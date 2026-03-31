@@ -1,0 +1,32 @@
+﻿using Microsoft.Extensions.Logging;
+using SPIC.MauiBlazorApp.Services;
+using SPIC.MauiBlazorApp.Shared.Services;
+
+namespace SPIC.MauiBlazorApp
+{
+    public static class MauiProgram
+    {
+        public static MauiApp CreateMauiApp()
+        {
+            var builder = MauiApp.CreateBuilder();
+            builder
+                .UseMauiApp<App>()
+                .ConfigureFonts(fonts =>
+                {
+                    fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+                });
+
+            // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
+            builder.Services.AddSingleton<IFormFactor, FormFactor>();
+
+            builder.Services.AddMauiBlazorWebView();
+
+#if DEBUG
+            builder.Services.AddBlazorWebViewDeveloperTools();
+            builder.Logging.AddDebug();
+#endif
+
+            return builder.Build();
+        }
+    }
+}
