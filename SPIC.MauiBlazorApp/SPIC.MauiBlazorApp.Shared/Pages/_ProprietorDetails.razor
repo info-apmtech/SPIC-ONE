@@ -1,0 +1,398 @@
+﻿@page "/ProprietorDetails" 
+    <style>
+        /* --- Header --- */
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .page-header i {
+            font-size: 1.2rem;
+            color: #4B5563;
+            cursor: pointer;
+        }
+        .page-title {
+            color: #374151;
+            font-weight: 700;
+            font-size: 1.25rem;
+            margin: 0;
+        }
+
+        /* --- Proprietor Summary Card --- */
+        .summary-card {
+            background: #ffffff;
+            border-radius: 12px;
+            border: 1px solid #E5E7EB;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+            padding: 24px;
+            margin-bottom: 30px;
+        }
+
+        .profile-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .profile-icon {
+            width: 48px;
+            height: 48px;
+            background-color: #ECFDF5;
+            color: #059669;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+        .profile-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #1F2937;
+            margin-bottom: 2px;
+        }
+        .profile-phone {
+            font-size: 0.8rem;
+            color: #6B7280;
+            font-weight: 500;
+        }
+
+        /* Summary Info Boxes */
+        .info-box {
+            background-color: #F9FAFB;
+            border: 1px solid #F3F4F6;
+            border-radius: 8px;
+            padding: 12px 16px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+        }
+        .info-label {
+            font-size: 0.7rem;
+            color: #6B7280;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .info-value {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #1F2937;
+            word-break: break-all;
+        }
+        .info-box i.end-icon {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #059669;
+            font-size: 1.1rem;
+        }
+
+        /* --- Section Titles --- */
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #374151;
+            margin-bottom: 16px;
+        }
+
+        /* --- Grid Cards (Family & Occupation) --- */
+        .detail-card {
+            border-radius: 12px;
+            padding: 20px;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid transparent;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+        }
+        
+        .card-header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 2;
+        }
+        .card-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .icon-box {
+            width: 42px;
+            height: 42px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        .card-label { font-size: 0.7rem; color: #6B7280; font-weight: 600; margin-bottom: 2px;}
+        .card-value-main { font-size: 1rem; font-weight: 700; color: #1F2937; margin: 0; text-transform: uppercase; }
+        
+        .card-actions i { font-size: 1rem; cursor: pointer; margin-left: 8px; }
+        .icon-edit { color: #3B82F6; }
+        .icon-delete { color: #EF4444; }
+
+        .inner-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 16px;
+            position: relative;
+            z-index: 2;
+        }
+        .detail-item { display: flex; flex-direction: column; gap: 2px; }
+        .detail-item .lbl { font-size: 0.7rem; color: #6B7280; font-weight: 500; }
+        .detail-item .val { font-size: 0.85rem; font-weight: 700; color: #1F2937; }
+
+        /* --- Blue Theme (Family Members) --- */
+        .theme-blue {
+            background-color: #F0F5FF; /* Light blue */
+            border-color: #E0E7FF;
+        }
+        .theme-blue .icon-box { background-color: #DBEAFE; color: #3B82F6; }
+        /* Abstract people watermark background */
+        .theme-blue::after {
+            content: '';
+            position: absolute;
+            right: -20px;
+            bottom: -20px;
+            width: 150px;
+            height: 150px;
+            background-image: radial-gradient(circle, #DBEAFE 30%, transparent 31%), radial-gradient(circle, #DBEAFE 30%, transparent 31%);
+            background-size: 60px 60px;
+            background-position: 0 0, 30px 30px;
+            opacity: 0.5;
+            z-index: 1;
+        }
+
+        /* --- Green Theme (Occupations) --- */
+        .theme-green {
+            background-color: #F0FDF4; /* Light green */
+            border-color: #D1FAE5;
+        }
+        .theme-green .icon-box { background-color: #DCFCE7; color: #10B981; }
+        /* Abstract briefcase/building watermark background */
+        .theme-green::after {
+            content: '';
+            position: absolute;
+            right: 0px;
+            bottom: -10px;
+            width: 120px;
+            height: 120px;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 7H4C2.89543 7 2 7.89543 2 9V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V9C22 7.89543 21.1046 7 20 7Z' fill='%23A7F3D0' opacity='0.4'/%3E%3Cpath d='M16 7V5C16 3.89543 15.1046 3 14 3H10C8.89543 3 8 3.89543 8 5V7' stroke='%23A7F3D0' stroke-width='2' opacity='0.4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-size: contain;
+            z-index: 1;
+        }
+
+    </style>
+
+
+    <div class="container py-5">
+        
+        <div class="page-header">
+            <i class="bi bi-arrow-left"></i>
+            <h2 class="page-title">Proprietor Information</h2>
+        </div>
+
+        <div class="summary-card">
+            <div class="profile-section">
+                <div class="profile-icon"><i class="bi bi-buildings"></i></div>
+                <div>
+                    <div class="profile-name">Robert</div>
+                    <div class="profile-phone">8899887766</div>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <div class="col">
+                    <div class="info-box">
+                        <div class="info-label">Name of Main Products</div>
+                        <div class="info-value">Robert</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="info-box">
+                        <div class="info-label">Mobile</div>
+                        <div class="info-value">567876545678</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="info-box">
+                        <div class="info-label">Email</div>
+                        <div class="info-value">gmail.com</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="info-box">
+                        <div class="info-label">PAN</div>
+                        <div class="info-value">56787654235678</div>
+                        <i class="bi bi-file-earmark-text end-icon"></i>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="info-box">
+                        <div class="info-label">Aadhaar</div>
+                        <div class="info-value">3242425325353</div>
+                        <i class="bi bi-person-vcard end-icon"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="section-title mb-3">Family Members (3)</h3>
+        <div class="row g-4 mb-5">
+            <div class="col-md-4">
+                <div class="detail-card theme-blue">
+                    <div class="card-header-flex">
+                        <div class="card-title-group">
+                            <div class="icon-box"><i class="bi bi-people-fill"></i></div>
+                            <div>
+                                <div class="card-label">Family Member</div>
+                                <h4 class="card-value-main">ROBERT</h4>
+                            </div>
+                        </div>
+                        <div class="card-actions">
+                            <i class="bi bi-pencil-square icon-edit"></i>
+                            <i class="bi bi-trash icon-delete"></i>
+                        </div>
+                    </div>
+                    <div class="inner-grid">
+                        <div class="detail-item"><span class="lbl">D.O.B</span><span class="val">27/3/1985</span></div>
+                        <div class="detail-item"><span class="lbl">Age</span><span class="val">₹ 84.5</span></div>
+                        <div class="detail-item"><span class="lbl">Relationship</span><span class="val">Father</span></div>
+                        <div class="detail-item"><span class="lbl">Occupation</span><span class="val">Farmer</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="detail-card theme-blue">
+                    <div class="card-header-flex">
+                        <div class="card-title-group">
+                            <div class="icon-box"><i class="bi bi-people-fill"></i></div>
+                            <div>
+                                <div class="card-label">Family Member</div>
+                                <h4 class="card-value-main">ROBERT</h4>
+                            </div>
+                        </div>
+                        <div class="card-actions">
+                            <i class="bi bi-pencil-square icon-edit"></i>
+                            <i class="bi bi-trash icon-delete"></i>
+                        </div>
+                    </div>
+                    <div class="inner-grid">
+                        <div class="detail-item"><span class="lbl">D.O.B</span><span class="val">27/3/1985</span></div>
+                        <div class="detail-item"><span class="lbl">Age</span><span class="val">₹ 84.5</span></div>
+                        <div class="detail-item"><span class="lbl">Relationship</span><span class="val">Father</span></div>
+                        <div class="detail-item"><span class="lbl">Occupation</span><span class="val">Farmer</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="detail-card theme-blue">
+                    <div class="card-header-flex">
+                        <div class="card-title-group">
+                            <div class="icon-box"><i class="bi bi-people-fill"></i></div>
+                            <div>
+                                <div class="card-label">Family Member</div>
+                                <h4 class="card-value-main">ROBERT</h4>
+                            </div>
+                        </div>
+                        <div class="card-actions">
+                            <i class="bi bi-pencil-square icon-edit"></i>
+                            <i class="bi bi-trash icon-delete"></i>
+                        </div>
+                    </div>
+                    <div class="inner-grid">
+                        <div class="detail-item"><span class="lbl">D.O.B</span><span class="val">27/3/1985</span></div>
+                        <div class="detail-item"><span class="lbl">Age</span><span class="val">₹ 84.5</span></div>
+                        <div class="detail-item"><span class="lbl">Relationship</span><span class="val">Father</span></div>
+                        <div class="detail-item"><span class="lbl">Occupation</span><span class="val">Farmer</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="section-title mb-3">Occupations / Agencies (3)</h3>
+        <div class="row g-4 mb-4">
+            <div class="col-md-4">
+                <div class="detail-card theme-green">
+                    <div class="card-header-flex">
+                        <div class="card-title-group">
+                            <div class="icon-box"><i class="bi bi-buildings-fill"></i></div>
+                            <div>
+                                <div class="card-label">COMPANY</div>
+                                <h4 class="card-value-main" style="text-transform: none;">Ludhiana Junction Terminal</h4>
+                            </div>
+                        </div>
+                        <div class="card-actions">
+                            <i class="bi bi-pencil-square icon-edit"></i>
+                            <i class="bi bi-trash icon-delete"></i>
+                        </div>
+                    </div>
+                    <div class="inner-grid">
+                        <div class="detail-item"><span class="lbl">Name of Main Products</span><span class="val">Robert</span></div>
+                        <div class="detail-item"><span class="lbl">Annual Turnover (₹)</span><span class="val">₹ 84.5</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="detail-card theme-green">
+                    <div class="card-header-flex">
+                        <div class="card-title-group">
+                            <div class="icon-box"><i class="bi bi-buildings-fill"></i></div>
+                            <div>
+                                <div class="card-label">COMPANY</div>
+                                <h4 class="card-value-main" style="text-transform: none;">Ludhiana Junction Terminal</h4>
+                            </div>
+                        </div>
+                        <div class="card-actions">
+                            <i class="bi bi-pencil-square icon-edit"></i>
+                            <i class="bi bi-trash icon-delete"></i>
+                        </div>
+                    </div>
+                    <div class="inner-grid">
+                        <div class="detail-item"><span class="lbl">Name of Main Products</span><span class="val">Robert</span></div>
+                        <div class="detail-item"><span class="lbl">Annual Turnover (₹)</span><span class="val">₹ 84.5</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="detail-card theme-green">
+                    <div class="card-header-flex">
+                        <div class="card-title-group">
+                            <div class="icon-box"><i class="bi bi-buildings-fill"></i></div>
+                            <div>
+                                <div class="card-label">COMPANY</div>
+                                <h4 class="card-value-main" style="text-transform: none;">Ludhiana Junction Terminal</h4>
+                            </div>
+                        </div>
+                        <div class="card-actions">
+                            <i class="bi bi-pencil-square icon-edit"></i>
+                            <i class="bi bi-trash icon-delete"></i>
+                        </div>
+                    </div>
+                    <div class="inner-grid">
+                        <div class="detail-item"><span class="lbl">Name of Main Products</span><span class="val">Robert</span></div>
+                        <div class="detail-item"><span class="lbl">Annual Turnover (₹)</span><span class="val">₹ 84.5</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+   
