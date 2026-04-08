@@ -4,29 +4,36 @@ using SPIC.MauiBlazorApp.Shared.Services;
 
 namespace SPIC.MauiBlazorApp
 {
-    public static class MauiProgram
-    {
-        public static MauiApp CreateMauiApp()
-        {
-            var builder = MauiApp.CreateBuilder();
-            builder
-                .UseMauiApp<App>()
-                .ConfigureFonts(fonts =>
-                {
-                    fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-                });
+	public static class MauiProgram
+	{
+		public static MauiApp CreateMauiApp()
+		{
+			var builder = MauiApp.CreateBuilder();
+			builder
+				.UseMauiApp<App>()
+				.ConfigureFonts(fonts =>
+				{
+					fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+				});
 
-            // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
-            builder.Services.AddSingleton<IFormFactor, FormFactor>();
+			// Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
+			builder.Services.AddSingleton<IFormFactor, FormFactor>();
 
-            builder.Services.AddMauiBlazorWebView();
+			builder.Services.AddMauiBlazorWebView();
+			builder.Services.AddScoped<LoginState>();
+
+			// ADD THIS
+			builder.Services.AddSingleton(new PlatformService
+			{
+				IsWeb = false
+			});
 
 #if DEBUG
-            builder.Services.AddBlazorWebViewDeveloperTools();
-            builder.Logging.AddDebug();
+			builder.Services.AddBlazorWebViewDeveloperTools();
+			builder.Logging.AddDebug();
 #endif
 
-            return builder.Build();
-        }
-    }
+			return builder.Build();
+		}
+	}
 }
