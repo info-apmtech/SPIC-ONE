@@ -26,13 +26,45 @@ namespace Spic.Infrastructure.Services
             {
                 Name = dto.Name,
                 Email = dto.Email,
-              //  PasswordHash = HashPassword(dto.Password)
+               PasswordHash = dto.Password
             };
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
             return user;
+        }
+
+        public async Task<ServiceResult> SeedDefaultUserAsync(SeedUserDto dto)
+        {
+            var exists = await _context.Users
+                .AnyAsync(x => x.Email == dto.Email);
+
+            if (exists)
+            {
+                return new ServiceResult
+                {
+                    Success = false,
+                    Message = "User already exists for this site."
+                };
+            }
+
+            var user = new Userinfo
+            {
+                Name = dto.Name,
+                Email = dto.Email,
+                PasswordHash = dto.Password,
+               // SiteCode = dto.SiteCode
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            return new ServiceResult
+            {
+                Success = true,
+                Message = "Default user created successfully."
+            };
         }
     }
 }
