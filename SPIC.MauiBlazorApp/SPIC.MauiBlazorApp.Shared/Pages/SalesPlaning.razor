@@ -1,275 +1,287 @@
-﻿    @page "/SalesPlaning" 
-    <style>
-       /*  body {
-            margin: 0;
-            font-family: 'Inter', sans-serif;
-            background-color: #F4F7F9; 
-            color: #1F2937;
-            padding-bottom: 50px;
-        } */
+﻿@page "/SalesPlaning"  
 
-        /* --- Page Header --- */
-        .page-title {
-            color: #374151;
-            font-weight: 700;
-            font-size: 1.35rem;
-            margin-bottom: 24px;
-        }
+<style>
+    /* --- Page Header --- */
+    .page-title {
+        color: #374151;
+        font-weight: 700;
+        font-size: 1.35rem;
+        margin-bottom: 24px;
+    }
 
-        /* --- Main Card Container --- */
-        .main-card {
-            background: #ffffff;
-            border-radius: 12px;
-            border: 1px solid #E5E7EB;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-            padding: 24px;
-        }
+    /* --- Main Card Container --- */
+    .main-card {
+        background: #ffffff;
+        border-radius: 12px;
+        border: 1px solid #E5E7EB;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        padding: 24px;
+    }
 
-        /* --- Section Title --- */
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: #374151;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 24px;
-        }
-        .section-title i {
-            color: #059669;
-            font-size: 1.2rem;
-        }
+    /* --- Section Title --- */
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #374151;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 24px;
+    }
+    .section-title i {
+        color: #059669;
+        font-size: 1.2rem;
+    }
 
-        /* --- Custom Tabs --- */
-        .custom-tabs {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 24px;
-        }
-        .tab-btn {
-            border: 1px solid #E5E7EB;
-            background-color: #ffffff;
-            color: #9CA3AF;
-            border-radius: 8px;
-            padding: 8px 16px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .tab-btn.active {
-            background-color: #F0FDF4; /* Light Green */
-            border-color: #A7F3D0;
-            color: #059669;
-        }
-        .tab-btn:hover:not(.active) {
-            background-color: #F9FAFB;
-            color: #6B7280;
-        }
+    /* --- Custom Tabs --- */
+    .custom-tabs {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+    .tab-btn {
+        border: 1px solid #E5E7EB;
+        background-color: #ffffff;
+        color: #9CA3AF;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .tab-btn.active {
+        background-color: #F0FDF4; /* Light Green */
+        border-color: #A7F3D0;
+        color: #059669;
+    }
+    .tab-btn:hover:not(.active) {
+        background-color: #F9FAFB;
+        color: #6B7280;
+    }
 
-        /* --- Data Table Styling --- */
-        .forecast-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-        }
+    /* --- Table Wrapper --- */
+    .table-wrapper {
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        overflow-x: auto; /* Allows horizontal scrolling for 12 months */
+        background-color: #ffffff;
+        margin-bottom: 24px;
+    }
+
+    /* --- Data Table Styling --- */
+    .forecast-table {
+        width: 100%;
+        border-collapse: collapse; /* Changed to collapse to allow solid header background */
+    }
+
+    /* Apply the gray background ONLY to the header */
+    .forecast-table thead {
+        background-color: #F4F7F9; /* Soft gray from your image */
+    }
+
+    .forecast-table th {
+        border: none !important;
+        color: #334155; /* Darker slate gray */
+        font-size: 0.85rem;
+        font-weight: 700;
+        padding: 16px 8px 4px 8px;
+    }
+
+    /* Sticky First Column */
+    .forecast-table th:first-child {
+        position: sticky;
+        left: 0;
+        background-color: #F4F7F9 !important; /* Matches thead background */
+        z-index: 3;
+        box-shadow: 2px 0 5px -2px rgba(0,0,0,0.05);
+    }
+    .forecast-table td:first-child {
+        position: sticky;
+        left: 0;
+        background-color: #ffffff !important; /* Matches tbody background */
+        z-index: 2;
+        box-shadow: 2px 0 5px -2px rgba(0,0,0,0.05);
+    }
+
+    .month-header-line {
+        border-bottom: 1px solid #CBD5E1; /* Subtly darker gray line */
+        padding-bottom: 8px;
+        width: 70%; /* Keeps lines from touching */
+        margin: 0 auto;
+        color: #1E293B;
+    }
+
+    .forecast-table .sub-th {
+        font-size: 0.75rem;
+        color: #64748B;
+        font-weight: 600;
+        padding-top: 8px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #E5E7EB !important; /* Line separating header from body */
+    }
+
+    .forecast-table td {
+        vertical-align: middle;
+        padding: 12px 8px; 
+        border-bottom: 1px solid #F1F5F9 !important; /* Light row separator */
+    }
+
+    .forecast-table .product-col {
+        min-width: 220px;
+        color: #64748B;
+        font-size: 0.85rem;
+        font-weight: 700;
+        padding-left: 20px;
+        text-align: left;
+    }
+
+    /* --- White Input Boxes --- */
+    input.val-box {
+        background-color: #ffffff; 
+        border: 1px solid #E5E7EB;
+        border-radius: 6px;
+        padding: 10px 12px;
+        text-align: center;
+        font-size: 0.8rem;
+        color: #374151;
+        font-weight: 600;
+        width: 100%;
+        min-width: 80px;
+        max-width: 100px;
+        margin: 0 auto;
+        display: block;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        transition: 0.2s;
+    }
+    input.val-box:focus {
+        border-color: #059669;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+    }
+
+    /* --- Footer Summary Cards --- */
+    .summary-card {
+        border-radius: 12px;
+        padding: 24px;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 110px;
+        border: 1px solid transparent;
+    }
+    
+    .stat-label { font-size: 0.85rem; color: #6B7280; font-weight: 600; margin-bottom: 8px; position: relative; z-index: 2; }
+    .stat-val { font-size: 1.5rem; font-weight: 700; color: #1F2937; display: flex; align-items: baseline; gap: 8px; position: relative; z-index: 2; }
+    .stat-unit { font-size: 0.9rem; font-weight: 500; color: #9CA3AF; }
+    .stat-trend { font-size: 0.85rem; font-weight: 700; color: #059669; }
+
+    .summary-card.pink { background-color: #FDF4FF; border-color: #FAE8FF; }
+    .summary-card.blue { background-color: #F0F9FF; border-color: #E0F2FE; }
+
+    .watermark-icon {
+        position: absolute;
+        right: 20px;
+        bottom: -15px;
+        font-size: 5.5rem;
+        opacity: 0.08;
+        line-height: 1;
+        z-index: 1;
+    }
+    .summary-card.pink .watermark-icon { color: #DB2777; }
+    .summary-card.blue .watermark-icon { color: #2563EB; }
+
+</style>
+
+<div class="container-fluid py-4 px-0">
+    <FormLoader />
+    
+    <h2 class="page-title">Sales Planning & Forecast</h2> 
+
+    <div class="main-card">
         
-        .forecast-table th {
-            color: #374151;
-            font-size: 0.85rem;
-            font-weight: 700;
-            padding: 12px 8px;
-            border-bottom: none;
-            background-color: #ffffff;
-        }
-        .forecast-table .sub-th {
-            font-size: 0.75rem;
-            color: #6B7280;
-            font-weight: 600;
-            padding-top: 4px;
-            padding-bottom: 16px;
-        }
-        
-        .forecast-table td {
-            vertical-align: middle;
-            padding: 10px 8px;
-            border-bottom: 1px solid #F3F4F6;
-        }
-        
-        .forecast-table .product-col {
-            min-width: 220px;
-            color: #4B5563;
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
+        <div class="section-title">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/businessIcon1.svg" style="width: 24px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+            Business Entity Type
+        </div>
 
-        /* Value Box (Input Style) */
-        .val-box {
-            background-color: #F9FAFB;
-            border: 1px solid transparent;
-            border-radius: 6px;
-            padding: 8px 12px;
-            text-align: center;
-            font-size: 0.8rem;
-            color: #4B5563;
-            font-weight: 600;
-            width: 100%;
-            min-width: 80px;
-            max-width: 100px;
-            margin: 0 auto;
-        }
+        <div class="custom-tabs">
+            <div class="tab-btn active">Fertilizer (MT/Value)</div>
+            <div class="tab-btn">SP (MT / Value)</div>
+            <div class="tab-btn">SP (Litre / Value)</div>
+        </div>
 
-        /* --- Footer Summary Cards --- */
-        .summary-card {
-            border-radius: 12px;
-            padding: 24px;
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            min-height: 110px;
-            border: 1px solid transparent;
-        }
-        
-        .stat-label {
-            font-size: 0.85rem;
-            color: #6B7280;
-            font-weight: 600;
-            margin-bottom: 8px;
-            position: relative;
-            z-index: 2;
-        }
-        
-        .stat-val {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #1F2937;
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
-            position: relative;
-            z-index: 2;
-        }
-        
-        .stat-unit {
-            font-size: 0.9rem;
-            font-weight: 500;
-            color: #9CA3AF;
-        }
-        
-        .stat-trend {
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: #059669; /* Green for positive trend */
-        }
-
-        /* Card Themes & Watermarks */
-        .summary-card.pink {
-            background-color: #FDF4FF;
-            border-color: #FAE8FF;
-        }
-        .summary-card.blue {
-            background-color: #F0F9FF;
-            border-color: #E0F2FE;
-        }
-
-        .watermark-icon {
-            position: absolute;
-            right: 20px;
-            bottom: -15px;
-            font-size: 5.5rem;
-            opacity: 0.08;
-            line-height: 1;
-            z-index: 1;
-        }
-        .summary-card.pink .watermark-icon { color: #DB2777; }
-        .summary-card.blue .watermark-icon { color: #2563EB; }
-
-    </style>
-
-
-    <div class="container-fluid py-4 px-0">
-        
-        <h2 class="page-title">Sales Planning & Forecast</h2>
-
-        <div class="main-card">
-            
-            <div class="section-title">
-                <i class="bi bi-box-seam"></i> Business Entity Type
-            </div>
-
-            <div class="custom-tabs">
-                <div class="tab-btn active">Fertilizer (MT / Value)</div>
-                <div class="tab-btn">SP (MT / Value)</div>
-                <div class="tab-btn">SP (Litre / Value)</div>
-            </div>
-
-            <div class="table-responsive mb-4 pb-2">
-                <table class="table forecast-table mb-0">
-                    <thead>
-                        <tr>
-                            <th rowspan="2" class="product-col align-middle border-end-0">Product Name / Category</th>
-                            <th colspan="2" class="text-center">APRIL</th>
-                            <th colspan="2" class="text-center">May</th>
-                            <th colspan="2" class="text-center">June</th>
-                            <th colspan="2" class="text-center">Jul</th>
-                        </tr>
-                        <tr>
-                            <th class="text-center sub-th">Matric</th>
-                            <th class="text-center sub-th">Lakhs</th>
-                            <th class="text-center sub-th">Matric</th>
-                            <th class="text-center sub-th">Lakhs</th>
-                            <th class="text-center sub-th">Matric</th>
-                            <th class="text-center sub-th">Lakhs</th>
-                            <th class="text-center sub-th">Matric</th>
-                            <th class="text-center sub-th">Lakhs</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach(var product in new[] { "NC Urea", "DAP 18:46:0", "NPK 16:20:0:13", "NPK 10:26:26", "NPK 15:15:15", "SSP - P & G", "MOP", "SP Sales Value (In Lakhs)", "WSF" })
+        <div class="table-wrapper">
+            <table class="table forecast-table mb-0">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="product-col align-middle">Product Name / Category</th>
+                        
+                        @foreach(var month in new[] { "APRIL", "May", "June", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar" })
                         {
-                            <tr>
-                                <td class="product-col">@product</td>
-                                <td><div class="val-box">12450</div></td>
-                                <td><div class="val-box">12450</div></td>
-                                <td><div class="val-box">12450</div></td>
-                                <td><div class="val-box">12450</div></td>
-                                <td><div class="val-box">12450</div></td>
-                                <td><div class="val-box">12450</div></td>
-                                <td><div class="val-box">12450</div></td>
-                                <td><div class="val-box">12450</div></td>
-                            </tr>
+                            <th colspan="2" class="text-center pt-3">
+                                <div class="month-header-line">@month</div>
+                            </th>
                         }
-                    </tbody>
-                </table>
+                    </tr>
+                    <tr>
+                        @for(int i=0; i<12; i++)
+                        {
+                            <th class="text-center sub-th">Matric</th>
+                            <th class="text-center sub-th">Lakhs</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach(var product in new[] { "NC Urea", "DAP 18:46:0", "NPK 16:20:0:13", "NPK 10:26:26", "NPK 15:15:15", "SSP - P & G", "MOP", "SP Sales Value (In Lakhs)", "WSF" })
+                    {
+                        <tr>
+                            <td class="product-col">@product</td>
+                            @for(int i=0; i<12; i++)
+                            {
+                                <td><input type="text" class="val-box" value="12450" /></td>
+                                <td><input type="text" class="val-box" value="12450" /></td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="row g-4 mt-2">
+            <div class="col-md-6">
+                <div class="summary-card pink">
+                    <div class="stat-label">Total Volume (MT/L)</div>
+                    <div class="stat-val">
+                        0.00 <span class="stat-unit">Units</span>
+                    </div>
+                    <i class="bi bi-gear watermark-icon" style="transform: translateY(-20px) scale(0.85);"></i>
+                    <i class="bi bi-coin watermark-icon"></i>
+                </div>
             </div>
 
-            <div class="row g-4 mt-3">
-                <div class="col-md-6">
-                    <div class="summary-card pink">
-                        <div class="stat-label">Total Volume (MT/L)</div>
-                        <div class="stat-val">
-                            0.00 <span class="stat-unit">Units</span>
-                        </div>
-                        <i class="bi bi-gear watermark-icon" style="transform: translateY(-20px) scale(0.85);"></i>
-                        <i class="bi bi-coin watermark-icon"></i>
+            <div class="col-md-6">
+                <div class="summary-card blue">
+                    <div class="stat-label">Total Forecast Value</div>
+                    <div class="stat-val">
+                        $0.00 <span class="stat-trend">+12% vs LY</span>
                     </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="summary-card blue">
-                        <div class="stat-label">Total Forecast Value</div>
-                        <div class="stat-val">
-                            $0.00 <span class="stat-trend">+12% vs LY</span>
-                        </div>
-                        <i class="bi bi-graph-up-arrow watermark-icon"></i>
-                    </div>
+                    <i class="bi bi-graph-up-arrow watermark-icon"></i>
                 </div>
             </div>
-
         </div>
 
     </div>
 
-   
+    <div class="footer-nav mt-4 d-flex justify-content-between">
+        <NavLink href="/Proprietor" class="btn btn-outline-secondary px-4 py-2 fw-bold text-decoration-none">
+            <i class="bi bi-chevron-left me-2"></i> Previous Step
+        </NavLink>
+
+        <NavLink href="/Investment" class="btn btn-primary px-4 py-2 fw-bold text-decoration-none" style="background-color: #2563EB; border: none;">
+            Next <i class="bi bi-chevron-right ms-2"></i>
+        </NavLink>
+    </div>
+</div>
