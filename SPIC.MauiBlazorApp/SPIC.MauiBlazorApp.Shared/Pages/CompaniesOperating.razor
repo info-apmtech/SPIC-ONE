@@ -1,0 +1,291 @@
+﻿@page "/Companies"
+
+<style>
+    /* --- General Page Styling --- */
+    .companies-wrapper {
+        font-family: 'Inter', sans-serif;
+        background-color: #F8FAFC;
+        color: #1F2937;
+        min-height: 100vh;
+    }
+
+    /* --- Header & Progress --- */
+    .step-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+    .step-title {
+        color: #065F46;
+        font-weight: 700;
+        font-size: 1.1rem;
+        margin-bottom: 4px;
+    }
+    .step-subtitle {
+        color: #4B5563;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+    .status-badge {
+        background-color: #059669;
+        color: white;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 6px 16px;
+        border-radius: 20px;
+    }
+
+    .progress-container {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 30px;
+        width: 100%;
+    }
+    .progress-segment {
+        height: 6px;
+        flex: 1;
+        border-radius: 4px;
+        background-color: #D1FAE5;
+    }
+    .progress-segment.active {
+        background-color: #065F46;
+    }
+
+    /* --- Section Title --- */
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #374151;
+        margin-bottom: 24px;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+    }
+    .section-title span {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #6B7280;
+    }
+
+    /* --- Custom CSS Grid Layout --- */
+    /* This replaces the Bootstrap .row to allow the 2-row span effect */
+    .company-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+    }
+    
+    /* Responsive Grid Breakpoints */
+    @@media (max-width: 1200px) {
+        .company-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @@media (max-width: 992px) {
+        .company-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @@media (max-width: 576px) {
+        .company-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* This class forces the big cards to span exactly 2 rows */
+    @@media (min-width: 577px) {
+        .span-2-rows {
+            grid-row: span 2;
+        }
+    }
+
+    /* --- Checkbox Styling --- */
+    .check-box {
+        width: 18px;
+        height: 18px;
+        border: 1.5px solid #D1D5DB;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        background-color: white;
+        flex-shrink: 0;
+    }
+    .check-box i {
+        color: white;
+        font-size: 0.9rem;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    /* --- Standard Company Cards --- */
+    .company-card {
+        background-color: #ffffff;
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        padding: 14px 16px;
+        height: 100%;
+        min-height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        user-select: none;
+    }
+    .company-card:hover {
+        border-color: #D1D5DB;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    }
+    .company-name {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #374151;
+        letter-spacing: 0.3px;
+    }
+
+    .company-card.selected {
+        border-color: #10B981;
+        background-color: #F0FDF4;
+    }
+    .company-card.selected .check-box {
+        background-color: #10B981;
+        border-color: #10B981;
+    }
+    .company-card.selected .check-box i { opacity: 1; }
+
+    /* --- Special Highlighted Cards (SPIC & GREEN STAR) --- */
+    .company-card-special {
+        border-radius: 8px;
+        padding: 20px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
+        user-select: none;
+    }
+    .company-card-special .check-box {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+    }
+
+    .card-logo-wrap {
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 12px;
+        width: 100%;
+    }
+    .card-logo-wrap img {
+        max-height: 100%;
+        max-width: 100%;
+        object-fit: contain;
+    }
+    .company-name-special {
+        font-size: 0.95rem;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+    }
+
+    /* SPIC Theme */
+    .card-spic {
+        background-color: #EEF2FF;
+        border: 1px solid #E0E7FF;
+    }
+    .card-spic .company-name-special { color: #3730A3; }
+    .card-spic .check-box { border-color: #C7D2FE; }
+    .card-spic.selected { border-color: #4338CA; }
+    .card-spic.selected .check-box { background-color: #4338CA; border-color: #4338CA; }
+
+    /* GREEN STAR Theme */
+    .card-greenstar {
+        background-color: #ECFDF5;
+        border: 1px solid #D1FAE5;
+    }
+    .card-greenstar .company-name-special { color: #059669; }
+    .card-greenstar .check-box { border-color: #6EE7B7; }
+    .card-greenstar.selected { border-color: #059669; }
+    .card-greenstar.selected .check-box { background-color: #059669; border-color: #059669; }
+</style>
+
+<div class="companies-wrapper">
+    <div class="container-fluid py-4 px-3 px-md-5">
+        
+        <FormLoader />
+        
+      
+       
+
+        <h3 class="section-title">
+            Companies Operating In Your Place <span>(Please Mark)</span>
+        </h3>
+
+        <div class="company-grid mb-5">
+            
+            <div class="span-2-rows">
+               <div class="logo-card spic active" onclick="this.classList.toggle('active')">
+                        <div class="card-checkbox"><i class="bi bi-check-lg"></i></div>
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" alt="SPIC Logo" />
+                        <span>SPIC</span>
+                    </div>
+            </div>
+
+            <div class="span-2-rows">
+                <div class="logo-card green-star" onclick="this.classList.toggle('active')">
+                        <div class="card-checkbox"><i class="bi bi-check-lg"></i></div>
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" alt="Green Star Logo" />
+                        <span>GREEN STAR</span>
+                    </div>
+            </div>
+            <div><div class="company-card selectable-card"><div class="company-name">FACT</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">MFL</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">MCF</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            
+            <div><div class="company-card selectable-card"><div class="company-name">SHRIRAM</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">INDOGULF</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">PPL</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            
+            <div><div class="company-card selectable-card"><div class="company-name">CIL</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">RCF</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">GODAVARI</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">NAGARJUNA</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">CHAMBAL</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+
+            <div><div class="company-card selectable-card"><div class="company-name">GNFC</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">KRIBHCO</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">KRIBHCO</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">IFFCO</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">TATA</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+
+            <div><div class="company-card selectable-card"><div class="company-name">IPL</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">HINDALCO</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">GSFC</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">SMARTCHEM</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">GFL</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+
+            <div><div class="company-card selectable-card"><div class="company-name">ZUARI</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">MOSAIC</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">NFL</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            <div><div class="company-card selectable-card"><div class="company-name">DEEPAK</div><div class="check-box"><i class="bi bi-check-lg"></i></div></div></div>
+            
+        </div>
+        
+        <CommanFooter />
+       
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    $(document).ready(function() {
+        // Visual toggle logic for ALL selectable cards (special and standard)
+        $('.selectable-card').on('click', function() {
+            $(this).toggleClass('selected');
+        });
+    });
+</script>

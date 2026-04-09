@@ -1,0 +1,871 @@
+﻿@page "/Proprietor" 
+
+
+    <style> 
+
+
+
+
+
+        /* --- Green Theme (Occupation) --- */
+.added-card.theme-green {
+    border-color: #D1FAE5; /* Light green border */
+    background-color: #ffffff; /* White base */
+}
+.added-card.theme-green .icon-box { 
+    background-color: #ECFDF5; 
+    color: #059669; 
+}
+
+/* Green subtle overlapping circles watermark effect */
+.added-card.theme-green::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 130px;
+    height: 130px;
+    background: radial-gradient(circle, rgba(209, 250, 229, 0.5) 0%, rgba(209, 250, 229, 0) 70%);
+    border-radius: 50%;
+    z-index: 1;
+}
+.added-card.theme-green::after {
+    content: '';
+    position: absolute;
+    bottom: -20px;
+    right: 50px;
+    width: 160px;
+    height: 160px;
+    background: radial-gradient(circle, rgba(209, 250, 229, 0.6) 0%, rgba(209, 250, 229, 0) 70%);
+    border-radius: 50%;
+    z-index: 1;
+}
+
+/* Ensure the white data boxes have a light green border in this theme */
+.added-card.theme-green .detail-item {
+    border-color: #ECFDF5;
+}
+        /* --- Added Details Cards --- */
+.added-card {
+    border-radius: 12px;
+    padding: 16px;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid transparent;
+    background-color: #ffffff; /* White background by default */
+}
+
+/* Blue Theme (Family) */
+.added-card.theme-blue {
+    border-color: #DBEAFE;
+}
+.added-card.theme-blue .icon-box { 
+    background-color: #EFF6FF; 
+}
+/* This creates the subtle blue overlapping circles watermark effect */
+.added-card.theme-blue::before {
+    content: '';
+    position: absolute;
+    top: -20px;
+    right: -20px;
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, rgba(219, 234, 254, 0.4) 0%, rgba(219, 234, 254, 0) 70%);
+    border-radius: 50%;
+    z-index: 1;
+}
+.added-card.theme-blue::after {
+    content: '';
+    position: absolute;
+    bottom: -30px;
+    right: 40px;
+    width: 150px;
+    height: 150px;
+    background: radial-gradient(circle, rgba(219, 234, 254, 0.5) 0%, rgba(219, 234, 254, 0) 70%);
+    border-radius: 50%;
+    z-index: 1;
+}
+
+.card-header-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    position: relative;
+    z-index: 2; /* Ensures text stays above watermark */
+}
+.card-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.icon-box {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.card-label { 
+    font-size: 0.75rem; 
+    color: #4B5563; 
+    font-weight: 500; 
+    margin-bottom: 2px;
+}
+.card-value-main { 
+    font-size: 1.05rem; 
+    font-weight: 700; 
+    color: #1F2937; 
+    margin: 0; 
+    text-transform: uppercase;
+}
+
+.card-actions i { 
+    font-size: 1.1rem; 
+    cursor: pointer; 
+    margin-left: 10px; 
+}
+.icon-edit { color: #3B82F6; }
+.icon-delete { color: #EF4444; }
+
+/* Grid for the data items */
+.detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    position: relative;
+    z-index: 2;
+}
+
+/* Individual Data Pill inside the card */
+.detail-item { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 4px;
+    background-color: #ffffff; /* White background inside the pill */
+    border: 1px solid #EFF6FF; /* Very light blue border */
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.01);
+}
+.detail-item .lbl { 
+    font-size: 0.7rem; 
+    color: #6B7280; 
+    font-weight: 500;
+}
+.detail-item .val { 
+    font-size: 0.9rem; 
+    font-weight: 700; 
+    color: #065F46; /* The dark green text color from your image */
+}
+        /* --- Page Typography --- */
+        .page-title {
+            color: #374151;
+            font-weight: 700;
+            font-size: 1.25rem;
+            margin-bottom: 20px;
+        }
+
+        /* --- Main Cards & Sections --- */
+        .main-section {
+            background: #ffffff;
+            border-radius: 12px;
+            border: 1px solid #E5E7EB;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0;
+        }
+        .section-title i {
+            color: #059669;
+            font-size: 1.1rem;
+        }
+        
+        .count-badge {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #4B5563;
+        }
+
+        /* --- Business Entity Type Selectors --- */
+        .entity-grid {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .entity-card {
+            flex: 1;
+            min-width: 120px;
+            background-color: #ffffff;
+            border: 1px solid #E5E7EB;
+            border-radius: 10px;
+            padding: 16px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .entity-card i {
+            font-size: 1.5rem;
+            color: #6B7280;
+        }
+        .entity-card span {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #4B5563;
+            text-align: center;
+        }
+        .entity-card:hover {
+            border-color: #D1D5DB;
+            background-color: #F9FAFB;
+        }
+        .entity-card.active {
+            border-color: #10B981;
+            background-color: #ECFDF5;
+        }
+        .entity-card.active i, .entity-card.active span {
+            color: #059669;
+        }
+
+        /* --- Form Controls --- */
+        .custom-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #4B5563;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .custom-input, .custom-select {
+            background-color: #F3F4F6;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            color: #1F2937;
+            width: 100%;
+        }
+        .custom-input::placeholder, .custom-select { color: #9CA3AF; }
+        .custom-input:focus, .custom-select:focus {
+            background-color: #ffffff;
+            border-color: #3B82F6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+            outline: none;
+        }
+
+        /* --- Buttons --- */
+        .btn-outline-select {
+            background-color: white;
+            border: 1px solid #D1D5DB;
+            color: #3B82F6;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 6px 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-blue-action {
+            background-color: #2563EB;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.85rem;
+            padding: 8px 24px;
+            transition: 0.2s;
+        }
+        .btn-blue-action:hover { background-color: #1D4ED8; }
+        
+        .badge-green {
+            background-color: #D1FAE5;
+            color: #065F46;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid #A7F3D0;
+        }
+
+        /* --- Custom Upload Inputs --- */
+        .upload-input-group {
+            display: flex;
+        }
+        .upload-input-group .custom-input {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        .btn-upload-attach {
+            background-color: #ECFDF5;
+            color: #059669;
+            border: 1px dashed #A7F3D0;
+            border-left: none;
+            border-top-right-radius: 6px;
+            border-bottom-right-radius: 6px;
+            padding: 0 16px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .btn-upload-attach:hover { background-color: #D1FAE5; }
+
+        /* --- Image Upload Box --- */
+        .image-upload-box {
+            background-color: #F9FAFB;
+            border: 1px dashed #D1D5DB;
+            border-radius: 8px;
+            height: 100%;
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+            color: #059669;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .image-upload-box i { font-size: 1.5rem; margin-bottom: 8px; }
+        .image-upload-box:hover { background-color: #ECFDF5; border-color: #10B981; }
+
+        /* --- Yes/No Toggles --- */
+        .toggle-group { display: flex; gap: 8px; }
+        .toggle-btn {
+            background-color: #F3F4F6;
+            color: #4B5563;
+            border: none;
+            padding: 8px 24px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .toggle-btn.active {
+            background-color: #059669;
+            color: white;
+        }
+
+        /* --- Added Details Cards --- */
+        .added-card {
+            border-radius: 12px;
+            padding: 16px;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid transparent;
+        }
+        
+        /* Blue Theme (Family) */
+        .added-card.theme-blue {
+            background-color: #F0F5FF;
+            border-color: #E0E7FF;
+        }
+        .added-card.theme-blue .icon-box { background-color: #DBEAFE; color: #3B82F6; }
+        
+        /* Green Theme (Occupation) */
+        .added-card.theme-green {
+            background-color: #F0FDF4;
+            border-color: #D1FAE5;
+        }
+        .added-card.theme-green .icon-box { background-color: #DCFCE7; color: #10B981; }
+
+        .card-header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        .card-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .icon-box {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        .card-label { font-size: 0.65rem; color: #6B7280; font-weight: 600; text-transform: uppercase; margin-bottom: 2px;}
+        .card-value-main { font-size: 1rem; font-weight: 700; color: #1F2937; margin: 0; }
+        
+        .card-actions i { font-size: 0.9rem; cursor: pointer; margin-left: 8px; }
+        .icon-edit { color: #3B82F6; }
+        .icon-delete { color: #EF4444; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            background-color: rgba(255,255,255,0.6);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .detail-item { display: flex; flex-direction: column; gap: 2px; }
+        .detail-item .lbl { font-size: 0.65rem; color: #6B7280; }
+        .detail-item .val { font-size: 0.85rem; font-weight: 700; color: #1F2937; }
+
+        /* --- Saved Details Footer Cards --- */
+        .saved-card {
+            background-color: #ffffff;
+            border: 1px solid #E5E7EB;
+            border-radius: 12px;
+            padding: 16px;
+            height: 100%;
+        }
+        .saved-card-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .saved-name { font-weight: 700; font-size: 0.95rem; color: #1F2937; margin-bottom: 2px; }
+        .saved-phone { font-size: 0.75rem; color: #6B7280; }
+        .saved-icon { color: #059669; font-size: 1.2rem; }
+        
+        .saved-actions i { margin-left: 8px; cursor: pointer; font-size: 0.9rem; }
+        .icon-view { color: #8B5CF6; }
+
+        .saved-stats {
+            display: flex;
+            gap: 8px;
+        }
+        .stat-pill {
+            flex: 1;
+            text-align: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 6px;
+            border-radius: 4px;
+        }
+        .stat-pill.blue { background-color: #EFF6FF; color: #1E3A8A; }
+        .stat-pill.green { background-color: #F0FDF4; color: #064E3B; }
+    </style> 
+
+
+
+
+    <div class="container-fluid py-4 px-0">
+        	<FormLoader />
+        <h2 class="page-title">Proprietor Details</h2>
+
+        <div class="main-section">
+            <div class="section-header mb-3">
+                <h3 class="section-title"> 
+                    
+                    
+                  <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/businessIcon1.svg"
+					 class="formicon" />
+                    Business Entity Type</h3>
+            </div>
+            <div class="entity-grid">
+                <div class="entity-card">
+                    <i class="bi bi-person"></i>
+                    <span>Sole Proprietor</span>
+                </div>
+                <div class="entity-card active">
+                   <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LeaderShip.svg"
+					 class="formicon" />
+                    <span>Partnership</span>
+                </div>
+                <div class="entity-card">
+                   <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LlpIcon.svg"    
+					 class="formicon" />
+                    <span>LLP</span>
+                </div>
+                <div class="entity-card">
+                  <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/PvtIcon.svg"
+					 class="formicon" />
+                    <span>PVT LTD</span>
+                </div>
+                <div class="entity-card">
+                    <i class="bi bi-buildings"></i>
+                    <span>PUB LTD</span>
+                </div>
+                <div class="entity-card">
+                   <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/socityIcon.svg"
+					 class="formicon" />
+                    <span>Society</span>
+                </div>
+            </div>
+        </div>
+
+
+          <div class="main-section">
+            <div class="section-header">
+                <h3 class="section-title">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/OwnerIcon.svg"
+					 class="formicon" />
+                    
+                    Ownership Information</h3>
+                <span class="badge-green">Primary Account Holder</span>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-md-9">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="custom-label">Proprietor Name</label>
+                            <input type="text" class="custom-input" placeholder="Enter Full Legal Name">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="custom-label">Son of / Daughter of</label>
+                            <input type="text" class="custom-input" placeholder="Enter Father Name">
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="custom-label">Phone Number</label>
+                            <input type="text" class="custom-input" placeholder="Enter Phone Number">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="custom-label">Email</label>
+                            <input type="email" class="custom-input" placeholder="email@example.com">
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="custom-label">Aadhaar Card Number</label>
+                            <div class="upload-input-group">
+                                <input type="text" class="custom-input" placeholder="XXXX XXXX XXXX">
+                                <button class="btn-upload-attach"><i class="bi bi-upload"></i> Upload Aadhaar</button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="custom-label">PAN number</label>
+                            <div class="upload-input-group">
+                                <input type="text" class="custom-input" placeholder="ABCDE1234F">
+                                <button class="btn-upload-attach"><i class="bi bi-upload"></i> Upload Pan PDF</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="image-upload-box">
+                        <i class="bi bi-image"></i>
+                        Upload the Proprietor / Managing Partner Image
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+        <div class="main-section">
+            <div class="section-header">
+                <h3 class="section-title"><i class="bi bi-people"></i> Family Members</h3>
+                <button class="btn-outline-select">Add Family Members <i class="bi bi-chevron-down"></i></button>
+            </div>
+            
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="custom-label">Family Member Name</label>
+                    <input type="text" class="custom-input" placeholder="Enter Name">
+                </div>
+                <div class="col-md-4">
+                    <label class="custom-label">D.O.B</label>
+                    <input type="text" class="custom-input" placeholder="27/3/1985">
+                </div>
+                <div class="col-md-4">
+                    <label class="custom-label">Age</label>
+                    <input type="text" class="custom-input" placeholder="Enter Age">
+                </div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="custom-label">Relationship</label>
+                    <input type="text" class="custom-input" placeholder="Enter Relationship">
+                </div>
+                <div class="col-md-6">
+                    <label class="custom-label">Occupation</label>
+                    <input type="text" class="custom-input" placeholder="Enter Occupation">
+                </div>
+            </div>
+            <div class="d-flex justify-content-end mt-2">
+                <button class="btn-blue-action">Add Details</button>
+            </div>
+        </div>
+
+        @* <div class="main-section">
+            <div class="section-header">
+                <h3 class="section-title"><i class="bi bi-card-checklist"></i> Added Family Details</h3>
+                <span class="count-badge">3</span>
+            </div>
+
+            <div class="row g-3">
+                @for(int i=0; i<3; i++) {
+                <div class="col-md-4">
+                    <div class="added-card theme-blue">
+                        <div class="card-header-flex">
+                            <div class="card-title-group">
+                                <div class="icon-box"><i class="bi bi-person-fill"></i></div>
+                                <div>
+                                    <div class="card-label">Family Member</div>
+                                    <h4 class="card-value-main">ROBERT</h4>
+                                </div>
+                            </div>
+                            <div class="card-actions">
+                                <i class="bi bi-pencil-square icon-edit"></i>
+                                <i class="bi bi-trash icon-delete"></i>
+                            </div>
+                        </div>
+                        <div class="detail-grid">
+                            <div class="detail-item"><span class="lbl">D.O.B</span><span class="val">27/3/1985</span></div>
+                            <div class="detail-item"><span class="lbl">Age</span><span class="val">₹ 84.5</span></div>
+                            <div class="detail-item"><span class="lbl">Relationship</span><span class="val">Father</span></div>
+                            <div class="detail-item"><span class="lbl">Occupation</span><span class="val">Farmer</span></div>
+                        </div>
+                    </div>
+                </div>
+                }
+            </div>
+        </div> *@ 
+
+        <div class="main-section">
+    <div class="section-header">
+        <h3 class="section-title">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/FamilyIcon.svg" class="formicon" style="width: 24px; margin-right: 8px;"/>
+            Added Family Details
+        </h3>
+        <span class="count-badge fs-5">3</span>
+    </div>
+
+    <div class="row g-3">
+        @for(int i=0; i<3; i++) {
+        <div class="col-md-4">
+            <div class="added-card theme-blue">
+                <div class="card-header-flex">
+                    <div class="card-title-group">
+                        <div class="icon-box">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/FamilyIcon.svg" style="width: 24px;" />
+                        </div>
+                        <div>
+                            <div class="card-label">Family Member</div>
+                            <h4 class="card-value-main">ROBERT</h4>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <i class="bi bi-pencil-square icon-edit"></i>
+                        <i class="bi bi-trash icon-delete"></i>
+                    </div>
+                </div>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <span class="lbl">D.O.B</span>
+                        <span class="val">27/3/1985</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="lbl">Age</span>
+                        <span class="val">₹ 84.5</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="lbl">Relationship</span>
+                        <span class="val">Father</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="lbl">Occupation</span>
+                        <span class="val">Farmer</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        }
+    </div>
+</div>
+
+      
+
+        <div class="main-section">
+            <div class="section-header">
+                <h3 class="section-title"><i class="bi bi-briefcase"></i> Other Occupation / Agencies</h3>
+                <button class="btn-outline-select">Add Occupation Details <i class="bi bi-chevron-down"></i></button>
+            </div>
+            
+            <div class="row g-3 align-items-end mb-3">
+                <div class="col-md-3">
+                    <label class="custom-label">Do you have other occupation or agencies?</label>
+                    <div class="toggle-group">
+                        <button class="toggle-btn active">Yes</button>
+                        <button class="toggle-btn">No</button>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="custom-label">Name of Company</label>
+                    <input type="text" class="custom-input" placeholder="Company Name">
+                </div>
+                <div class="col-md-3">
+                    <label class="custom-label">Sector</label>
+                    <select class="custom-select"><option>Select sector</option></select>
+                </div>
+                <div class="col-md-3">
+                    <label class="custom-label">Annual Turnover (₹)</label>
+                    <div class="position-relative">
+                        <input type="text" class="custom-input" placeholder="Amount ₹">
+                        <i class="bi bi-chevron-expand position-absolute" style="right:12px; top:10px; color:#9CA3AF;"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex justify-content-end mt-2">
+                <button class="btn-blue-action">Add Details</button>
+            </div>
+        </div>
+
+        @* <div class="main-section">
+            <div class="section-header">
+                <h3 class="section-title"><i class="bi bi-building"></i> Added Other Occupation / Agencies List</h3>
+                <span class="count-badge">3</span>
+            </div>
+
+            <div class="row g-3 mb-4">
+                @for(int i=0; i<3; i++) {
+                <div class="col-md-4">
+                    <div class="added-card theme-green">
+                        <div class="card-header-flex">
+                            <div class="card-title-group">
+                                <div class="icon-box"><i class="bi bi-buildings-fill"></i></div>
+                                <div>
+                                    <div class="card-label">Company</div>
+                                    <h6 class="card-value-main">Ludhiana Junction Terminal</h6>
+                                </div>
+                            </div>
+                            <div class="card-actions">
+                                <i class="bi bi-pencil-square icon-edit"></i>
+                                <i class="bi bi-trash icon-delete"></i>
+                            </div>
+                        </div>
+                        <div class="detail-grid">
+                            <div class="detail-item"><span class="lbl">Name of Main Products</span><span class="val">Robert</span></div>
+                            <div class="detail-item"><span class="lbl">Annual Turnover (₹)</span><span class="val">₹ 84.5</span></div>
+                        </div>
+                    </div>
+                </div>
+                }
+            </div>
+
+            <div class="d-flex justify-content-end border-top pt-4">
+                <button class="btn-blue-action">Save Details</button>
+            </div>
+        </div> *@
+
+        <div class="main-section">
+    <div class="section-header">
+        <h3 class="section-title">
+            <i class="bi bi-buildings" style="color: #059669; margin-right: 8px;"></i> 
+            Added Other Occupation / Agencies List
+        </h3>
+        <span class="count-badge fs-5">3</span>
+    </div>
+
+    <div class="row g-3 mb-4">
+        @for(int i=0; i<3; i++) {
+        <div class="col-md-4">
+            <div class="added-card theme-green">
+                <div class="card-header-flex">
+                    <div class="card-title-group">
+                        <div class="icon-box">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/businessIcon1.svg" style="width: 24px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                            <i class="bi bi-buildings-fill" style="display:none;"></i>
+                        </div>
+                        <div>
+                            <div class="card-label">Company</div>
+                            <div class="card-value-main" style="text-transform: none;">Ludhiana Junction </div>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <i class="bi bi-pencil-square icon-edit"></i>
+                        <i class="bi bi-trash icon-delete"></i>
+                    </div>
+                </div>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <span class="lbl">Name of Main Products</span>
+                        <span class="val">Robert</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="lbl">Annual Turnover (₹)</span>
+                        <span class="val">₹ 84.5</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        }
+    </div>
+
+    <div class="d-flex justify-content-end border-top pt-4">
+        <button class="btn-blue-action">Save Details</button>
+    </div>
+</div>
+        <div class="main-section bg-transparent border-0 shadow-none p-0">
+            <div class="section-header mb-3 px-2">
+                <h3 class="section-title">
+                     <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/FamilyIcon.svg" style="width: 24px;" />
+                    
+                    Saved Details</h3>
+                <span class="count-badge">3</span>
+            </div>
+
+            <div class="row g-3">
+                @for(int i=0; i<3; i++) {
+                <div class="col-md-4">
+                    <div class="saved-card">
+                        <div class="saved-card-header">
+                            <div class="d-flex gap-3 align-items-center">
+                                 <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Greencompany.svg" style="width: 24px;" />
+                                <div>
+                                    <div class="saved-name">Robert</div>
+                                    <div class="saved-phone">8899887766</div>
+                                </div>
+                            </div>
+                            <div class="saved-actions">
+    <a href="/ProprietorDetails" style="text-decoration: none;" title="View Proprietor Details">
+        <i class="bi bi-eye icon-view"></i>
+    </a>
+    
+    <i class="bi bi-pencil-square icon-edit"></i>
+    <i class="bi bi-trash icon-delete"></i>
+</div>
+                        </div>
+                        <div class="saved-stats">
+                            <div class="stat-pill blue">Family 2</div>
+                            <div class="stat-pill green">Occupation 2</div>
+                        </div>
+                    </div>
+                </div>
+                }
+            </div>
+        </div>
+        	<CommanFooter />
+    </div>
+
+    

@@ -1,11 +1,45 @@
-﻿<div class="footer-nav">
-	<button class="btn btn-prev">
-		<i class="bi bi-chevron-left"></i>
-		Previous Step
-	</button>
+﻿
+@using SPIC.MauiBlazorApp.Shared.FormFlow
+@inject NavigationManager Nav
 
-	<button class="btn btn-next">
-		Next
-		<i class="bi bi-chevron-right"></i>
-	</button>
-</div>
+@if (CurrentStep is FormStepModel step)
+{
+	<div class="footer-nav">
+		<div>
+			@if (step.StepNo != 1)
+			{
+				<NavLink href="@step.PreviousRoute" class="btn btn-prev text-decoration-none">
+					<i class="bi bi-chevron-left"></i>
+					Previous Step
+				</NavLink>
+			}
+		</div>
+
+		<div>
+			@if (step.StepNo < TotalSteps)
+			{
+				<NavLink href="@step.NextRoute" class="btn btn-next text-decoration-none">
+					Next
+					<i class="bi bi-chevron-right"></i>
+				</NavLink>
+			}
+			else
+			{
+				<button class="btn btn-next">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SendIcon.svg" class="verifyicon" alt="sendicon" />Submit Registration
+				</button>
+			}
+		</div>
+	</div>
+}
+
+@code {
+	private FormStepModel? CurrentStep;
+	private int TotalSteps => FormStepData.Steps.Count;
+
+	protected override void OnInitialized()
+	{
+		var relativePath = "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+		CurrentStep = FormStepData.GetStepByRoute(relativePath);
+	}
+}
