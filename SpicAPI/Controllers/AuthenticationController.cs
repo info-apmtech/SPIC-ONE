@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.IdentityModel.Protocols.WSIdentity;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
@@ -13,93 +12,120 @@ using static SPIC.Core.DTOs.AdminViewModel;
 
 namespace SpicAPI.Controllers
 {
-    [Authorize]
-    [ApiController]
-    [Route("api/Authentication")]
-    public class AuthenticationController : Controller
-    {
-        private readonly IConfiguration _config;
-        private readonly TokenService _tokenService;
-        private readonly IUserService _userService;
-        private readonly UserManager<UserInfo> _userManager;
-        private readonly SignInManager<UserInfo> _signInManager;
+	[Authorize]
+	[ApiController]
+	[Route("api/[controller]")]
+	public class AuthenticationController : ControllerBase
+	{
+		private readonly IConfiguration _config;
+		private readonly IUserService _userService;
+		private readonly UserManager<Userinfo> _userManager;
+		private readonly SignInManager<Userinfo> _signInManager;
 
-        public AuthenticationController(IUserService userService , UserManager<UserInfo> userManager, SignInManager<UserInfo> signInManager, IConfiguration config)
-        {
-            _userService = userService;
-            _userManager = userManager;
-            _signInManager = signInManager;
-            _config = config;
-        }
-        [HttpPost("seed-default-user")]
-        public async Task<IActionResult> SeedDefaultUser([FromBody] SeedUserDto dto)
-        {
-            var result = await _userService.SeedDefaultUserAsync(dto);
+		public AuthenticationController(
+			IUserService userService,
+			UserManager<Userinfo> userManager,
+			SignInManager<Userinfo> signInManager,
+			IConfiguration config)
+		{
+			_userService = userService;
+			_userManager = userManager;
+			_signInManager = signInManager;
+			_config = config;
+		}
 
-            if (!result.Success)
-                return BadRequest(result.Message);
+		[AllowAnonymous]
+		[HttpPost("seed-default-user")]
+		public async Task<IActionResult> SeedDefaultUser([FromBody] SeedUserDto dto)
+		{
+			if (!ModelState.IsValid)
+				return BadRequest(ModelState);
 
-            return Ok(result.Message);
-        }
-        [HttpPost]
-        public async Task<IActionResult> CreateUser([FromBody] CreateUserDto dto)
-        {
-            if (dto == null)
-                return BadRequest("Invalid data");
+			var result = await _userService.SeedDefaultUserAsync(dto);
 
-            var user = await _userService.CreateUserAsync(dto);
-            return Ok(user);
-        }
+			if (!result.Success)
+				return BadRequest(result.Message);
 
+			return Ok(new
+			{
+				message = result.Message
+			});
+		}
 
+		//[Authorize(Roles = "Admin")]
+		[HttpPost("create-user")]
+		public async Task<IActionResult> CreateUser([FromBody] CreateUserDto dto)
+		{
+			if (!ModelState.IsValid)
+				return BadRequest(ModelState);
 
-        [AllowAnonymous]
-        [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginViewModel model)
-        {
-            var user = await _userManager.FindByNameAsync(model.Name);
-            if (user == null)
-                return Unauthorized("Invalid username or password");
+			var user = await _userService.CreateUserAsync(dto);
 
-            var result = await _signInManager.CheckPasswordSignInAsync(user, model.Password, false);
-            if (!result.Succeeded)
-                return Unauthorized("Invalid username or password");
+			return Ok(new
+			{
+				message = "User created successfully",
+				user.Id,
+				user.Name,
+				user.Email,
+				user.UserName,
+				Role = user.Role.ToString()
+			});
+		}
 
-            var token = GenerateJwtToken(user.Id);
+		[AllowAnonymous]
+		[HttpPost("login")]
+		public async Task<IActionResult> Login([FromBody] LoginViewModel model)
+		{
+			if (!ModelState.IsValid)
+				return BadRequest(ModelState);
 
-            var handler = new JwtSecurityTokenHandler();
-            var jwtToken = handler.ReadToken(token) as JwtSecurityToken;
+			var user = await _userManager.FindByNameAsync(model.UserName);
+			if (user == null)
+				return Unauthorized("Invalid username or password");
 
-            //return Ok(new
-            //{
-            //    token = $"Bearer {token}",
-            //    user = user,
-            //    validtill = jwtToken?.ValidTo
-            //});
-            var responseData = new LoginResponseModel()
-            {
-                Token = token,
-                User = user,
-                Expiration = jwtToken?.ValidTo ?? DateTime.UtcNow.AddHours(1)
-            };
+			var result = await _signInManager.CheckPasswordSignInAsync(user, model.Password, false);
+			if (!result.Succeeded)
+				return Unauthorized("Invalid username or password");
 
-            return Ok(responseData);
-        }
-        private string GenerateJwtToken(string username)
-        {
-            var jwtConfig = _config.GetSection("Jwt");
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"]!));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+			var token = GenerateJwtToken(user);
 
-            var token = new JwtSecurityToken(
-                issuer: jwtConfig["Issuer"],
-                audience: jwtConfig["Audience"],
-                claims: new[] { new Claim(ClaimTypes.Name, username) },
-                expires: DateTime.Now.AddMinutes(Convert.ToDouble(jwtConfig["ExpireMinutes"])),
-                signingCredentials: creds
-            );
+			var handler = new JwtSecurityTokenHandler();
+			var jwtToken = handler.ReadToken(token) as JwtSecurityToken;
 
-            return new JwtSecurityTokenHandler().WriteToken(token);
-        }
-    }
+			var responseData = new LoginResponseModel
+			{
+				Token = $"Bearer {token}",
+				User = user,
+				Expiration = jwtToken?.ValidTo ?? DateTime.UtcNow.AddHours(1)
+			};
+
+			return Ok(responseData);
+		}
+
+		private string GenerateJwtToken(Userinfo user)
+		{
+			var jwtConfig = _config.GetSection("Jwt");
+			var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"]!));
+			var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+			var claims = new List<Claim>
+			{
+				new Claim(ClaimTypes.NameIdentifier, user.Id),
+				new Claim(ClaimTypes.Name, user.UserName ?? user.Email ?? string.Empty),
+				new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+				new Claim(ClaimTypes.Role, user.Role.ToString())
+			};
+
+			var token = new JwtSecurityToken(
+				issuer: jwtConfig["Issuer"],
+				audience: jwtConfig["Audience"],
+				claims: claims,
+				notBefore: DateTime.UtcNow,
+				expires: DateTime.UtcNow.AddMinutes(Convert.ToDouble(jwtConfig["ExpireMinutes"])),
+				signingCredentials: creds
+			);
+
+			return new JwtSecurityTokenHandler().WriteToken(token);
+		}
+	}
 }
