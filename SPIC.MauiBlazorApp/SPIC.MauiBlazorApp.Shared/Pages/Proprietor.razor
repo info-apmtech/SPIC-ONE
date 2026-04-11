@@ -1,5 +1,60 @@
 ﻿@page "/Proprietor" 
+<style>
+    .popup-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
 
+.popup-container {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 1000;
+}
+
+.popup-content {
+    width: 100%;
+    max-width: 1200px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 20px;
+    animation: fadeIn 0.2s ease;
+}
+
+.popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+    background: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.popup-body {
+    padding: 20px;
+    background: #f8f9fb;
+}
+
+@@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+</style>
     <div class="container-fluid py-4 px-0">
         	<FormLoader />
     <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
@@ -375,10 +430,14 @@
                                 </div>
                             </div>
                             <div class="saved-actions">
-    <a href="/ProprietorDetails" style="text-decoration: none;" title="View Proprietor Details">
+  @*   <a href="/ProprietorDetails" style="text-decoration: none;" title="View Proprietor Details">
         <i class="bi bi-eye icon-view"></i>
-    </a>
-    
+    </a> *@
+                                <a href="javascript:void(0);"
+                                       title="View Proprietor Details"
+                                       @onclick="OpenPopup">
+                                    <i class="bi bi-eye icon-view"></i>
+                                </a>
     <i class="bi bi-pencil-square icon-edit"></i>
     <i class="bi bi-trash icon-delete"></i>
 </div>
@@ -394,6 +453,30 @@
         </div>
         	<CommanFooter />
     </div>
+@if (showPopup)
+{
+    <div class="popup-backdrop" @onclick="ClosePopup"></div>
+
+    <div class="popup-container">
+        <div class="popup-content" @onclick:stopPropagation="true">
+
+            <!-- HEADER -->
+            <div class="popup-header">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-arrow-left" @onclick="ClosePopup"></i>
+                    <h5 class="m-0">Proprietor Information</h5>
+                </div>
+
+                <button class="btn-close" @onclick="ClosePopup"></button>
+            </div>
+
+            <!-- BODY -->
+            <div class="popup-body">
+                <_ProprietorDetails/>
+            </div>
+        </div>
+    </div>
+}
 
     @code {
     private async Task HandleAadhaarUpload(ChangeEventArgs e)
@@ -421,4 +504,8 @@
             Console.WriteLine($"Image file selected: {file.Name}");
         }
     }
+    private bool showPopup = false;
+
+    void OpenPopup() => showPopup = true;
+    void ClosePopup() => showPopup = false;
 }

@@ -1,279 +1,6 @@
 ﻿@page "/FinalSubmission" 
 
-<style>
-    /* --- General Typography & Layout --- */
-    body {
-        margin: 0;
-        font-family: 'Inter', sans-serif;
-        background-color: #F8FAFC; 
-        color: #1F2937;
-        padding-bottom: 50px;
-    }
-
-    .page-title {
-        color: #1F2937;
-        font-weight: 700;
-        font-size: 1.5rem;
-        margin: 24px 0;
-    }
-
-    /* --- Main Cards --- */
-    .main-card {
-        background: #ffffff;
-        border-radius: 12px;
-        border: 1px solid #E5E7EB;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-        padding: 24px;
-        margin-bottom: 24px;
-    }
-    
-    .section-title {
-        font-size: 1.15rem;
-        font-weight: 700;
-        color: #374151;
-        margin-bottom: 6px;
-    }
-    .section-subtitle {
-        font-size: 0.75rem;
-        color: #6B7280;
-        margin-bottom: 24px;
-    }
-
-    /* --- Progress Card --- */
-    .progress-card {
-        background: linear-gradient(to right, #FFFBEB, #FEF3C7);
-        border: 1px solid #FDE68A;
-        border-radius: 12px;
-        padding: 24px;
-        margin-bottom: 24px;
-    }
-    .progress-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        margin-bottom: 16px;
-    }
-    .progress-title { font-weight: 700; font-size: 1.1rem; color: #1F2937; margin-bottom: 4px; }
-    .progress-desc { font-size: 0.75rem; color: #4B5563; }
-    .progress-percent { font-weight: 700; font-size: 1.4rem; color: #92400E; line-height: 1; text-align: right;}
-    .progress-percent small { font-size: 0.65rem; color: #B45309; font-weight: 600; display: block; margin-top: 4px;}
-    
-    .progress-bar-custom {
-        height: 6px;
-        background-color: #E5E7EB;
-        border-radius: 10px;
-        width: 100%;
-        overflow: hidden;
-    }
-    .progress-fill {
-        height: 100%;
-        background-color: #059669; /* Green fill */
-        border-radius: 10px;
-    }
-
-    /* --- Completion Status Grid (Ticket Style) --- */
-    .completion-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 16px;
-    }
-
-    @@media (max-width: 992px) { .completion-grid { grid-template-columns: repeat(2, 1fr); } }
-    @@media (max-width: 768px) { .completion-grid { grid-template-columns: 1fr; } }
-
-    .ticket-card {
-        background-color: #ffffff;
-        border: 1px solid #E5E7EB;
-        border-radius: 8px;
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.01);
-    }
-
-  
-    .ticket-card.bg-tint-green {
-        background-color: #F4FBF7; 
-        border-color: #D1FAE5;
-    }
-    .ticket-card.bg-tint-orange {
-        background-color: #FFFAEC; 
-        border-color: #FDE68A;
-    }
-
-    .ticket-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .ticket-title-wrap {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .ticket-icon {
-        width: 28px;
-        height: 28px;
-        border-radius: 6px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.9rem;
-    }
-
-    .ticket-title {
-        font-weight: 700;
-        font-size: 0.85rem;
-        color: #1F2937;
-        margin: 0;
-    }
-
-    .edit-icon {
-        color: #3B82F6;
-        font-size: 0.9rem;
-        cursor: pointer;
-    }
-
-    /* Inner Data Grid */
-    .ticket-data {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .data-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-    }
-
-    .data-lbl {
-        font-size: 0.65rem;
-        color: #6B7280;
-        font-weight: 500;
-        flex: 0 0 110px; 
-    }
-
-    .data-val {
-        font-size: 0.7rem;
-        color: #1F2937;
-        font-weight: 600;
-        flex: 1;
-        text-align: left;
-    }
-
-   
-    .tag-pill {
-        background-color: #ffffff; 
-        color: #059669;
-        border: 1px solid #A7F3D0;
-        font-size: 0.55rem;
-        padding: 2px 6px;
-        border-radius: 4px;
-        display: inline-block;
-        margin-right: 4px;
-        margin-bottom: 4px;
-        font-weight: 700;
-    }
-
-    /* Themes for Icon blocks */
-    .theme-green .ticket-icon { background-color: #ECFDF5; color: #10B981; }
-    .theme-orange .ticket-icon { background-color: #FFF7ED; color: #F59E0B; }
-
-    /* Make icons pop more against the tinted backgrounds */
-    .bg-tint-green .theme-green .ticket-icon { background-color: #ffffff; border: 1px solid #D1FAE5; }
-    .bg-tint-orange .theme-orange .ticket-icon { background-color: #ffffff; border: 1px solid #FDE68A; }
-
-    /* --- Enclosures Section (Full Width inside Grid) --- */
-    .span-3 { grid-column: span 3; }
-    
-    .enclosure-header {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.7rem;
-        color: #4B5563;
-        margin-bottom: 12px;
-        font-weight: 500;
-    }
-    .enclosure-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-    }
-    .enclosure-pill {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background-color: #ffffff; /* Adjusted for tinted background */
-        border: 1px solid #A7F3D0;
-        color: #059669;
-        padding: 10px 12px;
-        border-radius: 6px;
-        font-size: 0.7rem;
-        font-weight: 600;
-    }
-    .enclosure-pill i { font-size: 0.9rem; }
-
-    /* --- Terms and Conditions --- */
-    .tc-box {
-        background-color: #F9FAFB;
-        border-radius: 8px;
-        padding: 20px;
-        height: 100%;
-    }
-    .tc-check-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-weight: 700;
-        font-size: 0.9rem;
-        color: #1F2937;
-        margin-bottom: 16px;
-    }
-    .form-check-input.custom-check {
-        width: 1.1rem;
-        height: 1.1rem;
-        border-color: #D1D5DB;
-        cursor: pointer;
-    }
-    .form-check-input.custom-check:checked {
-        background-color: #059669;
-        border-color: #059669;
-    }
-    .tc-list {
-        list-style-type: none;
-        padding-left: 0;
-        margin: 0;
-        font-size: 0.75rem;
-        color: #4B5563;
-        line-height: 2;
-    }
-    .tc-list li::before {
-        content: "•";
-        color: #9CA3AF;
-        font-weight: bold;
-        display: inline-block;
-        width: 12px;
-    }
-
-    /* --- Warning Alert --- */
-    .alert-custom {
-        background-color: #FEF2F2;
-        border: 1px solid #FECACA;
-        border-radius: 8px;
-        padding: 16px 20px;
-        color: #DC2626;
-        font-size: 0.75rem;
-    }
-    .alert-custom strong { font-weight: 700; margin-right: 4px; font-size: 0.85rem;}
-
-</style>
-
-<div class="container-fluid py-4 px-0" style="max-width: 1200px; margin: auto;">
+<div class="container-fluid py-4 px-0">
     
     <FormLoader />
     <div class="page-header-row">
@@ -304,7 +31,7 @@
             
             <div class="ticket-card bg-tint-green">
                 <div class="ticket-header">
-                    <div class="ticket-title-wrap theme-green">
+                    <div class="ticket-title-wrap theme-green-final">
                         <div class="ticket-icon"><i class="bi bi-buildings"></i></div>
                         <h4 class="ticket-title">Company Details</h4>
                     </div>
@@ -324,7 +51,7 @@
             <div class="d-flex flex-column gap-3">
                 <div class="ticket-card bg-tint-green" style="margin-bottom:0;">
                     <div class="ticket-header">
-                        <div class="ticket-title-wrap theme-green">
+                        <div class="ticket-title-wrap theme-green-final">
                             <div class="ticket-icon"><i class="bi bi-wifi"></i></div>
                             <h4 class="ticket-title">Office Automation</h4>
                         </div>
@@ -338,7 +65,7 @@
 
                 <div class="ticket-card flex-grow-1 bg-tint-green">
                     <div class="ticket-header">
-                        <div class="ticket-title-wrap theme-green">
+                        <div class="ticket-title-wrap theme-green-final">
                             <div class="ticket-icon"><i class="bi bi-building"></i></div>
                             <h4 class="ticket-title">Companies Operating</h4>
                         </div>
@@ -364,7 +91,7 @@
 
             <div class="ticket-card bg-tint-green">
                 <div class="ticket-header">
-                    <div class="ticket-title-wrap theme-green">
+                    <div class="ticket-title-wrap theme-green-final">
                         <div class="ticket-icon"><i class="bi bi-box-seam"></i></div>
                         <h4 class="ticket-title">Warehouse Details</h4>
                     </div>
@@ -398,7 +125,7 @@
 
             <div class="ticket-card bg-tint-green">
                 <div class="ticket-header">
-                    <div class="ticket-title-wrap theme-green">
+                    <div class="ticket-title-wrap theme-green-final">
                         <div class="ticket-icon"><i class="bi bi-graph-up-arrow"></i></div>
                         <h4 class="ticket-title">Annual Sales</h4>
                     </div>
@@ -430,7 +157,7 @@
 
             <div class="ticket-card bg-tint-green">
                 <div class="ticket-header">
-                    <div class="ticket-title-wrap theme-green">
+                    <div class="ticket-title-wrap theme-green-final">
                         <div class="ticket-icon"><i class="bi bi-calendar2-check"></i></div>
                         <h4 class="ticket-title">Sales Planning</h4>
                     </div>
@@ -460,7 +187,7 @@
 
             <div class="ticket-card bg-tint-green">
                 <div class="ticket-header">
-                    <div class="ticket-title-wrap theme-green">
+                    <div class="ticket-title-wrap theme-green-final">
                         <div class="ticket-icon"><i class="bi bi-geo-alt"></i></div>
                         <h4 class="ticket-title">Market Details</h4>
                     </div>
@@ -489,7 +216,7 @@
 
             <div class="ticket-card bg-tint-green">
                 <div class="ticket-header">
-                    <div class="ticket-title-wrap theme-green">
+                    <div class="ticket-title-wrap theme-green-final">
                         <div class="ticket-icon"><i class="bi bi-people"></i></div>
                         <h4 class="ticket-title">Proprietor Details</h4>
                     </div>
@@ -520,7 +247,7 @@
                 </div>
             </div>
 
-            <div class="ticket-card span-3 theme-green bg-tint-green mt-3">
+            <div class="ticket-card span-3 theme-green-final bg-tint-green mt-3">
                 <div class="ticket-header border-bottom pb-3 mb-3" style="border-color:#D1FAE5!important;">
                     <div class="ticket-title-wrap">
                         <div class="ticket-icon bg-white border"><i class="bi bi-paperclip"></i></div>
@@ -598,5 +325,5 @@
     <div class="alert-custom mb-5">
         <strong>Warning</strong> You have 10 incomplete sections. Please complete all sections before submitting.
     </div>
-
+    <CommanFooter />
 </div>
