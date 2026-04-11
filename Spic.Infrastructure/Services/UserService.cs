@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
@@ -11,60 +12,81 @@ using System.Threading.Tasks;
 
 namespace Spic.Infrastructure.Services
 {
-    public class UserService : IUserService
-    {
-        private readonly AppDbContext _context;
+	public class UserService : IUserService
+	{
+		private readonly AppDbContext _context;
+		private readonly UserManager<Userinfo> _userManager;
+		public UserService(AppDbContext context, UserManager<Userinfo> userManager)
+		{
+			_context = context;
+			_userManager = userManager;
+		}
 
-        public UserService(AppDbContext context)
-        {
-            _context = context;
-        }
+		public async Task<Userinfo> CreateUserAsync(CreateUserDto dto)
+		{
+			var exists = await _userManager.FindByEmailAsync(dto.Email);
+			if (exists != null)
+			{
+				throw new Exception("User already exists.");
+			}
 
-        public async Task<Userinfo> CreateUserAsync(CreateUserDto dto)
-        {
-            var user = new Userinfo
-            {
-                Name = dto.Name,
-                Email = dto.Email,
-               PasswordHash = dto.Password
-            };
+			var user = new Userinfo
+			{
+				Name = dto.Name,
+				Email = dto.Email,
+				UserName = dto.UserName,
+				Password = dto.Password,
+				Role = dto.Role
+			};
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+			var result = await _userManager.CreateAsync(user, dto.Password);
 
-            return user;
-        }
+			if (!result.Succeeded)
+			{
+				throw new Exception(string.Join(", ", result.Errors.Select(e => e.Description)));
+			}
 
-        public async Task<ServiceResult> SeedDefaultUserAsync(SeedUserDto dto)
-        {
-            var exists = await _context.Users
-                .AnyAsync(x => x.Email == dto.Email);
+			return user;
+		}
 
-            if (exists)
-            {
-                return new ServiceResult
-                {
-                    Success = false,
-                    Message = "User already exists for this site."
-                };
-            }
+		public async Task<ServiceResult> SeedDefaultUserAsync(SeedUserDto dto)
+		{
+			var exists = await _context.Users.AnyAsync(x => x.Email == dto.Email);
 
-            var user = new Userinfo
-            {
-                Name = dto.Name,
-                Email = dto.Email,
-                PasswordHash = dto.Password,
-               // SiteCode = dto.SiteCode
-            };
+			if (exists)
+			{
+				return new ServiceResult
+				{
+					Success = false,
+					Message = "User already exists for this site."
+				};
+			}
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+			var user = new Userinfo
+			{
+				Name = dto.Name,
+				Email = dto.Email,
+				UserName = dto.UserName,
+				Password = dto.Password,
+				Role = dto.Role
+			};
 
-            return new ServiceResult
-            {
-                Success = true,
-                Message = "Default user created successfully."
-            };
-        }
-    }
+			var result = await _userManager.CreateAsync(user, dto.Password);
+
+			if (!result.Succeeded)
+			{
+				return new ServiceResult
+				{
+					Success = false,
+					Message = string.Join(", ", result.Errors.Select(e => e.Description))
+				};
+			}
+
+			return new ServiceResult
+			{
+				Success = true,
+				Message = "Default user created successfully."
+			};
+		}
+	}
 }

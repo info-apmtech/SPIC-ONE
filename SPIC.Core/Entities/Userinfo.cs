@@ -12,5 +12,11 @@ namespace SPIC.Core.Entities
         public string? Name { get; set; }
         [PersonalData]
        public DateTime Createddate { get; set; } = DateTime.Now;
-    }
+		public AppRole Role { get; set; }
+		public string Password { get; set; }
+	}
+	public enum AppRole
+	{
+		Admin,Dealer
+	}
 }

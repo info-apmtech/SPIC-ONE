@@ -17,6 +17,10 @@ builder.Services.AddSingleton(new PlatformService
 {
 	IsWeb = true
 });
+builder.Services.AddScoped(sp => new HttpClient
+{
+	BaseAddress = new Uri("https://localhost:7032/")
+});
 
 var app = builder.Build();
 

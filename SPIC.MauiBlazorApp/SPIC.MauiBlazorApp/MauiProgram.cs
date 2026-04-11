@@ -27,6 +27,10 @@ namespace SPIC.MauiBlazorApp
 			{
 				IsWeb = false
 			});
+			builder.Services.AddScoped(sp => new HttpClient
+			{
+				BaseAddress = new Uri("https://localhost:7032/")
+			});
 
 #if DEBUG
 			builder.Services.AddBlazorWebViewDeveloperTools();
