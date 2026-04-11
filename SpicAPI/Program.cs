@@ -9,17 +9,16 @@ using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 using System.Text;
 
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 
-builder.Services.AddDbContext<AppDbContext>(op =>
-{
-    op.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
-    op.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
-});
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddIdentity<Userinfo, IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()
