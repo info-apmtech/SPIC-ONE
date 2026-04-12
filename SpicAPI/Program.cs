@@ -37,6 +37,7 @@ builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
 
 builder.Services.AddScoped<IUserService, UserService>();
 //builder.Services.AddScoped<ILocationService, LocationImplementation>();
+builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];
