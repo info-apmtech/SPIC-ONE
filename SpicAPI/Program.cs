@@ -19,9 +19,11 @@ builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
+            b => b.MigrationsAssembly("Spic.Infrastructure")
+    ));
 
-builder.Services.AddIdentity<Userinfo, IdentityRole>(options =>
+builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
 {
 	options.Password.RequireDigit = false;
 	options.Password.RequireLowercase = false;
@@ -34,7 +36,7 @@ builder.Services.AddIdentity<Userinfo, IdentityRole>(options =>
 .AddDefaultTokenProviders();
 
 builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<ILocationService, LocationImplementation>();
+//builder.Services.AddScoped<ILocationService, LocationImplementation>();
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];

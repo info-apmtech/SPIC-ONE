@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SPIC.Core.Entities;
 using System;
@@ -10,12 +11,34 @@ using System.Threading.Tasks;
 
 namespace Spic.Infrastructure.Data
 {
-    public class AppDbContext : IdentityDbContext<Userinfo>
+    public class AppDbContext : IdentityDbContext<UserInfo>
 	{
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
         }
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
 
-        public DbSet<Userinfo> UserInfos { get; set; }
+            builder.Entity<UserInfo>().ToTable("AppUsers");
+            builder.Entity<IdentityRole>().ToTable("AppRoles"); // optional, rename roles too
+            builder.Entity<IdentityUserRole<string>>().ToTable("AppUserRoles");
+            builder.Entity<IdentityUserClaim<string>>().ToTable("AppUserClaims");
+            builder.Entity<IdentityUserLogin<string>>().ToTable("AppUserLogins");
+            builder.Entity<IdentityRoleClaim<string>>().ToTable("AppRoleClaims");
+            builder.Entity<IdentityUserToken<string>>().ToTable("AppUserTokens");
+
+            // restrict delete on Designation
+            builder.Entity<UserInfo>()
+                .HasOne(u => u.Designation)
+                .WithMany()
+                .HasForeignKey(u => u.DesignationId)
+                .OnDelete(DeleteBehavior.Restrict);
+        }
+        public DbSet<Designation> Designations { get; set; }
+        public DbSet<Zone> Zones { get; set; }
+        public DbSet<State> States { get; set; }
+        public DbSet<District> Districts { get; set; }
+        public DbSet<SubDistrict> SubDistricts { get; set; }
     }
 }

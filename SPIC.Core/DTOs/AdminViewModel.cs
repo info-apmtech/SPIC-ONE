@@ -11,7 +11,7 @@ namespace SPIC.Core.DTOs
         public class LoginViewModel
         {
             //public string Name { get; set; } = "";
-			public string UserName { get; set; }
+			public required string UserName { get; set; }
 			//public string Email { get; set; } = "";
             public string Password { get; set; } = "";
         }
@@ -19,8 +19,8 @@ namespace SPIC.Core.DTOs
 
         public class LoginResponseModel
         {
-            public string Token { get; set; }
-            public Userinfo User { get; set; }
+            public required string Token { get; set; }
+            public required UserInfo User { get; set; }
             public DateTime Expiration { get; set; }
 
         }
