@@ -20,6 +20,7 @@ namespace SPIC.Core.Entities
 		public int Id { get; set; }
 		public required string StateName { get; set; }
 		public int ZoneId { get; set; }
+		public Zone? Zone { get; set; }
 		public bool IsActive { get; set; }
 		public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
@@ -30,6 +31,7 @@ namespace SPIC.Core.Entities
 		public int Id { get; set; }
 		public required string DistrictName { get; set; }
 		public int StateId { get; set; }
+		public State? State { get; set; }
 		public bool IsActive { get; set; }
 		public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
@@ -39,8 +41,8 @@ namespace SPIC.Core.Entities
 	{
 		public int Id { get; set; }
 		public required string SubDistrictName { get; set; }
-		public int StateId { get; set; }
 		public int DistrictId { get; set; }
+		public District? District { get; set; }
 		public bool IsActive { get; set; }
 		public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

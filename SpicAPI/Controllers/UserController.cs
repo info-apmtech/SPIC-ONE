@@ -19,7 +19,7 @@ namespace SpicAPI.Controllers
         }   
 
         [AllowAnonymous]
-        [HttpPost("seed-default-user")]
+        [HttpGet("seed-default-user")]
         public async Task<IActionResult> SeedDefaultUser()
         {
             if (!ModelState.IsValid)
@@ -27,7 +27,7 @@ namespace SpicAPI.Controllers
             var dto = new UserDto
             {
                 Name = "Admin User",
-                Email = "",
+                Email = "spic@apmiot.com",
                 UserName = "admin",
                 Password = "SpicAdmin)9*7^5$3@",
                 Role = AppRole.Admin,

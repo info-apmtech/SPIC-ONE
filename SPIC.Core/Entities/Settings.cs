@@ -45,6 +45,7 @@ namespace SPIC.Core.Entities
         public int Id { get; set; }
         public required string Name { get; set; }
         public int UnitId { get; set; }
+        public Unit? Unit { get; set; }
         public bool IsSpecialityProduct { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
@@ -56,6 +57,7 @@ namespace SPIC.Core.Entities
         public int Id { get; set; }
         public required string Name { get; set; }
         public int CategoryId { get; set; }
+        public Category? Category { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
@@ -78,7 +80,9 @@ namespace SPIC.Core.Entities
         public string? GoogleURL { get; set; }
         public string? RailwayCode { get; set; }
         public int StateId { get; set; } = 0;
+        public State? State { get; set; }
         public int DistrictId { get; set; } = 0;
+        public District? District { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
@@ -89,7 +93,9 @@ namespace SPIC.Core.Entities
         public int Id { get; set; }
         public required string Name { get; set; }
         public int StateId { get; set; } = 0;
+        public State? State { get; set; }
         public int DistrictId { get; set; } = 0;
+        public District? District { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

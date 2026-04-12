@@ -1,4 +1,9 @@
 ﻿@inherits LayoutComponentBase
+@using System.Net.Http.Headers
+@inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <div class="app-shell">
 	<aside class="sidebar">
@@ -57,3 +62,35 @@
 		</nav>
 	</div>
 </div>
+
+@code {
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender)
+		{
+			// Restore token from sessionStorage (survives page refresh)
+			if (Http.DefaultRequestHeaders.Authorization == null)
+			{
+				var token = LoginState.Token;
+
+				if (string.IsNullOrWhiteSpace(token))
+				{
+					token = await JS.InvokeAsync<string?>("sessionStorage.getItem", "jwt_token");
+				}
+
+				if (!string.IsNullOrWhiteSpace(token))
+				{
+					Http.DefaultRequestHeaders.Authorization =
+						new AuthenticationHeaderValue("Bearer", token);
+					LoginState.Token = token;
+					StateHasChanged();
+				}
+				else
+				{
+					// No token — redirect to login
+					Navigation.NavigateTo("/login");
+				}
+			}
+		}
+	}
+}

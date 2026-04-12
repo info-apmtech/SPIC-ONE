@@ -11,7 +11,7 @@ namespace SPIC.Core.Entities
     public class UserInfo : IdentityUser
     {
         public required string? Name { get; set; }
-        public int DesignationId { get; set; } = 0;
+        public int? DesignationId { get; set; }
         public Designation? Designation { get; set; }
         public AppRole Role { get; set; }
         public required string Password { get; set; }

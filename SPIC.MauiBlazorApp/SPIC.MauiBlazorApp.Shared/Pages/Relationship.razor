@@ -1,15 +1,23 @@
 ﻿@page "/Relationship"
-
+@using System.Net.Http.Json
+@inject HttpClient Http
 
 <div class="container-fluid">
 
 	<h2 class="page-title">Relationship Master</h2>
 
+	@if (!string.IsNullOrEmpty(_message))
+	{
+		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+			@_message
+			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
+		</div>
+	}
+
 	<div class="main-card">
 		<div class="section-header">
-			<h3 class="section-title">Add New Relationship</h3>
-			<button class="btn-outline-green" style="
-				width: 12%;">
+			<h3 class="section-title">@(_isEditing ? "Edit Relationship" : "Add New Relationship")</h3>
+			<button class="btn-outline-green" style="width: 12%;">
 				<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
 			</button>
 		</div>
@@ -17,14 +25,15 @@
 		<div class="row g-3 mb-4">
 			<div class="col-md-5">
 				<label class="form-label-custom">Relationship Name</label>
-				<input type="text" class="form-control-custom w-100" placeholder="Enter Relationship Name">
+				<input type="text" class="form-control-custom w-100" placeholder="Enter Relationship Name"
+					   @bind="_formModel.Name" />
 			</div>
-            
+
 			<div class="col-md-2">
 				<div class="status-toggle-box">
 					<span>Active</span>
 					<label class="switch">
-						<input type="checkbox" checked>
+						<input type="checkbox" @bind="_formModel.IsActive">
 						<span class="slider"></span>
 					</label>
 				</div>
@@ -32,8 +41,10 @@
 		</div>
 
 		<div class="d-flex justify-content-end pt-2 mt-4">
-			<button class="btn-cancel mt-3"><i class="bi bi-x"></i> Cancel</button>
-			<button class="btn-save mt-3"><i class="bi bi-save"></i> Save</button>
+			<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
+			<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+				<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+			</button>
 		</div>
 	</div>
 
@@ -42,49 +53,42 @@
 			<div class="metric-card bg-blue-light">
 				<div class="metric-header">
 					<h4 class="metric-title">Total Count</h4>
-					<div class="metric-trend"><i class="bi bi-arrow-up-right"></i> 12% from last quarter</div>
 				</div>
-				<div class="metric-val">24</div>
+				<div class="metric-val">@_allItems.Count</div>
 			</div>
 		</div>
 		<div class="col-md-4">
 			<div class="metric-card bg-mint-light">
 				<div class="metric-header">
 					<h4 class="metric-title">Active</h4>
-					<div class="metric-info"><i class="bi bi-exclamation-circle"></i> 6 zones pending review</div>
 				</div>
-				<div class="metric-val">18</div>
+				<div class="metric-val">@_allItems.Count(x => x.IsActive)</div>
 			</div>
 		</div>
 		<div class="col-md-4">
 			<div class="metric-card bg-gray-light">
 				<div class="metric-header">
 					<h4 class="metric-title">Inactive</h4>
-					<div class="metric-info"><i class="bi bi-info-circle"></i> 6 zones pending review</div>
 				</div>
-				<div class="metric-val">18</div>
+				<div class="metric-val">@_allItems.Count(x => !x.IsActive)</div>
 			</div>
 		</div>
 	</div>
 
 	<div class="main-card">
 		<div class="section-header">
-			<h3 class="section-title">Existing RelationShip</h3>
-            
+			<h3 class="section-title">Existing Relationships</h3>
+
 			<div class="table-controls">
 				<div class="search-box">
 					<i class="bi bi-search"></i>
-					<input type="text" placeholder="Search zones...">
+					<input type="text" placeholder="Search relationships..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
 				</div>
-				<select class="filter-select">
-					<option>All Status</option>
-					@* <option>Active</option>
-					<option>Inactive</option> *@
+				<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+					<option value="All">All Status</option>
+					<option value="Active">Active</option>
+					<option value="Inactive">Inactive</option>
 				</select>
-				@* <div class="view-toggle">
-					<button class="view-btn"><i class="bi bi-grid"></i> Card View</button>
-					<button class="view-btn active"><i class="bi bi-list-ul"></i> List View</button>
-				</div> *@
 			</div>
 		</div>
 
@@ -101,54 +105,42 @@
 						</tr>
 					</thead>
 					<tbody>
-						<tr>
-							<td class="text-muted">1</td>
-							<td>Sister</td>
-							<td><span class="status-pill status-active">Active</span></td>
-							<td>2026-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<td class="text-muted">2</td>
-							<td>Brother</td>
-							<td><span class="status-pill status-active">Active</span></td>
-							<td>2026-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<td class="text-muted">3</td>
-							<td>Mother</td>
-							<td><span class="status-pill status-inactive">Inactive</span></td>
-							<td>2024-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<td class="text-muted">4</td>
-							<td>Father</td>
-							<td><span class="status-pill status-active">Active</span></td>
-							<td>2026-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
+						@if (_isLoading)
+						{
+							<tr>
+								<td colspan="5" class="text-center text-muted">Loading...</td>
+							</tr>
+						}
+						else if (!PagedItems.Any())
+						{
+							<tr>
+								<td colspan="5" class="text-center text-muted">No relationships found.</td>
+							</tr>
+						}
+						else
+						{
+							@foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
+							{
+								<tr>
+									<td class="text-muted">@((_currentPage - 1) * _pageSize + index + 1)</td>
+									<td>@item.Name</td>
+									<td>
+										<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+											  style="cursor:pointer"
+											  @onclick="() => ToggleStatus(item)">
+											@(item.IsActive ? "Active" : "Inactive")
+										</span>
+									</td>
+									<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
+									<td>
+										<div class="action-icons">
+											<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+											<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+										</div>
+									</td>
+								</tr>
+							}
+						}
 					</tbody>
 				</table>
 			</div>
@@ -157,23 +149,31 @@
 		<div class="pagination-container">
 			<div class="items-per-page">
 				Items Per Page
-				<select>
-					<option>16</option>
-					<option>32</option>
-					<option>50</option>
+				<select @bind="_pageSize" @bind:after="ApplyFilter">
+					<option value="16">16</option>
+					<option value="32">32</option>
+					<option value="50">50</option>
 				</select>
 			</div>
-            
+
 			<div class="pagination-controls">
-				<div class="page-btn"><i class="bi bi-chevron-left"></i></div>
-				<div class="page-btn active">1</div>
-				<div class="page-btn">2</div>
-				<div class="page-btn">3</div>
-				<div class="page-btn ellipsis">...</div>
-				<div class="page-btn">8</div>
-				<div class="page-btn">9</div>
-				<div class="page-btn">10</div>
-				<div class="page-btn"><i class="bi bi-chevron-right"></i></div>
+				<div class="page-btn @(_currentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage">
+					<i class="bi bi-chevron-left"></i>
+				</div>
+				@foreach (var thispage in PageNumbers)
+				{
+					@if (thispage == -1)
+					{
+						<div class="page-btn ellipsis">...</div>
+					}
+					else
+					{
+						<div class="page-btn @(thispage == _currentPage ? "active" : "")" @onclick="() => GoToPage(thispage)">@(thispage)</div>
+					}
+				}
+				<div class="page-btn @(_currentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage">
+					<i class="bi bi-chevron-right"></i>
+				</div>
 			</div>
 		</div>
 
@@ -181,3 +181,252 @@
 
 </div>
 
+@code {
+	private const string ApiBase = "api/Relationship";
+
+	// Data
+	private List<RelationshipDto> _allItems = new();
+	private List<RelationshipDto> _filteredItems = new();
+
+	// Form
+	private RelationshipFormModel _formModel = new();
+	private bool _isEditing;
+	private int? _editingId;
+
+	// UI state
+	private bool _isLoading = true;
+	private bool _isSaving;
+	private string? _message;
+	private bool _isError;
+
+	// Search & filter
+	private string _searchText = "";
+	private string _statusFilter = "All";
+
+	// Pagination
+	private int _currentPage = 1;
+	private int _pageSize = 16;
+
+	private int TotalPages => Math.Max(1, (int)Math.Ceiling(_filteredItems.Count / (double)_pageSize));
+	private IEnumerable<RelationshipDto> PagedItems => _filteredItems
+		.Skip((_currentPage - 1) * _pageSize)
+		.Take(_pageSize);
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadData();
+	}
+
+	private async Task LoadData()
+	{
+		try
+		{
+			_isLoading = true;
+			_allItems = await Http.GetFromJsonAsync<List<RelationshipDto>>($"{ApiBase}/all") ?? new();
+			ApplyFilter();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load: {ex.Message}", true);
+		}
+		finally
+		{
+			_isLoading = false;
+		}
+	}
+
+	private void ApplyFilter()
+	{
+		_filteredItems = _allItems
+			.Where(x => string.IsNullOrEmpty(_searchText)
+				|| x.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+			.Where(x => _statusFilter switch
+			{
+				"Active" => x.IsActive,
+				"Inactive" => !x.IsActive,
+				_ => true
+			})
+			.OrderByDescending(x => x.CreatedAt)
+			.ToList();
+
+		if (_currentPage > TotalPages) _currentPage = 1;
+	}
+
+	private async Task HandleSave()
+	{
+		if (string.IsNullOrWhiteSpace(_formModel.Name))
+		{
+			ShowMessage("Relationship name is required.", true);
+			return;
+		}
+
+		try
+		{
+			_isSaving = true;
+
+			if (_isEditing && _editingId.HasValue)
+			{
+				var response = await Http.PutAsJsonAsync($"{ApiBase}/{_editingId.Value}", new
+				{
+					Id = _editingId.Value,
+					Name = _formModel.Name,
+					IsActive = _formModel.IsActive,
+					UpdatedBy = "current-user"
+				});
+
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Update failed: {error}", true);
+					return;
+				}
+
+				ShowMessage("Relationship updated successfully.", false);
+			}
+			else
+			{
+				var response = await Http.PostAsJsonAsync(ApiBase, new
+				{
+					Name = _formModel.Name,
+					IsActive = _formModel.IsActive,
+					CreatedAt = DateTime.Now,
+					UpdatedAt = DateTime.Now,
+					UpdatedBy = "current-user"
+				});
+
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Create failed: {error}", true);
+					return;
+				}
+
+				ShowMessage("Relationship created successfully.", false);
+			}
+
+			ResetForm();
+			await LoadData();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private void EditItem(RelationshipDto item)
+	{
+		_isEditing = true;
+		_editingId = item.Id;
+		_formModel = new RelationshipFormModel
+		{
+			Name = item.Name,
+			IsActive = item.IsActive
+		};
+	}
+
+	private async Task DeleteItem(RelationshipDto item)
+	{
+		try
+		{
+			var response = await Http.DeleteAsync($"{ApiBase}/{item.Id}");
+			if (response.IsSuccessStatusCode)
+			{
+				ShowMessage($"'{item.Name}' deleted successfully.", false);
+				await LoadData();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Delete failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+	}
+
+	private async Task ToggleStatus(RelationshipDto item)
+	{
+		try
+		{
+			var newStatus = !item.IsActive;
+			var response = await Http.PatchAsync($"{ApiBase}/{item.Id}/status?isActive={newStatus}", null);
+
+			if (response.IsSuccessStatusCode)
+			{
+				item.IsActive = newStatus;
+				ApplyFilter();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Status change failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+	}
+
+	private void ResetForm()
+	{
+		_formModel = new RelationshipFormModel { IsActive = true };
+		_isEditing = false;
+		_editingId = null;
+	}
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	// Pagination helpers
+	private void GoToPage(int page) { _currentPage = page; }
+	private void PreviousPage() { if (_currentPage > 1) _currentPage--; }
+	private void NextPage() { if (_currentPage < TotalPages) _currentPage++; }
+
+	private IEnumerable<int> PageNumbers
+	{
+		get
+		{
+			var total = TotalPages;
+			if (total <= 7)
+				return Enumerable.Range(1, total);
+
+			var pages = new List<int> { 1 };
+			var start = Math.Max(2, _currentPage - 1);
+			var end = Math.Min(total - 1, _currentPage + 1);
+
+			if (start > 2) pages.Add(-1); // ellipsis
+			for (var i = start; i <= end; i++) pages.Add(i);
+			if (end < total - 1) pages.Add(-1); // ellipsis
+			pages.Add(total);
+
+			return pages;
+		}
+	}
+
+	// Local DTOs
+	public class RelationshipDto
+	{
+		public int Id { get; set; }
+		public string Name { get; set; } = "";
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public string UpdatedBy { get; set; } = "";
+	}
+
+	public class RelationshipFormModel
+	{
+		public string Name { get; set; } = "";
+		public bool IsActive { get; set; } = true;
+	}
+}
