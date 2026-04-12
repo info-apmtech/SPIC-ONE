@@ -1,14 +1,24 @@
 ﻿@page "/Logistics"
+@using System.Net.Http.Json
+@inject HttpClient Http
 
 <div class="container-fluid">
 
 	<h2 class="page-title">Logistics Master</h2>
 
+	@if (!string.IsNullOrEmpty(_message))
+	{
+		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+			@_message
+			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
+		</div>
+	}
+
 	<div class="tabs-wrapper">
 		<div class="tabs-container">
 			@foreach (var tab in TabOptions)
 			{
-				<div class="tab-item @(ActiveTab == tab ? "active" : "")" @onclick='() => SetActiveTab(tab)'>
+				<div class="tab-item @(ActiveTab == tab ? "active" : "")" @onclick="() => SetActiveTab(tab)">
 					@tab
 				</div>
 			}
@@ -17,75 +27,125 @@
 
 	<div class="main-card">
 		<div class="section-header">
-			<h3 class="section-title">Add New @ActiveTab</h3>
-			<button class="btn-outline-green" style="
-				width: 12%;">
+			<h3 class="section-title">@(_isEditing ? $"Edit {ActiveTab}" : $"Add New {ActiveTab}")</h3>
+			<button class="btn-outline-green" style="width: 12%;">
 				<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
 			</button>
 		</div>
 
 		<div class="row g-3 mb-4">
-            
 			@if (ActiveTab == "Warehouse")
 			{
 				<div class="col-md-5">
 					<label class="form-label-custom">Warehouse Name</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter Warehouse Name">
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Warehouse Name"
+						   @bind="_warehouseForm.Name" />
 				</div>
 				<div class="col-md-5">
 					<label class="form-label-custom">Google Map or Lat/Long URL</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Paste Google Map or Lat/Long URL">
+					<input type="text" class="form-control-custom w-100" placeholder="Paste Google Map or Lat/Long URL"
+						   @bind="_warehouseForm.GoogleURL" />
 				</div>
 			}
 			else if (ActiveTab == "Rake Point")
 			{
 				<div class="col">
 					<label class="form-label-custom">Rake Point Name</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter Rake Point Name">
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Rake Point Name"
+						   @bind="_rakePointForm.Name" />
+				</div>
+				<div class="col">
+					<label class="form-label-custom">Google Map or Lat/Long URL</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Paste Google Map or Lat/Long URL"
+						   @bind="_rakePointForm.GoogleURL" />
 				</div>
 				<div class="col">
 					<label class="form-label-custom">Railway Code</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter Railway Code">
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Railway Code"
+						   @bind="_rakePointForm.RailwayCode" />
 				</div>
 				<div class="col">
-					<label class="form-label-custom">State Name</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter State Name">
+					<label class="form-label-custom">State</label>
+					<select class="form-control-custom w-100" @bind="_rakePointForm.StateId" @bind:after="OnRakePointStateChanged">
+						<option value="0">Select State</option>
+						@foreach (var s in _states)
+						{
+							<option value="@s.Id">@s.StateName</option>
+						}
+					</select>
 				</div>
 				<div class="col">
-					<label class="form-label-custom">District Name</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter District Name">
+					<label class="form-label-custom">District</label>
+					<select class="form-control-custom w-100" @bind="_rakePointForm.DistrictId">
+						<option value="0">Select District</option>
+						@foreach (var d in _rakePointFilteredDistricts)
+						{
+							<option value="@d.Id">@d.DistrictName</option>
+						}
+					</select>
 				</div>
 			}
 			else if (ActiveTab == "Port")
 			{
 				<div class="col">
 					<label class="form-label-custom">Port Name</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter Port Name">
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Port Name"
+						   @bind="_portForm.Name" />
 				</div>
 				<div class="col">
-					<label class="form-label-custom">State Name</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter State Name">
+					<label class="form-label-custom">Google Map or Lat/Long URL</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Paste Google Map or Lat/Long URL"
+						   @bind="_portForm.GoogleURL" />
 				</div>
 				<div class="col">
-					<label class="form-label-custom">District Name</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter District Name">
+					<label class="form-label-custom">State</label>
+					<select class="form-control-custom w-100" @bind="_portForm.StateId" @bind:after="OnPortStateChanged">
+						<option value="0">Select State</option>
+						@foreach (var s in _states)
+						{
+							<option value="@s.Id">@s.StateName</option>
+						}
+					</select>
+				</div>
+				<div class="col">
+					<label class="form-label-custom">District</label>
+					<select class="form-control-custom w-100" @bind="_portForm.DistrictId">
+						<option value="0">Select District</option>
+						@foreach (var d in _portFilteredDistricts)
+						{
+							<option value="@d.Id">@d.DistrictName</option>
+						}
+					</select>
 				</div>
 			}
 
 			<div class="col-md-2">
-				<div class="status-toggle-box">
-					<span>Active</span>
+				<div class="status-toggle-box @(CurrentFormIsActive ? "" : "status-toggle-inactive")">
+					<span>@(CurrentFormIsActive ? "Active" : "Inactive")</span>
 					<label class="switch">
-						<input type="checkbox" checked>
+						@if (ActiveTab == "Warehouse")
+						{
+							<input type="checkbox" @bind="_warehouseForm.IsActive">
+						}
+						else if (ActiveTab == "Rake Point")
+						{
+							<input type="checkbox" @bind="_rakePointForm.IsActive">
+						}
+						else
+						{
+							<input type="checkbox" @bind="_portForm.IsActive">
+						}
 						<span class="slider"></span>
 					</label>
 				</div>
 			</div>
 		</div>
 
-		<div class="d-flex justify-content-end pt-2">
-			<button class="btn-cancel"><i class="bi bi-x"></i> Cancel</button>
-			<button class="btn-save"><i class="bi bi-save"></i> Save</button>
+		<div class="d-flex justify-content-end pt-2 mt-4">
+			<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
+			<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+				<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+			</button>
 		</div>
 	</div>
 
@@ -94,27 +154,24 @@
 			<div class="metric-card bg-blue-light">
 				<div class="metric-header">
 					<h4 class="metric-title">Total @ActiveTab</h4>
-					<div class="metric-trend"><i class="bi bi-arrow-up-right"></i> 12% from last quarter</div>
 				</div>
-				<div class="metric-val">24</div>
+				<div class="metric-val">@CurrentAllItems.Count</div>
 			</div>
 		</div>
 		<div class="col-md-4">
 			<div class="metric-card bg-mint-light">
 				<div class="metric-header">
 					<h4 class="metric-title">Active</h4>
-					<div class="metric-info"><i class="bi bi-exclamation-circle"></i> 6 zones pending review</div>
 				</div>
-				<div class="metric-val">18</div>
+				<div class="metric-val">@CurrentAllItems.Count(x => x.IsActive)</div>
 			</div>
 		</div>
 		<div class="col-md-4">
 			<div class="metric-card bg-gray-light">
 				<div class="metric-header">
 					<h4 class="metric-title">Inactive</h4>
-					<div class="metric-info"><i class="bi bi-info-circle"></i> 6 zones pending review</div>
 				</div>
-				<div class="metric-val">18</div>
+				<div class="metric-val">@CurrentAllItems.Count(x => !x.IsActive)</div>
 			</div>
 		</div>
 	</div>
@@ -122,21 +179,17 @@
 	<div class="main-card">
 		<div class="section-header">
 			<h3 class="section-title">Existing @ActiveTab</h3>
-            
+
 			<div class="table-controls">
 				<div class="search-box">
 					<i class="bi bi-search"></i>
-					<input type="text" placeholder="Search @ActiveTab.ToLower()...">
+					<input type="text" placeholder="Search @ActiveTab.ToLower()..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
 				</div>
-				<select class="filter-select">
-					<option>All Status</option>
-					@*  <option>Active</option>
-                    <option>Inactive</option> *@
+				<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+					<option value="All">All Status</option>
+					<option value="Active">Active</option>
+					<option value="Inactive">Inactive</option>
 				</select>
-				@*  <div class="view-toggle">
-                    <button class="view-btn"><i class="bi bi-grid"></i> Card View</button>
-                    <button class="view-btn active"><i class="bi bi-list-ul"></i> List View</button>
-                </div> *@
 			</div>
 		</div>
 
@@ -147,7 +200,7 @@
 						<tr>
 							<th style="width: 80px;">S:No</th>
 							<th>@ActiveTab Name</th>
-                        
+
 							@if (ActiveTab == "Warehouse")
 							{
 								<th>Google Map or Lat/Long URL</th>
@@ -155,121 +208,88 @@
 							else if (ActiveTab == "Rake Point")
 							{
 								<th>Railway Code</th>
-								<th>District Name</th>
+								<th>State</th>
+								<th>District</th>
 							}
 							else if (ActiveTab == "Port")
 							{
-								<th>State Name</th>
+								<th>Google Map or Lat/Long URL</th>
+								<th>State</th>
+								<th>District</th>
 							}
-                        
+
 							<th>Status</th>
 							<th>Created At</th>
-							<th class="text-center">Action</th>
+							<th>Action</th>
 						</tr>
 					</thead>
 					<tbody>
-						<tr>
-							<td class="text-muted">1</td>
-							<td>PVT GODOWN ARIYALUR</td>
-                        
-							@if (ActiveTab == "Warehouse")
+						@if (_isLoading)
+						{
+							<tr>
+								<td colspan="@TableColSpan" class="text-center text-muted">Loading...</td>
+							</tr>
+						}
+						else if (!PagedItems.Any())
+						{
+							<tr>
+								<td colspan="@TableColSpan" class="text-center text-muted">No @ActiveTab.ToLower() found.</td>
+							</tr>
+						}
+						else
+						{
+							@foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
 							{
-								<td><i class="bi bi-geo-alt-fill map-icon"></i> 13.0843° N, 80.2705° E</td>
-							}
-							else if (ActiveTab == "Rake Point")
-							{
-								<td>RLY1234</td>
-								<td>Ariyalur</td>
-							}
-							else if (ActiveTab == "Port")
-							{
-								<td>Tamil Nadu</td>
-							}
+								<tr>
+									<td class="text-muted">@((_currentPage - 1) * _pageSize + index + 1)</td>
+									<td>@item.Name</td>
 
-							<td><span class="status-pill status-active">Active</span></td>
-							<td>2026-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<td class="text-muted">2</td>
-							<td>PVT GODOWN PALAYAVOYAL</td>
-							@if (ActiveTab == "Warehouse")
-							{
-								<td><i class="bi bi-geo-alt-fill map-icon"></i> 13.0843° N, 80.2705° E</td>
+									@if (ActiveTab == "Warehouse")
+												{
+													<td class="url-cell">
+														@if (!string.IsNullOrEmpty(item.GoogleURL))
+														{
+															<i class="bi bi-geo-alt-fill map-icon"></i>
+															@item.GoogleURL
+														}
+													</td>
+												}
+									else if (ActiveTab == "Rake Point")
+									{
+										<td>@item.RailwayCode</td>
+										<td>@GetStateName(item.StateId)</td>
+										<td>@GetDistrictName(item.DistrictId)</td>
+									}
+									else if (ActiveTab == "Port")
+									{
+										<td class="url-cell">
+											@if (!string.IsNullOrEmpty(item.GoogleURL))
+											{
+												<i class="bi bi-geo-alt-fill map-icon"></i>
+												@item.GoogleURL
+											}
+										</td>
+										<td>@GetStateName(item.StateId)</td>
+										<td>@GetDistrictName(item.DistrictId)</td>
+									}
+
+									<td>
+										<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+											  style="cursor:pointer"
+											  @onclick="() => ToggleStatus(item)">
+											@(item.IsActive ? "Active" : "Inactive")
+										</span>
+									</td>
+									<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
+									<td>
+										<div class="action-icons">
+											<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+											<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+										</div>
+									</td>
+								</tr>
 							}
-							else if (ActiveTab == "Rake Point")
-							{
-								<td>RLY5678</td>
-								<td>Palayavoyal</td>
-							}
-							else if (ActiveTab == "Port")
-							{
-								<td>Tamil Nadu</td>
-							}
-							<td><span class="status-pill status-active">Active</span></td>
-							<td>2026-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<td class="text-muted">3</td>
-							<td>PVT GODOWN COIMBATORE</td>
-							@if (ActiveTab == "Warehouse")
-							{
-								<td><i class="bi bi-geo-alt-fill map-icon"></i> 13.0843° N, 80.2705° E</td>
-							}
-							else if (ActiveTab == "Rake Point")
-							{
-								<td>RLY9101</td>
-								<td>Coimbatore</td>
-							}
-							else if (ActiveTab == "Port")
-							{
-								<td>Tamil Nadu</td>
-							}
-							<td><span class="status-pill status-inactive">Inactive</span></td>
-							<td>2024-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<td class="text-muted">4</td>
-							<td>PVT GODOWN COIMBATORE</td>
-							@if (ActiveTab == "Warehouse")
-							{
-								<td><i class="bi bi-geo-alt-fill map-icon"></i> 13.0843° N, 80.2705° E</td>
-							}
-							else if (ActiveTab == "Rake Point")
-							{
-								<td>RLY9101</td>
-								<td>Coimbatore</td>
-							}
-							else if (ActiveTab == "Port")
-							{
-								<td>Tamil Nadu</td>
-							}
-							<td><span class="status-pill status-active">Active</span></td>
-							<td>2026-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
+						}
 					</tbody>
 				</table>
 			</div>
@@ -278,23 +298,31 @@
 		<div class="pagination-container">
 			<div class="items-per-page">
 				Items Per Page
-				<select>
-					<option>16</option>
-					<option>32</option>
-					<option>50</option>
+				<select @bind="_pageSize" @bind:after="ApplyFilter">
+					<option value="16">16</option>
+					<option value="32">32</option>
+					<option value="50">50</option>
 				</select>
 			</div>
-            
+
 			<div class="pagination-controls">
-				<div class="page-btn"><i class="bi bi-chevron-left"></i></div>
-				<div class="page-btn active">1</div>
-				<div class="page-btn">2</div>
-				<div class="page-btn">3</div>
-				<div class="page-btn ellipsis">...</div>
-				<div class="page-btn">8</div>
-				<div class="page-btn">9</div>
-				<div class="page-btn">10</div>
-				<div class="page-btn"><i class="bi bi-chevron-right"></i></div>
+				<div class="page-btn @(_currentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage">
+					<i class="bi bi-chevron-left"></i>
+				</div>
+				@foreach (var thispage in PageNumbers)
+				{
+					@if (thispage == -1)
+					{
+						<div class="page-btn ellipsis">...</div>
+					}
+					else
+					{
+						<div class="page-btn @(thispage == _currentPage ? "active" : "")" @onclick="() => GoToPage(thispage)">@(thispage)</div>
+					}
+				}
+				<div class="page-btn @(_currentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage">
+					<i class="bi bi-chevron-right"></i>
+				</div>
 			</div>
 		</div>
 
@@ -302,16 +330,469 @@
 
 </div>
 
-@code {
-	// Define the available tabs
-	private List<string> TabOptions = new List<string> { "Warehouse", "Rake Point", "Port" };
-    
-	// State to keep track of the selected tab (Defaulting to "Warehouse" to match first image)
-	private string ActiveTab { get; set; } = "Warehouse";
+@if (_showDeleteConfirm)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Confirm Delete</h5>
+					<button type="button" class="btn-close" @onclick="CancelDelete"></button>
+				</div>
+				<div class="modal-body">
+					<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
+					<p class="text-muted mb-0">This action cannot be undone.</p>
+				</div>
+				<div class="modal-footer">
+					<button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+					<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+						@(_isDeleting ? "Deleting..." : "Delete")
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
 
-	// Method to switch tabs
-	private void SetActiveTab(string tabName)
+@code {
+	private readonly List<string> TabOptions = ["Warehouse", "Rake Point", "Port"];
+
+	// Tab state
+	private string ActiveTab { get; set; } = "Warehouse";
+	private string CurrentApiBase => ActiveTab switch
 	{
+		"Warehouse" => "api/Warehouse",
+		"Rake Point" => "api/RackPoint",
+		"Port" => "api/Port",
+		_ => ""
+	};
+	private int TableColSpan => ActiveTab switch
+	{
+		"Warehouse" => 6,
+		"Rake Point" => 8,
+		"Port" => 8,
+		_ => 6
+	};
+
+	// Data per tab
+	private List<LogisticsItemDto> _warehouseAll = new();
+	private List<LogisticsItemDto> _rakePointAll = new();
+	private List<LogisticsItemDto> _portAll = new();
+	private List<LogisticsItemDto> _filteredItems = new();
+
+	private List<LogisticsItemDto> CurrentAllItems => ActiveTab switch
+	{
+		"Warehouse" => _warehouseAll,
+		"Rake Point" => _rakePointAll,
+		"Port" => _portAll,
+		_ => new()
+	};
+
+	// Lookup data
+	private List<StateDto> _states = new();
+	private List<DistrictDto> _districts = new();
+
+	// Forms
+	private WarehouseFormModel _warehouseForm = new();
+	private RakePointFormModel _rakePointForm = new();
+	private PortFormModel _portForm = new();
+	private bool _isEditing;
+	private int? _editingId;
+
+	private bool CurrentFormIsActive => ActiveTab switch
+	{
+		"Warehouse" => _warehouseForm.IsActive,
+		"Rake Point" => _rakePointForm.IsActive,
+		"Port" => _portForm.IsActive,
+		_ => true
+	};
+
+	// Filtered districts for RakePoint/Port forms
+	private List<DistrictDto> _rakePointFilteredDistricts = new();
+	private List<DistrictDto> _portFilteredDistricts = new();
+
+	// UI state
+	private bool _isLoading = true;
+	private bool _isSaving;
+	private string? _message;
+	private bool _isError;
+
+	// Delete confirmation
+	private bool _showDeleteConfirm;
+	private bool _isDeleting;
+	private LogisticsItemDto? _deleteTarget;
+
+	// Search & filter
+	private string _searchText = "";
+	private string _statusFilter = "All";
+
+	// Pagination
+	private int _currentPage = 1;
+	private int _pageSize = 16;
+
+	private int TotalPages => Math.Max(1, (int)Math.Ceiling(_filteredItems.Count / (double)_pageSize));
+	private IEnumerable<LogisticsItemDto> PagedItems => _filteredItems
+		.Skip((_currentPage - 1) * _pageSize)
+		.Take(_pageSize);
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadLookups();
+		await LoadData();
+	}
+
+	private async Task LoadLookups()
+	{
+		try
+		{
+			_states = await Http.GetFromJsonAsync<List<StateDto>>("api/State/all") ?? new();
+			_districts = await Http.GetFromJsonAsync<List<DistrictDto>>("api/District/all") ?? new();
+		}
+		catch { }
+	}
+
+	private async Task LoadData()
+	{
+		try
+		{
+			_isLoading = true;
+			var items = await Http.GetFromJsonAsync<List<LogisticsItemDto>>($"{CurrentApiBase}/all") ?? new();
+
+			switch (ActiveTab)
+			{
+				case "Warehouse": _warehouseAll = items; break;
+				case "Rake Point": _rakePointAll = items; break;
+				case "Port": _portAll = items; break;
+			}
+
+			ApplyFilter();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load: {ex.Message}", true);
+		}
+		finally
+		{
+			_isLoading = false;
+		}
+	}
+
+	private async Task SetActiveTab(string tabName)
+	{
+		if (ActiveTab == tabName) return;
 		ActiveTab = tabName;
+		_searchText = "";
+		_statusFilter = "All";
+		_currentPage = 1;
+		ResetForm();
+		await LoadData();
+	}
+
+	private void ApplyFilter()
+	{
+		_filteredItems = CurrentAllItems
+			.Where(x => string.IsNullOrEmpty(_searchText)
+				|| x.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+			.Where(x => _statusFilter switch
+			{
+				"Active" => x.IsActive,
+				"Inactive" => !x.IsActive,
+				_ => true
+			})
+			.OrderByDescending(x => x.CreatedAt)
+			.ToList();
+
+		if (_currentPage > TotalPages) _currentPage = 1;
+	}
+
+	private async Task HandleSave()
+	{
+		var name = ActiveTab switch
+		{
+			"Warehouse" => _warehouseForm.Name,
+			"Rake Point" => _rakePointForm.Name,
+			"Port" => _portForm.Name,
+			_ => ""
+		};
+
+		if (string.IsNullOrWhiteSpace(name))
+		{
+			ShowMessage($"{ActiveTab} name is required.", true);
+			return;
+		}
+
+		try
+		{
+			_isSaving = true;
+
+			object payload = ActiveTab switch
+			{
+				"Warehouse" => _isEditing
+					? new { Id = _editingId!.Value, _warehouseForm.Name, _warehouseForm.GoogleURL, _warehouseForm.IsActive, UpdatedBy = "current-user" }
+					: new { _warehouseForm.Name, _warehouseForm.GoogleURL, _warehouseForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				"Rake Point" => _isEditing
+					? (object)new { Id = _editingId!.Value, _rakePointForm.Name, _rakePointForm.GoogleURL, _rakePointForm.RailwayCode, _rakePointForm.StateId, _rakePointForm.DistrictId, _rakePointForm.IsActive, UpdatedBy = "current-user" }
+					: new { _rakePointForm.Name, _rakePointForm.GoogleURL, _rakePointForm.RailwayCode, _rakePointForm.StateId, _rakePointForm.DistrictId, _rakePointForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				"Port" => _isEditing
+						? (object)new { Id = _editingId!.Value, _portForm.Name, _portForm.GoogleURL, _portForm.StateId, _portForm.DistrictId, _portForm.IsActive, UpdatedBy = "current-user" }
+						: new { _portForm.Name, _portForm.GoogleURL, _portForm.StateId, _portForm.DistrictId, _portForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				_ => new { }
+			};
+
+			HttpResponseMessage response;
+			if (_isEditing && _editingId.HasValue)
+			{
+				response = await Http.PutAsJsonAsync($"{CurrentApiBase}/{_editingId.Value}", payload);
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Update failed: {error}", true);
+					return;
+				}
+				ShowMessage($"{ActiveTab} updated successfully.", false);
+			}
+			else
+			{
+				response = await Http.PostAsJsonAsync(CurrentApiBase, payload);
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Create failed: {error}", true);
+					return;
+				}
+				ShowMessage($"{ActiveTab} created successfully.", false);
+			}
+
+			ResetForm();
+			await LoadData();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private void EditItem(LogisticsItemDto item)
+	{
+		_isEditing = true;
+		_editingId = item.Id;
+
+		switch (ActiveTab)
+		{
+			case "Warehouse":
+				_warehouseForm = new WarehouseFormModel { Name = item.Name, GoogleURL = item.GoogleURL, IsActive = item.IsActive };
+				break;
+			case "Rake Point":
+				_rakePointForm = new RakePointFormModel
+				{
+					Name = item.Name,
+					GoogleURL = item.GoogleURL,
+					RailwayCode = item.RailwayCode,
+					StateId = item.StateId,
+					DistrictId = item.DistrictId,
+					IsActive = item.IsActive
+				};
+				_rakePointFilteredDistricts = _districts.Where(d => d.StateId == item.StateId).ToList();
+				break;
+			case "Port":
+				_portForm = new PortFormModel
+				{
+					Name = item.Name,
+					GoogleURL = item.GoogleURL,
+					StateId = item.StateId,
+					DistrictId = item.DistrictId,
+					IsActive = item.IsActive
+				};
+				_portFilteredDistricts = _districts.Where(d => d.StateId == item.StateId).ToList();
+				break;
+		}
+	}
+
+	private void DeleteItem(LogisticsItemDto item)
+	{
+		_deleteTarget = item;
+		_showDeleteConfirm = true;
+	}
+
+	private async Task ConfirmDelete()
+	{
+		if (_deleteTarget is null) return;
+
+		try
+		{
+			_isDeleting = true;
+			var response = await Http.DeleteAsync($"{CurrentApiBase}/{_deleteTarget.Id}");
+			if (response.IsSuccessStatusCode)
+			{
+				ShowMessage($"'{_deleteTarget.Name}' deleted successfully.", false);
+				await LoadData();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Delete failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isDeleting = false;
+			CancelDelete();
+		}
+	}
+
+	private void CancelDelete()
+	{
+		_showDeleteConfirm = false;
+		_deleteTarget = null;
+	}
+
+	private async Task ToggleStatus(LogisticsItemDto item)
+	{
+		try
+		{
+			var newStatus = !item.IsActive;
+			var response = await Http.PatchAsync($"{CurrentApiBase}/{item.Id}/status?isActive={newStatus}", null);
+
+			if (response.IsSuccessStatusCode)
+			{
+				item.IsActive = newStatus;
+				ApplyFilter();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Status change failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+	}
+
+	private void ResetForm()
+	{
+		_warehouseForm = new WarehouseFormModel();
+		_rakePointForm = new RakePointFormModel();
+		_portForm = new PortFormModel();
+		_rakePointFilteredDistricts = new();
+		_portFilteredDistricts = new();
+		_isEditing = false;
+		_editingId = null;
+	}
+
+	private void OnRakePointStateChanged()
+	{
+		_rakePointForm.DistrictId = 0;
+		_rakePointFilteredDistricts = _districts.Where(d => d.StateId == _rakePointForm.StateId).ToList();
+	}
+
+	private void OnPortStateChanged()
+	{
+		_portForm.DistrictId = 0;
+		_portFilteredDistricts = _districts.Where(d => d.StateId == _portForm.StateId).ToList();
+	}
+
+	private string GetStateName(int stateId) =>
+		_states.FirstOrDefault(s => s.Id == stateId)?.StateName ?? "";
+
+	private string GetDistrictName(int districtId) =>
+		_districts.FirstOrDefault(d => d.Id == districtId)?.DistrictName ?? "";
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	// Pagination helpers
+	private void GoToPage(int page) { _currentPage = page; }
+	private void PreviousPage() { if (_currentPage > 1) _currentPage--; }
+	private void NextPage() { if (_currentPage < TotalPages) _currentPage++; }
+
+	private IEnumerable<int> PageNumbers
+	{
+		get
+		{
+			var total = TotalPages;
+			if (total <= 7)
+				return Enumerable.Range(1, total);
+
+			var pages = new List<int> { 1 };
+			var start = Math.Max(2, _currentPage - 1);
+			var end = Math.Min(total - 1, _currentPage + 1);
+
+			if (start > 2) pages.Add(-1);
+			for (var i = start; i <= end; i++) pages.Add(i);
+			if (end < total - 1) pages.Add(-1);
+			pages.Add(total);
+
+			return pages;
+		}
+	}
+
+	// Unified DTO for all 3 entity types (superset of fields)
+	public class LogisticsItemDto
+	{
+		public int Id { get; set; }
+		public string Name { get; set; } = "";
+		public string? GoogleURL { get; set; }
+		public string? RailwayCode { get; set; }
+		public int StateId { get; set; }
+		public int DistrictId { get; set; }
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public string UpdatedBy { get; set; } = "";
+	}
+
+	public class StateDto
+	{
+		public int Id { get; set; }
+		public string StateName { get; set; } = "";
+		public bool IsActive { get; set; }
+	}
+
+	public class DistrictDto
+	{
+		public int Id { get; set; }
+		public string DistrictName { get; set; } = "";
+		public int StateId { get; set; }
+		public bool IsActive { get; set; }
+	}
+
+	public class WarehouseFormModel
+	{
+		public string Name { get; set; } = "";
+		public string? GoogleURL { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class RakePointFormModel
+	{
+		public string Name { get; set; } = "";
+		public string? GoogleURL { get; set; }
+		public string? RailwayCode { get; set; }
+		public int StateId { get; set; }
+		public int DistrictId { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class PortFormModel
+	{
+		public string Name { get; set; } = "";
+		public string? GoogleURL { get; set; }
+		public int StateId { get; set; }
+		public int DistrictId { get; set; }
+		public bool IsActive { get; set; } = true;
 	}
 }

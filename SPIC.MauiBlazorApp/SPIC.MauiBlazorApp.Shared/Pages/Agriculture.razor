@@ -1,15 +1,24 @@
 ﻿@page "/Agriculture"
-
+@using System.Net.Http.Json
+@inject HttpClient Http
 
 <div class="container-fluid">
 
 	<h2 class="page-title">Agriculture & Product Master</h2>
 
+	@if (!string.IsNullOrEmpty(_message))
+	{
+		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+			@_message
+			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
+		</div>
+	}
+
 	<div class="tabs-wrapper">
 		<div class="tabs-container">
 			@foreach (var tab in TabOptions)
 			{
-				<div class="tab-item @(ActiveTab == tab ? "active" : "")" @onclick='() => SetActiveTab(tab)'>
+				<div class="tab-item @(ActiveTab == tab ? "active" : "")" @onclick="() => SetActiveTab(tab)">
 					@tab
 				</div>
 			}
@@ -18,51 +27,92 @@
 
 	<div class="main-card">
 		<div class="section-header">
-			<h3 class="section-title">Add New @ActiveTab</h3>
+			<h3 class="section-title">@(_isEditing ? $"Edit {GetSingularName(ActiveTab)}" : $"Add New {GetSingularName(ActiveTab)}")</h3>
 			<button class="btn-outline-green" style="width:12%"><i class="bi bi-cloud-arrow-up"></i> Bulk Upload</button>
 		</div>
 
 		<div class="row g-3 mb-4">
 			@if (ActiveTab == "Categories")
 			{
-				<div class="col-md-5">
+				<div class="col-md-4">
 					<label class="form-label-custom">Category Name</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter Category Name">
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Category Name"
+						   @bind="_categoryForm.Name" />
 				</div>
-				<div class="col-md-5">
+				<div class="col-md-3">
 					<label class="form-label-custom">Unit</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter Unit">
+					<select class="form-control-custom w-100" @bind="_categoryForm.UnitId">
+						<option value="0">Select Unit</option>
+						@foreach (var u in _unitsAll)
+						{
+							<option value="@u.Id">@u.Name</option>
+						}
+					</select>
+				</div>
+				<div class="col-md-3" style="margin-top: 28px;">
+					<div class="status-toggle-box @(_categoryForm.IsSpecialityProduct ? "" : "status-toggle-inactive")">
+						<span>@(_categoryForm.IsSpecialityProduct ? "Speciality" : "Regular")</span>
+						<label class="switch">
+							<input type="checkbox" @bind="_categoryForm.IsSpecialityProduct">
+							<span class="slider"></span>
+						</label>
+					</div>
+				</div>
+			}
+			else if (ActiveTab == "Products")
+			{
+				<div class="col-md-4">
+					<label class="form-label-custom">Category</label>
+					<select class="form-control-custom w-100" @bind="_productForm.CategoryId">
+						<option value="0">Select Category</option>
+						@foreach (var c in _categoriesAll)
+						{
+							<option value="@c.Id">@c.Name</option>
+						}
+					</select>
+				</div>
+				<div class="col-md-4">
+					<label class="form-label-custom">Product Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Product Name"
+						   @bind="_productForm.Name" />
 				</div>
 			}
 			else
 			{
-				@if (ActiveTab == "Products")
-				{
-					<div class="col-md-5">
-						<label class="form-label-custom">Category Name</label>
-						<input type="text" class="form-control-custom w-100" placeholder="Enter Category Name">
-					</div>
-				}
 				<div class="col-md-5">
 					<label class="form-label-custom">@GetSingularName(ActiveTab) Name</label>
-					<input type="text" class="form-control-custom w-100" placeholder="Enter @GetSingularName(ActiveTab) Name">
+					<input type="text" class="form-control-custom w-100" placeholder="Enter @GetSingularName(ActiveTab) Name"
+						   @bind="_simpleForm.Name" />
 				</div>
 			}
 
-			<div class="col-md-2">
-				<div class="status-toggle-box">
-					<span>Active</span>
+			<div class="col-md-2" style="margin-top: 28px;">
+				<div class="status-toggle-box @(CurrentFormIsActive ? "" : "status-toggle-inactive")">
+					<span>@(CurrentFormIsActive ? "Active" : "Inactive")</span>
 					<label class="switch">
-						<input type="checkbox" checked>
+						@if (ActiveTab == "Categories")
+						{
+							<input type="checkbox" @bind="_categoryForm.IsActive">
+						}
+						else if (ActiveTab == "Products")
+						{
+							<input type="checkbox" @bind="_productForm.IsActive">
+						}
+						else
+						{
+							<input type="checkbox" @bind="_simpleForm.IsActive">
+						}
 						<span class="slider"></span>
 					</label>
 				</div>
 			</div>
 		</div>
 
-		<div class="d-flex justify-content-end pt-2">
-			<button class="btn-cancel"><i class="bi bi-x"></i> Cancel</button>
-			<button class="btn-save"><i class="bi bi-save"></i> Save</button>
+		<div class="d-flex justify-content-end pt-2 mt-4">
+			<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
+			<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+				<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+			</button>
 		</div>
 	</div>
 
@@ -71,27 +121,24 @@
 			<div class="metric-card bg-blue-light">
 				<div class="metric-header">
 					<h4 class="metric-title">Total @ActiveTab</h4>
-					<div class="metric-trend"><i class="bi bi-arrow-up-right"></i> 12% from last quarter</div>
 				</div>
-				<div class="metric-val">24</div>
+				<div class="metric-val">@CurrentAllItems.Count</div>
 			</div>
 		</div>
 		<div class="col-md-4">
 			<div class="metric-card bg-mint-light">
 				<div class="metric-header">
 					<h4 class="metric-title">Active</h4>
-					<div class="metric-info"><i class="bi bi-exclamation-circle"></i> 6 @ActiveTab.ToLower() pending review</div>
 				</div>
-				<div class="metric-val">18</div>
+				<div class="metric-val">@CurrentAllItems.Count(x => x.IsActive)</div>
 			</div>
 		</div>
 		<div class="col-md-4">
 			<div class="metric-card bg-gray-light">
 				<div class="metric-header">
 					<h4 class="metric-title">Inactive</h4>
-					<div class="metric-info"><i class="bi bi-info-circle"></i> 6 @ActiveTab.ToLower() pending review</div>
 				</div>
-				<div class="metric-val">18</div>
+				<div class="metric-val">@CurrentAllItems.Count(x => !x.IsActive)</div>
 			</div>
 		</div>
 	</div>
@@ -99,21 +146,17 @@
 	<div class="main-card">
 		<div class="section-header">
 			<h3 class="section-title">Existing @ActiveTab</h3>
-            
+
 			<div class="table-controls">
 				<div class="search-box">
 					<i class="bi bi-search"></i>
-					<input type="text" placeholder="Search @ActiveTab.ToLower()...">
+					<input type="text" placeholder="Search @ActiveTab.ToLower()..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
 				</div>
-				<select class="filter-select">
-					<option>All Status</option>
-					@* <option>Active</option>
-					<option>Inactive</option> *@
+				<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+					<option value="All">All Status</option>
+					<option value="Active">Active</option>
+					<option value="Inactive">Inactive</option>
 				</select>
-				@*  <div class="view-toggle">
-                    <button class="view-btn"><i class="bi bi-grid"></i> Card View</button>
-                    <button class="view-btn active"><i class="bi bi-list-ul"></i> List View</button>
-                </div> *@
 			</div>
 		</div>
 
@@ -124,80 +167,74 @@
 						<tr>
 							<th style="width: 80px;">S:No</th>
 							<th>@GetSingularName(ActiveTab) Name</th>
+
 							@if (ActiveTab == "Categories")
 							{
 								<th>Unit</th>
+								<th>Type</th>
 							}
+							else if (ActiveTab == "Products")
+							{
+								<th>Category</th>
+							}
+
 							<th>Status</th>
 							<th>Created At</th>
-							<th class="text-center">Action</th>
+							<th>Action</th>
 						</tr>
 					</thead>
 					<tbody>
-						<tr>
-							<td class="text-muted">1</td>
-							<td>Acid lime</td>
-							@if (ActiveTab == "Categories")
+						@if (_isLoading)
+						{
+							<tr>
+								<td colspan="@TableColSpan" class="text-center text-muted">Loading...</td>
+							</tr>
+						}
+						else if (!PagedItems.Any())
+						{
+							<tr>
+								<td colspan="@TableColSpan" class="text-center text-muted">No @ActiveTab.ToLower() found.</td>
+							</tr>
+						}
+						else
+						{
+							@foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
 							{
-								<td>Kg</td>
+								<tr>
+									<td class="text-muted">@((_currentPage - 1) * _pageSize + index + 1)</td>
+									<td>@item.Name</td>
+
+									@if (ActiveTab == "Categories")
+									{
+										<td>@GetUnitName(item.UnitId)</td>
+										<td>
+											<span class="status-pill @(item.IsSpecialityProduct ? "status-active" : "")">
+												@(item.IsSpecialityProduct ? "Speciality" : "Regular")
+											</span>
+										</td>
+									}
+									else if (ActiveTab == "Products")
+									{
+										<td>@GetCategoryName(item.CategoryId)</td>
+									}
+
+									<td>
+										<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+											  style="cursor:pointer"
+											  @onclick="() => ToggleStatus(item)">
+											@(item.IsActive ? "Active" : "Inactive")
+										</span>
+									</td>
+									<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
+									<td>
+										<div class="action-icons">
+											<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+											<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+										</div>
+									</td>
+								</tr>
 							}
-							<td><span class="status-pill status-active">Active</span></td>
-							<td>2026-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<td class="text-muted">2</td>
-							<td>Acid lime</td>
-							@if (ActiveTab == "Categories")
-							{
-								<td>Kg</td>
-							}
-							<td><span class="status-pill status-active">Active</span></td>
-							<td>2026-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<td class="text-muted">3</td>
-							<td>Acid lime</td>
-							@if (ActiveTab == "Categories")
-							{
-								<td>Liters</td>
-							}
-							<td><span class="status-pill status-inactive">Inactive</span></td>
-							<td>2024-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<td class="text-muted">4</td>
-							<td>Acid lime</td>
-							@if (ActiveTab == "Categories")
-							{
-								<td>Pcs</td>
-							}
-							<td><span class="status-pill status-active">Active</span></td>
-							<td>2026-03-15</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del"></i>
-									<i class="bi bi-pencil-square icon-edit"></i>
-								</div>
-							</td>
-						</tr>
+						}
 					</tbody>
 				</table>
 			</div>
@@ -206,23 +243,31 @@
 		<div class="pagination-container">
 			<div class="items-per-page">
 				Items Per Page
-				<select>
-					<option>16</option>
-					<option>32</option>
-					<option>50</option>
+				<select @bind="_pageSize" @bind:after="ApplyFilter">
+					<option value="16">16</option>
+					<option value="32">32</option>
+					<option value="50">50</option>
 				</select>
 			</div>
-            
+
 			<div class="pagination-controls">
-				<div class="page-btn"><i class="bi bi-chevron-left"></i></div>
-				<div class="page-btn active">1</div>
-				<div class="page-btn">2</div>
-				<div class="page-btn">3</div>
-				<div class="page-btn ellipsis">...</div>
-				<div class="page-btn">8</div>
-				<div class="page-btn">9</div>
-				<div class="page-btn">10</div>
-				<div class="page-btn"><i class="bi bi-chevron-right"></i></div>
+				<div class="page-btn @(_currentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage">
+					<i class="bi bi-chevron-left"></i>
+				</div>
+				@foreach (var thispage in PageNumbers)
+				{
+					@if (thispage == -1)
+					{
+						<div class="page-btn ellipsis">...</div>
+					}
+					else
+					{
+						<div class="page-btn @(thispage == _currentPage ? "active" : "")" @onclick="() => GoToPage(thispage)">@(thispage)</div>
+					}
+				}
+				<div class="page-btn @(_currentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage">
+					<i class="bi bi-chevron-right"></i>
+				</div>
 			</div>
 		</div>
 
@@ -230,27 +275,458 @@
 
 </div>
 
-@code {
-	// Define the available tabs
-	private List<string> TabOptions = new List<string> { "Crops", "Competitors", "Sector", "Categories", "Products" };
-    
-	// State to keep track of the selected tab (Defaulting to "Crops" to match image)
-	private string ActiveTab { get; set; } = "Crops";
+@if (_showDeleteConfirm)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Confirm Delete</h5>
+					<button type="button" class="btn-close" @onclick="CancelDelete"></button>
+				</div>
+				<div class="modal-body">
+					<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
+					<p class="text-muted mb-0">This action cannot be undone.</p>
+				</div>
+				<div class="modal-footer">
+					<button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+					<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+						@(_isDeleting ? "Deleting..." : "Delete")
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
 
-	// Method to switch tabs
-	private void SetActiveTab(string tabName)
+@code {
+	private readonly List<string> TabOptions = ["Crops", "Competitors", "Sector", "Units", "Categories", "Products"];
+
+	// Tab state
+	private string ActiveTab { get; set; } = "Crops";
+	private string CurrentApiBase => ActiveTab switch
 	{
-		ActiveTab = tabName;
+		"Crops" => "api/Crop",
+		"Competitors" => "api/Competitor",
+		"Sector" => "api/Sector",
+		"Units" => "api/Unit",
+		"Categories" => "api/Category",
+		"Products" => "api/Product",
+		_ => ""
+	};
+	private int TableColSpan => ActiveTab switch
+	{
+		"Categories" => 7,
+		"Products" => 6,
+		_ => 5
+	};
+
+	// Data per tab
+	private List<AgriItemDto> _cropsAll = new();
+	private List<AgriItemDto> _competitorsAll = new();
+	private List<AgriItemDto> _sectorsAll = new();
+	private List<AgriItemDto> _categoriesAll = new();
+	private List<AgriItemDto> _productsAll = new();
+	private List<AgriItemDto> _filteredItems = new();
+
+	// Lookup data
+	private List<AgriItemDto> _unitsAll = new();
+
+	private List<AgriItemDto> CurrentAllItems => ActiveTab switch
+	{
+		"Crops" => _cropsAll,
+		"Competitors" => _competitorsAll,
+		"Sector" => _sectorsAll,
+		"Units" => _unitsAll,
+		"Categories" => _categoriesAll,
+		"Products" => _productsAll,
+		_ => new()
+	};
+
+	// Forms — simple (Crop, Competitor, Sector) share one form
+	private SimpleFormModel _simpleForm = new();
+	private CategoryFormModel _categoryForm = new();
+	private ProductFormModel _productForm = new();
+	private bool _isEditing;
+	private int? _editingId;
+
+	private bool CurrentFormIsActive => ActiveTab switch
+	{
+		"Categories" => _categoryForm.IsActive,
+		"Products" => _productForm.IsActive,
+		_ => _simpleForm.IsActive
+	};
+
+	// UI state
+	private bool _isLoading = true;
+	private bool _isSaving;
+	private string? _message;
+	private bool _isError;
+
+	// Delete confirmation
+	private bool _showDeleteConfirm;
+	private bool _isDeleting;
+	private AgriItemDto? _deleteTarget;
+
+	// Search & filter
+	private string _searchText = "";
+	private string _statusFilter = "All";
+
+	// Pagination
+	private int _currentPage = 1;
+	private int _pageSize = 16;
+
+	private int TotalPages => Math.Max(1, (int)Math.Ceiling(_filteredItems.Count / (double)_pageSize));
+	private IEnumerable<AgriItemDto> PagedItems => _filteredItems
+		.Skip((_currentPage - 1) * _pageSize)
+		.Take(_pageSize);
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadAllData();
+		ApplyFilter();
+		_isLoading = false;
 	}
 
-	// Helper method to dynamically change Plural text to Singular text for Labels
-	private string GetSingularName(string pluralName)
+	private async Task LoadAllData()
 	{
-		if (pluralName == "Categories") return "Category";
-		if (pluralName.EndsWith("s"))
+		try
 		{
-			return pluralName.Substring(0, pluralName.Length - 1);
+			_isLoading = true;
+			_cropsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Crop/all") ?? new();
+			_competitorsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Competitor/all") ?? new();
+			_sectorsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Sector/all") ?? new();
+			_unitsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Unit/all") ?? new();
+			_categoriesAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Category/all") ?? new();
+			_productsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Product/all") ?? new();
 		}
-		return pluralName;
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load: {ex.Message}", true);
+		}
+	}
+
+	private async Task LoadTabData()
+	{
+		try
+		{
+			_isLoading = true;
+			var items = await Http.GetFromJsonAsync<List<AgriItemDto>>($"{CurrentApiBase}/all") ?? new();
+
+			switch (ActiveTab)
+			{
+				case "Crops": _cropsAll = items; break;
+				case "Competitors": _competitorsAll = items; break;
+				case "Sector": _sectorsAll = items; break;
+				case "Units": _unitsAll = items; break;
+				case "Categories": _categoriesAll = items; break;
+				case "Products": _productsAll = items; break;
+			}
+
+			ApplyFilter();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load: {ex.Message}", true);
+		}
+		finally
+		{
+			_isLoading = false;
+		}
+	}
+
+	private async Task SetActiveTab(string tabName)
+	{
+		if (ActiveTab == tabName) return;
+		ActiveTab = tabName;
+		_searchText = "";
+		_statusFilter = "All";
+		_currentPage = 1;
+		ResetForm();
+		ApplyFilter();
+	}
+
+	private void ApplyFilter()
+	{
+		_filteredItems = CurrentAllItems
+			.Where(x => string.IsNullOrEmpty(_searchText)
+				|| x.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+			.Where(x => _statusFilter switch
+			{
+				"Active" => x.IsActive,
+				"Inactive" => !x.IsActive,
+				_ => true
+			})
+			.OrderByDescending(x => x.CreatedAt)
+			.ToList();
+
+		if (_currentPage > TotalPages) _currentPage = 1;
+	}
+
+	private async Task HandleSave()
+	{
+		var name = ActiveTab switch
+		{
+			"Categories" => _categoryForm.Name,
+			"Products" => _productForm.Name,
+			_ => _simpleForm.Name
+		};
+
+		if (string.IsNullOrWhiteSpace(name))
+		{
+			ShowMessage($"{GetSingularName(ActiveTab)} name is required.", true);
+			return;
+		}
+
+		try
+		{
+			_isSaving = true;
+
+			object payload = ActiveTab switch
+			{
+				"Categories" => _isEditing
+					? new { Id = _editingId!.Value, _categoryForm.Name, _categoryForm.UnitId, _categoryForm.IsSpecialityProduct, _categoryForm.IsActive, UpdatedBy = "current-user" }
+					: new { _categoryForm.Name, _categoryForm.UnitId, _categoryForm.IsSpecialityProduct, _categoryForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				"Products" => _isEditing
+					? (object)new { Id = _editingId!.Value, _productForm.Name, _productForm.CategoryId, _productForm.IsActive, UpdatedBy = "current-user" }
+					: new { _productForm.Name, _productForm.CategoryId, _productForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				_ => _isEditing
+					? (object)new { Id = _editingId!.Value, _simpleForm.Name, _simpleForm.IsActive, UpdatedBy = "current-user" }
+					: new { _simpleForm.Name, _simpleForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" }
+			};
+
+			HttpResponseMessage response;
+			if (_isEditing && _editingId.HasValue)
+			{
+				response = await Http.PutAsJsonAsync($"{CurrentApiBase}/{_editingId.Value}", payload);
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Update failed: {error}", true);
+					return;
+				}
+				ShowMessage($"{GetSingularName(ActiveTab)} updated successfully.", false);
+			}
+			else
+			{
+				response = await Http.PostAsJsonAsync(CurrentApiBase, payload);
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Create failed: {error}", true);
+					return;
+				}
+				ShowMessage($"{GetSingularName(ActiveTab)} created successfully.", false);
+			}
+
+			ResetForm();
+			await LoadTabData();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private void EditItem(AgriItemDto item)
+	{
+		_isEditing = true;
+		_editingId = item.Id;
+
+		switch (ActiveTab)
+		{
+			case "Categories":
+				_categoryForm = new CategoryFormModel
+				{
+					Name = item.Name,
+					UnitId = item.UnitId,
+					IsSpecialityProduct = item.IsSpecialityProduct,
+					IsActive = item.IsActive
+				};
+				break;
+			case "Products":
+				_productForm = new ProductFormModel
+				{
+					Name = item.Name,
+					CategoryId = item.CategoryId,
+					IsActive = item.IsActive
+				};
+				break;
+			default:
+				_simpleForm = new SimpleFormModel
+				{
+					Name = item.Name,
+					IsActive = item.IsActive
+				};
+				break;
+		}
+	}
+
+	private void DeleteItem(AgriItemDto item)
+	{
+		_deleteTarget = item;
+		_showDeleteConfirm = true;
+	}
+
+	private async Task ConfirmDelete()
+	{
+		if (_deleteTarget is null) return;
+
+		try
+		{
+			_isDeleting = true;
+			var response = await Http.DeleteAsync($"{CurrentApiBase}/{_deleteTarget.Id}");
+			if (response.IsSuccessStatusCode)
+			{
+				ShowMessage($"'{_deleteTarget.Name}' deleted successfully.", false);
+				await LoadTabData();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Delete failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isDeleting = false;
+			CancelDelete();
+		}
+	}
+
+	private void CancelDelete()
+	{
+		_showDeleteConfirm = false;
+		_deleteTarget = null;
+	}
+
+	private async Task ToggleStatus(AgriItemDto item)
+	{
+		try
+		{
+			var newStatus = !item.IsActive;
+			var response = await Http.PatchAsync($"{CurrentApiBase}/{item.Id}/status?isActive={newStatus}", null);
+
+			if (response.IsSuccessStatusCode)
+			{
+				item.IsActive = newStatus;
+				ApplyFilter();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Status change failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+	}
+
+	private void ResetForm()
+	{
+		_simpleForm = new SimpleFormModel();
+		_categoryForm = new CategoryFormModel();
+		_productForm = new ProductFormModel();
+		_isEditing = false;
+		_editingId = null;
+	}
+
+	private string GetUnitName(int unitId) =>
+		_unitsAll.FirstOrDefault(u => u.Id == unitId)?.Name ?? "";
+
+	private string GetCategoryName(int categoryId) =>
+		_categoriesAll.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "";
+
+	private string GetSingularName(string pluralName) => pluralName switch
+	{
+		"Crops" => "Crop",
+		"Competitors" => "Competitor",
+		"Units" => "Unit",
+		"Categories" => "Category",
+		"Products" => "Product",
+		"Sector" => "Sector",
+		_ => pluralName.TrimEnd('s')
+	};
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	// Pagination helpers
+	private void GoToPage(int page) { _currentPage = page; }
+	private void PreviousPage() { if (_currentPage > 1) _currentPage--; }
+	private void NextPage() { if (_currentPage < TotalPages) _currentPage++; }
+
+	private IEnumerable<int> PageNumbers
+	{
+		get
+		{
+			var total = TotalPages;
+			if (total <= 7)
+				return Enumerable.Range(1, total);
+
+			var pages = new List<int> { 1 };
+			var start = Math.Max(2, _currentPage - 1);
+			var end = Math.Min(total - 1, _currentPage + 1);
+
+			if (start > 2) pages.Add(-1);
+			for (var i = start; i <= end; i++) pages.Add(i);
+			if (end < total - 1) pages.Add(-1);
+			pages.Add(total);
+
+			return pages;
+		}
+	}
+
+	// Unified DTO (superset of all agriculture entity fields)
+	public class AgriItemDto
+	{
+		public int Id { get; set; }
+		public string Name { get; set; } = "";
+		// Category-specific
+		public int UnitId { get; set; }
+		public bool IsSpecialityProduct { get; set; }
+		// Product-specific
+		public int CategoryId { get; set; }
+		// Common
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public string UpdatedBy { get; set; } = "";
+	}
+
+	// Simple entities: Crop, Competitor, Sector
+	public class SimpleFormModel
+	{
+		public string Name { get; set; } = "";
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class CategoryFormModel
+	{
+		public string Name { get; set; } = "";
+		public int UnitId { get; set; }
+		public bool IsSpecialityProduct { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class ProductFormModel
+	{
+		public string Name { get; set; } = "";
+		public int CategoryId { get; set; }
+		public bool IsActive { get; set; } = true;
 	}
 }

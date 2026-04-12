@@ -92,6 +92,7 @@ namespace SPIC.Core.Entities
     {
         public int Id { get; set; }
         public required string Name { get; set; }
+        public string? GoogleURL { get; set; }
         public int StateId { get; set; } = 0;
         public State? State { get; set; }
         public int DistrictId { get; set; } = 0;

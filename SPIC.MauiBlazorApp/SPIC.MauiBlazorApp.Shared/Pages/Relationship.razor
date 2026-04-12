@@ -30,8 +30,8 @@
 			</div>
 
 			<div class="col-md-2">
-				<div class="status-toggle-box">
-					<span>Active</span>
+				<div class="status-toggle-box @(_formModel.IsActive ? "" : "status-toggle-inactive")">
+					<span>@(_formModel.IsActive ? "Active" : "Inactive")</span>
 					<label class="switch">
 						<input type="checkbox" @bind="_formModel.IsActive">
 						<span class="slider"></span>
@@ -181,6 +181,31 @@
 
 </div>
 
+@if (_showDeleteConfirm)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Confirm Delete</h5>
+					<button type="button" class="btn-close" @onclick="CancelDelete"></button>
+				</div>
+				<div class="modal-body">
+					<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
+					<p class="text-muted mb-0">This action cannot be undone.</p>
+				</div>
+				<div class="modal-footer">
+					<button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+					<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+						@(_isDeleting ? "Deleting..." : "Delete")
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
 @code {
 	private const string ApiBase = "api/Relationship";
 
@@ -198,6 +223,11 @@
 	private bool _isSaving;
 	private string? _message;
 	private bool _isError;
+
+	// Delete confirmation
+	private bool _showDeleteConfirm;
+	private bool _isDeleting;
+	private RelationshipDto? _deleteTarget;
 
 	// Search & filter
 	private string _searchText = "";
@@ -328,14 +358,23 @@
 		};
 	}
 
-	private async Task DeleteItem(RelationshipDto item)
+	private void DeleteItem(RelationshipDto item)
 	{
+		_deleteTarget = item;
+		_showDeleteConfirm = true;
+	}
+
+	private async Task ConfirmDelete()
+	{
+		if (_deleteTarget is null) return;
+
 		try
 		{
-			var response = await Http.DeleteAsync($"{ApiBase}/{item.Id}");
+			_isDeleting = true;
+			var response = await Http.DeleteAsync($"{ApiBase}/{_deleteTarget.Id}");
 			if (response.IsSuccessStatusCode)
 			{
-				ShowMessage($"'{item.Name}' deleted successfully.", false);
+				ShowMessage($"'{_deleteTarget.Name}' deleted successfully.", false);
 				await LoadData();
 			}
 			else
@@ -348,6 +387,17 @@
 		{
 			ShowMessage($"Error: {ex.Message}", true);
 		}
+		finally
+		{
+			_isDeleting = false;
+			CancelDelete();
+		}
+	}
+
+	private void CancelDelete()
+	{
+		_showDeleteConfirm = false;
+		_deleteTarget = null;
 	}
 
 	private async Task ToggleStatus(RelationshipDto item)

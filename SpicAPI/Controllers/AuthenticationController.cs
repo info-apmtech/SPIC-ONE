@@ -82,7 +82,7 @@ namespace SpicAPI.Controllers
                 audience: jwtConfig["Audience"],
                 claims: claims,
                 notBefore: DateTime.UtcNow,
-                expires: DateTime.UtcNow.AddMinutes(Convert.ToDouble(jwtConfig["ExpireMinutes"])),
+                expires: DateTime.UtcNow.AddMinutes(Convert.ToDouble(jwtConfig["ExpiryMinutes"])),
                 signingCredentials: creds
             );
 

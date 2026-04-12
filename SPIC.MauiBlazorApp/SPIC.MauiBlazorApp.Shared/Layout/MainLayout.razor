@@ -37,7 +37,18 @@
 		</div>
 
 		<div class="main-content">
-			@Body
+			@if (_isReady)
+			{
+				@Body
+			}
+			else
+			{
+				<div class="d-flex justify-content-center align-items-center" style="height: 60vh;">
+					<div class="spinner-border text-success" role="status">
+						<span class="visually-hidden">Loading...</span>
+					</div>
+				</div>
+			}
 		</div>
 	</main>
 </div>
@@ -64,32 +75,41 @@
 </div>
 
 @code {
+	private bool _isReady;
+
+	protected override void OnInitialized()
+	{
+		// In-circuit navigation (e.g. after login): token is already in memory
+		if (Http.DefaultRequestHeaders.Authorization != null)
+		{
+			_isReady = true;
+		}
+		else if (!string.IsNullOrWhiteSpace(LoginState.Token))
+		{
+			Http.DefaultRequestHeaders.Authorization =
+				new AuthenticationHeaderValue("Bearer", LoginState.Token);
+			_isReady = true;
+		}
+	}
+
 	protected override async Task OnAfterRenderAsync(bool firstRender)
 	{
-		if (firstRender)
+		if (firstRender && !_isReady)
 		{
-			// Restore token from sessionStorage (survives page refresh)
-			if (Http.DefaultRequestHeaders.Authorization == null)
+			// Page refresh: restore token from sessionStorage via JS interop
+			var token = await JS.InvokeAsync<string?>("sessionStorage.getItem", "jwt_token");
+
+			if (!string.IsNullOrWhiteSpace(token))
 			{
-				var token = LoginState.Token;
-
-				if (string.IsNullOrWhiteSpace(token))
-				{
-					token = await JS.InvokeAsync<string?>("sessionStorage.getItem", "jwt_token");
-				}
-
-				if (!string.IsNullOrWhiteSpace(token))
-				{
-					Http.DefaultRequestHeaders.Authorization =
-						new AuthenticationHeaderValue("Bearer", token);
-					LoginState.Token = token;
-					StateHasChanged();
-				}
-				else
-				{
-					// No token — redirect to login
-					Navigation.NavigateTo("/login");
-				}
+				Http.DefaultRequestHeaders.Authorization =
+					new AuthenticationHeaderValue("Bearer", token);
+				LoginState.Token = token;
+				_isReady = true;
+				StateHasChanged(); // Re-render to show @Body — child pages now initialize with token
+			}
+			else
+			{
+				Navigation.NavigateTo("/login");
 			}
 		}
 	}
