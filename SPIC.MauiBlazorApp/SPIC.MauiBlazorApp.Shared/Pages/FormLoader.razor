@@ -1,5 +1,4 @@
-﻿
-@using SPIC.MauiBlazorApp.Shared.FormFlow
+﻿@using SPIC.MauiBlazorApp.Shared.FormFlow
 @inject NavigationManager Nav
 
 @if (CurrentStep is not null)
@@ -23,10 +22,15 @@
 
 		<div class="step-subtext">@CurrentStep.Title</div>
 
-		<div class="progress-bar-custom">
+		<div class="progress-bar-custom-header">
 			@for (int i = 1; i <= TotalSteps; i++)
 			{
-				<div class="progress-segment @(i <= CurrentStep.StepNo ? "active" : "")"></div>
+				var step = FormStepData.Steps.FirstOrDefault(x => x.StepNo == i);
+
+				<div class="progress-segment @(i <= CurrentStep.StepNo ? "active" : "")"
+					 title="@step?.Title"
+					 @onclick="() => NavigateToStep(step)">
+				</div>
 			}
 		</div>
 	</div>
@@ -38,7 +42,32 @@
 
 	protected override void OnInitialized()
 	{
+		SetCurrentStep();
+		Nav.LocationChanged += HandleLocationChanged;
+	}
+
+	private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+	{
+		SetCurrentStep();
+		InvokeAsync(StateHasChanged);
+	}
+
+	private void SetCurrentStep()
+	{
 		var relativePath = "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
 		CurrentStep = FormStepData.GetStepByRoute(relativePath);
+	}
+
+	private void NavigateToStep(FormStepModel? step)
+	{
+		if (step is not null)
+		{
+			Nav.NavigateTo(step.Route);
+		}
+	}
+
+	public void Dispose()
+	{
+		Nav.LocationChanged -= HandleLocationChanged;
 	}
 }
