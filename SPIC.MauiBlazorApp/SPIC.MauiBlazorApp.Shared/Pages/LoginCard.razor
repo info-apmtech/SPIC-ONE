@@ -3,6 +3,8 @@
 @using System.Net.Http.Json
 @inject HttpClient Http
 @inject NavigationManager Navigation
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
 
 <div class="login-card">
 	<h5>Login To Your Account</h5>
@@ -116,6 +118,10 @@
 
 			Http.DefaultRequestHeaders.Authorization =
 				new AuthenticationHeaderValue("Bearer", rawToken);
+
+			// Persist token for other pages and page refreshes
+			LoginState.Token = rawToken;
+			await JS.InvokeVoidAsync("sessionStorage.setItem", "jwt_token", rawToken);
 
 			// ✅ GO TO DASHBOARD
 			Navigation.NavigateTo("/Dashboard");

@@ -10,7 +10,10 @@ namespace SPIC.Core.Interfaces
 {
     public interface IUserService
     {
-        Task<ServiceResult> SeedDefaultUserAsync(SeedUserDto dto);
-        Task<Userinfo> CreateUserAsync(CreateUserDto dto);
+        Task<ServiceResult> SeedDefaultUserAsync(UserDto dto);
+        Task<UserInfo> CreateUserAsync(UserDto dto);
+        Task<UserInfo> UpdateUserAsync(UserDto dto);
+        Task<ServiceResult> UpdateStatusAsync(string userId, bool isActive);
+        Task<ServiceResult> DeleteUserAsync(string userId);
     }
 }

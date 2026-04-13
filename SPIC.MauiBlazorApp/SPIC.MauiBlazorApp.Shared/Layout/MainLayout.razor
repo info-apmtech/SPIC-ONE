@@ -1,5 +1,9 @@
 ﻿@inherits LayoutComponentBase
-@inject NavigationManager NavManager
+@using System.Net.Http.Headers
+@inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <div class="app-shell">
 	<aside class="sidebar">
@@ -33,7 +37,18 @@
 		</div>
 
 		<div class="main-content">
-			@Body
+			@if (_isReady)
+			{
+				@Body
+			}
+			else
+			{
+				<div class="d-flex justify-content-center align-items-center" style="height: 60vh;">
+					<div class="spinner-border text-success" role="status">
+						<span class="visually-hidden">Loading...</span>
+					</div>
+				</div>
+			}
 		</div>
 	</main>
 </div>
@@ -45,111 +60,57 @@
 	</div>
 	<div class="offcanvas-body">
 		<nav class="nav nav-pills flex-column nav-section">
-			<NavLink class="nav-link" href="/Dashboard" Match="NavLinkMatch.All">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
-				Dashboard
-			</NavLink>
-
-			<NavLink class="nav-link" href="/Purchases">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
-				Purchases
-			</NavLink>
-
-			<NavLink class="nav-link" href="/Rewards">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg" class="SideBariconimg" />
-				Rewards
-			</NavLink>
-
-			<NavLink class="nav-link" href="/CropAdvice">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg" class="SideBariconimg" />
-				Crop Advice
-			</NavLink>
-
-			<NavLink class="nav-link" href="/YieldPrediction">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg" class="SideBariconimg" />
-				Yield Prediction
-			</NavLink>
-
-			<NavLink class="nav-link" href="/DiseaseDetection">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg" class="SideBariconimg" />
-				Disease Detection
-			</NavLink>
-
-			<NavLink class="nav-link" href="/Community">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg" class="SideBariconimg" />
-				Community
-			</NavLink>
-
-			<NavLink class="nav-link" href="/Notifications">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg" class="SideBariconimg" />
-				Notifications
-			</NavLink>
-
-			<NavLink class="nav-link" href="/Profile">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
-				Profile
-			</NavLink>
-
-			@* <NavLink class="nav-link" href="/Settings">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
-		Settings
-	</NavLink> *@
-
-			<div class="settings-menu-wrapper">
-				<a href="javascript:void(0);"
-					   class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
-					   @onclick="ToggleSettingsMenu">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />@* <span class=""><i class="bi bi-gear"></i></span> *@
-					Settings
-					<i class="bi @(isSettingsOpen ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
-				</a>
-
-				@if (isSettingsOpen)
-				{
-					<ul class="submenu-list">
-						<li class="submenu-item">
-							<NavLink href="/LocationMaster" class="submenu-link" Match="NavLinkMatch.All">Location Master</NavLink>
-						</li>
-						<li class="submenu-item">
-							<NavLink href="/Agriculture" class="submenu-link" Match="NavLinkMatch.All">Agriculture & Prod...</NavLink>
-						</li>
-						<li class="submenu-item">
-							<NavLink href="/Logistics" class="submenu-link" Match="NavLinkMatch.All">Logistics Master</NavLink>
-						</li>
-						<li class="submenu-item">
-							<NavLink href="/Financial" class="submenu-link" Match="NavLinkMatch.All">Financial Master</NavLink>
-						</li>
-						<li class="submenu-item">
-							<NavLink href="/Relationship" class="submenu-link" Match="NavLinkMatch.All">Relationship Master</NavLink>
-						</li>
-					</ul>
-				}
-			</div>
+			<a class="nav-link" href="#"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" alt="Dashboard" class="SideBariconimg"style="width:8%;"/>Dashboard</a>
+			<a class="nav-link active" href="#"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" alt="Purchase" class="SideBariconimg" style="width:8%;" />Purchases</a>
+			<a class="nav-link" href="#"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg" alt="Reward" class="SideBariconimg" style="width:8%;" />Rewards</a>
+			<a class="nav-link" href="#"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg" alt="CropAdvice" class="SideBariconimg" style="width:8%;" />Crop Advice</a>
+			<a class="nav-link" href="#"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg" alt="YieldPrediction" class="SideBariconimg" style="width:8%;" />Yield Prediction</a>
+			<a class="nav-link" href="#"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg" alt="DiseaseDetection" class="SideBariconimg" style="width:8%;" />Disease Detection</a>
+			<a class="nav-link" href="#"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg" alt="Notifications" class="SideBariconimg" style="width:8%;" />Community</a>
+			<a class="nav-link" href="#"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg" alt="Notification" class="SideBariconimg" style="width:8%;" />Notifications</a>
+			<a class="nav-link" href="#"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" alt="Profile" class="SideBariconimg" style="width:8%;" />Profile</a>
+			<a class="nav-link" href="#"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" alt="Settings" class="SideBariconimg" style="width:8%;" />Settings</a>
 		</nav>
 	</div>
 </div>
 
 @code {
-	private bool isSettingsOpen = false;
+	private bool _isReady;
 
 	protected override void OnInitialized()
 	{
-		isSettingsOpen = IsSettingsSectionActive();
+		// In-circuit navigation (e.g. after login): token is already in memory
+		if (Http.DefaultRequestHeaders.Authorization != null)
+		{
+			_isReady = true;
+		}
+		else if (!string.IsNullOrWhiteSpace(LoginState.Token))
+		{
+			Http.DefaultRequestHeaders.Authorization =
+				new AuthenticationHeaderValue("Bearer", LoginState.Token);
+			_isReady = true;
+		}
 	}
 
-	private void ToggleSettingsMenu()
+	protected override async Task OnAfterRenderAsync(bool firstRender)
 	{
-		isSettingsOpen = !isSettingsOpen;
-	}
+		if (firstRender && !_isReady)
+		{
+			// Page refresh: restore token from sessionStorage via JS interop
+			var token = await JS.InvokeAsync<string?>("sessionStorage.getItem", "jwt_token");
 
-	private bool IsSettingsSectionActive()
-	{
-		var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
-
-		return uri == "locationmaster"
-			|| uri == "agriculture"
-			|| uri == "logistics"
-			|| uri == "financial"
-			|| uri == "relationship";
+			if (!string.IsNullOrWhiteSpace(token))
+			{
+				Http.DefaultRequestHeaders.Authorization =
+					new AuthenticationHeaderValue("Bearer", token);
+				LoginState.Token = token;
+				_isReady = true;
+				StateHasChanged(); // Re-render to show @Body — child pages now initialize with token
+			}
+			else
+			{
+				Navigation.NavigateTo("/login");
+			}
+		}
 	}
 }

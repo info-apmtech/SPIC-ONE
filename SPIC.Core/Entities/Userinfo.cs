@@ -1,22 +1,33 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace SPIC.Core.Entities
 {
-    public class Userinfo : IdentityUser
+    public class UserInfo : IdentityUser
     {
-        public string? Name { get; set; }
-        [PersonalData]
-       public DateTime Createddate { get; set; } = DateTime.Now;
-		public AppRole Role { get; set; }
-		public string Password { get; set; }
-	}
-	public enum AppRole
-	{
-		Admin,Dealer
-	}
+        public required string? Name { get; set; }
+        public int? DesignationId { get; set; }
+        public Designation? Designation { get; set; }
+        public AppRole Role { get; set; }
+        public required string Password { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string? CreatedBy { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.Now;
+        public required string UpdatedBy { get; set; }
+        public bool IsActive { get; set; }
+    }
+    public class Designation
+    {
+        public int Id { get; set; }
+        public required string Name { get; set; }
+    }
+    public enum AppRole
+    {
+        Admin, Dealer
+    }
 }
