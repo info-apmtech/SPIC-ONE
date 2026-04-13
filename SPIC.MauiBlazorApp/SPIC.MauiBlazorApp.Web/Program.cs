@@ -17,9 +17,11 @@ builder.Services.AddSingleton(new PlatformService
 {
 	IsWeb = true
 });
-builder.Services.AddScoped(sp => new HttpClient
+builder.Services.AddScoped(sp =>
 {
-	BaseAddress = new Uri("https://localhost:7032/")
+    var config = sp.GetRequiredService<IConfiguration>();
+    var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmtechnologies.in/";
+    return new HttpClient { BaseAddress = new Uri(baseUrl) };
 });
 
 var app = builder.Build();
