@@ -9,8 +9,16 @@ namespace SPIC.Core.Entities
 	{
 		public int Id { get; set; }
 		public string UserTableId { get; set; }
-		public bool InSpic { get; set; }
+		[Display(Name ="Dealar / Department")]
+        public bool IsDealer { get; set; }
+        public bool InSpic { get; set; }
 		public bool InGreenStar { get; set; }
+
+		public string? DealerCode { get; set; }
+		public string? SPICCode { get; set; }
+		public string? GreenStarCode { get; set; }
+		public string? TnCode { get; set; }
+
 		[Display(Name = "State")]
 		public int StateId { get; set; }
 		public int Region { get; set; }

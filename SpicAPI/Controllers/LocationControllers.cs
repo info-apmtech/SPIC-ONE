@@ -15,4 +15,10 @@ namespace SpicAPI.Controllers
 
     [Route("api/[controller]")]
     public class SubDistrictController(IGenericRepository<SubDistrict> repo) : GenericCrudController<SubDistrict>(repo);
+
+    [Route("api/[controller]")]
+    public class RegionController(IGenericRepository<Region> repo) : GenericCrudController<Region>(repo);
+
+    [Route("api/[controller]")]
+    public class HeadquarterController(IGenericRepository<Headquarter> repo) : GenericCrudController<Headquarter>(repo);
 }

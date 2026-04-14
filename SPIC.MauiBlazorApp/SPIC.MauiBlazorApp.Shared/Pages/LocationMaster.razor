@@ -122,6 +122,42 @@
 					</select>
 				</div>
 			}
+			else if (ActiveTab == "Regions")
+			{
+				<div class="col-md-4">
+					<label class="form-label-custom">Region Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Region Name"
+						   @bind="_regionForm.RegionName" />
+				</div>
+				<div class="col-md-4">
+					<label class="form-label-custom">State</label>
+					<select class="form-control-custom w-100" @bind="_regionForm.StateId">
+						<option value="0">Select State</option>
+						@foreach (var s in _statesAll)
+						{
+							<option value="@s.Id">@s.StateName</option>
+						}
+					</select>
+				</div>
+			}
+			else if (ActiveTab == "Headquarters")
+			{
+				<div class="col-md-4">
+					<label class="form-label-custom">Headquarter Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Headquarter Name"
+						   @bind="_headquarterForm.HeadquarterName" />
+				</div>
+				<div class="col-md-4">
+					<label class="form-label-custom">Region</label>
+					<select class="form-control-custom w-100" @bind="_headquarterForm.RegionId">
+						<option value="0">Select Region</option>
+						@foreach (var r in _regionsAll)
+						{
+							<option value="@r.Id">@r.RegionName</option>
+						}
+					</select>
+				</div>
+			}
 
 			<div class="col-md-2" style="margin-top: 28px;">
 				<div class="status-toggle-box @(CurrentFormIsActive ? "" : "status-toggle-inactive")">
@@ -138,6 +174,14 @@
 						else if (ActiveTab == "Districts")
 						{
 							<input type="checkbox" @bind="_districtForm.IsActive">
+						}
+						else if (ActiveTab == "Regions")
+						{
+							<input type="checkbox" @bind="_regionForm.IsActive">
+						}
+						else if (ActiveTab == "Headquarters")
+						{
+							<input type="checkbox" @bind="_headquarterForm.IsActive">
 						}
 						else
 						{
@@ -226,6 +270,14 @@
 							{
 								<th>District</th>
 							}
+							else if (ActiveTab == "Regions")
+							{
+								<th>State</th>
+							}
+							else if (ActiveTab == "Headquarters")
+							{
+								<th>Region</th>
+							}
 
 							<th>Status</th>
 							<th>Created At</th>
@@ -281,6 +333,14 @@
 									else if (ActiveTab == "Sub-Districts")
 									{
 										<td>@GetDistrictName(item.DistrictId)</td>
+									}
+									else if (ActiveTab == "Regions")
+									{
+										<td>@GetStateName(item.StateId)</td>
+									}
+									else if (ActiveTab == "Headquarters")
+									{
+										<td>@GetRegionName(item.RegionId)</td>
 									}
 
 									<td>
@@ -366,7 +426,7 @@
 }
 
 @code {
-	private readonly List<string> TabOptions = ["Zones", "States", "Districts", "Sub-Districts"];
+	private readonly List<string> TabOptions = ["Zones", "States", "Districts", "Sub-Districts", "Regions", "Headquarters"];
 
 	// Tab state
 	private string ActiveTab { get; set; } = "Zones";
@@ -376,6 +436,8 @@
 		"States" => "api/State",
 		"Districts" => "api/District",
 		"Sub-Districts" => "api/SubDistrict",
+		"Regions" => "api/Region",
+		"Headquarters" => "api/Headquarter",
 		_ => ""
 	};
 	private int TableColSpan => ActiveTab switch
@@ -389,6 +451,8 @@
 	private List<LocationItemDto> _statesAll = new();
 	private List<LocationItemDto> _districtsAll = new();
 	private List<LocationItemDto> _subDistrictsAll = new();
+	private List<LocationItemDto> _regionsAll = new();
+	private List<LocationItemDto> _headquartersAll = new();
 	private List<LocationItemDto> _filteredItems = new();
 
 	private List<LocationItemDto> CurrentAllItems => ActiveTab switch
@@ -397,6 +461,8 @@
 		"States" => _statesAll,
 		"Districts" => _districtsAll,
 		"Sub-Districts" => _subDistrictsAll,
+		"Regions" => _regionsAll,
+		"Headquarters" => _headquartersAll,
 		_ => new()
 	};
 
@@ -405,6 +471,8 @@
 	private StateFormModel _stateForm = new();
 	private DistrictFormModel _districtForm = new();
 	private SubDistrictFormModel _subDistrictForm = new();
+	private RegionFormModel _regionForm = new();
+	private HeadquarterFormModel _headquarterForm = new();
 	private int _subDistrictSelectedStateId;
 	private List<LocationItemDto> _subDistrictFilteredDistricts = new();
 	private bool _isEditing;
@@ -416,6 +484,8 @@
 		"States" => _stateForm.IsActive,
 		"Districts" => _districtForm.IsActive,
 		"Sub-Districts" => _subDistrictForm.IsActive,
+		"Regions" => _regionForm.IsActive,
+		"Headquarters" => _headquarterForm.IsActive,
 		_ => true
 	};
 
@@ -459,6 +529,8 @@
 			_statesAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
 			_districtsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/District/all") ?? new();
 			_subDistrictsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/SubDistrict/all") ?? new();
+			_regionsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all") ?? new();
+			_headquartersAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all") ?? new();
 		}
 		catch (Exception ex)
 		{
@@ -479,6 +551,8 @@
 				case "States": _statesAll = items; break;
 				case "Districts": _districtsAll = items; break;
 				case "Sub-Districts": _subDistrictsAll = items; break;
+				case "Regions": _regionsAll = items; break;
+				case "Headquarters": _headquartersAll = items; break;
 			}
 
 			ApplyFilter();
@@ -529,6 +603,8 @@
 			"States" => _stateForm.StateName,
 			"Districts" => _districtForm.DistrictName,
 			"Sub-Districts" => _subDistrictForm.SubDistrictName,
+			"Regions" => _regionForm.RegionName,
+			"Headquarters" => _headquarterForm.HeadquarterName,
 			_ => ""
 		};
 
@@ -554,9 +630,15 @@
 					? (object)new { Id = _editingId!.Value, _districtForm.DistrictName, _districtForm.StateId, _districtForm.IsActive, UpdatedBy = "current-user" }
 					: new { _districtForm.DistrictName, _districtForm.StateId, _districtForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
 				"Sub-Districts" => _isEditing
-					? (object)new { Id = _editingId!.Value, _subDistrictForm.SubDistrictName, _subDistrictForm.DistrictId, _subDistrictForm.IsActive, UpdatedBy = "current-user" }
-					: new { _subDistrictForm.SubDistrictName, _subDistrictForm.DistrictId, _subDistrictForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
-				_ => new { }
+						? (object)new { Id = _editingId!.Value, _subDistrictForm.SubDistrictName, _subDistrictForm.DistrictId, _subDistrictForm.IsActive, UpdatedBy = "current-user" }
+						: new { _subDistrictForm.SubDistrictName, _subDistrictForm.DistrictId, _subDistrictForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+					"Regions" => _isEditing
+						? (object)new { Id = _editingId!.Value, _regionForm.RegionName, _regionForm.StateId, _regionForm.IsActive, UpdatedBy = "current-user" }
+						: new { _regionForm.RegionName, _regionForm.StateId, _regionForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+					"Headquarters" => _isEditing
+						? (object)new { Id = _editingId!.Value, _headquarterForm.HeadquarterName, _headquarterForm.RegionId, _headquarterForm.IsActive, UpdatedBy = "current-user" }
+						: new { _headquarterForm.HeadquarterName, _headquarterForm.RegionId, _headquarterForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+					_ => new { }
 			};
 
 			HttpResponseMessage response;
@@ -639,6 +721,22 @@
 					IsActive = item.IsActive
 				};
 				break;
+			case "Regions":
+				_regionForm = new RegionFormModel
+				{
+					RegionName = item.Name,
+					StateId = item.StateId,
+					IsActive = item.IsActive
+				};
+				break;
+			case "Headquarters":
+				_headquarterForm = new HeadquarterFormModel
+				{
+					HeadquarterName = item.Name,
+					RegionId = item.RegionId,
+					IsActive = item.IsActive
+				};
+				break;
 		}
 	}
 
@@ -714,6 +812,8 @@
 		_stateForm = new StateFormModel();
 		_districtForm = new DistrictFormModel();
 		_subDistrictForm = new SubDistrictFormModel();
+		_regionForm = new RegionFormModel();
+		_headquarterForm = new HeadquarterFormModel();
 		_subDistrictSelectedStateId = 0;
 		_subDistrictFilteredDistricts = new();
 		_isEditing = false;
@@ -740,12 +840,17 @@
 	private string GetDistrictName(int districtId) =>
 		_districtsAll.FirstOrDefault(d => d.Id == districtId)?.DistrictName ?? "";
 
+	private string GetRegionName(int regionId) =>
+		_regionsAll.FirstOrDefault(r => r.Id == regionId)?.RegionName ?? "";
+
 	private string GetSingularName(string pluralName) => pluralName switch
 	{
 		"Zones" => "Zone",
 		"States" => "State",
 		"Districts" => "District",
 		"Sub-Districts" => "Sub-District",
+		"Regions" => "Region",
+		"Headquarters" => "Headquarter",
 		_ => pluralName.TrimEnd('s')
 	};
 
@@ -790,6 +895,8 @@
 		public string StateName { get; set; } = "";
 		public string DistrictName { get; set; } = "";
 		public string SubDistrictName { get; set; } = "";
+		public string RegionName { get; set; } = "";
+		public string HeadquarterName { get; set; } = "";
 		// Zone-specific
 		public string? ZoneCode { get; set; }
 		public string? ZoneColorCode { get; set; }
@@ -797,6 +904,7 @@
 		public int ZoneId { get; set; }
 		public int StateId { get; set; }
 		public int DistrictId { get; set; }
+		public int RegionId { get; set; }
 		// Common
 		public bool IsActive { get; set; }
 		public DateTime CreatedAt { get; set; }
@@ -808,7 +916,9 @@
 			!string.IsNullOrEmpty(ZoneName) ? ZoneName :
 			!string.IsNullOrEmpty(StateName) ? StateName :
 			!string.IsNullOrEmpty(DistrictName) ? DistrictName :
-			SubDistrictName;
+			!string.IsNullOrEmpty(SubDistrictName) ? SubDistrictName :
+			!string.IsNullOrEmpty(RegionName) ? RegionName :
+			HeadquarterName;
 	}
 
 	public class ZoneFormModel
@@ -837,6 +947,20 @@
 	{
 		public string SubDistrictName { get; set; } = "";
 		public int DistrictId { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class RegionFormModel
+	{
+		public string RegionName { get; set; } = "";
+		public int StateId { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class HeadquarterFormModel
+	{
+		public string HeadquarterName { get; set; } = "";
+		public int RegionId { get; set; }
 		public bool IsActive { get; set; } = true;
 	}
 }

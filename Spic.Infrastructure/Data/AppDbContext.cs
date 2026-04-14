@@ -44,6 +44,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<State> States { get; set; }
         public DbSet<District> Districts { get; set; }
         public DbSet<SubDistrict> SubDistricts { get; set; }
+        public DbSet<Region> Regions { get; set; }
+        public DbSet<Headquarter> Headquarters { get; set; }
 
         // Settings
         public DbSet<Crop> Crops { get; set; }

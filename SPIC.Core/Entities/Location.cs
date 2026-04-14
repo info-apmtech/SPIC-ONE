@@ -48,4 +48,26 @@ namespace SPIC.Core.Entities
         public DateTime UpdatedAt { get; set; }
         public required string UpdatedBy { get; set; }
     }
+	public class Region
+	{
+		public int Id { get; set; }
+		public required string RegionName { get; set; }
+		public int StateId { get; set; }
+		public State? State { get; set; }
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public required string UpdatedBy { get; set; }
+    }
+	public class Headquarter
+	{
+		public int Id { get; set; }
+		public required string HeadquarterName { get; set; }
+		public int RegionId { get; set; }
+		public Region? Region { get; set; }
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public required string UpdatedBy { get; set; }
+    }
 }

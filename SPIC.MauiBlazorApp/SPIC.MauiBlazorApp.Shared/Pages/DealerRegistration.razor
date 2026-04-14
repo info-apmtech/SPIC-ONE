@@ -67,23 +67,35 @@
 					<div class="col-md-7">
 						<div class="row g-3">
 							<div class="col-md-6">
-								<label class="form-label-custom">State</label>
-								<select class="form-select-custom w-100" @bind="_stateForm.StateId">
-									<option value="0">-- Select State --</option>
-									@foreach (var state in _statesAll)
-									{
-										<option value="@state.Id">@state.StateName</option>
-									}
-								</select>
-							</div>
-							<div class="col-md-6">
-								<label class="form-label-custom">Region</label>
-								<input type="text" class="form-control-custom w-100" placeholder="Enter Region">
-							</div>
-							<div class="col-md-6">
-								<label class="form-label-custom">HQ</label>
-								<input type="text" class="form-control-custom w-100" placeholder="Enter HQ">
-							</div>
+									<label class="form-label-custom">State</label>
+									<select class="form-select-custom w-100" @bind="_basicInfoStateId" @bind:after="OnBasicInfoStateChanged">
+										<option value="0">-- Select State --</option>
+										@foreach (var state in _statesAll)
+										{
+											<option value="@state.Id">@state.StateName</option>
+										}
+									</select>
+								</div>
+								<div class="col-md-6">
+									<label class="form-label-custom">Region</label>
+									<select class="form-select-custom w-100" @bind="_basicInfoRegionId" @bind:after="OnBasicInfoRegionChanged">
+										<option value="0">-- Select Region --</option>
+										@foreach (var region in _filteredRegions)
+										{
+											<option value="@region.Id">@region.RegionName</option>
+										}
+									</select>
+								</div>
+								<div class="col-md-6">
+									<label class="form-label-custom">HQ</label>
+									<select class="form-select-custom w-100" @bind="_basicInfoHqId">
+										<option value="0">-- Select HQ --</option>
+										@foreach (var hq in _filteredHeadquarters)
+										{
+											<option value="@hq.Id">@hq.HeadquarterName</option>
+										}
+									</select>
+								</div>
 							<div class="col-md-6">
 								<label class="form-label-custom">Status</label>
 
@@ -257,15 +269,11 @@
 
 					<div class="col-md-3">
 						<label class="form-label-custom">Block</label>
-						<select class="form-select-custom w-100">
-							<option value="">Select Block</option>
-						</select>
+						<input type="text" class="form-control-custom w-100" placeholder="Enter Block">
 					</div>
 					<div class="col-md-3">
 						<label class="form-label-custom">Taluk</label>
-						<select class="form-select-custom w-100">
-							<option value="">Select Taluk</option>
-						</select>
+						<input type="text" class="form-control-custom w-100" placeholder="Enter Taluk">
 					</div>
 					<div class="col-md-3">
 						<label class="form-label-custom">District</label>
@@ -319,7 +327,13 @@
 					</div>
 					<div class="col-md-4">
 						<label class="form-label-custom">Bank Name</label>
-						<input type="text" class="form-control-custom w-100" placeholder="Enter Bank Name">
+						<select class="form-select-custom w-100" @bind="_bankId">
+							<option value="0">-- Select Bank --</option>
+							@foreach (var bank in _banksAll)
+							{
+								<option value="@bank.Id">@bank.Name</option>
+							}
+						</select>
 					</div>
 					<div class="col-md-4">
 						<label class="form-label-custom">Bank Branch</label>
@@ -540,6 +554,20 @@
 	// State DropDown
 	private List<LocationItemDto> _statesAll = new();
 	private List<LocationItemDto> _DistrictAll = new();
+	private List<LocationItemDto> _regionsAll = new();
+	private List<LocationItemDto> _headquartersAll = new();
+	private List<BankItemDto> _banksAll = new();
+
+	// Filtered cascading lists
+	private List<LocationItemDto> _filteredRegions = new();
+	private List<LocationItemDto> _filteredHeadquarters = new();
+
+	// Basic Information selections
+	private int _basicInfoStateId;
+	private int _basicInfoRegionId;
+	private int _basicInfoHqId;
+	private int _bankId;
+
 	private string CurrentApiBase => "api/State";
 	private string CurrentDistrictApiBase => "api/District";
 
@@ -559,11 +587,28 @@
 		{
 			_statesAll = await Http.GetFromJsonAsync<List<LocationItemDto>>($"{CurrentApiBase}/all") ?? new();
 			_DistrictAll = await Http.GetFromJsonAsync<List<LocationItemDto>>($"{CurrentDistrictApiBase}/all") ?? new();
+			_regionsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all") ?? new();
+			_headquartersAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all") ?? new();
+			_banksAll = await Http.GetFromJsonAsync<List<BankItemDto>>("api/Bank/all") ?? new();
 		}
 		catch (Exception ex)
 		{
 			ShowMessage($"Failed to load: {ex.Message}", true);
 		}
+	}
+
+	private void OnBasicInfoStateChanged()
+	{
+		_basicInfoRegionId = 0;
+		_basicInfoHqId = 0;
+		_filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
+		_filteredHeadquarters = new();
+	}
+
+	private void OnBasicInfoRegionChanged()
+	{
+		_basicInfoHqId = 0;
+		_filteredHeadquarters = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
 	}
 
 	private void ShowMessage(string message, bool isError)
@@ -577,6 +622,16 @@
 		public int Id { get; set; }
 		public string StateName { get; set; } = "";
 		public string DistrictName { get; set; } = "";
+		public string RegionName { get; set; } = "";
+		public string HeadquarterName { get; set; } = "";
+		public int StateId { get; set; }
+		public int RegionId { get; set; }
+	}
+
+	public class BankItemDto
+	{
+		public int Id { get; set; }
+		public string Name { get; set; } = "";
 	}
 
 	public class StateFormModel
