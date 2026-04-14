@@ -24,8 +24,6 @@ namespace SPIC.Core.Entities
 		public int Region { get; set; }
 		public int HQ { get; set; }
 		public DealerStatus Status { get; set; }
-		[Display(Name = "Dealer Code and Name")]
-		public string DealerCode { get; set; }
 		[Display(Name = "Parent Dealer")]
 		public int ParentDealer { get; set; }
 		[Display(Name = "Firm Name")]
