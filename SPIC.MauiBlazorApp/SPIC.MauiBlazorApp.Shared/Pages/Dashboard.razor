@@ -1,8 +1,10 @@
-﻿@page "/Dashboard" 
+﻿@page "/Dashboard"
+@using System.Net.Http.Json
+@inject HttpClient Http
 @inject NavigationManager NavManager
-   
+
 <div class="container-fluid py-4 px-0">
-        
+
 	<div class="d-flex justify-content-between align-items-center mb-4">
 		<div>
 			<h1 class="page-title">Dealer Registrations</h1>
@@ -18,7 +20,7 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-green"><i class="bi bi-file-earmark-check"></i></div>
-					<div class="kpi-number">8</div>
+					<div class="kpi-number">@_allDealers.Count</div>
 				</div>
 				<div class="kpi-label">Total Registrations</div>
 			</div>
@@ -27,7 +29,7 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-gray"><i class="bi bi-file-earmark-text"></i></div>
-					<div class="kpi-number">8</div>
+					<div class="kpi-number">@_allDealers.Count(d => d.RMApproved == null && d.SMApproved == null && d.AVPApproved == null)</div>
 				</div>
 				<div class="kpi-label">Drafts</div>
 			</div>
@@ -36,7 +38,7 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-					<div class="kpi-number">8</div>
+					<div class="kpi-number">@_allDealers.Count(d => d.RMApproved == true && d.AVPApproved == null)</div>
 				</div>
 				<div class="kpi-label">Pending Approval</div>
 			</div>
@@ -45,7 +47,7 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-green"><i class="bi bi-check-circle"></i></div>
-					<div class="kpi-number">8</div>
+					<div class="kpi-number">@_allDealers.Count(d => d.AVPApproved == true)</div>
 				</div>
 				<div class="kpi-label">Approved</div>
 			</div>
@@ -54,7 +56,7 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-red"><i class="bi bi-x-circle"></i></div>
-					<div class="kpi-number">8</div>
+					<div class="kpi-number">@_allDealers.Count(d => d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)</div>
 				</div>
 				<div class="kpi-label">Rejected / Returned</div>
 			</div>
@@ -64,11 +66,11 @@
 				<div class="kpi-label mb-2">Status</div>
 				<div class="d-flex justify-content-between align-items-center mb-2">
 					<div class="status-list"><span class="status-dot bg-success"></span> Active</div>
-					<div class="fw-bold fs-6">12</div>
+					<div class="fw-bold fs-6">@_allDealers.Count(d => d.Status == 0)</div>
 				</div>
 				<div class="d-flex justify-content-between align-items-center">
 					<div class="status-list"><span class="status-dot" style="background-color: #F59E0B;"></span> Inact / Term</div>
-					<div class="fw-bold fs-6">3/7</div>
+					<div class="fw-bold fs-6">@_allDealers.Count(d => d.Status == 1) / @_allDealers.Count(d => d.Status == 2)</div>
 				</div>
 			</div>
 		</div>
@@ -78,234 +80,362 @@
 
 		<div class="search-wrap">
 			<i class="bi bi-search"></i>
-			<input type="text" class="search-input" placeholder="Search by Dealer Code or Firm Name">
+			<input type="text" class="search-input" placeholder="Search by Dealer Code or Firm Name" @bind="_searchText" @bind:after="ApplyFilters">
 		</div>
 
 		<div class="filter-group">
-			<select class="filter-select"><option>All Companies</option></select>
-			<select class="filter-select"><option>All Statuses</option></select>
-			<select class="filter-select"><option>All Regions</option></select>
-			<select class="filter-select"><option>All Entity Type</option></select>
-			<select class="filter-select"><option>Recently Updated</option></select>
+			<select class="filter-select" @bind="_filterCompany" @bind:after="ApplyFilters">
+				<option value="">All Companies</option>
+				<option value="SPIC">SPIC</option>
+				<option value="GreenStar">GreenStar</option>
+				<option value="Both">Both (SPIC & GreenStar)</option>
+			</select>
+			<select class="filter-select" @bind="_filterStatus" @bind:after="ApplyFilters">
+				<option value="-1">All Statuses</option>
+				<option value="0">Active</option>
+				<option value="1">Inactive</option>
+				<option value="2">Terminated</option>
+			</select>
+			<select class="filter-select" @bind="_filterRegionId" @bind:after="ApplyFilters">
+				<option value="0">All Regions</option>
+				@foreach (var r in _regionsAll)
+				{
+					<option value="@r.Id">@r.RegionName</option>
+				}
+			</select>
+			<select class="filter-select" @bind="_filterEntityType" @bind:after="ApplyFilters">
+				<option value="">All Entity Type</option>
+				<option value="soleProprietor">Sole Proprietor</option>
+				<option value="Partnership">Partnership</option>
+				<option value="LLP">LLP</option>
+				<option value="PvtLtd">Pvt Ltd</option>
+				<option value="PubLtd">Pub Ltd</option>
+				<option value="Society">Society</option>
+			</select>
+			<select class="filter-select" @bind="_sortOrder" @bind:after="ApplyFilters">
+				<option value="recent">Recently Updated</option>
+				<option value="oldest">Oldest First</option>
+				<option value="name">Firm Name A-Z</option>
+			</select>
 		</div>
 
 	</div>
 
-	<div class="row g-4">
-            
-		<div class="col-md-4">
-			<div class="reg-card">
-				<div class="card-top-row">
-					<div class="progress-circle p-80">
-						<div class="progress-inner">
-							<div class="progress-val">80%</div>
-							<div class="progress-steps">10 of 12 steps</div>
-						</div>
-					</div>
-					<div class="d-flex flex-column align-items-end gap-2">
-						<div class="badge-group">
-							<span class="badge-custom badge-yellow">In Progress</span>
-							<span class="badge-custom badge-green-dashboard">Active</span>
-						</div>
-						<div class="d-flex gap-2">
-							<button class="btn-continue-blue"><i class="bi bi-play-circle me-1"></i> Continue</button>
-							<button class="btn-view"><i class="bi bi-eye"></i> View</button>
-							<button class="btn-dots"><i class="bi bi-three-dots-vertical"></i></button>
-						</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					<div class="reg-id">REG #DL-4829</div>
-					<h3 class="company-name">Veridian Fields Ltd</h3>
-					<div class="location-info">
-						<div><i class="bi bi-geo-alt"></i> Region: Mysur</div> |
-						<div>HQ: Shivamogga</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					SPIC / GFL <span class="bullet-dot">•</span> Partnership <span class="bullet-dot">•</span> Wholesale
-				</div>
-				<div class="card-footer-note">Last Updated: 14 May 2025</div>
-			</div>
+	@if (_isLoading)
+	{
+		<div class="text-center py-5">
+			<div class="spinner-border text-primary" role="status"></div>
+			<p class="text-muted mt-2">Loading dealers...</p>
 		</div>
-
-		<div class="col-md-4">
-			<div class="reg-card">
-				<div class="card-top-row">
-					<div class="progress-circle p-30">
-						<div class="progress-inner">
-							<div class="progress-val">30%</div>
-							<div class="progress-steps">4 of 12 steps</div>
-						</div>
-					</div>
-					<div class="d-flex flex-column align-items-end gap-2">
-						<div class="badge-group">
-							<span class="badge-custom badge-yellow">In Progress</span>
-							<span class="badge-custom badge-green-dashboard">Active</span>
-						</div>
-						<div class="d-flex gap-2">
-							<button class="btn-continue-blue"><i class="bi bi-play-circle me-1"></i> Continue</button>
-							<button class="btn-view"><i class="bi bi-eye"></i> View</button>
-							<button class="btn-dots"><i class="bi bi-three-dots-vertical"></i></button>
-						</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					<div class="reg-id">REG #DL-4829</div>
-					<h3 class="company-name">Veridian Fields Ltd</h3>
-					<div class="location-info">
-						<div><i class="bi bi-geo-alt"></i> Region: Mysur</div> |
-						<div>HQ: Shivamogga</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					SPIC / GFL <span class="bullet-dot">•</span> Partnership <span class="bullet-dot">•</span> Wholesale
-				</div>
-				<div class="card-footer-note">Last Updated: 14 May 2025</div>
-			</div>
+	}
+	else if (!_filteredDealers.Any())
+	{
+		<div class="text-center py-5">
+			<i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+			<p class="text-muted mt-2">No dealer registrations found.</p>
 		</div>
+	}
+	else
+	{
+		<div class="row g-4">
+			@foreach (var dealer in _filteredDealers)
+			{
+				var approvalStatus = GetApprovalStatus(dealer);
+				var statusName = GetStatusName(dealer.Status);
+				var regionName = _regionsAll.FirstOrDefault(r => r.Id == dealer.Region)?.RegionName ?? "-";
+				var hqName = _headquartersAll.FirstOrDefault(h => h.Id == dealer.HQ)?.HeadquarterName ?? "-";
 
-		<div class="col-md-4">
-			<div class="reg-card">
-				<div class="card-top-row">
-					<div class="progress-circle p-100">
-						<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
-					</div>
-					<div class="d-flex flex-column align-items-end gap-2">
-						<div class="badge-group">
-							<span class="badge-custom badge-green-dashboard" style="background:#D1FAE5; color:#047857;">Approved</span>
-							<span class="badge-custom badge-green-dashboard">Active</span>
+				<div class="col-md-4">
+					<div class="reg-card">
+						<div class="card-top-row">
+							@if (approvalStatus == "Approved")
+							{
+								<div class="progress-circle p-100">
+									<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
+								</div>
+							}
+							else
+							{
+								<div class="progress-circle p-30">
+									<div class="progress-inner">
+										<div class="progress-val">
+											@(approvalStatus == "Draft" ? "Draft" : approvalStatus == "Rejected" ? "!" : "...")
+										</div>
+										<div class="progress-steps">@approvalStatus</div>
+									</div>
+								</div>
+							}
+							<div class="d-flex flex-column align-items-end gap-2">
+								<div class="badge-group">
+									@if (approvalStatus == "Approved")
+									{
+										<span class="badge-custom badge-green-dashboard" style="background:#D1FAE5; color:#047857;">Approved</span>
+									}
+									else if (approvalStatus == "Rejected")
+									{
+										<span class="badge-custom" style="background:#FEE2E2; color:#DC2626;">Rejected</span>
+									}
+									else if (approvalStatus == "Pending")
+									{
+										<span class="badge-custom badge-yellow">Pending</span>
+									}
+									else
+									{
+										<span class="badge-custom badge-yellow">Draft</span>
+									}
+									<span class="badge-custom @(statusName == "Active" ? "badge-green-dashboard" : "badge-yellow")">@statusName</span>
+								</div>
+								<div class="d-flex gap-2">
+									<button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)"><i class="bi bi-pencil-square me-1"></i> Edit</button>
+									<button class="btn-view" @onclick="() => EditDealer(dealer.Id)"><i class="bi bi-eye"></i> View</button>
+									<button class="btn-dots" style="color:#DC2626;" @onclick="() => ConfirmDelete(dealer)"><i class="bi bi-trash"></i></button>
+								</div>
+							</div>
 						</div>
-						<div class="d-flex gap-2">
-							<button class="btn-view"><i class="bi bi-eye"></i> View</button>
-							<button class="btn-dots"><i class="bi bi-three-dots-vertical"></i></button>
+						<div class="tags-row mb-2">
+							<div class="reg-id">REG #@(dealer.DealerCode ?? $"DL-{dealer.Id}")</div>
+							<h3 class="company-name">@(dealer.FirmName ?? "Unnamed Firm")</h3>
+							<div class="location-info">
+								<div><i class="bi bi-geo-alt"></i> Region: @regionName</div> |
+								<div>HQ: @hqName</div>
+							</div>
 						</div>
+						<div class="tags-row mb-2">
+							@if (dealer.InSpic) { <span>SPIC</span> }
+							@if (dealer.InSpic && dealer.InGreenStar) { <span class="bullet-dot">•</span> }
+							@if (dealer.InGreenStar) { <span>GreenStar</span> }
+							@if (!string.IsNullOrEmpty(dealer.BusinessEntityType))
+							{
+								<span class="bullet-dot">•</span> <span>@dealer.BusinessEntityType</span>
+							}
+							@if (!string.IsNullOrEmpty(dealer.WholeSaleFertilizerLicenseNumber))
+							{
+								<span class="bullet-dot">•</span> <span>Wholesale</span>
+							}
+							@if (!string.IsNullOrEmpty(dealer.RetailFertilizerLicenseNumber))
+							{
+								<span class="bullet-dot">•</span> <span>Retail</span>
+							}
+						</div>
+						<div class="card-footer-note">Last Updated: @dealer.UpdatedAt.ToString("dd MMM yyyy")</div>
 					</div>
 				</div>
-				<div class="tags-row mb-2">
-					<div class="reg-id">REG #DL-4829</div>
-					<h3 class="company-name">Veridian Fields Ltd</h3>
-					<div class="location-info">
-						<div><i class="bi bi-geo-alt"></i> Region: Mysur</div> |
-						<div>HQ: Shivamogga</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					SPIC / GFL <span class="bullet-dot">•</span> Partnership <span class="bullet-dot">•</span> Wholesale
-				</div>
-				<div class="card-footer-note">Last Updated: 14 May 2025</div>
-			</div>
+			}
 		</div>
-
-		<div class="col-md-4">
-			<div class="reg-card">
-				<div class="card-top-row">
-					<div class="progress-circle p-80">
-						<div class="progress-inner">
-							<div class="progress-val">80%</div>
-							<div class="progress-steps">10 of 12 steps</div>
-						</div>
-					</div>
-					<div class="d-flex flex-column align-items-end gap-2">
-						<div class="badge-group">
-							<span class="badge-custom badge-yellow">In Progress</span>
-							<span class="badge-custom badge-green-dashboard">Active</span>
-						</div>
-						<div class="d-flex gap-2">
-							<button class="btn-continue-blue"><i class="bi bi-play-circle me-1"></i> Continue</button>
-							<button class="btn-view"><i class="bi bi-eye"></i> View</button>
-							<button class="btn-dots"><i class="bi bi-three-dots-vertical"></i></button>
-						</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					<div class="reg-id">REG #DL-4829</div>
-					<h3 class="company-name">Veridian Fields Ltd</h3>
-					<div class="location-info">
-						<div><i class="bi bi-geo-alt"></i> Region: Mysur</div> |
-						<div>HQ: Shivamogga</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					SPIC / GFL <span class="bullet-dot">•</span> Partnership <span class="bullet-dot">•</span> Wholesale
-				</div>
-				<div class="card-footer-note">Last Updated: 14 May 2025</div>
-			</div>
-		</div>
-
-		<div class="col-md-4">
-			<div class="reg-card">
-				<div class="card-top-row">
-					<div class="progress-circle p-30">
-						<div class="progress-inner">
-							<div class="progress-val">30%</div>
-							<div class="progress-steps">4 of 12 steps</div>
-						</div>
-					</div>
-					<div class="d-flex flex-column align-items-end gap-2">
-						<div class="badge-group">
-							<span class="badge-custom badge-yellow">In Progress</span>
-							<span class="badge-custom badge-green-dashboard">Active</span>
-						</div>
-						<div class="d-flex gap-2">
-							<button class="btn-continue-blue"><i class="bi bi-play-circle me-1"></i> Continue</button>
-							<button class="btn-view"><i class="bi bi-eye"></i> View</button>
-							<button class="btn-dots"><i class="bi bi-three-dots-vertical"></i></button>
-						</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					<div class="reg-id">REG #DL-4829</div>
-					<h3 class="company-name">Veridian Fields Ltd</h3>
-					<div class="location-info">
-						<div><i class="bi bi-geo-alt"></i> Region: Mysur</div> |
-						<div>HQ: Shivamogga</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					SPIC / GFL <span class="bullet-dot">•</span> Partnership <span class="bullet-dot">•</span> Wholesale
-				</div>
-				<div class="card-footer-note">Last Updated: 14 May 2025</div>
-			</div>
-		</div>
-
-		<div class="col-md-4">
-			<div class="reg-card">
-				<div class="card-top-row">
-					<div class="progress-circle p-100">
-						<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
-					</div>
-					<div class="d-flex flex-column align-items-end gap-2">
-						<div class="badge-group">
-							<span class="badge-custom badge-green-dashboard" style="background:#D1FAE5; color:#047857;">Approved</span>
-							<span class="badge-custom badge-green-dashboard">Active</span>
-						</div>
-						<div class="d-flex gap-2">
-							<button class="btn-view"><i class="bi bi-eye"></i> View</button>
-							<button class="btn-dots"><i class="bi bi-three-dots-vertical"></i></button>
-						</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					<div class="reg-id">REG #DL-4829</div>
-					<h3 class="company-name">Veridian Fields Ltd</h3>
-					<div class="location-info">
-						<div><i class="bi bi-geo-alt"></i> Region: Mysur</div> |
-						<div>HQ: Shivamogga</div>
-					</div>
-				</div>
-				<div class="tags-row mb-2">
-					SPIC / GFL <span class="bullet-dot">•</span> Partnership <span class="bullet-dot">•</span> Wholesale
-				</div>
-				<div class="card-footer-note">Last Updated: 14 May 2025</div>
-			</div>
-		</div>
-
-	</div>
+	}
 
 </div>
 
-@*  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html> *@
+@if (_showDeleteConfirm)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
+				<div class="modal-body text-center p-4">
+					<div class="mb-3">
+						<i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 3rem;"></i>
+					</div>
+					<h5 class="fw-bold mb-2">Delete Dealer Registration?</h5>
+					<p class="text-muted mb-1">
+						You are about to delete <strong>@(_dealerToDelete?.FirmName ?? "this dealer")</strong>
+					</p>
+					<p class="text-muted small mb-3">
+						Dealer Code: <strong>@(_dealerToDelete?.DealerCode ?? $"DL-{_dealerToDelete?.Id}")</strong>
+					</p>
+					<p class="text-danger small mb-4">This action cannot be undone.</p>
+					<div class="d-flex justify-content-center gap-3">
+						<button class="btn btn-outline-secondary rounded-pill px-4" @onclick="CancelDelete" disabled="@_isDeleting">
+							Cancel
+						</button>
+						<button class="btn btn-danger rounded-pill px-4" @onclick="DeleteConfirmed" disabled="@_isDeleting">
+							@if (_isDeleting)
+							{
+								<span class="spinner-border spinner-border-sm me-1"></span> <span>Deleting...</span>
+							}
+							else
+							{
+								<i class="bi bi-trash me-1"></i> <span>Delete</span>
+							}
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+@code {
+	private List<DealerDto> _allDealers = new();
+	private List<DealerDto> _filteredDealers = new();
+	private List<RegionDto> _regionsAll = new();
+	private List<HeadquarterDto> _headquartersAll = new();
+	private bool _isLoading = true;
+
+	// Filters
+	private string _searchText = "";
+	private string _filterCompany = "";
+	private int _filterStatus = -1;
+	private int _filterRegionId;
+	private string _filterEntityType = "";
+	private string _sortOrder = "recent";
+
+	// Delete confirmation
+	private bool _showDeleteConfirm;
+	private bool _isDeleting;
+	private DealerDto? _dealerToDelete;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadData();
+	}
+
+	private async Task LoadData()
+	{
+		_isLoading = true;
+		try
+		{
+			_allDealers = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/all") ?? new();
+			_regionsAll = await Http.GetFromJsonAsync<List<RegionDto>>("api/Region/all") ?? new();
+			_headquartersAll = await Http.GetFromJsonAsync<List<HeadquarterDto>>("api/Headquarter/all") ?? new();
+			ApplyFilters();
+		}
+		catch { }
+		finally
+		{
+			_isLoading = false;
+		}
+	}
+
+	private void ApplyFilters()
+	{
+		var query = _allDealers.AsEnumerable();
+
+		if (!string.IsNullOrWhiteSpace(_searchText))
+		{
+			var search = _searchText.Trim().ToLower();
+			query = query.Where(d =>
+				(d.DealerCode?.ToLower().Contains(search) == true) ||
+				(d.FirmName?.ToLower().Contains(search) == true));
+		}
+
+		if (_filterCompany == "SPIC")
+			query = query.Where(d => d.InSpic);
+		else if (_filterCompany == "GreenStar")
+			query = query.Where(d => d.InGreenStar);
+		else if (_filterCompany == "Both")
+			query = query.Where(d => d.InSpic && d.InGreenStar);
+
+		if (_filterStatus >= 0)
+			query = query.Where(d => d.Status == _filterStatus);
+
+		if (_filterRegionId > 0)
+			query = query.Where(d => d.Region == _filterRegionId);
+
+		if (!string.IsNullOrEmpty(_filterEntityType))
+			query = query.Where(d => string.Equals(d.BusinessEntityType, _filterEntityType, StringComparison.OrdinalIgnoreCase));
+
+		query = _sortOrder switch
+		{
+			"oldest" => query.OrderBy(d => d.UpdatedAt),
+			"name" => query.OrderBy(d => d.FirmName),
+			_ => query.OrderByDescending(d => d.UpdatedAt)
+		};
+
+		_filteredDealers = query.ToList();
+	}
+
+	private string GetApprovalStatus(DealerDto d)
+	{
+		if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)
+			return "Rejected";
+		if (d.AVPApproved == true)
+			return "Approved";
+		if (d.RMApproved == true || d.SMApproved == true)
+			return "Pending";
+		return "Draft";
+	}
+
+	private string GetStatusName(int status) => status switch
+	{
+		0 => "Active",
+		1 => "Inactive",
+		2 => "Terminated",
+		_ => "Unknown"
+	};
+
+	private void EditDealer(int dealerId)
+	{
+		NavManager.NavigateTo($"/Register?dealerId={dealerId}");
+	}
+
+	private void ConfirmDelete(DealerDto dealer)
+	{
+		_dealerToDelete = dealer;
+		_showDeleteConfirm = true;
+	}
+
+	private void CancelDelete()
+	{
+		_showDeleteConfirm = false;
+		_dealerToDelete = null;
+	}
+
+	private async Task DeleteConfirmed()
+	{
+		if (_dealerToDelete == null) return;
+		_isDeleting = true;
+		try
+		{
+			var response = await Http.DeleteAsync($"api/DealerRegistration/{_dealerToDelete.Id}");
+			if (response.IsSuccessStatusCode)
+			{
+				_allDealers.Remove(_dealerToDelete);
+				ApplyFilters();
+			}
+		}
+		catch { }
+		finally
+		{
+			_isDeleting = false;
+			_showDeleteConfirm = false;
+			_dealerToDelete = null;
+		}
+	}
+
+	public class DealerDto
+	{
+		public int Id { get; set; }
+		public bool IsDealer { get; set; }
+		public bool InSpic { get; set; }
+		public bool InGreenStar { get; set; }
+		public string? DealerCode { get; set; }
+		public string? SPICCode { get; set; }
+		public string? GreenStarCode { get; set; }
+		public int StateId { get; set; }
+		public int Region { get; set; }
+		public int HQ { get; set; }
+		public int Status { get; set; }
+		public string? FirmName { get; set; }
+		public string? BusinessEntityType { get; set; }
+		public string? WholeSaleFertilizerLicenseNumber { get; set; }
+		public string? RetailFertilizerLicenseNumber { get; set; }
+		public bool? RMApproved { get; set; }
+		public bool? SMApproved { get; set; }
+		public bool? AVPApproved { get; set; }
+		public DateTime UpdatedAt { get; set; }
+	}
+
+	public class RegionDto
+	{
+		public int Id { get; set; }
+		public string RegionName { get; set; } = "";
+	}
+
+	public class HeadquarterDto
+	{
+		public int Id { get; set; }
+		public string HeadquarterName { get; set; } = "";
+	}
+}
 

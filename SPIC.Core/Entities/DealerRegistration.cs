@@ -130,8 +130,21 @@ namespace SPIC.Core.Entities
         public DateTime CreatedAt { get; set; }
         public string UpdatedBy { get; set; }
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
+        //Approval Status Null pending, true for approved, false for rejected
+        public bool? RMApproved { get; set; }
+        public bool? SMApproved { get; set; }
+        public bool? AVPApproved { get; set; }
     }
-	public enum EntityType
+	public class ApprovalHistory
+	{
+		public int Id { get; set; }
+		public int DealerId { get; set; }
+		public string ApprovedBy { get; set; }
+		public string Role { get; set; }
+        public DateTime ApprovedAt { get; set; }
+		public string Remarks { get; set; }
+    }
+    public enum EntityType
 	{
 		soleProprietor, Partnership, LLP, PvtLtd, PubLtd, Society
 	}
