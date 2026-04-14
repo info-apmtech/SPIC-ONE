@@ -9,8 +9,8 @@ namespace SPIC.Core.Entities
 	{
 		public int Id { get; set; }
 		public string UserTableId { get; set; }
-		[Display(Name ="Dealar / Department")]
-        public bool IsDealer { get; set; }
+		[Display(Name = "Dealar / Department")]
+		public bool IsDealer { get; set; }
         public bool InSpic { get; set; }
 		public bool InGreenStar { get; set; }
 
@@ -31,21 +31,23 @@ namespace SPIC.Core.Entities
 		[Display(Name = "Date Of Appointment")]
 		public DateTime DateOfAppointment { get; set; }
 		[Display(Name = "Business Type")]
-		public string BusinessEntityType { get; set; }
+		public string? BusinessEntityType { get; set; }
         //OtherStatus
-        public DateTime LastTransactionDate { get; set; }
-		public bool IsLastTransactionIsSale { get; set; }
-        public bool IsFinalAmountSettled { get; set; }
+        public DateTime? LastTransactionDate { get; set; }
+		public bool? IsLastTransactionIsSale { get; set; }
+        public bool? IsFinalAmountSettled { get; set; }
         public decimal DebitorBalance { get; set; }
 
         //Address Details
         [Display(Name = "Google Map URL")]
-		public string GoogleMapURL { get; set; }
+		public string? GoogleMapURL { get; set; }
+		public double? Latitude { get; set; }
+		public double? Longitude { get; set; }
 		[Display(Name = "Shop No / Room No / Block No")]
 		public string ShopNoORRoomNoOrBlockNo { get; set; }
 		public string? Street { get; set; }
 		[Display(Name = "Sub Village")]
-		public string SubVillage { get; set; }
+		public string? SubVillage { get; set; }
 		public string Village { get; set; }
 		[Display(Name = "Pin Code")]
 		public string PinCode { get; set; }
@@ -70,14 +72,14 @@ namespace SPIC.Core.Entities
 		public string IFSC { get; set; }
 
 		[Display(Name = "GST Number")]
-		public string GSTNumber { get; set; }
-		public string GSTFilePath { get; set; }
+		public string? GSTNumber { get; set; }
+		public string? GSTFilePath { get; set; }
 		[Display(Name = "PAN Number")]
-		public string PANNumber { get; set; }
-		public string PANFilePath { get; set; }
+		public string? PANNumber { get; set; }
+		public string? PANFilePath { get; set; }
 		[Display(Name = "Aadhaar Number")]
-		public string AadhaarNumber { get; set; }
-		public string AadhaarFilePath { get; set; }
+		public string? AadhaarNumber { get; set; }
+		public string? AadhaarFilePath { get; set; }
 
 		//Wholesale Fertilizer
 		[Display(Name = "WholeSale Fertilizer License")]
@@ -100,28 +102,29 @@ namespace SPIC.Core.Entities
 		[Display(Name = "Is SDWA")]
 		public bool IsSDWA { get; set; }
 
-		////[Display(Name = "Experience")]
-		////public int ExperienceId { get; set; }
-		//[Display(Name = "Warehouse Facilities")]
-		//public int WarehouseFacilitiesId { get; set; }
-		//[Display(Name = "Rail Facilities")]
-		//public int RailFacilitiesId { get; set; }
-		//[Display(Name = "Port Facilities")]
-		//public int PortFacilitiesId { get; set; }
-		//[Display(Name = "Regional Block")]
-		//public int RegionalBlockId { get; set; }
-		//public int OwnerShipInfoId { get; set; }
-		//public int OccupationId { get; set; }
-		//public int InvestmentId { get; set; }
-		//public int BankBranchId { get; set; }
-		//public int AssetBankInfoId { get; set; }
-		//public int LandId { get; set; }
-		//public int BuildingId { get; set; }
-		//public int MovableId { get; set; }
-		//public int InfrastructureId { get; set; }
-		//public int LoanLiabilitiesId { get; set; }
-		//public int FiscalYearValuationId { get; set; }
-		public EntityType EntityType { get; set; }
+        ////[Display(Name = "Experience")]
+        ////public int ExperienceId { get; set; }
+        //[Display(Name = "Warehouse Facilities")]
+        //public int WarehouseFacilitiesId { get; set; }
+        //[Display(Name = "Rail Facilities")]
+        //public int RailFacilitiesId { get; set; }
+        //[Display(Name = "Port Facilities")]
+        //public int PortFacilitiesId { get; set; }
+        //[Display(Name = "Regional Block")]
+        //public int RegionalBlockId { get; set; }
+        //public int OwnerShipInfoId { get; set; }
+        //public int OccupationId { get; set; }
+        //public int InvestmentId { get; set; }
+        //public int BankBranchId { get; set; }
+        //public int AssetBankInfoId { get; set; }
+        //public int LandId { get; set; }
+        //public int BuildingId { get; set; }
+        //public int MovableId { get; set; }
+        //public int InfrastructureId { get; set; }
+        //public int LoanLiabilitiesId { get; set; }
+        //public int FiscalYearValuationId { get; set; }
+        public int YearsofExperiance { get; set; }
+        public EntityType? EntityType { get; set; }
         public DateTime CreditLimitExperiance { get; set; }
         public string CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; }
@@ -351,7 +354,7 @@ namespace SPIC.Core.Entities
         public decimal AssetValue { get; set; }
 		public string? Remarks { get; set; }
 	}
-	public class Infrastructure
+	public class DealerInfrastructure
 	{
 		public int Id { get; set; }
         public int DealerId { get; set; }
@@ -387,9 +390,10 @@ namespace SPIC.Core.Entities
         public double Q11Mark { get; set; }
         public decimal AdditionalCreditLimit { get; set; }
     }
-    public class CreditLimitSalesPerformance
+	public class CreditLimitSalesPerformance
 	{
-        public int CreditLimitId { get; set; }
+		public int Id { get; set; }
+		public int CreditLimitId { get; set; }
         public int ProductId { get; set; }
         public int CategoryId { get; set; }
         public decimal FY1Qty { get; set; }

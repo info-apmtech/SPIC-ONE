@@ -18,10 +18,24 @@
 		<div>
 			@if (step.StepNo < TotalSteps)
 			{
-				<NavLink href="@step.NextRoute" class="btn btn-next text-decoration-none">
-					Next
-					<i class="bi bi-chevron-right"></i>
-				</NavLink>
+				@if (OnNextClick.HasDelegate)
+				{
+					<button type="button" class="btn btn-next" @onclick="OnNextClick" disabled="@IsNextDisabled">
+						@if (IsNextDisabled)
+						{
+							<span class="spinner-border spinner-border-sm me-1"></span>
+						}
+						Next
+						<i class="bi bi-chevron-right"></i>
+					</button>
+				}
+				else
+				{
+					<NavLink href="@step.NextRoute" class="btn btn-next text-decoration-none">
+						Next
+						<i class="bi bi-chevron-right"></i>
+					</NavLink>
+				}
 			}
 			else
 			{
@@ -34,6 +48,9 @@
 }
 
 @code {
+	[Parameter] public EventCallback OnNextClick { get; set; }
+	[Parameter] public bool IsNextDisabled { get; set; }
+
 	private FormStepModel? CurrentStep;
 	private int TotalSteps => FormStepData.Steps.Count;
 
