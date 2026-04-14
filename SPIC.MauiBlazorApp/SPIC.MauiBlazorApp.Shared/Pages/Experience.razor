@@ -1,5 +1,6 @@
 ﻿@page "/Experience" 
-
+@using System.Net.Http.Json
+@inject HttpClient Http
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -22,8 +23,12 @@
 		<div class="row g-3">
 			<div class="col-md-6">
 				<label class="form-label-custom">Company Name</label>
-				<select asp-for="Company" class="form-select-custom w-100">
+				<select class="form-select-custom w-100" @bind="_companyForm.CompanyId">
 					<option value="">Select Company</option>
+					@foreach (var company in _companyAll)
+					{
+						<option value="@company.Id">@company.CompanyName</option>
+					}
 				</select>
 			</div>
 			<div class="col-md-6">
@@ -182,3 +187,44 @@
 	<CommanFooter />
 </div>
 
+@code{
+	// State DropDown
+	private List<ExpenceItemDto> _companyAll = new();
+	private string CurrentApiBase => "api/Company";
+
+	private CompanyFormModel _companyForm = new();
+	private string? _message;
+	private bool _isError;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadCompany();
+	}
+
+	private async Task LoadCompany()
+	{
+		try
+		{
+			_companyAll = await Http.GetFromJsonAsync<List<ExpenceItemDto>>($"{CurrentApiBase}/all") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load : {ex.Message}", true);
+		}
+	}
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+	public class ExpenceItemDto
+	{
+		public int Id { get; set; }
+		public string CompanyName { get; set; } = "";
+	}
+	public class CompanyFormModel
+	{
+		public int CompanyId { get; set; }
+	}
+}

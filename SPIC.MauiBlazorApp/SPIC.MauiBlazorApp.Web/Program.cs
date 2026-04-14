@@ -20,7 +20,8 @@ builder.Services.AddSingleton(new PlatformService
 builder.Services.AddScoped(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
-    var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmtechnologies.in/";
+    var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
+    //var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
     return new HttpClient { BaseAddress = new Uri(baseUrl) };
 });
 
