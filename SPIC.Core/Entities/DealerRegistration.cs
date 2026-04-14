@@ -8,42 +8,61 @@ namespace SPIC.Core.Entities
 	public class DealerRegistration
 	{
 		public int Id { get; set; }
+		public string UserTableId { get; set; }
+		public bool InSpic { get; set; }
+		public bool InGreenStar { get; set; }
 		[Display(Name = "State")]
 		public int StateId { get; set; }
-		public string Region { get; set; }
-		public string HQ { get; set; }
+		public int Region { get; set; }
+		public int HQ { get; set; }
 		public DealerStatus Status { get; set; }
 		[Display(Name = "Dealer Code and Name")]
-		public string DealerCodeandName { get; set; }
+		public string DealerCode { get; set; }
 		[Display(Name = "Parent Dealer")]
-		public string ParentDealer { get; set; }
+		public int ParentDealer { get; set; }
 		[Display(Name = "Firm Name")]
 		public string FirmName { get; set; }
 		[Display(Name = "Date Of Appointment")]
 		public DateTime DateOfAppointment { get; set; }
 		[Display(Name = "Business Type")]
-		public string BusinessEntityTypeId { get; set; }
-		[Display(Name = "Google Map URL")]
+		public string BusinessEntityType { get; set; }
+        //OtherStatus
+        public DateTime LastTransactionDate { get; set; }
+		public bool IsLastTransactionIsSale { get; set; }
+        public bool IsFinalAmountSettled { get; set; }
+        public decimal DebitorBalance { get; set; }
+
+        //Address Details
+        [Display(Name = "Google Map URL")]
 		public string GoogleMapURL { get; set; }
 		[Display(Name = "Shop No / Room No / Block No")]
 		public string ShopNoORRoomNoOrBlockNo { get; set; }
+		public string? Street { get; set; }
 		[Display(Name = "Sub Village")]
 		public string SubVillage { get; set; }
 		public string Village { get; set; }
 		[Display(Name = "Pin Code")]
 		public string PinCode { get; set; }
-		public string Block { get; set; }
-		public string Taluk { get; set; }
+		public string? Block { get; set; }
+		public string? Taluk { get; set; }
 		[Display(Name = "District")]
-		public string DistrictId { get; set; }
+		public int DistrictId { get; set; }
+		public int DealerStateId { get; set; }
 		[Display(Name = "Official Contact Number")]
 		public string OfficialContactNumber { get; set; }
 		[Display(Name = "WhatsApp Number")]
 		public string WhatsAppNumber { get; set; }
 		[Display(Name = "Alternative Number")]
 		public string? AlternativeNumber { get; set; }
-	
-		public int BankDetailsId { get; set; }
+
+
+		//Bank Details
+		public string AccountHolderName { get; set; }
+		public string AccountNumber { get; set; }
+		public int BankId { get; set; }
+		public string Branch { get; set; }
+		public string IFSC { get; set; }
+
 		[Display(Name = "GST Number")]
 		public string GSTNumber { get; set; }
 		public string GSTFilePath { get; set; }
@@ -53,241 +72,59 @@ namespace SPIC.Core.Entities
 		[Display(Name = "Aadhaar Number")]
 		public string AadhaarNumber { get; set; }
 		public string AadhaarFilePath { get; set; }
-		[Display(Name = "WholeSale Fertilizer")]
-		public int WholeSaleFertilizerId { get; set; }
-		[Display(Name = "Retail Fertilizer")]
-		public int RetailFertilizerId { get; set; }
+
+		//Wholesale Fertilizer
+		[Display(Name = "WholeSale Fertilizer License")]
+		public string? WholeSaleFertilizerLicenseNumber { get; set; }
+		public DateTime WholesaleLicenseExpiryDate { get; set; }
+		public string? WholesalemFMSCode { get; set; }
+		public string? WholesaleLicenseFilePath { get; set; }
+
+		//Retail Fertilizer
+		[Display(Name = "Retail Fertilizer License")]
+		public string? RetailFertilizerLicenseNumber { get; set; }
+		public DateTime RetailLicenseExpiryDate { get; set; }
+		public string? RetailmFMSCode { get; set; }
+		public string? RetailLicenseFilePath { get; set; }
+
 		[Display(Name = "Is Office Automation")]
 		public bool IsOfficeAutomation { get; set; }
+		public DateTime? ExpectedOfficeAutomationDate { get; set; }
+
 		[Display(Name = "Is SDWA")]
 		public bool IsSDWA { get; set; }
-		[Display(Name = "Experience")]
-		public int ExperienceId { get; set; }
-		[Display(Name = "Warehouse Facilities")]
-		public int WarehouseFacilitiesId { get; set; }
-		[Display(Name = "Rail Facilities")]
-		public int RailFacilitiesId { get; set; }
-		[Display(Name = "Port Facilities")]
-		public int PortFacilitiesId { get; set; }
-		[Display(Name = "Regional Block")]
-		public int RegionalBlockId { get; set; }
-		public int OwnerShipInfoId { get; set; }
-		public int OccupationId { get; set; }
-		public int InvestmentId { get; set; }
-		public int BankBranchId { get; set; }
-		public int AssetBankInfoId { get; set; }
-		public int LandId { get; set; }
-		public int BuildingId { get; set; }
-		public int MovableId { get; set; }
-		public int InfrastructureId { get; set; }
-		public int LoanLiabilitiesId { get; set; }
-		public int FiscalYearValuationId { get; set; }
-	}
-	public class BankDetails
-	{
-		public int Id { get; set; }
-		[Display(Name = "Accound Holder Name")]
-		public string AccoundHolderName { get; set; }
-		[Display(Name = "Accound Number")]
-		public string AccoundNumber { get; set; }
-		[Display(Name = "Bank")]
-		public string BankId { get; set; }
-		public string BankBranchId { get; set; }
-	}
-	public class WholeSaleFertilizer
-	{
-		public int Id { get; set; }
-		[Display(Name = "WholeSale Fertilizer License Details")]
-		public string LicenseDetails { get; set; }
-		[Display(Name = "Expiry Date")]
-		public DateTime ExpiryDate { get; set; }
-		[Display(Name = "nFMS Code")]
-		public string nFMSCode { get; set; }
-		public string LicenseFilePath { get; set; }
-	}
-	public class RetailFertilizer
-	{
-		public int Id { get; set; }
-		[Display(Name = "Retail Fertilizer License Details")]
-		public string LicenseDetails { get; set; }
-		[Display(Name = "Expiry Date")]
-		public DateTime ExpiryDate { get; set; }
-		[Display(Name = "nFMS Code")]
-		public string nFMSCode { get; set; }
-		public string LicenseFilePath { get; set; }
-	}
-	public class Experience
-	{
-		public int Id { get; set; }
-		[Display(Name = "Company")]
-		public string CompanyId { get; set; }
-		[Display(Name = "No Of Years")]
-		public int NoOfYears { get; set; }
-		public int Quantity { get; set; }
-		public decimal TurnOver { get; set; }
-		[Display(Name = "Is Active")]
-		public bool IsActive { get; set; }
-	}
-	public class Company
-	{
-		public int Id { get; set; }
-		[Display(Name = "Company")]
-		public string CompanyName { get; set; }
-	}
-	public class WarehouseFacilities
-	{
-		public int Id { get; set; }
-		[Display(Name = "warehouse")]
-		public string warehouseId { get; set; }
-		public int Distance { get; set; }
-		public int Freight { get; set; }
-	}
-	public class RailFacilities
-	{
-		public int Id { get; set; }
-		[Display(Name = "Rail Facilities Name")]
-		public string RailFacilitiesName { get; set; }
-		public int Distance { get; set; }
-		public int Freight { get; set; }
-	}
-	public class PortFacilities
-	{
-		public int Id { get; set; }
-		[Display(Name = "Port")]
-		public string PortId { get; set; }
-		public int Distance { get; set; }
-		public int Freight { get; set; }
-	}
-	public class RegionalBlocks
-	{
-		public int Id { get; set; }
-		[Display(Name = "Name Of Block")]
-		public string NameOfBlock { get; set; }
-		[Display(Name = "Major Crops")]
-		public string MajorCrops { get; set; }
-		[Display(Name = "No Of Dealers")]
-		public int NoOfDealer { get; set; }
-		[Display(Name = "No Of Farmer")]
-		public int NoOfFarmer { get; set; }
-		[Display(Name = "Season From Month")]
-		public string SeasonFromMonth { get; set; }
-		[Display(Name = "Season To Month")]
-		public string SeasonToMonth { get; set; }
-		public IrrigationType Irrigation { get; set; }
-	}
-	public class BusinessEntityType
-	{
-		public int Id { get; set; }
-		public string Name { get; set; }
-	}
-	public class OwnerShipInfo
-	{
-		public int Id { get; set; }
-		[Display(Name = "Proprietor Name")]
-		public string Name { get; set; }
-		[Display(Name = "Father Name")]
-		public string FatherName { get; set; }
-		public string Email { get; set; }
-		[Display(Name = "Aadhaar Number")]
-		public string AadhaarNumber { get; set; }
-		public string AadhaarFilePath { get; set; }
-		[Display(Name = "PAN Number")]
-		public string PANNumber { get; set; }
-		public string PANFilePath { get; set; }
-		public string ProprietorImagePath { get; set; }
-		[Display(Name = "Family Member Name")]
 
-		public string FamilyMemberName { get; set; }
-		[Display(Name = "Date Of Birth")]
-
-		public DateTime DateOfBirth { get; set; }
-		public int Age { get; set; }
-		[Display(Name = "Relationship")]
-		public string RelationshipId { get; set; }
-		public string Occupation { get; set; }
-	}
-	public class Occupation
+		////[Display(Name = "Experience")]
+		////public int ExperienceId { get; set; }
+		//[Display(Name = "Warehouse Facilities")]
+		//public int WarehouseFacilitiesId { get; set; }
+		//[Display(Name = "Rail Facilities")]
+		//public int RailFacilitiesId { get; set; }
+		//[Display(Name = "Port Facilities")]
+		//public int PortFacilitiesId { get; set; }
+		//[Display(Name = "Regional Block")]
+		//public int RegionalBlockId { get; set; }
+		//public int OwnerShipInfoId { get; set; }
+		//public int OccupationId { get; set; }
+		//public int InvestmentId { get; set; }
+		//public int BankBranchId { get; set; }
+		//public int AssetBankInfoId { get; set; }
+		//public int LandId { get; set; }
+		//public int BuildingId { get; set; }
+		//public int MovableId { get; set; }
+		//public int InfrastructureId { get; set; }
+		//public int LoanLiabilitiesId { get; set; }
+		//public int FiscalYearValuationId { get; set; }
+		public EntityType EntityType { get; set; }
+        public DateTime CreditLimitExperiance { get; set; }
+        public string CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string UpdatedBy { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.Now;
+    }
+	public enum EntityType
 	{
-		public int Id { get; set; }
-		[Display(Name = "Name of Company")]
-		public string NameofCompany { get; set; }
-		[Display(Name = "Sector")]
-		public string SectorId { get; set; }
-		[Display(Name = "Annual Turnover")]
-		public decimal AnnualTurnover { get; set; }
-	}
-	public class Investment
-	{
-		public int Id { get; set; }
-		[Display(Name = "Capital Investment")]
-		public decimal CapitalInvestment { get; set; }
-		[Display(Name = "Remarks")]
-		public decimal CapitalInvestmentRemarks { get; set; }
-		[Display(Name = "Cash Credit Limit")]
-		public string CashCreditLimit { get; set; }
-		[Display(Name = "Remarks")]
-		public decimal CashCreditLimitRrmarks { get; set; }
-	}
-	public class BankBranch
-	{
-		public int Id { get; set; }
-		public string Name { get; set; }
-	}
-	public class AssetBankInfo
-	{
-		public int Id { get; set; }
-		public string BankId { get; set; }
-		public string BankBranchId { get; set; }
-		public string Value { get; set; }
-		public string Remarks { get; set; }
-		public string FileUploadPath { get; set; }
-	}
-	public class Land
-	{
-		public int Id { get; set; }
-		public string LandName { get; set; }
-		public int SurvayNumber { get; set; }
-		public string LandSize { get; set; }
-		public decimal PropertyValue { get; set; }
-		public string UploadedLandDocumentPath { get; set; }
-		public string UploadedECDocumentPath { get; set; }
-	}
-	public class Building
-	{
-		public int Id { get; set; }
-		public string BuildingName { get; set; }
-		public string PropertyValue { get; set; }
-		public string SurveyNumber { get; set; }
-		public string LandSize { get; set; }
-		public string Remarks { get; set; }
-		public string UploadedBuildingDocumentPath { get; set; }
-		public string UploadedECDocumentPath { get; set; }
-	}
-	public class Movable
-	{
-		public int Id { get; set; }
-		public string AssetValue { get; set; }
-		public string Remarks { get; set; }
-	}
-	public class Infrastructure
-	{
-		public int Id { get; set; }
-		public string OwnGodownCapacity { get; set; }
-		public string RentGodownCapacity { get; set; }
-	}
-	public class LoanLiabilities
-	{
-		public int Id { get; set; }
-		public string LoanSource { get; set; }
-		public decimal LoanValue { get; set; }
-		public string Remarks { get; set; }
-	}
-	public class FiscalYearValuation
-	{
-		public int Id { get; set; }
-		public string Parameter { get; set; }
-		public decimal Value { get; set; }
-		public string Mark { get; set; }
+		soleProprietor, Partnership, LLP, PvtLtd, PubLtd, Society
 	}
 	public enum DealerStatus
 	{
@@ -297,4 +134,280 @@ namespace SPIC.Core.Entities
 	{
 		CANAL, TANK, WELL
 	}
+	public class Experience
+	{
+		public int Id { get; set; }
+		public int DealerId { get; set; }
+		[Display(Name = "Company")]
+		public string CompanyId { get; set; }
+		[Display(Name = "No Of Years")]
+		public int NoOfYears { get; set; }
+		public decimal Quantity { get; set; }
+		public decimal TurnOver { get; set; }
+		[Display(Name = "Is Active")]
+		public bool IsActive { get; set; }
+	}
+	public class AnnualSaleDataLastFYofDealerRegistration
+	{
+		public int Id { get; set; }
+		public int DealerId { get; set; }
+		public int CategoryId { get; set; }
+		public int ProductId { get; set; }
+		public decimal OwnRetailsSale { get; set; }
+		public decimal SaleToDealer { get; set; }
+	}
+	public class WarehouseFacilities
+	{
+		public int Id { get; set; }
+		public int DealerId { get; set; }
+		[Display(Name = "warehouse")]
+		public int WarehouseId { get; set; }
+		public double Distance { get; set; }
+		public double Freight { get; set; }
+	}
+	public class RailFacilities
+	{
+		public int Id { get; set; }
+		public int DealerId { get; set; }
+		[Display(Name = "Rail Facilities Name")]
+		public int RailFacilitiesId { get; set; }
+		public double Distance { get; set; }
+		public double Freight { get; set; }
+	}
+	public class PortFacilities
+	{
+		public int Id { get; set; }
+		[Display(Name = "Port")]
+		public int DealerId { get; set; }
+		public int PortId { get; set; }
+		public double Distance { get; set; }
+		public double Freight { get; set; }
+	}
+	public enum Months
+	{
+		January, February, March, April, May, June, July, August, September, October, November, December
+    }
+    public class MarketDetail
+	{
+		public int Id { get; set; }
+		public int DealerId { get; set; }
+		[Display(Name = "Name Of Block")]
+		public string NameOfBlock { get; set; }
+		[Display(Name = "Major Crops")]
+		public int MajorCrops { get; set; }
+		[Display(Name = "No Of Dealers")]
+		public int NoOfDealer { get; set; }
+		[Display(Name = "No Of Farmer")]
+		public int NoOfFarmer { get; set; }
+		[Display(Name = "Season From Month")]
+		public Months SeasonFromMonth { get; set; }
+		[Display(Name = "Season To Month")]
+		public Months SeasonToMonth { get; set; }
+		public bool IsCanal { get; set; }
+		public bool IsTank { get; set; }
+		public bool IsWell { get; set; }
+	}
+	public class CompaniesOperatingInArea
+	{
+		public int Id { get; set; }
+		public int DealerId { get; set; }
+
+		[Display(Name = "Company")]
+		public string? CompaniesOperating { get; set; }
+	}
+
+	public class OwnerShipInfo
+	{
+		public int Id { get; set; }
+        public int DealerId { get; set; }
+        [Display(Name = "Proprietor Name")]
+		public string Name { get; set; }
+		[Display(Name = "Father Name")]
+		public string FatherName { get; set; }
+		public string PhoneNumber { get; set; }
+		public string? Email { get; set; }
+		[Display(Name = "Aadhaar Number")]
+		public string AadhaarNumber { get; set; }
+		public string AadhaarFilePath { get; set; }
+		[Display(Name = "PAN Number")]
+		public string PANNumber { get; set; }
+		public string PANFilePath { get; set; }
+		public string ProprietorImagePath { get; set; }
+	}
+	public class PartnerFamilyDetails
+	{
+        public int Id { get; set; }
+        public int OwnershipPartnerId { get; set; }
+        [Display(Name = "Family Member Name")]
+        public string FamilyMemberName { get; set; }
+        [Display(Name = "Date Of Birth")]
+        public DateTime DateOfBirth { get; set; }
+        public int Age { get; set; }
+        [Display(Name = "Relationship")]
+        public int RelationshipId { get; set; }
+        public string Occupation { get; set; }
+    }
+	public class PartnerOccupation
+	{
+		public int Id { get; set; }
+        public int OwnershipPartnerId { get; set; }
+        [Display(Name = "Name of Company")]
+		public string NameofCompany { get; set; }
+		[Display(Name = "Sector")]
+		public int SectorId { get; set; }
+		[Display(Name = "Annual Turnover")]
+		public decimal AnnualTurnover { get; set; }
+	}
+
+	public class SalesPlanningInDealerRegistration
+	{
+        public int Id { get; set; }
+        public int DealerId { get; set; }
+        public int CategoryId { get; set; }
+        public int ProductId { get; set; }
+        public decimal AprilQty { get; set; }
+        public decimal AprilAmount { get; set; }
+        public decimal MayQty { get; set; }
+        public decimal MayAmount { get; set; }
+        public decimal JuneQty { get; set; }
+        public decimal JuneAmount { get; set; }
+        public decimal JulyQty { get; set; }
+        public decimal JulyAmount { get; set; }
+        public decimal AugustQty { get; set; }
+        public decimal AugustAmount { get; set; }
+        public decimal SeptemberQty { get; set; }
+        public decimal SeptemberAmount { get; set; }
+        public decimal OctoberQty { get; set; }
+        public decimal OctoberAmount { get; set; }
+        public decimal NovemberQty { get; set; }
+        public decimal NovemberAmount { get; set; }
+        public decimal DecemberQty { get; set; }
+        public decimal DecemberAmount { get; set; }
+        public decimal JanuaryQty { get; set; }
+        public decimal JanuaryAmount { get; set; }
+        public decimal FebruaryQty { get; set; }
+        public decimal FebruaryAmount { get; set; }
+        public decimal MarchQty { get; set; }
+        public decimal MarchAmount { get; set; }
+
+    }
+
+	public class Investment
+	{
+		public int Id { get; set; }
+        public int DealerId { get; set; }
+        [Display(Name = "Capital Investment")]
+		public decimal CapitalInvestment { get; set; }
+		[Display(Name = "Remarks")]
+		public string? CapitalInvestmentRemarks { get; set; }
+		[Display(Name = "Cash Credit Limit")]
+		public decimal CashCreditLimit { get; set; }
+		[Display(Name = "Remarks")]
+		public string? CashCreditLimitRrmarks { get; set; }
+	}
+	public class DealerAssetBank
+	{
+		public int Id { get; set; }
+        public int DealerId { get; set; }
+        public int BankId { get; set; }
+		public string? BankBranch { get; set; }
+		public decimal Value { get; set; }
+		public string? Remarks { get; set; }
+		public string? FileUploadPath { get; set; }
+	}
+	public class DealerAssetLand
+	{
+		public int Id { get; set; }
+        public int DealerId { get; set; }
+        public string? LandName { get; set; }
+		public string? SurvayNumber { get; set; }
+		public decimal LandSize { get; set; }
+		public decimal PropertyValue { get; set; }
+		public string? UploadedLandDocumentPath { get; set; }
+		public string? UploadedECDocumentPath { get; set; }
+	}
+	public class Building
+	{
+		public int Id { get; set; }
+        public int DealerId { get; set; }
+        public string? BuildingName { get; set; }
+		public decimal PropertyValue { get; set; }
+		public string? SurveyNumber { get; set; }
+		public decimal? LandSize { get; set; }
+		public string? Remarks { get; set; }
+		public string? UploadedBuildingDocumentPath { get; set; }
+		public string? UploadedECDocumentPath { get; set; }
+	}
+	public class Movable
+	{
+		public int Id { get; set; }
+        public int DealerId { get; set; }
+        public decimal AssetValue { get; set; }
+		public string? Remarks { get; set; }
+	}
+	public class Infrastructure
+	{
+		public int Id { get; set; }
+        public int DealerId { get; set; }
+        public decimal OwnGodownCapacity { get; set; }
+		public decimal RentGodownCapacity { get; set; }
+	}
+	public class LoanLiabilities
+	{
+		public int Id { get; set; }
+        public int DealerId { get; set; }
+        public string? LoanSource { get; set; }
+		public decimal LoanValue { get; set; }
+		public string? Remarks { get; set; }
+	}
+	
+	public class CreditLimitProposal
+	{
+		public int Id { get; set; }
+        public int DealerId { get; set; }
+        public int FY1 { get; set; }
+        public int FY2 { get; set; }
+        public int FY3 { get; set; }
+        public double Q1Mark { get; set; }
+        public double Q2Mark { get; set; }
+        public double Q3Mark { get; set; }
+        public double Q4Mark { get; set; }
+        public double Q5Mark { get; set; }
+        public double Q6Mark { get; set; }
+        public double Q7Mark { get; set; }
+        public double Q8Mark { get; set; }
+        public double Q9Mark { get; set; }
+        public double Q10Mark { get; set; }
+        public double Q11Mark { get; set; }
+        public decimal AdditionalCreditLimit { get; set; }
+    }
+    public class CreditLimitSalesPerformance
+	{
+        public int CreditLimitId { get; set; }
+        public int ProductId { get; set; }
+        public int CategoryId { get; set; }
+        public decimal FY1Qty { get; set; }
+        public decimal FY1Amount { get; set; }
+        public decimal FY2Qty { get; set; }
+        public decimal FY2Amount { get; set; }
+        public decimal FY3Qty { get; set; }
+        public decimal FY3Amount { get; set; }
+    }
+	public class DealerRegistrationDocuments
+	{
+        public int Id { get; set; }
+        public int DealerId { get; set; }
+        public string SpecimanFilePath { get; set; }
+        public string BankGauranteeFilePath { get; set; }
+        public int FY1 { get; set; }
+        public string FY1ITReturnFilePath { get; set; }
+        public int FY2 { get; set; }
+        public string FY2ITReturnFilePath { get; set; }
+        public string ValuationCertificateFilePath { get; set; }
+        public string RetailerListFilePath { get; set; }
+        public string? PartnershipDeadFilePath { get; set; }
+        public string? BoardReasolutionFilePath { get; set; }
+        public string? AffidavitFilePath { get; set; }
+
+    }
 }
