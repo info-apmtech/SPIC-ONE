@@ -19,7 +19,7 @@ builder.Services.AddSingleton(new PlatformService
 });
 builder.Services.AddScoped(sp => new HttpClient
 {
-	BaseAddress = new Uri("https://localhost:7032/")
+	BaseAddress = new Uri("https://spicapi.apmiot.com/")
 });
 
 var app = builder.Build();
