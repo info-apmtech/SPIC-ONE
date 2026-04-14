@@ -1,7 +1,6 @@
 ﻿@page "/Register" 
-
-
-
+@using System.Net.Http.Json
+@inject HttpClient Http
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
 
@@ -69,8 +68,12 @@
 						<div class="row g-3">
 							<div class="col-md-6">
 								<label class="form-label-custom">State</label>
-								<select class="form-select-custom w-100">
-									<option>Select State</option>
+								<select class="form-select-custom w-100" @bind="_stateForm.StateId">
+									<option value="0">-- Select State --</option>
+									@foreach (var state in _statesAll)
+									{
+										<option value="@state.Id">@state.StateName</option>
+									}
 								</select>
 							</div>
 							<div class="col-md-6">
@@ -266,15 +269,23 @@
 					</div>
 					<div class="col-md-3">
 						<label class="form-label-custom">District</label>
-						<select class="form-select-custom w-100">
-							<option value="">Select District</option>
+						<select class="form-select-custom w-100" @bind="_districtForm.DistrictId">
+							<option value="0">-- Select District --</option>
+							@foreach (var district in _DistrictAll)
+							{
+								<option value="@district.Id">@district.DistrictName</option>
+							}
 						</select>
 					</div>
 
 					<div class="col-md-3">
 						<label class="form-label-custom">State</label>
-						<select class="form-select-custom w-100">
-							<option value="">Select State</option>
+						<select class="form-select-custom w-100" @bind="_stateForm.StateId">
+							<option value="0">-- Select State --</option>
+							@foreach (var state in _statesAll)
+							{
+								<option value="@state.Id">@state.StateName</option>
+							}
 						</select>
 					</div>
 					<div class="col-md-4">
@@ -525,5 +536,55 @@
 	{
 		var file = e.File;
 		wholesalegstFileName = file.Name;
+	}
+	// State DropDown
+	private List<LocationItemDto> _statesAll = new();
+	private List<LocationItemDto> _DistrictAll = new();
+	private string CurrentApiBase => "api/State";
+	private string CurrentDistrictApiBase => "api/District";
+
+	private StateFormModel _stateForm = new();
+	private DistrictFormModel _districtForm = new();
+	private string? _message;
+	private bool _isError;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadStates();
+	}
+
+	private async Task LoadStates()
+	{
+		try
+		{
+			_statesAll = await Http.GetFromJsonAsync<List<LocationItemDto>>($"{CurrentApiBase}/all") ?? new();
+			_DistrictAll = await Http.GetFromJsonAsync<List<LocationItemDto>>($"{CurrentDistrictApiBase}/all") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load: {ex.Message}", true);
+		}
+	}
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	public class LocationItemDto
+	{
+		public int Id { get; set; }
+		public string StateName { get; set; } = "";
+		public string DistrictName { get; set; } = "";
+	}
+
+	public class StateFormModel
+	{
+		public int StateId { get; set; }
+	}
+	public class DistrictFormModel
+	{
+		public int DistrictId { get; set; }
 	}
 }

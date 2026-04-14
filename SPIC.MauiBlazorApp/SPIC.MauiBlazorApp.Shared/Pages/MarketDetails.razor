@@ -1,5 +1,6 @@
 ﻿@page "/MarketDetails" 
-
+@using System.Net.Http.Json
+@inject HttpClient Http
    
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -32,8 +33,12 @@
 			</div>
 			<div class="col-md-3">
 				<label class="form-label-custom">Major Crops</label>
-				<select class="form-select-custom w-100">
+				<select class="form-select-custom w-100" @bind="_cropsForm.CropId">
 					<option>Select Major Crops</option>
+					@foreach (var crop in _cropsAll)
+					{
+						<option value="@crop.Id">@crop.CropName</option>
+					}
 				</select>
 			</div>
 			<div class="col-md-3">
@@ -66,20 +71,16 @@
 			<div class="col-md-6">
 				<label class="form-label-custom">Irrigation Type</label>
 				<div class="d-flex justify-content-between align-items-center">
-                        
 					<div class="irrigation-toggles">
-						<label class="toggle-btn active">
-							<input type="checkbox" checked>
-							<i class="bi bi-check-square-fill"></i> CANAL
-						</label>
-						<label class="toggle-btn">
-							<input type="checkbox">
-							<i class="bi bi-square"></i> TANK
-						</label>
-						<label class="toggle-btn">
-							<input type="checkbox">
-							<i class="bi bi-square"></i> WELL
-						</label>
+						@foreach (var item in IrrigationOptions)
+						{
+							<label class="toggle-btn @(item.IsSelected ? "active" : "")"
+								   @onclick="() => ToggleIrrigation(item)">
+								<input type="checkbox" checked="@item.IsSelected" />
+								<i class="bi @(item.IsSelected ? "bi-check-square-fill" : "bi-square")"></i>
+								@item.Name
+							</label>
+						}
 					</div>
 				</div>
 			</div>
@@ -189,23 +190,61 @@
 	<CommanFooter />
 </div>
 
- <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    
- <script>
-        // Simple script to handle the visual toggling of the custom checkbox buttons
-        $(document).ready(function() {
-            $('.toggle-btn input[type="checkbox"]').on('change', function() {
-                const label = $(this).parent('.toggle-btn');
-                const icon = $(this).siblings('i');
-                
-                if($(this).is(':checked')) {
-                    label.addClass('active');
-                    icon.removeClass('bi-square').addClass('bi-check-square-fill');
-                } else {
-                    label.removeClass('active');
-                    icon.removeClass('bi-check-square-fill').addClass('bi-square');
-                }
-            });
-        });
-    </script> 
+@code {
+	private List<IrrigationOption> IrrigationOptions = new()
+	{
+		new IrrigationOption { Name = "CANAL", IsSelected = true },
+		new IrrigationOption { Name = "TANK", IsSelected = false },
+		new IrrigationOption { Name = "WELL", IsSelected = false }
+	};
+
+	private void ToggleIrrigation(IrrigationOption item)
+	{
+		item.IsSelected = !item.IsSelected;
+	}
+
+	public class IrrigationOption
+	{
+		public string Name { get; set; } = string.Empty;
+		public bool IsSelected { get; set; }
+	}
+	// Load DropDown
+	private List<MarketDetailsItemDto> _cropsAll = new();
+	private string CurrentApiBase => "api/Crop";
+
+	private CropsFormModel _cropsForm = new();
+	private string? _message;
+	private bool _isError;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadCrop();
+	}
+
+	private async Task LoadCrop()
+	{
+		try
+		{
+			_cropsAll = await Http.GetFromJsonAsync<List<MarketDetailsItemDto>>($"{CurrentApiBase}/all") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load : {ex.Message}", true);
+		}
+	}
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+	public class MarketDetailsItemDto
+	{
+		public int Id { get; set; }
+		public string CropName { get; set; } = "";
+	}
+	public class CropsFormModel
+	{
+		public int CropId { get; set; }
+	}
+}

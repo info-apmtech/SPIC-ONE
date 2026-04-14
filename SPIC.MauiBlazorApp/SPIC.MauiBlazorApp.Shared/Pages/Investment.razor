@@ -1,4 +1,6 @@
 ﻿@page "/Investment" 
+@using System.Net.Http.Json
+@inject HttpClient Http
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -55,11 +57,16 @@
 					<div class="row g-3 mb-3">
 						<div class="col-6">
 							<label class="custom-label">Bank Name</label>
-							<select class="custom-select"><option>Select Bank Name</option></select>
+							<select class="form-select-custom w-100" @bind="_bankForm.BankId">
+								<option>Select Bank Name</option>@foreach (var bank in _BankAll)
+								{
+									<option value="@bank.Id">@bank.BankName</option>
+								}
+							</select>
 						</div>
 						<div class="col-6">
 							<label class="custom-label">Bank Branch</label>
-							<select class="custom-select"><option>Select Bank Branch</option></select>
+							<select class="form-select-custom w-100"><option>Select Bank Branch</option></select>
 						</div>
 					</div>
 					<div class="row g-3 mb-4">
@@ -521,5 +528,44 @@
 		{
 			Console.WriteLine($"EC file selected: {file.Name}");
 		}
+	}
+	// Load DropDown
+	private List<InvestmentItemDto> _BankAll = new();
+	private string CurrentApiBase => "api/Bank";
+
+	private BankFormModel _bankForm = new();
+	private string? _message;
+	private bool _isError;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadSector();
+	}
+
+	private async Task LoadSector()
+	{
+		try
+		{
+			_BankAll = await Http.GetFromJsonAsync<List<InvestmentItemDto>>($"{CurrentApiBase}/all") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load : {ex.Message}", true);
+		}
+	}
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+	public class InvestmentItemDto
+	{
+		public int Id { get; set; }
+		public string BankName { get; set; } = "";
+	}
+	public class BankFormModel
+	{
+		public int BankId { get; set; }
 	}
 }
