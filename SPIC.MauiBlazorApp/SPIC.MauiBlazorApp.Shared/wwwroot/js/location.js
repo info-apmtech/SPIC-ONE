@@ -19,3 +19,13 @@ window.getCurrentPosition = function () {
         );
     });
 };
+
+window.openPrintableHtml = function (htmlContent) {
+    var w = window.open('', '_blank');
+    if (w) {
+        w.document.write(htmlContent);
+        w.document.close();
+        w.focus();
+        w.print();
+    }
+};

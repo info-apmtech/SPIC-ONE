@@ -21,10 +21,18 @@ namespace SpicAPI.Controllers
 
 			var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
 
-			var pdfDocTypes = new[] { "GST", "PAN", "Aadhaar", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN" };
+			var pdfDocTypes = new[] { "GST", "PAN", "Aadhaar", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN",
+				"Specimen", "BankGuarantee", "ITReturn1", "ITReturn2", "ValuationCertificate", "RetailerList", "PartnershipDeed", "BoardResolution", "Affidavit" };
 			var imageDocTypes = new[] { "ProprietorImage" };
+			var pdfOrImageDocTypes = new[] { "Specimen" };
 
-			if (pdfDocTypes.Contains(docType))
+			if (pdfOrImageDocTypes.Contains(docType))
+			{
+				var allowedExts = new[] { ".pdf", ".jpg", ".jpeg", ".png", ".webp" };
+				if (!allowedExts.Contains(ext))
+					return BadRequest("Only PDF, JPG, PNG, or WEBP files are allowed.");
+			}
+			else if (pdfDocTypes.Contains(docType))
 			{
 				if (ext != ".pdf")
 					return BadRequest("Only PDF files are allowed for this document type.");
