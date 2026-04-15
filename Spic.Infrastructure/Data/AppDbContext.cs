@@ -63,26 +63,24 @@ namespace Spic.Infrastructure.Data
         public DbSet<DealerRegistration> DealerRegistrations { get; set; }
 
         // Dealer Registration Sub-Entities
-        public DbSet<Experience> Experiences { get; set; }
+        public DbSet<DealerExperience> DealerExperiences { get; set; }
         public DbSet<AnnualSaleDataLastFYofDealerRegistration> AnnualSaleDataLastFY { get; set; }
-        public DbSet<WarehouseFacilities> WarehouseFacilities { get; set; }
-        public DbSet<RailFacilities> RailFacilities { get; set; }
-        public DbSet<PortFacilities> PortFacilities { get; set; }
-        public DbSet<MarketDetail> MarketDetails { get; set; }
-        public DbSet<CompaniesOperatingInArea> CompaniesOperatingInAreas { get; set; }
-        public DbSet<OwnerShipInfo> OwnerShipInfos { get; set; }
+        public DbSet<DealerWarehouseFacilities> DealerWarehouseFacilities { get; set; }
+        public DbSet<DealerRailFacilities> DealerRailFacilities { get; set; }
+        public DbSet<DealerPortFacilities> DealerPortFacilities { get; set; }
+        public DbSet<DealerMarketDetail> DealerMarketDetails { get; set; }
+        public DbSet<DealerCompaniesOperatingInArea> DealerCompaniesOperatingInAreas { get; set; }
+        public DbSet<DealerOwnershipInfo> DealerOwnershipInfos { get; set; }
         public DbSet<PartnerFamilyDetails> PartnerFamilyDetails { get; set; }
         public DbSet<PartnerOccupation> PartnerOccupations { get; set; }
         public DbSet<SalesPlanningInDealerRegistration> SalesPlannings { get; set; }
-        public DbSet<Investment> Investments { get; set; }
         public DbSet<DealerAssetBank> DealerAssetBanks { get; set; }
         public DbSet<DealerAssetLand> DealerAssetLands { get; set; }
-        public DbSet<Building> Buildings { get; set; }
-        public DbSet<Movable> Movables { get; set; }
-        public DbSet<DealerInfrastructure> DealerInfrastructures { get; set; }
-        public DbSet<LoanLiabilities> LoanLiabilities { get; set; }
-        public DbSet<CreditLimitProposal> CreditLimitProposals { get; set; }
-        public DbSet<CreditLimitSalesPerformance> CreditLimitSalesPerformances { get; set; }
+        public DbSet<DealerAssetBuilding> DealerAssetBuildings { get; set; }
+        public DbSet<DealerLoanLiabilities> DealerLoanLiabilities { get; set; }
+        public DbSet<DealerCreditLimitProposal> DealerCreditLimitProposals { get; set; }
+        public DbSet<DealerCreditLimitSalesPerformance> DealerCreditLimitSalesPerformances { get; set; }
         public DbSet<DealerRegistrationDocuments> DealerRegistrationDocuments { get; set; }
+        public DbSet<DealerApprovalHistory> DealerApprovalHistories { get; set; }
     }
 }

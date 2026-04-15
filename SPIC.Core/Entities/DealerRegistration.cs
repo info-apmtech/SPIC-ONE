@@ -134,8 +134,25 @@ namespace SPIC.Core.Entities
         public bool? RMApproved { get; set; }
         public bool? SMApproved { get; set; }
         public bool? AVPApproved { get; set; }
+		//Invesment
+
+        [Display(Name = "Capital Investment")]
+        public decimal CapitalInvestment { get; set; }
+        [Display(Name = "Remarks")]
+        public string? CapitalInvestmentRemarks { get; set; }
+        [Display(Name = "Cash Credit Limit")]
+        public decimal CashCreditLimit { get; set; }
+        [Display(Name = "Remarks")]
+        public string? CashCreditLimitRrmarks { get; set; }
+        //movable asset
+        public decimal AssetValue { get; set; }
+        public string? Remarks { get; set; }
+        //infra
+        public decimal OwnGodownCapacity { get; set; }
+        public decimal RentGodownCapacity { get; set; }
+
     }
-	public class ApprovalHistory
+    public class DealerApprovalHistory
 	{
 		public int Id { get; set; }
 		public int DealerId { get; set; }
@@ -156,7 +173,7 @@ namespace SPIC.Core.Entities
 	{
 		CANAL, TANK, WELL
 	}
-	public class Experience
+	public class DealerExperience
 	{
 		public int Id { get; set; }
 		public int DealerId { get; set; }
@@ -178,8 +195,8 @@ namespace SPIC.Core.Entities
 		public decimal OwnRetailsSale { get; set; }
 		public decimal SaleToDealer { get; set; }
 	}
-	public class WarehouseFacilities
-	{
+	public class DealerWarehouseFacilities
+    {
 		public int Id { get; set; }
 		public int DealerId { get; set; }
 		[Display(Name = "warehouse")]
@@ -187,8 +204,8 @@ namespace SPIC.Core.Entities
 		public double Distance { get; set; }
 		public double Freight { get; set; }
 	}
-	public class RailFacilities
-	{
+	public class DealerRailFacilities
+    {
 		public int Id { get; set; }
 		public int DealerId { get; set; }
 		[Display(Name = "Rail Facilities Name")]
@@ -196,7 +213,7 @@ namespace SPIC.Core.Entities
 		public double Distance { get; set; }
 		public double Freight { get; set; }
 	}
-	public class PortFacilities
+	public class DealerPortFacilities
 	{
 		public int Id { get; set; }
 		[Display(Name = "Port")]
@@ -209,7 +226,7 @@ namespace SPIC.Core.Entities
 	{
 		January, February, March, April, May, June, July, August, September, October, November, December
     }
-    public class MarketDetail
+    public class DealerMarketDetail
 	{
 		public int Id { get; set; }
 		public int DealerId { get; set; }
@@ -229,7 +246,7 @@ namespace SPIC.Core.Entities
 		public bool IsTank { get; set; }
 		public bool IsWell { get; set; }
 	}
-	public class CompaniesOperatingInArea
+	public class DealerCompaniesOperatingInArea
 	{
 		public int Id { get; set; }
 		public int DealerId { get; set; }
@@ -238,7 +255,7 @@ namespace SPIC.Core.Entities
 		public string? CompaniesOperating { get; set; }
 	}
 
-	public class OwnerShipInfo
+	public class DealerOwnershipInfo
 	{
 		public int Id { get; set; }
         public int DealerId { get; set; }
@@ -267,7 +284,7 @@ namespace SPIC.Core.Entities
         public int Age { get; set; }
         [Display(Name = "Relationship")]
         public int RelationshipId { get; set; }
-        public string Occupation { get; set; }
+        public string? Occupation { get; set; }
     }
 	public class PartnerOccupation
 	{
@@ -314,19 +331,6 @@ namespace SPIC.Core.Entities
 
     }
 
-	public class Investment
-	{
-		public int Id { get; set; }
-        public int DealerId { get; set; }
-        [Display(Name = "Capital Investment")]
-		public decimal CapitalInvestment { get; set; }
-		[Display(Name = "Remarks")]
-		public string? CapitalInvestmentRemarks { get; set; }
-		[Display(Name = "Cash Credit Limit")]
-		public decimal CashCreditLimit { get; set; }
-		[Display(Name = "Remarks")]
-		public string? CashCreditLimitRrmarks { get; set; }
-	}
 	public class DealerAssetBank
 	{
 		public int Id { get; set; }
@@ -348,7 +352,7 @@ namespace SPIC.Core.Entities
 		public string? UploadedLandDocumentPath { get; set; }
 		public string? UploadedECDocumentPath { get; set; }
 	}
-	public class Building
+	public class DealerAssetBuilding
 	{
 		public int Id { get; set; }
         public int DealerId { get; set; }
@@ -360,22 +364,8 @@ namespace SPIC.Core.Entities
 		public string? UploadedBuildingDocumentPath { get; set; }
 		public string? UploadedECDocumentPath { get; set; }
 	}
-	public class Movable
-	{
-		public int Id { get; set; }
-        public int DealerId { get; set; }
-        public decimal AssetValue { get; set; }
-		public string? Remarks { get; set; }
-	}
-	public class DealerInfrastructure
-	{
-		public int Id { get; set; }
-        public int DealerId { get; set; }
-        public decimal OwnGodownCapacity { get; set; }
-		public decimal RentGodownCapacity { get; set; }
-	}
-	public class LoanLiabilities
-	{
+	public class DealerLoanLiabilities
+    {
 		public int Id { get; set; }
         public int DealerId { get; set; }
         public string? LoanSource { get; set; }
@@ -383,8 +373,8 @@ namespace SPIC.Core.Entities
 		public string? Remarks { get; set; }
 	}
 	
-	public class CreditLimitProposal
-	{
+	public class DealerCreditLimitProposal
+    {
 		public int Id { get; set; }
         public int DealerId { get; set; }
         public int FY1 { get; set; }
@@ -403,7 +393,7 @@ namespace SPIC.Core.Entities
         public double Q11Mark { get; set; }
         public decimal AdditionalCreditLimit { get; set; }
     }
-	public class CreditLimitSalesPerformance
+	public class DealerCreditLimitSalesPerformance
 	{
 		public int Id { get; set; }
 		public int CreditLimitId { get; set; }

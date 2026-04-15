@@ -8,28 +8,28 @@ namespace SpicAPI.Controllers
     [Route("api/[controller]")]
     public class DealerRegistrationController(IGenericRepository<DealerRegistration> repo) : GenericCrudController<DealerRegistration>(repo);
     [Route("api/[controller]")]
-    public class ExperienceController(IGenericRepository<Experience> repo) : GenericCrudController<Experience>(repo);
+    public class DealerExperienceController(IGenericRepository<DealerExperience> repo) : GenericCrudController<DealerExperience>(repo);
 
     [Route("api/[controller]")]
     public class AnnualSaleDataLastFYController(IGenericRepository<AnnualSaleDataLastFYofDealerRegistration> repo) : GenericCrudController<AnnualSaleDataLastFYofDealerRegistration>(repo);
 
     [Route("api/[controller]")]
-    public class WarehouseFacilitiesController(IGenericRepository<WarehouseFacilities> repo) : GenericCrudController<WarehouseFacilities>(repo);
+    public class DealerWarehouseFacilitiesController(IGenericRepository<DealerWarehouseFacilities> repo) : GenericCrudController<DealerWarehouseFacilities>(repo);
 
     [Route("api/[controller]")]
-    public class RailFacilitiesController(IGenericRepository<RailFacilities> repo) : GenericCrudController<RailFacilities>(repo);
+    public class DealerRailFacilitiesController(IGenericRepository<DealerRailFacilities> repo) : GenericCrudController<DealerRailFacilities>(repo);
 
     [Route("api/[controller]")]
-    public class PortFacilitiesController(IGenericRepository<PortFacilities> repo) : GenericCrudController<PortFacilities>(repo);
+    public class DealerPortFacilitiesController(IGenericRepository<DealerPortFacilities> repo) : GenericCrudController<DealerPortFacilities>(repo);
 
     [Route("api/[controller]")]
-    public class MarketDetailController(IGenericRepository<MarketDetail> repo) : GenericCrudController<MarketDetail>(repo);
+    public class DealerMarketDetailController(IGenericRepository<DealerMarketDetail> repo) : GenericCrudController<DealerMarketDetail>(repo);
 
     [Route("api/[controller]")]
-    public class CompaniesOperatingInAreaController(IGenericRepository<CompaniesOperatingInArea> repo) : GenericCrudController<CompaniesOperatingInArea>(repo);
+    public class DealerCompaniesOperatingInAreaController(IGenericRepository<DealerCompaniesOperatingInArea> repo) : GenericCrudController<DealerCompaniesOperatingInArea>(repo);
 
     [Route("api/[controller]")]
-    public class OwnerShipInfoController(IGenericRepository<OwnerShipInfo> repo) : GenericCrudController<OwnerShipInfo>(repo);
+    public class DealerOwnershipInfoController(IGenericRepository<DealerOwnershipInfo> repo) : GenericCrudController<DealerOwnershipInfo>(repo);
 
     [Route("api/[controller]")]
     public class PartnerFamilyDetailsController(IGenericRepository<PartnerFamilyDetails> repo) : GenericCrudController<PartnerFamilyDetails>(repo);
@@ -41,32 +41,26 @@ namespace SpicAPI.Controllers
     public class SalesPlanningController(IGenericRepository<SalesPlanningInDealerRegistration> repo) : GenericCrudController<SalesPlanningInDealerRegistration>(repo);
 
     [Route("api/[controller]")]
-    public class InvestmentController(IGenericRepository<Investment> repo) : GenericCrudController<Investment>(repo);
-
-    [Route("api/[controller]")]
     public class DealerAssetBankController(IGenericRepository<DealerAssetBank> repo) : GenericCrudController<DealerAssetBank>(repo);
 
     [Route("api/[controller]")]
     public class DealerAssetLandController(IGenericRepository<DealerAssetLand> repo) : GenericCrudController<DealerAssetLand>(repo);
 
     [Route("api/[controller]")]
-    public class BuildingController(IGenericRepository<Building> repo) : GenericCrudController<Building>(repo);
+    public class DealerAssetBuildingController(IGenericRepository<DealerAssetBuilding> repo) : GenericCrudController<DealerAssetBuilding>(repo);
 
     [Route("api/[controller]")]
-    public class MovableController(IGenericRepository<Movable> repo) : GenericCrudController<Movable>(repo);
+    public class DealerLoanLiabilitiesController(IGenericRepository<DealerLoanLiabilities> repo) : GenericCrudController<DealerLoanLiabilities>(repo);
 
     [Route("api/[controller]")]
-    public class DealerInfrastructureController(IGenericRepository<DealerInfrastructure> repo) : GenericCrudController<DealerInfrastructure>(repo);
+    public class DealerCreditLimitProposalController(IGenericRepository<DealerCreditLimitProposal> repo) : GenericCrudController<DealerCreditLimitProposal>(repo);
 
     [Route("api/[controller]")]
-    public class LoanLiabilitiesController(IGenericRepository<LoanLiabilities> repo) : GenericCrudController<LoanLiabilities>(repo);
-
-    [Route("api/[controller]")]
-    public class CreditLimitProposalController(IGenericRepository<CreditLimitProposal> repo) : GenericCrudController<CreditLimitProposal>(repo);
-
-    [Route("api/[controller]")]
-    public class CreditLimitSalesPerformanceController(IGenericRepository<CreditLimitSalesPerformance> repo) : GenericCrudController<CreditLimitSalesPerformance>(repo);
+    public class DealerCreditLimitSalesPerformanceController(IGenericRepository<DealerCreditLimitSalesPerformance> repo) : GenericCrudController<DealerCreditLimitSalesPerformance>(repo);
 
     [Route("api/[controller]")]
     public class DealerRegistrationDocumentsController(IGenericRepository<DealerRegistrationDocuments> repo) : GenericCrudController<DealerRegistrationDocuments>(repo);
+
+    [Route("api/[controller]")]
+    public class DealerApprovalHistoryController(IGenericRepository<DealerApprovalHistory> repo) : GenericCrudController<DealerApprovalHistory>(repo);
 }

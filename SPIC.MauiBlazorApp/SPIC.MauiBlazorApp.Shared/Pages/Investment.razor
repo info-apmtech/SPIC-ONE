@@ -1,42 +1,56 @@
-﻿@page "/Investment" 
+﻿@page "/Investment"
 @using System.Net.Http.Json
+@using SPIC.Core.Entities
+@using DealerReg = SPIC.Core.Entities.DealerRegistration
 @inject HttpClient Http
+@inject NavigationManager Nav
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
+
+	@if (!string.IsNullOrEmpty(_message))
+	{
+		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+			@_message
+			<button type="button" class="btn-close" @onclick='() => _message = null'></button>
+		</div>
+	}
+
 	<div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
 		<h3 class="fw-bold m-0 company-title">Investment</h3>
 	</div>
 
+	<!-- Capital Investment Section -->
 	<div class="main-section">
 		<div class="section-header">
 			<h3 class="section-title">
 				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Captial.svg" style="width: 24px;" />
 				Capital Investment
 			</h3>
-			<div class="val-pill">Total Capital Value <span>₹0</span></div>
+			<div class="val-pill">Total Capital Value <span>₹@((_dealer.CapitalInvestment + _dealer.CashCreditLimit).ToString("N0"))</span></div>
 		</div>
-            
+
 		<div class="row g-3 mb-3">
 			<div class="col-md-6">
 				<label class="custom-label">Capital Investment (₹)</label>
-				<input type="text" class="custom-input" placeholder="₹ 0.00">
+				<input type="number" class="custom-input" placeholder="₹ 0.00" @bind="_dealer.CapitalInvestment" />
 			</div>
 			<div class="col-md-6">
 				<label class="custom-label">Cash Credit Limit (₹)</label>
-				<input type="text" class="custom-input" placeholder="₹ 0.00">
+				<input type="number" class="custom-input" placeholder="₹ 0.00" @bind="_dealer.CashCreditLimit" />
 			</div>
 		</div>
 		<div class="row g-3">
 			<div class="col-md-6">
-				<input type="text" class="custom-input" placeholder="Remarks">
+				<input type="text" class="custom-input" placeholder="Remarks" @bind="_dealer.CapitalInvestmentRemarks" />
 			</div>
 			<div class="col-md-6">
-				<input type="text" class="custom-input" placeholder="Remarks">
+				<input type="text" class="custom-input" placeholder="Remarks" @bind="_dealer.CashCreditLimitRrmarks" />
 			</div>
 		</div>
 	</div>
 
+	<!-- Assets (Banking & Properties) Section -->
 	<div class="main-section">
 		<div class="section-header">
 			<h3 class="section-title">
@@ -44,13 +58,14 @@
 				Assets (Banking & Properties)
 			</h3>
 			<div class="d-flex gap-3">
-				<div class="val-pill">Assets Added <span>1</span></div>
-				<div class="val-pill">Total Capital Value <span>₹0</span></div>
+				<div class="val-pill">Assets Added <span>@(_bankAssets.Count + _landAssets.Count + _buildingAssets.Count)</span></div>
+				<div class="val-pill">Total Capital Value <span>₹@((_bankAssets.Sum(b => b.Value) + _landAssets.Sum(l => l.PropertyValue) + _buildingAssets.Sum(b => b.PropertyValue)).ToString("N0"))</span></div>
 			</div>
 		</div>
 
 		<div class="row g-4 mb-4">
-                
+
+			<!-- Banking Sub-Card -->
 			<div class="col-md-6">
 				<div class="sub-card">
 					<div class="sub-card-title"><i class="bi bi-bank icon-blue"></i> Banking</div>
@@ -58,499 +73,635 @@
 						<div class="col-6">
 							<label class="custom-label">Bank Name</label>
 							<select class="form-select-custom w-100" @bind="_bankForm.BankId">
-								<option>Select Bank Name</option>@foreach (var bank in _BankAll)
+								<option value="0">Select Bank Name</option>
+								@foreach (var bank in _banks)
 								{
-									<option value="@bank.Id">@bank.BankName</option>
+									<option value="@bank.Id">@bank.Name</option>
 								}
 							</select>
 						</div>
 						<div class="col-6">
 							<label class="custom-label">Bank Branch</label>
-							<select class="form-select-custom w-100"><option>Select Bank Branch</option></select>
+							<input type="text" class="custom-input" placeholder="Enter Branch" @bind="_bankForm.BankBranch" />
 						</div>
 					</div>
 					<div class="row g-3 mb-4">
 						<div class="col-6">
 							<label class="custom-label">Value (₹)</label>
-							<input type="text" class="custom-input" placeholder="0.0">
+							<input type="number" class="custom-input" placeholder="0.0" @bind="_bankForm.Value" />
 						</div>
 						<div class="col-6">
 							<label class="custom-label">Remarks</label>
-							<input type="text" class="custom-input" placeholder="">
+							<input type="text" class="custom-input" placeholder="" @bind="_bankForm.Remarks" />
 						</div>
 					</div>
 					<div class="mt-auto">
-						<button class="btn-upload-dashed mb-3">
-							<i class="bi bi-upload"></i> <label class="btn-upload-attach mb-0">
-							PDF File Upload
-							<input type="file" hidden @onchange="HandlePdfUpload" />
-						</label>
-					</button>
-					<button class="btn-blue-action"><i class="bi bi-plus"></i> Add Banking</button>
+						<button class="btn-blue-action" @onclick="SaveBankAsset"><i class="bi bi-plus"></i> @(_bankForm.Id > 0 ? "Update" : "Add") Banking</button>
+					</div>
 				</div>
 			</div>
-		</div>
 
-		<div class="col-md-6">
-			<div class="sub-card">
-				<div class="sub-card-title">
-                            
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Land.svg" style="width: 24px;"/>
-                            
-					Land
-				</div>
-				<div class="row g-3 mb-3">
-					<div class="col-6">
-						<label class="custom-label">Land Name</label>
-						<input type="text" class="custom-input" placeholder="Enter Land Name">
+			<!-- Land Sub-Card -->
+			<div class="col-md-6">
+				<div class="sub-card">
+					<div class="sub-card-title">
+						<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Land.svg" style="width: 24px;" />
+						Land
 					</div>
-					<div class="col-6">
-						<label class="custom-label">Survey Number</label>
-						<input type="text" class="custom-input" placeholder="Enter ID/Cent">
-					</div>
-				</div>
-				<div class="row g-3 mb-4">
-					<div class="col-6">
-						<label class="custom-label">Land Size (In Cent)</label>
-						<input type="text" class="custom-input" placeholder="Enter In Cent">
-					</div>
-					<div class="col-6">
-						<label class="custom-label">Property Value (₹) (In Lakhs)</label>
-						<input type="text" class="custom-input" placeholder="Enter Value">
-					</div>
-				</div>
-				<div class="mt-auto">
-					<div class="row g-2 mb-3">
+					<div class="row g-3 mb-3">
 						<div class="col-6">
-							<button class="btn-upload-dashed">
-								<i class="bi bi-upload"></i> <label class="btn-upload-attach mb-0">
-								Upload Land Document
-								<input type="file" hidden @onchange="HandleLandDocumentUpload" />
-							</label>
-						</button>
+							<label class="custom-label">Land Name</label>
+							<input type="text" class="custom-input" placeholder="Enter Land Name" @bind="_landForm.LandName" />
+						</div>
+						<div class="col-6">
+							<label class="custom-label">Survey Number</label>
+							<input type="text" class="custom-input" placeholder="Enter ID/Cent" @bind="_landForm.SurvayNumber" />
+						</div>
 					</div>
-					<div class="col-6">
-						<button class="btn-upload-dashed">
-							<i class="bi bi-upload"></i> <label class="btn-upload-attach mb-0">
-							Upload EC Document
-							<input type="file" hidden @onchange="HandleECDocumentUpload" />
-						</label>
-					</button>
+					<div class="row g-3 mb-4">
+						<div class="col-6">
+							<label class="custom-label">Land Size (In Cent)</label>
+							<input type="number" class="custom-input" placeholder="Enter In Cent" @bind="_landForm.LandSize" />
+						</div>
+						<div class="col-6">
+							<label class="custom-label">Property Value (₹) (In Lakhs)</label>
+							<input type="number" class="custom-input" placeholder="Enter Value" @bind="_landForm.PropertyValue" />
+						</div>
+					</div>
+					<div class="mt-auto">
+						<button class="btn-blue-action" @onclick="SaveLandAsset"><i class="bi bi-plus"></i> @(_landForm.Id > 0 ? "Update" : "Add") Land</button>
+					</div>
 				</div>
 			</div>
-			<button class="btn-blue-action"><i class="bi bi-plus"></i> Add Land</button>
 		</div>
-	</div>
-</div>
-</div>
 
-<div class="sub-card mb-4">
-	<div class="sub-card-title">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Home.svg" />
-                    
-		Building
-	</div>
-	<div class="row g-3 mb-3">
-		<div class="col-md-4">
-			<label class="custom-label">Building Name</label>
-			<input type="text" class="custom-input" placeholder="Enter Building Name">
-		</div>
-		<div class="col-md-4">
-			<label class="custom-label">Property Value (₹)</label>
-			<input type="number" class="custom-input" placeholder="Enter Value">
-		</div>
-		<div class="col-md-4">
-			<label class="custom-label">Survey Number</label>
-			<input type="number" class="custom-input" placeholder="Enter ID/Cent">
-		</div>
-	</div>
-	<div class="row g-3 mb-4">
-		<div class="col-md-6">
-			<label class="custom-label">Land Size (In Square Fit)</label>
-			<input type="number" class="custom-input" placeholder="Enter In Square Fit">
-		</div>
-		<div class="col-md-6">
-			<label class="custom-label">Remarks</label>
-			<input type="text" class="custom-input" placeholder="">
-		</div>
-	</div>
-	<div class="row g-3">
-		<div class="col-md-4">
-			<button class="btn-upload-dashed">
-				<i class="bi bi-upload"></i><label class="btn-upload-attach mb-0">
-				Upload Building Document
-				<input type="file" hidden @onchange="HandleBuildingDocumentUpload" />
-			</label>
-		</button>
-	</div>
-	<div class="col-md-4">
-		<button class="btn-upload-dashed">
-			<i class="bi bi-upload"></i> <label class="btn-upload-attach mb-0">
-			Upload EC Document
-			<input type="file" hidden @onchange="HandleECDocumentUpload" />
-		</label>
-	</button>
-</div>
-<div class="col-md-4"><button class="btn-blue-action w-100"><i class="bi bi-plus"></i> Add Building</button></div>
-</div>
-</div>
-
-<h4 class="list-header">Your Added Assets</h4>
-            
-<div class="asset-row">
-	<div class="asset-icon" style="color: #3B82F6; background: #EFF6FF;"><i class="bi bi-bank"></i></div>
-	<div class="asset-detail"><div class="asset-lbl">Bank Name</div><div class="asset-val">State Bank</div></div>
-	<div class="asset-detail"><div class="asset-lbl">Bank Branch</div><div class="asset-val">Saidapet</div></div>
-	<div class="asset-detail"><div class="asset-lbl">Monthly Transaction (₹)</div><div class="asset-val">₹ 1200000</div></div>
-	<div class="asset-detail"><div class="asset-lbl">PDF File</div><div class="asset-val" style="color:#059669;">Uploaded</div></div>
-	<div class="asset-detail"><div class="asset-lbl">Remarks</div><div class="asset-val text-muted">Remarks...</div></div>
-	<div class="asset-actions">
-		<i class="bi bi-pencil-square edit"></i>
-		<i class="bi bi-trash delete"></i>
-	</div>
-</div>
-
-<div class="asset-row">
-	<div class="asset-icon" style="color: #EC4899; background: #FCE7F3;"><i class="bi bi-building"></i></div>
-	<div class="asset-detail"><div class="asset-lbl">Building Name</div><div class="asset-val">Avanti Gardens</div></div>
-	<div class="asset-detail"><div class="asset-lbl">Property Value (₹)</div><div class="asset-val">1200000</div></div>
-	<div class="asset-detail"><div class="asset-lbl">Land Size</div><div class="asset-val">230 Sq Ft</div></div>
-	<div class="asset-detail"><div class="asset-lbl">EC File</div><div class="asset-val" style="color:#059669;">Uploaded</div></div>
-	<div class="asset-detail"><div class="asset-lbl">PDF File</div><div class="asset-val" style="color:#059669;">Uploaded</div></div>
-	<div class="asset-detail"><div class="asset-lbl">Remarks</div><div class="asset-val text-muted">Remarks...</div></div>
-	<div class="asset-actions">
-		<i class="bi bi-pencil-square edit"></i>
-		<i class="bi bi-trash delete"></i>
-	</div>
-</div>
-</div>
-
-<div class="main-section">
-	<div class="section-header border-0 mb-0 pb-0">
-		<h3 class="section-title">
-			<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/MovableAsset.svg" style="width: 24px;" />
-			Movable
-		</h3>
-	</div>
-	<div class="row g-3 mt-1">
-		<div class="col-md-6">
-			<label class="custom-label">Movable Assets Value (₹)</label>
-			<input type="number" class="custom-input" placeholder="Enter Value">
-		</div>
-		<div class="col-md-6">
-			<label class="custom-label">Remarks</label>
-			<input type="text" class="custom-input" placeholder="">
-		</div>
-	</div>
-</div>
-
-<div class="main-section">
-	<div class="section-header border-0 mb-0 pb-0">
-		<h3 class="section-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Infrastructure.svg" style="width: 24px;" /> Infrastructure</h3>
-	</div>
-	<div class="row g-4 mt-1">
-		<div class="col-md-6">
-			<div class="sub-card">
-				<div class="sub-card-title">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/OwnGodown.svg" style="width: 24px;" />
-
-					Own Godown Capacity
-				</div>
-				<label class="custom-label">MT</label>
-				<input type="number" class="custom-input" placeholder="Enter The Value">
+		<!-- Building Sub-Card -->
+		<div class="sub-card mb-4">
+			<div class="sub-card-title">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Home.svg" />
+				Building
 			</div>
-		</div>
-		<div class="col-md-6">
-			<div class="sub-card">
-				<div class="sub-card-title">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/RentGodown.svg" style="width: 24px;" />
-					Rent Godown Capacity
-				</div>
-				<label class="custom-label">MT</label>
-				<input type="number" class="custom-input" placeholder="Enter The Value">
-			</div>
-		</div>
-	</div>
-</div>
-
-@* <div class="main-section">
-            <div class="section-header">
-                <h3 class="section-title">
-                                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/HomeLoan.svg" style="width: 24px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
-
-                    Loan Liabilities</h3>
-                <div class="val-pill">Total Liabilities Value <span>₹0</span></div>
-            </div>
-            
-            <div class="row g-3 mb-4 align-items-end">
-                <div class="col-md-4">
-                    <label class="custom-label">Loan Source / Institution *</label>
-                    <input type="text" class="custom-input" placeholder="e.g., State Bank Of India">
-                </div>
-                <div class="col-md-4">
-                    <label class="custom-label">Loan Value *</label>
-                    <input type="text" class="custom-input" placeholder="₹ 0.00">
-                </div>
-                <div class="col-md-4">
-                    <label class="custom-label" style="visibility:hidden;">Remarks</label>
-                    <input type="text" class="custom-input" placeholder="Remarks...">
-                </div>
-            </div>
-            <div class="d-flex justify-content-end mb-4 border-bottom pb-4">
-                <button class="btn-blue-action" style="width: auto;"><i class="bi bi-plus"></i> Add Loan</button>
-            </div>
-
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="list-header m-0">Loan Liabilities List</h4>
-                <div class="fw-bold text-secondary">3</div>
-            </div>
-
-            <div class="row g-3">
-                @for(int i=0; i<3; i++) {
-                <div class="col-md-4">
-                    <div class="loan-card">
-                        <div class="loan-header">
-                            <div class="loan-bank-name"><i class="bi bi-bank"></i> State Bank</div>
-                            <div class="asset-actions">
-                                <i class="bi bi-pencil-square edit"></i>
-                                <i class="bi bi-trash delete"></i>
-                            </div>
-                        </div>
-                        <div class="row g-2 mb-3">
-                            <div class="col-12">
-                                <div class="asset-lbl">Loan Value</div>
-                                <div class="asset-val">200000</div>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="asset-lbl">Remarks</div>
-                            <div class="asset-val text-muted" style="font-weight: 500;">Add the Remarks</div>
-                        </div>
-                    </div>
-                </div>
-                }
-            </div>
-        </div> *@
-
-<div class="main-section">
-	<div class="section-header border-0 mb-2">
-		<h3 class="section-title">
-			<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LoanLiabilities .svg" style="width: 24px;" />
-			<i class="bi bi-cash-stack" style="display:none;"></i>
-			Loan Liabilities List
-		</h3>
-		<div class="val-pill pill-light-blue">Total Liabilities Value <span class="ms-1">0₹</span></div>
-	</div>
-           
-	<div class="row g-3 mb-3">
-		<div class="col-md-4">
-			<label class="custom-label">Loan Source / Institution *</label>
-			<input type="text" class="custom-input" placeholder="e.g., State Bank Of India">
-		</div>
-		<div class="col-md-4">
-			<label class="custom-label">Loan Value *</label>
-			<input type="text" class="custom-input" placeholder="₹ 0.00">
-		</div>
-		<div class="col-md-4 d-flex align-items-end">
-			<input type="text" class="custom-input" placeholder="Remarks...">
-		</div>
-	</div>
-
-	<div class="d-flex justify-content-end mb-4">
-		<button class="btn-blue-action" style="width: auto;">
-			<i class="bi bi-plus-lg"></i> Add Loan
-		</button>
-	</div>
-
-	<div class="loan-list-container">
-		<div class="d-flex justify-content-between align-items-center mb-4">
-			<h4 class="list-header m-0 d-flex align-items-center gap-2">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LoanLiabilities .svg" style="width: 20px;" />
-				Loan Liabilities List
-			</h4>
-			<div class="fw-bold text-dark fs-5">3</div>
-		</div>
-
-		<div class="row g-3">
-			@for (int i = 0; i<3; i++)
-			{
+			<div class="row g-3 mb-3">
 				<div class="col-md-4">
-					<div class="loan-card-white">
-						<div class="loan-header">
-							<div class="loan-bank-name">
-								<i class="bi bi-bank"></i> State Bank
+					<label class="custom-label">Building Name</label>
+					<input type="text" class="custom-input" placeholder="Enter Building Name" @bind="_buildingForm.BuildingName" />
+				</div>
+				<div class="col-md-4">
+					<label class="custom-label">Property Value (₹)</label>
+					<input type="number" class="custom-input" placeholder="Enter Value" @bind="_buildingForm.PropertyValue" />
+				</div>
+				<div class="col-md-4">
+					<label class="custom-label">Survey Number</label>
+					<input type="text" class="custom-input" placeholder="Enter ID/Cent" @bind="_buildingForm.SurveyNumber" />
+				</div>
+			</div>
+			<div class="row g-3 mb-4">
+				<div class="col-md-4">
+					<label class="custom-label">Land Size (In Square Ft)</label>
+					<input type="number" class="custom-input" placeholder="Enter In Square Ft" @bind="_buildingForm.LandSize" />
+				</div>
+				<div class="col-md-4">
+					<label class="custom-label">Remarks</label>
+					<input type="text" class="custom-input" placeholder="" @bind="_buildingForm.Remarks" />
+				</div>
+				<div class="col-md-4">
+					<button class="btn-blue-action w-100" @onclick="SaveBuildingAsset"><i class="bi bi-plus"></i> @(_buildingForm.Id > 0 ? "Update" : "Add") Building</button>
+				</div>
+			</div>
+		</div>
+
+		<h4 class="list-header">Your Added Assets</h4>
+
+		@foreach (var item in _bankAssets)
+		{
+			var bankName = _banks.FirstOrDefault(b => b.Id == item.BankId)?.Name ?? "Bank";
+			var bankType = "bank";
+			<div class="asset-row">
+				<div class="asset-icon" style="color: #3B82F6; background: #EFF6FF;"><i class="bi bi-bank"></i></div>
+				<div class="asset-detail"><div class="asset-lbl">Bank Name</div><div class="asset-val">@bankName</div></div>
+				<div class="asset-detail"><div class="asset-lbl">Bank Branch</div><div class="asset-val">@item.BankBranch</div></div>
+				<div class="asset-detail"><div class="asset-lbl">Value (₹)</div><div class="asset-val">₹ @item.Value.ToString("N0")</div></div>
+				<div class="asset-detail"><div class="asset-lbl">Remarks</div><div class="asset-val text-muted">@item.Remarks</div></div>
+				<div class="asset-actions">
+					<i class="bi bi-pencil-square edit" style="cursor:pointer;" @onclick="() => EditBankAsset(item)"></i>
+					<i class="bi bi-trash delete" style="cursor:pointer;" @onclick="() => ConfirmDelete(item.Id, bankType)"></i>
+				</div>
+			</div>
+		}
+
+		@foreach (var item in _landAssets)
+		{
+			var landType = "land";
+			<div class="asset-row">
+				<div class="asset-icon" style="color: #10B981; background: #ECFDF5;"><i class="bi bi-geo-alt"></i></div>
+				<div class="asset-detail"><div class="asset-lbl">Land Name</div><div class="asset-val">@item.LandName</div></div>
+				<div class="asset-detail"><div class="asset-lbl">Survey No</div><div class="asset-val">@item.SurvayNumber</div></div>
+				<div class="asset-detail"><div class="asset-lbl">Size (Cent)</div><div class="asset-val">@item.LandSize</div></div>
+				<div class="asset-detail"><div class="asset-lbl">Value (₹)</div><div class="asset-val">₹ @item.PropertyValue.ToString("N0")</div></div>
+				<div class="asset-actions">
+					<i class="bi bi-pencil-square edit" style="cursor:pointer;" @onclick="() => EditLandAsset(item)"></i>
+					<i class="bi bi-trash delete" style="cursor:pointer;" @onclick="() => ConfirmDelete(item.Id, landType)"></i>
+				</div>
+			</div>
+		}
+
+		@foreach (var item in _buildingAssets)
+		{
+			var buildingType = "building";
+			<div class="asset-row">
+				<div class="asset-icon" style="color: #EC4899; background: #FCE7F3;"><i class="bi bi-building"></i></div>
+				<div class="asset-detail"><div class="asset-lbl">Building</div><div class="asset-val">@item.BuildingName</div></div>
+				<div class="asset-detail"><div class="asset-lbl">Value (₹)</div><div class="asset-val">₹ @item.PropertyValue.ToString("N0")</div></div>
+				<div class="asset-detail"><div class="asset-lbl">Size (Sq Ft)</div><div class="asset-val">@item.LandSize</div></div>
+				<div class="asset-detail"><div class="asset-lbl">Remarks</div><div class="asset-val text-muted">@item.Remarks</div></div>
+				<div class="asset-actions">
+					<i class="bi bi-pencil-square edit" style="cursor:pointer;" @onclick="() => EditBuildingAsset(item)"></i>
+					<i class="bi bi-trash delete" style="cursor:pointer;" @onclick="() => ConfirmDelete(item.Id, buildingType)"></i>
+				</div>
+			</div>
+		}
+	</div>
+
+	<!-- Movable Section -->
+	<div class="main-section">
+		<div class="section-header border-0 mb-0 pb-0">
+			<h3 class="section-title">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/MovableAsset.svg" style="width: 24px;" />
+				Movable
+			</h3>
+		</div>
+		<div class="row g-3 mt-1">
+			<div class="col-md-6">
+				<label class="custom-label">Movable Assets Value (₹)</label>
+				<input type="number" class="custom-input" placeholder="Enter Value" @bind="_dealer.AssetValue" />
+			</div>
+			<div class="col-md-6">
+				<label class="custom-label">Remarks</label>
+				<input type="text" class="custom-input" placeholder="" @bind="_dealer.Remarks" />
+			</div>
+		</div>
+	</div>
+
+	<!-- Infrastructure Section -->
+	<div class="main-section">
+		<div class="section-header border-0 mb-0 pb-0">
+			<h3 class="section-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Infrastructure.svg" style="width: 24px;" /> Infrastructure</h3>
+		</div>
+		<div class="row g-4 mt-1">
+			<div class="col-md-6">
+				<div class="sub-card">
+					<div class="sub-card-title">
+						<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/OwnGodown.svg" style="width: 24px;" />
+						Own Godown Capacity
+					</div>
+					<label class="custom-label">MT</label>
+					<input type="number" class="custom-input" placeholder="Enter The Value" @bind="_dealer.OwnGodownCapacity" />
+				</div>
+			</div>
+			<div class="col-md-6">
+				<div class="sub-card">
+					<div class="sub-card-title">
+						<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/RentGodown.svg" style="width: 24px;" />
+						Rent Godown Capacity
+					</div>
+					<label class="custom-label">MT</label>
+					<input type="number" class="custom-input" placeholder="Enter The Value" @bind="_dealer.RentGodownCapacity" />
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Loan Liabilities Section -->
+	<div class="main-section">
+		<div class="section-header border-0 mb-2">
+			<h3 class="section-title">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LoanLiabilities .svg" style="width: 24px;" />
+				<i class="bi bi-cash-stack" style="display:none;"></i>
+				Loan Liabilities List
+			</h3>
+			<div class="val-pill pill-light-blue">Total Liabilities Value <span class="ms-1">₹@_loanLiabilities.Sum(l => l.LoanValue).ToString("N0")</span></div>
+		</div>
+
+		<div class="row g-3 mb-3">
+			<div class="col-md-4">
+				<label class="custom-label">Loan Source / Institution *</label>
+				<input type="text" class="custom-input" placeholder="e.g., State Bank Of India" @bind="_loanForm.LoanSource" />
+			</div>
+			<div class="col-md-4">
+				<label class="custom-label">Loan Value *</label>
+				<input type="number" class="custom-input" placeholder="₹ 0.00" @bind="_loanForm.LoanValue" />
+			</div>
+			<div class="col-md-4 d-flex align-items-end">
+				<input type="text" class="custom-input" placeholder="Remarks..." @bind="_loanForm.Remarks" />
+			</div>
+		</div>
+
+		<div class="d-flex justify-content-end mb-4">
+			<button class="btn-blue-action" style="width: auto;" @onclick="SaveLoan">
+				<i class="bi bi-plus-lg"></i> @(_loanForm.Id > 0 ? "Update" : "Add") Loan
+			</button>
+		</div>
+
+		<div class="loan-list-container">
+			<div class="d-flex justify-content-between align-items-center mb-4">
+				<h4 class="list-header m-0 d-flex align-items-center gap-2">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LoanLiabilities .svg" style="width: 20px;" />
+					Loan Liabilities List
+				</h4>
+				<div class="fw-bold text-dark fs-5">@_loanLiabilities.Count</div>
+			</div>
+
+			<div class="row g-3">
+				@foreach (var loan in _loanLiabilities)
+				{
+					var loanType = "loan";
+					<div class="col-md-4">
+						<div class="loan-card-white">
+							<div class="loan-header">
+								<div class="loan-bank-name">
+									<i class="bi bi-bank"></i> @loan.LoanSource
+								</div>
+								<div class="asset-actions ms-auto">
+									<i class="bi bi-pencil-square edit" style="cursor:pointer;" @onclick="() => EditLoan(loan)"></i>
+									<i class="bi bi-trash delete" style="cursor:pointer;" @onclick="() => ConfirmDelete(loan.Id, loanType)"></i>
+								</div>
 							</div>
-							<div class="asset-actions ms-auto">
-								<i class="bi bi-pencil-square edit"></i>
-								<i class="bi bi-trash delete"></i>
+							<div class="loan-detail-box">
+								<div class="asset-lbl">Loan Value</div>
+								<div class="asset-val">₹ @loan.LoanValue.ToString("N0")</div>
 							</div>
-						</div>
-                    
-						<div class="loan-detail-box">
-							<div class="asset-lbl">Loan Value</div>
-							<div class="asset-val">200000</div>
-						</div>
-						<div class="loan-detail-box">
-							<div class="asset-lbl">Remarks</div>
-							<div class="asset-val" style="font-weight: 500;">Add the Remarks</div>
+							<div class="loan-detail-box">
+								<div class="asset-lbl">Remarks</div>
+								<div class="asset-val" style="font-weight: 500;">@(string.IsNullOrEmpty(loan.Remarks) ? "-" : loan.Remarks)</div>
+							</div>
 						</div>
 					</div>
+				}
+			</div>
+		</div>
+	</div>
+
+	<!-- Financial Summary Footer -->
+	<div class="financial-footer">
+		<div class="fin-top-row">
+			<div class="fin-title">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LoanLiabilities .svg" style="width: 24px;" />
+				Net Financial Position
+			</div>
+			<div class="d-flex align-items-center gap-3">
+				<div class="fin-calc-pill">
+					Calculation: (Capital + Assets) - Loans <strong>(₹@CapitalTotal.ToString("N0") + ₹@AssetsTotal.ToString("N0")) - ₹@LoansTotal.ToString("N0") = ₹@NetFinancial.ToString("N0")</strong>
 				</div>
-			}
-		</div>
-	</div>
-</div>
-@* <div class="financial-footer">
-            <div class="fin-top-row">
-                <div class="fin-title"><i class="bi bi-graph-up-arrow"></i> Net Financial Position</div>
-                <div class="d-flex align-items-center gap-3">
-                    <div class="fin-calc">Calculation: (Capital + Assets) - Loans: <strong>(₹0 + ₹324) - ₹0 = ₹324</strong></div>
-                    <div class="badge-green"><i class="bi bi-check-lg"></i> Positive Financial Position</div>
-                </div>
-            </div>
-
-            <div class="fin-pill-grid">
-                <div class="fin-pill pill-pink">
-                    <div class="fin-pill-icon"><i class="bi bi-shield-check"></i></div>
-                    <div>
-                        <div class="fin-pill-lbl">Capital Position</div>
-                        <div class="fin-pill-val text-pink" style="color: #EC4899;">₹ 0</div>
-                    </div>
-                </div>
-                <div class="fin-pill pill-green">
-                    <div class="fin-pill-icon"><i class="bi bi-building"></i></div>
-                    <div>
-                        <div class="fin-pill-lbl">Banking & Property Assets</div>
-                        <div class="fin-pill-val text-green" style="color: #10B981;">₹ 324</div>
-                    </div>
-                </div>
-                <div class="fin-pill pill-yellow">
-                    <div class="fin-pill-icon"><i class="bi bi-cash-stack"></i></div>
-                    <div>
-                        <div class="fin-pill-lbl">Loan Liabilities</div>
-                        <div class="fin-pill-val text-yellow" style="color: #F59E0B;">₹ 0</div>
-                    </div>
-                </div>
-                <div class="fin-pill pill-blue">
-                    <div class="fin-pill-icon"><i class="bi bi-graph-up-arrow"></i></div>
-                    <div>
-                        <div class="fin-pill-lbl">Net Financial Value</div>
-                        <div class="fin-pill-val text-blue" style="color: #3B82F6;">₹ 324</div>
-                    </div>
-                </div>
-            </div>
-        </div> *@ 
-
-<div class="financial-footer">
-	<div class="fin-top-row">
-		<div class="fin-title">
-			<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LoanLiabilities .svg" style="width: 24px;" />
-
-
-			Net Financial Position
-		</div>
-		<div class="d-flex align-items-center gap-3">
-			<div class="fin-calc-pill">
-				Calculation: (Capital + Assets) - Loans <strong>(₹0 + ₹324) - ₹0 = ₹324</strong>
+				@if (NetFinancial >= 0)
+				{
+					<div class="badge-outline-green"><i class="bi bi-check2"></i> Positive Financial Position</div>
+				}
+				else
+				{
+					<div class="badge-outline-green" style="border-color:#EF4444; color:#EF4444;"><i class="bi bi-x-lg"></i> Negative Financial Position</div>
+				}
 			</div>
-			<div class="badge-outline-green">
-				<i class="bi bi-check2"></i> Positive Financial Position
+		</div>
+
+		<div class="fin-pill-grid">
+			<div class="fin-card-white fin-pink">
+				<div class="fin-card-header">
+					<div class="fin-icon-bg"><i class="bi bi-shield-check"></i></div>
+					Capital Position
+				</div>
+				<div class="fin-card-val">₹ @CapitalTotal.ToString("N0")</div>
+			</div>
+
+			<div class="fin-card-white fin-green">
+				<div class="fin-card-header">
+					<div class="fin-icon-bg"><i class="bi bi-bank"></i></div>
+					Banking & Property Assets
+				</div>
+				<div class="fin-card-val">₹ @AssetsTotal.ToString("N0")</div>
+			</div>
+
+			<div class="fin-card-white fin-yellow">
+				<div class="fin-card-header">
+					<div class="fin-icon-bg"><i class="bi bi-cash-stack"></i></div>
+					Loan Liabilities
+				</div>
+				<div class="fin-card-val">₹ @LoansTotal.ToString("N0")</div>
+			</div>
+
+			<div class="fin-card-white fin-blue">
+				<div class="fin-card-header">
+					<div class="fin-icon-bg"><i class="bi bi-snow"></i></div>
+					Net Financial Value
+				</div>
+				<div class="fin-card-val">₹ @NetFinancial.ToString("N0")</div>
 			</div>
 		</div>
 	</div>
 
-	<div class="fin-pill-grid">
-		<div class="fin-card-white fin-pink">
-			<div class="fin-card-header">
-				<div class="fin-icon-bg"><i class="bi bi-shield-check"></i></div>
-				Capital Position
-			</div>
-			<div class="fin-card-val">₹ 0</div>
-		</div>
+	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+</div>
 
-		<div class="fin-card-white fin-green">
-			<div class="fin-card-header">
-				<div class="fin-icon-bg"><i class="bi bi-bank"></i></div>
-				Banking & Property Assets
+<!-- Delete Confirmation Modal -->
+@if (_showDeleteModal)
+{
+	<div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Confirm Delete</h5>
+					<button type="button" class="btn-close" @onclick="() => _showDeleteModal = false"></button>
+				</div>
+				<div class="modal-body">Are you sure you want to delete this item?</div>
+				<div class="modal-footer">
+					<button class="btn btn-secondary" @onclick="() => _showDeleteModal = false">Cancel</button>
+					<button class="btn btn-danger" @onclick="ExecuteDelete">Delete</button>
+				</div>
 			</div>
-			<div class="fin-card-val">₹ 324</div>
-		</div>
-
-		<div class="fin-card-white fin-yellow">
-			<div class="fin-card-header">
-				<div class="fin-icon-bg"><i class="bi bi-cash-stack"></i></div>
-				Loan Liabilities
-			</div>
-			<div class="fin-card-val">₹ 0</div>
-		</div>
-
-		<div class="fin-card-white fin-blue">
-			<div class="fin-card-header">
-				<div class="fin-icon-bg"><i class="bi bi-snow"></i></div>
-				Net Financial Value
-			</div>
-			<div class="fin-card-val">₹ 324</div>
 		</div>
 	</div>
-</div>
-<CommanFooter />
-</div>
+}
 
 @code {
-	private async Task HandlePdfUpload(ChangeEventArgs e)
-	{
-		var file = (e.Value as Microsoft.AspNetCore.Components.Forms.IBrowserFile);
-		if (file != null)
-		{
-			Console.WriteLine($"Pdf file selected: {file.Name}");
-		}
-	}
-	private async Task HandleLandDocumentUpload(ChangeEventArgs e)
-	{
-		var file = (e.Value as Microsoft.AspNetCore.Components.Forms.IBrowserFile);
-		if (file != null)
-		{
-			Console.WriteLine($"Land file selected: {file.Name}");
-		}
-	}
-	private async Task HandleECDocumentUpload(ChangeEventArgs e)
-	{
-		var file = (e.Value as Microsoft.AspNetCore.Components.Forms.IBrowserFile);
-		if (file != null)
-		{
-			Console.WriteLine($"EC file selected: {file.Name}");
-		}
-	}
-	private async Task HandleBuildingDocumentUpload(ChangeEventArgs e)
-	{
-		var file = (e.Value as Microsoft.AspNetCore.Components.Forms.IBrowserFile);
-		if (file != null)
-		{
-			Console.WriteLine($"EC file selected: {file.Name}");
-		}
-	}
-	// Load DropDown
-	private List<InvestmentItemDto> _BankAll = new();
-	private string CurrentApiBase => "api/Bank";
+	[SupplyParameterFromQuery(Name = "dealerId")]
+	public int? DealerId { get; set; }
 
-	private BankFormModel _bankForm = new();
+	private DealerReg _dealer = new();
+	private List<Bank> _banks = new();
+	private List<DealerAssetBank> _bankAssets = new();
+	private List<DealerAssetLand> _landAssets = new();
+	private List<DealerAssetBuilding> _buildingAssets = new();
+	private List<DealerLoanLiabilities> _loanLiabilities = new();
+
+	private DealerAssetBank _bankForm = new();
+	private DealerAssetLand _landForm = new();
+	private DealerAssetBuilding _buildingForm = new();
+	private DealerLoanLiabilities _loanForm = new();
+
+	private bool _isSaving;
 	private string? _message;
 	private bool _isError;
 
+	private bool _showDeleteModal;
+	private int _deleteId;
+	private string _deleteType = "";
+
+	private decimal CapitalTotal => _dealer.CapitalInvestment + _dealer.CashCreditLimit;
+	private decimal AssetsTotal => _bankAssets.Sum(b => b.Value) + _landAssets.Sum(l => l.PropertyValue) + _buildingAssets.Sum(b => b.PropertyValue) + _dealer.AssetValue;
+	private decimal LoansTotal => _loanLiabilities.Sum(l => l.LoanValue);
+	private decimal NetFinancial => CapitalTotal + AssetsTotal - LoansTotal;
+
 	protected override async Task OnInitializedAsync()
 	{
-		await LoadSector();
+		await LoadBanks();
+
+		if (DealerId.HasValue && DealerId.Value > 0)
+		{
+			await LoadDealer();
+			await LoadBankAssets();
+			await LoadLandAssets();
+			await LoadBuildingAssets();
+			await LoadLoanLiabilities();
+		}
 	}
 
-	private async Task LoadSector()
+	private async Task LoadDealer()
 	{
 		try
 		{
-			_BankAll = await Http.GetFromJsonAsync<List<InvestmentItemDto>>($"{CurrentApiBase}/all") ?? new();
+			_dealer = await Http.GetFromJsonAsync<DealerReg>($"api/DealerRegistration/{DealerId}") ?? new();
+		}
+		catch (Exception ex) { ShowMessage($"Failed to load dealer: {ex.Message}", true); }
+	}
+
+	private async Task LoadBanks()
+	{
+		try { _banks = await Http.GetFromJsonAsync<List<Bank>>("api/Bank") ?? new(); }
+		catch (Exception ex) { ShowMessage($"Failed to load banks: {ex.Message}", true); }
+	}
+
+	private async Task LoadBankAssets()
+	{
+		try
+		{
+			var all = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new();
+			_bankAssets = all.Where(a => a.DealerId == DealerId!.Value).ToList();
+		}
+		catch (Exception ex) { ShowMessage($"Failed to load bank assets: {ex.Message}", true); }
+	}
+
+	private async Task LoadLandAssets()
+	{
+		try
+		{
+			var all = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand/all") ?? new();
+			_landAssets = all.Where(a => a.DealerId == DealerId!.Value).ToList();
+		}
+		catch (Exception ex) { ShowMessage($"Failed to load land assets: {ex.Message}", true); }
+	}
+
+	private async Task LoadBuildingAssets()
+	{
+		try
+		{
+			var all = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all") ?? new();
+			_buildingAssets = all.Where(a => a.DealerId == DealerId!.Value).ToList();
+		}
+		catch (Exception ex) { ShowMessage($"Failed to load building assets: {ex.Message}", true); }
+	}
+
+	private async Task LoadLoanLiabilities()
+	{
+		try
+		{
+			var all = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities/all") ?? new();
+			_loanLiabilities = all.Where(a => a.DealerId == DealerId!.Value).ToList();
+		}
+		catch (Exception ex) { ShowMessage($"Failed to load loans: {ex.Message}", true); }
+	}
+
+	// ---- Bank Asset CRUD ----
+	private async Task SaveBankAsset()
+	{
+		_bankForm.DealerId = DealerId ?? 0;
+		if (_bankForm.Id > 0)
+		{
+			await Http.PutAsJsonAsync($"api/DealerAssetBank/{_bankForm.Id}", _bankForm);
+			var idx = _bankAssets.FindIndex(b => b.Id == _bankForm.Id);
+			if (idx >= 0) _bankAssets[idx] = _bankForm;
+		}
+		else
+		{
+			var resp = await Http.PostAsJsonAsync("api/DealerAssetBank", _bankForm);
+			if (resp.IsSuccessStatusCode)
+			{
+				var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerAssetBank>>();
+				if (result?.Data != null) { _bankForm.Id = result.Data.Id; _bankAssets.Add(_bankForm); }
+			}
+		}
+		_bankForm = new();
+	}
+
+	private void EditBankAsset(DealerAssetBank item)
+	{
+		_bankForm = new DealerAssetBank
+		{
+			Id = item.Id, DealerId = item.DealerId, BankId = item.BankId,
+			BankBranch = item.BankBranch, Value = item.Value, Remarks = item.Remarks
+		};
+	}
+
+	// ---- Land Asset CRUD ----
+	private async Task SaveLandAsset()
+	{
+		_landForm.DealerId = DealerId ?? 0;
+		if (_landForm.Id > 0)
+		{
+			await Http.PutAsJsonAsync($"api/DealerAssetLand/{_landForm.Id}", _landForm);
+			var idx = _landAssets.FindIndex(l => l.Id == _landForm.Id);
+			if (idx >= 0) _landAssets[idx] = _landForm;
+		}
+		else
+		{
+			var resp = await Http.PostAsJsonAsync("api/DealerAssetLand", _landForm);
+			if (resp.IsSuccessStatusCode)
+			{
+				var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerAssetLand>>();
+				if (result?.Data != null) { _landForm.Id = result.Data.Id; _landAssets.Add(_landForm); }
+			}
+		}
+		_landForm = new();
+	}
+
+	private void EditLandAsset(DealerAssetLand item)
+	{
+		_landForm = new DealerAssetLand
+		{
+			Id = item.Id, DealerId = item.DealerId, LandName = item.LandName,
+			SurvayNumber = item.SurvayNumber, LandSize = item.LandSize, PropertyValue = item.PropertyValue
+		};
+	}
+
+	// ---- Building Asset CRUD ----
+	private async Task SaveBuildingAsset()
+	{
+		_buildingForm.DealerId = DealerId ?? 0;
+		if (_buildingForm.Id > 0)
+		{
+			await Http.PutAsJsonAsync($"api/DealerAssetBuilding/{_buildingForm.Id}", _buildingForm);
+			var idx = _buildingAssets.FindIndex(b => b.Id == _buildingForm.Id);
+			if (idx >= 0) _buildingAssets[idx] = _buildingForm;
+		}
+		else
+		{
+			var resp = await Http.PostAsJsonAsync("api/DealerAssetBuilding", _buildingForm);
+			if (resp.IsSuccessStatusCode)
+			{
+				var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerAssetBuilding>>();
+				if (result?.Data != null) { _buildingForm.Id = result.Data.Id; _buildingAssets.Add(_buildingForm); }
+			}
+		}
+		_buildingForm = new();
+	}
+
+	private void EditBuildingAsset(DealerAssetBuilding item)
+	{
+		_buildingForm = new DealerAssetBuilding
+		{
+			Id = item.Id, DealerId = item.DealerId, BuildingName = item.BuildingName,
+			PropertyValue = item.PropertyValue, SurveyNumber = item.SurveyNumber,
+			LandSize = item.LandSize, Remarks = item.Remarks
+		};
+	}
+
+	// ---- Loan CRUD ----
+	private async Task SaveLoan()
+	{
+		_loanForm.DealerId = DealerId ?? 0;
+		if (_loanForm.Id > 0)
+		{
+			await Http.PutAsJsonAsync($"api/DealerLoanLiabilities/{_loanForm.Id}", _loanForm);
+			var idx = _loanLiabilities.FindIndex(l => l.Id == _loanForm.Id);
+			if (idx >= 0) _loanLiabilities[idx] = _loanForm;
+		}
+		else
+		{
+			var resp = await Http.PostAsJsonAsync("api/DealerLoanLiabilities", _loanForm);
+			if (resp.IsSuccessStatusCode)
+			{
+				var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerLoanLiabilities>>();
+				if (result?.Data != null) { _loanForm.Id = result.Data.Id; _loanLiabilities.Add(_loanForm); }
+			}
+		}
+		_loanForm = new();
+	}
+
+	private void EditLoan(DealerLoanLiabilities item)
+	{
+		_loanForm = new DealerLoanLiabilities
+		{
+			Id = item.Id, DealerId = item.DealerId, LoanSource = item.LoanSource,
+			LoanValue = item.LoanValue, Remarks = item.Remarks
+		};
+	}
+
+	// ---- Delete ----
+	private void ConfirmDelete(int id, string type)
+	{
+		_deleteId = id;
+		_deleteType = type;
+		_showDeleteModal = true;
+	}
+
+	private async Task ExecuteDelete()
+	{
+		_showDeleteModal = false;
+		try
+		{
+			switch (_deleteType)
+			{
+				case "bank":
+					await Http.DeleteAsync($"api/DealerAssetBank/{_deleteId}");
+					_bankAssets.RemoveAll(b => b.Id == _deleteId);
+					break;
+				case "land":
+					await Http.DeleteAsync($"api/DealerAssetLand/{_deleteId}");
+					_landAssets.RemoveAll(l => l.Id == _deleteId);
+					break;
+				case "building":
+					await Http.DeleteAsync($"api/DealerAssetBuilding/{_deleteId}");
+					_buildingAssets.RemoveAll(b => b.Id == _deleteId);
+					break;
+				case "loan":
+					await Http.DeleteAsync($"api/DealerLoanLiabilities/{_deleteId}");
+					_loanLiabilities.RemoveAll(l => l.Id == _deleteId);
+					break;
+			}
+		}
+		catch (Exception ex) { ShowMessage($"Failed to delete: {ex.Message}", true); }
+	}
+
+	// ---- Save & Navigate ----
+	private async Task HandleNext()
+	{
+		if (!DealerId.HasValue || DealerId.Value <= 0)
+		{
+			ShowMessage("Dealer ID is required.", true);
+			return;
+		}
+
+		_isSaving = true;
+		try
+		{
+			await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", _dealer);
+			Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}");
 		}
 		catch (Exception ex)
 		{
-			ShowMessage($"Failed to load : {ex.Message}", true);
+			ShowMessage($"Failed to save: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
 		}
 	}
 
@@ -559,13 +710,10 @@
 		_message = message;
 		_isError = isError;
 	}
-	public class InvestmentItemDto
+
+	private class CreateResponse<T>
 	{
-		public int Id { get; set; }
-		public string BankName { get; set; } = "";
-	}
-	public class BankFormModel
-	{
-		public int BankId { get; set; }
+		public string? Message { get; set; }
+		public T? Data { get; set; }
 	}
 }

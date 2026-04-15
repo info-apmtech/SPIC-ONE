@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260415035952_v1.6DealeradditionalUpdates")]
+    partial class v16DealeradditionalUpdates
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -446,6 +449,28 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("DealerAssetLands");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.DealerAssetMovable", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AssetValue")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("DealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DealerAssetMovables");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.DealerCompaniesOperatingInArea", b =>
                 {
                     b.Property<int>("Id")
@@ -596,6 +621,56 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("DealerExperiences");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DealerInfrastructure", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("OwnGodownCapacity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("RentGodownCapacity")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DealerInfrastructures");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DealerInvestment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("CapitalInvestment")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("CapitalInvestmentRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("CashCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("CashCreditLimitRrmarks")
+                        .HasColumnType("text");
+
+                    b.Property<int>("DealerId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DealerInvestments");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerLoanLiabilities", b =>
@@ -796,9 +871,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("AlternativeNumber")
                         .HasColumnType("text");
 
-                    b.Property<decimal>("AssetValue")
-                        .HasColumnType("numeric");
-
                     b.Property<int>("BankId")
                         .HasColumnType("integer");
 
@@ -810,18 +882,6 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("BusinessEntityType")
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("CapitalInvestment")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("CapitalInvestmentRemarks")
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("CashCreditLimit")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("CashCreditLimitRrmarks")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
@@ -912,9 +972,6 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<decimal>("OwnGodownCapacity")
-                        .HasColumnType("numeric");
-
                     b.Property<string>("PANFilePath")
                         .HasColumnType("text");
 
@@ -933,12 +990,6 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<int>("Region")
                         .HasColumnType("integer");
-
-                    b.Property<string>("Remarks")
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("RentGodownCapacity")
-                        .HasColumnType("numeric");
 
                     b.Property<string>("RetailFertilizerLicenseNumber")
                         .HasColumnType("text");
@@ -1241,6 +1292,7 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("Occupation")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("OwnershipPartnerId")

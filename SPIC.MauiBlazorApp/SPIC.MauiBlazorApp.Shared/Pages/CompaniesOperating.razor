@@ -1,10 +1,22 @@
-﻿
-@page "/Companies"
+﻿@page "/Companies"
+@using System.Net.Http.Json
+@using SPIC.Core.Entities
+@inject HttpClient Http
+@inject NavigationManager Nav
 
 <div class="companies-operating-wrapper">
     <div class="container-fluid">
 
         <FormLoader />
+
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+                @_message
+                <button type="button" class="btn-close" @onclick='() => _message = null'></button>
+            </div>
+        }
+
         <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
             <h3 class="fw-bold m-0 company-title">Companies Operating In Your Place <span>(Please Mark)</span></h3>
         </div>
@@ -33,229 +45,138 @@
                 </div>
             </div>
 
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("FACT") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("FACT")'>
-                    <div class="companies-operating-name">FACT</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
+            @foreach (var comp in _competitors)
+            {
+                <div>
+                    <div class="companies-operating-card selectable-card @(_selectedNames.Contains(comp.Name) ? "selected" : "")"
+                         @onclick="() => ToggleCompany(comp.Name)">
+                        <div class="companies-operating-name">@comp.Name</div>
+                        <div class="check-box"><i class="bi bi-check-lg"></i></div>
+                    </div>
                 </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("MFL") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("MFL")'>
-                    <div class="companies-operating-name">MFL</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("MCF") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("MCF")'>
-                    <div class="companies-operating-name">MCF</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("SHRIRAM") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("SHRIRAM")'>
-                    <div class="companies-operating-name">SHRIRAM</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("INDOGULF") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("INDOGULF")'>
-                    <div class="companies-operating-name">INDOGULF</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("PPL") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("PPL")'>
-                    <div class="companies-operating-name">PPL</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("CIL") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("CIL")'>
-                    <div class="companies-operating-name">CIL</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("RCF") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("RCF")'>
-                    <div class="companies-operating-name">RCF</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("GODAVARI") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("GODAVARI")'>
-                    <div class="companies-operating-name">GODAVARI</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("NAGARJUNA") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("NAGARJUNA")'>
-                    <div class="companies-operating-name">NAGARJUNA</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("CHAMBAL") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("CHAMBAL")'>
-                    <div class="companies-operating-name">CHAMBAL</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("GNFC") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("GNFC")'>
-                    <div class="companies-operating-name">GNFC</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("KRIBHCO") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("KRIBHCO")'>
-                    <div class="companies-operating-name">KRIBHCO</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("IFFCO") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("IFFCO")'>
-                    <div class="companies-operating-name">IFFCO</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("TATA") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("TATA")'>
-                    <div class="companies-operating-name">TATA</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("IPL") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("IPL")'>
-                    <div class="companies-operating-name">IPL</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("HINDALCO") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("HINDALCO")'>
-                    <div class="companies-operating-name">HINDALCO</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("GSFC") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("GSFC")'>
-                    <div class="companies-operating-name">GSFC</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("SMARTCHEM") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("SMARTCHEM")'>
-                    <div class="companies-operating-name">SMARTCHEM</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("GFL") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("GFL")'>
-                    <div class="companies-operating-name">GFL</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("ZUARI") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("ZUARI")'>
-                    <div class="companies-operating-name">ZUARI</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("MOSAIC") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("MOSAIC")'>
-                    <div class="companies-operating-name">MOSAIC</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("NFL") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("NFL")'>
-                    <div class="companies-operating-name">NFL</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
-
-            <div>
-                <div class="companies-operating-card selectable-card @(selectedCompanies.Contains("DEEPAK") ? "selected" : "")"
-                     @onclick='() => ToggleCompany("DEEPAK")'>
-                    <div class="companies-operating-name">DEEPAK</div>
-                    <div class="check-box"><i class="bi bi-check-lg"></i></div>
-                </div>
-            </div>
+            }
 
         </div>
 
-        <CommanFooter />
+        <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
     </div>
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "dealerId")]
+    public int? DealerId { get; set; }
+
     private bool isSpic = true;
     private bool isGreenStar = true;
 
-    private HashSet<string> selectedCompanies = new();
-    // {
-    //     "FACT",
-    //     "MFL"
-    // };
+    private List<Competitor> _competitors = new();
+    private HashSet<string> _selectedNames = new();
+    private List<DealerCompaniesOperatingInArea> _savedEntries = new();
 
-    void ToggleSpic()
+    private bool _isSaving;
+    private string? _message;
+    private bool _isError;
+
+    protected override async Task OnInitializedAsync()
     {
-        isSpic = !isSpic;
+        await LoadCompetitors();
+        await LoadSavedSelections();
     }
 
-    void ToggleGreenStar()
+    private async Task LoadCompetitors()
     {
-        isGreenStar = !isGreenStar;
+        try
+        {
+            _competitors = await Http.GetFromJsonAsync<List<Competitor>>("api/Competitor") ?? new();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load competitors: {ex.Message}", true);
+        }
     }
 
-    void ToggleCompany(string companyName)
+    private async Task LoadSavedSelections()
     {
-        if (selectedCompanies.Contains(companyName))
-            selectedCompanies.Remove(companyName);
-        else
-            selectedCompanies.Add(companyName);
+        if (!DealerId.HasValue || DealerId.Value <= 0) return;
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new();
+            _savedEntries = all.Where(e => e.DealerId == DealerId.Value).ToList();
+            _selectedNames = new HashSet<string>(_savedEntries.Where(e => e.CompaniesOperating != null).Select(e => e.CompaniesOperating!));
+
+            if (_selectedNames.Contains("SPIC")) { isSpic = true; _selectedNames.Remove("SPIC"); }
+            if (_selectedNames.Contains("GREEN STAR")) { isGreenStar = true; _selectedNames.Remove("GREEN STAR"); }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load saved selections: {ex.Message}", true);
+        }
+    }
+
+    private void ToggleSpic() => isSpic = !isSpic;
+    private void ToggleGreenStar() => isGreenStar = !isGreenStar;
+
+    private void ToggleCompany(string name)
+    {
+        if (!_selectedNames.Remove(name))
+            _selectedNames.Add(name);
+    }
+
+    private async Task HandleNext()
+    {
+        if (!DealerId.HasValue || DealerId.Value <= 0)
+        {
+            ShowMessage("Dealer ID is required.", true);
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            // Build full list of selected companies including SPIC / GREEN STAR
+            var allSelected = new List<string>(_selectedNames);
+            if (isSpic) allSelected.Add("SPIC");
+            if (isGreenStar) allSelected.Add("GREEN STAR");
+
+            // Delete entries that are no longer selected
+            foreach (var existing in _savedEntries)
+            {
+                if (existing.CompaniesOperating == null || !allSelected.Contains(existing.CompaniesOperating))
+                {
+                    await Http.DeleteAsync($"api/DealerCompaniesOperatingInArea/{existing.Id}");
+                }
+            }
+
+            // Add new entries that don't already exist
+            var existingNames = _savedEntries.Where(e => e.CompaniesOperating != null).Select(e => e.CompaniesOperating!).ToHashSet();
+            foreach (var name in allSelected)
+            {
+                if (!existingNames.Contains(name))
+                {
+                    var entry = new DealerCompaniesOperatingInArea
+                    {
+                        DealerId = DealerId.Value,
+                        CompaniesOperating = name
+                    };
+                    await Http.PostAsJsonAsync("api/DealerCompaniesOperatingInArea", entry);
+                }
+            }
+
+            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to save: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
     }
 }
