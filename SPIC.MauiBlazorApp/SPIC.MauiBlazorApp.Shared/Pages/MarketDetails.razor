@@ -3,6 +3,7 @@
 @using SPIC.Core.Entities
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject LoadingService Loading
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -262,8 +263,16 @@
 
 	protected override async Task OnInitializedAsync()
 	{
-		await LoadCrops();
-		await LoadSavedBlocks();
+		Loading.Show();
+		try
+		{
+			await LoadCrops();
+			await LoadSavedBlocks();
+		}
+		finally
+		{
+			Loading.Hide();
+		}
 	}
 
 	private async Task LoadCrops()
@@ -431,10 +440,12 @@
 		_isSaving = true;
 		try
 		{
+			Loading.Show();
 			Nav.NavigateTo($"/Companies?dealerId={DealerId}");
 		}
 		catch (Exception ex)
 		{
+			Loading.Hide();
 			ShowMessage($"Failed: {ex.Message}", true);
 		}
 		finally

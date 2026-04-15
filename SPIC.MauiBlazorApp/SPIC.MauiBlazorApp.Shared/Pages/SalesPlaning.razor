@@ -3,6 +3,7 @@
 @using SPIC.Core.Entities
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject LoadingService Loading
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -134,20 +135,28 @@
 
 	protected override async Task OnInitializedAsync()
 	{
-		await LoadCategories();
-		await LoadUnits();
-		await LoadProducts();
-
-		if (_categories.Count > 0)
+		Loading.Show();
+		try
 		{
-			_selectedCategoryId = _categories.First().Id;
-			UpdateSelectedUnit();
+			await LoadCategories();
+			await LoadUnits();
+			await LoadProducts();
+
+			if (_categories.Count > 0)
+			{
+				_selectedCategoryId = _categories.First().Id;
+				UpdateSelectedUnit();
+			}
+
+			if (DealerId.HasValue && DealerId.Value > 0)
+				await LoadSalesData();
+
+			BuildCurrentRows();
 		}
-
-		if (DealerId.HasValue && DealerId.Value > 0)
-			await LoadSalesData();
-
-		BuildCurrentRows();
+		finally
+		{
+			Loading.Hide();
+		}
 	}
 
 	private async Task LoadCategories()
@@ -318,10 +327,12 @@
 					}
 				}
 			}
+			Loading.Show();
 			Nav.NavigateTo($"/Investment?dealerId={DealerId}");
 		}
 		catch (Exception ex)
 		{
+			Loading.Hide();
 			ShowMessage($"Failed to save: {ex.Message}", true);
 		}
 		finally

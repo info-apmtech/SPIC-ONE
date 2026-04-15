@@ -7,6 +7,7 @@
 @using DealerReg = SPIC.Core.Entities.DealerRegistration
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject LoadingService Loading
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -424,9 +425,17 @@
 
 	protected override async Task OnInitializedAsync()
 	{
-		await LoadLookups();
-		await LoadDealerLocation();
-		await LoadSavedFacilities();
+		Loading.Show();
+		try
+		{
+			await LoadLookups();
+			await LoadDealerLocation();
+			await LoadSavedFacilities();
+		}
+		finally
+		{
+			Loading.Hide();
+		}
 	}
 
 	private async Task LoadLookups()
@@ -876,10 +885,12 @@
 		_isSaving = true;
 		try
 		{
+			Loading.Show();
 			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}");
 		}
 		catch (Exception ex)
 		{
+			Loading.Hide();
 			ShowMessage($"Failed: {ex.Message}", true);
 		}
 		finally

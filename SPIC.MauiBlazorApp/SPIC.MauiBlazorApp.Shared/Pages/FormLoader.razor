@@ -1,5 +1,6 @@
 ﻿@using SPIC.MauiBlazorApp.Shared.FormFlow
 @inject NavigationManager Nav
+@inject LoadingService Loading
 
 @if (CurrentStep is not null)
 {
@@ -62,7 +63,11 @@
 	{
 		if (step is not null)
 		{
-			Nav.NavigateTo(step.Route);
+			Loading.Show();
+			var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+			var qIndex = baseRelative.IndexOf('?');
+			var queryString = qIndex >= 0 ? baseRelative[qIndex..] : string.Empty;
+			Nav.NavigateTo(step.Route + queryString);
 		}
 	}
 
