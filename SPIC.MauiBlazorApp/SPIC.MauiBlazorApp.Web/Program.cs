@@ -1,8 +1,15 @@
 using SPIC.MauiBlazorApp.Shared.Services;
 using SPIC.MauiBlazorApp.Web.Components;
 using SPIC.MauiBlazorApp.Web.Services;
+using Microsoft.AspNetCore.DataProtection;
+using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
+// ✅ ADD THIS HERE
+builder.Services.AddDataProtection()
+	.PersistKeysToFileSystem(new DirectoryInfo(
+		Path.Combine(builder.Environment.ContentRootPath, "keys")))
+	.SetApplicationName("SPIC");
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
