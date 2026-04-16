@@ -56,9 +56,12 @@
 					<thead>
 						<tr>
 							<th>Product Name</th>
-							<th>Own Retail Sales (@_selectedUnitName)</th>
-							<th>Sales to Dealers (@_selectedUnitName)</th>
-							<th>@_selectedUnitName Total</th>
+							<th>Own Retail Qty (@_selectedUnitName)</th>
+							<th>Own Retail Amount (₹) Lakhs</th>
+							<th>Sale to Dealer Qty (@_selectedUnitName)</th>
+							<th>Sale to Dealer Amount (₹) Lakhs</th>
+							<th>Total Qty (@_selectedUnitName)</th>
+							<th>Total Amount (₹)</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -77,24 +80,38 @@
 								</td>
 								<td>
 									<input class="table-input" type="number" step="0.01"
-										   value="@row.OwnRetailsSale"
-										   @onchange="(e) => UpdateOwnRetail(row, e)" />
+										   value="@row.OwnRetailsSaleQty"
+										   @onchange="(e) => UpdateField(row, e, r => r.OwnRetailsSaleQty, (r, v) => r.OwnRetailsSaleQty = v)" />
 								</td>
 								<td>
 									<input class="table-input" type="number" step="0.01"
-										   value="@row.SaleToDealer"
-										   @onchange="(e) => UpdateSaleToDealer(row, e)" />
+										   value="@row.OwnRetailsSaleAmount"
+										   @onchange="(e) => UpdateField(row, e, r => r.OwnRetailsSaleAmount, (r, v) => r.OwnRetailsSaleAmount = v)" />
 								</td>
-								<td class="text-value">@((row.OwnRetailsSale + row.SaleToDealer).ToString("N2"))</td>
+								<td>
+									<input class="table-input" type="number" step="0.01"
+										   value="@row.SaleToDealerQty"
+										   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerQty, (r, v) => r.SaleToDealerQty = v)" />
+								</td>
+								<td>
+									<input class="table-input" type="number" step="0.01"
+										   value="@row.SaleToDealerAmount"
+										   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerAmount, (r, v) => r.SaleToDealerAmount = v)" />
+								</td>
+								<td class="text-value">@((row.OwnRetailsSaleQty + row.SaleToDealerQty).ToString("N2"))</td>
+								<td class="text-value">@((row.OwnRetailsSaleAmount + row.SaleToDealerAmount).ToString("N2"))</td>
 							</tr>
 						}
 					</tbody>
 					<tfoot>
 						<tr>
 							<td>Grand Total</td>
-							<td>@_currentRows.Sum(r => r.OwnRetailsSale).ToString("N2") @_selectedUnitName</td>
-							<td>@_currentRows.Sum(r => r.SaleToDealer).ToString("N2") @_selectedUnitName</td>
-							<td>@_currentRows.Sum(r => r.OwnRetailsSale + r.SaleToDealer).ToString("N2") @_selectedUnitName</td>
+							<td>@_currentRows.Sum(r => r.OwnRetailsSaleQty).ToString("N2")</td>
+							<td>@_currentRows.Sum(r => r.OwnRetailsSaleAmount).ToString("N2")</td>
+							<td>@_currentRows.Sum(r => r.SaleToDealerQty).ToString("N2")</td>
+							<td>@_currentRows.Sum(r => r.SaleToDealerAmount).ToString("N2")</td>
+							<td>@_currentRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty).ToString("N2")</td>
+							<td>@_currentRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount).ToString("N2")</td>
 						</tr>
 					</tfoot>
 				</table>
@@ -103,18 +120,46 @@
 
 	</div>
 
+	<div class="row g-3 mb-3">
+		@foreach (var cat in _categories)
+		{
+			var catRows = _allSalesData.Where(s => s.CategoryId == cat.Id).ToList();
+			var catTotalQty = catRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
+			var catTotalAmt = catRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+			var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+			var retailAmt = catRows.Sum(r => r.OwnRetailsSaleAmount);
+			var dealerAmt = catRows.Sum(r => r.SaleToDealerAmount);
+			var ratio = catTotalAmt > 0 ? (dealerAmt / catTotalAmt * 100) : 0;
+
+			<div class="col-md-4">
+				<div class="total-value-card total-value-card-bgimg" style="min-height: 120px;">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+						 class="total-card-bg"
+						 alt="GrowthForecast" />
+					<div class="total-value-title" style="font-size: 0.8rem;">@cat.Name</div>
+					<div class="total-value-amount" style="font-size: 1.4rem;">
+						₹ @catTotalAmt.ToString("N0") <span class="total-value-unit">Lakhs</span>
+					</div>
+					<div style="font-size: 0.7rem; opacity: 0.85; margin-top: 2px;">
+						@catTotalQty.ToString("N2") @unitName &nbsp;|&nbsp; Dealer Ratio: @ratio.ToString("N1")%
+					</div>
+				</div>
+			</div>
+		}
+	</div>
+
 	<div class="row g-4">
 		<div class="col-md-8">
 			<div class="insights-card">
 				<div class="insights-title">Automated Insights</div>
 				<p class="insights-text">
-					@if (_currentRows.Count > 0)
+					@if (_allSalesData.Count > 0)
 					{
-						var totalRetail = _currentRows.Sum(r => r.OwnRetailsSale);
-						var totalDealer = _currentRows.Sum(r => r.SaleToDealer);
+						var totalRetail = _allSalesData.Sum(r => r.OwnRetailsSaleAmount);
+						var totalDealer = _allSalesData.Sum(r => r.SaleToDealerAmount);
 						var grandTotal = totalRetail + totalDealer;
 						var ratio = grandTotal > 0 ? (totalDealer / grandTotal * 100) : 0;
-						<span>Based on your entries, your dealer-to-retail ratio is <strong>@ratio.ToString("N1")%</strong>.</span>
+						<span>Based on your entries, your overall dealer-to-retail ratio is <strong>@ratio.ToString("N1")%</strong>.</span>
 					}
 					else
 					{
@@ -129,9 +174,9 @@
 				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
 					 class="total-card-bg"
 					 alt="GrowthForecast" />
-				<div class="total-value-title">Total Value</div>
+				<div class="total-value-title">Grand Total</div>
 				<div class="total-value-amount">
-					@_allSalesData.Sum(r => r.OwnRetailsSale + r.SaleToDealer).ToString("N0")
+					₹ @_allSalesData.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount).ToString("N0")
 					<span class="total-value-unit">Per Year</span>
 				</div>
 			</div>
@@ -265,8 +310,10 @@
 					DealerId = DealerId ?? 0,
 					CategoryId = _selectedCategoryId,
 					ProductId = product.Id,
-					OwnRetailsSale = 0,
-					SaleToDealer = 0
+					OwnRetailsSaleQty = 0,
+						OwnRetailsSaleAmount = 0,
+						SaleToDealerQty = 0,
+						SaleToDealerAmount = 0
 				};
 				_currentRows.Add(newRow);
 				_allSalesData.Add(newRow);
@@ -274,16 +321,10 @@
 		}
 	}
 
-	private void UpdateOwnRetail(AnnualSaleDataLastFYofDealerRegistration row, ChangeEventArgs e)
+	private void UpdateField(AnnualSaleDataLastFYofDealerRegistration row, ChangeEventArgs e, Func<AnnualSaleDataLastFYofDealerRegistration, decimal> getter, Action<AnnualSaleDataLastFYofDealerRegistration, decimal> setter)
 	{
 		if (decimal.TryParse(e.Value?.ToString(), out var val))
-			row.OwnRetailsSale = val;
-	}
-
-	private void UpdateSaleToDealer(AnnualSaleDataLastFYofDealerRegistration row, ChangeEventArgs e)
-	{
-		if (decimal.TryParse(e.Value?.ToString(), out var val))
-			row.SaleToDealer = val;
+			setter(row, val);
 	}
 
 	private async Task HandleNext()
@@ -299,7 +340,7 @@
 		{
 			foreach (var row in _allSalesData)
 			{
-				if (row.OwnRetailsSale == 0 && row.SaleToDealer == 0 && row.Id == 0)
+				if (row.OwnRetailsSaleQty == 0 && row.OwnRetailsSaleAmount == 0 && row.SaleToDealerQty == 0 && row.SaleToDealerAmount == 0 && row.Id == 0)
 					continue;
 
 				row.DealerId = DealerId.Value;

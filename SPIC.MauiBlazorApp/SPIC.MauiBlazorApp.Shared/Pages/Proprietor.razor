@@ -85,16 +85,33 @@
                     </div>
                 </div>
                 <div class="row g-3 mb-3">
-                    @* <div class="col-md-6">
-                        <label class="custom-label">Phone Number</label>
-                        <input type="text" class="custom-input" placeholder="Enter Phone Number" @bind="_partnerForm.PhoneNumber" />
-                    </div> *@ 
+                    <div class="col-md-3">
+                        <label class="custom-label">Gender</label>
+                        <select class="form-select-custom w-100" @bind="_partnerForm.Gender">
+                            @foreach (var g in Enum.GetValues<Gender>())
+                            {
+                                <option value="@g">@g</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="custom-label">Marital Status</label>
+                        <select class="form-select-custom w-100" @bind="_partnerForm.MaritalStatus">
+                            @foreach (var ms in Enum.GetValues<MaritalStatus>())
+                            {
+                                <option value="@ms">@ms</option>
+                            }
+                        </select>
+                    </div>
                     <div class="col-md-6">
                         <label class="custom-label">Phone Number</label>
-                        <input type="text"
+                        <input type="tel"
+                               inputmode="numeric"
+                               pattern="[0-9]*"
                                class="custom-input"
-                               placeholder="Enter Phone Number"
+                               placeholder="10-digit mobile number"
                                @bind="_partnerForm.PhoneNumber"
+                               @bind:after="SanitizePhoneNumber"
                                maxlength="10"
                                oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
                     </div>
@@ -149,6 +166,70 @@
                         <InputFile hidden OnChange="OnImageSelected" accept=".jpg,.jpeg,.png,.webp" />
                     </label>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Address Details -->
+    <div class="main-section">
+        <div class="section-header mb-3">
+            <h3 class="section-title">
+                <i class="bi bi-geo-alt"></i>
+                Address Details
+            </h3>
+        </div>
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <label class="custom-label">Shop No / Room No / Block No</label>
+                <input type="text" class="custom-input" placeholder="Enter Shop/Room/Block No" @bind="_partnerForm.ShopNoORRoomNoOrBlockNo" />
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">Street</label>
+                <input type="text" class="custom-input" placeholder="Enter Street" @bind="_partnerForm.Street" />
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">Sub Village</label>
+                <input type="text" class="custom-input" placeholder="Enter Sub Village" @bind="_partnerForm.SubVillage" />
+            </div>
+        </div>
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <label class="custom-label">Village</label>
+                <input type="text" class="custom-input" placeholder="Enter Village" @bind="_partnerForm.Village" />
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">Pin Code</label>
+                <input type="text" class="custom-input" placeholder="Enter Pin Code" @bind="_partnerForm.PinCode" maxlength="6" oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">Block</label>
+                <input type="text" class="custom-input" placeholder="Enter Block" @bind="_partnerForm.Block" />
+            </div>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="custom-label">Taluk</label>
+                <input type="text" class="custom-input" placeholder="Enter Taluk" @bind="_partnerForm.Taluk" />
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">State</label>
+                <select class="form-select-custom w-100" @bind="_partnerForm.StateId">
+                    <option value="0">Select State</option>
+                    @foreach (var s in _statesAll)
+                    {
+                        <option value="@s.Id">@s.StateName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">District</label>
+                <select class="form-select-custom w-100" @bind="_partnerForm.DistrictId">
+                    <option value="0">Select District</option>
+                    @foreach (var d in _districtsAll.Where(d => d.StateId == _partnerForm.StateId))
+                    {
+                        <option value="@d.Id">@d.DistrictName</option>
+                    }
+                </select>
             </div>
         </div>
     </div>
@@ -514,6 +595,62 @@
                                     <div class="info-value">@_viewPartner.AadhaarNumber</div>
                                 </div>
                             </div>
+                            <div class="col">
+                                <div class="info-box">
+                                    <div class="info-label">Gender</div>
+                                    <div class="info-value">@_viewPartner.Gender</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="info-box">
+                                    <div class="info-label">Marital Status</div>
+                                    <div class="info-value">@_viewPartner.MaritalStatus</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-2">
+                            <div class="col">
+                                <div class="info-box">
+                                    <div class="info-label">Shop/Room/Block No</div>
+                                    <div class="info-value">@(_viewPartner.ShopNoORRoomNoOrBlockNo ?? "—")</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="info-box">
+                                    <div class="info-label">Street</div>
+                                    <div class="info-value">@(_viewPartner.Street ?? "—")</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="info-box">
+                                    <div class="info-label">Village</div>
+                                    <div class="info-value">@(_viewPartner.Village ?? "—")</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="info-box">
+                                    <div class="info-label">Pin Code</div>
+                                    <div class="info-value">@(_viewPartner.PinCode ?? "—")</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="info-box">
+                                    <div class="info-label">Taluk</div>
+                                    <div class="info-value">@(_viewPartner.Taluk ?? "—")</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="info-box">
+                                    <div class="info-label">District</div>
+                                    <div class="info-value">@GetDistrictName(_viewPartner.DistrictId)</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="info-box">
+                                    <div class="info-label">State</div>
+                                    <div class="info-value">@GetStateName(_viewPartner.StateId)</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -603,6 +740,8 @@
     // Dropdowns
     private List<Sector> _sectors = new();
     private List<RelationshipEntity> _relationships = new();
+    private List<State> _statesAll = new();
+    private List<District> _districtsAll = new();
 
     // Partner form
     private DealerOwnershipInfo _partnerForm = new();
@@ -650,7 +789,7 @@
         Loading.Show();
         try
         {
-            await Task.WhenAll(LoadSectors(), LoadRelationships(), LoadDealerEntityType(), LoadSavedPartners());
+            await Task.WhenAll(LoadSectors(), LoadRelationships(), LoadDealerEntityType(), LoadSavedPartners(), LoadStates(), LoadDistricts());
         }
         finally
         {
@@ -666,6 +805,16 @@
     private async Task LoadRelationships()
     {
         try { _relationships = await Http.GetFromJsonAsync<List<RelationshipEntity>>("api/Relationship/all") ?? new(); } catch { }
+    }
+
+    private async Task LoadStates()
+    {
+        try { _statesAll = await Http.GetFromJsonAsync<List<State>>("api/State/all") ?? new(); } catch { }
+    }
+
+    private async Task LoadDistricts()
+    {
+        try { _districtsAll = await Http.GetFromJsonAsync<List<District>>("api/District/all") ?? new(); } catch { }
     }
 
     private async Task LoadDealerEntityType()
@@ -949,7 +1098,18 @@
             AadhaarFilePath = partner.AadhaarFilePath,
             PANNumber = partner.PANNumber,
             PANFilePath = partner.PANFilePath,
-            ProprietorImagePath = partner.ProprietorImagePath
+            ProprietorImagePath = partner.ProprietorImagePath,
+            Gender = partner.Gender,
+            MaritalStatus = partner.MaritalStatus,
+            ShopNoORRoomNoOrBlockNo = partner.ShopNoORRoomNoOrBlockNo,
+            Street = partner.Street,
+            SubVillage = partner.SubVillage,
+            Village = partner.Village,
+            PinCode = partner.PinCode,
+            Block = partner.Block,
+            Taluk = partner.Taluk,
+            DistrictId = partner.DistrictId,
+            StateId = partner.StateId
         };
 
         _currentFamilyList = _savedFamilyMap.ContainsKey(partner.Id)
@@ -1091,6 +1251,12 @@
     private string GetSectorName(int id) =>
         _sectors.FirstOrDefault(s => s.Id == id)?.Name ?? "—";
 
+    private string GetStateName(int id) =>
+        _statesAll.FirstOrDefault(s => s.Id == id)?.StateName ?? "—";
+
+    private string GetDistrictName(int id) =>
+        _districtsAll.FirstOrDefault(d => d.Id == id)?.DistrictName ?? "—";
+
     private static PartnerFamilyDetails NewFamilyForm() => new() { DateOfBirth = DateTime.Today };
 
     private static PartnerFamilyDetails CloneFamily(PartnerFamilyDetails src) => new()
@@ -1130,6 +1296,11 @@
         }
         catch { }
         return null;
+    }
+
+    private void SanitizePhoneNumber()
+    {
+        _partnerForm.PhoneNumber = new string(_partnerForm.PhoneNumber?.Where(char.IsDigit).ToArray() ?? []);
     }
 
     private void ShowMessage(string message, bool isError)
