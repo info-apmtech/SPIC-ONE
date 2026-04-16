@@ -199,7 +199,15 @@
             </div>
             <div class="col-md-4">
                 <label class="custom-label">Pin Code</label>
-                <input type="text" class="custom-input" placeholder="Enter Pin Code" @bind="_partnerForm.PinCode" maxlength="6" oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+                <input type="text" class="custom-input" placeholder="Enter Pin Code" @bind="_partnerForm.PinCode" @bind:after="OnPincodeChanged" maxlength="6" oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+                @if (_isPincodeLookup)
+                {
+                    <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
+                }
+                @if (!string.IsNullOrEmpty(_pincodeMessage))
+                {
+                    <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">@_pincodeMessage</div>
+                }
             </div>
             <div class="col-md-4">
                 <label class="custom-label">Block</label>
@@ -212,16 +220,6 @@
                 <input type="text" class="custom-input" placeholder="Enter Taluk" @bind="_partnerForm.Taluk" />
             </div>
             <div class="col-md-4">
-                <label class="custom-label">State</label>
-                <select class="form-select-custom w-100" @bind="_partnerForm.StateId">
-                    <option value="0">Select State</option>
-                    @foreach (var s in _statesAll)
-                    {
-                        <option value="@s.Id">@s.StateName</option>
-                    }
-                </select>
-            </div>
-            <div class="col-md-4">
                 <label class="custom-label">District</label>
                 <select class="form-select-custom w-100" @bind="_partnerForm.DistrictId">
                     <option value="0">Select District</option>
@@ -231,6 +229,17 @@
                     }
                 </select>
             </div>
+            <div class="col-md-4">
+                <label class="custom-label">State</label>
+                <select class="form-select-custom w-100" @bind="_partnerForm.StateId">
+                    <option value="0">Select State</option>
+                    @foreach (var s in _statesAll)
+                    {
+                        <option value="@s.Id">@s.StateName</option>
+                    }
+                </select>
+            </div>
+
         </div>
     </div>
 
@@ -783,6 +792,9 @@
     private bool _isSaving;
     private string? _message;
     private bool _isError;
+    private bool _isPincodeLookup;
+    private string? _pincodeMessage;
+    private bool _pincodeSuccess;
 
     protected override async Task OnInitializedAsync()
     {
@@ -1303,6 +1315,68 @@
         _partnerForm.PhoneNumber = new string(_partnerForm.PhoneNumber?.Where(char.IsDigit).ToArray() ?? []);
     }
 
+    private async Task OnPincodeChanged()
+    {
+        _pincodeMessage = null;
+        _pincodeSuccess = false;
+
+        if (string.IsNullOrWhiteSpace(_partnerForm.PinCode) || _partnerForm.PinCode.Length != 6 || !_partnerForm.PinCode.All(char.IsDigit))
+            return;
+
+        _isPincodeLookup = true;
+        StateHasChanged();
+
+        try
+        {
+            var results = await Http.GetFromJsonAsync<List<PincodeApiResponse>>($"https://api.postalpincode.in/pincode/{_partnerForm.PinCode}");
+            var result = results?.FirstOrDefault();
+
+            if (result?.Status == "Success" && result.PostOffice?.Count > 0)
+            {
+                var postOffice = result.PostOffice[0];
+
+                var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
+                var matchedDistrict = _districtsAll.FirstOrDefault(d =>
+                    d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+                if (matchedDistrict != null)
+                    _partnerForm.DistrictId = matchedDistrict.Id;
+
+                var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
+                var matchedState = _statesAll.FirstOrDefault(s =>
+                    s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
+                if (matchedState != null)
+                    _partnerForm.StateId = matchedState.Id;
+
+                if (!string.IsNullOrWhiteSpace(postOffice.Block))
+                    _partnerForm.Block = postOffice.Block;
+
+                if (!string.IsNullOrWhiteSpace(postOffice.Division))
+                    _partnerForm.Taluk = postOffice.Division;
+
+                if (!string.IsNullOrWhiteSpace(postOffice.Name))
+                    _partnerForm.Village = postOffice.Name;
+
+                if (!string.IsNullOrWhiteSpace(postOffice.Region))
+                    _partnerForm.Street = postOffice.Region;
+
+                _pincodeSuccess = true;
+                _pincodeMessage = $"Auto-filled: {postOffice.District}, {postOffice.State}, {postOffice.Block}";
+            }
+            else
+            {
+                _pincodeMessage = "No data found for this pincode";
+            }
+        }
+        catch
+        {
+            _pincodeMessage = "Could not look up pincode. Please fill manually.";
+        }
+        finally
+        {
+            _isPincodeLookup = false;
+        }
+    }
+
     private void ShowMessage(string message, bool isError)
     {
         _message = message;
@@ -1318,5 +1392,22 @@
     private class FileUploadResponse
     {
         public string? FilePath { get; set; }
+    }
+
+    private class PincodeApiResponse
+    {
+        public string Status { get; set; } = "";
+        public string Message { get; set; } = "";
+        public List<PostOfficeDto>? PostOffice { get; set; }
+    }
+
+    private class PostOfficeDto
+    {
+        public string Name { get; set; } = "";
+        public string District { get; set; } = "";
+        public string State { get; set; } = "";
+        public string Block { get; set; } = "";
+        public string Division { get; set; } = "";
+        public string Region { get; set; } = "";
     }
 }

@@ -4,6 +4,7 @@
 @using DealerReg = SPIC.Core.Entities.DealerRegistration
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject LoadingService Loading
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -413,15 +414,25 @@
 
 	protected override async Task OnInitializedAsync()
 	{
-		await LoadBanks();
-
-		if (DealerId.HasValue && DealerId.Value > 0)
+		Loading.Show();
+		try
 		{
-			await LoadDealer();
-			await LoadBankAssets();
-			await LoadLandAssets();
-			await LoadBuildingAssets();
-			await LoadLoanLiabilities();
+			await LoadBanks();
+
+			if (DealerId.HasValue && DealerId.Value > 0)
+			{
+				await Task.WhenAll(
+					LoadDealer(),
+					LoadBankAssets(),
+					LoadLandAssets(),
+					LoadBuildingAssets(),
+					LoadLoanLiabilities()
+				);
+			}
+		}
+		finally
+		{
+			Loading.Hide();
 		}
 	}
 

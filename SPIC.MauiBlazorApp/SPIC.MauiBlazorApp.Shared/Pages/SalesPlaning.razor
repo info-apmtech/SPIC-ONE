@@ -87,28 +87,35 @@
 			</div>
 		</div>
 
-		<!-- Summary Cards -->
-		<div class="row g-4 mt-2">
-			<div class="col-md-6">
-				<div class="summary-card pink">
-					<div class="stat-label">Total Volume (@_selectedUnitName)</div>
-					<div class="stat-val">
-						@TotalVolume().ToString("N2") <span class="stat-unit">@_selectedUnitName</span>
+		<!-- Summary Cards — Per Category -->
+		<div class="row g-3 mt-2">
+			@foreach (var cat in _categories)
+			{
+				var catUnit = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+				var catRows = _allSalesData.Where(r => r.CategoryId == cat.Id).ToList();
+				var catVolume = catRows.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
+				var catValue = catRows.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
+				<div class="col-md-4">
+					<div style="background: linear-gradient(135deg, #f8fafc 0%, #fff 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+						<div style="font-weight: 600; font-size: 0.85rem; color: #334155; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+							<span style="width: 8px; height: 8px; border-radius: 50%; background: @(cat.Id == _selectedCategoryId ? "#2563eb" : "#94a3b8"); display: inline-block;"></span>
+							@cat.Name
+							<span style="background: #f1f5f9; color: #64748b; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; font-weight: 500;">@catUnit</span>
+						</div>
+						<div style="display: flex; justify-content: space-between; align-items: flex-end;">
+							<div>
+								<div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Volume</div>
+								<div style="font-size: 1.25rem; font-weight: 700; color: #1e293b;">@catVolume.ToString("N2") <span style="font-size: 0.75rem; font-weight: 500; color: #64748b;">@catUnit</span></div>
+							</div>
+							<div style="width: 1px; height: 36px; background: #e2e8f0;"></div>
+							<div style="text-align: right;">
+								<div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Value</div>
+								<div style="font-size: 1.25rem; font-weight: 700; color: #2563eb;">₹@catValue.ToString("N2") <span style="font-size: 0.75rem; font-weight: 500; color: #64748b;">Lakhs</span></div>
+							</div>
+						</div>
 					</div>
-					<i class="bi bi-gear watermark-icon" style="transform: translateY(-20px) scale(0.85);"></i>
-					<i class="bi bi-coin watermark-icon"></i>
 				</div>
-			</div>
-
-			<div class="col-md-6">
-				<div class="summary-card blue">
-					<div class="stat-label">Total Forecast Value</div>
-					<div class="stat-val">
-						₹@TotalForecastValue().ToString("N2") <span class="stat-unit">Lakhs</span>
-					</div>
-					<i class="bi bi-graph-up-arrow watermark-icon"></i>
-				</div>
-			</div>
+			}
 		</div>
 
 	</div>
@@ -284,12 +291,12 @@
 		}
 	}
 
-	private decimal TotalVolume() => _allSalesData.Sum(r =>
+	private decimal TotalVolume() => _currentRows.Sum(r =>
 		r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty +
 		r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty +
 		r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
 
-	private decimal TotalForecastValue() => _allSalesData.Sum(r =>
+	private decimal TotalForecastValue() => _currentRows.Sum(r =>
 		r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount +
 		r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount +
 		r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
