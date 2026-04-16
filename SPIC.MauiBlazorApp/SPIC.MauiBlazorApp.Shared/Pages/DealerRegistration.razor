@@ -5,6 +5,7 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject LoadingService Loading
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -789,11 +790,19 @@
 
 	protected override async Task OnInitializedAsync()
 	{
-		await LoadData();
-		if (DealerIdFromQuery.HasValue && DealerIdFromQuery.Value > 0)
+		Loading.Show();
+		try
 		{
-			_dealerCodeId = DealerIdFromQuery.Value;
-			await OnDealerCodeChanged();
+			await LoadData();
+			if (DealerIdFromQuery.HasValue && DealerIdFromQuery.Value > 0)
+			{
+				_dealerCodeId = DealerIdFromQuery.Value;
+				await OnDealerCodeChanged();
+			}
+		}
+		finally
+		{
+			Loading.Hide();
 		}
 	}
 
@@ -1254,6 +1263,7 @@
 		var saved = await SaveDealer();
 		if (saved)
 		{
+			Loading.Show();
 			Nav.NavigateTo($"/Experience?dealerId={_model.Id}");
 		}
 	}
@@ -1551,6 +1561,22 @@
 		public DateTime CreatedAt { get; set; }
 		public string? UpdatedBy { get; set; }
 		public DateTime UpdatedAt { get; set; } = DateTime.Now;
+
+		// Approval fields (preserve during round-trip)
+		public bool? RMApproved { get; set; }
+		public bool? SMApproved { get; set; }
+		public bool? AVPApproved { get; set; }
+		public int YearsofExperiance { get; set; }
+
+		// Investment fields (preserve during round-trip)
+		public decimal CapitalInvestment { get; set; }
+		public string? CapitalInvestmentRemarks { get; set; }
+		public decimal CashCreditLimit { get; set; }
+		public string? CashCreditLimitRrmarks { get; set; }
+		public decimal AssetValue { get; set; }
+		public string? Remarks { get; set; }
+		public decimal OwnGodownCapacity { get; set; }
+		public decimal RentGodownCapacity { get; set; }
 	}
 
 	public class LocationItemDto

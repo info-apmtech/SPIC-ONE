@@ -5,6 +5,7 @@
 @using SPIC.Core.Entities
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject LoadingService Loading
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -214,11 +215,19 @@
 
 	protected override async Task OnInitializedAsync()
 	{
-		await LoadCompanies();
-		if (DealerId.HasValue && DealerId.Value > 0)
+		Loading.Show();
+		try
 		{
-			await LoadExperiences();
-			await LoadDealerYearsOfExperience();
+			await LoadCompanies();
+			if (DealerId.HasValue && DealerId.Value > 0)
+			{
+				await LoadExperiences();
+				await LoadDealerYearsOfExperience();
+			}
+		}
+		finally
+		{
+			Loading.Hide();
 		}
 	}
 
@@ -389,6 +398,7 @@
 	private async Task HandleNext()
 	{
 		await SaveYearsOfExperience();
+		Loading.Show();
 		Nav.NavigateTo($"/AnnualSales?dealerId={DealerId}");
 	}
 

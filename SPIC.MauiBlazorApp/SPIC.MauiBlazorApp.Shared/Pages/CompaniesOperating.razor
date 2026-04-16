@@ -3,6 +3,7 @@
 @using SPIC.Core.Entities
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject LoadingService Loading
 
 <div class="companies-operating-wrapper">
     <div class="container-fluid">
@@ -79,8 +80,16 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadCompetitors();
-        await LoadSavedSelections();
+        Loading.Show();
+        try
+        {
+            await LoadCompetitors();
+            await LoadSavedSelections();
+        }
+        finally
+        {
+            Loading.Hide();
+        }
     }
 
     private async Task LoadCompetitors()
@@ -162,10 +171,12 @@
                 }
             }
 
+            Loading.Show();
             Nav.NavigateTo($"/Proprietor?dealerId={DealerId}");
         }
         catch (Exception ex)
         {
+            Loading.Hide();
             ShowMessage($"Failed to save: {ex.Message}", true);
         }
         finally

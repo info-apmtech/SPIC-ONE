@@ -1,0 +1,39 @@
+@implements IDisposable
+@inject SPIC.MauiBlazorApp.Shared.Services.LoadingService Loading
+
+@if (Loading.IsLoading)
+{
+	<div class="loading-overlay" @onclick:stopPropagation="true">
+		<div class="loading-overlay-content">
+			<div class="loading-spinner-ring">
+				<div></div><div></div><div></div><div></div>
+			</div>
+			<div class="loading-overlay-text">Loading, please wait...</div>
+			<button class="loading-close-btn" @onclick="CloseLoader">
+				<i class="bi bi-x-lg me-1"></i> Close
+			</button>
+		</div>
+	</div>
+}
+
+@code {
+	protected override void OnInitialized()
+	{
+		Loading.OnChange += HandleChange;
+	}
+
+	private async void HandleChange()
+	{
+		await InvokeAsync(StateHasChanged);
+	}
+
+	private void CloseLoader()
+	{
+		Loading.Hide();
+	}
+
+	public void Dispose()
+	{
+		Loading.OnChange -= HandleChange;
+	}
+}

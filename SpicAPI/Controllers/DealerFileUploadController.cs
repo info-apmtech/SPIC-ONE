@@ -13,6 +13,26 @@ namespace SpicAPI.Controllers
 			_env = env;
 		}
 
+		[HttpGet("view/{*filePath}")]
+		public IActionResult ViewFile(string filePath)
+		{
+			var fullPath = Path.Combine(_env.ContentRootPath, "Uploads", filePath);
+			if (!System.IO.File.Exists(fullPath))
+				return NotFound("File not found.");
+
+			var ext = Path.GetExtension(fullPath).ToLowerInvariant();
+			var contentType = ext switch
+			{
+				".pdf" => "application/pdf",
+				".jpg" or ".jpeg" => "image/jpeg",
+				".png" => "image/png",
+				".webp" => "image/webp",
+				_ => "application/octet-stream"
+			};
+
+			return PhysicalFile(fullPath, contentType);
+		}
+
 		[HttpPost("upload/{dealerId}/{docType}")]
 		public async Task<IActionResult> Upload(int dealerId, string docType, IFormFile file)
 		{
@@ -21,21 +41,15 @@ namespace SpicAPI.Controllers
 
 			var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
 
-			var pdfDocTypes = new[] { "GST", "PAN", "Aadhaar", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN",
+			var pdfOrImageDocTypes = new[] { "GST", "PAN", "Aadhaar", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN",
 				"Specimen", "BankGuarantee", "ITReturn1", "ITReturn2", "ValuationCertificate", "RetailerList", "PartnershipDeed", "BoardResolution", "Affidavit" };
 			var imageDocTypes = new[] { "ProprietorImage" };
-			var pdfOrImageDocTypes = new[] { "Specimen" };
 
 			if (pdfOrImageDocTypes.Contains(docType))
 			{
 				var allowedExts = new[] { ".pdf", ".jpg", ".jpeg", ".png", ".webp" };
 				if (!allowedExts.Contains(ext))
 					return BadRequest("Only PDF, JPG, PNG, or WEBP files are allowed.");
-			}
-			else if (pdfDocTypes.Contains(docType))
-			{
-				if (ext != ".pdf")
-					return BadRequest("Only PDF files are allowed for this document type.");
 			}
 			else if (imageDocTypes.Contains(docType))
 			{
@@ -48,8 +62,8 @@ namespace SpicAPI.Controllers
 				return BadRequest("Invalid document type.");
 			}
 
-			if (file.Length > 5 * 1024 * 1024)
-				return BadRequest("File size must be less than 5 MB.");
+			if (file.Length > 10 * 1024 * 1024)
+				return BadRequest("File size must be less than 10 MB.");
 
 			var folderPath = Path.Combine(_env.ContentRootPath, "Uploads", "DealerRegistration", dealerId.ToString());
 			Directory.CreateDirectory(folderPath);
