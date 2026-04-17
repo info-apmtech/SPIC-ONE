@@ -1,4 +1,5 @@
 @page "/Register"
+@implements IDisposable
 @using System.Net.Http.Json
 @using System.Text.RegularExpressions
 @using Microsoft.AspNetCore.Components
@@ -50,7 +51,6 @@
 					<div class="col-md-5">
 						<div class="row g-3 h-100">
 
-							<!-- SPIC -->
 							<div class="col-6">
 								<div class="logo-card spic @(isSpic ? "active" : "")"
 									 @onclick="ToggleSpic">
@@ -62,7 +62,6 @@
 								</div>
 							</div>
 
-							<!-- GREEN STAR -->
 							<div class="col-6">
 								<div class="logo-card green-star @(isGreenStar ? "active" : "")"
 									 @onclick="ToggleGreenStar">
@@ -332,28 +331,23 @@
 
 				<div class="row g-3">
 					<div class="col-md-4">
-						<div class="map-box">
-							<button type="button" class="btn btn-sm btn-success rounded-pill px-3" style="font-size: 0.6rem; position: absolute; top: 10px; right: 10px;" @onclick="UseCurrentLocation" disabled="@_isGettingLocation"><i class="bi bi-crosshair"></i> Use current location</button>
-							@if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+						<div class="map-box" style="position: relative; height: 100%; min-height: 250px;">
+							<div id="leafletMap" style="height: 100%; width: 100%; min-height: 250px; border-radius: 12px; border: 1px solid #cbd5e1; z-index: 1;"></div>
+							<button type="button" class="btn btn-sm btn-success rounded-pill px-3 shadow-sm" style="font-size: 0.6rem; position: absolute; top: 10px; right: 10px; z-index: 1000;" @onclick="UseCurrentLocation" disabled="@_isGettingLocation"><i class="bi bi-crosshair"></i> Use current location</button>
+							
+							@* @if (_model.Latitude.HasValue && _model.Longitude.HasValue)
 							{
-								<div class="d-flex flex-column align-items-center justify-content-center h-100">
-									<i class="bi bi-geo-alt-fill text-success" style="font-size: 2rem;"></i>
-									<span class="small text-muted mt-1">Lat: @_model.Latitude.Value.ToString("F6")</span>
-									<span class="small text-muted">Lng: @_model.Longitude.Value.ToString("F6")</span>
-									<a href="https://www.google.com/maps?q=@_model.Latitude,@_model.Longitude" target="_blank" class="small text-primary mt-1"><i class="bi bi-box-arrow-up-right"></i> View on Map</a>
+								<div class="mt-2 text-center small text-muted">
+									Lat: @_model.Latitude.Value.ToString("F6") | Lng: @_model.Longitude.Value.ToString("F6")
 								</div>
-							}
-							else
-							{
-								<button type="button" class="map-overlay-btn">No coordinates yet</button>
-							}
+							} *@
 						</div>
 					</div>
 					<div class="col-md-8">
 						<div class="row g-3">
 							<div class="col-md-6">
 								<label class="form-label-custom">Google Map URL</label>
-								<input type="text" class="form-control-custom w-100" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Paste Google Maps link">
+								<input type="text" class="form-control-custom w-100" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Click map or Paste Google Maps link">
 							</div>
 							<div class="col-md-6">
 								<label class="form-label-custom">Shop No / Room No / Block No</label>
@@ -435,14 +429,7 @@
 							<div class="field-error">@_errors["DealerStateId"]</div>
 						}
 					</div>
-					@* <div class="col-md-4">
-						<label class="form-label-custom">Official Contact Number</label>
-						<input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("OfficialContactNumber") ? "is-invalid" : "")" @bind="_model.OfficialContactNumber" @bind:after='() => ValidateFieldOnChange("OfficialContactNumber", _model.OfficialContactNumber?.Length == 10)' placeholder="10-digit mobile number" maxlength="10">
-						@if (_errors.ContainsKey("OfficialContactNumber"))
-						{
-							<div class="field-error">@_errors["OfficialContactNumber"]</div>
-						}
-					</div> *@ 
+					
 
 					<div class="col-md-4">
 	<label class="form-label-custom">Official Contact Number</label>
@@ -483,10 +470,7 @@
 
 
 
-					@* <div class="col-md-4">
-						<label class="form-label-custom">Alternative Number</label>
-						<input type="text" class="form-control-custom w-100" @bind="_model.AlternativeNumber" placeholder="10-digit mobile number" maxlength="10">
-					</div> *@ 
+					
 					<div class="col-md-4">
 	<label class="form-label-custom">Alternative Number</label>
 	<input type="tel" 
@@ -645,33 +629,7 @@
 							
 						</div>
 					</div>
-					@* <div class="col-md-4">
-						<div class="compliance-card aadhaar">
-							<div class="fw-bold small mb-2"><i class="bi bi-fingerprint text-danger me-2"></i>Aadhaar Number <span class="text-danger">*</span></div>
-							<label class="form-label-custom">Aadhaar Number</label>
-							<input type="text" class="form-control form-control-sm @(_errors.ContainsKey("AadhaarNumber") ? "is-invalid" : "")" @bind="_model.AadhaarNumber" @bind:after="OnAadhaarNumberChanged" placeholder="12-digit Aadhaar" maxlength="12">
-							@if (_errors.ContainsKey("AadhaarNumber"))
-							{
-								<div class="field-error">@_errors["AadhaarNumber"]</div>
-							}
-							<div class="mt-2">
-								<label class="upload-area">
-									<i class="bi bi-cloud-arrow-up text-danger"></i>
-									<span class="small text-danger fw-600">Upload Aadhaar Card (PDF) *</span>
-									<InputFile OnChange="HandleAadhaarUpload" accept=".pdf" hidden />
-									@if (_errors.ContainsKey("AadhaarFile"))
-							{
-								<div class="field-error">@_errors["AadhaarFile"]</div>
-							}
-							@if (!string.IsNullOrEmpty(_model.AadhaarFilePath))
-							{
-								<div class="mt-1 small text-danger"style="word-break: break-all;"><i class="bi bi-check-circle"></i> @_model.AadhaarFilePath</div>
-							}
-								</label>
-							</div>
-							
-						</div>
-					</div> *@ 
+					
 
 					<div class="col-md-4">
     <div class="compliance-card aadhaar">
@@ -849,14 +807,7 @@
 			</div>
 		}
 
-@* 		@if (status == "Active" || status == "Inactive" || status == "Terminated")
-		{
-			<div class="d-flex justify-content-end gap-2 mt-3 mb-4">
-				<button type="button" class="btn btn-outline-secondary rounded-pill px-4" @onclick="ResetForm">
-					<i class="bi bi-arrow-counterclockwise"></i> Reset
-				</button>
-			</div>
-		} *@
+
 	</form>
 	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
@@ -886,6 +837,9 @@
 	private bool _isGettingLocation;
 	private string? _locationMessage;
 	private bool _locationSuccess;
+	
+	// Map C# Object Reference
+	private DotNetObjectReference<DealerRegistration>? _objRef;
 
 	// Lookup data
 	private List<LocationItemDto> _statesAll = new();
@@ -915,6 +869,7 @@
 
 	protected override async Task OnInitializedAsync()
 	{
+		_objRef = DotNetObjectReference.Create(this);
 		Loading.Show();
 		try
 		{
@@ -929,6 +884,52 @@
 		{
 			Loading.Hide();
 		}
+	}
+
+	public void Dispose()
+	{
+		_objRef?.Dispose();
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender)
+		{
+			// Initialize the map and pass the C# reference to JavaScript
+			await JS.InvokeVoidAsync("initLeafletMap", "leafletMap", _objRef);
+			
+			// Set initial pin if coordinates exist
+			if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+			{
+				await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+			}
+		}
+	}
+
+	private async Task TriggerMapUpdate(double lat, double lng)
+	{
+		try
+		{
+			await JS.InvokeVoidAsync("updateLeafletMap", "leafletMap", lat, lng);
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Map update failed: {ex.Message}");
+		}
+	}
+
+	[JSInvokable]
+	public void UpdateLocationFromMap(double lat, double lng)
+	{
+		_model.Latitude = lat;
+		_model.Longitude = lng;
+		
+		// Set the Google Map URL input automatically from the map click
+		_model.GoogleMapURL = $"http://maps.google.com/maps?q={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+		
+		_locationMessage = $"Location selected from Map: {lat:F6}, {lng:F6}";
+		_locationSuccess = true;
+		StateHasChanged();
 	}
 
 	private async Task LoadData()
@@ -1131,6 +1132,12 @@
 					_filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
 					_filteredHeadquarters = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
 					_filteredDealers = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
+
+					// Trigger Map Update on load if we have coordinates
+					if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+					{
+						await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+					}
 				}
 			}
 			catch (Exception ex)
@@ -1538,7 +1545,7 @@
 		_isError = isError;
 	}
 
-	private void OnGoogleMapUrlChanged()
+	private async Task OnGoogleMapUrlChanged()
 	{
 		_locationMessage = null;
 		if (string.IsNullOrWhiteSpace(_model.GoogleMapURL))
@@ -1581,6 +1588,9 @@
 			_model.Longitude = lng;
 			_locationMessage = $"Coordinates extracted: {lat:F6}, {lng:F6}";
 			_locationSuccess = true;
+			
+			// Trigger map update
+			await TriggerMapUpdate(lat, lng);
 		}
 		else
 		{
@@ -1609,9 +1619,12 @@
 			{
 				_model.Latitude = result.Latitude;
 				_model.Longitude = result.Longitude;
-				_model.GoogleMapURL = $"https://www.google.com/maps?q={result.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{result.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+				_model.GoogleMapURL = $"http://maps.google.com/maps?q={result.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{result.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
 				_locationMessage = $"Location captured: {result.Latitude:F6}, {result.Longitude:F6}";
 				_locationSuccess = true;
+				
+				// Trigger map update
+				await TriggerMapUpdate(result.Latitude, result.Longitude);
 			}
 		}
 		catch (Exception ex)

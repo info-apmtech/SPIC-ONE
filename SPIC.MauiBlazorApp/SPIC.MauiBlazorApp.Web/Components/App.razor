@@ -38,6 +38,7 @@
     <link rel="stylesheet" href="_content/SPIC.MauiBlazorApp.Shared/css/LocationSaveList.css" />
     <link rel="stylesheet" href="_content/SPIC.MauiBlazorApp.Shared/css/SettingTreeLayout.css" />
     <link rel="stylesheet" href="_content/SPIC.MauiBlazorApp.Shared/css/EmployeeRegistration.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   
     <HeadOutlet @rendermode="InteractiveServer" />
@@ -48,6 +49,67 @@
     <ReconnectModal />
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        var mapInstances = {};
+        var dotNetRefs = {};
+
+        window.initLeafletMap = (elementId, dotNetRef) => {
+        dotNetRefs[elementId] = dotNetRef;
+
+        if (!mapInstances[elementId]) {
+        // Default View (Set to India center by default, adjust if needed)
+        mapInstances[elementId] = L.map(elementId).setView([20.5937, 78.9629], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+        }).addTo(mapInstances[elementId]);
+
+        // Add click listener to the map
+        mapInstances[elementId].on('click', function (e) {
+        var lat = e.latlng.lat;
+        var lng = e.latlng.lng;
+
+        // Set or move the marker
+        if (mapInstances[elementId].marker) {
+        mapInstances[elementId].marker.setLatLng([lat, lng]);
+        } else {
+        mapInstances[elementId].marker = L.marker([lat, lng]).addTo(mapInstances[elementId]);
+        }
+
+        // Send the new coordinates back to Blazor C# Code!
+        if (dotNetRefs[elementId]) {
+        dotNetRefs[elementId].invokeMethodAsync('UpdateLocationFromMap', lat, lng);
+        }
+        });
+        }
+        };
+
+        window.updateLeafletMap = (elementId, lat, lng) => {
+        if (mapInstances[elementId]) {
+        var map = mapInstances[elementId];
+        map.setView([lat, lng], 15); // Zoom in on the location
+
+        if (map.marker) {
+        map.marker.setLatLng([lat, lng]);
+        } else {
+        map.marker = L.marker([lat, lng]).addTo(map);
+        }
+        }
+        };
+
+        window.getCurrentPosition = () => {
+        return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+        resolve({ error: "Geolocation not supported" });
+        } else {
+        navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        (err) => resolve({ error: err.message })
+        );
+        }
+        });
+        };
+    </script>
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     <script>
         const addBtn = document.getElementById('addExperienceBtn');
@@ -96,7 +158,8 @@
         e.target.closest('.exp-card')?.remove();
         }
         });
-    </script>
+    </script> 
+    
     <script src="_content/SPIC.MauiBlazorApp.Shared/js/location.js"></script>
 </body>
 
