@@ -126,19 +126,81 @@
 					<input type="text" class="custom-input" placeholder="Enter Survey Number" @bind="_buildingForm.SurveyNumber" />
 				</div>
 			</div>
-			<div class="row g-3 mb-4">
-				<div class="col-md-4">
-					<label class="custom-label">Land Size (In Square Ft)</label>
-					<input type="number" class="custom-input" placeholder="Enter In Square Ft" @bind="_buildingForm.LandSize" />
+			<div class="row g-3 mb-3">
+					<div class="col-md-4">
+						<label class="custom-label">Land Size (In Square Ft)</label>
+						<input type="number" class="custom-input" placeholder="Enter In Square Ft" @bind="_buildingForm.LandSize" />
+					</div>
+					<div class="col-md-4">
+						<label class="custom-label">Remarks</label>
+						<input type="text" class="custom-input" placeholder="" @bind="_buildingForm.Remarks" />
+					</div>
+					<div class="col-md-4">
+						<label class="custom-label">Shop No / Room No / Block No</label>
+						<input type="text" class="custom-input" placeholder="Enter Shop/Room/Block No" @bind="_buildingForm.ShopNoORRoomNoOrBlockNo" />
+					</div>
 				</div>
-				<div class="col-md-4">
-					<label class="custom-label">Remarks</label>
-					<input type="text" class="custom-input" placeholder="" @bind="_buildingForm.Remarks" />
+				<div class="row g-3 mb-3">
+					<div class="col-md-4">
+						<label class="custom-label">Pin Code</label>
+						<input type="text" class="custom-input" placeholder="Enter Pincode" maxlength="6" @bind="_buildingForm.PinCode" @bind:after="OnBuildingPincodeChanged" />
+						@if (_isBuildingPincodeLookup)
+						{
+							<div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
+						}
+						@if (!string.IsNullOrEmpty(_buildingPincodeMessage))
+						{
+							<div class="small @(_buildingPincodeSuccess ? "text-success" : "text-warning") mt-1">@_buildingPincodeMessage</div>
+						}
+					</div>
+					<div class="col-md-4">
+						<label class="custom-label">Street</label>
+						<input type="text" class="custom-input" placeholder="Enter Street" @bind="_buildingForm.Street" />
+					</div>
+					<div class="col-md-4">
+						<label class="custom-label">Sub Village</label>
+						<input type="text" class="custom-input" placeholder="Enter Sub Village" @bind="_buildingForm.SubVillage" />
+					</div>
 				</div>
-				<div class="col-md-4">
-					<button class="btn-blue-action w-100 mt-4" @onclick="SaveBuildingAsset"><i class="bi bi-plus"></i> @(_buildingForm.Id > 0 ? "Update" : "Add") Building</button>
+				<div class="row g-3 mb-3">
+					<div class="col-md-4">
+						<label class="custom-label">Village</label>
+						<input type="text" class="custom-input" placeholder="Enter Village" @bind="_buildingForm.Village" />
+					</div>
+					<div class="col-md-4">
+						<label class="custom-label">Block</label>
+						<input type="text" class="custom-input" placeholder="Enter Block" @bind="_buildingForm.Block" />
+					</div>
+					<div class="col-md-4">
+						<label class="custom-label">Taluk</label>
+						<input type="text" class="custom-input" placeholder="Enter Taluk" @bind="_buildingForm.Taluk" />
+					</div>
 				</div>
-			</div>
+				<div class="row g-3 mb-4">
+					<div class="col-md-4">
+						<label class="custom-label">District</label>
+						<select class="form-select-custom w-100" @bind="_buildingForm.DistrictId">
+							<option value="0">Select District</option>
+							@foreach (var d in _districts)
+							{
+								<option value="@d.Id">@d.DistrictName</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-4">
+						<label class="custom-label">State</label>
+						<select class="form-select-custom w-100" @bind="_buildingForm.StateId">
+							<option value="0">Select State</option>
+							@foreach (var s in _states)
+							{
+								<option value="@s.Id">@s.StateName</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-4">
+						<button class="btn-blue-action w-100 mt-4" @onclick="SaveBuildingAsset"><i class="bi bi-plus"></i> @(_buildingForm.Id > 0 ? "Update" : "Add") Building</button>
+					</div>
+				</div>
 		</div>
 
 		<h4 class="list-header">Your Added Assets</h4>
@@ -400,6 +462,13 @@
 	private DealerAssetBuilding _buildingForm = new();
 	private DealerLoanLiabilities _loanForm = new();
 
+	private List<LocationItemDto> _states = new();
+	private List<LocationItemDto> _districts = new();
+
+	private bool _isBuildingPincodeLookup;
+	private string? _buildingPincodeMessage;
+	private bool _buildingPincodeSuccess;
+
 	private bool _isSaving;
 	private string? _message;
 	private bool _isError;
@@ -417,7 +486,7 @@
 		Loading.Show();
 		try
 		{
-			await LoadBanks();
+			await Task.WhenAll(LoadBanks(), LoadStates(), LoadDistricts());
 
 			if (DealerId.HasValue && DealerId.Value > 0)
 			{
@@ -449,6 +518,18 @@
 	{
 		try { _banks = await Http.GetFromJsonAsync<List<Bank>>("api/Bank") ?? new(); }
 		catch (Exception ex) { ShowMessage($"Failed to load banks: {ex.Message}", true); }
+	}
+
+	private async Task LoadStates()
+	{
+		try { _states = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new(); }
+		catch { }
+	}
+
+	private async Task LoadDistricts()
+	{
+		try { _districts = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/District/all") ?? new(); }
+		catch { }
 	}
 
 	private async Task LoadBankAssets()
@@ -581,7 +662,10 @@
 		{
 			Id = item.Id, DealerId = item.DealerId, BuildingName = item.BuildingName,
 			PropertyValue = item.PropertyValue, SurveyNumber = item.SurveyNumber,
-			LandSize = item.LandSize, Remarks = item.Remarks
+			LandSize = item.LandSize, Remarks = item.Remarks,
+			ShopNoORRoomNoOrBlockNo = item.ShopNoORRoomNoOrBlockNo, Street = item.Street,
+			SubVillage = item.SubVillage, Village = item.Village, PinCode = item.PinCode,
+			Block = item.Block, Taluk = item.Taluk, DistrictId = item.DistrictId, StateId = item.StateId
 		};
 	}
 
@@ -684,9 +768,92 @@
 		_isError = isError;
 	}
 
+	private async Task OnBuildingPincodeChanged()
+	{
+		_buildingPincodeMessage = null;
+		_buildingPincodeSuccess = false;
+
+		if (string.IsNullOrWhiteSpace(_buildingForm.PinCode) || _buildingForm.PinCode.Length != 6 || !_buildingForm.PinCode.All(char.IsDigit))
+			return;
+
+		_isBuildingPincodeLookup = true;
+		StateHasChanged();
+
+		try
+		{
+			var results = await Http.GetFromJsonAsync<List<PincodeApiResponse>>($"https://api.postalpincode.in/pincode/{_buildingForm.PinCode}");
+			var result = results?.FirstOrDefault();
+
+			if (result?.Status == "Success" && result.PostOffice?.Count > 0)
+			{
+				var po = result.PostOffice[0];
+
+				var apiDistrict = po.District?.Trim().Replace(" ", "") ?? "";
+				var matchedDistrict = _districts.FirstOrDefault(d =>
+					d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+				if (matchedDistrict != null)
+					_buildingForm.DistrictId = matchedDistrict.Id;
+
+				var apiState = po.State?.Trim().Replace(" ", "") ?? "";
+				var matchedState = _states.FirstOrDefault(s =>
+					s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
+				if (matchedState != null)
+					_buildingForm.StateId = matchedState.Id;
+
+				if (!string.IsNullOrWhiteSpace(po.Block))
+					_buildingForm.Block = po.Block;
+				if (!string.IsNullOrWhiteSpace(po.Division))
+					_buildingForm.Taluk = po.Division;
+				if (!string.IsNullOrWhiteSpace(po.Name))
+					_buildingForm.Village = po.Name;
+				if (!string.IsNullOrWhiteSpace(po.Region))
+					_buildingForm.Street = po.Region;
+
+				_buildingPincodeSuccess = true;
+				_buildingPincodeMessage = $"Auto-filled: {po.District}, {po.State}, {po.Block}";
+			}
+			else
+			{
+				_buildingPincodeMessage = "No data found for this pincode";
+			}
+		}
+		catch
+		{
+			_buildingPincodeMessage = "Could not look up pincode. Please fill manually.";
+		}
+		finally
+		{
+			_isBuildingPincodeLookup = false;
+		}
+	}
+
 	private class CreateResponse<T>
 	{
 		public string? Message { get; set; }
 		public T? Data { get; set; }
+	}
+
+	private class LocationItemDto
+	{
+		public int Id { get; set; }
+		public string StateName { get; set; } = "";
+		public string DistrictName { get; set; } = "";
+	}
+
+	private class PincodeApiResponse
+	{
+		public string Status { get; set; } = "";
+		public string Message { get; set; } = "";
+		public List<PostOfficeDto>? PostOffice { get; set; }
+	}
+
+	private class PostOfficeDto
+	{
+		public string Name { get; set; } = "";
+		public string District { get; set; } = "";
+		public string State { get; set; } = "";
+		public string Block { get; set; } = "";
+		public string Division { get; set; } = "";
+		public string Region { get; set; } = "";
 	}
 }

@@ -395,6 +395,19 @@ namespace SPIC.Core.Entities
         public decimal PropertyValue { get; set; }
         public string? SurveyNumber { get; set; }
         public decimal? LandSize { get; set; }
+        [Display(Name = "Shop No / Room No / Block No")]
+        public string ShopNoORRoomNoOrBlockNo { get; set; }
+        public string? Street { get; set; }
+        [Display(Name = "Sub Village")]
+        public string? SubVillage { get; set; }
+        public string Village { get; set; }
+        [Display(Name = "Pin Code")]
+        public string PinCode { get; set; }
+        public string? Block { get; set; }
+        public string? Taluk { get; set; }
+        [Display(Name = "District")]
+        public int DistrictId { get; set; }
+        public int StateId { get; set; }
         public string? Remarks { get; set; }
         public string? UploadedBuildingDocumentPath { get; set; }
         public string? UploadedECDocumentPath { get; set; }
@@ -412,6 +425,11 @@ namespace SPIC.Core.Entities
     {
         public int Id { get; set; }
         public int DealerId { get; set; }
+        //Existing Credit Limit
+        public decimal ExistingCreditLimitAmount { get; set; }
+        public DateTime ExistingCreditLimitFrom { get; set; }
+        public DateTime ExistingCreditLimitTo { get; set; }
+
         public int FY1 { get; set; }
         public int FY2 { get; set; }
         public int FY3 { get; set; }
@@ -497,6 +515,7 @@ namespace SPIC.Core.Entities
         public string? PartnershipDeadFilePath { get; set; }
         public string? BoardReasolutionFilePath { get; set; }
         public string? AffidavitFilePath { get; set; }
+        public string? GreenstarSpecimanFilePath { get; set; }
 
     }
 }

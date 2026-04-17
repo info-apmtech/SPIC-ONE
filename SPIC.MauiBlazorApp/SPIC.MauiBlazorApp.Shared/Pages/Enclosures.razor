@@ -94,6 +94,54 @@
         </div>
     </div>
 
+    <!-- GFL Specimen Signature Section -->
+    <div class="main-card">
+        <h3 class="section-title mb-3">Greenstar Specimen Signature</h3>
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="dl-box">
+                    <div class="dl-icon"><i class="bi bi-download"></i></div>
+                    <div class="dl-title">Download Greenstar Specimen Document</div>
+                    <div class="dl-text">Download the Greenstar specimen document, print it, get it signed by all required signatories.</div>
+                    <button class="btn-outline-blue" @onclick="DownloadGreenstarSpecimen" disabled="@(_partners.Count == 0)">
+                        <i class="bi bi-file-earmark-arrow-down me-1"></i> Download Template
+                    </button>
+                    @if (_partners.Count == 0)
+                    {
+                        <div class="text-muted mt-2" style="font-size:0.85rem;">
+                            <i class="bi bi-info-circle"></i> No partners found. Add partners in Proprietor step first.
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="up-box">
+                    @if (!string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath))
+                    {
+                        <i class="bi bi-check-circle up-icon" style="color:#059669;"></i>
+                        <div class="up-title">Greenstar Specimen Uploaded</div>
+                        <div class="up-text">@GetFileName(_docs.GreenstarSpecimanFilePath)</div>
+                        <label class="btn-upload-attach-Enclosure mb-0">
+                            <i class="bi bi-arrow-repeat"></i> Replace
+                            <InputFile hidden OnChange="OnGreenstarSpecimenSelected" accept=".pdf,.jpg,.jpeg,.png" />
+                        </label>
+                    }
+                    else
+                    {
+                        <i class="bi bi-upload up-icon"></i>
+                        <div class="up-title">
+                            <label class="btn-upload-attach-Enclosure mb-0">
+                                Click or drag file to upload
+                                <InputFile hidden OnChange="OnGreenstarSpecimenSelected" accept=".pdf,.jpg,.jpeg,.png" />
+                            </label>
+                        </div>
+                        <div class="up-text">PDF, JPG, PNG (Max 10 MB)</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Documents already added in previous steps -->
     <div class="main-card">
         <h3 class="section-title">Documents already added in previous steps</h3>
@@ -1190,6 +1238,7 @@
             _dealer.AadhaarFilePath,
             _dealer.WholesaleLicenseFilePath,
             _docs.SpecimanFilePath,
+            _docs.GreenstarSpecimanFilePath,
             _docs.BankGauranteeFilePath,
             _docs.FY1ITReturnFilePath,
             _docs.FY2ITReturnFilePath,
@@ -1245,6 +1294,12 @@
     {
         var path = await UploadFileToServer(DealerId, "Specimen", e.File);
         if (path != null) { _docs.SpecimanFilePath = path; await SaveDocuments(); CalculateProgress(); }
+    }
+
+    private async Task OnGreenstarSpecimenSelected(InputFileChangeEventArgs e)
+    {
+        var path = await UploadFileToServer(DealerId, "GreenstarSpecimen", e.File);
+        if (path != null) { _docs.GreenstarSpecimanFilePath = path; await SaveDocuments(); CalculateProgress(); }
     }
 
     private async Task OnBankGuaranteeSelected(InputFileChangeEventArgs e)
@@ -1369,6 +1424,18 @@
     }
 
     // --- Specimen Download ---
+    private async Task DownloadGreenstarSpecimen()
+    {
+        if (_partners.Count == 0)
+        {
+            ShowMessage("No partner details found. Please add partners in the Proprietor step.", true);
+            return;
+        }
+
+        var html = GenerateGreenstarSpecimenHtml();
+        await JS.InvokeVoidAsync("openPrintableHtml", html);
+    }
+
     private async Task DownloadSpecimen()
     {
         if (_partners.Count == 0)
@@ -1490,7 +1557,7 @@
 
     <div class='info-grid'>
         <div class='info-item'><span class='label'>Dealer ID</span><span class='value'>{DealerId}</span></div>
-        <div class='info-item'><span class='label'>Firm Name</span><span class='value'>{firmName}</span></div>
+        <div class='info-item'><span class='label'>Firm Name</span><span class='value'>M/s.{firmName}</span></div>
         <div class='info-item'><span class='label'>GST Number</span><span class='value'>{gst}</span></div>
         <div class='info-item'><span class='label'>Date</span><span class='value'>{dateStr}</span></div>
     </div>
@@ -1531,11 +1598,165 @@
         </div>
         <div class='footer-col' style='text-align:center;'>
             <div class='sig-line'></div>
-            <div class='sig-label'>Authorised Signatory</div>
+            <div class='sig-label'>Authorised Signatory in For Seal</div>
         </div>
         <div class='seal-box'>
             <div class='seal-border'>Dealer Seal / Stamp</div>
-            <div class='seal-label'>Official Seal</div>
+            <div class='seal-label'>Official Seal (Firm Full Address Seal)</div>
+        </div>
+    </div>
+</body>
+</html>";
+    }
+
+    private string GenerateGreenstarSpecimenHtml()
+    {
+        var apiBase = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        var rows = new System.Text.StringBuilder();
+
+        for (int i = 0; i < _partners.Count; i++)
+        {
+            var p = _partners[i];
+            var imgHtml = !string.IsNullOrEmpty(p.ProprietorImagePath)
+                ? $"<img src='{apiBase}/api/DealerFile/view/{p.ProprietorImagePath}' class='partner-photo' />"
+                : "<div class='photo-placeholder'><svg width='40' height='40' viewBox='0 0 24 24' fill='#9CA3AF'><path d='M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z'/></svg></div>";
+
+            var encodedName = System.Net.WebUtility.HtmlEncode(p.Name);
+            var encodedFather = System.Net.WebUtility.HtmlEncode(p.FatherName);
+
+            rows.Append($@"
+            <tr>
+                <td rowspan='3' class='cell-center cell-sno'>{i + 1}</td>
+                <td rowspan='3' class='cell-center cell-photo'>{imgHtml}</td>
+                <td rowspan='3' class='cell-name'><strong>{encodedName}</strong><br/><span class='text-secondary'>S/o or D/o {encodedFather}</span></td>
+                <td class='cell-center cell-signo'>1</td>
+                <td class='cell-sig'>&nbsp;</td>
+            </tr>
+            <tr>
+                <td class='cell-center cell-signo'>2</td>
+                <td class='cell-sig'>&nbsp;</td>
+            </tr>
+            <tr>
+                <td class='cell-center cell-signo'>3</td>
+                <td class='cell-sig'>&nbsp;</td>
+            </tr>");
+        }
+
+        var firmName = System.Net.WebUtility.HtmlEncode(_dealer.FirmName ?? "\u2014");
+        var gst = System.Net.WebUtility.HtmlEncode(_dealer.GSTNumber ?? "\u2014");
+        var dateStr = DateTime.Now.ToString("dd-MM-yyyy");
+
+        return $@"<!DOCTYPE html>
+<html>
+<head>
+    <title>Specimen Signature \u2014 GFL Dealer Registration</title>
+    <style>
+        @@page {{ size: A4 portrait; margin: 18mm 16mm 20mm 16mm; }}
+        * {{ box-sizing: border-box; }}
+        body {{ font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 0; padding: 0; font-size: 11px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+
+        .doc-header {{ text-align: center; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 3px solid #0d6938; position: relative; }}
+        .doc-header::after {{ content: ''; position: absolute; bottom: -3px; left: 0; width: 100%; height: 1px; background: #b0d4c0; }}
+        .company-name {{ font-size: 16px; font-weight: 700; color: #0d6938; letter-spacing: 1.2px; text-transform: uppercase; margin: 0; }}
+        .doc-subtitle {{ font-size: 12px; color: #374151; font-weight: 500; margin: 4px 0 0; letter-spacing: 0.3px; }}
+        .doc-ref {{ font-size: 9px; color: #6B7280; margin-top: 6px; }}
+
+        .info-grid {{ display: flex; justify-content: space-between; margin-bottom: 16px; padding: 10px 14px; background: #f8faf9; border: 1px solid #e5e7eb; border-radius: 4px; }}
+        .info-item {{ font-size: 10.5px; }}
+        .info-item .label {{ color: #6B7280; font-weight: 600; text-transform: uppercase; font-size: 8.5px; letter-spacing: 0.5px; display: block; margin-bottom: 2px; }}
+        .info-item .value {{ color: #1a1a1a; font-weight: 600; font-size: 11px; }}
+
+        .spec-table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
+        .spec-table th {{ background: #0d6938; color: #ffffff; padding: 8px 10px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #0d6938; text-align: center; }}
+        .spec-table td {{ border: 1px solid #d1d5db; vertical-align: middle; font-size: 11px; }}
+        .cell-center {{ text-align: center; }}
+        .cell-sno {{ width: 45px; font-weight: 700; font-size: 12px; }}
+        .cell-photo {{ width: 100px; padding: 8px; }}
+        .cell-name {{ padding: 10px 12px; }}
+        .cell-name strong {{ font-size: 12px; display: block; margin-bottom: 2px; }}
+        .text-secondary {{ color: #6B7280; font-size: 10px; }}
+        .cell-signo {{ width: 30px; font-weight: 600; font-size: 11px; color: #374151; background: #fafafa; }}
+        .cell-sig {{ min-width: 180px; height: 36px; }}
+        .partner-photo {{ width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid #e5e7eb; }}
+        .photo-placeholder {{ width: 80px; height: 80px; background: #f3f4f6; border-radius: 4px; border: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: center; margin: 0 auto; }}
+
+        .consent-section {{ margin-bottom: 18px; page-break-inside: avoid; }}
+        .consent-title {{ font-size: 11px; font-weight: 700; color: #0d6938; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #d1d5db; }}
+        .consent-text {{ font-size: 10px; color: #374151; line-height: 1.7; text-align: justify; }}
+        .consent-text p {{ margin: 0 0 6px; }}
+        .consent-text ol {{ margin: 4px 0 8px; padding-left: 18px; }}
+        .consent-text ol li {{ margin-bottom: 3px; }}
+
+        .doc-footer {{ display: flex; justify-content: space-between; align-items: flex-end; margin-top: 24px; padding-top: 12px; border-top: 1px solid #e5e7eb; }}
+        .footer-col {{ font-size: 10px; }}
+        .sig-line {{ border-bottom: 1px solid #374151; width: 180px; display: inline-block; margin-top: 24px; }}
+        .sig-label {{ font-size: 9px; color: #6B7280; margin-top: 3px; }}
+        .seal-box {{ text-align: center; }}
+        .seal-border {{ border: 2px dashed #c4c4c4; width: 130px; height: 70px; display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 9px; margin: 0 auto 4px; border-radius: 4px; }}
+        .seal-label {{ font-weight: 600; font-size: 9px; color: #6B7280; }}
+
+        @@media print {{
+            body {{ padding: 0; }}
+            .doc-header {{ border-bottom-color: #0d6938 !important; }}
+            .spec-table th {{ background: #0d6938 !important; color: #fff !important; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class='doc-header'>
+        <div class='company-name'>Greenstar Fertilizers Limited</div>
+        <div class='doc-subtitle'>Specimen Signature Document — Dealer Registration</div>
+        <div class='doc-ref'>Ref: GFL/DR/{DealerId}/{DateTime.Now:yyyyMMdd} &nbsp;|&nbsp; Generated on: {dateStr}</div>
+    </div>
+
+    <div class='info-grid'>
+        <div class='info-item'><span class='label'>Dealer ID</span><span class='value'>{DealerId}</span></div>
+        <div class='info-item'><span class='label'>Firm Name</span><span class='value'>M/s.{firmName}</span></div>
+        <div class='info-item'><span class='label'>GST Number</span><span class='value'>{gst}</span></div>
+        <div class='info-item'><span class='label'>Date</span><span class='value'>{dateStr}</span></div>
+    </div>
+
+    <table class='spec-table'>
+        <thead>
+            <tr>
+                <th>S.No</th>
+                <th>Photo</th>
+                <th>Partner / Proprietor Name</th>
+                <th colspan='2'>Signature</th>
+            </tr>
+        </thead>
+        <tbody>
+            {rows}
+        </tbody>
+    </table>
+
+    <div class='consent-section'>
+        <div class='consent-title'>Declaration &amp; Consent</div>
+        <div class='consent-text'>
+            <p>I/We, the undersigned Partner(s)/Proprietor(s) of <strong>{firmName}</strong>, do hereby solemnly declare and affirm the following:</p>
+            <ol>
+                <li>The specimen signatures provided above are our genuine and authentic signatures, which shall be used for all official correspondence, agreements, and transactions with Greenstar Fertilizers Limited (GFL).</li>
+                <li>All information furnished in this dealer registration application and the supporting documents submitted are true, correct, and complete to the best of our knowledge and belief.</li>
+                <li>We authorise GFL to verify the authenticity of all documents, information, and signatures provided herein through any means deemed appropriate.</li>
+                <li>We understand that any misrepresentation, falsification, or concealment of material facts may result in immediate cancellation of the dealership, forfeiture of any deposits or guarantees, and may attract legal proceedings.</li>
+                <li>We agree to abide by the terms and conditions, policies, and guidelines of GFL as amended from time to time.</li>
+                <li>We consent to GFL collecting, processing, and storing our personal data and business information for the purpose of dealer registration and ongoing business operations in accordance with applicable data protection laws.</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class='doc-footer'>
+        <div class='footer-col'>
+            <div><strong>Place:</strong> <span class='sig-line'></span></div>
+            <div style='margin-top:12px;'><strong>Date:</strong>&nbsp; <span class='sig-line'></span></div>
+        </div>
+        <div class='footer-col' style='text-align:center;'>
+            <div class='sig-line'></div>
+            <div class='sig-label'>Authorised Signatory in For Seal</div>
+        </div>
+        <div class='seal-box'>
+            <div class='seal-border'>Dealer Seal / Stamp</div>
+            <div class='seal-label'>Official Seal (Firm Full Address Seal)</div>
         </div>
     </div>
 </body>
