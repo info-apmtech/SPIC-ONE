@@ -516,6 +516,7 @@ namespace SPIC.Core.Entities
         public string? BoardReasolutionFilePath { get; set; }
         public string? AffidavitFilePath { get; set; }
         public string? GreenstarSpecimanFilePath { get; set; }
+        public string? AuthorizationLetterFilePath { get; set; }
 
     }
 }

@@ -1120,6 +1120,72 @@
                     }
                 </div>
             </div>
+
+            @if (_showAuthorizationLetter)
+            {
+            <!-- Authorization Letter -->
+            <div class="col-md-6">
+                <div class="doc-card">
+                    <div class="doc-header">
+                        <div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+                            <i class="bi bi-envelope-open"></i>
+                        </div>
+                        <div class="doc-title-row">
+                            <div>
+                                <div class="doc-title">Authorization Letter</div>
+                                <div class="doc-desc">Letter of authorization from the firm</div>
+                            </div>
+                            <div class="badge-group">
+                                <span class="badge-req">Required</span>
+                                @if (!string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath))
+                                {
+                                    <span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath))
+                    {
+                        <div class="file-uploaded-box">
+                            <div class="file-info">
+                                <i class="bi bi-file-earmark-pdf"></i>
+                                <div>
+                                    <div class="file-name">@GetFileName(_docs.AuthorizationLetterFilePath)</div>
+                                    <div class="file-meta">Authorization Letter</div>
+                                </div>
+                            </div>
+                            <div class="file-actions">
+                                <a href="@GetFileUrl(_docs.AuthorizationLetterFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+                                <label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+                                    <i class="bi bi-arrow-repeat"></i> Replace
+                                    <InputFile hidden OnChange="OnAuthorizationLetterSelected" accept=".pdf,.jpg,.jpeg,.png" />
+                                </label>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="file-missing-box">
+                            <div class="missing-info">
+                                <i class="bi bi-upload" style="color:#059669;"></i>
+                                <div>
+                                    <div class="missing-title" style="color:#059669;">Click to upload</div>
+                                    <div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+                                </div>
+                            </div>
+                            <label class="btn-green-solid mb-0" style="cursor:pointer;">
+                                <i class="bi bi-upload me-1"></i> Upload Document
+                                <InputFile hidden OnChange="OnAuthorizationLetterSelected" accept=".pdf,.jpg,.jpeg,.png" />
+                            </label>
+                        </div>
+                    }
+                </div>
+            </div>
+            }
         </div>
     </div>
 
@@ -1155,6 +1221,19 @@
             if (string.IsNullOrEmpty(t)) return false;
             return t.Contains("Partnership", StringComparison.OrdinalIgnoreCase) ||
                    t.Equals("LLP", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private bool _showAuthorizationLetter
+    {
+        get
+        {
+            var t = _dealer.BusinessEntityType?.Trim();
+            if (string.IsNullOrEmpty(t)) return false;
+            if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
+                t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return true;
         }
     }
 
@@ -1252,6 +1331,9 @@
         if (_showBoardResolution)
             requiredPaths.Add(_docs.BoardReasolutionFilePath);
 
+        if (_showAuthorizationLetter)
+            requiredPaths.Add(_docs.AuthorizationLetterFilePath);
+
         foreach (var p in _partners)
         {
             requiredPaths.Add(p.ProprietorImagePath);
@@ -1348,6 +1430,12 @@
     {
         var path = await UploadFileToServer(DealerId, "Affidavit", e.File);
         if (path != null) { _docs.AffidavitFilePath = path; await SaveDocuments(); CalculateProgress(); }
+    }
+
+    private async Task OnAuthorizationLetterSelected(InputFileChangeEventArgs e)
+    {
+        var path = await UploadFileToServer(DealerId, "AuthorizationLetter", e.File);
+        if (path != null) { _docs.AuthorizationLetterFilePath = path; await SaveDocuments(); CalculateProgress(); }
     }
 
     // --- Partner Document Upload Handlers ---
