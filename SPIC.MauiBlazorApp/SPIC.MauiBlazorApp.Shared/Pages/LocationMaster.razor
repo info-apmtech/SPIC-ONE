@@ -39,7 +39,7 @@
 				<div class="col-md-3">
 					<label class="form-label-custom">Zone Name</label>
 					<input type="text" class="form-control-custom w-100" placeholder="Enter Zone Name"
-						   @bind="_zoneForm.ZoneName" />
+						   @bind="_zoneForm.ZoneName" @ref="_firstInputRef" />
 				</div>
 				<div class="col-md-3">
 					<label class="form-label-custom">Zone Code</label>
@@ -63,7 +63,7 @@
 				<div class="col-md-4">
 					<label class="form-label-custom">State Name</label>
 					<input type="text" class="form-control-custom w-100" placeholder="Enter State Name"
-						   @bind="_stateForm.StateName" />
+						   @bind="_stateForm.StateName" @ref="_firstInputRef" />
 				</div>
 				<div class="col-md-4">
 					<label class="form-label-custom">Zone</label>
@@ -81,7 +81,7 @@
 				<div class="col-md-4">
 					<label class="form-label-custom">District Name</label>
 					<input type="text" class="form-control-custom w-100" placeholder="Enter District Name"
-						   @bind="_districtForm.DistrictName" />
+						   @bind="_districtForm.DistrictName" @ref="_firstInputRef" />
 				</div>
 				<div class="col-md-4">
 					<label class="form-label-custom">State</label>
@@ -99,7 +99,7 @@
 				<div class="col-md-3">
 					<label class="form-label-custom">Sub-District Name</label>
 					<input type="text" class="form-control-custom w-100" placeholder="Enter Sub-District Name"
-						   @bind="_subDistrictForm.SubDistrictName" />
+						   @bind="_subDistrictForm.SubDistrictName" @ref="_firstInputRef" />
 				</div>
 				<div class="col-md-3">
 					<label class="form-label-custom">State</label>
@@ -127,7 +127,7 @@
 				<div class="col-md-4">
 					<label class="form-label-custom">Region Name</label>
 					<input type="text" class="form-control-custom w-100" placeholder="Enter Region Name"
-						   @bind="_regionForm.RegionName" />
+						   @bind="_regionForm.RegionName" @ref="_firstInputRef" />
 				</div>
 				<div class="col-md-4">
 					<label class="form-label-custom">State</label>
@@ -145,7 +145,7 @@
 				<div class="col-md-4">
 					<label class="form-label-custom">Headquarter Name</label>
 					<input type="text" class="form-control-custom w-100" placeholder="Enter Headquarter Name"
-						   @bind="_headquarterForm.HeadquarterName" />
+						   @bind="_headquarterForm.HeadquarterName" @ref="_firstInputRef" />
 				</div>
 				<div class="col-md-4">
 					<label class="form-label-custom">Region</label>
@@ -166,267 +166,270 @@
 						@if (ActiveTab == "Zones")
 						{
 							<input type="checkbox" @bind="_zoneForm.IsActive">
-						}
+							}
 						else if (ActiveTab == "States")
-						{
-							<input type="checkbox" @bind="_stateForm.IsActive">
-						}
+							{
+								<input type="checkbox" @bind="_stateForm.IsActive">
+								}
 						else if (ActiveTab == "Districts")
-						{
-							<input type="checkbox" @bind="_districtForm.IsActive">
-						}
+								{
+									<input type="checkbox" @bind="_districtForm.IsActive">
+									}
 						else if (ActiveTab == "Regions")
-						{
-							<input type="checkbox" @bind="_regionForm.IsActive">
-						}
-						else if (ActiveTab == "Headquarters")
-						{
-							<input type="checkbox" @bind="_headquarterForm.IsActive">
-						}
-						else
-						{
-							<input type="checkbox" @bind="_subDistrictForm.IsActive">
-						}
-						<span class="slider"></span>
-					</label>
-				</div>
-			</div>
-		</div>
-
-		<div class="d-flex justify-content-end pt-2 mt-4">
-			<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
-			<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
-				<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
-			</button>
-		</div>
-	</div>
-
-	<div class="row g-3 mb-4">
-		<div class="col-md-4">
-			<div class="metric-card bg-blue-light">
-				<div class="metric-header">
-					<h4 class="metric-title">Total @ActiveTab</h4>
-				</div>
-				<div class="metric-val">@CurrentAllItems.Count</div>
-			</div>
-		</div>
-		<div class="col-md-4">
-			<div class="metric-card bg-mint-light">
-				<div class="metric-header">
-					<h4 class="metric-title">Active</h4>
-				</div>
-				<div class="metric-val">@CurrentAllItems.Count(x => x.IsActive)</div>
-			</div>
-		</div>
-		<div class="col-md-4">
-			<div class="metric-card bg-gray-light">
-				<div class="metric-header">
-					<h4 class="metric-title">Inactive</h4>
-				</div>
-				<div class="metric-val">@CurrentAllItems.Count(x => !x.IsActive)</div>
-			</div>
-		</div>
-	</div>
-
-	<div class="main-card">
-		<div class="section-header">
-			<h3 class="section-title">Existing @ActiveTab</h3>
-
-			<div class="table-controls">
-				<div class="search-box">
-					<i class="bi bi-search"></i>
-					<input type="text" placeholder="Search @ActiveTab.ToLower()..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
-				</div>
-				<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
-					<option value="All">All Status</option>
-					<option value="Active">Active</option>
-					<option value="Inactive">Inactive</option>
-				</select>
-			</div>
-		</div>
-
-		<div class="table-wrapper">
-			<div class="table-responsive">
-				<table class="spic-table">
-					<thead>
-						<tr>
-							<th style="width: 80px;">S:No</th>
-							<th>@GetSingularName(ActiveTab) Name</th>
-
-							@if (ActiveTab == "Zones")
-							{
-								<th>Zone Code</th>
-								<th>Color</th>
-							}
-							else if (ActiveTab == "States")
-							{
-								<th>Zone</th>
-							}
-							else if (ActiveTab == "Districts")
-							{
-								<th>State</th>
-							}
-							else if (ActiveTab == "Sub-Districts")
-							{
-								<th>District</th>
-							}
-							else if (ActiveTab == "Regions")
-							{
-								<th>State</th>
-							}
-							else if (ActiveTab == "Headquarters")
-							{
-								<th>Region</th>
-							}
-
-							<th>Status</th>
-							<th>Created At</th>
-							<th>Action</th>
-						</tr>
-					</thead>
-					<tbody>
-						@if (_isLoading)
-						{
-							<tr>
-								<td colspan="@TableColSpan" class="text-center text-muted">Loading...</td>
-							</tr>
-						}
-						else if (!PagedItems.Any())
-						{
-							<tr>
-								<td colspan="@TableColSpan" class="text-center text-muted">No @ActiveTab.ToLower() found.</td>
-							</tr>
-						}
-						else
-						{
-							@foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
-							{
-								<tr>
-									<td class="text-muted">@((_currentPage - 1) * _pageSize + index + 1)</td>
-									<td>
-										@if (ActiveTab == "Zones" && !string.IsNullOrEmpty(item.ZoneColorCode))
-										{
-											<span class="color-dot" style="background-color: @item.ZoneColorCode;"></span>
+									{
+										<input type="checkbox" @bind="_regionForm.IsActive">
 										}
-										@item.Name
-									</td>
-
-									@if (ActiveTab == "Zones")
-									{
-										<td>@item.ZoneCode</td>
-										<td>
-											@if (!string.IsNullOrEmpty(item.ZoneColorCode))
-											{
-												<span class="color-dot" style="background-color: @item.ZoneColorCode;"></span>
-												@item.ZoneColorCode
+						else if (ActiveTab == "Headquarters")
+										{
+											<input type="checkbox" @bind="_headquarterForm.IsActive">
 											}
-										</td>
-									}
-									else if (ActiveTab == "States")
-									{
-										<td>@GetZoneName(item.ZoneId)</td>
-									}
-									else if (ActiveTab == "Districts")
-									{
-										<td>@GetStateName(item.StateId)</td>
-									}
-									else if (ActiveTab == "Sub-Districts")
-									{
-										<td>@GetDistrictName(item.DistrictId)</td>
-									}
-									else if (ActiveTab == "Regions")
-									{
-										<td>@GetStateName(item.StateId)</td>
-									}
-									else if (ActiveTab == "Headquarters")
-									{
-										<td>@GetRegionName(item.RegionId)</td>
-									}
-
-									<td>
-										<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
-											  style="cursor:pointer"
-											  @onclick="() => ToggleStatus(item)">
-											@(item.IsActive ? "Active" : "Inactive")
-										</span>
-									</td>
-									<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
-									<td>
-										<div class="action-icons">
-											<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
-											<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+						else
+											{
+												<input type="checkbox" @bind="_subDistrictForm.IsActive">
+												}
+												<span class="slider"></span>
+											</label>
 										</div>
-									</td>
-								</tr>
+									</div>
+								</div>
+
+								<div class="d-flex justify-content-end pt-2 mt-4">
+									<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
+									<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+										<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+									</button>
+								</div>
+							</div>
+
+							<div class="row g-3 mb-4">
+								<div class="col-md-4">
+									<div class="metric-card bg-blue-light">
+										<div class="metric-header">
+											<h4 class="metric-title">Total @ActiveTab</h4>
+										</div>
+										<div class="metric-val">@CurrentAllItems.Count</div>
+									</div>
+								</div>
+								<div class="col-md-4">
+									<div class="metric-card bg-mint-light">
+										<div class="metric-header">
+											<h4 class="metric-title">Active</h4>
+										</div>
+										<div class="metric-val">@CurrentAllItems.Count(x => x.IsActive)</div>
+									</div>
+								</div>
+								<div class="col-md-4">
+									<div class="metric-card bg-gray-light">
+										<div class="metric-header">
+											<h4 class="metric-title">Inactive</h4>
+										</div>
+										<div class="metric-val">@CurrentAllItems.Count(x => !x.IsActive)</div>
+									</div>
+								</div>
+							</div>
+
+							<div class="main-card">
+								<div class="section-header">
+									<h3 class="section-title">Existing @ActiveTab</h3>
+
+									<div class="table-controls">
+										<div class="search-box">
+											<i class="bi bi-search"></i>
+											<input type="text" placeholder="Search @ActiveTab.ToLower()..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
+											</div>
+											<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+												<option value="All">All Status</option>
+												<option value="Active">Active</option>
+												<option value="Inactive">Inactive</option>
+											</select>
+										</div>
+									</div>
+
+									<div class="table-wrapper">
+										<div class="table-responsive">
+											<table class="spic-table">
+												<thead>
+													<tr>
+														<th style="width: 80px;">S:No</th>
+														<th>@GetSingularName(ActiveTab) Name</th>
+
+														@if (ActiveTab == "Zones")
+														{
+															<th>Zone Code</th>
+															<th>Color</th>
+														}
+														else if (ActiveTab == "States")
+														{
+															<th>Zone</th>
+														}
+														else if (ActiveTab == "Districts")
+														{
+															<th>State</th>
+														}
+														else if (ActiveTab == "Sub-Districts")
+														{
+															<th>District</th>
+														}
+														else if (ActiveTab == "Regions")
+														{
+															<th>State</th>
+														}
+														else if (ActiveTab == "Headquarters")
+														{
+															<th>Region</th>
+														}
+
+														<th>Status</th>
+														<th>Created At</th>
+														<th>Action</th>
+													</tr>
+												</thead>
+												<tbody>
+													@if (_isLoading)
+													{
+														<tr>
+															<td colspan="@TableColSpan" class="text-center text-muted">Loading...</td>
+														</tr>
+													}
+													else if (!PagedItems.Any())
+													{
+														<tr>
+															<td colspan="@TableColSpan" class="text-center text-muted">No @ActiveTab.ToLower() found.</td>
+														</tr>
+													}
+													else
+													{
+														@foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
+														{
+															<tr>
+																<td class="text-muted">@((_currentPage - 1) * _pageSize + index + 1)</td>
+																<td>
+																	@if (ActiveTab == "Zones" && !string.IsNullOrEmpty(item.ZoneColorCode))
+																	{
+																		<span class="color-dot" style="background-color: @item.ZoneColorCode;"></span>
+																	}
+																	@item.Name
+																</td>
+
+																@if (ActiveTab == "Zones")
+																{
+																	<td>@item.ZoneCode</td>
+																	<td>
+																		@if (!string.IsNullOrEmpty(item.ZoneColorCode))
+																		{
+																			<span class="color-dot" style="background-color: @item.ZoneColorCode;"></span>
+																			@item.ZoneColorCode
+																		}
+																	</td>
+																}
+																else if (ActiveTab == "States")
+																{
+																	<td>@GetZoneName(item.ZoneId)</td>
+																}
+																else if (ActiveTab == "Districts")
+																{
+																	<td>@GetStateName(item.StateId)</td>
+																}
+																else if (ActiveTab == "Sub-Districts")
+																{
+																	<td>@GetDistrictName(item.DistrictId)</td>
+																}
+																else if (ActiveTab == "Regions")
+																{
+																	<td>@GetStateName(item.StateId)</td>
+																}
+																else if (ActiveTab == "Headquarters")
+																{
+																	<td>@GetRegionName(item.RegionId)</td>
+																}
+
+																<td>
+																	<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+																		  style="cursor:pointer"
+																		  @onclick="() => ToggleStatus(item)">
+																		@(item.IsActive ? "Active" : "Inactive")
+																	</span>
+																</td>
+																<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
+																<td>
+																	<div class="action-icons">
+																		<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+																		<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+																	</div>
+																</td>
+															</tr>
+														}
+													}
+												</tbody>
+											</table>
+										</div>
+									</div>
+
+									<div class="pagination-container">
+										<div class="items-per-page">
+											Items Per Page
+											<select @bind="_pageSize" @bind:after="ApplyFilter">
+												<option value="16">16</option>
+												<option value="32">32</option>
+												<option value="50">50</option>
+											</select>
+										</div>
+
+										<div class="pagination-controls">
+											<div class="page-btn @(_currentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage">
+												<i class="bi bi-chevron-left"></i>
+											</div>
+											@foreach (var thispage in PageNumbers)
+											{
+												@if (thispage == -1)
+												{
+													<div class="page-btn ellipsis">...</div>
+												}
+												else
+												{
+													<div class="page-btn @(thispage == _currentPage ? "active" : "")" @onclick="() => GoToPage(thispage)">@(thispage)</div>
+												}
+											}
+											<div class="page-btn @(_currentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage">
+												<i class="bi bi-chevron-right"></i>
+											</div>
+										</div>
+									</div>
+
+								</div>
+
+							</div>
+
+							@if (_showDeleteConfirm)
+							{
+								<div class="modal-backdrop fade show"></div>
+								<div class="modal fade show d-block" tabindex="-1" role="dialog">
+									<div class="modal-dialog modal-dialog-centered" role="document">
+										<div class="modal-content">
+											<div class="modal-header">
+												<h5 class="modal-title">Confirm Delete</h5>
+												<button type="button" class="btn-close" @onclick="CancelDelete"></button>
+											</div>
+											<div class="modal-body">
+												<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
+												<p class="text-muted mb-0">This action cannot be undone.</p>
+											</div>
+											<div class="modal-footer">
+												<button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+												<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+													@(_isDeleting ? "Deleting..." : "Delete")
+												</button>
+											</div>
+										</div>
+									</div>
+								</div>
 							}
-						}
-					</tbody>
-				</table>
-			</div>
-		</div>
-
-		<div class="pagination-container">
-			<div class="items-per-page">
-				Items Per Page
-				<select @bind="_pageSize" @bind:after="ApplyFilter">
-					<option value="16">16</option>
-					<option value="32">32</option>
-					<option value="50">50</option>
-				</select>
-			</div>
-
-			<div class="pagination-controls">
-				<div class="page-btn @(_currentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage">
-					<i class="bi bi-chevron-left"></i>
-				</div>
-				@foreach (var thispage in PageNumbers)
-				{
-					@if (thispage == -1)
-					{
-						<div class="page-btn ellipsis">...</div>
-					}
-					else
-					{
-						<div class="page-btn @(thispage == _currentPage ? "active" : "")" @onclick="() => GoToPage(thispage)">@(thispage)</div>
-					}
-				}
-				<div class="page-btn @(_currentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage">
-					<i class="bi bi-chevron-right"></i>
-				</div>
-			</div>
-		</div>
-
-	</div>
-
-</div>
-
-@if (_showDeleteConfirm)
-{
-	<div class="modal-backdrop fade show"></div>
-	<div class="modal fade show d-block" tabindex="-1" role="dialog">
-		<div class="modal-dialog modal-dialog-centered" role="document">
-			<div class="modal-content">
-				<div class="modal-header">
-					<h5 class="modal-title">Confirm Delete</h5>
-					<button type="button" class="btn-close" @onclick="CancelDelete"></button>
-				</div>
-				<div class="modal-body">
-					<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
-					<p class="text-muted mb-0">This action cannot be undone.</p>
-				</div>
-				<div class="modal-footer">
-					<button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
-					<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
-						@(_isDeleting ? "Deleting..." : "Delete")
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-}
 
 @code {
 	private readonly List<string> TabOptions = ["Zones", "States", "Districts", "Sub-Districts", "Regions", "Headquarters"];
+
+	// ADDED: Element reference for focusing
+	private ElementReference _firstInputRef;
 
 	// Tab state
 	private string ActiveTab { get; set; } = "Zones";
@@ -632,13 +635,13 @@
 				"Sub-Districts" => _isEditing
 						? (object)new { Id = _editingId!.Value, _subDistrictForm.SubDistrictName, _subDistrictForm.DistrictId, _subDistrictForm.IsActive, UpdatedBy = "current-user" }
 						: new { _subDistrictForm.SubDistrictName, _subDistrictForm.DistrictId, _subDistrictForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
-					"Regions" => _isEditing
-						? (object)new { Id = _editingId!.Value, _regionForm.RegionName, _regionForm.StateId, _regionForm.IsActive, UpdatedBy = "current-user" }
-						: new { _regionForm.RegionName, _regionForm.StateId, _regionForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
-					"Headquarters" => _isEditing
-						? (object)new { Id = _editingId!.Value, _headquarterForm.HeadquarterName, _headquarterForm.RegionId, _headquarterForm.IsActive, UpdatedBy = "current-user" }
-						: new { _headquarterForm.HeadquarterName, _headquarterForm.RegionId, _headquarterForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
-					_ => new { }
+				"Regions" => _isEditing
+					? (object)new { Id = _editingId!.Value, _regionForm.RegionName, _regionForm.StateId, _regionForm.IsActive, UpdatedBy = "current-user" }
+					: new { _regionForm.RegionName, _regionForm.StateId, _regionForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				"Headquarters" => _isEditing
+					? (object)new { Id = _editingId!.Value, _headquarterForm.HeadquarterName, _headquarterForm.RegionId, _headquarterForm.IsActive, UpdatedBy = "current-user" }
+					: new { _headquarterForm.HeadquarterName, _headquarterForm.RegionId, _headquarterForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				_ => new { }
 			};
 
 			HttpResponseMessage response;
@@ -678,7 +681,8 @@
 		}
 	}
 
-	private void EditItem(LocationItemDto item)
+	// CHANGED: Added async Task to support FocusAsync
+	private async Task EditItem(LocationItemDto item)
 	{
 		_isEditing = true;
 		_editingId = item.Id;
@@ -738,6 +742,13 @@
 				};
 				break;
 		}
+
+		// ADDED: Focus the input automatically
+		try
+		{
+			await _firstInputRef.FocusAsync();
+		}
+		catch { }
 	}
 
 	private void DeleteItem(LocationItemDto item)
@@ -964,4 +975,3 @@
 		public bool IsActive { get; set; } = true;
 	}
 }
-
