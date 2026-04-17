@@ -386,6 +386,7 @@ namespace SPIC.Core.Entities
         public decimal PropertyValue { get; set; }
         public string? UploadedLandDocumentPath { get; set; }
         public string? UploadedECDocumentPath { get; set; }
+        public string? UploadedValuationCertificatePath { get; set; }
     }
     public class DealerAssetBuilding
     {
@@ -411,6 +412,7 @@ namespace SPIC.Core.Entities
         public string? Remarks { get; set; }
         public string? UploadedBuildingDocumentPath { get; set; }
         public string? UploadedECDocumentPath { get; set; }
+        public string? UploadedValuationCertificatePath { get; set; }
     }
     public class DealerLoanLiabilities
     {
@@ -517,6 +519,7 @@ namespace SPIC.Core.Entities
         public string? AffidavitFilePath { get; set; }
         public string? GreenstarSpecimanFilePath { get; set; }
         public string? AuthorizationLetterFilePath { get; set; }
+        public string? DeedOfGuaranteeFilePath { get; set; }
 
     }
 }

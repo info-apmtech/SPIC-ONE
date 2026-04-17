@@ -36,6 +36,22 @@ namespace SpicAPI.Controllers
             return Ok(items);
         }
 
+        [HttpGet("byDealer/{dealerId}")]
+        public virtual async Task<IActionResult> GetByDealerId(int dealerId)
+        {
+            var prop = typeof(T).GetProperty("DealerId");
+            if (prop == null) return BadRequest($"{typeof(T).Name} does not have a DealerId property.");
+
+            var param = System.Linq.Expressions.Expression.Parameter(typeof(T), "x");
+            var body = System.Linq.Expressions.Expression.Equal(
+                System.Linq.Expressions.Expression.Property(param, prop),
+                System.Linq.Expressions.Expression.Constant(dealerId));
+            var predicate = System.Linq.Expressions.Expression.Lambda<Func<T, bool>>(body, param);
+
+            var items = await _repo.GetWhere(predicate).ToListAsync();
+            return Ok(items);
+        }
+
         [HttpGet("{id}")]
         public virtual async Task<IActionResult> GetById(int id)
         {

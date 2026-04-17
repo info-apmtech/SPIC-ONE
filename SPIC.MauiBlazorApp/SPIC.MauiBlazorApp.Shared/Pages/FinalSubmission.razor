@@ -505,6 +505,51 @@
     private int _incompleteSections;
     private int _progressPercent;
 
+    private bool _isSoleProprietor => _dealer.EntityType == EntityType.soleProprietor;
+    private bool _hasWholesaleLicense => !string.IsNullOrEmpty(_dealer.WholeSaleFertilizerLicenseNumber);
+    private bool _hasRetailLicense => !string.IsNullOrEmpty(_dealer.RetailFertilizerLicenseNumber);
+
+    private bool _showPartnershipDeed
+    {
+        get
+        {
+            var t = _dealer.BusinessEntityType?.Trim();
+            if (string.IsNullOrEmpty(t)) return false;
+            return t.Contains("Partnership", StringComparison.OrdinalIgnoreCase) ||
+                   t.Equals("LLP", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private bool _showAuthorizationLetter
+    {
+        get
+        {
+            var t = _dealer.BusinessEntityType?.Trim();
+            if (string.IsNullOrEmpty(t)) return false;
+            if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
+                t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return true;
+        }
+    }
+
+    private bool _showBoardResolution
+    {
+        get
+        {
+            var t = _dealer.BusinessEntityType?.Trim();
+            if (string.IsNullOrEmpty(t)) return false;
+            if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
+                t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (t.Contains("Partnership", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (t.Equals("LLP", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return true;
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await Task.WhenAll(
@@ -639,11 +684,13 @@
         // Step 11: Enclosures
         _stepStatus[10] = _docs != null &&
             !string.IsNullOrEmpty(_docs.SpecimanFilePath) &&
+            !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath) &&
             !string.IsNullOrEmpty(_docs.BankGauranteeFilePath) &&
             !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath) &&
             !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath) &&
             !string.IsNullOrEmpty(_docs.ValuationCertificateFilePath) &&
-            !string.IsNullOrEmpty(_docs.RetailerListFilePath);
+            !string.IsNullOrEmpty(_docs.RetailerListFilePath) &&
+            !string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath);
     }
 
     private void BuildEnclosureItems()
@@ -653,30 +700,57 @@
             new("GST Certificate", !string.IsNullOrEmpty(_dealer.GSTFilePath)),
             new("PAN Copy", !string.IsNullOrEmpty(_dealer.PANFilePath)),
             new("Aadhaar Copy", !string.IsNullOrEmpty(_dealer.AadhaarFilePath)),
-            new("Fertilizers Sales License", !string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath)),
-            new("Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.SpecimanFilePath)),
+            new("SPIC Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.SpecimanFilePath)),
+            new("Greenstar Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath)),
             new("Bank Guarantee Certificate", _docs != null && !string.IsNullOrEmpty(_docs.BankGauranteeFilePath)),
             new("IT Returns (FY1)", _docs != null && !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath)),
             new("IT Returns (FY2)", _docs != null && !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath)),
             new("Valuation Certificate", _docs != null && !string.IsNullOrEmpty(_docs.ValuationCertificateFilePath)),
             new("Retailer List", _docs != null && !string.IsNullOrEmpty(_docs.RetailerListFilePath)),
+            new("Deed of Guarantee", _docs != null && !string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath)),
+            new("Affidavit", _docs != null && !string.IsNullOrEmpty(_docs.AffidavitFilePath)),
         };
 
-        // Add partner documents
+        // Conditional license documents
+        if (_hasWholesaleLicense)
+            _enclosureItems.Add(new("Wholesale Fertilizers License", !string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath)));
+        if (_hasRetailLicense)
+            _enclosureItems.Add(new("Retail Fertilizers License", !string.IsNullOrEmpty(_dealer.RetailLicenseFilePath)));
+
+        // Conditional documents based on business entity type
+        if (_showPartnershipDeed)
+            _enclosureItems.Add(new("Partnership Deed", _docs != null && !string.IsNullOrEmpty(_docs.PartnershipDeadFilePath)));
+        if (_showBoardResolution)
+            _enclosureItems.Add(new("Board Resolution", _docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath)));
+        if (_showAuthorizationLetter)
+            _enclosureItems.Add(new("Authorization Letter", _docs != null && !string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath)));
+
+        // Partner documents
         foreach (var p in _partners)
         {
             _enclosureItems.Add(new($"Photo — {p.Name}", !string.IsNullOrEmpty(p.ProprietorImagePath)));
-            _enclosureItems.Add(new($"Aadhaar — {p.Name}", !string.IsNullOrEmpty(p.AadhaarFilePath)));
-            _enclosureItems.Add(new($"PAN — {p.Name}", !string.IsNullOrEmpty(p.PANFilePath)));
+            if (!_isSoleProprietor)
+            {
+                _enclosureItems.Add(new($"Aadhaar — {p.Name}", !string.IsNullOrEmpty(p.AadhaarFilePath)));
+                _enclosureItems.Add(new($"PAN — {p.Name}", !string.IsNullOrEmpty(p.PANFilePath)));
+            }
         }
 
-        // Optional documents
-        if (_docs != null && !string.IsNullOrEmpty(_docs.PartnershipDeadFilePath))
-            _enclosureItems.Add(new("Partnership Deed", true));
-        if (_docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath))
-            _enclosureItems.Add(new("Board Resolution", true));
-        if (_docs != null && !string.IsNullOrEmpty(_docs.AffidavitFilePath))
-            _enclosureItems.Add(new("Affidavit", true));
+        // Land asset documents
+        foreach (var l in _assetLands)
+        {
+            _enclosureItems.Add(new($"EC — Land: {l.LandName}", !string.IsNullOrEmpty(l.UploadedECDocumentPath)));
+            _enclosureItems.Add(new($"Property Doc — Land: {l.LandName}", !string.IsNullOrEmpty(l.UploadedLandDocumentPath)));
+            _enclosureItems.Add(new($"Valuation — Land: {l.LandName}", !string.IsNullOrEmpty(l.UploadedValuationCertificatePath)));
+        }
+
+        // Building asset documents
+        foreach (var b in _assetBuildings)
+        {
+            _enclosureItems.Add(new($"EC — Building: {b.BuildingName}", !string.IsNullOrEmpty(b.UploadedECDocumentPath)));
+            _enclosureItems.Add(new($"Property Doc — Building: {b.BuildingName}", !string.IsNullOrEmpty(b.UploadedBuildingDocumentPath)));
+            _enclosureItems.Add(new($"Valuation — Building: {b.BuildingName}", !string.IsNullOrEmpty(b.UploadedValuationCertificatePath)));
+        }
 
         _docTotalCount = _enclosureItems.Count;
         _docUploadedCount = _enclosureItems.Count(d => d.Uploaded);

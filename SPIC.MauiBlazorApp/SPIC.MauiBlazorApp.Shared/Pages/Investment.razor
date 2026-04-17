@@ -1,5 +1,6 @@
 ﻿@page "/Investment"
 @using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Forms
 @using SPIC.Core.Entities
 @using DealerReg = SPIC.Core.Entities.DealerRegistration
 @inject HttpClient Http
@@ -99,6 +100,43 @@
 							<input type="number" class="custom-input" placeholder="Enter Value" @bind="_landForm.PropertyValue" />
 						</div>
 					</div>
+					<div class="row g-3 mb-4">
+						<div class="col-6">
+							<label class="custom-label">EC (Encumbrance Certificate)</label>
+							<label class="btn-upload-attach-Enclosure w-100 mb-0" style="cursor:pointer;">
+								<i class="bi bi-upload"></i> @(string.IsNullOrEmpty(_landForm.UploadedECDocumentPath) ? "Upload EC" : "Replace EC")
+								<InputFile hidden OnChange="OnLandECSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+							@if (!string.IsNullOrEmpty(_landForm.UploadedECDocumentPath))
+							{
+								<div class="small text-success mt-1"><i class="bi bi-check-circle"></i> @GetFileName(_landForm.UploadedECDocumentPath)</div>
+							}
+						</div>
+						<div class="col-6">
+							<label class="custom-label">Property Document</label>
+							<label class="btn-upload-attach-Enclosure w-100 mb-0" style="cursor:pointer;">
+								<i class="bi bi-upload"></i> @(string.IsNullOrEmpty(_landForm.UploadedLandDocumentPath) ? "Upload Property Doc" : "Replace Property Doc")
+								<InputFile hidden OnChange="OnLandPropertyDocSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+							@if (!string.IsNullOrEmpty(_landForm.UploadedLandDocumentPath))
+							{
+								<div class="small text-success mt-1"><i class="bi bi-check-circle"></i> @GetFileName(_landForm.UploadedLandDocumentPath)</div>
+							}
+						</div>
+					</div>
+					<div class="row g-3 mb-4">
+						<div class="col-6">
+							<label class="custom-label">Valuation Certificate</label>
+							<label class="btn-upload-attach-Enclosure w-100 mb-0" style="cursor:pointer;">
+								<i class="bi bi-upload"></i> @(string.IsNullOrEmpty(_landForm.UploadedValuationCertificatePath) ? "Upload Valuation Cert" : "Replace Valuation Cert")
+								<InputFile hidden OnChange="OnLandValuationCertSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+							@if (!string.IsNullOrEmpty(_landForm.UploadedValuationCertificatePath))
+							{
+								<div class="small text-success mt-1"><i class="bi bi-check-circle"></i> @GetFileName(_landForm.UploadedValuationCertificatePath)</div>
+							}
+						</div>
+					</div>
 					<div class="mt-auto">
 						<button class="btn-blue-action" @onclick="SaveLandAsset"><i class="bi bi-plus"></i> @(_landForm.Id > 0 ? "Update" : "Add") Land</button>
 					</div>
@@ -195,12 +233,47 @@
 							{
 								<option value="@s.Id">@s.StateName</option>
 							}
-						</select>
-					</div>
-					<div class="col-md-4">
-						<button class="btn-blue-action w-100 mt-4" @onclick="SaveBuildingAsset"><i class="bi bi-plus"></i> @(_buildingForm.Id > 0 ? "Update" : "Add") Building</button>
-					</div>
-				</div>
+							</select>
+							</div>
+							<div class="col-md-4">
+								<label class="custom-label">EC (Encumbrance Certificate)</label>
+								<label class="btn-upload-attach-Enclosure w-100 mb-0" style="cursor:pointer;">
+									<i class="bi bi-upload"></i> @(string.IsNullOrEmpty(_buildingForm.UploadedECDocumentPath) ? "Upload EC" : "Replace EC")
+									<InputFile hidden OnChange="OnBuildingECSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+								@if (!string.IsNullOrEmpty(_buildingForm.UploadedECDocumentPath))
+								{
+									<div class="small text-success mt-1"><i class="bi bi-check-circle"></i> @GetFileName(_buildingForm.UploadedECDocumentPath)</div>
+								}
+							</div>
+						</div>
+						<div class="row g-3 mb-3">
+							<div class="col-md-4">
+								<label class="custom-label">Property Document</label>
+								<label class="btn-upload-attach-Enclosure w-100 mb-0" style="cursor:pointer;">
+									<i class="bi bi-upload"></i> @(string.IsNullOrEmpty(_buildingForm.UploadedBuildingDocumentPath) ? "Upload Property Doc" : "Replace Property Doc")
+									<InputFile hidden OnChange="OnBuildingPropertyDocSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+								@if (!string.IsNullOrEmpty(_buildingForm.UploadedBuildingDocumentPath))
+								{
+									<div class="small text-success mt-1"><i class="bi bi-check-circle"></i> @GetFileName(_buildingForm.UploadedBuildingDocumentPath)</div>
+								}
+							</div>
+							<div class="col-md-4">
+								<label class="custom-label">Valuation Certificate</label>
+								<label class="btn-upload-attach-Enclosure w-100 mb-0" style="cursor:pointer;">
+									<i class="bi bi-upload"></i> @(string.IsNullOrEmpty(_buildingForm.UploadedValuationCertificatePath) ? "Upload Valuation Cert" : "Replace Valuation Cert")
+									<InputFile hidden OnChange="OnBuildingValuationCertSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+								@if (!string.IsNullOrEmpty(_buildingForm.UploadedValuationCertificatePath))
+								{
+									<div class="small text-success mt-1"><i class="bi bi-check-circle"></i> @GetFileName(_buildingForm.UploadedValuationCertificatePath)</div>
+								}
+							</div>
+							<div class="col-md-4">
+								<button class="btn-blue-action w-100 mt-4" @onclick="SaveBuildingAsset"><i class="bi bi-plus"></i> @(_buildingForm.Id > 0 ? "Update" : "Add") Building</button>
+							</div>
+						</div>
 		</div>
 
 		<h4 class="list-header">Your Added Assets</h4>
@@ -231,6 +304,14 @@
 				<div class="asset-detail"><div class="asset-lbl">Survey No</div><div class="asset-val">@item.SurvayNumber</div></div>
 				<div class="asset-detail"><div class="asset-lbl">Size (Cent)</div><div class="asset-val">@item.LandSize</div></div>
 				<div class="asset-detail"><div class="asset-lbl">Value (₹)</div><div class="asset-val">₹ @item.PropertyValue.ToString("N0")</div></div>
+				<div class="asset-detail">
+					<div class="asset-lbl">Documents</div>
+					<div class="asset-val">
+						@if (!string.IsNullOrEmpty(item.UploadedECDocumentPath)) { <span class="badge bg-success me-1">EC</span> }
+						@if (!string.IsNullOrEmpty(item.UploadedLandDocumentPath)) { <span class="badge bg-success me-1">Property</span> }
+						@if (!string.IsNullOrEmpty(item.UploadedValuationCertificatePath)) { <span class="badge bg-success">Valuation</span> }
+					</div>
+				</div>
 				<div class="asset-actions">
 					<i class="bi bi-pencil-square edit" style="cursor:pointer;" @onclick="() => EditLandAsset(item)"></i>
 					<i class="bi bi-trash delete" style="cursor:pointer;" @onclick="() => ConfirmDelete(item.Id, landType)"></i>
@@ -246,7 +327,14 @@
 				<div class="asset-detail"><div class="asset-lbl">Building</div><div class="asset-val">@item.BuildingName</div></div>
 				<div class="asset-detail"><div class="asset-lbl">Value (₹)</div><div class="asset-val">₹ @item.PropertyValue.ToString("N0")</div></div>
 				<div class="asset-detail"><div class="asset-lbl">Size (Sq Ft)</div><div class="asset-val">@item.LandSize</div></div>
-				<div class="asset-detail"><div class="asset-lbl">Remarks</div><div class="asset-val text-muted">@item.Remarks</div></div>
+				<div class="asset-detail">
+					<div class="asset-lbl">Documents</div>
+					<div class="asset-val">
+						@if (!string.IsNullOrEmpty(item.UploadedECDocumentPath)) { <span class="badge bg-success me-1">EC</span> }
+						@if (!string.IsNullOrEmpty(item.UploadedBuildingDocumentPath)) { <span class="badge bg-success me-1">Property</span> }
+						@if (!string.IsNullOrEmpty(item.UploadedValuationCertificatePath)) { <span class="badge bg-success">Valuation</span> }
+					</div>
+				</div>
 				<div class="asset-actions">
 					<i class="bi bi-pencil-square edit" style="cursor:pointer;" @onclick="() => EditBuildingAsset(item)"></i>
 					<i class="bi bi-trash delete" style="cursor:pointer;" @onclick="() => ConfirmDelete(item.Id, buildingType)"></i>
@@ -397,7 +485,7 @@
 			<div class="fin-card-white fin-green">
 				<div class="fin-card-header">
 					<div class="fin-icon-bg"><i class="bi bi-bank"></i></div>
-					Fixed Assets
+					Total Assets
 				</div>
 				<div class="fin-card-val">₹ @AssetsTotal.ToString("N0")</div>
 				<div class="fin-card-sub">Banking, Land, Building & Movable</div>
@@ -630,7 +718,10 @@
 		_landForm = new DealerAssetLand
 		{
 			Id = item.Id, DealerId = item.DealerId, LandName = item.LandName,
-			SurvayNumber = item.SurvayNumber, LandSize = item.LandSize, PropertyValue = item.PropertyValue
+			SurvayNumber = item.SurvayNumber, LandSize = item.LandSize, PropertyValue = item.PropertyValue,
+			UploadedECDocumentPath = item.UploadedECDocumentPath,
+			UploadedLandDocumentPath = item.UploadedLandDocumentPath,
+			UploadedValuationCertificatePath = item.UploadedValuationCertificatePath
 		};
 	}
 
@@ -665,7 +756,10 @@
 			LandSize = item.LandSize, Remarks = item.Remarks,
 			ShopNoORRoomNoOrBlockNo = item.ShopNoORRoomNoOrBlockNo, Street = item.Street,
 			SubVillage = item.SubVillage, Village = item.Village, PinCode = item.PinCode,
-			Block = item.Block, Taluk = item.Taluk, DistrictId = item.DistrictId, StateId = item.StateId
+			Block = item.Block, Taluk = item.Taluk, DistrictId = item.DistrictId, StateId = item.StateId,
+			UploadedECDocumentPath = item.UploadedECDocumentPath,
+			UploadedBuildingDocumentPath = item.UploadedBuildingDocumentPath,
+			UploadedValuationCertificatePath = item.UploadedValuationCertificatePath
 		};
 	}
 
@@ -827,6 +921,84 @@
 		}
 	}
 
+	// ---- Document Upload Handlers (Land) ----
+	private async Task OnLandECSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId ?? 0, "LandEC", e.File);
+		if (path != null) _landForm.UploadedECDocumentPath = path;
+	}
+
+	private async Task OnLandPropertyDocSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId ?? 0, "LandPropertyDoc", e.File);
+		if (path != null) _landForm.UploadedLandDocumentPath = path;
+	}
+
+	private async Task OnLandValuationCertSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId ?? 0, "LandValuationCert", e.File);
+		if (path != null) _landForm.UploadedValuationCertificatePath = path;
+	}
+
+	// ---- Document Upload Handlers (Building) ----
+	private async Task OnBuildingECSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId ?? 0, "BuildingEC", e.File);
+		if (path != null) _buildingForm.UploadedECDocumentPath = path;
+	}
+
+	private async Task OnBuildingPropertyDocSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId ?? 0, "BuildingPropertyDoc", e.File);
+		if (path != null) _buildingForm.UploadedBuildingDocumentPath = path;
+	}
+
+	private async Task OnBuildingValuationCertSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId ?? 0, "BuildingValuationCert", e.File);
+		if (path != null) _buildingForm.UploadedValuationCertificatePath = path;
+	}
+
+	// ---- File Upload Helper ----
+	private async Task<string?> UploadFileToServer(int dealerId, string docType, IBrowserFile file)
+	{
+		try
+		{
+			using var content = new MultipartFormDataContent();
+			var stream = file.OpenReadStream(10 * 1024 * 1024);
+			content.Add(new StreamContent(stream), "file", file.Name);
+			var response = await Http.PostAsync($"api/DealerFile/upload/{dealerId}/{docType}", content);
+			if (response.IsSuccessStatusCode)
+			{
+				var result = await response.Content.ReadFromJsonAsync<FileUploadResponse>();
+				return result?.FilePath;
+			}
+			else
+			{
+				ShowMessage($"Upload failed: {await response.Content.ReadAsStringAsync()}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Upload error: {ex.Message}", true);
+		}
+		return null;
+	}
+
+	private string GetFileName(string? path)
+	{
+		if (string.IsNullOrEmpty(path)) return "";
+		var idx = path.LastIndexOf('/');
+		return idx >= 0 ? path[(idx + 1)..] : path;
+	}
+
+	private string GetFileUrl(string? path)
+	{
+		if (string.IsNullOrEmpty(path)) return "";
+		var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+		return $"{baseUrl}/api/DealerFile/view/{path}";
+	}
+
 	private class CreateResponse<T>
 	{
 		public string? Message { get; set; }
@@ -855,5 +1027,10 @@
 		public string Block { get; set; } = "";
 		public string Division { get; set; } = "";
 		public string Region { get; set; } = "";
+	}
+
+	private class FileUploadResponse
+	{
+		public string? FilePath { get; set; }
 	}
 }
