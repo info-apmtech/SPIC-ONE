@@ -159,16 +159,8 @@
 						 alt="icon" /> Terminated Status
 				</div>
 				<div class="row g-3">
-					<div class="col-md-4">
-						<label class="form-label-custom">Last Transaction Date</label>
-							<input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("LastTransactionDate") ? "is-invalid" : "")" @bind="_model.LastTransactionDate" @bind:after='() => ValidateFieldOnChange("LastTransactionDate", _model.LastTransactionDate != null)'>
-							@if (_errors.ContainsKey("LastTransactionDate"))
-							{
-								<div class="field-error">@_errors["LastTransactionDate"]</div>
-							}
-						</div>
-						<div class="col-md-4">
-							<label class="form-label-custom">Final Amount Status</label>
+					<div class="col-md-3">
+						<label class="form-label-custom">Final Amount Status</label>
 						<div class="status-btn-group">
 							<button type="button"
 									class="btn btn_active @(_model.IsFinalAmountSettled == true ? "active" : "")"
@@ -182,88 +174,101 @@
 							</button>
 						</div>
 					</div>
-					<div class="col-md-4">
-						<label class="form-label-custom">Turnover (Lakhs)</label>
-
+					<div class="col-md-3">
+						<label class="form-label-custom">Final Approval Date</label>
+						<input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("FinalApprovalDate") ? "is-invalid" : "")" @bind="_model.FinalApprovalDate" @bind:after='() => ValidateFieldOnChange("FinalApprovalDate", _model.FinalApprovalDate != null)'>
+						@if (_errors.ContainsKey("FinalApprovalDate"))
+						{
+							<div class="field-error">@_errors["FinalApprovalDate"]</div>
+						}
+					</div>
+					<div class="col-md-3">
+						<label class="form-label-custom">Settlement Date</label>
+						<input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SettlementDate") ? "is-invalid" : "")" @bind="_model.SettlementDate" @bind:after='() => ValidateFieldOnChange("SettlementDate", _model.SettlementDate != null)'>
+						@if (_errors.ContainsKey("SettlementDate"))
+						{
+							<div class="field-error">@_errors["SettlementDate"]</div>
+						}
+					</div>
+					<div class="col-md-3">
+						<label class="form-label-custom">Settlement Amount (Lakhs)</label>
 						<div class="input-icon-left-wrapper">
 							<span class="input-icon-left">₹</span>
-
 							<input type="number"
 								   class="form-control-custom w-100 input-with-left-icon"
 								   placeholder="0.00"
 								   step="0.01"
-								   @bind="_model.DebitorBalance">
+								   @bind="_model.SettlementAmount">
 						</div>
 					</div>
 				</div>
 			</div>
 		}
 
-		@if (status == "Active" || status == "Inactive" || status == "Terminated")
-		{
-			<div class="basic-info-card">
-				<div class="card-header-title mb-2">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
-						 class="formicon"
-						 alt="icon" /> Business Information
-					@if (_isEditMode)
-					{
-						<span class="badge bg-info ms-2">Editing</span>
-					}
-					else
-					{
-						<span class="badge bg-success ms-2">New Entry</span>
-					}
-				</div>
-				<div class="row g-3">
-					<div class="col-md-4">
-						<label class="form-label-custom">Dealer Code & Name</label>
-						<select class="form-select-custom w-100" @bind="_dealerCodeId" @bind:after="OnDealerCodeChanged" style="text-transform: uppercase;">
-							<option value="0">-- New Entry --</option>
-							@foreach (var dealer in _filteredDealers)
-							{
-								<option value="@dealer.Id">@dealer.DealerCode - @dealer.FirmName</option>
-							}
-						</select>
+			<div class="basic-info-card" style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+					<div style="padding: 18px 24px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
+						<div class="d-flex align-items-center gap-2">
+							<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg" class="formicon" alt="icon" />
+							<h5 class="fw-semibold m-0" style="color: #1e293b; font-size: 1rem;">Business Information</h5>
 						</div>
-						<div class="col-md-4">
-							<label class="form-label-custom">Parent Dealer Code & Name</label>
-						<select class="form-select-custom w-100" @bind="_parentDealerId" style="text-transform: uppercase;">
-							<option value="0">-- Select Parent Dealer --</option>
-							@foreach (var dealer in _filteredDealers)
-							{
-								<option value="@dealer.Id">@dealer.DealerCode - @dealer.FirmName</option>
-							}
-						</select>
-					</div>
-					@* <div class="col-md-4">
-						<label class="form-label-custom">Business Type</label>
-						<input type="text" class="form-control-custom w-100" @bind="_model.BusinessEntityType" placeholder="Enter Type">
-					</div> *@
-					<div class="col-md-4">
-                    <label class="form-label-custom">
-                            Firm Name (As per Fertilizer License or GST Trade Name)
-                    </label>
-
-                    <div class="input-group"><span class="input-group-text">M/s</span>
-                <input type="text"
-           class="form-control @(_errors.ContainsKey("FirmName") ? "is-invalid" : "")"
-           @bind="_model.FirmName"
-           @bind:after='() => ValidateFieldOnChange("FirmName", !string.IsNullOrWhiteSpace(_model.FirmName))'
-           placeholder="Enter Firm Business Name"   style="text-transform: uppercase;" />
-</div>
-						@if (_errors.ContainsKey("FirmName"))
+						@if (_isEditMode)
 						{
-							<div class="field-error">@_errors["FirmName"]</div>
+							<span style="background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">
+								<i class="bi bi-pencil-square me-1"></i>Editing
+							</span>
+						}
+						else
+						{
+							<span style="background: #dcfce7; color: #166534; padding: 4px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">
+								<i class="bi bi-plus-circle me-1"></i>New Entry
+							</span>
 						}
 					</div>
-					<div class="col-md-4">
-						<label class="form-label-custom">Date of Appointment</label>
-						<input type="date" class="form-control-custom w-100" @bind="_model.DateOfAppointment">
+
+					<div style="padding: 24px;">
+						<div class="row g-3 mb-3">
+							<div class="col-md-6">
+								<label class="form-label-custom">Dealer Code & Name</label>
+								<select class="form-select-custom w-100" @bind="_dealerCodeId" @bind:after="OnDealerCodeChanged">
+									<option value="0">-- New Entry --</option>
+									@foreach (var dealer in _filteredDealers)
+									{
+										<option value="@dealer.Id">@dealer.DealerCode - @dealer.FirmName</option>
+									}
+								</select>
+							</div>
+							<div class="col-md-6">
+								<label class="form-label-custom">Parent Dealer Code & Name</label>
+								<select class="form-select-custom w-100" @bind="_parentDealerId">
+									<option value="0">-- Select Parent Dealer --</option>
+									@foreach (var dealer in _filteredDealers)
+									{
+										<option value="@dealer.Id">@dealer.DealerCode - @dealer.FirmName</option>
+									}
+								</select>
+							</div>
+						</div>
+
+						<div class="row g-3">
+							<div class="col-md-8">
+								<label class="form-label-custom">Firm Name <small class="text-muted fw-normal">(As per Fertilizer License or GST Trade Name)</small></label>
+								<div class="d-flex align-items-stretch">
+									<span style="background: #f1f5f9; color: #475569; font-weight: 600; padding: 0 14px; display: flex; align-items: center; border: 1px solid #cbd5e1; border-right: none; border-radius: 8px 0 0 8px; font-size: 0.9rem;">M/s.</span>
+									<input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("FirmName") ? "is-invalid" : "")" style="border-radius: 0 8px 8px 0; text-transform: uppercase;" @bind="_model.FirmName" @bind:after="SanitizeFirmName" placeholder="Enter Firm Business Name">
+								</div>
+								@if (_errors.ContainsKey("FirmName"))
+								{
+									<div class="field-error">@_errors["FirmName"]</div>
+								}
+							</div>
+							<div class="col-md-4">
+								<label class="form-label-custom">Date of Appointment</label>
+								<input type="date" class="form-control-custom w-100" @bind="_model.DateOfAppointment">
+							</div>
+						</div>
 					</div>
 				</div>
-			</div>
-		}
+		
 
 		@if (status == "Inactive")
 		{
@@ -440,35 +445,40 @@
 					</div> *@ 
 
 					<div class="col-md-4">
-    <label class="form-label-custom">Official Contact Number</label>
-    <input type="text" 
-           class="form-control-custom w-100 @(_errors.ContainsKey("OfficialContactNumber") ? "is-invalid" : "")" 
-           @bind="_model.OfficialContactNumber" 
-           @bind:after='() => ValidateFieldOnChange("OfficialContactNumber", _model.OfficialContactNumber?.Length == 10)' 
-           placeholder="10-digit mobile number" 
-           maxlength="10"
-           oninput="this.value = this.value.replace(/[^0-9]/g, '')">
-           
-    @if (_errors.ContainsKey("OfficialContactNumber"))
-    {
-        <div class="field-error">@_errors["OfficialContactNumber"]</div>
-    }
+	<label class="form-label-custom">Official Contact Number</label>
+	<input type="tel" 
+		   inputmode="numeric"
+		   pattern="[0-9]*"
+		   class="form-control-custom w-100 @(_errors.ContainsKey("OfficialContactNumber") ? "is-invalid" : "")" 
+		   @bind="_model.OfficialContactNumber" 
+		   @bind:after="SanitizeOfficialContact" 
+		   placeholder="10-digit mobile number" 
+		   maxlength="10"
+		   oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+
+	@if (_errors.ContainsKey("OfficialContactNumber"))
+	{
+		<div class="field-error">@_errors["OfficialContactNumber"]</div>
+	}
 </div>
 					
 
 					<div class="col-md-4">
-    <label class="form-label-custom">WhatsApp Number</label>
-    <input type="text"   class="form-control-custom w-100 @(_errors.ContainsKey("WhatsAppNumber") ? "is-invalid" : "")" 
-           @bind="_model.WhatsAppNumber" 
-           @bind:after='() => ValidateFieldOnChange("WhatsAppNumber", _model.WhatsAppNumber?.Length == 10)' 
-           placeholder="10-digit mobile number" 
-           maxlength="10"
-           oninput="this.value = this.value.replace(/[^0-9]/g, '')">
-           
-    @if (_errors.ContainsKey("WhatsAppNumber"))
-    {
-        <div class="field-error">@_errors["WhatsAppNumber"]</div>
-    }
+	<label class="form-label-custom">WhatsApp Number</label>
+	<input type="tel"
+		   inputmode="numeric"
+		   pattern="[0-9]*"
+		   class="form-control-custom w-100 @(_errors.ContainsKey("WhatsAppNumber") ? "is-invalid" : "")" 
+		   @bind="_model.WhatsAppNumber" 
+		   @bind:after="SanitizeWhatsAppNumber" 
+		   placeholder="10-digit mobile number" 
+		   maxlength="10"
+		   oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+
+	@if (_errors.ContainsKey("WhatsAppNumber"))
+	{
+		<div class="field-error">@_errors["WhatsAppNumber"]</div>
+	}
 </div>
 
 
@@ -478,14 +488,42 @@
 						<input type="text" class="form-control-custom w-100" @bind="_model.AlternativeNumber" placeholder="10-digit mobile number" maxlength="10">
 					</div> *@ 
 					<div class="col-md-4">
-    <label class="form-label-custom">Alternative Number</label>
-    <input type="text" 
-           class="form-control-custom w-100" 
-           @bind="_model.AlternativeNumber" 
-           placeholder="10-digit mobile number" 
-           maxlength="10"
-           oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+	<label class="form-label-custom">Alternative Number</label>
+	<input type="tel" 
+		   inputmode="numeric"
+		   pattern="[0-9]*"
+		   class="form-control-custom w-100" 
+		   @bind="_model.AlternativeNumber" 
+		   @bind:after="SanitizeAlternativeNumber"
+		   placeholder="10-digit mobile number" 
+		   maxlength="10"
+		   oninput="this.value = this.value.replace(/[^0-9]/g, '')">
 </div>
+				</div>
+			</div>
+
+			<div class="basic-info-card">
+				<div class="card-header-title mb-2">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+						 class="formicon"
+						 alt="icon" /> Trade Deposit Details
+				</div>
+				<div class="row g-3">
+					<div class="col-md-4">
+						<label class="form-label-custom">Trade Deposit Amount (₹)</label>
+						<div class="input-icon-left-wrapper">
+							<span class="input-icon-left">₹</span>
+							<input type="number" class="form-control-custom w-100 input-with-left-icon" placeholder="0.00" step="0.01" @bind="_model.TradeDepositAmount">
+						</div>
+					</div>
+					<div class="col-md-4">
+						<label class="form-label-custom">Receipt No</label>
+						<input type="text" class="form-control-custom w-100" @bind="_model.TradeDepositReceiptNo" placeholder="Enter Receipt Number">
+					</div>
+					<div class="col-md-4">
+						<label class="form-label-custom">Deposit Date</label>
+						<input type="date" class="form-control-custom w-100" @bind="_model.TradeDepositDate">
+					</div>
 				</div>
 			</div>
 
@@ -683,7 +721,7 @@
 					<div class="col-md-6">
 						<div class="form-card mb-0 h-100">
 							<div class="card-header-title">
-								<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WholeSale.svg" alt="WholeSale" class="formicon" /> Wholesale Fertilizer Details
+								<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WholeSale.svg" alt="WholeSale" class="formicon" /> Wholesale Fertilizer Details  (as per iFMS)
 							</div>
 							<div class="row g-3">
 								<div class="col-6">
@@ -695,8 +733,8 @@
 								<input type="date" class="form-control-custom w-100" @bind="_model.WholesaleLicenseExpiryDate">
 							</div>
 							<div class="col-6">
-								<label class="form-label-custom">mFMS Code</label>
-								<input type="text" class="form-control-custom w-100" @bind="_model.WholesalemFMSCode" placeholder="Enter mFMS Code">
+								<label class="form-label-custom">mFMS ID</label>
+								<input type="text" class="form-control-custom w-100" @bind="_model.WholesalemFMSCode" placeholder="Enter mFMS ID">
 							</div>
 							<div class="col-6">
 								<label class="file-upload-box">
@@ -721,7 +759,7 @@
 				<div class="col-md-6">
 					<div class="form-card mb-0 h-100">
 						<div class="card-header-title">
-							<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WholeSale.svg" alt="WholeSale" class="formicon" /> Retail Fertilizer Details
+							<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WholeSale.svg" alt="WholeSale" class="formicon" /> Retail Fertilizer Details (as per iFMS)
 						</div>
 						<div class="row g-3">
 							<div class="col-6">
@@ -733,8 +771,8 @@
 								<input type="date" class="form-control-custom w-100" @bind="_model.RetailLicenseExpiryDate">
 							</div>
 							<div class="col-6">
-								<label class="form-label-custom">mFMS Code</label>
-								<input type="text" class="form-control-custom w-100" @bind="_model.RetailmFMSCode" placeholder="Enter mFMS Code">
+								<label class="form-label-custom">mFMS ID</label>
+								<input type="text" class="form-control-custom w-100" @bind="_model.RetailmFMSCode" placeholder="Enter mFMS ID">
 							</div>
 							<div class="col-6">
 								<label class="file-upload-box">
@@ -942,6 +980,30 @@
 	{
 		if (isValid)
 			_errors.Remove(key);
+	}
+
+	private void SanitizeOfficialContact()
+	{
+		_model.OfficialContactNumber = new string(_model.OfficialContactNumber?.Where(char.IsDigit).ToArray() ?? []);
+		ValidateFieldOnChange("OfficialContactNumber", _model.OfficialContactNumber?.Length == 10);
+	}
+
+	private void SanitizeWhatsAppNumber()
+	{
+		_model.WhatsAppNumber = new string(_model.WhatsAppNumber?.Where(char.IsDigit).ToArray() ?? []);
+		ValidateFieldOnChange("WhatsAppNumber", _model.WhatsAppNumber?.Length == 10);
+	}
+
+	private void SanitizeAlternativeNumber()
+	{
+		_model.AlternativeNumber = new string(_model.AlternativeNumber?.Where(char.IsDigit).ToArray() ?? []);
+	}
+
+	private void SanitizeFirmName()
+	{
+		if (!string.IsNullOrEmpty(_model.FirmName))
+			_model.FirmName = _model.FirmName.ToUpperInvariant();
+		ValidateFieldOnChange("FirmName", !string.IsNullOrWhiteSpace(_model.FirmName));
 	}
 
 	private void OnGSTNumberChanged()
@@ -1604,6 +1666,9 @@
 		public DateTime? LastTransactionDate { get; set; }
 		public bool? IsLastTransactionIsSale { get; set; }
 		public bool? IsFinalAmountSettled { get; set; }
+		public DateTime? FinalApprovalDate { get; set; }
+		public DateTime? SettlementDate { get; set; }
+		public decimal SettlementAmount { get; set; }
 		public decimal DebitorBalance { get; set; }
 		public string? GoogleMapURL { get; set; }
 		public double? Latitude { get; set; }
@@ -1664,6 +1729,11 @@
 		public string? Remarks { get; set; }
 		public decimal OwnGodownCapacity { get; set; }
 		public decimal RentGodownCapacity { get; set; }
+
+		//Trade Deposit Details
+		public decimal TradeDepositAmount { get; set; }
+		public string? TradeDepositReceiptNo { get; set; }
+		public DateTime? TradeDepositDate { get; set; }
 	}
 
 	public class LocationItemDto
