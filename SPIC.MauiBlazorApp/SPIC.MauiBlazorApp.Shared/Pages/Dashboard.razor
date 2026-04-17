@@ -1,5 +1,6 @@
 ﻿@page "/Dashboard"
 @using System.Net.Http.Json
+@using SPIC.Core.Entities
 @inject HttpClient Http
 @inject NavigationManager NavManager
 
@@ -154,17 +155,23 @@
 									<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
 								</div>
 							}
-							else
-							{
-								<div class="progress-circle p-30">
-									<div class="progress-inner">
-										<div class="progress-val">
-											@(approvalStatus == "Draft" ? "Draft" : approvalStatus == "Rejected" ? "!" : "...")
-										</div>
-										<div class="progress-steps">@approvalStatus</div>
+							else if (approvalStatus == "Draft" && IsDealerComplete(dealer.Id))
+								{
+									<div class="progress-circle p-100">
+										<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
 									</div>
-								</div>
-							}
+								}
+								else
+								{
+									<div class="progress-circle p-30">
+										<div class="progress-inner">
+											<div class="progress-val">
+												@(approvalStatus == "Draft" ? "Draft" : approvalStatus == "Rejected" ? "!" : "...")
+											</div>
+											<div class="progress-steps">@approvalStatus</div>
+										</div>
+									</div>
+								}
 							<div class="d-flex flex-column align-items-end gap-2">
 								<div class="badge-group">
 									@if (approvalStatus == "Approved")
@@ -178,6 +185,10 @@
 									else if (approvalStatus == "Pending")
 									{
 										<span class="badge-custom badge-yellow">Pending</span>
+									}
+									else if (IsDealerComplete(dealer.Id))
+									{
+										<span class="badge-custom badge-green-dashboard" style="background:#D1FAE5; color:#047857;">Submitted</span>
 									}
 									else
 									{
@@ -290,14 +301,41 @@
 		await LoadData();
 	}
 
+	private List<DealerRegistrationDocuments> _allDocs = new();
+	private List<DealerExperience> _allExperiences = new();
+	private List<AnnualSaleDataLastFYofDealerRegistration> _allAnnualSales = new();
+	private List<DealerWarehouseFacilities> _allWarehouses = new();
+	private List<DealerMarketDetail> _allMarketDetails = new();
+	private List<DealerCompaniesOperatingInArea> _allCompanies = new();
+	private List<DealerOwnershipInfo> _allPartners = new();
+	private List<SalesPlanningInDealerRegistration> _allSalesPlans = new();
+	private List<DealerAssetBank> _allAssetBanks = new();
+	private List<DealerCreditLimitProposal> _allCreditLimits = new();
+	private HashSet<int> _completeDealerIds = new();
+
 	private async Task LoadData()
 	{
 		_isLoading = true;
 		try
 		{
-			_allDealers = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/all") ?? new();
-			_regionsAll = await Http.GetFromJsonAsync<List<RegionDto>>("api/Region/all") ?? new();
-			_headquartersAll = await Http.GetFromJsonAsync<List<HeadquarterDto>>("api/Headquarter/all") ?? new();
+			var tasks = new Task[]
+			{
+				Task.Run(async () => _allDealers = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/all") ?? new()),
+				Task.Run(async () => _regionsAll = await Http.GetFromJsonAsync<List<RegionDto>>("api/Region/all") ?? new()),
+				Task.Run(async () => _headquartersAll = await Http.GetFromJsonAsync<List<HeadquarterDto>>("api/Headquarter/all") ?? new()),
+				Task.Run(async () => _allDocs = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments/all") ?? new()),
+				Task.Run(async () => _allExperiences = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience/all") ?? new()),
+				Task.Run(async () => _allAnnualSales = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all") ?? new()),
+				Task.Run(async () => _allWarehouses = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new()),
+				Task.Run(async () => _allMarketDetails = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new()),
+				Task.Run(async () => _allCompanies = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new()),
+				Task.Run(async () => _allPartners = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all") ?? new()),
+				Task.Run(async () => _allSalesPlans = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new()),
+				Task.Run(async () => _allAssetBanks = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new()),
+				Task.Run(async () => _allCreditLimits = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all") ?? new()),
+			};
+			await Task.WhenAll(tasks);
+			BuildCompletionSet();
 			ApplyFilters();
 		}
 		catch { }
@@ -306,6 +344,72 @@
 			_isLoading = false;
 		}
 	}
+
+	private void BuildCompletionSet()
+	{
+		_completeDealerIds.Clear();
+		foreach (var dealer in _allDealers)
+		{
+			var id = dealer.Id;
+			var steps = 0;
+
+			// Step 1: Dealer Registration basics
+			if (!string.IsNullOrEmpty(dealer.FirmName) && dealer.StateId > 0)
+				steps++;
+
+			// Step 2: Experience
+			if (_allExperiences.Any(e => e.DealerId == id))
+				steps++;
+
+			// Step 3: Annual Sales
+			if (_allAnnualSales.Any(a => a.DealerId == id))
+				steps++;
+
+			// Step 4: Warehouse
+			if (_allWarehouses.Any(w => w.DealerId == id))
+				steps++;
+
+			// Step 5: Market Details
+			if (_allMarketDetails.Any(m => m.DealerId == id))
+				steps++;
+
+			// Step 6: Companies Operating
+			if (_allCompanies.Any(c => c.DealerId == id))
+				steps++;
+
+			// Step 7: Proprietor
+			if (_allPartners.Any(p => p.DealerId == id))
+				steps++;
+
+			// Step 8: Sales Planning
+			if (_allSalesPlans.Any(s => s.DealerId == id))
+				steps++;
+
+			// Step 9: Investment
+			if (_allAssetBanks.Any(b => b.DealerId == id))
+				steps++;
+
+			// Step 10: Credit Limit
+			if (_allCreditLimits.Any(c => c.DealerId == id))
+				steps++;
+
+			// Step 11: Enclosures
+			var docs = _allDocs.FirstOrDefault(d => d.DealerId == id);
+			if (docs != null &&
+				!string.IsNullOrEmpty(docs.SpecimanFilePath) &&
+				!string.IsNullOrEmpty(docs.BankGauranteeFilePath) &&
+				!string.IsNullOrEmpty(docs.FY1ITReturnFilePath) &&
+				!string.IsNullOrEmpty(docs.FY2ITReturnFilePath) &&
+				!string.IsNullOrEmpty(docs.ValuationCertificateFilePath) &&
+				!string.IsNullOrEmpty(docs.RetailerListFilePath))
+				steps++;
+
+			if (steps == 11)
+				_completeDealerIds.Add(id);
+		}
+	}
+
+	private bool IsDealerComplete(int dealerId) => _completeDealerIds.Contains(dealerId);
 
 	private void ApplyFilters()
 	{

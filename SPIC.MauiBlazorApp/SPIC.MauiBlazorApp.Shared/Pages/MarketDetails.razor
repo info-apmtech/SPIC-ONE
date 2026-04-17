@@ -51,10 +51,13 @@
 					}
 				</select>
 			</div>
-			<div class="col-md-3">
-				<label class="form-label-custom">No of Dealer</label>
-				<input type="number" class="form-control-custom w-100" placeholder="Enter No of Dealer" @bind="_formNoOfDealer">
-			</div>
+			@if (_hasWholesaleLicense)
+			{
+				<div class="col-md-3">
+					<label class="form-label-custom">No of Dealer</label>
+					<input type="number" class="form-control-custom w-100" placeholder="Enter No of Dealer" @bind="_formNoOfDealer">
+				</div>
+			}
 			<div class="col-md-3">
 				<label class="form-label-custom">No of Farmer</label>
 				<input type="number" class="form-control-custom w-100" placeholder="Enter No of Farmer" @bind="_formNoOfFarmer">
@@ -166,10 +169,13 @@
 							</div>
 						</div>
 						<div class="info-pill-container">
-							<div class="info-pill">
-								<div class="pill-label">No of Dealer</div>
-								<div class="pill-value">@block.NoOfDealer</div>
-							</div>
+							@if (_hasWholesaleLicense)
+							{
+								<div class="info-pill">
+									<div class="pill-label">No of Dealer</div>
+									<div class="pill-value">@block.NoOfDealer</div>
+								</div>
+							}
 							<div class="info-pill">
 								<div class="pill-label">No of Farmer</div>
 								<div class="pill-value">@block.NoOfFarmer</div>
@@ -260,12 +266,14 @@
 	private bool _isSaving;
 	private string? _message;
 	private bool _isError;
+	private bool _hasWholesaleLicense;
 
 	protected override async Task OnInitializedAsync()
 	{
 		Loading.Show();
 		try
 		{
+			await LoadDealerInfo();
 			await LoadCrops();
 			await LoadSavedBlocks();
 		}
@@ -460,9 +468,26 @@
 		_isError = isError;
 	}
 
+	private async Task LoadDealerInfo()
+	{
+		if (!DealerId.HasValue || DealerId.Value <= 0) return;
+		try
+		{
+			var dealer = await Http.GetFromJsonAsync<DealerBasicInfo>($"api/DealerRegistration/{DealerId.Value}");
+			if (dealer != null)
+				_hasWholesaleLicense = !string.IsNullOrWhiteSpace(dealer.WholeSaleFertilizerLicenseNumber);
+		}
+		catch { }
+	}
+
 	private class CreateResponse
 	{
 		public string? Message { get; set; }
 		public DealerMarketDetail? Data { get; set; }
+	}
+
+	private class DealerBasicInfo
+	{
+		public string? WholeSaleFertilizerLicenseNumber { get; set; }
 	}
 }

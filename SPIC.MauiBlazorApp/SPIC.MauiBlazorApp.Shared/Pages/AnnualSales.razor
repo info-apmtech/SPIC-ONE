@@ -56,12 +56,15 @@
 					<thead>
 						<tr>
 							<th>Product Name</th>
-							<th>Own Retail Qty (@_selectedUnitName)</th>
-							<th>Own Retail Amount (₹) Lakhs</th>
-							<th>Sale to Dealer Qty (@_selectedUnitName)</th>
-							<th>Sale to Dealer Amount (₹) Lakhs</th>
-							<th>Total Qty (@_selectedUnitName)</th>
-							<th>Total Amount (₹)</th>
+								<th>Own Retail Qty (@_selectedUnitName)</th>
+								<th>Own Retail Amount (₹) Lakhs</th>
+								@if (_hasWholesaleLicense)
+								{
+									<th>Sale to Dealer Qty (@_selectedUnitName)</th>
+									<th>Sale to Dealer Amount (₹) Lakhs</th>
+								}
+								<th>Total Qty (@_selectedUnitName)</th>
+								<th>Total Amount (₹)</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -88,16 +91,19 @@
 										   value="@row.OwnRetailsSaleAmount"
 										   @onchange="(e) => UpdateField(row, e, r => r.OwnRetailsSaleAmount, (r, v) => r.OwnRetailsSaleAmount = v)" />
 								</td>
-								<td>
-									<input class="table-input" type="number" step="0.01"
-										   value="@row.SaleToDealerQty"
-										   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerQty, (r, v) => r.SaleToDealerQty = v)" />
-								</td>
-								<td>
-									<input class="table-input" type="number" step="0.01"
-										   value="@row.SaleToDealerAmount"
-										   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerAmount, (r, v) => r.SaleToDealerAmount = v)" />
-								</td>
+								@if (_hasWholesaleLicense)
+								{
+									<td>
+										<input class="table-input" type="number" step="0.01"
+											   value="@row.SaleToDealerQty"
+											   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerQty, (r, v) => r.SaleToDealerQty = v)" />
+									</td>
+									<td>
+										<input class="table-input" type="number" step="0.01"
+											   value="@row.SaleToDealerAmount"
+											   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerAmount, (r, v) => r.SaleToDealerAmount = v)" />
+									</td>
+								}
 								<td class="text-value">@((row.OwnRetailsSaleQty + row.SaleToDealerQty).ToString("N2"))</td>
 								<td class="text-value">@((row.OwnRetailsSaleAmount + row.SaleToDealerAmount).ToString("N2"))</td>
 							</tr>
@@ -108,8 +114,11 @@
 							<td>Grand Total</td>
 							<td>@_currentRows.Sum(r => r.OwnRetailsSaleQty).ToString("N2")</td>
 							<td>@_currentRows.Sum(r => r.OwnRetailsSaleAmount).ToString("N2")</td>
-							<td>@_currentRows.Sum(r => r.SaleToDealerQty).ToString("N2")</td>
-							<td>@_currentRows.Sum(r => r.SaleToDealerAmount).ToString("N2")</td>
+							@if (_hasWholesaleLicense)
+							{
+								<td>@_currentRows.Sum(r => r.SaleToDealerQty).ToString("N2")</td>
+								<td>@_currentRows.Sum(r => r.SaleToDealerAmount).ToString("N2")</td>
+							}
 							<td>@_currentRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty).ToString("N2")</td>
 							<td>@_currentRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount).ToString("N2")</td>
 						</tr>
@@ -201,6 +210,7 @@
 	private bool _isSaving;
 	private string? _message;
 	private bool _isError;
+	private bool _hasWholesaleLicense;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -218,7 +228,10 @@
 			}
 
 			if (DealerId.HasValue && DealerId.Value > 0)
+			{
+				await LoadDealerInfo();
 				await LoadSalesData();
+			}
 
 			BuildCurrentRows();
 		}
@@ -262,6 +275,17 @@
 		{
 			ShowMessage($"Failed to load products: {ex.Message}", true);
 		}
+	}
+
+	private async Task LoadDealerInfo()
+	{
+		try
+		{
+			var dealer = await Http.GetFromJsonAsync<DealerBasicInfo>($"api/DealerRegistration/{DealerId!.Value}");
+			if (dealer != null)
+				_hasWholesaleLicense = !string.IsNullOrWhiteSpace(dealer.WholeSaleFertilizerLicenseNumber);
+		}
+		catch { }
 	}
 
 	private async Task LoadSalesData()
@@ -393,5 +417,10 @@
 	{
 		public string? Message { get; set; }
 		public AnnualSaleDataLastFYofDealerRegistration? Data { get; set; }
+	}
+
+	private class DealerBasicInfo
+	{
+		public string? WholeSaleFertilizerLicenseNumber { get; set; }
 	}
 }
