@@ -44,8 +44,11 @@ namespace SpicAPI.Controllers
 
 			var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
 
-			var pdfOrImageDocTypes = new[] { "GST", "PAN", "Aadhaar", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN",
-				"Specimen", "BankGuarantee", "ITReturn1", "ITReturn2", "ValuationCertificate", "PartnershipDeed", "BoardResolution", "Affidavit" };
+          var pdfOrImageDocTypes = new[] { "GST", "PAN", "Aadhaar", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN",
+				"Specimen", "BankGuarantee", "ITReturn1", "ITReturn2", "ValuationCertificate", "PartnershipDeed", "BoardResolution", "Affidavit",
+				// Investment / Assets related docs
+				"LandEC", "LandPropertyDoc", "LandValuationCert",
+				"BuildingEC", "BuildingPropertyDoc", "BuildingValuationCert" };
 			var imageDocTypes = new[] { "ProprietorImage" };
 			var excelCsvDocTypes = new[] { "RetailerList" };
 
@@ -84,8 +87,9 @@ namespace SpicAPI.Controllers
 			using var stream = new FileStream(filePath, FileMode.Create);
 			await file.CopyToAsync(stream);
 
-			var relativePath = $"DealerRegistration/{dealerId}/{fileName}";
-			return Ok(new { filePath = relativePath });
+         var relativePath = $"DealerRegistration/{dealerId}/{fileName}";
+			// return file path in response
+			return Ok(new { FilePath = relativePath });
 		}
 	}
 }
