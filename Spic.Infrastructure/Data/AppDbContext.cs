@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static SPIC.Core.Entities.EmployeeRegistration;
 
 
 namespace Spic.Infrastructure.Data
@@ -82,5 +83,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<DealerCreditLimitSalesPerformance> DealerCreditLimitSalesPerformances { get; set; }
         public DbSet<DealerRegistrationDocuments> DealerRegistrationDocuments { get; set; }
         public DbSet<DealerApprovalHistory> DealerApprovalHistories { get; set; }
+        public DbSet<EmployeeInformation> EmployeeInformation { get; set; }
+        public DbSet<Employeelogin> Employeelogins { get; set; }
     }
 }

@@ -1,4 +1,12 @@
 ﻿@page "/EmployeeRegistration"
+@using System.Net.Http.Json
+@using System.Text.Json.Nodes
+@using Microsoft.AspNetCore.Components
+@using SPIC.Core.Entities
+@using static SPIC.Core.Entities.EmployeeRegistration
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LoadingService Loading
 
 <style>
     /* --- Badges --- */
@@ -170,19 +178,13 @@
         <div class="row">
             <div class="col-md-12">
                 <label class="form-lbl">Role</label>
-                <select class="form-inp" @bind="SelectedRole">
-                    <option value="" disabled selected>Select the Role</option>
-                    <option value="RM">RM</option>
-                    <option value="SM">SM</option>
-                    <option value="SMM">SMM</option>
-                    <option value="VP">VP</option>
-                    <option value="Director">Director</option>
-                    <option value="ABP">ABP</option>
-                    <option value="Corporate Admin">Corporate Admin</option>
-                    <option value="MDO">MDO</option>
-                    <option value="JMDO">JMDO</option>
-                    <option value="RMO">RMO</option>
-                </select>
+           <select class="form-inp" @bind="vm.Login.Role">
+        <option value="">Select Role</option>
+        @foreach (var role in Enum.GetValues<AppRole>())
+        {
+            <option value="@role">@role</option>
+        }
+    </select>
             </div>
         </div>
     </div>
@@ -197,11 +199,13 @@
             {
                 <div class="col-md-3">
                     <label class="form-lbl">Zone</label>
-                    <select class="form-inp">
-                        <option value="" disabled selected>Select the Zone</option>
-                        <option value="North">North Zone</option>
-                        <option value="South">South Zone</option>
-                    </select>
+                  <select class="form-inp" @bind="vm.Login.ZoneId">
+    <option value="">Select Zone</option>
+    @foreach (var z in Zones)
+    {
+        <option value="@z.Id">@z.Name</option>
+    }
+</select>
                 </div>
             }
 
@@ -209,11 +213,13 @@
             {
                 <div class="col-md-3">
                     <label class="form-lbl">State</label>
-                    <select class="form-inp">
-                        <option value="" disabled selected>Select the State</option>
-                        <option value="Tamil Nadu">Tamil Nadu</option>
-                        <option value="Kerala">Kerala</option>
-                    </select>
+               <select class="form-inp" @bind="vm.Login.StateId">
+    <option value="">Select State</option>
+    @foreach (var s in States)
+    {
+        <option value="@s.Id">@s.Name</option>
+    }
+</select>
                 </div>
             }
 
@@ -221,23 +227,27 @@
             {
                 <div class="col-md-3">
                     <label class="form-lbl">Region</label>
-                    <select class="form-inp">
-                        <option value="" disabled selected>Select the Region</option>
-                        <option value="Chennai">Chennai</option>
-                        <option value="Coimbatore">Coimbatore</option>
-                    </select>
+                  <select class="form-inp" @bind="vm.Login.RegionId">
+    <option value="">Select Region</option>
+    @foreach (var r in Regions)
+    {
+        <option value="@r.Id">@r.Name</option>
+    }
+</select>
                 </div>
             }
 
-            @if (SelectedRole == "Corporate Admin")
+            @if (SelectedRole == "Corporate Admin"||SelectedRole == "RM")
             {
                 <div class="col-md-3">
                     <label class="form-lbl">Headquarters</label>
-                    <select class="form-inp">
-                        <option value="" disabled selected>Select the Headquarters</option>
-                        <option value="HQ1">Headquarters 1</option>
-                        <option value="HQ2">Headquarters 2</option>
-                    </select>
+                <select class="form-inp" @bind="vm.Login.HeadquartersId">
+    <option value="">Select Headquarters</option>
+    @foreach (var h in Headquarters)
+    {
+        <option value="@h.Id">@h.Name</option>
+    }
+</select>
                 </div>
             }
 
@@ -257,24 +267,25 @@
         <div class="row g-4 align-items-end">
             <div class="col-md-4">
                 <label class="form-lbl">User Name</label>
-                <input type="text" class="form-inp" placeholder="Enter User Name">
+                <input type="text" class="form-inp" @bind="vm.Login.UserName" placeholder="Enter User Name">
             </div>
             <div class="col-md-4">
                 <label class="form-lbl">Password</label>
-                <input type="password" class="form-inp" placeholder="Enter Password">
+                <input type="password" class="form-inp" @bind="vm.Login.Password"  placeholder="Enter Password">
             </div>
-            <div class="col-md-4">
-                <div class="status-toggle-box">
-                    <div class="status-toggle-text">
-                        <strong>Status</strong>
-                        <small>Active / Inactive</small>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" checked>
-                        <span class="slider"></span>
-                    </label>
-                </div>
-            </div>
+         <div class="col-md-4">
+    <div class="status-toggle-box">
+        <div class="status-toggle-text">
+            <strong>Status</strong>
+            <small>Active / Inactive</small>
+        </div>
+        <label class="switch">
+            <!-- ✅ Only change here -->
+            <input type="checkbox" @bind="vm.Login.IsActive">
+            <span class="slider"></span>
+        </label>
+    </div>
+</div>
         </div>
     </div>
 
@@ -285,30 +296,30 @@
         <div class="row g-4">
             <div class="col-md-6">
                 <label class="form-lbl">Employee Name</label>
-                <input type="text" class="form-inp" placeholder="Enter Employee Name">
+                <input type="text" class="form-inp" placeholder="Enter Employee Name" @bind="vm.Employee.Name">
             </div>
             <div class="col-md-6">
                 <label class="form-lbl">Employee ID</label>
-                <input type="text" class="form-inp" placeholder="Enter Employee ID">
+                <input type="text" class="form-inp" placeholder="Enter Employee ID" @bind="vm.Employee.EmployeeCode">
             </div>
             <div class="col-md-6">
                 <label class="form-lbl">Personal Phone Number</label>
-                <input type="text" class="form-inp" placeholder="Enter Personal Phone Number" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                <input type="text" class="form-inp" placeholder="Enter Personal Phone Number" @bind="vm.Employee.PersonalPhoneNumber"maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
             </div>
             <div class="col-md-6">
                 <label class="form-lbl">Official Phone Number</label>
-                <input type="text" class="form-inp" placeholder="Enter Official Phone Number" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                <input type="text" class="form-inp" placeholder="Enter Official Phone Number"  @bind="vm.Employee.OfficialPhoneNumber"maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
             </div>
             <div class="col-md-6">
                 <label class="form-lbl">Email ID</label>
-                <input type="email" class="form-inp" placeholder="Enter Email ID">
+                <input type="email" class="form-inp" placeholder="Enter Email ID" @bind="vm.Employee.Email">
             </div>
         </div>
     </div>
 
     <div class="footer-actions">
         <button class="btn-cancel"><i class="bi bi-x"></i> Cancel</button>
-        <button class="btn-save">Save Employee <i class="bi bi-floppy"></i></button>
+        <button class="btn-save"  @onclick="SaveEmployee">Save Employee <i class="bi bi-floppy"></i></button>
     </div>
 
 </div>
@@ -316,4 +327,90 @@
 @code {
     // Property to bind the dropdown selection
     private string SelectedRole { get; set; } = "RM"; 
+    private EmployeeRegistrationVM vm = new();
+    private List<LocationItemDto> Zones = new();
+    private List<LocationItemDto> States = new();
+    private List<LocationItemDto> Regions = new();
+    private List<LocationItemDto> Headquarters = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Zones = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Zone/all") ?? new();
+        States = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
+        Regions = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all") ?? new();
+        Headquarters = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all") ?? new();
+    }
+    private async Task SaveEmployee()
+    {
+        try
+        {
+            vm.Employee.CreatedBy = "System";
+            // 🔥 Step 1: Save Employee
+        var empResponse = await Http.PostAsJsonAsync("api/EmployeeRegistration", vm.Employee);
+
+        if (!empResponse.IsSuccessStatusCode)
+            throw new Exception("Employee save failed");
+
+        var result = await empResponse.Content.ReadFromJsonAsync<ApiResponse<EmployeeInformation>>();
+
+        // 🔥 Step 2: Save Login
+        vm.Login.EmployeeInformationID = result.data.Id;
+
+        var loginResponse = await Http.PostAsJsonAsync("api/Employeelogin", vm.Login);
+
+        if (!loginResponse.IsSuccessStatusCode)
+            throw new Exception("Login save failed");
+
+        Console.WriteLine("Saved successfully");
+             vm = new EmployeeRegistrationVM();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+    }
+}
+	public class LocationItemDto
+	{
+		public int Id { get; set; }
+		// Mapped name — different entities use different property names
+		public string ZoneName { get; set; } = "";
+		public string StateName { get; set; } = "";
+		public string DistrictName { get; set; } = "";
+		public string SubDistrictName { get; set; } = "";
+		public string RegionName { get; set; } = "";
+		public string HeadquarterName { get; set; } = "";
+		// Zone-specific
+		public string? ZoneCode { get; set; }
+		public string? ZoneColorCode { get; set; }
+		// Foreign keys
+		public int ZoneId { get; set; }
+		public int StateId { get; set; }
+		public int DistrictId { get; set; }
+		public int RegionId { get; set; }
+		// Common
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public string UpdatedBy { get; set; } = "";
+
+		// Computed display name (first non-empty name)
+		public string Name =>
+			!string.IsNullOrEmpty(ZoneName) ? ZoneName :
+			!string.IsNullOrEmpty(StateName) ? StateName :
+			!string.IsNullOrEmpty(DistrictName) ? DistrictName :
+			!string.IsNullOrEmpty(SubDistrictName) ? SubDistrictName :
+			!string.IsNullOrEmpty(RegionName) ? RegionName :
+			HeadquarterName;
+	}
+public class ApiResponse<T>
+{
+    public string message { get; set; }
+    public T data { get; set; }
+}
+
+    public class EmployeeRegistrationVM
+{
+    public EmployeeInformation Employee { get; set; } = new();
+    public Employeelogin Login { get; set; } = new();
+}
 }

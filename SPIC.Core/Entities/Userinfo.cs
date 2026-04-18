@@ -28,6 +28,6 @@ namespace SPIC.Core.Entities
     }
     public enum AppRole
     {
-        Admin, Dealer
+        Admin, CorporateAdmin, Director, Avp,  SM, SMM, RM,RMO,MDO,MO,JMDO,Dealer,Formaer
     }
 }
