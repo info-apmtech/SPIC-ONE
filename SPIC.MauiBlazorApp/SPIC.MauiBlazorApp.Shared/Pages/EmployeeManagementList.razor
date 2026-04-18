@@ -232,23 +232,24 @@
         <div class="filter-bar">
             <div class="search-box main-search">
                 <i class="bi bi-search"></i>
-                <input type="text" placeholder="Search Schemes....">
+                <input type="text" placeholder="Search employees..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
             </div>
             
             <div class="filter-selects">
-                <select class="form-inp">
-                    <option>All Roles</option>
-                    <option>Director</option>
-                    <option>Vice President</option>
-                    <option>State Manager</option>
-                    <option>Regional Manager</option>
-                    <option>Marketing Officer</option>
+                <select class="form-inp" @bind="_roleFilter" @bind:after="ApplyFilter">
+                    <option value="All">All Roles</option>
+                    <option value="Director">Director</option>
+                    <option value="VicePresident">Vice President</option>
+                    <option value="StateManager">State Manager</option>
+                    <option value="RegionalManager">Regional Manager</option>
+                    <option value="MarketingOfficer">Marketing Officer</option>
                 </select>
-                <select class="form-inp">
-                    <option>All States</option>
-                    <option>Tamilnadu</option>
-                    <option>Kerala</option>
-                    <option>Karnataka</option>
+                <select class="form-inp" @bind="_stateFilter" @bind:after="ApplyFilter">
+                    <option value="All">All States</option>
+                    @foreach (var s in states)
+                    {
+                        <option value="@s.Id">@(!string.IsNullOrWhiteSpace(s.StateName) ? s.StateName : s.ZoneName)</option>
+                    }
                 </select>
             </div>
         </div>
@@ -259,7 +260,24 @@
                 <h3 class="section-title">Coverage & Eligibility Mapping List</h3>
                 <div class="search-box small-search">
                     <i class="bi bi-search"></i>
-                    <input type="text" placeholder="Search zones...">
+                    <input type="text" placeholder="Search employees..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
+                </div>
+            </div>
+
+            <div class="table-controls" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div class="search-box main-search" style="max-width:400px;">
+                    <i class="bi bi-search"></i>
+                    <input type="text" placeholder="Search employees..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
+                </div>
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <div class="items-per-page">
+                        Items Per Page
+                        <select @bind="_pageSize" @bind:after="ApplyFilter">
+                            <option value="16">16</option>
+                            <option value="32">32</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -277,64 +295,65 @@
                             <th>State</th>
                         </tr>
                     </thead>
-              <tbody>
-    @foreach (var item in employees.Select((value, index) => new { value, index }))
-    {
-        var login = GetLogin(item.value.Id);
-
-        <tr>
-            <td class="text-center text-muted">@(item.index + 1)</td>
-
-            <td>@item.value.EmployeeCode</td>
-
-            <td>
-                <img src="https://i.pravatar.cc/100?img=@(item.index+1)" class="avatar-img" />
-                @item.value.Name
-            </td>
-
-            <td class="text-muted">@login?.UserName</td>
-
-            <td class="text-muted">@login.Password</td>
-
-            <td>
-                <span class="role-badge">
-                    @login?.Role.ToString()
-                </span>
-            </td>
-
-            <td>
-                @GetZoneName(login?.ZoneId)
-            </td>
-
-            <td>
-                @GetStateName(login?.StateId)
-            </td>
-        </tr>
-    }
-</tbody>
+                    <tbody>
+                        @if (_isLoading)
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center text-muted">Loading...</td>
+                            </tr>
+                        }
+                        else if (!PagedItems.Any())
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center text-muted">No employees found.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
+                            {
+                                var login = GetLogin(item.Id);
+                                <tr>
+                                    <td class="text-center text-muted">@((_currentPage - 1) * _pageSize + index + 1)</td>
+                                    <td>@item.EmployeeCode</td>
+                                    <td>
+                                        <img src="https://i.pravatar.cc/100?img=@((_currentPage - 1) * _pageSize + index + 1)" class="avatar-img" />
+                                        @item.Name
+                                    </td>
+                                    <td class="text-muted">@((login?.UserName) ?? "-")</td>
+                                    <td class="text-muted">@((login?.Password) ?? "-")</td>
+                                    <td>
+                                        <span class="role-badge">@(login is null ? "-" : login.Role.ToString())</span>
+                                    </td>
+                                    <td>@GetZoneName(login?.ZoneId)</td>
+                                    <td>@GetStateName(login?.StateId)</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
                 </table>
             </div>
 
             <div class="pagination-container">
-                <div class="items-per-page">
-                    Items Per Page
-                    <select>
-                        <option>16</option>
-                        <option>32</option>
-                        <option>50</option>
-                    </select>
-                </div>
-                
+                <div></div>
                 <div class="pagination-controls">
-                    <div class="page-btn"><i class="bi bi-chevron-left"></i></div>
-                    <div class="page-btn active">1</div>
-                    <div class="page-btn">2</div>
-                    <div class="page-btn">3</div>
-                    <div class="page-btn ellipsis">..</div>
-                    <div class="page-btn">8</div>
-                    <div class="page-btn">9</div>
-                    <div class="page-btn">10</div>
-                    <div class="page-btn"><i class="bi bi-chevron-right"></i></div>
+                    <div class="page-btn @(_currentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage">
+                        <i class="bi bi-chevron-left"></i>
+                    </div>
+                    @foreach (var thispage in PageNumbers)
+                    {
+                        @if (thispage == -1)
+                        {
+                            <div class="page-btn ellipsis">...</div>
+                        }
+                        else
+                        {
+                            <div class="page-btn @(thispage == _currentPage ? "active" : "")" @onclick="() => GoToPage(thispage)">@(thispage)</div>
+                        }
+                    }
+                    <div class="page-btn @(_currentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage">
+                        <i class="bi bi-chevron-right"></i>
+                    </div>
                 </div>
             </div>
 
@@ -352,61 +371,176 @@
     private List<LocationItemDto> zones = new();
     private List<LocationItemDto> states = new();
 
+    // Lookup caches
+    private Dictionary<int, Employeelogin> loginByEmployee = new();
+    private Dictionary<int, string> zoneNameById = new();
+    private Dictionary<int, string> stateNameById = new();
+
+    // UI state for datatable
+    private bool _isLoading = true;
+    private string _searchText = string.Empty;
+    private string _roleFilter = "All";
+    private string _stateFilter = "All";
+    private int _pageSize = 16;
+    private int _currentPage = 1;
+
+    private List<EmployeeInformation> FilteredItems = new();
+    private List<EmployeeInformation> PagedItems = new();
+
+    private int TotalPages => (int)Math.Ceiling((double)FilteredItems.Count / _pageSize);
+    private IEnumerable<int> PageNumbers => GetPageNumbers();
+
     protected override async Task OnInitializedAsync()
     {
+        _isLoading = true;
+
         employees = await Http.GetFromJsonAsync<List<EmployeeInformation>>("api/EmployeeRegistration/all") ?? new();
-
         logins = await Http.GetFromJsonAsync<List<Employeelogin>>("api/Employeelogin/all") ?? new();
-
         zones = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Zone/all") ?? new();
-
         states = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
+
+        // Build dictionaries for fast lookup
+        loginByEmployee = logins.Where(l => l.EmployeeInformationID > 0).ToDictionary(l => l.EmployeeInformationID, l => l);
+
+        zoneNameById = zones.ToDictionary(
+            z => z.Id,
+            z => !string.IsNullOrWhiteSpace(z.ZoneName) ? z.ZoneName : (!string.IsNullOrWhiteSpace(z.StateName) ? z.StateName : z.DistrictName ?? "-"));
+
+        stateNameById = states.ToDictionary(
+            s => s.Id,
+            s => !string.IsNullOrWhiteSpace(s.StateName) ? s.StateName : (!string.IsNullOrWhiteSpace(s.ZoneName) ? s.ZoneName : s.DistrictName ?? "-"));
+
+        ApplyFilter();
+        _isLoading = false;
     }
+
     private Employeelogin? GetLogin(int empId)
-{
-    return logins.FirstOrDefault(x => x.EmployeeInformationID == empId);
-}
+    {
+        return empId > 0 && loginByEmployee.TryGetValue(empId, out var l) ? l : null;
+    }
 
-private string GetZoneName(int? zoneId)
-{
-    return zones.FirstOrDefault(x => x.Id == zoneId)?.Name ?? "-";
-}
+    private string GetZoneName(int? zoneId)
+    {
+        if (zoneId == null) return "-";
+        return zoneNameById.TryGetValue(zoneId.Value, out var v) ? v : "-";
+    }
 
-private string GetStateName(int? stateId)
-{
-    return states.FirstOrDefault(x => x.Id == stateId)?.Name ?? "-";
-}
-    	public class LocationItemDto
-	{
-		public int Id { get; set; }
-		// Mapped name — different entities use different property names
-		public string ZoneName { get; set; } = "";
-		public string StateName { get; set; } = "";
-		public string DistrictName { get; set; } = "";
-		public string SubDistrictName { get; set; } = "";
-		public string RegionName { get; set; } = "";
-		public string HeadquarterName { get; set; } = "";
-		// Zone-specific
-		public string? ZoneCode { get; set; }
-		public string? ZoneColorCode { get; set; }
-		// Foreign keys
-		public int ZoneId { get; set; }
-		public int StateId { get; set; }
-		public int DistrictId { get; set; }
-		public int RegionId { get; set; }
-		// Common
-		public bool IsActive { get; set; }
-		public DateTime CreatedAt { get; set; }
-		public DateTime UpdatedAt { get; set; }
-		public string UpdatedBy { get; set; } = "";
+    private string GetStateName(int? stateId)
+    {
+        if (stateId == null) return "-";
+        return stateNameById.TryGetValue(stateId.Value, out var v) ? v : "-";
+    }
 
-		// Computed display name (first non-empty name)
-		public string Name =>
-			!string.IsNullOrEmpty(ZoneName) ? ZoneName :
-			!string.IsNullOrEmpty(StateName) ? StateName :
-			!string.IsNullOrEmpty(DistrictName) ? DistrictName :
-			!string.IsNullOrEmpty(SubDistrictName) ? SubDistrictName :
-			!string.IsNullOrEmpty(RegionName) ? RegionName :
-			HeadquarterName;
-	}
+    private void ApplyFilter()
+    {
+        // Simple search across name and employee code and username
+        var q = (_searchText ?? string.Empty).Trim();
+
+        IEnumerable<EmployeeInformation> query = employees;
+
+        if (!string.IsNullOrEmpty(q))
+        {
+            query = query.Where(e => (e.Name ?? string.Empty).Contains(q, StringComparison.OrdinalIgnoreCase)
+                                     || (e.EmployeeCode ?? string.Empty).Contains(q, StringComparison.OrdinalIgnoreCase)
+                                     || (GetLogin(e.Id)?.UserName ?? string.Empty).Contains(q, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.Equals(_roleFilter, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(e => string.Equals(GetLogin(e.Id)?.Role.ToString(), _roleFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.Equals(_stateFilter, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            if (int.TryParse(_stateFilter, out var sid))
+            {
+                query = query.Where(e => GetLogin(e.Id)?.StateId == sid);
+            }
+        }
+
+        FilteredItems = query.ToList();
+        _currentPage = 1;
+        RecalculatePage();
+    }
+
+    private void RecalculatePage()
+    {
+        if (_pageSize <= 0) _pageSize = 16;
+        PagedItems = FilteredItems.Skip((_currentPage - 1) * _pageSize).Take(_pageSize).ToList();
+    }
+
+    private void PreviousPage()
+    {
+        if (_currentPage <= 1) return;
+        _currentPage--;
+        RecalculatePage();
+    }
+
+    private void NextPage()
+    {
+        if (_currentPage >= TotalPages) return;
+        _currentPage++;
+        RecalculatePage();
+    }
+
+    private void GoToPage(int page)
+    {
+        if (page < 1 || page > TotalPages) return;
+        _currentPage = page;
+        RecalculatePage();
+    }
+
+    private IEnumerable<int> GetPageNumbers()
+    {
+        var total = TotalPages;
+        if (total <= 7)
+        {
+            return Enumerable.Range(1, total);
+        }
+
+        var pages = new List<int>();
+        pages.Add(1);
+        var start = Math.Max(2, _currentPage - 2);
+        var end = Math.Min(total - 1, _currentPage + 2);
+
+        if (start > 2) pages.Add(-1);
+        for (int i = start; i <= end; i++) pages.Add(i);
+        if (end < total - 1) pages.Add(-1);
+        pages.Add(total);
+        return pages;
+    }
+
+    public class LocationItemDto
+    {
+        public int Id { get; set; }
+        // Mapped name — different entities use different property names
+        public string ZoneName { get; set; } = "";
+        public string StateName { get; set; } = "";
+        public string DistrictName { get; set; } = "";
+        public string SubDistrictName { get; set; } = "";
+        public string RegionName { get; set; } = "";
+        public string HeadquarterName { get; set; } = "";
+        // Zone-specific
+        public string? ZoneCode { get; set; }
+        public string? ZoneColorCode { get; set; }
+        // Foreign keys
+        public int ZoneId { get; set; }
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public int RegionId { get; set; }
+        // Common
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+
+        // Computed display name (first non-empty name)
+        public string Name =>
+            !string.IsNullOrEmpty(ZoneName) ? ZoneName :
+            !string.IsNullOrEmpty(StateName) ? StateName :
+            !string.IsNullOrEmpty(DistrictName) ? DistrictName :
+            !string.IsNullOrEmpty(SubDistrictName) ? SubDistrictName :
+            !string.IsNullOrEmpty(RegionName) ? RegionName :
+            HeadquarterName;
+    }
+
 }
