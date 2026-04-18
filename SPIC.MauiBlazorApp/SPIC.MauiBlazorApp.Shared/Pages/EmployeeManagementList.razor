@@ -1,4 +1,11 @@
-﻿
+﻿@using System.Net.Http.Json
+@using System.Text.Json.Nodes
+@using Microsoft.AspNetCore.Components
+@using SPIC.Core.Entities
+@using static SPIC.Core.Entities.EmployeeRegistration
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LoadingService Loading
 
 @page "/EmployeeManagement"
 
@@ -270,77 +277,41 @@
                             <th>State</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <tr>
-                            <td class="text-center text-muted">1</td>
-                            <td>EMP001</td>
-                            <td>
-                                <img src="https://i.pravatar.cc/100?img=11" alt="Avatar" class="avatar-img" />
-                                Rajesh Kumar
-                            </td>
-                            <td class="text-muted">DIR_KMNR</td>
-                            <td class="text-muted">23xxxx</td>
-                            <td><span class="role-badge role-director">Director</span></td>
-                            <td><span class="color-dot dot-blue"></span>South Zone</td>
-                            <td class="text-muted">-</td>
-                        </tr>
-                        
-                        <tr>
-                            <td class="text-center text-muted">2</td>
-                            <td>EMP002</td>
-                            <td>
-                                <img src="https://i.pravatar.cc/100?img=5" alt="Avatar" class="avatar-img" />
-                                Priya Sharma
-                            </td>
-                            <td class="text-muted">VP_KMNR</td>
-                            <td class="text-muted">23xxxx</td>
-                            <td><span class="role-badge role-vp">Vice President</span></td>
-                            <td><span class="color-dot dot-blue"></span>South Zone</td>
-                            <td class="text-muted">Tamilnadu</td>
-                        </tr>
+              <tbody>
+    @foreach (var item in employees.Select((value, index) => new { value, index }))
+    {
+        var login = GetLogin(item.value.Id);
 
-                        <tr>
-                            <td class="text-center text-muted">3</td>
-                            <td>EMP021</td>
-                            <td>
-                                <img src="https://i.pravatar.cc/100?img=9" alt="Avatar" class="avatar-img" />
-                                Lakshmi
-                            </td>
-                            <td class="text-muted">SM_KMNR</td>
-                            <td class="text-muted">23xxxx</td>
-                            <td><span class="role-badge role-sm">State Manager(SM)</span></td>
-                            <td><span class="color-dot dot-blue"></span>South Zone</td>
-                            <td class="text-muted">Tamilnadu</td>
-                        </tr>
+        <tr>
+            <td class="text-center text-muted">@(item.index + 1)</td>
 
-                        <tr>
-                            <td class="text-center text-muted">4</td>
-                            <td>EMP007</td>
-                            <td>
-                                <img src="https://i.pravatar.cc/100?img=12" alt="Avatar" class="avatar-img" />
-                                Narayanan
-                            </td>
-                            <td class="text-muted">SMM_KMNR</td>
-                            <td class="text-muted">23xxxx</td>
-                            <td><span class="role-badge role-rm">Regional Manager (RM)</span></td>
-                            <td class="text-muted">-</td>
-                            <td class="text-muted">-</td>
-                        </tr>
+            <td>@item.value.EmployeeCode</td>
 
-                        <tr>
-                            <td class="text-center text-muted">5</td>
-                            <td>EMP00S</td>
-                            <td>
-                                <img src="https://i.pravatar.cc/100?img=15" alt="Avatar" class="avatar-img" />
-                                Arun
-                            </td>
-                            <td class="text-muted">MO_KMNR</td>
-                            <td class="text-muted">23xxxx</td>
-                            <td><span class="role-badge role-mo">Marketing Officer (MO)</span></td>
-                            <td><span class="color-dot dot-blue"></span>South Zone</td>
-                            <td class="text-muted">Tamilnadu</td>
-                        </tr>
-                    </tbody>
+            <td>
+                <img src="https://i.pravatar.cc/100?img=@(item.index+1)" class="avatar-img" />
+                @item.value.Name
+            </td>
+
+            <td class="text-muted">@login?.UserName</td>
+
+            <td class="text-muted">@login.Password</td>
+
+            <td>
+                <span class="role-badge">
+                    @login?.Role.ToString()
+                </span>
+            </td>
+
+            <td>
+                @GetZoneName(login?.ZoneId)
+            </td>
+
+            <td>
+                @GetStateName(login?.StateId)
+            </td>
+        </tr>
+    }
+</tbody>
                 </table>
             </div>
 
@@ -375,4 +346,67 @@
 
 @code {
 
+    private List<EmployeeInformation> employees = new();
+    private List<Employeelogin> logins = new();
+
+    private List<LocationItemDto> zones = new();
+    private List<LocationItemDto> states = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        employees = await Http.GetFromJsonAsync<List<EmployeeInformation>>("api/EmployeeRegistration/all") ?? new();
+
+        logins = await Http.GetFromJsonAsync<List<Employeelogin>>("api/Employeelogin/all") ?? new();
+
+        zones = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Zone/all") ?? new();
+
+        states = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
+    }
+    private Employeelogin? GetLogin(int empId)
+{
+    return logins.FirstOrDefault(x => x.EmployeeInformationID == empId);
+}
+
+private string GetZoneName(int? zoneId)
+{
+    return zones.FirstOrDefault(x => x.Id == zoneId)?.Name ?? "-";
+}
+
+private string GetStateName(int? stateId)
+{
+    return states.FirstOrDefault(x => x.Id == stateId)?.Name ?? "-";
+}
+    	public class LocationItemDto
+	{
+		public int Id { get; set; }
+		// Mapped name — different entities use different property names
+		public string ZoneName { get; set; } = "";
+		public string StateName { get; set; } = "";
+		public string DistrictName { get; set; } = "";
+		public string SubDistrictName { get; set; } = "";
+		public string RegionName { get; set; } = "";
+		public string HeadquarterName { get; set; } = "";
+		// Zone-specific
+		public string? ZoneCode { get; set; }
+		public string? ZoneColorCode { get; set; }
+		// Foreign keys
+		public int ZoneId { get; set; }
+		public int StateId { get; set; }
+		public int DistrictId { get; set; }
+		public int RegionId { get; set; }
+		// Common
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public string UpdatedBy { get; set; } = "";
+
+		// Computed display name (first non-empty name)
+		public string Name =>
+			!string.IsNullOrEmpty(ZoneName) ? ZoneName :
+			!string.IsNullOrEmpty(StateName) ? StateName :
+			!string.IsNullOrEmpty(DistrictName) ? DistrictName :
+			!string.IsNullOrEmpty(SubDistrictName) ? SubDistrictName :
+			!string.IsNullOrEmpty(RegionName) ? RegionName :
+			HeadquarterName;
+	}
 }
