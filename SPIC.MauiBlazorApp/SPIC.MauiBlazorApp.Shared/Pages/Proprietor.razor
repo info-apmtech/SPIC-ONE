@@ -61,6 +61,8 @@
 		</div>
 	</div>
 
+	@if (_selectedEntityType != EntityType.soleProprietor || _savedPartners.Count < 1 || _isEditingPartner)
+	{
 	<div class="main-section">
 		<div class="section-header">
 			<h3 class="section-title">
@@ -70,174 +72,176 @@
 			<span class="badge-green">@(_isEditingPartner ? "Editing Partner" : "New Partner")</span>
 		</div>
 
-		<div class="row g-4">
-			<div class="col-md-9">
-				<div class="row g-3 mb-3">
-					<div class="col-md-6">
-						<label class="custom-label">   Autheorized Name</label>
-						<input type="text" class="custom-input" placeholder="Enter Full Legal Name" @bind="_partnerForm.Name" />
-					</div>
-					<div class="col-md-6">
-						<label class="custom-label">Son of / Daughter of</label>
-						<input type="text" class="custom-input" placeholder="Enter Father Name" @bind="_partnerForm.FatherName" />
-					</div>
-				</div>
-				<div class="row g-3 mb-3">
-					<div class="col-md-3">
-						<label class="custom-label">Gender</label>
-						<select class="form-select-custom w-100" @bind="_partnerForm.Gender">
-							@foreach (var g in Enum.GetValues<Gender>())
-							{
-								<option value="@g">@g</option>
-							}
-						</select>
-					</div>
-					<div class="col-md-3">
-						<label class="custom-label">Marital Status</label>
-						<select class="form-select-custom w-100" @bind="_partnerForm.MaritalStatus">
-							@foreach (var ms in Enum.GetValues<MaritalStatus>())
-							{
-								<option value="@ms">@ms</option>
-							}
-						</select>
-					</div>
-					<div class="col-md-6">
-						<label class="custom-label">Phone Number</label>
-						<input type="tel"
-							   inputmode="numeric"
-							   pattern="[0-9]*"
-							   class="custom-input"
-							   placeholder="10-digit mobile number"
-							   @bind="_partnerForm.PhoneNumber"
-							   @bind:after="SanitizePhoneNumber"
-							   maxlength="10"
-							   oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
-					</div>
-					<div class="col-md-6">
-						<label class="custom-label">Email</label>
-						<input type="email" class="custom-input" placeholder="email@example.com" @bind="_partnerForm.Email" />
-					</div>
-				</div>
-				<div class="row g-3">
-					<div class="col-md-6">
-						<label class="custom-label">Aadhaar Card Number</label>
-						<div class="upload-input-group">
-							<input type="text"
-								   class="custom-input"
-								   placeholder="XXXX XXXX XXXX"
-								   @bind="_partnerForm.AadhaarNumber"
-								   maxlength="12"
-								   oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
-							<label class="btn-upload-attach mb-0 d-flex align-items-center">
-								<span><i class="bi bi-upload"></i> @(_aadhaarFile != null ? _aadhaarFile.Name : (!string.IsNullOrEmpty(_partnerForm.AadhaarFilePath) ? _partnerForm.AadhaarFilePath : "Upload Aadhaar"))</span>
-								@if (_aadhaarFile != null || !string.IsNullOrEmpty(_partnerForm.AadhaarFilePath))
-								{
-									<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveAadhaarFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
-								}
-								<InputFile hidden OnChange="OnAadhaarSelected" accept=".pdf" />
-							</label>
+        <div class="row g-4">
+            <div class="col-md-9">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="custom-label">Authorized Name</label>
+                        <input type="text" class="custom-input" placeholder="Enter Full Legal Name" @bind="_partnerForm.Name" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="custom-label">Son of / Daughter of</label>
+                        <input type="text" class="custom-input" placeholder="Enter Father Name" @bind="_partnerForm.FatherName" />
+                    </div>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3">
+                        <label class="custom-label">Gender</label>
+                        <select class="form-select-custom w-100" @bind="_partnerForm.Gender">
+                            @foreach (var g in Enum.GetValues<Gender>())
+                            {
+                                <option value="@g">@g</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="custom-label">Marital Status</label>
+                        <select class="form-select-custom w-100" @bind="_partnerForm.MaritalStatus">
+                            @foreach (var ms in Enum.GetValues<MaritalStatus>())
+                            {
+                                <option value="@ms">@ms</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="custom-label">Phone Number</label>
+                        <input type="tel"
+                               inputmode="numeric"
+                               pattern="[0-9]*"
+                               class="custom-input"
+                               placeholder="10-digit mobile number"
+                               @bind="_partnerForm.PhoneNumber"
+                               @bind:after="SanitizePhoneNumber"
+                               maxlength="10"
+                               oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="custom-label">Email</label>
+                        <input type="email" class="custom-input" placeholder="email@example.com" @bind="_partnerForm.Email" />
+                    </div>
+                </div>
+                <div class="row g-3">
+                    @* <div class="col-md-6">
+                        <label class="custom-label">Aadhaar Card Number</label>
+                        <div class="upload-input-group">
+                            <input type="text" class="custom-input" placeholder="XXXX XXXX XXXX" @bind="_partnerForm.AadhaarNumber" />
+                            <label class="btn-upload-attach mb-0">
+                                <i class="bi bi-upload"></i> @(_aadhaarFile != null ? _aadhaarFile.Name : "Upload Aadhaar")
+                                <InputFile hidden OnChange="OnAadhaarSelected" accept=".pdf" />
+                            </label>
+                        </div>
+                    </div> *@ 
+					@if (_selectedEntityType != EntityType.soleProprietor)
+					{
+						<div class="col-md-6">
+							<label class="custom-label">Aadhaar Card Number</label>
+							<div class="upload-input-group">
+								<input type="text"
+									   class="custom-input"
+									   placeholder="XXXX XXXX XXXX"
+									   @bind="_partnerForm.AadhaarNumber"
+									   maxlength="12"
+									   oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+								<label class="btn-upload-attach mb-0">
+									<i class="bi bi-upload"></i> @(_aadhaarFile != null ? _aadhaarFile.Name : "Upload Aadhaar")
+									<InputFile hidden OnChange="OnAadhaarSelected" accept=".pdf" />
+								</label>
+							</div>
 						</div>
-					</div>
-					<div class="col-md-6">
-						<label class="custom-label">PAN number</label>
-						<div class="upload-input-group">
-							<input type="text" class="custom-input" placeholder="ABCDE1234F" @bind="_partnerForm.PANNumber" />
-							<label class="btn-upload-attach mb-0 d-flex align-items-center">
-								<span><i class="bi bi-upload"></i> @(_panFile != null ? _panFile.Name : (!string.IsNullOrEmpty(_partnerForm.PANFilePath) ? _partnerForm.PANFilePath : "Upload Pan PDF"))</span>
-								@if (_panFile != null || !string.IsNullOrEmpty(_partnerForm.PANFilePath))
-								{
-									<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemovePanFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
-								}
-								<InputFile hidden OnChange="OnPanSelected" accept=".pdf" />
-							</label>
+						<div class="col-md-6">
+							<label class="custom-label">PAN number</label>
+							<div class="upload-input-group">
+								<input type="text" class="custom-input" placeholder="ABCDE1234F" @bind="_partnerForm.PANNumber" />
+								<label class="btn-upload-attach mb-0">
+									<i class="bi bi-upload"></i> @(_panFile != null ? _panFile.Name : "Upload Pan PDF")
+									<InputFile hidden OnChange="OnPanSelected" accept=".pdf" />
+								</label>
+							</div>
 						</div>
-					</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<label class="image-upload-box mb-0" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; width:100%;">
-					<i class="bi bi-image"></i>
-					<span class="btn-upload-attach d-flex align-items-center mt-2">
-						<span>@(_imageFile != null ? _imageFile.Name : (!string.IsNullOrEmpty(_partnerForm.ProprietorImagePath) ? _partnerForm.ProprietorImagePath : "Upload Proprietor / Managing Partner Image"))</span>
-						@if (_imageFile != null || !string.IsNullOrEmpty(_partnerForm.ProprietorImagePath))
-						{
-							<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveImageFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
-						}
-					</span>
-					<InputFile hidden OnChange="OnImageSelected" accept=".jpg,.jpeg,.png,.webp" />
-				</label>
-			</div>
-		</div>
-	</div>
+					}
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="image-upload-box mb-0" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; width:100%;">
+                    <i class="bi bi-image"></i>
+                    <span class="btn-upload-attach">
+                        @(_imageFile != null ? _imageFile.Name : "Upload Proprietor / Managing Partner Image")
+                    </span>
+                    <InputFile hidden OnChange="OnImageSelected" accept=".jpg,.jpeg,.png,.webp" />
+                </label>
+            </div>
+        </div>
+    </div>
 
-	<div class="main-section">
-		<div class="section-header mb-3">
-			<h3 class="section-title">
-				<i class="bi bi-geo-alt"></i>
-				Address Details
-			</h3>
-		</div>
-		<div class="row g-3 mb-3">
-			<div class="col-md-4">
-				<label class="custom-label">Shop No / Room No / Block No</label>
-				<input type="text" class="custom-input" placeholder="Enter Shop/Room/Block No" @bind="_partnerForm.ShopNoORRoomNoOrBlockNo" />
-			</div>
-			<div class="col-md-4">
-				<label class="custom-label">Street</label>
-				<input type="text" class="custom-input" placeholder="Enter Street" @bind="_partnerForm.Street" />
-			</div>
-			<div class="col-md-4">
-				<label class="custom-label">Sub Village</label>
-				<input type="text" class="custom-input" placeholder="Enter Sub Village" @bind="_partnerForm.SubVillage" />
-			</div>
-		</div>
-		<div class="row g-3 mb-3">
-			<div class="col-md-4">
-				<label class="custom-label">Village</label>
-				<input type="text" class="custom-input" placeholder="Enter Village" @bind="_partnerForm.Village" />
-			</div>
-			<div class="col-md-4">
-				<label class="custom-label">Pin Code</label>
-				<input type="text" class="custom-input" placeholder="Enter Pin Code" @bind="_partnerForm.PinCode" @bind:after="OnPincodeChanged" maxlength="6" oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
-				@if (_isPincodeLookup)
-				{
-					<div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
-				}
-				@if (!string.IsNullOrEmpty(_pincodeMessage))
-				{
-					<div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">@_pincodeMessage</div>
-				}
-			</div>
-			<div class="col-md-4">
-				<label class="custom-label">Block</label>
-				<input type="text" class="custom-input" placeholder="Enter Block" @bind="_partnerForm.Block" />
-			</div>
-		</div>
-		<div class="row g-3">
-			<div class="col-md-4">
-				<label class="custom-label">Taluk</label>
-				<input type="text" class="custom-input" placeholder="Enter Taluk" @bind="_partnerForm.Taluk" />
-			</div>
-			<div class="col-md-4">
-				<label class="custom-label">District</label>
-				<select class="form-select-custom w-100" @bind="_partnerForm.DistrictId">
-					<option value="0">Select District</option>
-					@foreach (var d in _districtsAll.Where(d => d.StateId == _partnerForm.StateId))
-					{
-						<option value="@d.Id">@d.DistrictName</option>
-					}
-				</select>
-			</div>
-			<div class="col-md-4">
-				<label class="custom-label">State</label>
-				<select class="form-select-custom w-100" @bind="_partnerForm.StateId">
-					<option value="0">Select State</option>
-					@foreach (var s in _statesAll)
-					{
-						<option value="@s.Id">@s.StateName</option>
-					}
-				</select>
-			</div>
+    <!-- Address Details -->
+    <div class="main-section">
+        <div class="section-header mb-3">
+            <h3 class="section-title">
+                <i class="bi bi-geo-alt"></i>
+                Residential Address Details
+            </h3>
+        </div>
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <label class="custom-label">Shop No / Room No / Block No</label>
+                <input type="text" class="custom-input" placeholder="Enter Shop/Room/Block No" @bind="_partnerForm.ShopNoORRoomNoOrBlockNo" />
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">Street</label>
+                <input type="text" class="custom-input" placeholder="Enter Street" @bind="_partnerForm.Street" />
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">Sub Village</label>
+                <input type="text" class="custom-input" placeholder="Enter Sub Village" @bind="_partnerForm.SubVillage" />
+            </div>
+        </div>
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <label class="custom-label">Village</label>
+                <input type="text" class="custom-input" placeholder="Enter Village" @bind="_partnerForm.Village" />
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">Pin Code</label>
+                <input type="text" class="custom-input" placeholder="Enter Pin Code" @bind="_partnerForm.PinCode" @bind:after="OnPincodeChanged" maxlength="6" oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+                @if (_isPincodeLookup)
+                {
+                    <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
+                }
+                @if (!string.IsNullOrEmpty(_pincodeMessage))
+                {
+                    <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">@_pincodeMessage</div>
+                }
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">Block</label>
+                <input type="text" class="custom-input" placeholder="Enter Block" @bind="_partnerForm.Block" />
+            </div>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="custom-label">Taluk</label>
+                <input type="text" class="custom-input" placeholder="Enter Taluk" @bind="_partnerForm.Taluk" />
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">District</label>
+                <select class="form-select-custom w-100" @bind="_partnerForm.DistrictId">
+                    <option value="0">Select District</option>
+                    @foreach (var d in _districtsAll.Where(d => d.StateId == _partnerForm.StateId))
+                    {
+                        <option value="@d.Id">@d.DistrictName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="custom-label">State</label>
+                <select class="form-select-custom w-100" @bind="_partnerForm.StateId">
+                    <option value="0">Select State</option>
+                    @foreach (var s in _statesAll)
+                    {
+                        <option value="@s.Id">@s.StateName</option>
+                    }
+                </select>
+            </div>
 
 		</div>
 	</div>
@@ -462,6 +466,13 @@
 			}
 		</div>
 	</div>
+	}
+	else
+	{
+		<div class="alert alert-info" role="alert">
+			<i class="bi bi-info-circle me-2"></i>Sole Proprietor allows only 1 proprietor. You can edit or delete the existing one from the saved details below.
+		</div>
+	}
 
 	@if (_savedPartners.Count > 0)
 	{

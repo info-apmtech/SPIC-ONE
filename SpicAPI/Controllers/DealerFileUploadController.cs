@@ -27,6 +27,9 @@ namespace SpicAPI.Controllers
 				".jpg" or ".jpeg" => "image/jpeg",
 				".png" => "image/png",
 				".webp" => "image/webp",
+				".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				".xls" => "application/vnd.ms-excel",
+				".csv" => "text/csv",
 				_ => "application/octet-stream"
 			};
 
@@ -42,8 +45,9 @@ namespace SpicAPI.Controllers
 			var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
 
 			var pdfOrImageDocTypes = new[] { "GST", "PAN", "Aadhaar", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN",
-				"Specimen", "BankGuarantee", "ITReturn1", "ITReturn2", "ValuationCertificate", "RetailerList", "PartnershipDeed", "BoardResolution", "Affidavit" };
+				"Specimen", "BankGuarantee", "ITReturn1", "ITReturn2", "ValuationCertificate", "PartnershipDeed", "BoardResolution", "Affidavit" };
 			var imageDocTypes = new[] { "ProprietorImage" };
+			var excelCsvDocTypes = new[] { "RetailerList" };
 
 			if (pdfOrImageDocTypes.Contains(docType))
 			{
@@ -56,6 +60,12 @@ namespace SpicAPI.Controllers
 				var allowedImageExts = new[] { ".jpg", ".jpeg", ".png", ".webp" };
 				if (!allowedImageExts.Contains(ext))
 					return BadRequest("Only JPG, PNG, or WEBP images are allowed.");
+			}
+			else if (excelCsvDocTypes.Contains(docType))
+			{
+				var allowedExcelCsvExts = new[] { ".xlsx", ".xls", ".csv" };
+				if (!allowedExcelCsvExts.Contains(ext))
+					return BadRequest("Only Excel (.xlsx, .xls) or CSV (.csv) files are allowed.");
 			}
 			else
 			{

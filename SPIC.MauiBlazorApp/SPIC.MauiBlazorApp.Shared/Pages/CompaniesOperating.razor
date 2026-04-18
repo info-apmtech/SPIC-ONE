@@ -67,8 +67,8 @@
     [SupplyParameterFromQuery(Name = "dealerId")]
     public int? DealerId { get; set; }
 
-    private bool isSpic = true;
-    private bool isGreenStar = true;
+    private bool isSpic;
+    private bool isGreenStar;
 
     private List<Competitor> _competitors = new();
     private HashSet<string> _selectedNames = new();
@@ -111,10 +111,18 @@
         {
             var all = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new();
             _savedEntries = all.Where(e => e.DealerId == DealerId.Value).ToList();
-            _selectedNames = new HashSet<string>(_savedEntries.Where(e => e.CompaniesOperating != null).Select(e => e.CompaniesOperating!));
 
-            if (_selectedNames.Contains("SPIC")) { isSpic = true; _selectedNames.Remove("SPIC"); }
-            if (_selectedNames.Contains("GREEN STAR")) { isGreenStar = true; _selectedNames.Remove("GREEN STAR"); }
+            var savedNames = _savedEntries
+                .Where(e => !string.IsNullOrEmpty(e.CompaniesOperating))
+                .Select(e => e.CompaniesOperating!)
+                .ToHashSet();
+
+            isSpic = savedNames.Contains("SPIC");
+            isGreenStar = savedNames.Contains("GREEN STAR");
+
+            savedNames.Remove("SPIC");
+            savedNames.Remove("GREEN STAR");
+            _selectedNames = savedNames;
         }
         catch (Exception ex)
         {
@@ -142,7 +150,7 @@
         _isSaving = true;
         try
         {
-            // Build full list of selected companies including SPIC / GREEN STAR
+            // Build full list including SPIC / GREEN STAR
             var allSelected = new List<string>(_selectedNames);
             if (isSpic) allSelected.Add("SPIC");
             if (isGreenStar) allSelected.Add("GREEN STAR");
