@@ -32,9 +32,9 @@ namespace SPIC.Core.Entities
         public class Employeelogin
         {
             [Key]
-            public string Id { get; set; }
-            [Display(Name = "Employee")]
-            public string EmployeeId { get; set; }
+            public string Id { get; set; } = Guid.NewGuid().ToString();
+            //[Display(Name = "Employee")]
+            //public string EmployeeId { get; set; }
             // 🔹 Role & Authority
             [Required]
             [Display(Name = "Role")]
