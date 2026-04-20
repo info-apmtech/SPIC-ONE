@@ -1,345 +1,563 @@
-﻿@page "/ScanProduct"
+﻿ @page "/Scanproduct"
+ <style>
 
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background-color: #F5F8FF;
+    }
 
-    <style>
-       
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px;
+  /*     background-color: #F5F8FF; */
+      border-bottom: 1px solid #E8EEFF;
+      flex-shrink: 0;
+    }
 
-        /* --- Header --- */
-        .page-header-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 24px;
-            margin-top: 24px;
-        }
-        .page-title {
-            color: #1F2937;
-            font-weight: 700;
-            font-size: 1.5rem;
-            margin: 0;
-        }
-        .page-subtitle {
-            font-size: 0.85rem;
-            color: #6B7280;
-            margin-top: 4px;
-        }
+    .back-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: none;
+      background-color: #fff;
+      color: #1A1A2E;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+    }
 
-        /* --- Buttons --- */
-        .btn-outline-green {
-            border: 1px solid #10B981;
-            color: #10B981;
-            background-color: transparent;
-            font-size: 0.85rem;
-            font-weight: 600;
-            padding: 6px 12px;
-            border-radius: 8px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            transition: 0.2s;
-        }
-        .btn-outline-green:hover { background-color: #ECFDF5; }
+    .back-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
 
-        /* Ensure the header button is compact and anchored to the right */
-        .page-header-row .btn-outline-green { margin-left: auto; min-width: 110px; max-width: 160px; width: auto; }
+    .back-btn:active {
+      transform: scale(0.98);
+    }
 
-        .btn-primary-blue {
-            background-color: #3B82F6;
-            color: #ffffff;
-            border: none;
-            font-size: 0.85rem;
-            font-weight: 600;
-            padding: 12px 24px;
-            border-radius: 8px;
-            width: 100%;
-            max-width: 250px;
-            transition: 0.2s;
-        }
-        .btn-primary-blue:hover { background-color: #2563EB; }
+    .header-title {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      color: #1A1A2E;
+    }
 
-        .btn-outline-gray {
-            border: 1px solid #D1D5DB;
-            color: #4B5563;
-            background-color: #ffffff;
-            font-size: 0.85rem;
-            font-weight: 600;
-            padding: 12px 24px;
-            border-radius: 8px;
-            width: 100%;
-            max-width: 250px;
-            transition: 0.2s;
-            cursor: pointer;
-        }
-        .btn-outline-gray:hover { background-color: #F3F4F6; }
+    .scroll-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 16px 20px;
+    }
 
-        /* --- Main Cards --- */
-        .main-card {
-            background: #ffffff;
-            border-radius: 12px;
-            border: 1px solid #E5E7EB;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-            padding: 24px;
-            margin-bottom: 24px;
-        }
-        
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: #374151;
-            margin-bottom: 16px;
-        }
+    .scroll-container::-webkit-scrollbar {
+      width: 6px;
+    }
 
-        /* --- Top Metric Cards --- */
-        .metric-card {
-            border-radius: 12px;
-            padding: 20px;
-            height: 100%;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        
-        .metric-card-title { font-size: 0.9rem; font-weight: 700; color: #4B5563; margin-bottom: 8px;}
-        .metric-card-value { font-size: 1.8rem; font-weight: 700; color: #1F2937; margin: 0; line-height: 1;}
-        .metric-icon-box {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            width: 44px;
-            height: 44px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.4rem;
-        }
+    .scroll-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
 
-        /* Card 1: Total Entries */
-        .card-total { background-color: #FAFAFA; border: 1px solid #F3E8FF; }
-        .card-total .metric-icon-box { background-color: #F3E8FF; color: #A855F7; }
-        .progress-bar-custom {
-            height: 6px; background-color: #E5E7EB; border-radius: 10px; width: 100%; margin-top: 12px; overflow: hidden;
-        }
-        .progress-fill { height: 100%; background-color: #059669; border-radius: 10px; }
-        .progress-labels { display: flex; justify-content: space-between; font-size: 0.7rem; color: #6B7280; font-weight: 600; margin-top: 6px;}
+    .scroll-container::-webkit-scrollbar-thumb {
+      background: #D0D5E8;
+      border-radius: 3px;
+    }
 
-        /* Card 2: Active */
-        .card-active { background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border: 1px solid #A7F3D0; }
-        .card-active .metric-icon-box { color: #059669; top: 16px; right: auto; left: 20px;}
-        .card-active .metric-card-title { margin-top: 40px;}
+    .scroll-container::-webkit-scrollbar-thumb:hover {
+      background: #B8BFD8;
+    }
 
-        /* Card 3: This Month */
-        .card-month { background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%); border: 1px solid #BFDBFE; }
-        .card-month .metric-icon-box { color: #2563EB; top: 16px; right: auto; left: 20px;}
-        .card-month .metric-card-title { margin-top: 40px;}
+    .company-card {
+      background-color: #1B5E20;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
 
-        /* Card 4: Remaining */
-        .card-remaining { background: linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%); border: 1px solid #FECACA; }
-        .card-remaining .metric-icon-box { color: #DC2626; top: 16px; right: auto; left: 20px;}
-        .card-remaining .metric-card-title { margin-top: 40px;}
+    .card-top {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
 
+    .avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 10px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      object-fit: cover;
+      flex-shrink: 0;
+    }
 
-        /* --- Scan & Upload Areas --- */
-        .scan-upload-area {
-            border: 2px dashed #A7F3D0;
-            border-radius: 12px;
-            background-color: #FAFAFA;
-            padding: 32px 18px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            box-sizing: border-box; /* ensure border and padding are inside the box */
-            width: 100%;
-            /* Avoid forcing full height — let the card determine height from padding and min-height */
-            min-height: 260px;
-        }
+    .company-info {
+      flex: 1;
+    }
 
-        .scan-icon { font-size: 4rem; color: #86EFAC; margin-bottom: 16px; }
-        .upload-icon { font-size: 4rem; color: #86EFAC; margin-bottom: 16px; }
+    .name-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
 
-        .area-title { font-size: 1.05rem; font-weight: 700; color: #1F2937; margin-bottom: 6px; }
-        .area-subtitle { font-size: 0.85rem; color: #6B7280; font-weight: 500; margin-bottom: 24px; }
+    .company-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.3px;
+    }
 
-        /* --- How It Works Section --- */
-        .how-it-works-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 20px;
-            margin-top: 24px;
-        }
-        
-        .step-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            flex: 1;
-        }
-        
-        .step-icon {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background-color: #F0FDF4;
-            color: #059669;
-            border: 1px solid #D1FAE5;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-            flex-shrink: 0;
-        }
-        
-        .step-content h4 {
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: #1F2937;
-            margin: 0 0 4px 0;
-        }
-        
-        .step-content p {
-            font-size: 0.75rem;
-            color: #6B7280;
-            margin: 0;
-            line-height: 1.4;
-        }
+    .verified-badge {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background-color: #2E7D32;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 20px;
+      padding: 3px 8px;
+      color: #fff;
+    }
 
-        @@media (max-width: 992px) {
-            .how-it-works-row { flex-direction: column; }
-        }
+    .verified-badge span {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
 
-    </style>
+    .verified-badge svg {
+      color: #fff;
+      flex-shrink: 0;
+    }
 
-    <div class="container-fluid" style="max-width: 1200px; margin: auto;">
-         
-        <div class="page-header-row">
-            <div>
-                <h1 class="page-title">Scan Product</h1>
-                <div class="page-subtitle">Scan your product QR code to earn lucky draw entries and rewards</div>
+    .address-row {
+      display: flex;
+      gap: 5px;
+      align-items: flex-start;
+    }
+
+    .address-row svg {
+      color: #A8C5E8;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .address-text {
+      font-size: 12px;
+      color: #A8C5E8;
+      line-height: 17px;
+    }
+
+    .divider {
+      height: 1px;
+      background-color: rgba(255, 255, 255, 0.15);
+      margin-bottom: 12px;
+    }
+
+    .contact-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .contact-item {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background-color: rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: #A8C5E8;
+      min-height: 32px;
+    }
+
+    .contact-right { justify-content: flex-end; }
+
+    .contact-item svg {
+      flex-shrink: 0;
+      color: #A8C5E8;
+    }
+
+    .contact-text {
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1A1A2E;
+      margin-bottom: 14px;
+      letter-spacing: 0.2px;
+    }
+
+    .products-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .product-item {
+      display: flex;
+      gap: 12px;
+      background-color: #fff;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      transition: box-shadow 0.2s ease;
+    }
+
+    .product-item:hover {
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
+
+    .product-image {
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+      background-color: #F5F8FF;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .product-details {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .product-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .product-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1A1A2E;
+    }
+
+    .product-category {
+      font-size: 11px;
+      color: #8B92A8;
+      margin-top: 4px;
+    }
+
+    .product-controls {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      width: 100px;
+      background-color: #f5f5f5;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .control-btn {
+      width: 30px;
+      height: 30px;
+      border: none;
+      background-color: transparent;
+      color: #1A1A2E;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      transition: background-color 0.15s ease;
+    }
+
+    .control-btn:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    .control-btn:active {
+      background-color: rgba(0, 0, 0, 0.1);
+    }
+
+    .quantity-display {
+      flex: 1;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: #1A1A2E;
+    }
+
+    .add-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background-color: #1565C0;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 600;
+      border-radius: 6px;
+      margin-left: auto;
+      margin-right: 4px;
+      margin-top: 8px;
+      transition: all 0.15s ease;
+    }
+
+    .add-btn:hover {
+      background-color: #1154A8;
+      transform: scale(1.05);
+    }
+
+    .add-btn:active {
+      transform: scale(0.98);
+    }
+
+    .footers {
+      padding: 16px;
+   /*    background-color: #F5F8FF; */
+      border-top: 1px solid #E8EEFF;
+      flex-shrink: 0;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      background-color: #1565C0;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 8px rgba(21, 101, 192, 0.3);
+    }
+
+    /* Contact row under header: phone left, email right */
+    .contact-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-top: 12px;
+        margin-bottom: 8px;
+        color: #4B5563;
+        font-size: 0.9rem;
+    }
+    .contact-item { display: inline-flex; align-items: center; gap: 8px; }
+    .contact-item i { color: #10B981; font-size: 1rem; }
+
+    @@media (max-width: 576px) {
+        .contact-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+        .contact-item { width: 100%; justify-content: flex-start; }
+    }
+
+    .submit-btn:hover {
+      background-color: #1154A8;
+      box-shadow: 0 6px 12px rgba(21, 101, 192, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .submit-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 4px rgba(21, 101, 192, 0.2);
+    }
+
+    @@media (max-width: 480px) {
+      .header {
+        padding: 12px 12px;
+      }
+
+      .scroll-container {
+        padding: 8px 12px 20px;
+      }
+
+      .company-card {
+        padding: 14px;
+      }
+
+      .product-item {
+        padding: 10px;
+      }
+
+      .product-image {
+        width: 70px;
+        height: 70px;
+      }
+
+      .footers {
+        padding: 12px;
+      }
+
+      .submit-btn {
+        padding: 14px;
+        font-size: 15px;
+      }
+    }
+
+    @@media (max-width: 360px) {
+      .header-title {
+        font-size: 15px;
+      }
+
+      .company-name {
+        font-size: 14px;
+      }
+
+      .section-title {
+        font-size: 16px;
+      }
+
+      .product-name {
+        font-size: 13px;
+      }
+    }
+  </style>
+
+@* <div class="container"> *@
+    <div class="header">
+        <button class="back-btn" @onclick="GoBack">
+            <svg width="20" height="20" viewBox="0 0 24 24">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+        </button>
+        <h1 class="header-title">Back To Scan</h1>
+    </div>
+
+    <div class="scroll-container">
+
+        <div class="company-card">
+            <div class="card-top">
+                <img src="https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg"
+                     class="avatar" />
+                <div class="company-info">
+                    <div class="name-row">
+                        <h2 class="company-name">COMPANY NAME</h2>
+                        <div class="verified-badge">
+                            <span>VERIFIED</span>
+                        </div>
+                    </div>
+                    <p class="address-text">Address Goes Here</p>
+                    <div class="contact-row" style="margin-top:10px;">
+                        <div class="contact-item">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M22 16.92V20a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3.09a1 1 0 0 1 1 .75c.12.66.37 1.32.74 1.9a1 1 0 0 1-.24 1.09L8.91 8.91a16 16 0 0 0 6.17 6.17l1.17-1.17a1 1 0 0 1 1.09-.24c.58.37 1.24.62 1.9.74a1 1 0 0 1 .75 1V20z" stroke="#A8C5E8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <div class="contact-text">+91 98765 43210</div>
+                        </div>
+
+                        <div class="contact-item contact-right">
+                            <div class="contact-text" style="text-align:right;">support@example.com</div>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M3 8l7.89 5.26a2 2 0 0 0 2.22 0L21 8" stroke="#A8C5E8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <rect x="3" y="5" width="18" height="14" rx="2" ry="2" stroke="#A8C5E8" stroke-width="1.2"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <button class="btn-outline-green"><i class="bi bi-search"></i> View Entries</button>
         </div>
 
-        <div class="row g-4 mb-4">
-            <div class="col-lg-5 col-md-12">
-                <div class="metric-card card-total">
-                    <div class="metric-card-title">Total Entries</div>
-                    <div class="metric-icon-box"><i class="bi bi-gift-fill"></i></div>
-                    
-                    <div class="metric-card-value mb-1">12</div>
-                    <div class="area-subtitle mb-0" style="font-size: 0.75rem;">Total Lucky Draw Entries</div>
-                    
-                    <div class="progress-bar-custom">
-                        <div class="progress-fill" style="width: 12%;"></div>
-                    </div>
-                    <div class="progress-labels">
-                        <span>0</span>
-                        <span>100 entries</span>
-                    </div>
-                </div>
-            </div>
+        <h3 class="section-title">Products</h3>
 
-            <div class="col-lg-2 col-md-4">
-                <div class="metric-card card-active">
-                    <div class="metric-icon-box"><i class="bi bi-person-check-fill"></i></div>
-                    <div class="metric-card-title">Active</div>
-                    <div class="metric-card-value">12</div>
-                </div>
-            </div>
+        <div class="products-list">
+            @foreach (var product in Products)
+            {
+                <div class="product-item">
+                    <img src="@product.Image" class="product-image" />
 
-            <div class="col-lg-2 col-md-4">
-                <div class="metric-card card-month">
-                    <div class="metric-icon-box"><i class="bi bi-calendar-event-fill"></i></div>
-                    <div class="metric-card-title">This Month</div>
-                    <div class="metric-card-value">13</div>
-                </div>
-            </div>
+                    <div class="product-details">
+                        <div>
+                            <div class="product-name">@product.Name</div>
+                            <div class="product-category">@product.Category</div>
+                        </div>
 
-            <div class="col-lg-3 col-md-4">
-                <div class="metric-card card-remaining">
-                    <div class="metric-icon-box"><i class="bi bi-hourglass-split"></i></div>
-                    <div class="metric-card-title">Remaining</div>
-                    <div class="metric-card-value">87</div>
-                </div>
-            </div>
-        </div>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <div class="product-controls">
+                                <button class="control-btn"
+                                        @onclick="() => Decrement(product)">
+                                    −
+                                </button>
 
-        <div class="row g-4 mb-4">
-            
-            <div class="col-md-6">
-                <div class="main-card h-100 mb-0">
-                    <h3 class="section-title">QR Code Scanner</h3>
-                    <div class="scan-upload-area">
-                        <i class="bi bi-qr-code-scan scan-icon"></i>
-                        <div class="area-title">Position QR code in frame</div>
-                        <div class="area-subtitle">Camera will auto-detect</div>
-                        <button class="btn-primary-blue">Start Camera Scan</button>
+                                <div class="quantity-display">
+                                    @product.Quantity
+                                </div>
+                            </div>
+
+                            <button class="add-btn"
+                                    @onclick="() => Increment(product)">
+                                +
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            <div class="col-md-6">
-                <div class="main-card h-100 mb-0">
-                    <h3 class="section-title">Upload Image</h3>
-                    <div class="scan-upload-area">
-                        <i class="bi bi-cloud-arrow-up-fill upload-icon"></i>
-                        <div class="area-title">Drop image here or click to browse</div>
-                        <div class="area-subtitle">Supports: JPG, PNG, PDF (Max 5MB)</div>
-                        <label class="btn-outline-gray d-flex align-items-center justify-content-center m-0">
-                            Browse Files
-                            <input type="file" hidden accept=".jpg,.png,.pdf" />
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-
-        <div class="main-card">
-            <h3 class="section-title">How it Works</h3>
-            
-            <div class="how-it-works-row">
-                <div class="step-item">
-                    <div class="step-icon"><i class="bi bi-qr-code"></i></div>
-                    <div class="step-content">
-                        <h4>Scan product QR</h4>
-                        <p>Use the scanner to read the product code</p>
-                    </div>
-                </div>
-
-                <div class="step-item">
-                    <div class="step-icon"><i class="bi bi-boxes"></i></div>
-                    <div class="step-content">
-                        <h4>Select quantity</h4>
-                        <p>Choose the number of products purchased</p>
-                    </div>
-                </div>
-
-                <div class="step-item">
-                    <div class="step-icon"><i class="bi bi-shield-check"></i></div>
-                    <div class="step-content">
-                        <h4>Verify purchase</h4>
-                        <p>Confirm your transaction details</p>
-                    </div>
-                </div>
-
-                <div class="step-item">
-                    <div class="step-icon"><i class="bi bi-ticket-perforated"></i></div>
-                    <div class="step-content">
-                        <h4>Get entry in lucky draw</h4>
-                        <p>Automatically receive your draw entry</p>
-                    </div>
-                </div>
-            </div>
+            }
         </div>
 
     </div>
 
-   
-
+    <div class="footers">
+        <button class="submit-btn" @onclick="Submit">
+            Submit
+        </button>
+    </div>
+@* </div> *@
 @code {
 
+    public class Product
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string Category { get; set; }
+        public string Image { get; set; }
+        public int Quantity { get; set; }
+    }
+
+    List<Product>? Products = new()
+    {
+        new Product { Id="1", Name="SPIC Urea 45kg Bag", Category="Fertilizer", Image="https://images.pexels.com/photos/7728082/pexels-photo-7728082.jpeg", Quantity=2 },
+        new Product { Id="2", Name="SPIC Urea 45kg Bag", Category="Fertilizer", Image="https://images.pexels.com/photos/7728082/pexels-photo-7728082.jpeg", Quantity=2 },
+        new Product { Id="3", Name="SPIC Urea 45kg Bag", Category="Fertilizer", Image="https://images.pexels.com/photos/7728082/pexels-photo-7728082.jpeg", Quantity=2 },
+        new Product { Id="4", Name="SPIC Urea 45kg Bag", Category="Fertilizer", Image="https://images.pexels.com/photos/7728082/pexels-photo-7728082.jpeg", Quantity=2 }
+    };
+
+    void Increment(Product product)
+    {
+        product.Quantity++;
+    }
+
+    void Decrement(Product product)
+    {
+        if (product.Quantity > 0)
+            product.Quantity--;
+    }
+
+    void Submit()
+    {
+        var total = Products.Sum(p => p.Quantity);
+
+        Console.WriteLine($"Total Items: {total}");
+
+        foreach (var p in Products)
+        {
+            Console.WriteLine($"{p.Name} - {p.Quantity}");
+        }
+    }
+
+    void GoBack()
+    {
+        Console.WriteLine("Back clicked");
+    }
 }
