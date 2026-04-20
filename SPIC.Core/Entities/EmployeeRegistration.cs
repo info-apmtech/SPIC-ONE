@@ -25,18 +25,19 @@ namespace SPIC.Core.Entities
             public string Email { get; set; }
             public string CreatedBy { get; set; }
             public string? UpdatedBy { get; set; }
-            public DateTime CreatedAt { get; set; }
-            public DateTime UpdatedAt { get; set; } = DateTime.Now;
+            public DateTime CreatedAt { get; set; } = DateTime.Now;
+			public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
         }
         public class Employeelogin
         {
             [Key]
-            public string Id { get; set; } = Guid.NewGuid().ToString();
-            //[Display(Name = "Employee")]
-            //public string EmployeeId { get; set; }
-            // 🔹 Role & Authority
-            [Required]
+            public int Id { get; set; } /*= Guid.NewGuid().ToString();*/
+			//[Display(Name = "Employee")]
+			//public string EmployeeId { get; set; }
+			[Required]
+			public string UserId { get; set; }
+			[Required]
             [Display(Name = "Role")]
             public AppRole Role { get; set; }
             // 🔹 Role Specification
@@ -48,12 +49,12 @@ namespace SPIC.Core.Entities
             public int RegionId { get; set; }
             [Display(Name = "Headquarters")]
             public int HeadquartersId { get; set; }
-            [Required]
-            [Display(Name = "User Name")]
-            public string UserName { get; set; }
-            [Required]
-            [Display(Name = "Password")]
-            public string Password { get; set; }  // ⚠️ Prefer PasswordHash in real apps
+            //[Required]
+            //[Display(Name = "User Name")]
+            //public string UserName { get; set; }
+            //[Required]
+            //[Display(Name = "Password")]
+            //public string Password { get; set; } 
             // 🔹 Status
             [Display(Name = "Status")]
             public bool IsActive { get; set; } = true;
@@ -61,4 +62,21 @@ namespace SPIC.Core.Entities
 
         }
     }
+	public class EmployeeLoginCreateRequest
+	{
+		public int EmployeeInformationID { get; set; }
+		public string UserName { get; set; } = "";
+		public string Password { get; set; } = "";
+		public string? Email { get; set; }
+		public string? Name { get; set; }
+		public int? DesignationId { get; set; }
+		public AppRole Role { get; set; }
+		public int ZoneId { get; set; }
+		public int StateId { get; set; }
+		public int RegionId { get; set; }
+		public int HeadquartersId { get; set; }
+		public bool IsActive { get; set; } = true;
+		public string? CreatedBy { get; set; }
+		public string? UpdatedBy { get; set; }
+	}
 }
