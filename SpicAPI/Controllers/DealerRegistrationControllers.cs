@@ -30,7 +30,7 @@ namespace SpicAPI.Controllers
 				query = query.Where(x => x.Region == regionId);
 			else if ((role == "SM") && int.TryParse(stateClaim, out var stateId))
 				query = query.Where(x => x.StateId == stateId);
-            else if ((role == "MDO") && int.TryParse(hqClaim, out var hqId))
+            else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId))
                 query = query.Where(x => x.HQ == hqId);
             else
 				query = query.Where(x => x.CreatedBy == userId);
