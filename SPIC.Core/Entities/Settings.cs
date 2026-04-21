@@ -67,6 +67,7 @@ namespace SPIC.Core.Entities
     {
         public int Id { get; set; }
         public required string Name { get; set; }
+        public string WarehouseCode { get; set; }
         public string? GoogleURL { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
