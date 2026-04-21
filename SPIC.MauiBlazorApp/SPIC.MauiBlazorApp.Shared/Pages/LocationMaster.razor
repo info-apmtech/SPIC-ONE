@@ -1,5 +1,6 @@
 ﻿@page "/LocationMaster"
 @using System.Net.Http.Json
+@using System.Text.Json
 @inject HttpClient Http
 
 <div class="container-fluid">
@@ -26,9 +27,9 @@
 	</div>
 
 	<div class="main-card">
-		<div class="section-header">
+            <div class="section-header">
 			<h3 class="section-title">@(_isEditing ? $"Edit {GetSingularName(ActiveTab)}" : $"Add New {GetSingularName(ActiveTab)}")</h3>
-			<button class="btn-outline-green" style="width: 12%;">
+			<button class="btn-outline-green" style="width: 12%;" @onclick="() => _showUploadModal = true">
 				<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
 			</button>
 		</div>
@@ -425,6 +426,34 @@
 								</div>
 							}
 
+							@if (_showUploadModal)
+							{
+								<div class="modal-backdrop fade show"></div>
+								<div class="modal fade show d-block" tabindex="-1" role="dialog">
+									<div class="modal-dialog modal-dialog-centered" role="document">
+										<div class="modal-content">
+											<div class="modal-header">
+												<h5 class="modal-title">Bulk Upload - @ActiveTab</h5>
+												<button type="button" class="btn-close" @onclick="() => _showUploadModal = false"></button>
+											</div>
+                                            <div class="modal-body">
+												<InputFile OnChange="OnBulkFileSelected" />
+												<div class="upload-result" style="margin-top: 10px;">
+													@if (_isUploading)
+													{
+														<p class="text-muted">Uploading...</p>
+													}
+													else if (!string.IsNullOrEmpty(_uploadResult))
+													{
+														<p>@_uploadResult</p>
+													}
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+							}
+
 @code {
 	private readonly List<string> TabOptions = ["Zones", "States", "Districts", "Sub-Districts", "Regions", "Headquarters"];
 
@@ -443,6 +472,13 @@
 		"Headquarters" => "api/Headquarter",
 		_ => ""
 	};
+
+	// Upload modal state
+	private bool _showUploadModal = false;
+	private bool _isUploading = false;
+	private string _uploadResult = string.Empty;
+
+
 	private int TableColSpan => ActiveTab switch
 	{
 		"Zones" => 7,
@@ -502,6 +538,7 @@
 	private bool _showDeleteConfirm;
 	private bool _isDeleting;
 	private LocationItemDto? _deleteTarget;
+
 
 	// Search & filter
 	private string _searchText = "";
@@ -869,6 +906,56 @@
 	{
 		_message = message;
 		_isError = isError;
+	}
+
+	private async Task OnBulkFileSelected(InputFileChangeEventArgs e)
+	{
+		var file = e.File;
+		if (file == null) return;
+
+		var entityType = ActiveTab; // your existing tab string, e.g., "Zones", "States"...
+    // Map UI label to API type
+    var typeMap = entityType.ToLowerInvariant();
+    // normalize expected strings:
+    if (typeMap == "zones") typeMap = "zone";
+    else if (typeMap == "states") typeMap = "state";
+    else if (typeMap == "districts") typeMap = "district";
+    else if (typeMap.Contains("sub")) typeMap = "subdistrict";
+    else if (typeMap == "regions") typeMap = "region";
+    else if (typeMap.Contains("headquarter")) typeMap = "headquarter";
+
+    using var content = new MultipartFormDataContent();
+    var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+    var streamContent = new StreamContent(stream);
+    streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+    content.Add(streamContent, "file", file.Name);
+
+    _isUploading = true;
+    _uploadResult = string.Empty;
+    try
+    {
+        var response = await Http.PostAsync($"api/locationbulkupload/bulk-upload?type={typeMap}", content);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement?>();
+        if (response.IsSuccessStatusCode)
+        {
+            _uploadResult = "Upload successful";
+            // optionally refresh lists:
+            await LoadTabData();
+        }
+        else
+        {
+            var text = await response.Content.ReadAsStringAsync();
+            _uploadResult = "Upload failed: " + text;
+        }
+    }
+    catch (Exception ex)
+    {
+        _uploadResult = "Upload error: " + ex.Message;
+    }
+    finally
+    {
+        _isUploading = false;
+    }
 	}
 
 	// Pagination helpers
