@@ -26,9 +26,9 @@
 	</div>
 
 	<div class="main-card">
-		<div class="section-header">
+        <div class="section-header">
 			<h3 class="section-title">@(_isEditing ? $"Edit {GetSingularName(ActiveTab)}" : $"Add New {GetSingularName(ActiveTab)}")</h3>
-			<button class="btn-outline-green" style="width:12%"><i class="bi bi-cloud-arrow-up"></i> Bulk Upload</button>
+			<button class="btn-outline-green" style="width:12%;" @onclick="() => _showUploadModal = true"><i class="bi bi-cloud-arrow-up"></i> Bulk Upload</button>
 		</div>
 
 		<div class="row g-3 mb-4">
@@ -109,6 +109,34 @@
 						</div>
 
 						<div class="d-flex justify-content-end pt-2 mt-4">
+            @if (_showUploadModal)
+			{
+				<div class="modal-backdrop fade show"></div>
+				<div class="modal fade show d-block" tabindex="-1" role="dialog">
+					<div class="modal-dialog modal-dialog-centered" role="document">
+						<div class="modal-content">
+							<div class="modal-header">
+								<h5 class="modal-title">Bulk Upload - @ActiveTab</h5>
+								<button type="button" class="btn-close" @onclick="() => _showUploadModal = false"></button>
+							</div>
+							<div class="modal-body">
+								<InputFile OnChange="OnBulkFileSelected" />
+								<div class="upload-result" style="margin-top:10px;">
+									@if (_isUploading)
+									{
+										<p class="text-muted">Uploading...</p>
+									}
+									else if (!string.IsNullOrEmpty(_uploadResult))
+									{
+										<p>@_uploadResult</p>
+									}
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			}
+
 							<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
 							<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
 								<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
@@ -371,6 +399,11 @@
 	private bool _showDeleteConfirm;
 	private bool _isDeleting;
 	private AgriItemDto? _deleteTarget;
+
+	// Upload modal state
+	private bool _showUploadModal = false;
+	private bool _isUploading = false;
+	private string _uploadResult = string.Empty;
 
 	// Search & filter
 	private string _searchText = "";
@@ -674,6 +707,55 @@
 	{
 		_message = message;
 		_isError = isError;
+	}
+
+	private async Task OnBulkFileSelected(Microsoft.AspNetCore.Components.Forms.InputFileChangeEventArgs e)
+	{
+		var file = e.File;
+		if (file == null) return;
+
+		var typeMap = ActiveTab.ToLowerInvariant();
+		if (typeMap == "crops") typeMap = "crop";
+		else if (typeMap == "competitors") typeMap = "competitor";
+		else if (typeMap == "sector") typeMap = "sector";
+		else if (typeMap == "units") typeMap = "unit";
+		else if (typeMap == "categories") typeMap = "category";
+		else if (typeMap == "products") typeMap = "product";
+
+		_isUploading = true;
+		_uploadResult = string.Empty;
+
+		try
+		{
+			using var ms = new MemoryStream();
+			await file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(ms);
+			ms.Position = 0;
+
+			using var content = new MultipartFormDataContent();
+			var fileContent = new StreamContent(ms);
+			fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+			content.Add(fileContent, "file", file.Name);
+
+			var resp = await Http.PostAsync($"api/agriculturebulkupload/bulk-upload?type={typeMap}", content);
+			var body = await resp.Content.ReadAsStringAsync();
+			if (resp.IsSuccessStatusCode)
+			{
+				_uploadResult = "Upload successful";
+				await LoadAllData();
+			}
+			else
+			{
+				_uploadResult = "Upload failed: " + body;
+			}
+		}
+		catch (Exception ex)
+		{
+			_uploadResult = "Upload error: " + ex.Message;
+		}
+		finally
+		{
+			_isUploading = false;
+		}
 	}
 
 	// Pagination helpers

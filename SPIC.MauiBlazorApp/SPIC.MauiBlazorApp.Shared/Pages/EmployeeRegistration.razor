@@ -1,5 +1,6 @@
 ﻿@page "/EmployeeRegistration"
 @using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Components
 @using SPIC.Core.Entities
 @using static SPIC.Core.Entities.EmployeeRegistration
@@ -17,8 +18,39 @@
             <div class="page-subtitle" style="font-size: 0.85rem; color: #6B7280; margin-top: 4px;">
                 Create and assign employee to role and location
             </div>
+
+    @if (_showUploadModal)
+    {
+        <div class="modal-backdrop fade show"></div>
+        <div class="modal fade show d-block" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Bulk Upload Employees</h5>
+                        <button type="button" class="btn-close" @onclick="() => _showUploadModal = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <InputFile OnChange="OnEmployeeFileSelected" />
+                        <div style="margin-top:10px;">
+                            @if (_isUploading)
+                            {
+                                <p class="text-muted">Uploading...</p>
+                            }
+                            else if (!string.IsNullOrEmpty(_uploadResult))
+                            {
+                                <p>@_uploadResult</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
         </div>
         <div class="badge-director">@(!string.IsNullOrEmpty(SelectedRole) ? SelectedRole : "Director")</div>
+        <div style="margin-left:12px">
+            <button class="btn-outline-green" @onclick="() => _showUploadModal = true"><i class="bi bi-cloud-arrow-up"></i> Bulk Upload</button>
+        </div>
     </div>
 
     <div class="main-card">
@@ -186,6 +218,9 @@
 
     private bool IsEditMode = false;
     private int EditingEmployeeId = 0;
+    private bool _showUploadModal = false;
+    private bool _isUploading = false;
+    private string _uploadResult = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -355,6 +390,46 @@
     private void Cancel()
     {
         ResetForm();
+    }
+
+    private async Task OnEmployeeFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        _isUploading = true;
+        _uploadResult = string.Empty;
+
+        try
+        {
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(20 * 1024 * 1024).CopyToAsync(ms);
+            ms.Position = 0;
+
+            using var content = new MultipartFormDataContent();
+            var fileContent = new StreamContent(ms);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+            content.Add(fileContent, "file", file.Name);
+
+            var resp = await Http.PostAsync("api/EmployeeBulkUpload/bulk-upload", content);
+            var body = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                _uploadResult = "Upload successful";
+            }
+            else
+            {
+                _uploadResult = "Upload failed: " + body;
+            }
+        }
+        catch (Exception ex)
+        {
+            _uploadResult = "Upload error: " + ex.Message;
+        }
+        finally
+        {
+            _isUploading = false;
+        }
     }
 
     public class LocationItemDto
