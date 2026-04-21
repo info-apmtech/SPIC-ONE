@@ -149,29 +149,32 @@
 				<div class="col-md-4">
 					<div class="reg-card">
 						<div class="card-top-row">
-							@if (approvalStatus == "Approved")
-							{
-								<div class="progress-circle p-100">
-									<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
+                    @if (approvalStatus == "Approved")
+					{
+						<div class="progress-circle p-100">
+							<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
+						</div>
+					}
+					else if (approvalStatus == "Pending")
+					{
+						<div class="progress-circle p-60">
+							<div class="progress-inner">
+								<div class="progress-val">Pending</div>
+								<div class="progress-steps">@approvalStatus</div>
+							</div>
+						</div>
+					}
+					else
+					{
+						<div class="progress-circle p-30">
+							<div class="progress-inner">
+								<div class="progress-val">
+									@(approvalStatus == "Draft" ? "Draft" : approvalStatus == "Rejected" ? "!" : "...")
 								</div>
-							}
-							else if (approvalStatus == "Draft" && IsDealerComplete(dealer.Id))
-								{
-									<div class="progress-circle p-100">
-										<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
-									</div>
-								}
-								else
-								{
-									<div class="progress-circle p-30">
-										<div class="progress-inner">
-											<div class="progress-val">
-												@(approvalStatus == "Draft" ? "Draft" : approvalStatus == "Rejected" ? "!" : "...")
-											</div>
-											<div class="progress-steps">@approvalStatus</div>
-										</div>
-									</div>
-								}
+								<div class="progress-steps">@approvalStatus</div>
+							</div>
+						</div>
+					}
 							<div class="d-flex flex-column align-items-end gap-2">
 								<div class="badge-group">
 									@if (approvalStatus == "Approved")
@@ -451,12 +454,27 @@
 
 	private string GetApprovalStatus(DealerDto d)
 	{
+       // 1. Rejections take priority
 		if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)
 			return "Rejected";
+
+		// 2. Final approval
 		if (d.AVPApproved == true)
 			return "Approved";
+
+		// 3. Pending approval (match KPI): dealer is complete and awaiting AVP while RM/SM are not explicitly false
+		if (IsDealerComplete(d.Id) && d.AVPApproved == null && d.RMApproved != false && d.SMApproved != false)
+			return "Pending";
+
+		// 4. Pending if internal approvals started
 		if (d.RMApproved == true || d.SMApproved == true)
 			return "Pending";
+
+		// 5. Submitted if all steps complete
+		if (IsDealerComplete(d.Id))
+			return "Submitted";
+
+		// 6. Default to Draft
 		return "Draft";
 	}
 
