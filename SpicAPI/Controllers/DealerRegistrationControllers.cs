@@ -1,13 +1,43 @@
 using Microsoft.AspNetCore.Mvc;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 
 namespace SpicAPI.Controllers
 {
 
     [Route("api/[controller]")]
-    public class DealerRegistrationController(IGenericRepository<DealerRegistration> repo) : GenericCrudController<DealerRegistration>(repo);
-    [Route("api/[controller]")]
+	public class DealerRegistrationController : GenericCrudController<DealerRegistration>
+	{
+		public DealerRegistrationController(IGenericRepository<DealerRegistration> repo): base(repo){}
+
+		[HttpGet("all")]
+		public override async Task<IActionResult> GetAllWithInactive()
+		{
+			var query = _repo.GetAllWithInactive();
+
+			var role = User.FindFirst(ClaimTypes.Role)?.Value;
+			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			var regionClaim = User.FindFirst("RegionId")?.Value;
+			var stateClaim = User.FindFirst("StateId")?.Value;
+			var hqClaim = User.FindFirst("HQId")?.Value;
+
+			// Admin / CorporateAdmin → full data
+			if (role == "Admin" || role == "CorporateAdmin")
+				return Ok(await query.ToListAsync());
+			if (role == "RM" && int.TryParse(regionClaim, out var regionId))
+				query = query.Where(x => x.Region == regionId);
+			else if ((role == "SM") && int.TryParse(stateClaim, out var stateId))
+				query = query.Where(x => x.StateId == stateId);
+            else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId))
+                query = query.Where(x => x.HQ == hqId);
+            else
+				query = query.Where(x => x.CreatedBy == userId);
+			return Ok(await query.ToListAsync());
+		}
+	}
+	[Route("api/[controller]")]
     public class DealerExperienceController(IGenericRepository<DealerExperience> repo) : GenericCrudController<DealerExperience>(repo);
 
     [Route("api/[controller]")]
