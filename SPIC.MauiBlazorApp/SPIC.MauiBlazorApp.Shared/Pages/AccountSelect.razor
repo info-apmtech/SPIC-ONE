@@ -1,0 +1,131 @@
+﻿
+@page "/AccountSelector"
+@layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
+@inject SPIC.MauiBlazorApp.Shared.Services.PlatformService Platform
+
+<style>
+    /* Paste the original CSS here - I have optimized it for the Blazor component wrapper */
+    .spic-wrapper { position: relative; min-height: 100vh; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+    .spic-bg { position: fixed; inset: 0; background-image: url('https://images.pexels.com/photos/440731/pexels-photo-440731.jpeg?auto=compress&cs=tinysrgb&w=1200'); background-size: cover; background-position: center; z-index: 0; }
+    .spic-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(30, 80, 40, 0.60) 0%, rgba(20, 60, 30, 0.50) 50%, rgba(10, 40, 15, 0.45) 100%); }
+    .spic-content { position: relative; z-index: 1; width: 100%; max-width: 420px; padding: 48px 20px 24px; display: flex; flex-direction: column; align-items: center; }
+    .spic-logo-circle { width: 76px; height: 76px; border-radius: 50%; background: #f9c600; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25); border: 3px solid rgba(255, 255, 255, 0.53); margin-bottom: 1rem; }
+    .spic-logo-inner { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .spic-logo-icon { width: 28px; height: 28px; color: #1a6b2f; }
+    .spic-logo-text { font-size: 10px; font-weight: 800; color: #1a6b2f; letter-spacing: 1.5px; line-height: 1; }
+    .spic-title { font-size: 26px; font-weight: 700; letter-spacing: -0.3px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); color: white; text-align: center; margin-bottom: 0.5rem; }
+    .spic-subtitle { font-size: 14px; opacity: 0.88; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); color: white; text-align: center; max-width: 280px; margin-bottom: 1.5rem; }
+    .spic-card { background: #fff; border-radius: 20px; padding: 24px 20px 20px; box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18); width: 100%; }
+    .spic-accounts-label { font-size: 15px; font-weight: 700; color: #1b1b1b; margin-bottom: 1rem; }
+    .spic-account-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .spic-account-item { background: #fff; border: 1.5px solid #e8e8e8; border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: all 0.18s; display: flex; align-items: center; gap: 0.75rem; text-align: left; width: 100%; }
+    .spic-account-item:hover { border-color: #2e7d32; box-shadow: 0 2px 12px rgba(46, 125, 50, 0.12); }
+    .spic-account-item.selected { border-color: #2e7d32; background: #f6fff6; box-shadow: 0 2px 14px rgba(46, 125, 50, 0.15); }
+    .spic-account-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .spic-account-info { flex-grow: 1; }
+    .spic-account-name { font-size: 14px; font-weight: 600; color: #1b1b1b; line-height: 1.3; }
+    .spic-account-location { font-size: 12px; color: #757575; margin-top: 2px; }
+    .spic-account-chevron { width: 16px; height: 16px; color: #bdbdbd; flex-shrink: 0; }
+    .spic-buttons { display: flex; flex-direction: column; gap: 0.5rem; }
+    .spic-btn-continue { background: #2e7d32; color: #fff; border: none; border-radius: 12px; padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(46, 125, 50, 0.3); }
+    .spic-btn-logout { background: #fff; color: #333; border: 1.5px solid #d0d0d0; border-radius: 12px; padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .spic-footer { padding-bottom: 1rem; margin-top: 1.5rem; text-align: center; }
+    .spic-footer-brand { font-size: 14px; font-weight: 800; color: #a5d6a7; letter-spacing: 2px; margin: 0; }
+    .spic-footer-sub { font-size: 11px; color: rgba(255, 255, 255, 0.65); margin-top: 4px; }
+</style>
+
+<div class="spic-wrapper">
+    <div class="spic-bg"></div>
+
+    <div class="spic-content">
+        <div class="spic-logo-circle">
+            <div class="spic-logo-inner">
+                <svg class="spic-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+                <span class="spic-logo-text">SPIC</span>
+            </div>
+        </div>
+
+        <h1 class="spic-title">Select Account</h1>
+        <p class="spic-subtitle">Choose an account to continue your session</p>
+
+        <div class="spic-card">
+            <p class="spic-accounts-label">@accounts.Count Accounts Linked</p>
+
+            <div class="spic-account-list">
+                @foreach (var account in accounts)
+                {
+                    <button class="spic-account-item @(selectedAccountId == account.Id ? "selected" : "")" 
+                            @onclick="() => SelectAccount(account.Id)">
+                        <div class="spic-account-icon" style="background: @account.BgColor;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="@account.StrokeColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
+                                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                            </svg>
+                        </div>
+                        <div class="spic-account-info">
+                            <div class="spic-account-name">@account.Name</div>
+                            <div class="spic-account-location">@account.Location</div>
+                        </div>
+                        <svg class="spic-account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </button>
+                }
+            </div>
+
+            <div class="spic-buttons">
+                <button class="spic-btn-continue" @onclick="HandleContinue">Continue</button>
+                <button class="spic-btn-logout" @onclick="HandleLogout">Logout</button>
+            </div>
+        </div>
+
+        <div class="spic-footer">
+            <p class="spic-footer-brand">SPIC ONE</p>
+            <p class="spic-footer-sub">@DateTime.Now.Year SPIC ONE. Industrial System Engineered with Excellence</p>
+        </div>
+    </div>
+</div>
+
+
+@code {
+    private int selectedAccountId = 1;
+
+    private void SelectAccount(int id)
+    {
+        selectedAccountId = id;
+    }
+
+    private void HandleContinue()
+    {
+        var selected = accounts.FirstOrDefault(a => a.Id == selectedAccountId);
+        // In a real app, you'd navigate: NavigationManager.NavigateTo("/dashboard");
+        Console.WriteLine($"Selected: {selected?.Name}");
+    }
+
+    private void HandleLogout()
+    {
+        // Add logout logic
+        Console.WriteLine("Logging out...");
+    }
+
+    // Data model for the accounts
+    private List<AccountModel> accounts = new()
+    {
+        new AccountModel { Id = 1, Name = "SPIC Agro Dealers Pvt.Ltd", Location = "Chennai, Tamil Nadu", BgColor = "#e8f5e9", StrokeColor = "#2e7d32" },
+        new AccountModel { Id = 2, Name = "Kaveri Seed Distributors", Location = "Coimbatore, Tamil Nadu", BgColor = "#e3f2fd", StrokeColor = "#1565c0" },
+        new AccountModel { Id = 3, Name = "Green Valley Agri Retail", Location = "Chennai, Tamil Nadu", BgColor = "#ede7f6", StrokeColor = "#6a1b9a" },
+        new AccountModel { Id = 4, Name = "SPIC Corporate Operations", Location = "Chennai, Tamil Nadu", BgColor = "#fce4ec", StrokeColor = "#880e4f" }
+    };
+
+    public class AccountModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Location { get; set; } = "";
+        public string BgColor { get; set; } = "";
+        public string StrokeColor { get; set; } = "";
+    }
+}

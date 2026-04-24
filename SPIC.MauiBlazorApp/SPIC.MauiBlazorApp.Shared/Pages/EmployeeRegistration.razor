@@ -1,0 +1,496 @@
+﻿@page "/EmployeeRegistration"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components
+@using SPIC.Core.Entities
+@using static SPIC.Core.Entities.EmployeeRegistration
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LoadingService Loading
+
+<div class="container-fluid py-4 px-0">
+
+    <div class="page-header-row mb-4">
+        <div>
+            <h1 class="page-title" style="color: #1F2937; font-weight: 700; font-size: 1.5rem; margin: 0;">
+                @(IsEditMode ? "Edit Employee" : "Employee Registration")
+            </h1>
+            <div class="page-subtitle" style="font-size: 0.85rem; color: #6B7280; margin-top: 4px;">
+                Create and assign employee to role and location
+            </div>
+
+    @if (_showUploadModal)
+    {
+        <div class="modal-backdrop fade show"></div>
+        <div class="modal fade show d-block" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Bulk Upload Employees</h5>
+                        <button type="button" class="btn-close" @onclick="() => _showUploadModal = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <InputFile OnChange="OnEmployeeFileSelected" />
+                        <div style="margin-top:10px;">
+                            @if (_isUploading)
+                            {
+                                <p class="text-muted">Uploading...</p>
+                            }
+                            else if (!string.IsNullOrEmpty(_uploadResult))
+                            {
+                                <p>@_uploadResult</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+        </div>
+        <div class="badge-director">@(!string.IsNullOrEmpty(SelectedRole) ? SelectedRole : "Director")</div>
+        <div style="margin-left:12px">
+            <button class="btn-outline-green" @onclick="() => _showUploadModal = true"><i class="bi bi-cloud-arrow-up"></i> Bulk Upload</button>
+        </div>
+    </div>
+
+    <div class="main-card">
+        <div class="section-header">
+            <h3 class="section-title"><i class="bi bi-person-gear"></i> Role & Authority</h3>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <label class="form-lbl">Role</label>
+                <select class="form-inp" @bind="vm.Login.Role">
+                    <option value="">Select Role</option>
+                    @foreach (var role in AllowedRoles)
+                    {
+                        <option value="@role">@role</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-card">
+        <div class="section-header">
+            <h3 class="section-title"><i class="bi bi-buildings"></i> Role Specification</h3>
+        </div>
+        <div class="row g-4 align-items-end">
+
+            @if (SelectedRole == "RM" || SelectedRole == "SMD" || SelectedRole == "SMM" || SelectedRole == "MDO" || SelectedRole == "JMDO" || SelectedRole == "RMD")
+            {
+                <div class="col-md-3">
+                    <label class="form-lbl">Zone</label>
+                    <select class="form-inp" @bind="vm.Login.ZoneId">
+                        <option value="All">Select Zone</option>
+                        @foreach (var z in Zones)
+                        {
+                            <option value="@z.Id">@z.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+
+            @if (SelectedRole == "RM" || SelectedRole == "SMD" || SelectedRole == "SMM" || SelectedRole == "MDO" || SelectedRole == "JMDO" || SelectedRole == "MO" || SelectedRole == "RMD")
+            {
+                <div class="col-md-3">
+                    <label class="form-lbl">State</label>
+                    <select class="form-inp" @bind="vm.Login.StateId">
+                        <option value="All">Select State</option>
+                        @foreach (var s in States)
+                        {
+                            <option value="@s.Id">@s.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+
+            @if (SelectedRole == "RM" || SelectedRole == "MDO" || SelectedRole == "JMDO" || SelectedRole == "RMD")
+            {
+                <div class="col-md-3">
+                    <label class="form-lbl">Region</label>
+                    <select class="form-inp" @bind="vm.Login.RegionId">
+                        <option value="All">Select Region</option>
+                        @foreach (var r in Regions)
+                        {
+                            <option value="@r.Id">@r.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+
+            @if (SelectedRole == "MO" || SelectedRole == "MDO" || SelectedRole == "JMDO" || SelectedRole == "RMD")
+            {
+                <div class="col-md-3">
+                    <label class="form-lbl">Headquarters</label>
+                    <select class="form-inp" @bind="vm.Login.HeadquartersId">
+                        <option value="All">Select Headquarters</option>
+                        @foreach (var h in Headquarters)
+                        {
+                            <option value="@h.Id">@h.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="main-card">
+        <div class="section-header">
+            <h3 class="section-title"><i class="bi bi-shield-lock"></i> Login Details</h3>
+        </div>
+        <div class="row g-4 align-items-end">
+            <div class="col-md-4">
+                <label class="form-lbl">User Name</label>
+                <input type="text" class="form-inp" @bind="vm.Account.UserName" placeholder="Enter User Name">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-lbl">Password</label>
+                    <input type="text" class="form-inp" @bind="vm.Account.Password" placeholder="Enter Password">
+                    </div>
+                    <div class="col-md-4">
+                        <div class="status-toggle-box">
+                            <div class="status-toggle-text">
+                                <strong>Status</strong>
+                                <small>Active / Inactive</small>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" @bind="vm.Login.IsActive">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="main-card">
+                    <div class="section-header">
+                        <h3 class="section-title"><i class="bi bi-person-badge"></i> Employee Details</h3>
+                    </div>
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <label class="form-lbl">Employee Name</label>
+                            <input type="text" class="form-inp" placeholder="Enter Employee Name" @bind="vm.Employee.Name">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-lbl">Employee ID</label>
+                                <input type="text" class="form-inp" placeholder="Enter Employee ID" @bind="vm.Employee.EmployeeCode">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-lbl">Personal Phone Number</label>
+                                    <input type="text" class="form-inp" placeholder="Enter Personal Phone Number"
+                                           @bind="vm.Employee.PersonalPhoneNumber"
+                                           maxlength="10"
+                                           oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-lbl">Official Phone Number</label>
+                                        <input type="text" class="form-inp" placeholder="Enter Official Phone Number"
+                                               @bind="vm.Employee.OfficialPhoneNumber"
+                                               maxlength="10"
+                                               oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-lbl">Email ID</label>
+                                            <input type="email" class="form-inp" placeholder="Enter Email ID" @bind="vm.Employee.Email">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="footer-actions">
+                                        <button type="button" class="btn-cancel" @onclick="Cancel">
+                                            <i class="bi bi-x"></i> Cancel
+                                        </button>
+                                        <button type="button" class="btn-save" @onclick="SaveEmployee">
+                                            @(IsEditMode ? "Update Employee" : "Save Employee") <i class="bi bi-floppy"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+@code {
+    private string SelectedRole => vm.Login.Role.ToString();
+
+    private EmployeeRegistrationVM vm = new();
+    private List<LocationItemDto> Zones = new();
+    private List<LocationItemDto> States = new();
+    private List<LocationItemDto> Regions = new();
+    private List<LocationItemDto> Headquarters = new();
+
+    private bool IsEditMode = false;
+    private int EditingEmployeeId = 0;
+    private bool _showUploadModal = false;
+    private bool _isUploading = false;
+    private string _uploadResult = string.Empty;
+
+    private static readonly AppRole[] AllowedRoles = new[]
+    {
+        AppRole.CorporateAdmin,
+        AppRole.Director,
+        AppRole.AVP,
+        AppRole.SMD,
+        AppRole.SMM,
+        AppRole.RM,
+        AppRole.RMD,
+        AppRole.MDO,
+        AppRole.MO,
+        AppRole.JMDO
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Zones = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Zone/all") ?? new();
+        States = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
+        Regions = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all") ?? new();
+        Headquarters = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all") ?? new();
+
+        var uri = new Uri(Nav.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var editIdValue = query["editId"];
+
+        if (int.TryParse(editIdValue, out var editId))
+        {
+            await LoadForEdit(editId);
+        }
+    }
+
+    private async Task SaveEmployee()
+    {
+        try
+        {
+            Loading.Show();
+
+            vm.Employee.CreatedBy ??= "System";
+            vm.Employee.UpdatedBy = "System";
+
+            if (!IsEditMode)
+            {
+                var empResponse = await Http.PostAsJsonAsync("api/EmployeeRegistration", vm.Employee);
+
+                if (!empResponse.IsSuccessStatusCode)
+                {
+                    var error = await empResponse.Content.ReadAsStringAsync();
+                    throw new Exception($"Employee save failed: {error}");
+                }
+
+                var empResult = await empResponse.Content.ReadFromJsonAsync<ApiResponse<EmployeeInformation>>();
+
+                if (empResult?.data == null)
+                    throw new Exception("Employee save failed: invalid response");
+
+                var loginRequest = new EmployeeLoginCreateRequest
+                {
+                    EmployeeInformationID = empResult.data.Id,
+                    UserName = vm.Account.UserName,
+                    Password = vm.Account.Password,
+                    Email = vm.Employee.Email,
+                    Name = vm.Employee.Name,
+                    DesignationId = null,
+                    Role = vm.Login.Role,
+                    ZoneId = vm.Login.ZoneId,
+                    StateId = vm.Login.StateId,
+                    RegionId = vm.Login.RegionId,
+                    HeadquartersId = vm.Login.HeadquartersId,
+                    IsActive = vm.Login.IsActive,
+                    CreatedBy = "System",
+                    UpdatedBy = "System"
+                };
+
+                var loginResponse = await Http.PostAsJsonAsync("api/EmployeeLoginSetup", loginRequest);
+
+                if (!loginResponse.IsSuccessStatusCode)
+                {
+                    var error = await loginResponse.Content.ReadAsStringAsync();
+                    throw new Exception($"Login save failed: {error}");
+                }
+            }
+            else
+            {
+                var employeeUpdateResponse = await Http.PutAsJsonAsync($"api/EmployeeRegistration/{EditingEmployeeId}", vm.Employee);
+
+                if (!employeeUpdateResponse.IsSuccessStatusCode)
+                {
+                    var error = await employeeUpdateResponse.Content.ReadAsStringAsync();
+                    throw new Exception($"Employee update failed: {error}");
+                }
+
+                var loginRequest = new EmployeeLoginCreateRequest
+                {
+                    EmployeeInformationID = EditingEmployeeId,
+                    UserName = vm.Account.UserName,
+                    Password = vm.Account.Password,
+                    Email = vm.Employee.Email,
+                    Name = vm.Employee.Name,
+                    DesignationId = null,
+                    Role = vm.Login.Role,
+                    ZoneId = vm.Login.ZoneId,
+                    StateId = vm.Login.StateId,
+                    RegionId = vm.Login.RegionId,
+                    HeadquartersId = vm.Login.HeadquartersId,
+                    IsActive = vm.Login.IsActive,
+                    UpdatedBy = "System"
+                };
+
+                var loginUpdateResponse = await Http.PutAsJsonAsync($"api/EmployeeLoginSetup/{EditingEmployeeId}", loginRequest);
+
+                if (!loginUpdateResponse.IsSuccessStatusCode)
+                {
+                    var error = await loginUpdateResponse.Content.ReadAsStringAsync();
+                    throw new Exception($"Login update failed: {error}");
+                }
+            }
+
+            ResetForm();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+        finally
+        {
+            Loading.Hide();
+        }
+    }
+
+    private async Task LoadForEdit(int employeeId)
+    {
+        try
+        {
+            Loading.Show();
+
+            var employee = await Http.GetFromJsonAsync<EmployeeInformation>($"api/EmployeeRegistration/{employeeId}");
+            var loginData = await Http.GetFromJsonAsync<EmployeeLoginCreateRequest>($"api/EmployeeLoginSetup/by-employee/{employeeId}");
+
+            if (employee == null || loginData == null)
+                throw new Exception("Unable to load employee data");
+
+            vm.Employee = employee;
+            vm.Login = new Employeelogin
+            {
+                EmployeeInformationID = employeeId,
+                Role = loginData.Role,
+                ZoneId = loginData.ZoneId,
+                StateId = loginData.StateId,
+                RegionId = loginData.RegionId,
+                HeadquartersId = loginData.HeadquartersId,
+                IsActive = loginData.IsActive
+            };
+
+            vm.Account = new UserAccountVM
+            {
+                UserName = loginData.UserName,
+                Password = loginData.Password
+            };
+
+            EditingEmployeeId = employeeId;
+            IsEditMode = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+        finally
+        {
+            Loading.Hide();
+        }
+    }
+
+    private void ResetForm()
+    {
+        vm = new EmployeeRegistrationVM();
+        EditingEmployeeId = 0;
+        IsEditMode = false;
+    }
+
+    private void Cancel()
+    {
+        ResetForm();
+    }
+
+    private async Task OnEmployeeFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        _isUploading = true;
+        _uploadResult = string.Empty;
+
+        try
+        {
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(20 * 1024 * 1024).CopyToAsync(ms);
+            ms.Position = 0;
+
+            using var content = new MultipartFormDataContent();
+            var fileContent = new StreamContent(ms);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+            content.Add(fileContent, "file", file.Name);
+
+            var resp = await Http.PostAsync("api/EmployeeBulkUpload/bulk-upload", content);
+            var body = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                _uploadResult = "Upload successful";
+            }
+            else
+            {
+                _uploadResult = "Upload failed: " + body;
+            }
+        }
+        catch (Exception ex)
+        {
+            _uploadResult = "Upload error: " + ex.Message;
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+
+    public class LocationItemDto
+    {
+        public int Id { get; set; }
+        public string ZoneName { get; set; } = "";
+        public string StateName { get; set; } = "";
+        public string DistrictName { get; set; } = "";
+        public string SubDistrictName { get; set; } = "";
+        public string RegionName { get; set; } = "";
+        public string HeadquarterName { get; set; } = "";
+        public string? ZoneCode { get; set; }
+        public string? ZoneColorCode { get; set; }
+        public int ZoneId { get; set; }
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public int RegionId { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string UpdatedBy { get; set; } = "";
+
+        public string Name =>
+            !string.IsNullOrEmpty(ZoneName) ? ZoneName :
+            !string.IsNullOrEmpty(StateName) ? StateName :
+            !string.IsNullOrEmpty(DistrictName) ? DistrictName :
+            !string.IsNullOrEmpty(SubDistrictName) ? SubDistrictName :
+            !string.IsNullOrEmpty(RegionName) ? RegionName :
+            HeadquarterName;
+    }
+
+    public class ApiResponse<T>
+    {
+        public string message { get; set; }
+        public T data { get; set; }
+    }
+
+    public class EmployeeRegistrationVM
+    {
+        public EmployeeInformation Employee { get; set; } = new();
+        public Employeelogin Login { get; set; } = new();
+        public UserAccountVM Account { get; set; } = new();
+    }
+
+    public class UserAccountVM
+    {
+        public string UserName { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+}

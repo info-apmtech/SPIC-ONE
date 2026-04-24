@@ -1,0 +1,87 @@
+﻿
+@using SPIC.MauiBlazorApp.Shared.FormFlow
+@inject NavigationManager Nav
+@inject LoadingService Loading
+
+@if (CurrentStep is FormStepModel step)
+{
+	<div class="footer-nav">
+		<div>
+			@if (step.StepNo != 1)
+			{
+				<button type="button" class="btn btn-prev" @onclick="GoToPrevious">
+						<i class="bi bi-chevron-left"></i>
+						Previous Step
+					</button>
+			}
+		</div>
+
+		<div>
+			@if (step.StepNo < TotalSteps)
+			{
+				@if (OnNextClick.HasDelegate)
+				{
+					<button type="button" class="btn btn-next" @onclick="OnNextClick" disabled="@IsNextDisabled">
+						@if (IsNextDisabled)
+						{
+							<span class="spinner-border spinner-border-sm me-1"></span>
+						}
+						Next
+						<i class="bi bi-chevron-right"></i>
+					</button>
+				}
+				else
+				{
+					<NavLink href="@(step.NextRoute + _queryString)" class="btn btn-next text-decoration-none">
+							Next
+							<i class="bi bi-chevron-right"></i>
+						</NavLink>
+				}
+			}
+			else
+				{
+					@if (OnNextClick.HasDelegate)
+					{
+						<button type="button" class="btn btn-next" @onclick="OnNextClick" disabled="@IsNextDisabled">
+							@if (IsNextDisabled)
+							{
+								<span class="spinner-border spinner-border-sm me-1"></span>
+							}
+							<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SendIcon.svg" class="verifyicon" alt="sendicon" />Submit Registration
+						</button>
+					}
+					else
+					{
+						<button class="btn btn-next">
+							<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SendIcon.svg" class="verifyicon" alt="sendicon" />Submit Registration
+						</button>
+					}
+				}
+		</div>
+	</div>
+}
+
+@code {
+	[Parameter] public EventCallback OnNextClick { get; set; }
+	[Parameter] public bool IsNextDisabled { get; set; }
+
+	private FormStepModel? CurrentStep;
+	private int TotalSteps => FormStepData.Steps.Count;
+	private string _queryString = string.Empty;
+
+	protected override void OnInitialized()
+	{
+		var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+		var qIndex = baseRelative.IndexOf('?');
+		_queryString = qIndex >= 0 ? baseRelative[qIndex..] : string.Empty;
+		var relativePath = "/" + baseRelative.Split('?')[0];
+		CurrentStep = FormStepData.GetStepByRoute(relativePath);
+	}
+
+	private void GoToPrevious()
+	{
+		if (CurrentStep is null) return;
+		Loading.Show();
+		Nav.NavigateTo(CurrentStep.PreviousRoute + _queryString);
+	}
+}

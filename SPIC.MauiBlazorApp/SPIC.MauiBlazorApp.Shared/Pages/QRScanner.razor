@@ -1,0 +1,252 @@
+﻿@page "/qr-scanner"
+
+<style>
+    :root {
+        --primary-blue: #3b82f6;
+        --scanner-green: #22c55e;
+    }
+
+    /* Full screen container to prevent scrolling */
+    .mobile-container {
+        height: 100vh;
+        width: 100%;
+        max-width: 500px; /* Limits width on desktop web view */
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        background-color: #000;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Camera View Area */
+    .camera-view {
+        position: relative;
+        flex: 1;
+        /* background: url('https://images.unsplash.com/photo-1595079676339-1534801ad6cf?q=80&w=1000') no-repeat center center; */
+        background-size: cover;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    /* Top Navigation Actions */
+    .top-nav {
+        width: 100%;
+        padding: 15px;
+        display: flex;
+        justify-content: flex-start;
+        z-index: 10;
+    }
+
+    .camera-header-actions {
+        position: absolute;
+        top: 80px;
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(8px);
+        border-radius: 12px;
+        padding: 10px 20px;
+        display: flex;
+        gap: 30px;
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Scanner Frame - Matches 2nd Image exactly */
+    .scanner-box {
+        position: absolute;
+        top: 45%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 280px;
+        height: 280px;
+    }
+
+    .corner {
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        border: 10px solid var(--scanner-green);
+    }
+    .tl { top: 0; left: 0; border-right: 0; border-bottom: 0; border-radius: 20px 0 0 0; }
+    .tr { top: 0; right: 0; border-left: 0; border-bottom: 0; border-radius: 0 20px 0 0; }
+    .bl { bottom: 0; left: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 20px; }
+    .br { bottom: 0; right: 0; border-left: 0; border-top: 0; border-radius: 0 0 20px 0; }
+
+    .scan-line {
+        position: absolute;
+        width: 100%;
+        height: 3px;
+        background: var(--scanner-green);
+        box-shadow: 0 0 15px var(--scanner-green);
+        top: 50%;
+        animation: scanMove 2.5s infinite ease-in-out;
+    }
+
+    @@keyframes scanMove {
+        0%, 100% { top: 10%; }
+        50% { top: 90%; }
+    }
+
+    /* Zoom Slider */
+    .zoom-section {
+        position: absolute;
+        bottom: 140px;
+        width: 85%;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: white;
+    }
+
+    input[type=range].custom-slider {
+        flex: 1;
+        accent-color: var(--scanner-green);
+    }
+
+    /* Action Button */
+    .btn-container {
+        position: absolute;
+        bottom: 85px;
+        width: 90%;
+        padding: 0 10px;
+    }
+
+    .btn-view {
+        background-color: #3b82f6;
+        color: white;
+        border: none;
+        width: 100%;
+        padding: 14px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 1rem;
+    }
+
+    /* Bottom Navigation - The "Second Image" Look */
+    .custom-bottom-nav {
+        background: white;
+        height: 80px;
+        position: relative;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        border-top-left-radius: 25px;
+        border-top-right-radius: 25px;
+        padding-bottom: 10px;
+    }
+
+    /* The Center Cutout Effect */
+    .nav-center-cutout {
+        position: absolute;
+        top: -35px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80px;
+        height: 80px;
+        background: #000; /* Matches camera background */
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .fab-button {
+        width: 60px;
+        height: 60px;
+        background: white;
+        border-radius: 50%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border: 4px solid #000;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+
+    .nav-item {
+        text-align: center;
+        color: #9ca3af;
+        text-decoration: none;
+        font-size: 0.65rem;
+        flex: 1;
+    }
+
+    .nav-item i {
+        font-size: 1.4rem;
+        display: block;
+        margin-bottom: 2px;
+    }
+
+    .nav-item.active {
+        color: #059669;
+    }
+
+    .nav-item.active span {
+        font-weight: 700;
+    }
+</style>
+
+<div class="mobile-container">
+    <div class="camera-view">
+        <div class="top-nav">
+            <i class="bi bi-arrow-left text-white fs-3"></i>
+        </div>
+
+        <div class="camera-header-actions">
+            <i class="bi bi-image"></i>
+            <i class="bi bi-lightning-fill"></i>
+            <i class="bi bi-camera-rotate"></i>
+        </div>
+
+        <div class="scanner-box">
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+            <div class="scan-line"></div>
+        </div>
+
+        <div class="zoom-section">
+            <i class="bi bi-dash"></i>
+            <input type="range" class="form-range custom-slider" id="zoom">
+            <i class="bi bi-plus"></i>
+        </div>
+
+        <div class="btn-container">
+            <button class="btn-view">View Entries</button>
+        </div>
+    </div>
+
+    <div class="custom-bottom-nav">
+        <a href="#" class="nav-item">
+            <i class="bi bi-house-door"></i>
+            <span>Home</span>
+        </a>
+        <a href="#" class="nav-item">
+            <i class="bi bi-award"></i>
+            <span>Rewards</span>
+        </a>
+
+        <div class="nav-center-cutout">
+            <div class="fab-button">
+                <i class="bi bi-qr-code-scan" style="color: #059669; font-size: 1.5rem;"></i>
+            </div>
+        </div>
+        
+        <div class="nav-item" style="visibility: hidden;"></div>
+
+        <a href="#" class="nav-item">
+            <i class="bi bi-people"></i>
+            <span>Community</span>
+        </a>
+        <a href="#" class="nav-item">
+            <i class="bi bi-gear"></i>
+            <span>Setting</span>
+        </a>
+    </div>
+</div>
+
+@code {
+    
+}

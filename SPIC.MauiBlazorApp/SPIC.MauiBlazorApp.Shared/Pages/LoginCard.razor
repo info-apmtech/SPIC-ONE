@@ -1,0 +1,211 @@
+﻿@using System.ComponentModel.DataAnnotations
+@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
+
+<div class="login-card">
+	<h5>Login To Your Account</h5>
+
+	<EditForm Model="_model" OnValidSubmit="HandleLogin">
+		<DataAnnotationsValidator />
+		<ValidationSummary />
+
+		<div class="input-group-custom custom-with-icon">
+			<input @bind="_model.UserName"
+				   type="text"
+				   class="form-control-custom"
+				   placeholder="User Name" />
+			<span class="input-icon">
+				<svg width="16" height="21" viewBox="0 0 16 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M7.749 9.501C5.13 9.501 3 7.371 3 4.752C3 2.133 5.13 0 7.749 0C10.368 0 12.498 2.13 12.498 4.749C12.498 7.368 10.368 9.501 7.749 9.501ZM7.749 1.5C5.958 1.5 4.5 2.958 4.5 4.749C4.5 6.54 5.958 8.001 7.749 8.001C9.54 8.001 10.998 6.543 10.998 4.752C10.998 2.961 9.54 1.5 7.749 1.5ZM7.749 20.502C5.751 20.502 3.861 20.052 2.427 19.233C0.861 18.339 0 17.103 0 15.753C0 14.403 0.861 13.167 2.427 12.273C3.861 11.451 5.751 11.001 7.749 11.001C9.747 11.001 11.637 11.451 13.071 12.27C14.637 13.164 15.498 14.4 15.498 15.75C15.498 17.1 14.637 18.336 13.071 19.23C11.637 20.049 9.747 20.502 7.749 20.502ZM7.749 12.501C6.009 12.501 4.383 12.882 3.171 13.575C2.547 13.932 1.5 14.688 1.5 15.753C1.5 16.815 2.547 17.574 3.171 17.931C4.383 18.621 6.009 19.002 7.749 19.002C9.489 19.002 11.115 18.621 12.327 17.928C12.951 17.571 13.998 16.815 13.998 15.75C13.998 14.688 12.951 13.929 12.327 13.572C11.115 12.882 9.489 12.501 7.749 12.501Z" fill="#B2B8BF" />
+				</svg>
+			</span>
+		</div>
+
+		<div class="input-group-custom custom-with-icon">
+			<input @bind="_model.Password"
+				   type="@(_showPassword ? "text" : "password")"
+				   class="form-control-custom"
+				   placeholder="Password" />
+			<button type="button" class="icon-button" @onclick="TogglePassword">
+				<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path fill-rule="evenodd" clip-rule="evenodd" d="M6.248 10.17C4.796 11.542 3.86 13.193 3.451 14.267C3.38019 14.4529 3.23842 14.6031 3.05689 14.6845C2.87535 14.7659 2.66892 14.7718 2.483 14.701C2.29709 14.6302 2.14692 14.4884 2.06553 14.3069C1.98413 14.1253 1.97819 13.9189 2.049 13.733C2.529 12.473 3.584 10.624 5.218 9.08C6.86 7.527 9.127 6.25 12 6.25C14.873 6.25 17.139 7.527 18.782 9.08C20.416 10.624 21.471 12.473 21.951 13.733C22.0218 13.9189 22.0159 14.1253 21.9345 14.3069C21.8531 14.4884 21.7029 14.6302 21.517 14.701C21.3311 14.7718 21.1247 14.7659 20.9431 14.6845C20.7616 14.6031 20.6198 14.4529 20.549 14.267C20.139 13.193 19.203 11.542 17.751 10.17C16.308 8.806 14.394 7.75 12 7.75C9.606 7.75 7.69 8.806 6.248 10.17ZM12 11.75C11.7045 11.75 11.4119 11.8082 11.139 11.9213C10.866 12.0343 10.6179 12.2001 10.409 12.409C10.2001 12.6179 10.0343 12.866 9.92128 13.139C9.8082 13.4119 9.75 13.7045 9.75 14C9.75 14.2955 9.8082 14.5881 9.92128 14.861C10.0343 15.134 10.2001 15.3821 10.409 15.591C10.6179 15.7999 10.866 15.9657 11.139 16.0787C11.4119 16.1918 11.7045 16.25 12 16.25C12.5967 16.25 13.169 16.0129 13.591 15.591C14.013 15.169 14.25 14.5967 14.25 14C14.25 13.4033 14.013 12.831 13.591 12.409C13.169 11.9871 12.5967 11.75 12 11.75ZM8.25 14C8.25 13.0054 8.64509 12.0516 9.34835 11.3483C10.0516 10.6451 11.0054 10.25 12 10.25C12.9946 10.25 13.9484 10.6451 14.6517 11.3483C15.3549 12.0516 15.75 13.0054 15.75 14C15.75 14.9946 15.3549 15.9484 14.6517 16.6517C13.9484 17.3549 12.9946 17.75 12 17.75C11.0054 17.75 10.0516 17.3549 9.34835 16.6517C8.64509 15.9484 8.25 14.9946 8.25 14Z" fill="#B2B8BF" />
+				</svg>
+			</button>
+		</div>
+
+		<div class="login-options-row">
+			<label class="form-check-label-custom">
+				<input type="checkbox" @bind="_model.RememberMe" />
+				Remain logged in this device
+			</label>
+
+			<a href="#" class="forgot-link">Forgot Password?</a>
+		</div>
+
+		<button type="submit" class="btn-login" disabled="@_isLoading">
+			@(_isLoading ? "Logging in..." : "Login")
+		</button>
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div style="color:red">@_errorMessage</div>
+		}
+	</EditForm>
+
+	<div class="auth-icons">
+		<a href="#" class="auth-icon-btn" title="Fingerprint Login">
+			<img src="_content/SPIC.MauiBlazorApp.Shared/images/LoginImages/Passkey.svg" alt="Passkey" class="login-secure-img" />
+		</a>
+		<a href="#" class="auth-icon-btn" title="Face Scan Login">
+			<img src="_content/SPIC.MauiBlazorApp.Shared/images/LoginImages/FaceLock.svg" alt="FaceLock" class="login-secure-img" />
+		</a>
+		<a href="#" class="auth-icon-btn" title="Fingerprint Login">
+			<img src="_content/SPIC.MauiBlazorApp.Shared/images/LoginImages/FingerPrint.svg" alt="FingerPrint" class="login-secure-img" />
+		</a>
+	</div>
+
+	<div class="register-text">
+		New to the platform?
+		<a href="/AccountSelector">Submit an Access Request</a>
+	</div>
+</div>
+
+@code {
+	private LoginModel _model = new();
+	private bool _showPassword;
+	private bool _isLoading;
+	private string? _errorMessage;
+
+	private void TogglePassword()
+	{
+		_showPassword = !_showPassword;
+	}
+	private async Task HandleLogin()
+	{
+		try
+		{
+			_isLoading = true;
+			_errorMessage = null;
+
+			var request = new LoginRequestDto
+			{
+				UserName = _model.UserName ?? string.Empty,
+				Password = _model.Password ?? string.Empty
+			};
+
+			var response = await Http.PostAsJsonAsync("api/Authentication/login", request);
+
+			if (!response.IsSuccessStatusCode)
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				_errorMessage = string.IsNullOrWhiteSpace(error) ? "Login failed." : error;
+				return;
+			}
+
+			var result = await response.Content.ReadFromJsonAsync<LoginResponseDto>();
+
+			if (result is null || string.IsNullOrWhiteSpace(result.Token))
+			{
+				_errorMessage = "Token was not returned.";
+				return;
+			}
+
+			var rawToken = result.Token.StartsWith("Bearer ")
+				? result.Token.Substring("Bearer ".Length)
+				: result.Token;
+
+			Http.DefaultRequestHeaders.Authorization =
+				new AuthenticationHeaderValue("Bearer", rawToken);
+
+			// Persist token for other pages and page refreshes
+			LoginState.Token = rawToken;
+			await JS.InvokeVoidAsync("sessionStorage.setItem", "jwt_token", rawToken);
+
+			// ✅ GO TO DASHBOARD
+			Navigation.NavigateTo("/Dashboard");
+		}
+		catch (Exception ex)
+		{
+			_errorMessage = ex.Message;
+		}
+		finally
+		{
+			_isLoading = false;
+		}
+	}
+	// private async Task HandleLogin()
+	// {
+	//     try
+	//     {
+	//         _isLoading = true;
+	//         _errorMessage = null;
+
+	//         var request = new LoginRequestDto
+	//         {
+	//             UserName = _model.UserName ?? string.Empty,
+	//             Password = _model.Password ?? string.Empty
+	//         };
+
+	//         var response = await Http.PostAsJsonAsync("https://localhost:7032/api/Authentication/login", request);
+
+	//         if (!response.IsSuccessStatusCode)
+	//         {
+	//             var error = await response.Content.ReadAsStringAsync();
+	//             _errorMessage = string.IsNullOrWhiteSpace(error) ? "Login failed." : error;
+	//             return;
+	//         }
+
+	//         var result = await response.Content.ReadFromJsonAsync<LoginResponseDto>();
+
+	//         if (result is null || string.IsNullOrWhiteSpace(result.Token))
+	//         {
+	//             _errorMessage = "Token was not returned.";
+	//             return;
+	//         }
+
+	//         var rawToken = result.Token.StartsWith("Bearer ")
+	//             ? result.Token.Substring("Bearer ".Length)
+	//             : result.Token;
+
+	//         Http.DefaultRequestHeaders.Authorization =
+	//             new AuthenticationHeaderValue("Bearer", rawToken);
+
+	//         Navigation.NavigateTo("/");
+	//     }
+	//     catch (Exception ex)
+	//     {
+	//         _errorMessage = ex.Message;
+	//     }
+	//     finally
+	//     {
+	//         _isLoading = false;
+	//     }
+	// }
+
+	public class LoginModel
+	{
+		[Required]
+		public string? UserName { get; set; }
+
+		[Required]
+		public string? Password { get; set; }
+
+		public bool RememberMe { get; set; }
+	}
+
+	public class LoginRequestDto
+	{
+		public string UserName { get; set; } = string.Empty;
+		public string Password { get; set; } = string.Empty;
+	}
+
+	public class LoginResponseDto
+	{
+		public string? Token { get; set; }
+		public object? User { get; set; }
+		public DateTime Expiration { get; set; }
+	}
+}

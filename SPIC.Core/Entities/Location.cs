@@ -1,0 +1,73 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
+
+namespace SPIC.Core.Entities
+{
+	public class Zone
+	{
+		public int Id { get; set; }
+		public required string ZoneName { get; set; }
+		public string? ZoneCode { get; set; }
+		public string? ZoneColorCode { get; set; }
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+        public required string UpdatedBy { get; set; }
+    }
+	public class State
+	{
+		public int Id { get; set; }
+		public required string StateName { get; set; }
+		public int ZoneId { get; set; }
+		public Zone? Zone { get; set; }
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public required string UpdatedBy { get; set; }
+    }
+    public class District
+	{
+		public int Id { get; set; }
+		public required string DistrictName { get; set; }
+		public int StateId { get; set; }
+		public State? State { get; set; }
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public required string UpdatedBy { get; set; }
+    }
+    public class SubDistrict
+	{
+		public int Id { get; set; }
+		public required string SubDistrictName { get; set; }
+		public int DistrictId { get; set; }
+		public District? District { get; set; }
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public required string UpdatedBy { get; set; }
+    }
+	public class Region
+	{
+		public int Id { get; set; }
+		public required string RegionName { get; set; }
+		public int StateId { get; set; }
+		public State? State { get; set; }
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public required string UpdatedBy { get; set; }
+    }
+	public class Headquarter
+	{
+		public int Id { get; set; }
+		public required string HeadquarterName { get; set; }
+		public int RegionId { get; set; }
+		public Region? Region { get; set; }
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public required string UpdatedBy { get; set; }
+    }
+}

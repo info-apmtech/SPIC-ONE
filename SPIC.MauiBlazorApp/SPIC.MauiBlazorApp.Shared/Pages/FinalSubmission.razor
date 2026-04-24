@@ -1,0 +1,811 @@
+﻿@page "/FinalSubmission"
+@using System.Net.Http.Json
+@using DealerReg = SPIC.Core.Entities.DealerRegistration
+@using SPIC.Core.Entities
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="container-fluid py-4 px-0">
+
+    <FormLoader />
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+            @_message
+            <button type="button" class="btn-close" @onclick="() => _message = null"></button>
+        </div>
+    }
+
+    <div class="page-header-row">
+        <h1 class="page-title">Final Submission</h1>
+    </div>
+
+    <!-- Progress Section -->
+    <div class="progress-card">
+        <div class="progress-header">
+            <div>
+                <div class="progress-title">Completion Progress</div>
+                <div class="progress-desc">@_completedSections of @_totalSections sections completed</div>
+            </div>
+            <div class="progress-percent">
+                @_progressPercent%
+                <small>Complete</small>
+            </div>
+        </div>
+        <div class="progress-bar-custom">
+            <div class="progress-fill" style="width: @_progressPercent%;"></div>
+        </div>
+    </div>
+
+    <!-- Section Completion Status -->
+    <div class="main-card">
+        <h3 class="section-title">Section Completion Status</h3>
+        <p class="section-subtitle">Review all sections before final submission</p>
+
+        <div class="completion-grid">
+
+            <!-- 1. Company Details (Step 1) -->
+            <div class="ticket-card @(_stepStatus[0] ? "bg-tint-green" : "bg-tint-orange")">
+                <div class="ticket-header">
+                    <div class="ticket-title-wrap @(_stepStatus[0] ? "theme-green-final" : "theme-orange")">
+                        <div class="ticket-icon"><i class="bi bi-buildings"></i></div>
+                        <h4 class="ticket-title">Company Details</h4>
+                    </div>
+                    <a href="/Register?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                </div>
+                <div class="ticket-data">
+                    <div class="data-row"><span class="data-lbl">Firm Name:</span> <span class="data-val">@(_dealer.FirmName ?? "—")</span></div>
+                    <div class="data-row"><span class="data-lbl">Business Type:</span> <span class="data-val">@(_dealer.BusinessEntityType ?? "—")</span></div>
+                    <div class="data-row"><span class="data-lbl">GST Number:</span> <span class="data-val">@(MaskValue(_dealer.GSTNumber))</span></div>
+                    <div class="data-row"><span class="data-lbl">PAN Number:</span> <span class="data-val">@(MaskValue(_dealer.PANNumber))</span></div>
+                    <div class="data-row"><span class="data-lbl">Aadhaar Number:</span> <span class="data-val">@(MaskValue(_dealer.AadhaarNumber))</span></div>
+                    <div class="data-row"><span class="data-lbl">Contact:</span> <span class="data-val">@(_dealer.OfficialContactNumber ?? "—")</span></div>
+                    <div class="data-row">
+                        <span class="data-lbl">Status:</span>
+                        <span class="data-val">
+                            @if (_stepStatus[0])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2 & 6 column: Office Automation + Companies Operating -->
+            <div class="d-flex flex-column gap-3">
+                <div class="ticket-card @(_stepStatus[0] ? "bg-tint-green" : "bg-tint-orange")" style="margin-bottom:0;">
+                    <div class="ticket-header">
+                        <div class="ticket-title-wrap @(_stepStatus[0] ? "theme-green-final" : "theme-orange")">
+                            <div class="ticket-icon"><i class="bi bi-wifi"></i></div>
+                            <h4 class="ticket-title">Office Automation</h4>
+                        </div>
+                        <a href="/Register?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                    </div>
+                    <div class="ticket-data">
+                        <div class="data-row"><span class="data-lbl">Office Automation:</span> <span class="data-val">@(_dealer.IsOfficeAutomation ? "Yes" : "No")</span></div>
+                        @if (_dealer.ExpectedOfficeAutomationDate.HasValue)
+                        {
+                            <div class="data-row"><span class="data-lbl">Expected Date:</span> <span class="data-val">@_dealer.ExpectedOfficeAutomationDate.Value.ToString("dd-MM-yyyy")</span></div>
+                        }
+                    </div>
+                </div>
+
+                <div class="ticket-card flex-grow-1 @(_stepStatus[5] ? "bg-tint-green" : "bg-tint-orange")">
+                    <div class="ticket-header">
+                        <div class="ticket-title-wrap @(_stepStatus[5] ? "theme-green-final" : "theme-orange")">
+                            <div class="ticket-icon"><i class="bi bi-building"></i></div>
+                            <h4 class="ticket-title">Companies Operating</h4>
+                        </div>
+                        <a href="/Companies?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                    </div>
+                    <div class="ticket-data">
+                        <div class="data-row">
+                            <span class="data-lbl" style="flex: 0 0 100px;">Companies:</span>
+                            <span class="data-val">
+                                @if (_companies.Count > 0)
+                                {
+                                    @foreach (var c in _companies)
+                                    {
+                                        <span class="tag-pill">@(c.CompaniesOperating ?? "—")</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span style="color:#D97706;">No companies added</span>
+                                }
+                            </span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-lbl">Status:</span>
+                            <span class="data-val">
+                                @if (_stepStatus[5])
+                                {
+                                    <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                                }
+                                else
+                                {
+                                    <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                                }
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Warehouse Details (Step 4) -->
+            <div class="ticket-card @(_stepStatus[3] ? "bg-tint-green" : "bg-tint-orange")">
+                <div class="ticket-header">
+                    <div class="ticket-title-wrap @(_stepStatus[3] ? "theme-green-final" : "theme-orange")">
+                        <div class="ticket-icon"><i class="bi bi-box-seam"></i></div>
+                        <h4 class="ticket-title">Warehouse Details</h4>
+                    </div>
+                    <a href="/Warehouse?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                </div>
+                <div class="ticket-data">
+                    <div class="data-row"><span class="data-lbl">Warehouses:</span> <span class="data-val">@_warehouses.Count record(s)</span></div>
+                    <div class="data-row"><span class="data-lbl">Rail Facilities:</span> <span class="data-val">@_railFacilities.Count record(s)</span></div>
+                    <div class="data-row"><span class="data-lbl">Port Facilities:</span> <span class="data-val">@_portFacilities.Count record(s)</span></div>
+                    <div class="data-row"><span class="data-lbl">Own Godown:</span> <span class="data-val">@_dealer.OwnGodownCapacity MT</span></div>
+                    <div class="data-row"><span class="data-lbl">Rent Godown:</span> <span class="data-val">@_dealer.RentGodownCapacity MT</span></div>
+                    <div class="data-row">
+                        <span class="data-lbl">Status:</span>
+                        <span class="data-val">
+                            @if (_stepStatus[3])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Experience (Step 2) -->
+            <div class="ticket-card @(_stepStatus[1] ? "bg-tint-green" : "bg-tint-orange")">
+                <div class="ticket-header">
+                    <div class="ticket-title-wrap @(_stepStatus[1] ? "theme-green-final" : "theme-orange")">
+                        <div class="ticket-icon"><i class="bi bi-award"></i></div>
+                        <h4 class="ticket-title">Experience</h4>
+                    </div>
+                    <a href="/Experience?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                </div>
+                <div class="ticket-data">
+                    <div class="data-row"><span class="data-lbl">Total Companies:</span> <span class="data-val">@_experiences.Count record(s)</span></div>
+                    <div class="data-row"><span class="data-lbl">Years of Experience:</span> <span class="data-val">@_dealer.YearsofExperiance Years</span></div>
+                    <div class="data-row"><span class="data-lbl">Total Turnover:</span> <span class="data-val">₹@_experiences.Sum(e => e.TurnOver).ToString("N2")</span></div>
+                    <div class="data-row"><span class="data-lbl">Total Quantity:</span> <span class="data-val">@_experiences.Sum(e => e.Quantity).ToString("N2") MT</span></div>
+                    <div class="data-row">
+                        <span class="data-lbl">Status:</span>
+                        <span class="data-val">
+                            @if (_stepStatus[1])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. Annual Sales (Step 3) -->
+            <div class="ticket-card @(_stepStatus[2] ? "bg-tint-green" : "bg-tint-orange")">
+                <div class="ticket-header">
+                    <div class="ticket-title-wrap @(_stepStatus[2] ? "theme-green-final" : "theme-orange")">
+                        <div class="ticket-icon"><i class="bi bi-graph-up-arrow"></i></div>
+                        <h4 class="ticket-title">Annual Sales</h4>
+                    </div>
+                    <a href="/AnnualSales?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                </div>
+                <div class="ticket-data">
+                    <div class="data-row"><span class="data-lbl">Products:</span> <span class="data-val">@_annualSales.Count record(s)</span></div>
+                    <div class="data-row"><span class="data-lbl">Total Retail Sales:</span> <span class="data-val">₹@_annualSales.Sum(a => a.OwnRetailsSaleQty).ToString("N2")</span></div>
+                    <div class="data-row"><span class="data-lbl">Total Dealer Sales:</span> <span class="data-val">₹@_annualSales.Sum(a => a.SaleToDealerQty).ToString("N2")</span></div>
+                    <div class="data-row"><span class="data-lbl">Overall Total:</span> <span class="data-val">₹@_annualSales.Sum(a => a.OwnRetailsSaleQty + a.SaleToDealerQty).ToString("N2")</span></div>
+                    <div class="data-row">
+                        <span class="data-lbl">Status:</span>
+                        <span class="data-val">
+                            @if (_stepStatus[2])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. Investment (Step 9) -->
+            <div class="ticket-card @(_stepStatus[8] ? "bg-tint-green" : "bg-tint-orange")">
+                <div class="ticket-header">
+                    <div class="ticket-title-wrap @(_stepStatus[8] ? "theme-green-final" : "theme-orange")">
+                        <div class="ticket-icon"><i class="bi bi-currency-dollar"></i></div>
+                        <h4 class="ticket-title">Investment</h4>
+                    </div>
+                    <a href="/Investment?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                </div>
+                <div class="ticket-data">
+                    <div class="data-row"><span class="data-lbl">Asset Value:</span> <span class="data-val">₹@_dealer.AssetValue.ToString("N2")</span></div>
+                    <div class="data-row"><span class="data-lbl">Bank Assets:</span> <span class="data-val">@_assetBanks.Count record(s)</span></div>
+                    <div class="data-row"><span class="data-lbl">Land Assets:</span> <span class="data-val">@_assetLands.Count record(s)</span></div>
+                    <div class="data-row">
+                        <span class="data-lbl">Status:</span>
+                        <span class="data-val">
+                            @if (_stepStatus[8])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. Sales Planning (Step 8) -->
+            <div class="ticket-card @(_stepStatus[7] ? "bg-tint-green" : "bg-tint-orange")">
+                <div class="ticket-header">
+                    <div class="ticket-title-wrap @(_stepStatus[7] ? "theme-green-final" : "theme-orange")">
+                        <div class="ticket-icon"><i class="bi bi-calendar2-check"></i></div>
+                        <h4 class="ticket-title">Sales Planning</h4>
+                    </div>
+                    <a href="/SalesPlaning?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                </div>
+                <div class="ticket-data">
+                    <div class="data-row"><span class="data-lbl">Products Planned:</span> <span class="data-val">@_salesPlans.Count record(s)</span></div>
+                    @{ var totalPlanAmt = _salesPlans.Sum(s => s.AprilAmount + s.MayAmount + s.JuneAmount + s.JulyAmount + s.AugustAmount + s.SeptemberAmount + s.OctoberAmount + s.NovemberAmount + s.DecemberAmount + s.JanuaryAmount + s.FebruaryAmount + s.MarchAmount); }
+                    <div class="data-row"><span class="data-lbl">Total Planned Value:</span> <span class="data-val">₹@totalPlanAmt.ToString("N2")</span></div>
+                    <div class="data-row">
+                        <span class="data-lbl">Status:</span>
+                        <span class="data-val">
+                            @if (_stepStatus[7])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 8. Market Details (Step 5) -->
+            <div class="ticket-card @(_stepStatus[4] ? "bg-tint-green" : "bg-tint-orange")">
+                <div class="ticket-header">
+                    <div class="ticket-title-wrap @(_stepStatus[4] ? "theme-green-final" : "theme-orange")">
+                        <div class="ticket-icon"><i class="bi bi-geo-alt"></i></div>
+                        <h4 class="ticket-title">Market Details</h4>
+                    </div>
+                    <a href="/MarketDetails?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                </div>
+                <div class="ticket-data">
+                    <div class="data-row"><span class="data-lbl">Blocks Covered:</span> <span class="data-val">@_marketDetails.Count block(s)</span></div>
+                    <div class="data-row"><span class="data-lbl">Total Farmers:</span> <span class="data-val">@_marketDetails.Sum(m => m.NoOfFarmer)</span></div>
+                    <div class="data-row"><span class="data-lbl">Total Dealers:</span> <span class="data-val">@_marketDetails.Sum(m => m.NoOfDealer)</span></div>
+                    <div class="data-row">
+                        <span class="data-lbl">Status:</span>
+                        <span class="data-val">
+                            @if (_stepStatus[4])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 9. Proprietor Details (Step 7) -->
+            <div class="ticket-card @(_stepStatus[6] ? "bg-tint-green" : "bg-tint-orange")">
+                <div class="ticket-header">
+                    <div class="ticket-title-wrap @(_stepStatus[6] ? "theme-green-final" : "theme-orange")">
+                        <div class="ticket-icon"><i class="bi bi-people"></i></div>
+                        <h4 class="ticket-title">Proprietor Details</h4>
+                    </div>
+                    <a href="/Proprietor?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                </div>
+                <div class="ticket-data">
+                    <div class="data-row"><span class="data-lbl">Entity Type:</span> <span class="data-val">@(_dealer.EntityType.ToString() ?? "—")</span></div>
+                    <div class="data-row"><span class="data-lbl">Total Members:</span> <span class="data-val">@_partners.Count partner(s)</span></div>
+                    @foreach (var p in _partners.Take(3))
+                    {
+                        <div class="data-row"><span class="data-lbl">@(p.Name):</span> <span class="data-val">S/o or D/o @(p.FatherName)</span></div>
+                    }
+                    @if (_partners.Count > 3)
+                    {
+                        <div class="data-row"><span class="data-lbl"></span> <span class="data-val">+@(_partners.Count - 3) more...</span></div>
+                    }
+                    <div class="data-row">
+                        <span class="data-lbl">Status:</span>
+                        <span class="data-val">
+                            @if (_stepStatus[6])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 10. Credit Limit Proposal (Step 10) -->
+            <div class="ticket-card @(_stepStatus[9] ? "bg-tint-green" : "bg-tint-orange")">
+                <div class="ticket-header">
+                    <div class="ticket-title-wrap @(_stepStatus[9] ? "theme-green-final" : "theme-orange")">
+                        <div class="ticket-icon"><i class="bi bi-person-badge"></i></div>
+                        <h4 class="ticket-title">Credit Limit Proposal</h4>
+                    </div>
+                    <a href="/CreditLimit?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                </div>
+                <div class="ticket-data">
+                    @if (_creditLimit != null)
+                    {
+                        var totalScore = _creditLimit.Q1Mark + _creditLimit.Q2Mark + _creditLimit.Q3Mark + _creditLimit.Q4Mark + _creditLimit.Q5Mark + _creditLimit.Q6Mark + _creditLimit.Q7Mark + _creditLimit.Q8Mark + _creditLimit.Q9Mark + _creditLimit.Q10Mark + _creditLimit.Q11Mark;
+                        <div class="data-row"><span class="data-lbl">Dealer Score:</span> <span class="data-val">@totalScore.ToString("N1") / 100</span></div>
+                        <div class="data-row"><span class="data-lbl">Additional Credit Limit:</span> <span class="data-val">₹@_creditLimit.AdditionalCreditLimit.ToString("N2")</span></div>
+                    }
+                    else
+                    {
+                        <div class="data-row"><span class="data-lbl">Data:</span> <span class="data-val" style="color:#D97706;">Not submitted yet</span></div>
+                    }
+                    <div class="data-row">
+                        <span class="data-lbl">Status:</span>
+                        <span class="data-val">
+                            @if (_stepStatus[9])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 11. Enclosures (Step 11) — spanning full width -->
+            <div class="ticket-card span-3 @(_stepStatus[10] ? "theme-green-final bg-tint-green" : "theme-orange bg-tint-orange") mt-3">
+                <div class="ticket-header border-bottom pb-3 mb-3" style="border-color:@(_stepStatus[10] ? "#D1FAE5" : "#FED7AA")!important;">
+                    <div class="ticket-title-wrap">
+                        <div class="ticket-icon bg-white border"><i class="bi bi-paperclip"></i></div>
+                        <h4 class="ticket-title">Enclosures</h4>
+                    </div>
+                    <a href="/Enclosures?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square edit-icon"></i></a>
+                </div>
+
+                <div class="enclosure-header">
+                    <div>Documents Uploaded: <strong>@_docUploadedCount of @_docTotalCount Required Documents</strong></div>
+                    <div>Missing Documents: <strong>@(_docMissingCount == 0 ? "None" : $"{_docMissingCount} document(s)")</strong></div>
+                </div>
+
+                <div class="enclosure-grid">
+                    @foreach (var doc in _enclosureItems)
+                    {
+                        <div class="enclosure-pill" style="@(doc.Uploaded ? "" : "color:#D97706; border-color:#FED7AA;")">
+                            <i class="bi @(doc.Uploaded ? "bi-check-circle" : "bi-x-circle")"></i> @doc.Name
+                        </div>
+                    }
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Terms and Conditions -->
+    <div class="main-card">
+        <h3 class="section-title mb-4">Terms and Conditions</h3>
+
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="tc-box">
+                    <div class="form-check tc-check-header">
+                        <input class="form-check-input custom-check" type="checkbox" checked disabled />
+                        <label class="form-check-label">I accept the Terms and Conditions</label>
+                    </div>
+                    <ul class="tc-list">
+                        <li>All information provided in this application is true and accurate to the best of my knowledge.</li>
+                        <li>I understand that providing false information may result in rejection of the application.</li>
+                        <li>I agree to comply with all company policies, guidelines, and regulations.</li>
+                        <li>I authorize the company to verify all information and documents provided.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="tc-box">
+                    <div class="form-check tc-check-header">
+                        <input class="form-check-input custom-check" type="checkbox" checked disabled />
+                        <label class="form-check-label">I hereby declare</label>
+                    </div>
+                    <ul class="tc-list">
+                        <li>That I am the authorized person to submit this dealer registration application.</li>
+                        <li>That all documents uploaded are genuine and authentic.</li>
+                        <li>That I will be responsible for any legal implications arising from incorrect information.</li>
+                        <li>That I consent to the company verifying all submitted documents and records.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (_incompleteSections > 0)
+    {
+        <div class="alert-custom mb-5">
+            <strong>Warning</strong> You have @_incompleteSections incomplete section(s). Please complete all sections before submitting.
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-success mb-5" role="alert">
+            <strong><i class="bi bi-check-circle-fill"></i> All sections completed!</strong> You are ready to submit your registration.
+        </div>
+    }
+
+    <CommanFooter OnNextClick="HandleSubmit" IsNextDisabled="@_isSubmitting" />
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "dealerId")]
+    public int DealerId { get; set; }
+
+    private DealerReg _dealer = new();
+    private DealerRegistrationDocuments? _docs;
+    private List<DealerOwnershipInfo> _partners = new();
+    private List<DealerExperience> _experiences = new();
+    private List<AnnualSaleDataLastFYofDealerRegistration> _annualSales = new();
+    private List<DealerWarehouseFacilities> _warehouses = new();
+    private List<DealerRailFacilities> _railFacilities = new();
+    private List<DealerPortFacilities> _portFacilities = new();
+    private List<DealerMarketDetail> _marketDetails = new();
+    private List<DealerCompaniesOperatingInArea> _companies = new();
+    private List<SalesPlanningInDealerRegistration> _salesPlans = new();
+    private List<DealerAssetBank> _assetBanks = new();
+    private List<DealerAssetLand> _assetLands = new();
+    private List<DealerAssetBuilding> _assetBuildings = new();
+    private DealerCreditLimitProposal? _creditLimit;
+
+    private bool[] _stepStatus = new bool[11];
+    private List<EnclosureItem> _enclosureItems = new();
+    private int _docUploadedCount;
+    private int _docTotalCount;
+    private int _docMissingCount;
+
+    private string? _message;
+    private bool _isError;
+    private bool _isSubmitting;
+
+    private int _completedSections;
+    private int _totalSections = 11;
+    private int _incompleteSections;
+    private int _progressPercent;
+
+    private bool _isSoleProprietor => _dealer.EntityType == EntityType.soleProprietor;
+    private bool _hasWholesaleLicense => !string.IsNullOrEmpty(_dealer.WholeSaleFertilizerLicenseNumber);
+    private bool _hasRetailLicense => !string.IsNullOrEmpty(_dealer.RetailFertilizerLicenseNumber);
+
+    private bool _showPartnershipDeed
+    {
+        get
+        {
+            var t = _dealer.BusinessEntityType?.Trim();
+            if (string.IsNullOrEmpty(t)) return false;
+            return t.Contains("Partnership", StringComparison.OrdinalIgnoreCase) ||
+                   t.Equals("LLP", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private bool _showAuthorizationLetter
+    {
+        get
+        {
+            var t = _dealer.BusinessEntityType?.Trim();
+            if (string.IsNullOrEmpty(t)) return false;
+            if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
+                t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return true;
+        }
+    }
+
+    private bool _showBoardResolution
+    {
+        get
+        {
+            var t = _dealer.BusinessEntityType?.Trim();
+            if (string.IsNullOrEmpty(t)) return false;
+            if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
+                t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (t.Contains("Partnership", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (t.Equals("LLP", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return true;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(
+            LoadDealer(),
+            LoadExperiences(),
+            LoadAnnualSales(),
+            LoadWarehouses(),
+            LoadRailFacilities(),
+            LoadPortFacilities(),
+            LoadMarketDetails(),
+            LoadCompanies(),
+            LoadPartners(),
+            LoadSalesPlans(),
+            LoadAssetBanks(),
+            LoadAssetLands(),
+            LoadAssetBuildings(),
+            LoadCreditLimit(),
+            LoadDocuments()
+        );
+        CalculateStepStatus();
+        BuildEnclosureItems();
+        CalculateProgress();
+    }
+
+    private async Task LoadDealer()
+    {
+        try { var d = await Http.GetFromJsonAsync<DealerReg>($"api/DealerRegistration/{DealerId}"); if (d != null) _dealer = d; } catch { }
+    }
+
+    private async Task LoadExperiences()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience/all") ?? new(); _experiences = all.Where(e => e.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadAnnualSales()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all") ?? new(); _annualSales = all.Where(a => a.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadWarehouses()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new(); _warehouses = all.Where(w => w.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadRailFacilities()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities/all") ?? new(); _railFacilities = all.Where(r => r.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadPortFacilities()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities/all") ?? new(); _portFacilities = all.Where(p => p.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadMarketDetails()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new(); _marketDetails = all.Where(m => m.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadCompanies()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new(); _companies = all.Where(c => c.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadPartners()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all") ?? new(); _partners = all.Where(p => p.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadSalesPlans()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new(); _salesPlans = all.Where(s => s.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadAssetBanks()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new(); _assetBanks = all.Where(a => a.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadAssetLands()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand/all") ?? new(); _assetLands = all.Where(a => a.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadAssetBuildings()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all") ?? new(); _assetBuildings = all.Where(a => a.DealerId == DealerId).ToList(); } catch { }
+    }
+
+    private async Task LoadCreditLimit()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all") ?? new(); _creditLimit = all.FirstOrDefault(c => c.DealerId == DealerId); } catch { }
+    }
+
+    private async Task LoadDocuments()
+    {
+        try { var all = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments/all") ?? new(); _docs = all.FirstOrDefault(d => d.DealerId == DealerId); } catch { }
+    }
+
+    private void CalculateStepStatus()
+    {
+        // Step 1: Dealer Registration — FirmName, StateId, address, bank
+        _stepStatus[0] = !string.IsNullOrEmpty(_dealer.FirmName) && _dealer.StateId > 0 && !string.IsNullOrEmpty(_dealer.OfficialContactNumber) && _dealer.BankId > 0;
+
+        // Step 2: Experience
+        _stepStatus[1] = _experiences.Count > 0;
+
+        // Step 3: Annual Sales
+        _stepStatus[2] = _annualSales.Count > 0;
+
+        // Step 4: Warehouse
+        _stepStatus[3] = _warehouses.Count > 0 || _railFacilities.Count > 0 || _portFacilities.Count > 0;
+
+        // Step 5: Market Details
+        _stepStatus[4] = _marketDetails.Count > 0;
+
+        // Step 6: Companies Operating
+        _stepStatus[5] = _companies.Count > 0;
+
+        // Step 7: Proprietor
+        _stepStatus[6] = _partners.Count > 0;
+
+        // Step 8: Sales Planning
+        _stepStatus[7] = _salesPlans.Count > 0;
+
+        // Step 9: Investment
+        _stepStatus[8] = _assetBanks.Count > 0 || _assetLands.Count > 0 || _assetBuildings.Count > 0;
+
+        // Step 10: Credit Limit
+        _stepStatus[9] = _creditLimit != null;
+
+        // Step 11: Enclosures
+        _stepStatus[10] = _docs != null &&
+            !string.IsNullOrEmpty(_docs.SpecimanFilePath) &&
+            !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath) &&
+            !string.IsNullOrEmpty(_docs.BankGauranteeFilePath) &&
+            !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath) &&
+            !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath) &&
+            !string.IsNullOrEmpty(_docs.ValuationCertificateFilePath) &&
+            !string.IsNullOrEmpty(_docs.RetailerListFilePath) &&
+            !string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath);
+    }
+
+    private void BuildEnclosureItems()
+    {
+        _enclosureItems = new List<EnclosureItem>
+        {
+            new("GST Certificate", !string.IsNullOrEmpty(_dealer.GSTFilePath)),
+            new("PAN Copy", !string.IsNullOrEmpty(_dealer.PANFilePath)),
+            new("Aadhaar Copy", !string.IsNullOrEmpty(_dealer.AadhaarFilePath)),
+            new("SPIC Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.SpecimanFilePath)),
+            new("Greenstar Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath)),
+            new("Bank Guarantee Certificate", _docs != null && !string.IsNullOrEmpty(_docs.BankGauranteeFilePath)),
+            new("IT Returns (FY1)", _docs != null && !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath)),
+            new("IT Returns (FY2)", _docs != null && !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath)),
+            new("Valuation Certificate", _docs != null && !string.IsNullOrEmpty(_docs.ValuationCertificateFilePath)),
+            new("Retailer List", _docs != null && !string.IsNullOrEmpty(_docs.RetailerListFilePath)),
+            new("Deed of Guarantee", _docs != null && !string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath)),
+            new("Affidavit", _docs != null && !string.IsNullOrEmpty(_docs.AffidavitFilePath)),
+        };
+
+        // Conditional license documents
+        if (_hasWholesaleLicense)
+            _enclosureItems.Add(new("Wholesale Fertilizers License", !string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath)));
+        if (_hasRetailLicense)
+            _enclosureItems.Add(new("Retail Fertilizers License", !string.IsNullOrEmpty(_dealer.RetailLicenseFilePath)));
+
+        // Conditional documents based on business entity type
+        if (_showPartnershipDeed)
+            _enclosureItems.Add(new("Partnership Deed", _docs != null && !string.IsNullOrEmpty(_docs.PartnershipDeadFilePath)));
+        if (_showBoardResolution)
+            _enclosureItems.Add(new("Board Resolution", _docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath)));
+        if (_showAuthorizationLetter)
+            _enclosureItems.Add(new("Authorization Letter", _docs != null && !string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath)));
+
+        // Partner documents
+        foreach (var p in _partners)
+        {
+            _enclosureItems.Add(new($"Photo — {p.Name}", !string.IsNullOrEmpty(p.ProprietorImagePath)));
+            if (!_isSoleProprietor)
+            {
+                _enclosureItems.Add(new($"Aadhaar — {p.Name}", !string.IsNullOrEmpty(p.AadhaarFilePath)));
+                _enclosureItems.Add(new($"PAN — {p.Name}", !string.IsNullOrEmpty(p.PANFilePath)));
+            }
+        }
+
+        // Land asset documents
+        foreach (var l in _assetLands)
+        {
+            _enclosureItems.Add(new($"EC — Land: {l.LandName}", !string.IsNullOrEmpty(l.UploadedECDocumentPath)));
+            _enclosureItems.Add(new($"Property Doc — Land: {l.LandName}", !string.IsNullOrEmpty(l.UploadedLandDocumentPath)));
+            _enclosureItems.Add(new($"Valuation — Land: {l.LandName}", !string.IsNullOrEmpty(l.UploadedValuationCertificatePath)));
+        }
+
+        // Building asset documents
+        foreach (var b in _assetBuildings)
+        {
+            _enclosureItems.Add(new($"EC — Building: {b.BuildingName}", !string.IsNullOrEmpty(b.UploadedECDocumentPath)));
+            _enclosureItems.Add(new($"Property Doc — Building: {b.BuildingName}", !string.IsNullOrEmpty(b.UploadedBuildingDocumentPath)));
+            _enclosureItems.Add(new($"Valuation — Building: {b.BuildingName}", !string.IsNullOrEmpty(b.UploadedValuationCertificatePath)));
+        }
+
+        _docTotalCount = _enclosureItems.Count;
+        _docUploadedCount = _enclosureItems.Count(d => d.Uploaded);
+        _docMissingCount = _docTotalCount - _docUploadedCount;
+    }
+
+    private void CalculateProgress()
+    {
+        _completedSections = _stepStatus.Count(s => s);
+        _incompleteSections = _totalSections - _completedSections;
+        _progressPercent = _totalSections > 0 ? (int)Math.Round((double)_completedSections / _totalSections * 100) : 0;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (_incompleteSections > 0)
+        {
+            ShowMessage($"Please complete all {_incompleteSections} incomplete section(s) before submitting.", true);
+            return;
+        }
+
+        _isSubmitting = true;
+        _message = null;
+
+        try
+        {
+            _dealer.Status = DealerStatus.Active;
+            var resp = await Http.PutAsJsonAsync($"api/DealerRegistration/{_dealer.Id}", _dealer);
+            resp.EnsureSuccessStatusCode();
+            ShowMessage("Registration submitted successfully!", false);
+            await Task.Delay(1500);
+            Nav.NavigateTo("/Dashboard");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error submitting registration: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private string MaskValue(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "—";
+        if (value.Length <= 4) return value;
+        return new string('*', value.Length - 4) + value[^4..];
+    }
+
+    private void ShowMessage(string msg, bool isError)
+    {
+        _message = msg;
+        _isError = isError;
+    }
+
+    private record EnclosureItem(string Name, bool Uploaded);
+}

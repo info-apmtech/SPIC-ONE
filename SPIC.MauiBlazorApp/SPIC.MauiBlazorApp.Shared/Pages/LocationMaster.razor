@@ -1,0 +1,1163 @@
+﻿@page "/LocationMaster"
+@using System.Net.Http.Json
+@using System.Text.Json
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<div class="container-fluid">
+
+	<h2 class="page-title">Location Master</h2>
+
+	@if (!string.IsNullOrEmpty(_message))
+	{
+		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+			@_message
+			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
+		</div>
+	}
+
+	<div class="tabs-wrapper">
+		<div class="tabs-container">
+			@foreach (var tab in TabOptions)
+			{
+				<div class="tab-item @(ActiveTab == tab ? "active" : "")" @onclick="() => SetActiveTab(tab)">
+					@tab
+				</div>
+			}
+		</div>
+	</div>
+
+	<div class="main-card">
+            <div class="section-header">
+			<h3 class="section-title">@(_isEditing ? $"Edit {GetSingularName(ActiveTab)}" : $"Add New {GetSingularName(ActiveTab)}")</h3>
+			<button class="btn-outline-green" style="width: 12%;" @onclick="() => _showUploadModal = true">
+				<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
+			</button>
+		</div>
+
+		<div class="row g-3 mb-4">
+			@if (ActiveTab == "Zones")
+			{
+				<div class="col-md-3">
+					<label class="form-label-custom">Zone Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Zone Name"
+						   @bind="_zoneForm.ZoneName" @ref="_firstInputRef" />
+				</div>
+				<div class="col-md-3">
+					<label class="form-label-custom">Zone Code</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Zone Code"
+						   @bind="_zoneForm.ZoneCode" />
+				</div>
+				<div class="col-md-4">
+					<label class="form-label-custom">Zone Color Code</label>
+					<div class="color-picker-wrapper">
+						<input type="color" class="color-picker-input"
+							   value="@(_zoneForm.ZoneColorCode ?? "#3B82F6")"
+							   @onchange="OnColorChanged" />
+						<input type="text" class="form-control-custom color-picker-text"
+							   placeholder="#3B82F6"
+							   @bind="_zoneForm.ZoneColorCode" />
+					</div>
+				</div>
+			}
+			else if (ActiveTab == "States")
+			{
+				<div class="col-md-4">
+					<label class="form-label-custom">State Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter State Name"
+						   @bind="_stateForm.StateName" @ref="_firstInputRef" />
+				</div>
+				<div class="col-md-4">
+					<label class="form-label-custom">Zone</label>
+					<select class="form-control-custom w-100" @bind="_stateForm.ZoneId">
+						<option value="0">Select Zone</option>
+						@foreach (var z in _zonesAll)
+						{
+							<option value="@z.Id">@z.ZoneName</option>
+						}
+					</select>
+				</div>
+			}
+			else if (ActiveTab == "Districts")
+			{
+				<div class="col-md-4">
+					<label class="form-label-custom">District Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter District Name"
+						   @bind="_districtForm.DistrictName" @ref="_firstInputRef" />
+				</div>
+				<div class="col-md-4">
+					<label class="form-label-custom">State</label>
+					<select class="form-control-custom w-100" @bind="_districtForm.StateId">
+						<option value="0">Select State</option>
+						@foreach (var s in _statesAll)
+						{
+							<option value="@s.Id">@s.StateName</option>
+						}
+					</select>
+				</div>
+			}
+			else if (ActiveTab == "Sub-Districts")
+			{
+				<div class="col-md-3">
+					<label class="form-label-custom">Sub-District Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Sub-District Name"
+						   @bind="_subDistrictForm.SubDistrictName" @ref="_firstInputRef" />
+				</div>
+				<div class="col-md-3">
+					<label class="form-label-custom">State</label>
+					<select class="form-control-custom w-100" @bind="_subDistrictSelectedStateId" @bind:after="OnSubDistrictStateChanged">
+						<option value="0">Select State</option>
+						@foreach (var s in _statesAll)
+						{
+							<option value="@s.Id">@s.StateName</option>
+						}
+					</select>
+				</div>
+				<div class="col-md-3">
+					<label class="form-label-custom">District</label>
+					<select class="form-control-custom w-100" @bind="_subDistrictForm.DistrictId">
+						<option value="0">Select District</option>
+						@foreach (var d in _subDistrictFilteredDistricts)
+						{
+							<option value="@d.Id">@d.DistrictName</option>
+						}
+					</select>
+				</div>
+			}
+			else if (ActiveTab == "Regions")
+			{
+				<div class="col-md-4">
+					<label class="form-label-custom">Region Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Region Name"
+						   @bind="_regionForm.RegionName" @ref="_firstInputRef" />
+				</div>
+				<div class="col-md-4">
+					<label class="form-label-custom">State</label>
+					<select class="form-control-custom w-100" @bind="_regionForm.StateId">
+						<option value="0">Select State</option>
+						@foreach (var s in _statesAll)
+						{
+							<option value="@s.Id">@s.StateName</option>
+						}
+					</select>
+				</div>
+			}
+			else if (ActiveTab == "Headquarters")
+			{
+				<div class="col-md-4">
+					<label class="form-label-custom">Headquarter Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Headquarter Name"
+						   @bind="_headquarterForm.HeadquarterName" @ref="_firstInputRef" />
+				</div>
+				<div class="col-md-4">
+					<label class="form-label-custom">Region</label>
+					<select class="form-control-custom w-100" @bind="_headquarterForm.RegionId">
+						<option value="0">Select Region</option>
+						@foreach (var r in _regionsAll)
+						{
+							<option value="@r.Id">@r.RegionName</option>
+						}
+					</select>
+				</div>
+			}
+
+			<div class="col-md-2" style="margin-top: 28px;">
+				<div class="status-toggle-box @(CurrentFormIsActive ? "" : "status-toggle-inactive")">
+					<span>@(CurrentFormIsActive ? "Active" : "Inactive")</span>
+					<label class="switch">
+						@if (ActiveTab == "Zones")
+						{
+							<input type="checkbox" @bind="_zoneForm.IsActive">
+							}
+						else if (ActiveTab == "States")
+							{
+								<input type="checkbox" @bind="_stateForm.IsActive">
+								}
+						else if (ActiveTab == "Districts")
+								{
+									<input type="checkbox" @bind="_districtForm.IsActive">
+									}
+						else if (ActiveTab == "Regions")
+									{
+										<input type="checkbox" @bind="_regionForm.IsActive">
+										}
+						else if (ActiveTab == "Headquarters")
+										{
+											<input type="checkbox" @bind="_headquarterForm.IsActive">
+											}
+						else
+											{
+												<input type="checkbox" @bind="_subDistrictForm.IsActive">
+												}
+												<span class="slider"></span>
+											</label>
+										</div>
+									</div>
+								</div>
+
+								<div class="d-flex justify-content-end pt-2 mt-4">
+									<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
+									<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+										<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+									</button>
+								</div>
+							</div>
+
+							<div class="row g-3 mb-4">
+								<div class="col-md-4">
+									<div class="metric-card bg-blue-light">
+										<div class="metric-header">
+											<h4 class="metric-title">Total @ActiveTab</h4>
+										</div>
+										<div class="metric-val">@CurrentAllItems.Count</div>
+									</div>
+								</div>
+								<div class="col-md-4">
+									<div class="metric-card bg-mint-light">
+										<div class="metric-header">
+											<h4 class="metric-title">Active</h4>
+										</div>
+										<div class="metric-val">@CurrentAllItems.Count(x => x.IsActive)</div>
+									</div>
+								</div>
+								<div class="col-md-4">
+									<div class="metric-card bg-gray-light">
+										<div class="metric-header">
+											<h4 class="metric-title">Inactive</h4>
+										</div>
+										<div class="metric-val">@CurrentAllItems.Count(x => !x.IsActive)</div>
+									</div>
+								</div>
+							</div>
+
+							<div class="main-card">
+								<div class="section-header">
+									<h3 class="section-title">Existing @ActiveTab</h3>
+
+									<div class="table-controls">
+										<div class="search-box">
+											<i class="bi bi-search"></i>
+											<input type="text" placeholder="Search @ActiveTab.ToLower()..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
+											</div>
+											<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+												<option value="All">All Status</option>
+												<option value="Active">Active</option>
+												<option value="Inactive">Inactive</option>
+											</select>
+										</div>
+									</div>
+
+									<div class="table-wrapper">
+										<div class="table-responsive">
+											<table class="spic-table">
+												<thead>
+													<tr>
+														<th style="width: 80px;">S:No</th>
+														<th>@GetSingularName(ActiveTab) Name</th>
+
+														@if (ActiveTab == "Zones")
+														{
+															<th>Zone Code</th>
+															<th>Color</th>
+														}
+														else if (ActiveTab == "States")
+														{
+															<th>Zone</th>
+														}
+														else if (ActiveTab == "Districts")
+														{
+															<th>State</th>
+														}
+														else if (ActiveTab == "Sub-Districts")
+														{
+															<th>District</th>
+														}
+														else if (ActiveTab == "Regions")
+														{
+															<th>State</th>
+														}
+														else if (ActiveTab == "Headquarters")
+														{
+															<th>Region</th>
+														}
+
+														<th>Status</th>
+														<th>Created At</th>
+														<th>Action</th>
+													</tr>
+												</thead>
+												<tbody>
+													@if (_isLoading)
+													{
+														<tr>
+															<td colspan="@TableColSpan" class="text-center text-muted">Loading...</td>
+														</tr>
+													}
+													else if (!PagedItems.Any())
+													{
+														<tr>
+															<td colspan="@TableColSpan" class="text-center text-muted">No @ActiveTab.ToLower() found.</td>
+														</tr>
+													}
+													else
+													{
+														@foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
+														{
+															<tr>
+																<td class="text-muted">@((_currentPage - 1) * _pageSize + index + 1)</td>
+																<td>
+																	@if (ActiveTab == "Zones" && !string.IsNullOrEmpty(item.ZoneColorCode))
+																	{
+																		<span class="color-dot" style="background-color: @item.ZoneColorCode;"></span>
+																	}
+																	@item.Name
+																</td>
+
+																@if (ActiveTab == "Zones")
+																{
+																	<td>@item.ZoneCode</td>
+																	<td>
+																		@if (!string.IsNullOrEmpty(item.ZoneColorCode))
+																		{
+																			<span class="color-dot" style="background-color: @item.ZoneColorCode;"></span>
+																			@item.ZoneColorCode
+																		}
+																	</td>
+																}
+																else if (ActiveTab == "States")
+																{
+																	<td>@GetZoneName(item.ZoneId)</td>
+																}
+																else if (ActiveTab == "Districts")
+																{
+																	<td>@GetStateName(item.StateId)</td>
+																}
+																else if (ActiveTab == "Sub-Districts")
+																{
+																	<td>@GetDistrictName(item.DistrictId)</td>
+																}
+																else if (ActiveTab == "Regions")
+																{
+																	<td>@GetStateName(item.StateId)</td>
+																}
+																else if (ActiveTab == "Headquarters")
+																{
+																	<td>@GetRegionName(item.RegionId)</td>
+																}
+
+																<td>
+																	<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+																		  style="cursor:pointer"
+																		  @onclick="() => ToggleStatus(item)">
+																		@(item.IsActive ? "Active" : "Inactive")
+																	</span>
+																</td>
+																<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
+																<td>
+																	<div class="action-icons">
+																		<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+																		<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+																	</div>
+																</td>
+															</tr>
+														}
+													}
+												</tbody>
+											</table>
+										</div>
+									</div>
+
+									<div class="pagination-container">
+										<div class="items-per-page">
+											Items Per Page
+											<select @bind="_pageSize" @bind:after="ApplyFilter">
+												<option value="16">16</option>
+												<option value="32">32</option>
+												<option value="50">50</option>
+											</select>
+										</div>
+
+										<div class="pagination-controls">
+											<div class="page-btn @(_currentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage">
+												<i class="bi bi-chevron-left"></i>
+											</div>
+											@foreach (var thispage in PageNumbers)
+											{
+												@if (thispage == -1)
+												{
+													<div class="page-btn ellipsis">...</div>
+												}
+												else
+												{
+													<div class="page-btn @(thispage == _currentPage ? "active" : "")" @onclick="() => GoToPage(thispage)">@(thispage)</div>
+												}
+											}
+											<div class="page-btn @(_currentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage">
+												<i class="bi bi-chevron-right"></i>
+											</div>
+										</div>
+									</div>
+
+								</div>
+
+							</div>
+
+							@if (_showDeleteConfirm)
+							{
+								<div class="modal-backdrop fade show"></div>
+								<div class="modal fade show d-block" tabindex="-1" role="dialog">
+									<div class="modal-dialog modal-dialog-centered" role="document">
+										<div class="modal-content">
+											<div class="modal-header">
+												<h5 class="modal-title">Confirm Delete</h5>
+												<button type="button" class="btn-close" @onclick="CancelDelete"></button>
+											</div>
+											<div class="modal-body">
+												<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
+												<p class="text-muted mb-0">This action cannot be undone.</p>
+											</div>
+											<div class="modal-footer">
+												<button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+												<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+													@(_isDeleting ? "Deleting..." : "Delete")
+												</button>
+											</div>
+										</div>
+									</div>
+								</div>
+							}
+
+							@if (_showUploadModal)
+							{
+								<div class="modal-backdrop fade show"></div>
+								<div class="modal fade show d-block" tabindex="-1" role="dialog">
+									<div class="modal-dialog modal-dialog-centered" role="document">
+										<div class="modal-content">
+											<div class="modal-header">
+												<h5 class="modal-title">Bulk Upload - @ActiveTab</h5>
+												<button type="button" class="btn-close" @onclick="() => _showUploadModal = false"></button>
+											</div>
+											<div class="modal-body">
+												<InputFile OnChange="OnBulkFileSelected" accept=".xlsx,.xls" />
+												<div class="upload-result" style="margin-top: 12px;">
+													@if (_isUploading)
+													{
+														<div class="d-flex align-items-center gap-2 text-muted">
+															<span class="spinner-border spinner-border-sm"></span>
+															<span>Uploading, please wait...</span>
+														</div>
+													}
+													else if (!string.IsNullOrEmpty(_uploadResult))
+													{
+														<div class="alert @(_uploadSuccess ? (_groupedErrors.Count > 0 ? "alert-warning" : "alert-success") : "alert-danger") mb-2 py-2">
+															@_uploadResult
+														</div>
+														@if (_groupedErrors.Count > 0)
+														{
+															<div style="border: 1px solid #dee2e6; border-radius: 4px; padding: 8px;">
+																<div class="d-flex justify-content-between align-items-center mb-2">
+																	<small class="text-muted fw-semibold">@(_uploadSuccess ? "Skipped Groups:" : "Issues:")</small>
+																	<button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.75rem;"
+																		@onclick="CopyUploadErrors" title="Copy all errors to clipboard">
+																		@if (_errorsCopied)
+																		{
+																			<i class="bi bi-check2"></i> <span>Copied!</span>
+																		}
+																		else
+																		{
+																			<i class="bi bi-clipboard"></i> <span>Copy</span>
+																		}
+																	</button>
+																</div>
+																<div style="max-height: 280px; overflow-y: auto;">
+																	@foreach (var group in _groupedErrors)
+																	{
+																		<div class="mb-2">
+																			<div style="font-size: 0.82rem;">
+																				<span class="badge bg-secondary me-1">@group.Value.Count</span>
+																				<strong>@group.Key</strong>
+																			</div>
+																			<ul class="mb-0 ps-3 mt-1" style="font-size: 0.8rem; color: #555;">
+																				@foreach (var item in group.Value)
+																				{
+																					<li>@item</li>
+																				}
+																			</ul>
+																		</div>
+																	}
+																</div>
+															</div>
+														}
+													}
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+							}
+
+@code {
+	private readonly List<string> TabOptions = ["Zones", "States", "Districts", "Sub-Districts", "Regions", "Headquarters"];
+
+	// ADDED: Element reference for focusing
+	private ElementReference _firstInputRef;
+
+	// Tab state
+	private string ActiveTab { get; set; } = "Zones";
+	private string CurrentApiBase => ActiveTab switch
+	{
+		"Zones" => "api/Zone",
+		"States" => "api/State",
+		"Districts" => "api/District",
+		"Sub-Districts" => "api/SubDistrict",
+		"Regions" => "api/Region",
+		"Headquarters" => "api/Headquarter",
+		_ => ""
+	};
+
+	// Upload modal state
+	private bool _showUploadModal = false;
+	private bool _isUploading = false;
+	private string _uploadResult = string.Empty;
+	private bool _uploadSuccess = false;
+	private Dictionary<string, List<string>> _groupedErrors = new();
+	private bool _errorsCopied = false;
+
+
+	private int TableColSpan => ActiveTab switch
+	{
+		"Zones" => 7,
+		_ => 6
+	};
+
+	// Data per tab
+	private List<LocationItemDto> _zonesAll = new();
+	private List<LocationItemDto> _statesAll = new();
+	private List<LocationItemDto> _districtsAll = new();
+	private List<LocationItemDto> _subDistrictsAll = new();
+	private List<LocationItemDto> _regionsAll = new();
+	private List<LocationItemDto> _headquartersAll = new();
+	private List<LocationItemDto> _filteredItems = new();
+
+	private List<LocationItemDto> CurrentAllItems => ActiveTab switch
+	{
+		"Zones" => _zonesAll,
+		"States" => _statesAll,
+		"Districts" => _districtsAll,
+		"Sub-Districts" => _subDistrictsAll,
+		"Regions" => _regionsAll,
+		"Headquarters" => _headquartersAll,
+		_ => new()
+	};
+
+	// Forms
+	private ZoneFormModel _zoneForm = new();
+	private StateFormModel _stateForm = new();
+	private DistrictFormModel _districtForm = new();
+	private SubDistrictFormModel _subDistrictForm = new();
+	private RegionFormModel _regionForm = new();
+	private HeadquarterFormModel _headquarterForm = new();
+	private int _subDistrictSelectedStateId;
+	private List<LocationItemDto> _subDistrictFilteredDistricts = new();
+	private bool _isEditing;
+	private int? _editingId;
+
+	private bool CurrentFormIsActive => ActiveTab switch
+	{
+		"Zones" => _zoneForm.IsActive,
+		"States" => _stateForm.IsActive,
+		"Districts" => _districtForm.IsActive,
+		"Sub-Districts" => _subDistrictForm.IsActive,
+		"Regions" => _regionForm.IsActive,
+		"Headquarters" => _headquarterForm.IsActive,
+		_ => true
+	};
+
+	// UI state
+	private bool _isLoading = true;
+	private bool _isSaving;
+	private string? _message;
+	private bool _isError;
+
+	// Delete confirmation
+	private bool _showDeleteConfirm;
+	private bool _isDeleting;
+	private LocationItemDto? _deleteTarget;
+
+
+	// Search & filter
+	private string _searchText = "";
+	private string _statusFilter = "All";
+
+	// Pagination
+	private int _currentPage = 1;
+	private int _pageSize = 16;
+
+	private int TotalPages => Math.Max(1, (int)Math.Ceiling(_filteredItems.Count / (double)_pageSize));
+	private IEnumerable<LocationItemDto> PagedItems => _filteredItems
+		.Skip((_currentPage - 1) * _pageSize)
+		.Take(_pageSize);
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadAllLookups();
+		ApplyFilter();
+		_isLoading = false;
+	}
+
+	private async Task LoadAllLookups()
+	{
+		try
+		{
+			_isLoading = true;
+			_zonesAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Zone/all") ?? new();
+			_statesAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
+			_districtsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/District/all") ?? new();
+			_subDistrictsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/SubDistrict/all") ?? new();
+			_regionsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all") ?? new();
+			_headquartersAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load: {ex.Message}", true);
+		}
+	}
+
+	private async Task LoadTabData()
+	{
+		try
+		{
+			_isLoading = true;
+			var items = await Http.GetFromJsonAsync<List<LocationItemDto>>($"{CurrentApiBase}/all") ?? new();
+
+			switch (ActiveTab)
+			{
+				case "Zones": _zonesAll = items; break;
+				case "States": _statesAll = items; break;
+				case "Districts": _districtsAll = items; break;
+				case "Sub-Districts": _subDistrictsAll = items; break;
+				case "Regions": _regionsAll = items; break;
+				case "Headquarters": _headquartersAll = items; break;
+			}
+
+			ApplyFilter();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load: {ex.Message}", true);
+		}
+		finally
+		{
+			_isLoading = false;
+		}
+	}
+
+	private async Task SetActiveTab(string tabName)
+	{
+		if (ActiveTab == tabName) return;
+		ActiveTab = tabName;
+		_searchText = "";
+		_statusFilter = "All";
+		_currentPage = 1;
+		ResetForm();
+		ApplyFilter();
+	}
+
+	private void ApplyFilter()
+	{
+		_filteredItems = CurrentAllItems
+			.Where(x => string.IsNullOrEmpty(_searchText)
+				|| x.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+			.Where(x => _statusFilter switch
+			{
+				"Active" => x.IsActive,
+				"Inactive" => !x.IsActive,
+				_ => true
+			})
+			.OrderByDescending(x => x.CreatedAt)
+			.ToList();
+
+		if (_currentPage > TotalPages) _currentPage = 1;
+	}
+
+	private async Task HandleSave()
+	{
+		var name = ActiveTab switch
+		{
+			"Zones" => _zoneForm.ZoneName,
+			"States" => _stateForm.StateName,
+			"Districts" => _districtForm.DistrictName,
+			"Sub-Districts" => _subDistrictForm.SubDistrictName,
+			"Regions" => _regionForm.RegionName,
+			"Headquarters" => _headquarterForm.HeadquarterName,
+			_ => ""
+		};
+
+		if (string.IsNullOrWhiteSpace(name))
+		{
+			ShowMessage($"{GetSingularName(ActiveTab)} name is required.", true);
+			return;
+		}
+
+		try
+		{
+			_isSaving = true;
+
+			object payload = ActiveTab switch
+			{
+				"Zones" => _isEditing
+					? new { Id = _editingId!.Value, _zoneForm.ZoneName, _zoneForm.ZoneCode, _zoneForm.ZoneColorCode, _zoneForm.IsActive, UpdatedBy = "current-user" }
+					: new { _zoneForm.ZoneName, _zoneForm.ZoneCode, _zoneForm.ZoneColorCode, _zoneForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				"States" => _isEditing
+					? (object)new { Id = _editingId!.Value, _stateForm.StateName, _stateForm.ZoneId, _stateForm.IsActive, UpdatedBy = "current-user" }
+					: new { _stateForm.StateName, _stateForm.ZoneId, _stateForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				"Districts" => _isEditing
+					? (object)new { Id = _editingId!.Value, _districtForm.DistrictName, _districtForm.StateId, _districtForm.IsActive, UpdatedBy = "current-user" }
+					: new { _districtForm.DistrictName, _districtForm.StateId, _districtForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				"Sub-Districts" => _isEditing
+						? (object)new { Id = _editingId!.Value, _subDistrictForm.SubDistrictName, _subDistrictForm.DistrictId, _subDistrictForm.IsActive, UpdatedBy = "current-user" }
+						: new { _subDistrictForm.SubDistrictName, _subDistrictForm.DistrictId, _subDistrictForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				"Regions" => _isEditing
+					? (object)new { Id = _editingId!.Value, _regionForm.RegionName, _regionForm.StateId, _regionForm.IsActive, UpdatedBy = "current-user" }
+					: new { _regionForm.RegionName, _regionForm.StateId, _regionForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				"Headquarters" => _isEditing
+					? (object)new { Id = _editingId!.Value, _headquarterForm.HeadquarterName, _headquarterForm.RegionId, _headquarterForm.IsActive, UpdatedBy = "current-user" }
+					: new { _headquarterForm.HeadquarterName, _headquarterForm.RegionId, _headquarterForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+				_ => new { }
+			};
+
+			HttpResponseMessage response;
+			if (_isEditing && _editingId.HasValue)
+			{
+				response = await Http.PutAsJsonAsync($"{CurrentApiBase}/{_editingId.Value}", payload);
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Update failed: {error}", true);
+					return;
+				}
+				ShowMessage($"{GetSingularName(ActiveTab)} updated successfully.", false);
+			}
+			else
+			{
+				response = await Http.PostAsJsonAsync(CurrentApiBase, payload);
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Create failed: {error}", true);
+					return;
+				}
+				ShowMessage($"{GetSingularName(ActiveTab)} created successfully.", false);
+			}
+
+			ResetForm();
+			await LoadTabData();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	// CHANGED: Added async Task to support FocusAsync
+	private async Task EditItem(LocationItemDto item)
+	{
+		_isEditing = true;
+		_editingId = item.Id;
+
+		switch (ActiveTab)
+		{
+			case "Zones":
+				_zoneForm = new ZoneFormModel
+				{
+					ZoneName = item.Name,
+					ZoneCode = item.ZoneCode,
+					ZoneColorCode = item.ZoneColorCode,
+					IsActive = item.IsActive
+				};
+				break;
+			case "States":
+				_stateForm = new StateFormModel
+				{
+					StateName = item.Name,
+					ZoneId = item.ZoneId,
+					IsActive = item.IsActive
+				};
+				break;
+			case "Districts":
+				_districtForm = new DistrictFormModel
+				{
+					DistrictName = item.Name,
+					StateId = item.StateId,
+					IsActive = item.IsActive
+				};
+				break;
+			case "Sub-Districts":
+				var district = _districtsAll.FirstOrDefault(d => d.Id == item.DistrictId);
+				_subDistrictSelectedStateId = district?.StateId ?? 0;
+				_subDistrictFilteredDistricts = _districtsAll.Where(d => d.StateId == _subDistrictSelectedStateId).ToList();
+				_subDistrictForm = new SubDistrictFormModel
+				{
+					SubDistrictName = item.Name,
+					DistrictId = item.DistrictId,
+					IsActive = item.IsActive
+				};
+				break;
+			case "Regions":
+				_regionForm = new RegionFormModel
+				{
+					RegionName = item.Name,
+					StateId = item.StateId,
+					IsActive = item.IsActive
+				};
+				break;
+			case "Headquarters":
+				_headquarterForm = new HeadquarterFormModel
+				{
+					HeadquarterName = item.Name,
+					RegionId = item.RegionId,
+					IsActive = item.IsActive
+				};
+				break;
+		}
+
+		// ADDED: Focus the input automatically
+		try
+		{
+			await _firstInputRef.FocusAsync();
+		}
+		catch { }
+	}
+
+	private void DeleteItem(LocationItemDto item)
+	{
+		_deleteTarget = item;
+		_showDeleteConfirm = true;
+	}
+
+	private async Task ConfirmDelete()
+	{
+		if (_deleteTarget is null) return;
+
+		try
+		{
+			_isDeleting = true;
+			var response = await Http.DeleteAsync($"{CurrentApiBase}/{_deleteTarget.Id}");
+			if (response.IsSuccessStatusCode)
+			{
+				ShowMessage($"'{_deleteTarget.Name}' deleted successfully.", false);
+				await LoadTabData();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Delete failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isDeleting = false;
+			CancelDelete();
+		}
+	}
+
+	private void CancelDelete()
+	{
+		_showDeleteConfirm = false;
+		_deleteTarget = null;
+	}
+
+	private async Task ToggleStatus(LocationItemDto item)
+	{
+		try
+		{
+			var newStatus = !item.IsActive;
+			var response = await Http.PatchAsync($"{CurrentApiBase}/{item.Id}/status?isActive={newStatus}", null);
+
+			if (response.IsSuccessStatusCode)
+			{
+				item.IsActive = newStatus;
+				ApplyFilter();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Status change failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+	}
+
+	private void ResetForm()
+	{
+		_zoneForm = new ZoneFormModel();
+		_stateForm = new StateFormModel();
+		_districtForm = new DistrictFormModel();
+		_subDistrictForm = new SubDistrictFormModel();
+		_regionForm = new RegionFormModel();
+		_headquarterForm = new HeadquarterFormModel();
+		_subDistrictSelectedStateId = 0;
+		_subDistrictFilteredDistricts = new();
+		_isEditing = false;
+		_editingId = null;
+	}
+
+	private void OnColorChanged(ChangeEventArgs e)
+	{
+		_zoneForm.ZoneColorCode = e.Value?.ToString();
+	}
+
+	private void OnSubDistrictStateChanged()
+	{
+		_subDistrictForm.DistrictId = 0;
+		_subDistrictFilteredDistricts = _districtsAll.Where(d => d.StateId == _subDistrictSelectedStateId).ToList();
+	}
+
+	private string GetZoneName(int zoneId) =>
+		_zonesAll.FirstOrDefault(z => z.Id == zoneId)?.ZoneName ?? "";
+
+	private string GetStateName(int stateId) =>
+		_statesAll.FirstOrDefault(s => s.Id == stateId)?.StateName ?? "";
+
+	private string GetDistrictName(int districtId) =>
+		_districtsAll.FirstOrDefault(d => d.Id == districtId)?.DistrictName ?? "";
+
+	private string GetRegionName(int regionId) =>
+		_regionsAll.FirstOrDefault(r => r.Id == regionId)?.RegionName ?? "";
+
+	private string GetSingularName(string pluralName) => pluralName switch
+	{
+		"Zones" => "Zone",
+		"States" => "State",
+		"Districts" => "District",
+		"Sub-Districts" => "Sub-District",
+		"Regions" => "Region",
+		"Headquarters" => "Headquarter",
+		_ => pluralName.TrimEnd('s')
+	};
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	private async Task OnBulkFileSelected(InputFileChangeEventArgs e)
+	{
+		var file = e.File;
+		if (file == null) return;
+
+		var typeMap = ActiveTab.ToLowerInvariant() switch
+		{
+			"zones" => "zone",
+			"states" => "state",
+			"districts" => "district",
+			var s when s.Contains("sub") => "subdistrict",
+			"regions" => "region",
+			var s when s.Contains("headquarter") => "headquarter",
+			_ => ActiveTab.ToLowerInvariant()
+		};
+
+		using var content = new MultipartFormDataContent();
+		var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+		var streamContent = new StreamContent(stream);
+		streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+		content.Add(streamContent, "file", file.Name);
+
+		_isUploading = true;
+		_uploadResult = string.Empty;
+		_groupedErrors = new();
+		_uploadSuccess = false;
+		try
+		{
+			var response = await Http.PostAsync($"api/locationbulkupload/bulk-upload?type={typeMap}", content);
+			var bodyText = await response.Content.ReadAsStringAsync();
+
+			if (response.IsSuccessStatusCode)
+			{
+				_uploadSuccess = true;
+				try
+				{
+					var json = JsonSerializer.Deserialize<JsonElement>(bodyText);
+					JsonElement groupedProp = default;
+					if (json.TryGetProperty("groupedErrors", out groupedProp) || json.TryGetProperty("GroupedErrors", out groupedProp))
+						foreach (var g in groupedProp.EnumerateObject())
+						{
+							var items = g.Value.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList();
+							if (items.Count > 0) _groupedErrors[g.Name] = items;
+						}
+				}
+				catch { }
+				var totalSkipped = _groupedErrors.Values.Sum(v => v.Count);
+				_uploadResult = totalSkipped > 0
+					? $"Upload completed with {totalSkipped} skipped row(s) across {_groupedErrors.Count} group(s). See details below."
+					: "Upload completed successfully. All rows inserted.";
+				await LoadTabData();
+			}
+			else
+			{
+				_uploadSuccess = false;
+				try
+				{
+					var json = JsonSerializer.Deserialize<JsonElement>(bodyText);
+					var msg = json.TryGetProperty("message", out var m) ? m.GetString()
+						: json.TryGetProperty("Message", out var m2) ? m2.GetString() : null;
+					_uploadResult = msg ?? "Upload failed.";
+					// Missing columns list
+					if (json.TryGetProperty("missing", out var miss) || json.TryGetProperty("Missing", out miss))
+						if (miss.ValueKind == JsonValueKind.Array)
+						{
+							var missingItems = miss.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList();
+							if (missingItems.Count > 0) _groupedErrors["Missing columns"] = missingItems;
+						}
+				}
+				catch
+				{
+					_uploadResult = $"Upload failed: {bodyText}";
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_uploadSuccess = false;
+			_uploadResult = $"Upload error: {ex.Message}";
+		}
+		finally
+		{
+			_isUploading = false;
+		}
+	}
+
+	private async Task CopyUploadErrors()
+	{
+		if (_groupedErrors.Count == 0) return;
+		var sb = new System.Text.StringBuilder();
+		foreach (var group in _groupedErrors)
+		{
+			sb.AppendLine($"[{group.Key}] ({group.Value.Count})");
+			foreach (var item in group.Value) sb.AppendLine($"  - {item}");
+			sb.AppendLine();
+		}
+		await JS.InvokeVoidAsync("navigator.clipboard.writeText", sb.ToString().TrimEnd());
+		_errorsCopied = true;
+		StateHasChanged();
+		await Task.Delay(2000);
+		_errorsCopied = false;
+		StateHasChanged();
+	}
+
+	// Pagination helpers
+	private void GoToPage(int page) { _currentPage = page; }
+	private void PreviousPage() { if (_currentPage > 1) _currentPage--; }
+	private void NextPage() { if (_currentPage < TotalPages) _currentPage++; }
+
+	private IEnumerable<int> PageNumbers
+	{
+		get
+		{
+			var total = TotalPages;
+			if (total <= 7)
+				return Enumerable.Range(1, total);
+
+			var pages = new List<int> { 1 };
+			var start = Math.Max(2, _currentPage - 1);
+			var end = Math.Min(total - 1, _currentPage + 1);
+
+			if (start > 2) pages.Add(-1);
+			for (var i = start; i <= end; i++) pages.Add(i);
+			if (end < total - 1) pages.Add(-1);
+			pages.Add(total);
+
+			return pages;
+		}
+	}
+
+	// Unified DTO (superset of all location entity fields)
+	public class LocationItemDto
+	{
+		public int Id { get; set; }
+		// Mapped name — different entities use different property names
+		public string ZoneName { get; set; } = "";
+		public string StateName { get; set; } = "";
+		public string DistrictName { get; set; } = "";
+		public string SubDistrictName { get; set; } = "";
+		public string RegionName { get; set; } = "";
+		public string HeadquarterName { get; set; } = "";
+		// Zone-specific
+		public string? ZoneCode { get; set; }
+		public string? ZoneColorCode { get; set; }
+		// Foreign keys
+		public int ZoneId { get; set; }
+		public int StateId { get; set; }
+		public int DistrictId { get; set; }
+		public int RegionId { get; set; }
+		// Common
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public string UpdatedBy { get; set; } = "";
+
+		// Computed display name (first non-empty name)
+		public string Name =>
+			!string.IsNullOrEmpty(ZoneName) ? ZoneName :
+			!string.IsNullOrEmpty(StateName) ? StateName :
+			!string.IsNullOrEmpty(DistrictName) ? DistrictName :
+			!string.IsNullOrEmpty(SubDistrictName) ? SubDistrictName :
+			!string.IsNullOrEmpty(RegionName) ? RegionName :
+			HeadquarterName;
+	}
+
+	public class ZoneFormModel
+	{
+		public string ZoneName { get; set; } = "";
+		public string? ZoneCode { get; set; }
+		public string? ZoneColorCode { get; set; } = "#3B82F6";
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class StateFormModel
+	{
+		public string StateName { get; set; } = "";
+		public int ZoneId { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class DistrictFormModel
+	{
+		public string DistrictName { get; set; } = "";
+		public int StateId { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class SubDistrictFormModel
+	{
+		public string SubDistrictName { get; set; } = "";
+		public int DistrictId { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class RegionFormModel
+	{
+		public string RegionName { get; set; } = "";
+		public int StateId { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class HeadquarterFormModel
+	{
+		public string HeadquarterName { get; set; } = "";
+		public int RegionId { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+}

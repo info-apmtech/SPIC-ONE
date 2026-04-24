@@ -1,0 +1,354 @@
+﻿@page "/scanner"
+<style>
+    .scanner-page {
+        position: relative;
+        min-height: 100vh;
+        background: linear-gradient(rgba(0,0,0,.58), rgba(0,0,0,.58)), url('/images/qr-bg.jpg') center/cover no-repeat;
+        overflow: hidden;
+        color: #fff;
+        font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .top-bar {
+        height: 28px;
+        padding: 8px 12px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        opacity: 0.95;
+    }
+
+    .status-icons {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .scanner-content {
+        padding: 8px 16px 120px;
+    }
+
+    .back-row {
+        margin-top: 6px;
+        margin-bottom: 26px;
+    }
+
+    .icon-btn {
+        border: none;
+        background: transparent;
+        color: #fff;
+        cursor: pointer;
+    }
+
+    .back-btn {
+        font-size: 26px;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .mode-toolbar {
+        width: 220px;
+        height: 32px;
+        margin: 0 auto 34px;
+        border-radius: 6px;
+        background: rgba(255,255,255,0.28);
+        backdrop-filter: blur(6px);
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+    }
+
+    .toolbar-btn {
+        width: 56px;
+        height: 24px;
+        border: none;
+        background: transparent;
+        color: #f1f1f1;
+        font-size: 16px;
+        cursor: pointer;
+        border-radius: 4px;
+    }
+
+        .toolbar-btn.active {
+            color: #ffffff;
+            font-weight: bold;
+        }
+
+    .scanner-frame-wrapper {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 34px;
+    }
+
+    .scanner-frame {
+        position: relative;
+        width: 270px;
+        height: 270px;
+    }
+
+    .qr-box {
+        position: absolute;
+        inset: 20px;
+        background: #fff;
+        border-radius: 2px;
+        overflow: hidden;
+        box-shadow: 0 8px 18px rgba(0,0,0,.25);
+    }
+
+    .qr-placeholder {
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, #000 10px, transparent 10px) 0 0 / 34px 34px, linear-gradient(#000 10px, transparent 10px) 0 0 / 34px 34px, linear-gradient(90deg, transparent 24px, #000 24px, #000 34px) 0 0 / 34px 34px, linear-gradient(transparent 24px, #000 24px, #000 34px) 0 0 / 34px 34px, #fff;
+        filter: contrast(1.1);
+    }
+
+    .qr-grid {
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at 20% 20%, #000 0 20px, transparent 21px), radial-gradient(circle at 80% 20%, #000 0 20px, transparent 21px), radial-gradient(circle at 70% 72%, #000 0 20px, transparent 21px);
+        opacity: .9;
+    }
+
+    .corner {
+        position: absolute;
+        width: 62px;
+        height: 62px;
+        border-color: #19b83d;
+        border-style: solid;
+        border-width: 0;
+        border-radius: 8px;
+    }
+
+    .top-left {
+        top: 0;
+        left: 0;
+        border-top-width: 12px;
+        border-left-width: 12px;
+    }
+
+    .top-right {
+        top: 0;
+        right: 0;
+        border-top-width: 12px;
+        border-right-width: 12px;
+    }
+
+    .bottom-left {
+        bottom: 0;
+        left: 0;
+        border-bottom-width: 12px;
+        border-left-width: 12px;
+    }
+
+    .bottom-right {
+        bottom: 0;
+        right: 0;
+        border-bottom-width: 12px;
+        border-right-width: 12px;
+    }
+
+    .scan-line {
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        top: 50%;
+        height: 4px;
+        background: #10c63e;
+        border-radius: 3px;
+        box-shadow: 0 0 10px rgba(16, 198, 62, .9);
+        transform: translateY(-50%);
+    }
+
+    .zoom-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        justify-content: center;
+        margin: 8px auto 38px;
+        max-width: 280px;
+    }
+
+    .zoom-btn {
+        border: none;
+        background: transparent;
+        color: #fff;
+        font-size: 28px;
+        width: 24px;
+        cursor: pointer;
+    }
+
+    .zoom-row input[type="range"] {
+        flex: 1;
+        accent-color: #1db447;
+    }
+
+    .entries-btn {
+        display: block;
+        width: 100%;
+        max-width: 320px;
+        margin: 0 auto;
+        height: 36px;
+        border: none;
+        border-radius: 6px;
+        background: #2f6fd6;
+        color: #fff;
+        font-size: 15px;
+        cursor: pointer;
+    }
+
+    .bottom-nav-wrap {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 104px;
+    }
+
+    .bottom-nav {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 72px;
+        background: #eef1ef;
+        border-top-left-radius: 14px;
+        border-top-right-radius: 14px;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        align-items: center;
+        text-align: center;
+        color: #9aa19d;
+        box-shadow: 0 -4px 12px rgba(0,0,0,.12);
+    }
+
+    .nav-item {
+        font-size: 11px;
+    }
+
+    .nav-icon {
+        font-size: 18px;
+        margin-bottom: 2px;
+    }
+
+    .nav-item.active {
+        color: #2e9a46;
+    }
+
+    .center-scan-btn {
+        position: absolute;
+        left: 50%;
+        top: -10px;
+        transform: translateX(-50%);
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        border: 4px solid #d8ddd8;
+        background: #fff;
+        color: #2e9a46;
+        font-size: 22px;
+        cursor: pointer;
+        z-index: 2;
+        box-shadow: 0 4px 12px rgba(0,0,0,.18);
+    }
+
+    .scan-icon {
+        display: inline-block;
+        transform: translateY(1px);
+    }
+</style>
+<div class="scanner-page">
+    @*  <div class="top-bar">
+        <span class="time">5:13 PM</span>
+        <div class="status-icons">
+            <span>◔</span>
+            <span>⌁</span>
+            <span>📶</span>
+            <span>▰</span>
+        </div>
+    </div> *@
+
+    <div class="scanner-content">
+        <div class="back-row">
+            <button class="icon-btn back-btn" @onclick="GoBack">←</button>
+        </div>
+
+        <div class="mode-toolbar">
+            <button class="toolbar-btn">
+                <span>🖼</span>
+            </button>
+            <button class="toolbar-btn active">
+                <span>⚡</span>
+            </button>
+            <button class="toolbar-btn">
+                <span>📷</span>
+            </button>
+        </div>
+
+        <div class="scanner-frame-wrapper">
+            <div class="scanner-frame">
+                <div class="corner top-left"></div>
+                <div class="corner top-right"></div>
+                <div class="corner bottom-left"></div>
+                <div class="corner bottom-right"></div>
+
+                <div class="qr-box">
+                    <!-- Replace with your live camera / QR preview -->
+                    <div class="qr-placeholder">
+                        <div class="qr-grid"></div>
+                    </div>
+                </div>
+
+                <div class="scan-line"></div>
+            </div>
+        </div>
+
+        <div class="zoom-row">
+            <button class="zoom-btn">−</button>
+            <input type="range" min="0" max="100" @bind="ZoomValue" />
+            <button class="zoom-btn">+</button>
+        </div>
+
+        <button class="entries-btn">
+            View Entries
+        </button>
+    </div>
+
+    <div class="bottom-nav-wrap">
+        <button class="center-scan-btn">
+            <span class="scan-icon">▣</span>
+        </button>
+
+        <div class="bottom-nav">
+            <div class="nav-item">
+                <div class="nav-icon">⌂</div>
+                <div class="nav-label">Home</div>
+            </div>
+            <div class="nav-item">
+                <div class="nav-icon">◎</div>
+                <div class="nav-label">Rewards</div>
+            </div>
+            <div class="nav-item active">
+                <div class="nav-icon">▣</div>
+                <div class="nav-label">Rewards</div>
+            </div>
+            <div class="nav-item">
+                <div class="nav-icon">♟</div>
+                <div class="nav-label">Community</div>
+            </div>
+            <div class="nav-item">
+                <div class="nav-icon">⚙</div>
+                <div class="nav-label">Setting</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int ZoomValue { get; set; } = 20;
+
+    private void GoBack()
+    {
+        // add navigation logic here
+    }
+}
