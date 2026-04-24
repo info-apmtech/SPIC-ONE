@@ -17,7 +17,7 @@
 	@if (!string.IsNullOrEmpty(_message))
 	{
 		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
-			@_message
+			@((MarkupString)_message)
 			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
 		</div>
 	}
@@ -735,7 +735,6 @@
 		</div>
 	</div>
 }
-
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int DealerId { get; set; }
@@ -1014,21 +1013,41 @@
 	// --- Save Partner (with family + occupations) ---
 	private async Task SavePartnerDetails()
 	{
+		var validationErrors = new List<string>();
+
 		if (string.IsNullOrWhiteSpace(_partnerForm.Name))
-		{
-			ShowMessage("Please enter proprietor name.", true);
-			return;
-		}
+			validationErrors.Add("• <b>Authorized Name</b> is required.");
+
 		if (string.IsNullOrWhiteSpace(_partnerForm.PhoneNumber))
+			validationErrors.Add("• <b>Phone Number</b> is required.");
+		else if (_partnerForm.PhoneNumber.Length != 10)
+			validationErrors.Add("• <b>Phone Number</b> must be exactly 10 digits.");
+
+		if (!string.IsNullOrWhiteSpace(_partnerForm.Email) &&
+			!System.Text.RegularExpressions.Regex.IsMatch(_partnerForm.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+			validationErrors.Add("• <b>Email</b> is not a valid email address.");
+
+		if (_selectedEntityType != EntityType.soleProprietor)
 		{
-			ShowMessage("Please enter phone number.", true);
-			return;
+			if (string.IsNullOrWhiteSpace(_partnerForm.AadhaarNumber))
+				validationErrors.Add("• <b>Aadhaar Number</b> is required.");
+			else if (_partnerForm.AadhaarNumber.Length != 12)
+				validationErrors.Add("• <b>Aadhaar Number</b> must be exactly 12 digits.");
+
+			if (string.IsNullOrWhiteSpace(_partnerForm.PANNumber))
+				validationErrors.Add("• <b>PAN Number</b> is required.");
+			else if (!System.Text.RegularExpressions.Regex.IsMatch(_partnerForm.PANNumber, @"^[A-Z]{5}[0-9]{4}[A-Z]$"))
+				validationErrors.Add("• <b>PAN Number</b> must be in format ABCDE1234F (e.g. ABCDE1234F).");
 		}
 
 		// Enforce max partners for sole proprietor
 		if (_selectedEntityType == EntityType.soleProprietor && !_isEditingPartner && _savedPartners.Count >= 1)
+			validationErrors.Add("• <b>Entity Type</b>: Sole Proprietor can have only 1 partner.");
+
+		if (validationErrors.Count > 0)
 		{
-			ShowMessage("Sole Proprietor can have only 1 partner.", true);
+			_message = string.Join("<br/>", validationErrors);
+			_isError = true;
 			return;
 		}
 
@@ -1060,8 +1079,13 @@
 
 			if (_isEditingPartner)
 			{
-				// Update existing partner
-				await Http.PutAsJsonAsync($"api/DealerOwnershipInfo/{_editingPartnerId}", _partnerForm);
+				var updateResp = await Http.PutAsJsonAsync($"api/DealerOwnershipInfo/{_editingPartnerId}", _partnerForm);
+				if (!updateResp.IsSuccessStatusCode)
+				{
+					var err = await updateResp.Content.ReadAsStringAsync();
+					ShowMessage($"Failed to update partner: {err}", true);
+					return;
+				}
 				partnerId = _editingPartnerId;
 
 				// Delete existing family and occupations for this partner, then re-create
@@ -1078,11 +1102,20 @@
 			}
 			else
 			{
-				// Create new partner
 				var resp = await Http.PostAsJsonAsync("api/DealerOwnershipInfo", _partnerForm);
+				if (!resp.IsSuccessStatusCode)
+				{
+					var err = await resp.Content.ReadAsStringAsync();
+					ShowMessage($"Failed to save partner: {err}", true);
+					return;
+				}
 				var created = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerOwnershipInfo>>();
 				partnerId = created?.Data?.Id ?? 0;
-				if (partnerId == 0) { ShowMessage("Failed to save partner.", true); return; }
+				if (partnerId == 0)
+				{
+					ShowMessage("Failed to save partner: server did not return a valid ID. Please try again.", true);
+					return;
+				}
 			}
 
 			// Save family details
@@ -1110,7 +1143,7 @@
 		}
 		catch (Exception ex)
 		{
-			ShowMessage($"Error saving partner: {ex.Message}", true);
+			ShowMessage($"Unexpected error: {ex.Message}", true);
 		}
 		finally
 		{

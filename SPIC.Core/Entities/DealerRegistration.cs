@@ -286,11 +286,11 @@ namespace SPIC.Core.Entities
         public string PhoneNumber { get; set; }
         public string? Email { get; set; }
         [Display(Name = "Aadhaar Number")]
-        public string AadhaarNumber { get; set; }
-        public string AadhaarFilePath { get; set; }
+        public string? AadhaarNumber { get; set; }
+        public string? AadhaarFilePath { get; set; }
         [Display(Name = "PAN Number")]
-        public string PANNumber { get; set; }
-        public string PANFilePath { get; set; }
+        public string? PANNumber { get; set; }
+        public string? PANFilePath { get; set; }
         public string ProprietorImagePath { get; set; }
         //address details
         [Display(Name = "Shop No / Room No / Block No")]
