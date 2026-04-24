@@ -2,6 +2,7 @@
 @using System.Net.Http.Json
 @using System.Text.Json
 @inject HttpClient Http
+@inject IJSRuntime JS
 
 <div class="container-fluid">
 
@@ -436,16 +437,57 @@
 												<h5 class="modal-title">Bulk Upload - @ActiveTab</h5>
 												<button type="button" class="btn-close" @onclick="() => _showUploadModal = false"></button>
 											</div>
-                                            <div class="modal-body">
-												<InputFile OnChange="OnBulkFileSelected" />
-												<div class="upload-result" style="margin-top: 10px;">
+											<div class="modal-body">
+												<InputFile OnChange="OnBulkFileSelected" accept=".xlsx,.xls" />
+												<div class="upload-result" style="margin-top: 12px;">
 													@if (_isUploading)
 													{
-														<p class="text-muted">Uploading...</p>
+														<div class="d-flex align-items-center gap-2 text-muted">
+															<span class="spinner-border spinner-border-sm"></span>
+															<span>Uploading, please wait...</span>
+														</div>
 													}
 													else if (!string.IsNullOrEmpty(_uploadResult))
 													{
-														<p>@_uploadResult</p>
+														<div class="alert @(_uploadSuccess ? (_groupedErrors.Count > 0 ? "alert-warning" : "alert-success") : "alert-danger") mb-2 py-2">
+															@_uploadResult
+														</div>
+														@if (_groupedErrors.Count > 0)
+														{
+															<div style="border: 1px solid #dee2e6; border-radius: 4px; padding: 8px;">
+																<div class="d-flex justify-content-between align-items-center mb-2">
+																	<small class="text-muted fw-semibold">@(_uploadSuccess ? "Skipped Groups:" : "Issues:")</small>
+																	<button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.75rem;"
+																		@onclick="CopyUploadErrors" title="Copy all errors to clipboard">
+																		@if (_errorsCopied)
+																		{
+																			<i class="bi bi-check2"></i> <span>Copied!</span>
+																		}
+																		else
+																		{
+																			<i class="bi bi-clipboard"></i> <span>Copy</span>
+																		}
+																	</button>
+																</div>
+																<div style="max-height: 280px; overflow-y: auto;">
+																	@foreach (var group in _groupedErrors)
+																	{
+																		<div class="mb-2">
+																			<div style="font-size: 0.82rem;">
+																				<span class="badge bg-secondary me-1">@group.Value.Count</span>
+																				<strong>@group.Key</strong>
+																			</div>
+																			<ul class="mb-0 ps-3 mt-1" style="font-size: 0.8rem; color: #555;">
+																				@foreach (var item in group.Value)
+																				{
+																					<li>@item</li>
+																				}
+																			</ul>
+																		</div>
+																	}
+																</div>
+															</div>
+														}
 													}
 												</div>
 											</div>
@@ -477,6 +519,9 @@
 	private bool _showUploadModal = false;
 	private bool _isUploading = false;
 	private string _uploadResult = string.Empty;
+	private bool _uploadSuccess = false;
+	private Dictionary<string, List<string>> _groupedErrors = new();
+	private bool _errorsCopied = false;
 
 
 	private int TableColSpan => ActiveTab switch
@@ -913,49 +958,103 @@
 		var file = e.File;
 		if (file == null) return;
 
-		var entityType = ActiveTab; // your existing tab string, e.g., "Zones", "States"...
-    // Map UI label to API type
-    var typeMap = entityType.ToLowerInvariant();
-    // normalize expected strings:
-    if (typeMap == "zones") typeMap = "zone";
-    else if (typeMap == "states") typeMap = "state";
-    else if (typeMap == "districts") typeMap = "district";
-    else if (typeMap.Contains("sub")) typeMap = "subdistrict";
-    else if (typeMap == "regions") typeMap = "region";
-    else if (typeMap.Contains("headquarter")) typeMap = "headquarter";
+		var typeMap = ActiveTab.ToLowerInvariant() switch
+		{
+			"zones" => "zone",
+			"states" => "state",
+			"districts" => "district",
+			var s when s.Contains("sub") => "subdistrict",
+			"regions" => "region",
+			var s when s.Contains("headquarter") => "headquarter",
+			_ => ActiveTab.ToLowerInvariant()
+		};
 
-    using var content = new MultipartFormDataContent();
-    var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
-    var streamContent = new StreamContent(stream);
-    streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
-    content.Add(streamContent, "file", file.Name);
+		using var content = new MultipartFormDataContent();
+		var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+		var streamContent = new StreamContent(stream);
+		streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+		content.Add(streamContent, "file", file.Name);
 
-    _isUploading = true;
-    _uploadResult = string.Empty;
-    try
-    {
-        var response = await Http.PostAsync($"api/locationbulkupload/bulk-upload?type={typeMap}", content);
-        var body = await response.Content.ReadFromJsonAsync<JsonElement?>();
-        if (response.IsSuccessStatusCode)
-        {
-            _uploadResult = "Upload successful";
-            // optionally refresh lists:
-            await LoadTabData();
-        }
-        else
-        {
-            var text = await response.Content.ReadAsStringAsync();
-            _uploadResult = "Upload failed: " + text;
-        }
-    }
-    catch (Exception ex)
-    {
-        _uploadResult = "Upload error: " + ex.Message;
-    }
-    finally
-    {
-        _isUploading = false;
-    }
+		_isUploading = true;
+		_uploadResult = string.Empty;
+		_groupedErrors = new();
+		_uploadSuccess = false;
+		try
+		{
+			var response = await Http.PostAsync($"api/locationbulkupload/bulk-upload?type={typeMap}", content);
+			var bodyText = await response.Content.ReadAsStringAsync();
+
+			if (response.IsSuccessStatusCode)
+			{
+				_uploadSuccess = true;
+				try
+				{
+					var json = JsonSerializer.Deserialize<JsonElement>(bodyText);
+					JsonElement groupedProp = default;
+					if (json.TryGetProperty("groupedErrors", out groupedProp) || json.TryGetProperty("GroupedErrors", out groupedProp))
+						foreach (var g in groupedProp.EnumerateObject())
+						{
+							var items = g.Value.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList();
+							if (items.Count > 0) _groupedErrors[g.Name] = items;
+						}
+				}
+				catch { }
+				var totalSkipped = _groupedErrors.Values.Sum(v => v.Count);
+				_uploadResult = totalSkipped > 0
+					? $"Upload completed with {totalSkipped} skipped row(s) across {_groupedErrors.Count} group(s). See details below."
+					: "Upload completed successfully. All rows inserted.";
+				await LoadTabData();
+			}
+			else
+			{
+				_uploadSuccess = false;
+				try
+				{
+					var json = JsonSerializer.Deserialize<JsonElement>(bodyText);
+					var msg = json.TryGetProperty("message", out var m) ? m.GetString()
+						: json.TryGetProperty("Message", out var m2) ? m2.GetString() : null;
+					_uploadResult = msg ?? "Upload failed.";
+					// Missing columns list
+					if (json.TryGetProperty("missing", out var miss) || json.TryGetProperty("Missing", out miss))
+						if (miss.ValueKind == JsonValueKind.Array)
+						{
+							var missingItems = miss.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList();
+							if (missingItems.Count > 0) _groupedErrors["Missing columns"] = missingItems;
+						}
+				}
+				catch
+				{
+					_uploadResult = $"Upload failed: {bodyText}";
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_uploadSuccess = false;
+			_uploadResult = $"Upload error: {ex.Message}";
+		}
+		finally
+		{
+			_isUploading = false;
+		}
+	}
+
+	private async Task CopyUploadErrors()
+	{
+		if (_groupedErrors.Count == 0) return;
+		var sb = new System.Text.StringBuilder();
+		foreach (var group in _groupedErrors)
+		{
+			sb.AppendLine($"[{group.Key}] ({group.Value.Count})");
+			foreach (var item in group.Value) sb.AppendLine($"  - {item}");
+			sb.AppendLine();
+		}
+		await JS.InvokeVoidAsync("navigator.clipboard.writeText", sb.ToString().TrimEnd());
+		_errorsCopied = true;
+		StateHasChanged();
+		await Task.Delay(2000);
+		_errorsCopied = false;
+		StateHasChanged();
 	}
 
 	// Pagination helpers

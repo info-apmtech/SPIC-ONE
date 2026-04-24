@@ -1,5 +1,6 @@
 ﻿@page "/Dashboard"
 @using System.Net.Http.Json
+@using System.Text.Json
 @using SPIC.Core.Entities
 @inject HttpClient Http
 @inject NavigationManager NavManager
@@ -11,9 +12,15 @@
 			<h1 class="page-title">Dealer Registrations</h1>
 			<p class="page-subtitle">Manage all draft, in-progress, submitted, and approved dealer applications</p>
 		</div>
-		<NavLink href="/Register" class="btn-create-new text-decoration-none">
-			<i class="bi bi-plus-lg"></i> Create New Registration
-		</NavLink>
+		<div class="d-flex align-items-center gap-2">
+			<NavLink href="/Register" class="btn-create-new text-decoration-none">
+				<i class="bi bi-plus-lg"></i> Create New Registration
+			</NavLink>
+			<button class="btn-create-new" @onclick="() => _showImportModal = true"
+				style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
+				<i class="bi bi-cloud-arrow-up"></i> Import from Excel
+			</button>
+		</div>
 	</div>
 
 	<div class="row g-3 mb-4">
@@ -241,6 +248,69 @@
 
 </div>
 
+@if (_showImportModal)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
+				<div class="modal-header">
+					<h5 class="modal-title">Import Dealers from Excel</h5>
+					<button type="button" class="btn-close" @onclick="() => _showImportModal = false" disabled="@_isImporting"></button>
+				</div>
+				<div class="modal-body">
+					<p class="text-muted small mb-3">
+						Expected columns: <strong>CUSTOMER</strong>, <strong>CUSTOMER NAME</strong>, <strong>State</strong>.<br />
+						CUSTOMER prefix: <code>Z</code> → SPICCode, <code>N</code> → GreenStarCode, <code>D</code> → TradeCode.
+					</p>
+					<InputFile OnChange="OnImportFileSelected" accept=".xlsx,.xls" disabled="@_isImporting" />
+					<div class="mt-3">
+						@if (_isImporting)
+						{
+							<div class="d-flex align-items-center gap-2 text-muted">
+								<span class="spinner-border spinner-border-sm"></span>
+								<span>Importing, please wait...</span>
+							</div>
+						}
+						else if (!string.IsNullOrEmpty(_importResult))
+						{
+							<div class="alert @(_importSuccess ? (_importGroupedErrors.Count > 0 ? "alert-warning" : "alert-success") : "alert-danger") mb-2 py-2">
+								@_importResult
+							</div>
+							@if (_importGroupedErrors.Count > 0)
+							{
+								<div style="border: 1px solid #dee2e6; border-radius: 4px; padding: 8px;">
+									<small class="text-muted fw-semibold d-block mb-2">Skipped Groups:</small>
+									<div style="max-height: 260px; overflow-y: auto;">
+										@foreach (var group in _importGroupedErrors)
+										{
+											<div class="mb-2">
+												<div style="font-size: 0.82rem;">
+													<span class="badge bg-secondary me-1">@group.Value.Count</span>
+													<strong>@group.Key</strong>
+												</div>
+												<ul class="mb-0 ps-3 mt-1" style="font-size: 0.8rem; color: #555;">
+													@foreach (var item in group.Value)
+													{
+														<li>@item</li>
+													}
+												</ul>
+											</div>
+										}
+									</div>
+								</div>
+							}
+						}
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button class="btn btn-secondary" @onclick="() => _showImportModal = false" disabled="@_isImporting">Close</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
 @if (_showDeleteConfirm)
 {
 	<div class="modal-backdrop fade show"></div>
@@ -300,21 +370,18 @@
 	private bool _isDeleting;
 	private DealerDto? _dealerToDelete;
 
+	// Import modal state
+	private bool _showImportModal = false;
+	private bool _isImporting = false;
+	private string _importResult = string.Empty;
+	private bool _importSuccess = false;
+	private Dictionary<string, List<string>> _importGroupedErrors = new();
+
 	protected override async Task OnInitializedAsync()
 	{
 		await LoadData();
 	}
 
-	private List<DealerRegistrationDocuments> _allDocs = new();
-	private List<DealerExperience> _allExperiences = new();
-	private List<AnnualSaleDataLastFYofDealerRegistration> _allAnnualSales = new();
-	private List<DealerWarehouseFacilities> _allWarehouses = new();
-	private List<DealerMarketDetail> _allMarketDetails = new();
-	private List<DealerCompaniesOperatingInArea> _allCompanies = new();
-	private List<DealerOwnershipInfo> _allPartners = new();
-	private List<SalesPlanningInDealerRegistration> _allSalesPlans = new();
-	private List<DealerAssetBank> _allAssetBanks = new();
-	private List<DealerCreditLimitProposal> _allCreditLimits = new();
 	private HashSet<int> _completeDealerIds = new();
 
 	private async Task LoadData()
@@ -322,21 +389,12 @@
 		_isLoading = true;
 		try
 		{
+			// Only 3 API calls needed — completion is determined by PinCode presence on the dealer record itself
 			var tasks = new Task[]
 			{
-				Task.Run(async () => _allDealers = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/all") ?? new()),
-				Task.Run(async () => _regionsAll = await Http.GetFromJsonAsync<List<RegionDto>>("api/Region/all") ?? new()),
+				Task.Run(async () => _allDealers      = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/all") ?? new()),
+				Task.Run(async () => _regionsAll      = await Http.GetFromJsonAsync<List<RegionDto>>("api/Region/all") ?? new()),
 				Task.Run(async () => _headquartersAll = await Http.GetFromJsonAsync<List<HeadquarterDto>>("api/Headquarter/all") ?? new()),
-				Task.Run(async () => _allDocs = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments/all") ?? new()),
-				Task.Run(async () => _allExperiences = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience/all") ?? new()),
-				Task.Run(async () => _allAnnualSales = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all") ?? new()),
-				Task.Run(async () => _allWarehouses = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new()),
-				Task.Run(async () => _allMarketDetails = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new()),
-				Task.Run(async () => _allCompanies = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new()),
-				Task.Run(async () => _allPartners = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all") ?? new()),
-				Task.Run(async () => _allSalesPlans = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new()),
-				Task.Run(async () => _allAssetBanks = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new()),
-				Task.Run(async () => _allCreditLimits = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all") ?? new()),
 			};
 			await Task.WhenAll(tasks);
 			BuildCompletionSet();
@@ -349,68 +407,14 @@
 		}
 	}
 
+	// A dealer is considered "complete" (submitted) when their PinCode is filled in,
+	// which indicates the address/basic details section has been saved.
 	private void BuildCompletionSet()
 	{
-		_completeDealerIds.Clear();
-		foreach (var dealer in _allDealers)
-		{
-			var id = dealer.Id;
-			var steps = 0;
-
-			// Step 1: Dealer Registration basics
-			if (!string.IsNullOrEmpty(dealer.FirmName) && dealer.StateId > 0)
-				steps++;
-
-			// Step 2: Experience
-			if (_allExperiences.Any(e => e.DealerId == id))
-				steps++;
-
-			// Step 3: Annual Sales
-			if (_allAnnualSales.Any(a => a.DealerId == id))
-				steps++;
-
-			// Step 4: Warehouse
-			if (_allWarehouses.Any(w => w.DealerId == id))
-				steps++;
-
-			// Step 5: Market Details
-			if (_allMarketDetails.Any(m => m.DealerId == id))
-				steps++;
-
-			// Step 6: Companies Operating
-			if (_allCompanies.Any(c => c.DealerId == id))
-				steps++;
-
-			// Step 7: Proprietor
-			if (_allPartners.Any(p => p.DealerId == id))
-				steps++;
-
-			// Step 8: Sales Planning
-			if (_allSalesPlans.Any(s => s.DealerId == id))
-				steps++;
-
-			// Step 9: Investment
-			if (_allAssetBanks.Any(b => b.DealerId == id))
-				steps++;
-
-			// Step 10: Credit Limit
-			if (_allCreditLimits.Any(c => c.DealerId == id))
-				steps++;
-
-			// Step 11: Enclosures
-			var docs = _allDocs.FirstOrDefault(d => d.DealerId == id);
-			if (docs != null &&
-				!string.IsNullOrEmpty(docs.SpecimanFilePath) &&
-				!string.IsNullOrEmpty(docs.BankGauranteeFilePath) &&
-				!string.IsNullOrEmpty(docs.FY1ITReturnFilePath) &&
-				!string.IsNullOrEmpty(docs.FY2ITReturnFilePath) &&
-				!string.IsNullOrEmpty(docs.ValuationCertificateFilePath) &&
-				!string.IsNullOrEmpty(docs.RetailerListFilePath))
-				steps++;
-
-			if (steps == 11)
-				_completeDealerIds.Add(id);
-		}
+		_completeDealerIds = _allDealers
+			.Where(d => !string.IsNullOrWhiteSpace(d.PinCode))
+			.Select(d => d.Id)
+			.ToHashSet();
 	}
 
 	private bool IsDealerComplete(int dealerId) => _completeDealerIds.Contains(dealerId);
@@ -487,6 +491,72 @@
 		_ => "Unknown"
 	};
 
+	private async Task OnImportFileSelected(InputFileChangeEventArgs e)
+	{
+		var file = e.File;
+		if (file == null) return;
+
+		_isImporting = true;
+		_importResult = string.Empty;
+		_importGroupedErrors = new();
+		_importSuccess = false;
+
+		try
+		{
+			using var content = new MultipartFormDataContent();
+			var stream = file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+			var streamContent = new StreamContent(stream);
+			streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+			content.Add(streamContent, "file", file.Name);
+
+			var response = await Http.PostAsync("api/dealerbulkupload/import", content);
+			var bodyText = await response.Content.ReadAsStringAsync();
+
+			if (response.IsSuccessStatusCode)
+			{
+				_importSuccess = true;
+				try
+				{
+					var json = JsonSerializer.Deserialize<JsonElement>(bodyText);
+					var msg = json.TryGetProperty("message", out var m) ? m.GetString()
+						: json.TryGetProperty("Message", out var m2) ? m2.GetString() : null;
+					_importResult = msg ?? "Import completed.";
+
+					JsonElement groupedProp = default;
+					if (json.TryGetProperty("groupedErrors", out groupedProp) || json.TryGetProperty("GroupedErrors", out groupedProp))
+						foreach (var g in groupedProp.EnumerateObject())
+						{
+							var items = g.Value.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList();
+							if (items.Count > 0) _importGroupedErrors[g.Name] = items;
+						}
+				}
+				catch { _importResult = "Import completed."; }
+				await LoadData();
+			}
+			else
+			{
+				_importSuccess = false;
+				try
+				{
+					var json = JsonSerializer.Deserialize<JsonElement>(bodyText);
+					var msg = json.TryGetProperty("message", out var m) ? m.GetString()
+						: json.TryGetProperty("Message", out var m2) ? m2.GetString() : null;
+					_importResult = msg ?? "Import failed.";
+				}
+				catch { _importResult = $"Import failed: {bodyText}"; }
+			}
+		}
+		catch (Exception ex)
+		{
+			_importSuccess = false;
+			_importResult = $"Import error: {ex.Message}";
+		}
+		finally
+		{
+			_isImporting = false;
+		}
+	}
+
 	private void EditDealer(int dealerId)
 	{
 		NavManager.NavigateTo($"/Register?dealerId={dealerId}");
@@ -543,6 +613,7 @@
 		public string? BusinessEntityType { get; set; }
 		public string? WholeSaleFertilizerLicenseNumber { get; set; }
 		public string? RetailFertilizerLicenseNumber { get; set; }
+		public string? PinCode { get; set; }
 		public bool? RMApproved { get; set; }
 		public bool? SMApproved { get; set; }
 		public bool? AVPApproved { get; set; }
