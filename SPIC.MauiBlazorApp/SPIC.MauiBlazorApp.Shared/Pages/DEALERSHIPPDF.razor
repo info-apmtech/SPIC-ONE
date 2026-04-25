@@ -1,5 +1,6 @@
 ﻿@page "/DealershipPDF/{dealerId:int?}"
 @* @implements IDisposable *@
+@layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
 @using Microsoft.AspNetCore.Components
 @using System.Net.Http.Json
 @inject HttpClient Http
@@ -640,6 +641,44 @@
                             </tr>
                         </thead>
                         <tbody>
+            @if (_annualSales != null && _annualSales.Any())
+            {
+                @foreach (var sale in _annualSales)
+                {
+                    var product = _productsAll.FirstOrDefault(p => p.Id == sale.ProductId);
+                    var category = _categoriesAll.FirstOrDefault(c => c.Id == sale.CategoryId);
+
+                    <tr>
+                        <td>
+                            @(product?.Name ?? "Unknown") 
+                            <span class="product-desc">@(category?.Name ?? "")</span>
+                        </td>
+                        <td style="text-align: center;">@sale.OwnRetailsSaleQty.ToString("N2")</td>
+                        <td style="text-align: center;">@sale.SaleToDealerQty.ToString("N2")</td>
+                        <td style="text-align: center;">
+                            @((sale.OwnRetailsSaleQty + sale.SaleToDealerQty).ToString("N2")) / 
+                            ₹@((sale.OwnRetailsSaleAmount + sale.SaleToDealerAmount).ToString("N2"))
+                        </td>
+                    </tr>
+                }
+                <tr style="background-color: var(--card-bg);">
+                    <td style="font-weight: bold; color: var(--primary-dark);">Grand Total</td>
+                    <td style="text-align: center; font-weight: bold;">@_annualSales.Sum(s => s.OwnRetailsSaleQty).ToString("N2")</td>
+                    <td style="text-align: center; font-weight: bold;">@_annualSales.Sum(s => s.SaleToDealerQty).ToString("N2")</td>
+                    <td style="text-align: center; font-weight: bold; color: var(--primary-green);">
+                        @_annualSales.Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty).ToString("N2") / 
+                        ₹@_annualSales.Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount).ToString("N2")
+                    </td>
+                </tr>
+            }
+            else
+            {
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 20px; color: var(--label-color);">No Annual Sales Data Available</td>
+                </tr>
+            }
+        </tbody>
+@*                         <tbody>
                             <tr>
                                 <td>NC UREA <span class="product-desc">Nitrogen Fertilizer</span></td>
                                 <td>124</td>
@@ -692,954 +731,896 @@
                                 <td colspan="4">Grand Total</td>
                             </tr>
                         </tbody>
-                    </table>
+ *@                    </table>
                 </div>
 
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">🏭</div> Facility Proximity Audit
-                    </div>
+<div class="section">
+    <div class="section-title">
+        <div class="section-icon">🏭</div> Facility Proximity Audit
+    </div>
 
-                    <div class="sub-card">
-                        <div class="sub-card-header">
-                            <h3>Central Distribution Hub A</h3>
-                            <span class="badge badge-warehouse">WAREHOUSE</span>
-                        </div>
-                        <div class="grid-2">
-                            <div class="field">
-                                <label>Distance</label>
-                                <div class="value">15 KM</div>
-                            </div>
-                            <div class="field">
-                                <label>Freight Cost</label>
-                                <div class="value">₹ 250 / ton</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sub-card">
-                        <div class="sub-card-header">
-                            <h3>North Sector Depot 04</h3>
-                            <span class="badge badge-rail">RAIL HEAD</span>
-                        </div>
-                        <div class="grid-2">
-                            <div class="field">
-                                <label>Distance</label>
-                                <div class="value">15 KM</div>
-                            </div>
-                            <div class="field">
-                                <label>Freight Cost</label>
-                                <div class="value">₹ 250 / ton</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sub-card">
-                        <div class="sub-card-header">
-                            <h3>Eastern Terminal Junction</h3>
-                            <span class="badge badge-port">PORT</span>
-                        </div>
-                        <div class="grid-2">
-                            <div class="field">
-                                <label>Distance</label>
-                                <div class="value">15 KM</div>
-                            </div>
-                            <div class="field">
-                                <label>Freight Cost</label>
-                                <div class="value">₹ 250 / ton</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">🌍</div> Market Coverage & Service Areas
-                    </div>
-                    <div class="sub-card">
-                        <div class="sub-card-header">
-                            <h3>West Block</h3>
-                            <span class="badge badge-zone">ZONE C-12</span>
-                        </div>
-                        <div class="grid-2">
-                            <div class="field">
-                                <label>Major Crops</label>
-                                <div class="pill-group">
-                                    <span class="pill-tag">Cotton</span>
-                                    <span class="pill-tag">Groundnut</span>
-                                    <span class="pill-tag">Pulse</span>
-                                    <span class="pill-tag">Groundnut</span>
-                                </div>
-                            </div>
-                            <div class="field">
-                                <label>Irrigation</label>
-                                <div class="value">Drip Irrigation</div>
-                            </div>
-                        </div>
-                        <div class="grid-3 mt-15">
-                            <div class="field">
-                                <label>Season</label>
-                                <div class="value">Oct – March</div>
-                            </div>
-                            <div class="field">
-                                <label>Dealers</label>
-                                <div class="value">2,105</div>
-                            </div>
-                            <div class="field">
-                                <label>Farmer</label>
-                                <div class="value">62.0k</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">🤝</div> Authorized Dealer Partnerships
-                    </div>
-                    <div class="pill-group">
-                        <span class="pill-tag">IFFCO</span>
-                        <span class="pill-tag">SPIC</span>
-                        <span class="pill-tag">KRIBHCO</span>
-                        <span class="pill-tag">Bayer CropScience</span>
-                        <span class="pill-tag">Mahyco</span>
-                        <span class="pill-tag">UPL Limited</span>
-                        <span class="pill-tag">NFL</span>
-                        <span class="pill-tag">Rallis India</span>
-                        <span class="pill-tag">Coromandel International</span>
-                        <span class="pill-tag">Dhanuka Agritech</span>
-                        <span class="pill-tag">Dhanuka Agritech</span>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">👤</div> Proprietor Details
-                    </div>
-                    <div class="proprietor-wrap">
-                        <div class="prop-fields">
-                            <div class="grid-2">
-                                <div class="field">
-                                    <label>Business Entity Type</label>
-                                    <div class="value">Partnership</div>
-                                </div>
-                                <div class="field">
-                                    <label>Name</label>
-                                    <div class="value">Rajesh Kumar</div>
-                                </div>
-                                <div class="field">
-                                    <label>Father Name</label>
-                                    <div class="value">Private Limited Company</div>
-                                </div>
-                                <div class="field">
-                                    <label>Aadhar No</label>
-                                    <div class="value">1234 5678 9012</div>
-                                </div>
-                                <div class="field">
-                                    <label>PAN NO</label>
-                                    <div class="value">ABCDE1234F</div>
-                                </div>
-                                <div class="field">
-                                    <label>Phone No</label>
-                                    <div class="value">+91 98765 43210</div>
-                                </div>
-                            </div>
-                            <div class="grid-1 mt-15">
-                                <div class="field">
-                                    <label>Email ID</label>
-                                    <div class="value">r.kumar@example.com</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="prop-photo-box">
-                            <img src="https://via.placeholder.com/150x200/e2e8f0/64748b?text=Photo" alt="Proprietor Photo">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">👨‍👩‍👧‍👦</div> Family Members
-                    </div>
-                    
-                    <div class="sub-card">
-                        <div class="grid-3 mb-15">
-                            <div class="field">
-                                <label>Name</label>
-                                <div class="value">Sunita Kumar</div>
-                            </div>
-                            <div class="field">
-                                <label>D.O.B</label>
-                                <div class="value">16/07/1985</div>
-                            </div>
-                            <div class="field">
-                                <label>Age</label>
-                                <div class="value">42 Years</div>
-                            </div>
-                        </div>
-                        <div class="grid-2 mt-15">
-                            <div class="field">
-                                <label>Occupation</label>
-                                <div class="value">Homemaker</div>
-                            </div>
-                            <div class="field">
-                                <label>Relationship</label>
-                                <div class="value">Wife</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sub-card">
-                        <div class="grid-3 mb-15">
-                            <div class="field">
-                                <label>Name</label>
-                                <div class="value">Aryan Kumar</div>
-                            </div>
-                            <div class="field">
-                                <label>D.O.B</label>
-                                <div class="value">16/07/2006</div>
-                            </div>
-                            <div class="field">
-                                <label>Age</label>
-                                <div class="value">18 Years</div>
-                            </div>
-                        </div>
-                        <div class="grid-2 mt-15">
-                            <div class="field">
-                                <label>Occupation</label>
-                                <div class="value">Student</div>
-                            </div>
-                            <div class="field">
-                                <label>Relationship</label>
-                                <div class="value">Son</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">🏢</div> Family Members (Companies)
-                    </div>
-
-                    <div class="sub-card">
-                        <div class="grid-2">
-                            <div class="field">
-                                <label>Company Name</label>
-                                <div class="value">Kumar Agri Logistics</div>
-                            </div>
-                            <div class="field">
-                                <label>Annual Turnover (₹)</label>
-                                <div class="value">₹25 Lakhs</div>
-                            </div>
-                        </div>
-                        <div class="grid-1 mt-15">
-                            <div class="field">
-                                <label>Main Products / Services</label>
-                                <div class="value">Cold Storage Facilities & Rural Transport Infrastructure</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sub-card">
-                        <div class="grid-2">
-                            <div class="field">
-                                <label>Company Name</label>
-                                <div class="value">Kumar Agri Logistics</div>
-                            </div>
-                            <div class="field">
-                                <label>Annual Turnover (₹)</label>
-                                <div class="value">₹25 Lakhs</div>
-                            </div>
-                        </div>
-                        <div class="grid-1 mt-15">
-                            <div class="field">
-                                <label>Main Products / Services</label>
-                                <div class="value">Cold Storage Facilities & Rural Transport Infrastructure</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">📈</div> Sales Planning & Forecast
-                    </div>
-
-                    <div class="sub-card">
-                        <h3 class="sub-card-title">1. Fertilizer Sales Forecast (MT / Value)</h3>
-                        
-                        <table class="sales-table table-th-center mb-15">
-                            <thead>
-                                <tr>
-                                    <th>PRODUCT</th>
-                                    <th>APR</th><th>MAY</th><th>JUN</th><th>JUL</th><th>AUG</th><th>SEP</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>NC Urea</td>
-                                    <td><span class="stacked-val">12,450 MT / ₹</span><span class="stacked-val-alt">12,450</span></td>
-                                    <td><span class="stacked-val">11,200 MT / ₹</span><span class="stacked-val-alt">11,200</span></td>
-                                    <td><span class="stacked-val">14,300 MT / ₹</span><span class="stacked-val-alt">14,300</span></td>
-                                    <td><span class="stacked-val">9,800 MT / ₹</span><span class="stacked-val-alt">9,800</span></td>
-                                    <td><span class="stacked-val">10,500 MT / ₹</span><span class="stacked-val-alt">10,500</span></td>
-                                    <td><span class="stacked-val">12,100 MT / ₹</span><span class="stacked-val-alt">12,100</span></td>
-                                </tr>
-                                <tr>
-                                    <td>DAP 18:46:0</td>
-                                    <td><span class="stacked-val">8,500 MT / ₹</span><span class="stacked-val-alt">15,200</span></td>
-                                    <td><span class="stacked-val">7,800 MT / ₹</span><span class="stacked-val-alt">14,000</span></td>
-                                    <td><span class="stacked-val">9,100 MT / ₹</span><span class="stacked-val-alt">16,300</span></td>
-                                    <td><span class="stacked-val">6,400 MT / ₹</span><span class="stacked-val-alt">11,500</span></td>
-                                    <td><span class="stacked-val">7,200 MT / ₹</span><span class="stacked-val-alt">12,900</span></td>
-                                    <td><span class="stacked-val">8,300 MT / ₹</span><span class="stacked-val-alt">14,900</span></td>
-                                </tr>
-                                <tr>
-                                    <td>NPK 20:20:13</td>
-                                    <td><span class="stacked-val">5,200 MT / ₹</span><span class="stacked-val-alt">8,400</span></td>
-                                    <td><span class="stacked-val">4,900 MT / ₹</span><span class="stacked-val-alt">7,900</span></td>
-                                    <td><span class="stacked-val">5,800 MT / ₹</span><span class="stacked-val-alt">9,300</span></td>
-                                    <td><span class="stacked-val">4,100 MT / ₹</span><span class="stacked-val-alt">6,600</span></td>
-                                    <td><span class="stacked-val">4,500 MT / ₹</span><span class="stacked-val-alt">7,200</span></td>
-                                    <td><span class="stacked-val">5,100 MT / ₹</span><span class="stacked-val-alt">8,200</span></td>
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        <table class="sales-table table-th-center">
-                            <thead>
-                                <tr>
-                                    <th>PRODUCT</th>
-                                    <th>OCT</th><th>NOV</th><th>DEC</th><th>JAN</th><th>FEB</th><th>MAR</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>NC Urea</td>
-                                    <td><span class="stacked-val">12,450 MT / ₹</span><span class="stacked-val-alt">12,450</span></td>
-                                    <td><span class="stacked-val">11,200 MT / ₹</span><span class="stacked-val-alt">11,200</span></td>
-                                    <td><span class="stacked-val">14,300 MT / ₹</span><span class="stacked-val-alt">14,300</span></td>
-                                    <td><span class="stacked-val">9,800 MT / ₹</span><span class="stacked-val-alt">9,800</span></td>
-                                    <td><span class="stacked-val">10,500 MT / ₹</span><span class="stacked-val-alt">10,500</span></td>
-                                    <td><span class="stacked-val">12,100 MT / ₹</span><span class="stacked-val-alt">12,100</span></td>
-                                </tr>
-                                <tr>
-                                    <td>DAP 18:46:0</td>
-                                    <td><span class="stacked-val">8,500 MT / ₹</span><span class="stacked-val-alt">15,200</span></td>
-                                    <td><span class="stacked-val">7,800 MT / ₹</span><span class="stacked-val-alt">14,000</span></td>
-                                    <td><span class="stacked-val">9,100 MT / ₹</span><span class="stacked-val-alt">16,300</span></td>
-                                    <td><span class="stacked-val">6,400 MT / ₹</span><span class="stacked-val-alt">11,500</span></td>
-                                    <td><span class="stacked-val">7,200 MT / ₹</span><span class="stacked-val-alt">12,900</span></td>
-                                    <td><span class="stacked-val">8,300 MT / ₹</span><span class="stacked-val-alt">14,900</span></td>
-                                </tr>
-                                <tr>
-                                    <td>NPK 20:20:13</td>
-                                    <td><span class="stacked-val">5,200 MT / ₹</span><span class="stacked-val-alt">8,400</span></td>
-                                    <td><span class="stacked-val">4,900 MT / ₹</span><span class="stacked-val-alt">7,900</span></td>
-                                    <td><span class="stacked-val">5,800 MT / ₹</span><span class="stacked-val-alt">9,300</span></td>
-                                    <td><span class="stacked-val">4,100 MT / ₹</span><span class="stacked-val-alt">6,600</span></td>
-                                    <td><span class="stacked-val">4,500 MT / ₹</span><span class="stacked-val-alt">7,200</span></td>
-                                    <td><span class="stacked-val">5,100 MT / ₹</span><span class="stacked-val-alt">8,200</span></td>
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        <div class="totals-wrapper">
-                            <div class="totals-box">
-                                <div class="total-col">
-                                    <span class="total-label">Total Volume</span>
-                                    <span class="total-val">145,200 MT</span>
-                                </div>
-                                <div class="total-col">
-                                    <span class="total-label">Total Forecast Value</span>
-                                    <span class="total-val">₹ 2,45,60,000</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sub-card">
-                        <h3 class="sub-card-title">2. SP Sales Forecast (MT / Value)</h3>
-                        
-                        <table class="sales-table table-th-center mb-15">
-                            <thead>
-                                <tr>
-                                    <th>PRODUCT</th>
-                                    <th>APR</th><th>MAY</th><th>JUN</th><th>JUL</th><th>AUG</th><th>SEP</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>NC Urea</td>
-                                    <td><span class="stacked-val">12,450 MT / ₹</span><span class="stacked-val-alt">12,450</span></td>
-                                    <td><span class="stacked-val">11,200 MT / ₹</span><span class="stacked-val-alt">11,200</span></td>
-                                    <td><span class="stacked-val">14,300 MT / ₹</span><span class="stacked-val-alt">14,300</span></td>
-                                    <td><span class="stacked-val">9,800 MT / ₹</span><span class="stacked-val-alt">9,800</span></td>
-                                    <td><span class="stacked-val">10,500 MT / ₹</span><span class="stacked-val-alt">10,500</span></td>
-                                    <td><span class="stacked-val">12,100 MT / ₹</span><span class="stacked-val-alt">12,100</span></td>
-                                </tr>
-                                <tr>
-                                    <td>DAP 18:46:0</td>
-                                    <td><span class="stacked-val">8,500 MT / ₹</span><span class="stacked-val-alt">15,200</span></td>
-                                    <td><span class="stacked-val">7,800 MT / ₹</span><span class="stacked-val-alt">14,000</span></td>
-                                    <td><span class="stacked-val">9,100 MT / ₹</span><span class="stacked-val-alt">16,300</span></td>
-                                    <td><span class="stacked-val">6,400 MT / ₹</span><span class="stacked-val-alt">11,500</span></td>
-                                    <td><span class="stacked-val">7,200 MT / ₹</span><span class="stacked-val-alt">12,900</span></td>
-                                    <td><span class="stacked-val">8,300 MT / ₹</span><span class="stacked-val-alt">14,900</span></td>
-                                </tr>
-                                <tr>
-                                    <td>NPK 20:20:13</td>
-                                    <td><span class="stacked-val">5,200 MT / ₹</span><span class="stacked-val-alt">8,400</span></td>
-                                    <td><span class="stacked-val">4,900 MT / ₹</span><span class="stacked-val-alt">7,900</span></td>
-                                    <td><span class="stacked-val">5,800 MT / ₹</span><span class="stacked-val-alt">9,300</span></td>
-                                    <td><span class="stacked-val">4,100 MT / ₹</span><span class="stacked-val-alt">6,600</span></td>
-                                    <td><span class="stacked-val">4,500 MT / ₹</span><span class="stacked-val-alt">7,200</span></td>
-                                    <td><span class="stacked-val">5,100 MT / ₹</span><span class="stacked-val-alt">8,200</span></td>
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        <table class="sales-table table-th-center">
-                            <thead>
-                                <tr>
-                                    <th>PRODUCT</th>
-                                    <th>OCT</th><th>NOV</th><th>DEC</th><th>JAN</th><th>FEB</th><th>MAR</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>NC Urea</td>
-                                    <td><span class="stacked-val">12,450 MT / ₹</span><span class="stacked-val-alt">12,450</span></td>
-                                    <td><span class="stacked-val">11,200 MT / ₹</span><span class="stacked-val-alt">11,200</span></td>
-                                    <td><span class="stacked-val">14,300 MT / ₹</span><span class="stacked-val-alt">14,300</span></td>
-                                    <td><span class="stacked-val">9,800 MT / ₹</span><span class="stacked-val-alt">9,800</span></td>
-                                    <td><span class="stacked-val">10,500 MT / ₹</span><span class="stacked-val-alt">10,500</span></td>
-                                    <td><span class="stacked-val">12,100 MT / ₹</span><span class="stacked-val-alt">12,100</span></td>
-                                </tr>
-                                <tr>
-                                    <td>DAP 18:46:0</td>
-                                    <td><span class="stacked-val">8,500 MT / ₹</span><span class="stacked-val-alt">15,200</span></td>
-                                    <td><span class="stacked-val">7,800 MT / ₹</span><span class="stacked-val-alt">14,000</span></td>
-                                    <td><span class="stacked-val">9,100 MT / ₹</span><span class="stacked-val-alt">16,300</span></td>
-                                    <td><span class="stacked-val">6,400 MT / ₹</span><span class="stacked-val-alt">11,500</span></td>
-                                    <td><span class="stacked-val">7,200 MT / ₹</span><span class="stacked-val-alt">12,900</span></td>
-                                    <td><span class="stacked-val">8,300 MT / ₹</span><span class="stacked-val-alt">14,900</span></td>
-                                </tr>
-                                <tr>
-                                    <td>NPK 20:20:13</td>
-                                    <td><span class="stacked-val">5,200 MT / ₹</span><span class="stacked-val-alt">8,400</span></td>
-                                    <td><span class="stacked-val">4,900 MT / ₹</span><span class="stacked-val-alt">7,900</span></td>
-                                    <td><span class="stacked-val">5,800 MT / ₹</span><span class="stacked-val-alt">9,300</span></td>
-                                    <td><span class="stacked-val">4,100 MT / ₹</span><span class="stacked-val-alt">6,600</span></td>
-                                    <td><span class="stacked-val">4,500 MT / ₹</span><span class="stacked-val-alt">7,200</span></td>
-                                    <td><span class="stacked-val">5,100 MT / ₹</span><span class="stacked-val-alt">8,200</span></td>
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        <div class="totals-wrapper">
-                            <div class="totals-box">
-                                <div class="total-col">
-                                    <span class="total-label">Total Volume</span>
-                                    <span class="total-val">145,200 MT</span>
-                                </div>
-                                <div class="total-col">
-                                    <span class="total-label">Total Forecast Value</span>
-                                    <span class="total-val">₹ 2,45,60,000</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sub-card">
-                        <h3 class="sub-card-title">3. SP Sales Forecast (Litre / Value)</h3>
-                        
-                        <table class="sales-table table-th-center mb-15">
-                            <thead>
-                                <tr>
-                                    <th>PRODUCT</th>
-                                    <th>APR</th><th>MAY</th><th>JUN</th><th>JUL</th><th>AUG</th><th>SEP</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>NC Urea</td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                </tr>
-                                <tr>
-                                    <td>DAP 18:46:0</td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        <table class="sales-table table-th-center">
-                            <thead>
-                                <tr>
-                                    <th>PRODUCT</th>
-                                    <th>OCT</th><th>NOV</th><th>DEC</th><th>JAN</th><th>FEB</th><th>MAR</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>NC Urea</td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                </tr>
-                                <tr>
-                                    <td>DAP 18:46:0</td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                    <td><span class="stacked-val">5,000 L / ₹</span><span class="stacked-val-alt">8,000</span></td>
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        <div class="totals-wrapper">
-                            <div class="totals-box">
-                                <div class="total-col">
-                                    <span class="total-label">Total Volume</span>
-                                    <span class="total-val">54,800 Litres</span>
-                                </div>
-                                <div class="total-col">
-                                    <span class="total-label">Total Forecast Value</span>
-                                    <span class="total-val">₹ 84,25,000</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">💰</div> Investment & Godowns
-                    </div>
-                    <div class="grid-2 mb-15">
-                        <div class="field">
-                            <label>Capital Investment (₹)</label>
-                            <div class="value">₹ @(_model.CapitalInvestment.ToString("N2"))</div>
-                        </div>
-                        <div class="field">
-                            <label>Cash Credit Limit (₹)</label>
-                            <div class="value">₹ @(_model.CashCreditLimit.ToString("N2"))</div>
-                        </div>
-                        <div class="field">
-                            <label>Own Godown Capacity</label>
-                            <div class="value">@(_model.OwnGodownCapacity) MT</div>
-                        </div>
-                        <div class="field">
-                            <label>Rent Godown Capacity</label>
-                            <div class="value">@(_model.RentGodownCapacity) MT</div>
-                        </div>
-                    </div>
-                    <div class="grid-1">
-                        <div class="field">
-                            <label>Investment Remarks</label>
-                            <div class="value">@(_model.CapitalInvestmentRemarks ?? "-")</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">🏦</div> Assets (Banking & Properties)
-                    </div>
-
-                    <div class="sub-card">
-                        <h3 class="sub-card-title">Banking</h3>
-                        <div class="grid-3 mb-15">
-                            <div class="field">
-                                <label>Bank Name</label>
-                                <div class="value">HDFC Bank</div>
-                            </div>
-                            <div class="field">
-                                <label>Bank Branch</label>
-                                <div class="value">MAIN BRANCH • SN-BANK-092</div>
-                            </div>
-                            <div class="field">
-                                <label>Value</label>
-                                <div class="value">₹ 5,00,000</div>
-                            </div>
-                        </div>
-                        <div class="grid-1">
-                            <div class="field">
-                                <label>Remarks</label>
-                                <div class="value">Standard credit line facilities active for operational</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sub-card">
-                        <h3 class="sub-card-title">Land</h3>
-                        <div class="grid-2 mb-15">
-                            <div class="field">
-                                <label>Land Name</label>
-                                <div class="value">HDFC Bank</div>
-                            </div>
-                            <div class="field">
-                                <label>Survey Number</label>
-                                <div class="value">Serial: SN-102</div>
-                            </div>
-                            <div class="field">
-                                <label>Land Size (in Cent)</label>
-                                <div class="value">Area: 5.5 Acres</div>
-                            </div>
-                            <div class="field">
-                                <label>Property Value (₹) (In Lakhs)</label>
-                                <div class="value">₹ 1,20,00,000</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="sub-card">
-                        <h3 class="sub-card-title">Building</h3>
-                        <div class="grid-2 mb-15">
-                            <div class="field">
-                                <label>Building Name</label>
-                                <div class="value">HDFC Bank</div>
-                            </div>
-                            <div class="field">
-                                <label>Property Value (₹)</label>
-                                <div class="value">MAIN BRANCH • SN-BANK-092</div>
-                            </div>
-                            <div class="field">
-                                <label>Survey Number</label>
-                                <div class="value">HDFC Bank</div>
-                            </div>
-                            <div class="field">
-                                <label>Land Size (in Square Ft)</label>
-                                <div class="value">MAIN BRANCH • SN-BANK-092</div>
-                            </div>
-                        </div>
-                        <div class="grid-1">
-                            <div class="field">
-                                <label>Remarks</label>
-                                <div class="value">Standard credit line facilities active for operational</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sub-card">
-                        <h3 class="sub-card-title">Land</h3>
-                        <div class="grid-2">
-                            <div class="field">
-                                <label>Land Name</label>
-                                <div class="value">Main Warehouse</div>
-                            </div>
-                            <div class="field">
-                                <label>Survey Number</label>
-                                <div class="value">Serial: SN-405</div>
-                            </div>
-                            <div class="field">
-                                <label>Land Size (in Cent)</label>
-                                <div class="value">Area: 12,000 sq ft</div>
-                            </div>
-                            <div class="field">
-                                <label>Property Value (₹) (In Lakhs)</label>
-                                <div class="value">₹ 85,00,000</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="summary-bar">
-                        <span>TOTAL AGGREGATE ASSETS</span>
-                        <span>₹ 2,10,00,000</span>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">🚚</div> Movable
+    @if ((_savedWarehouses != null && _savedWarehouses.Any()) || 
+         (_savedRails != null && _savedRails.Any()) || 
+         (_savedPorts != null && _savedPorts.Any()))
+    {
+        @if (_savedWarehouses != null)
+        {
+            @foreach (var wh in _savedWarehouses)
+            {
+                var whName = _warehousesAll.FirstOrDefault(w => w.Id == wh.WarehouseId)?.Name ?? "Warehouse";
+                <div class="sub-card">
+                    <div class="sub-card-header">
+                        <h3>@whName</h3>
+                        <span class="badge badge-warehouse" style="background-color: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">WAREHOUSE</span>
                     </div>
                     <div class="grid-2">
                         <div class="field">
-                            <label>Movable Assets Value (₹)</label>
-                            <div class="value">₹ 15,00,000</div>
+                            <label>Distance</label>
+                            <div class="value">@wh.Distance.ToString("N1") KM</div>
                         </div>
                         <div class="field">
-                            <label>Remarks</label>
-                            <div class="value"></div>
+                            <label>Freight Cost</label>
+                            <div class="value">₹ @wh.Freight.ToString("N2") / ton / KM</div>
                         </div>
                     </div>
                 </div>
+            }
+        }
 
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">💳</div> Loan Liabilities
-                    </div>
-                    <div class="grid-2 mb-15">
-                        <div class="field">
-                            <label>Loan Source / Institution *</label>
-                            <div class="value">State Bank of India</div>
-                        </div>
-                        <div class="field">
-                            <label>Loan Value *</label>
-                            <div class="value">₹ 40,00,000</div>
-                        </div>
-                    </div>
-                    <div class="grid-1">
-                        <div class="field">
-                            <label>Remarks</label>
-                            <div class="value">Business Expansion Loan Facility</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">📈</div> Net Financial Position
-                    </div>
-                    <div class="grid-3 mb-15">
-                        <div class="field">
-                            <label>Capital Value</label>
-                            <div class="value">₹ 50,00,000</div>
-                        </div>
-                        <div class="field">
-                            <label>Assets Value</label>
-                            <div class="value">₹ 2,10,00,000</div>
-                        </div>
-                        <div class="field">
-                            <label>Loan Liabilities</label>
-                            <div class="value">₹ 40,00,000</div>
-                        </div>
-                    </div>
-                    <div class="summary-bar" style="margin-top: 0;">
-                        <span style="font-weight: normal; font-size: 0.85rem; color: var(--label-color);">Net Financial Value</span>
-                        <span>₹ 2,20,00,000</span>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">📑</div> Credit Limit Proposal
+        @if (_savedRails != null)
+        {
+            @foreach (var rail in _savedRails)
+            {
+                var railName = _rackPointsAll.FirstOrDefault(r => r.Id == rail.RailFacilitiesId)?.Name ?? "Rail Head";
+                <div class="sub-card">
+                    <div class="sub-card-header">
+                        <h3>@railName</h3>
+                        <span class="badge badge-rail" style="background-color: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">RAIL HEAD</span>
                     </div>
                     <div class="grid-2">
                         <div class="field">
-                            <label>Firm Name</label>
-                            <div class="value">Heritage Agrochemicals Ltd.</div>
+                            <label>Distance</label>
+                            <div class="value">@rail.Distance.ToString("N1") KM</div>
                         </div>
                         <div class="field">
-                            <label>Total Investment</label>
-                            <div class="value">₹ 4.50 Crores</div>
-                        </div>
-                        <div class="field">
-                            <label>Godown Capacity</label>
-                            <div class="value">12,500 Metric Tonnes</div>
-                        </div>
-                        <div class="field">
-                            <label>Experience in Industry</label>
-                            <div class="value">18 Years Professional</div>
+                            <label>Freight Cost</label>
+                            <div class="value">₹ @rail.Freight.ToString("N2") / ton / KM</div>
                         </div>
                     </div>
                 </div>
+            }
+        }
+
+        @if (_savedPorts != null)
+        {
+            @foreach (var port in _savedPorts)
+            {
+                var portName = _portsAll.FirstOrDefault(p => p.Id == port.PortId)?.Name ?? "Port";
+                <div class="sub-card">
+                    <div class="sub-card-header">
+                        <h3>@portName</h3>
+                        <span class="badge badge-port" style="background-color: #fce7f3; color: #9d174d; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">PORT</span>
+                    </div>
+                    <div class="grid-2">
+                        <div class="field">
+                            <label>Distance</label>
+                            <div class="value">@port.Distance.ToString("N1") KM</div>
+                        </div>
+                        <div class="field">
+                            <label>Freight Cost</label>
+                            <div class="value">₹ @port.Freight.ToString("N2") / ton / KM</div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Facility Proximity Data Available</div>
+    }
+</div>
+                <div class="section">
+    <div class="section-title">
+        <div class="section-icon">🌍</div> Market Coverage & Service Areas
+    </div>
+
+    @if (_marketDetails != null && _marketDetails.Any())
+    {
+        @foreach (var block in _marketDetails)
+        {
+            var cropName = _cropsAll.FirstOrDefault(c => c.Id == block.MajorCrops)?.Name ?? "—";
+            var irrigationList = GetIrrigationText(block);
+            var seasonText = $"{block.SeasonFromMonth} - {block.SeasonToMonth}";
+
+            <div class="sub-card">
+                <div class="sub-card-header">
+                    <h3>@block.NameOfBlock</h3>
+                    <span class="badge badge-zone">REGIONAL BLOCK</span>
+                </div>
+                <div class="grid-2">
+                    <div class="field">
+                        <label>Major Crops</label>
+                        <div class="pill-group">
+                            @if (!string.IsNullOrEmpty(cropName) && cropName != "—")
+                            {
+                                <span class="pill-tag">@cropName</span>
+                            }
+                            else
+                            {
+                                <span class="value" style="border: none; padding: 0;">—</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label>Irrigation</label>
+                        <div class="value">@irrigationList</div>
+                    </div>
+                </div>
+                <div class="grid-3 mt-15">
+                    <div class="field">
+                        <label>Season</label>
+                        <div class="value">@seasonText</div>
+                    </div>
+                    @* Only show Dealers if wholesale license exists, matching your form logic *@
+                    @if (!string.IsNullOrWhiteSpace(_model.WholeSaleFertilizerLicenseNumber))
+                    {
+                        <div class="field">
+                            <label>Dealers</label>
+                            <div class="value">@block.NoOfDealer.ToString("N0")</div>
+                        </div>
+                    }
+                    <div class="field">
+                        <label>Farmer</label>
+                        <div class="value">@block.NoOfFarmer.ToString("N0")</div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Market Details Available</div>
+    }
+</div>
+
+<div class="section">
+    <div class="section-title">
+        <div class="section-icon">🤝</div> Authorized Dealer Partnerships
+    </div>
+    <div class="pill-group">
+        @if (_companiesOperatingAll != null && _companiesOperatingAll.Any())
+        {
+            @foreach (var comp in _companiesOperatingAll)
+            {
+                @if (!string.IsNullOrWhiteSpace(comp.CompaniesOperating))
+                {
+                    <span class="pill-tag">@comp.CompaniesOperating</span>
+                }
+            }
+        }
+        else
+        {
+            <span class="value" style="border: none; padding: 0; color: var(--label-color);">No Partnerships Available</span>
+        }
+    </div>
+</div>
+
+@if (_savedPartners != null && _savedPartners.Any())
+{
+    @foreach (var partner in _savedPartners)
+    {
+        <div class="section">
+            <div class="section-title">
+                <div class="section-icon">👤</div> Proprietor Details
+            </div>
+            <div class="proprietor-wrap">
+                <div class="prop-fields">
+                    <div class="grid-2">
+                        <div class="field">
+                            <label>Business Entity Type</label>
+                            <div class="value">@GetEntityTypeName(_model.EntityType)</div>
+                        </div>
+                        <div class="field">
+                            <label>Name</label>
+                            <div class="value">@(partner.Name ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>Father Name</label>
+                            <div class="value">@(partner.FatherName ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>Aadhar No</label>
+                            <div class="value">[Aadhaar Redacted]</div>
+                        </div>
+                        <div class="field">
+                            <label>PAN NO</label>
+                            <div class="value">@(partner.PANNumber ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>Phone No</label>
+                            <div class="value">@(partner.PhoneNumber ?? "-")</div>
+                        </div>
+                    </div>
+                    <div class="grid-1 mt-15">
+                        <div class="field">
+                            <label>Email ID</label>
+                            <div class="value">@(partner.Email ?? "-")</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="prop-photo-box">
+                    <img src="@(string.IsNullOrEmpty(partner.ProprietorImagePath) ? "https://via.placeholder.com/150x200/e2e8f0/64748b?text=Photo" : partner.ProprietorImagePath)" alt="Proprietor Photo">
+                </div>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <div class="section">
+        <div class="section-title">
+            <div class="section-icon">👤</div> Proprietor Details
+        </div>
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Proprietor Details Available</div>
+    </div>
+}
+
 
                 <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">🏢</div> Property Assets
+    <div class="section-title">
+        <div class="section-icon">👨‍👩‍👧‍👦</div> Family Members
+    </div>
+    
+    @if (_familyAll != null && _familyAll.Any())
+    {
+        @foreach (var fm in _familyAll)
+        {
+            <div class="sub-card">
+                <div class="grid-3 mb-15">
+                    <div class="field">
+                        <label>Name</label>
+                        <div class="value">@(fm.FamilyMemberName ?? "-")</div>
                     </div>
-                    <div class="grid-2 mb-15">
-                        <div class="field">
-                            <label>Warehouse & Storage Infrastructure</label>
-                            <div class="value">450.00</div>
-                        </div>
-                        <div class="field">
-                            <label>Commercial Office Premises</label>
-                            <div class="value">120.50</div>
-                        </div>
-                        <div class="field">
-                            <label>Agricultural/Industrial Land</label>
-                            <div class="value">890.00</div>
-                        </div>
-                        <div class="field">
-                            <label>Movable Assets (Vehicles/Fleet)</label>
-                            <div class="value">75.00</div>
-                        </div>
+                    <div class="field">
+                        <label>D.O.B</label>
+                        <div class="value">@fm.DateOfBirth.ToString("dd/MM/yyyy")</div>
                     </div>
-                    <div class="summary-bar">
-                        <span style="font-size: 0.85rem; color: var(--label-color); font-weight: normal; text-transform: uppercase;">TOTAL COMBINED VALUATION</span>
-                        <span>₹ 1,535.50</span>
+                    <div class="field">
+                        <label>Age</label>
+                        <div class="value">@fm.Age Years</div>
                     </div>
                 </div>
+                <div class="grid-2 mt-15">
+                    <div class="field">
+                        <label>Occupation</label>
+                        <div class="value">@(fm.Occupation ?? "-")</div>
+                    </div>
+                    <div class="field">
+                        <label>Relationship</label>
+                        <div class="value">@GetRelationshipName(fm.RelationshipId)</div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Family Details Available</div>
+    }
+</div>
 
                 <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">📊</div> Sales Performance Review
+    <div class="section-title">
+        <div class="section-icon">🏢</div> Family Members (Companies)
+    </div>
+
+    @if (_occupationsAll != null && _occupationsAll.Any())
+    {
+        @foreach (var occ in _occupationsAll)
+        {
+            <div class="sub-card">
+                <div class="grid-2">
+                    <div class="field">
+                        <label>Company Name</label>
+                        <div class="value">@(occ.NameofCompany ?? "-")</div>
                     </div>
-                    <table class="sales-table table-th-center">
-                        <thead>
-                            <tr>
-                                <th rowspan="2" style="vertical-align: bottom;">PRODUCT CATEGORY</th>
-                                <th colspan="2" style="border-bottom: 1px solid var(--border-color);">FY 2022-23</th>
-                                <th colspan="2" style="border-bottom: 1px solid var(--border-color);">FY 2023-24 (TARGET)</th>
-                            </tr>
-                            <tr>
-                                <th style="background-color: #f8fafc;">Qty (MT)</th>
-                                <th style="background-color: #f8fafc;">Value (Lakh)</th>
-                                <th style="background-color: #f8fafc;">Qty (MT)</th>
-                                <th style="background-color: #f8fafc;">Value (Lakh)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>NC Urea</td>
-                                <td>4,500</td><td>1,200</td><td>5,200</td><td>1,450</td>
-                            </tr>
-                            <tr>
-                                <td>NPK Variants</td>
-                                <td>1,800</td><td>620</td><td>2,100</td><td>740</td>
-                            </tr>
-                            <tr>
-                                <td>SSP</td>
-                                <td>900</td><td>210</td><td>1,100</td><td>265</td>
-                            </tr>
-                            <tr>
-                                <td>MOP</td>
-                                <td>550</td><td>145</td><td>600</td><td>160</td>
-                            </tr>
-                            <tr>
-                                <td>DAP</td>
-                                <td colspan="2">2,200 <span style="margin: 0 15px; color:var(--border-color)">|</span> 850</td>
-                                <td colspan="2">2,500 <span style="margin: 0 15px; color:var(--border-color)">|</span> 980</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div class="field">
+                        <label>Annual Turnover (₹)</label>
+                        <div class="value">₹ @occ.AnnualTurnover</div>
+                    </div>
                 </div>
+                <div class="grid-1 mt-15">
+                    <div class="field">
+                        <label>Main Products / Services</label>
+                        <div class="value">@GetSectorName(occ.SectorId)</div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Company Details Available</div>
+    }
+</div>
 
                 <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">🤝</div> Other Companies Handled
-                    </div>
-                    <div class="sub-card mb-15">
-                        <div class="grid-3">
-                            <div class="field">
-                                <label>Company Name</label>
-                                <div class="value">IFFCO Cooperative</div>
-                            </div>
-                            <div class="field">
-                                <label>Quantity (MT)</label>
-                                <div class="value">340.00</div>
-                            </div>
-                            <div class="field">
-                                <label>Value (Lakhs)</label>
-                                <div class="value">340.00</div>
-                            </div>
+    <div class="section-title">
+        <div class="section-icon">📈</div> Sales Planning & Forecast
+    </div>
+
+    @if (_salesPlanningAll != null && _salesPlanningAll.Any() && _categoriesAll != null)
+    {
+        int catIndex = 1;
+        @foreach (var cat in _categoriesAll)
+        {
+            // Get all sales records for this specific category
+            var catSales = _salesPlanningAll.Where(s => s.CategoryId == cat.Id).ToList();
+            if (!catSales.Any()) continue; // Skip categories with no data
+
+            var catUnit = _unitsAll.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+            
+            // Calculate Grand Totals for the category
+            var catTotalVolume = catSales.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
+            var catTotalValue = catSales.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
+
+            <div class="sub-card">
+                <h3 class="sub-card-title">@catIndex. @cat.Name Sales Forecast (@catUnit / Value)</h3>
+                
+                <table class="sales-table table-th-center mb-15">
+                    <thead>
+                        <tr>
+                            <th>PRODUCT</th>
+                            <th>APR</th><th>MAY</th><th>JUN</th><th>JUL</th><th>AUG</th><th>SEP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sale in catSales)
+                        {
+                            var product = _productsAll.FirstOrDefault(p => p.Id == sale.ProductId);
+                            <tr>
+                                <td>@(product?.Name ?? "Unknown")</td>
+                                <td><span class="stacked-val">@sale.AprilQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.AprilAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.MayQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.MayAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.JuneQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.JuneAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.JulyQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.JulyAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.AugustQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.AugustAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.SeptemberQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.SeptemberAmount.ToString("N0")</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <table class="sales-table table-th-center">
+                    <thead>
+                        <tr>
+                            <th>PRODUCT</th>
+                            <th>OCT</th><th>NOV</th><th>DEC</th><th>JAN</th><th>FEB</th><th>MAR</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sale in catSales)
+                        {
+                            var product = _productsAll.FirstOrDefault(p => p.Id == sale.ProductId);
+                            <tr>
+                                <td>@(product?.Name ?? "Unknown")</td>
+                                <td><span class="stacked-val">@sale.OctoberQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.OctoberAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.NovemberQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.NovemberAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.DecemberQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.DecemberAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.JanuaryQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.JanuaryAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.FebruaryQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.FebruaryAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.MarchQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.MarchAmount.ToString("N0")</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="totals-wrapper">
+                    <div class="totals-box">
+                        <div class="total-col">
+                            <span class="total-label">Total Volume</span>
+                            <span class="total-val">@catTotalVolume.ToString("N0") @catUnit</span>
                         </div>
-                    </div>
-                    <div class="sub-card mb-15">
-                        <div class="grid-3">
-                            <div class="field">
-                                <label>Company Name</label>
-                                <div class="value">IFFCO Cooperative</div>
-                            </div>
-                            <div class="field">
-                                <label>Quantity (MT)</label>
-                                <div class="value">340.00</div>
-                            </div>
-                            <div class="field">
-                                <label>Value (Lakhs)</label>
-                                <div class="value">340.00</div>
-                            </div>
+                        <div class="total-col">
+                            <span class="total-label">Total Forecast Value</span>
+                            <span class="total-val">₹ @catTotalValue.ToString("N0")</span>
                         </div>
                     </div>
                 </div>
+            </div>
+            
+            catIndex++;
+        }
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Sales Planning Data Available</div>
+    }
+</div>
 
                 <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">📋</div> Credit Limit Proposal Scoring
-                    </div>
-                    <table class="sales-table table-th-center mb-15">
-                        <thead>
-                            <tr>
-                                <th>PARAMETER</th>
-                                <th>VALUE</th>
-                                <th>MARK</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td style="font-weight: bold; color: var(--primary-dark); text-align:left;">Sales Volume Index</td>
-                                <td style="font-weight: normal; color: #374151;">Annual aggregated metric</td>
-                                <td>18 / 20</td>
-                            </tr>
-                            <tr>
-                                <td style="font-weight: bold; color: var(--primary-dark); text-align:left;">GFL Dedicated Sales</td>
-                                <td style="font-weight: normal; color: #374151;">Product-specific alignment</td>
-                                <td>14 / 15</td>
-                            </tr>
-                            <tr>
-                                <td style="font-weight: bold; color: var(--primary-dark); text-align:left;">Turnover Consistency</td>
-                                <td style="font-weight: normal; color: #374151;">3-year fiscal trend</td>
-                                <td>12 / 15</td>
-                            </tr>
-                            <tr>
-                                <td style="font-weight: bold; color: var(--primary-dark); text-align:left;">Business Tenure</td>
-                                <td style="font-weight: normal; color: #374151;">Years of operation</td>
-                                <td>10 / 10</td>
-                            </tr>
-                            <tr>
-                                <td style="font-weight: bold; color: var(--primary-dark); text-align:left;">Payment Overdues</td>
-                                <td style="font-weight: normal; color: #374151;">Grace period compliance</td>
-                                <td>08 / 10</td>
-                            </tr>
-                            <tr>
-                                <td style="font-weight: bold; color: var(--primary-dark); text-align:left;">Property Asset Value</td>
-                                <td style="font-weight: normal; color: #374151;">Collateral appraisal</td>
-                                <td>15 / 20</td>
-                            </tr>
-                            <tr>
-                                <td style="font-weight: bold; color: var(--primary-dark); text-align:left;">Security Deposits</td>
-                                <td style="font-weight: normal; color: #374151;">Cash equivalent holdings</td>
-                                <td>09 / 10</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <div class="summary-bar">
-                        <span style="font-size: 0.85rem; color: var(--label-color); font-weight: normal; text-transform: uppercase;">TOTAL COMBINED VALUATION</span>
-                        <span>₹ 1,535.50</span>
-                    </div>
-                </div>
+    <div class="section-title">
+        <div class="section-icon">💰</div> Investment & Godowns
+    </div>
+    <div class="grid-2 mb-15">
+        <div class="field">
+            <label>Capital Investment (₹)</label>
+            <div class="value">₹ @(_model.CapitalInvestment.ToString("N2"))</div>
+        </div>
+        <div class="field">
+            <label>Cash Credit Limit (₹)</label>
+            <div class="value">₹ @(_model.CashCreditLimit.ToString("N2"))</div>
+        </div>
+        <div class="field">
+            <label>Own Godown Capacity</label>
+            <div class="value">@(_model.OwnGodownCapacity) MT</div>
+        </div>
+        <div class="field">
+            <label>Rent Godown Capacity</label>
+            <div class="value">@(_model.RentGodownCapacity) MT</div>
+        </div>
+    </div>
+    <div class="grid-1">
+        <div class="field">
+            <label>Investment Remarks</label>
+            <div class="value">@(_model.CapitalInvestmentRemarks ?? "-")</div>
+        </div>
+    </div>
+</div>
 
-                <div class="section">
-                    <div class="section-title">
-                        <div class="section-icon">✅</div> Recommended Credit Limit
+<div class="section">
+    <div class="section-title">
+        <div class="section-icon">🏦</div> Assets (Banking & Properties)
+    </div>
+
+    @if (_bankAssetsAll != null && _bankAssetsAll.Any())
+    {
+        @foreach(var bank in _bankAssetsAll)
+        {
+            <div class="sub-card">
+                <h3 class="sub-card-title">Banking</h3>
+                <div class="grid-3 mb-15">
+                    <div class="field">
+                        <label>Bank Name</label>
+                        <div class="value">@GetBankName(bank.BankId)</div>
                     </div>
-                    <div class="grid-3 mb-15">
-                        <div class="field">
-                            <label>Proposed Base Limit</label>
-                            <div class="value">₹ 850.00</div>
-                        </div>
-                        <div class="field">
-                            <label>Additional Seasonal</label>
-                            <div class="value">₹ 150.00</div>
-                        </div>
-                        <div class="field">
-                            <label>Multiplier Factor</label>
-                            <div class="value">1.15x</div>
-                        </div>
+                    <div class="field">
+                        <label>Bank Branch</label>
+                        <div class="value">@(bank.BankBranch ?? "-")</div>
                     </div>
-                    <div class="summary-bar">
-                        <span style="font-size: 0.85rem; color: var(--label-color); font-weight: normal; text-transform: uppercase;">TOTAL COMBINED VALUATION</span>
-                        <span>₹ 1,535.50</span>
+                    <div class="field">
+                        <label>Value</label>
+                        <div class="value">₹ @bank.Value.ToString("N2")</div>
                     </div>
                 </div>
+                <div class="grid-1">
+                    <div class="field">
+                        <label>Remarks</label>
+                        <div class="value">@(bank.Remarks ?? "-")</div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+
+    @if (_landAssetsAll != null && _landAssetsAll.Any())
+    {
+        @foreach(var land in _landAssetsAll)
+        {
+            <div class="sub-card">
+                <h3 class="sub-card-title">Land</h3>
+                <div class="grid-2 mb-15">
+                    <div class="field">
+                        <label>Land Name</label>
+                        <div class="value">@(land.LandName ?? "-")</div>
+                    </div>
+                    <div class="field">
+                        <label>Survey Number</label>
+                        <div class="value">@(land.SurvayNumber ?? "-")</div>
+                    </div>
+                    <div class="field">
+                        <label>Land Size (in Cent)</label>
+                        <div class="value">@land.LandSize</div>
+                    </div>
+                    <div class="field">
+                        <label>Property Value (₹)</label>
+                        <div class="value">₹ @land.PropertyValue.ToString("N2")</div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+
+    @if (_buildingAssetsAll != null && _buildingAssetsAll.Any())
+    {
+        @foreach(var building in _buildingAssetsAll)
+        {
+            <div class="sub-card">
+                <h3 class="sub-card-title">Building</h3>
+                <div class="grid-2 mb-15">
+                    <div class="field">
+                        <label>Building Name</label>
+                        <div class="value">@(building.BuildingName ?? "-")</div>
+                    </div>
+                    <div class="field">
+                        <label>Property Value (₹)</label>
+                        <div class="value">₹ @building.PropertyValue.ToString("N2")</div>
+                    </div>
+                    <div class="field">
+                        <label>Survey Number</label>
+                        <div class="value">@(building.SurveyNumber ?? "-")</div>
+                    </div>
+                    <div class="field">
+                        <label>Land Size (in Square Ft)</label>
+                        <div class="value">@building.LandSize</div>
+                    </div>
+                </div>
+                <div class="grid-1">
+                    <div class="field">
+                        <label>Remarks</label>
+                        <div class="value">@(building.Remarks ?? "-")</div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+
+    <div class="summary-bar">
+        <span>TOTAL AGGREGATE FIXED ASSETS</span>
+        <span>₹ @GetTotalFixedAssets().ToString("N2")</span>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">
+        <div class="section-icon">🚚</div> Movable
+    </div>
+    <div class="grid-2">
+        <div class="field">
+            <label>Movable Assets Value (₹)</label>
+            <div class="value">₹ @(_model.AssetValue.ToString("N2"))</div>
+        </div>
+        <div class="field">
+            <label>Remarks</label>
+            <div class="value">@(string.IsNullOrEmpty(_model.Remarks) ? "-" : _model.Remarks)</div>
+        </div>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">
+        <div class="section-icon">💳</div> Loan Liabilities
+    </div>
+    
+    @if (_loanLiabilitiesAll != null && _loanLiabilitiesAll.Any())
+    {
+        @foreach(var loan in _loanLiabilitiesAll)
+        {
+            <div class="grid-2 mb-15">
+                <div class="field">
+                    <label>Loan Source / Institution</label>
+                    <div class="value">@(loan.LoanSource ?? "-")</div>
+                </div>
+                <div class="field">
+                    <label>Loan Value</label>
+                    <div class="value">₹ @loan.LoanValue.ToString("N2")</div>
+                </div>
+            </div>
+            <div class="grid-1 mb-15">
+                <div class="field">
+                    <label>Remarks</label>
+                    <div class="value">@(string.IsNullOrEmpty(loan.Remarks) ? "-" : loan.Remarks)</div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Loan Liabilities</div>
+    }
+</div>
+
+<div class="section">
+    <div class="section-title">
+        <div class="section-icon">📈</div> Net Financial Position
+    </div>
+    <div class="grid-3 mb-15">
+        <div class="field">
+            <label>Capital Value</label>
+            <div class="value">₹ @(_model.CapitalInvestment.ToString("N2"))</div>
+        </div>
+        <div class="field">
+            <label>Assets Value (Fixed + Movable)</label>
+            <div class="value">₹ @GetTotalAssets().ToString("N2")</div>
+        </div>
+        <div class="field">
+            <label>Loan Liabilities</label>
+            <div class="value">₹ @GetTotalLoans().ToString("N2")</div>
+        </div>
+    </div>
+    <div class="summary-bar" style="margin-top: 0;">
+        <span style="font-weight: normal; font-size: 0.85rem; color: var(--label-color);">Net Financial Value</span>
+        <span>₹ @GetNetFinancialPosition().ToString("N2")</span>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">
+        <div class="section-icon">📑</div> Credit Limit Proposal Basics
+    </div>
+    <div class="grid-2">
+        <div class="field">
+            <label>Firm Name</label>
+            <div class="value">@(_model.FirmName ?? "-")</div>
+        </div>
+        <div class="field">
+            <label>Total Investment</label>
+            <div class="value">₹ @(_model.CapitalInvestment.ToString("N2"))</div>
+        </div>
+        <div class="field">
+            <label>Godown Capacity</label>
+            <div class="value">@(_model.OwnGodownCapacity + _model.RentGodownCapacity) Metric Tonnes</div>
+        </div>
+        <div class="field">
+            <label>Experience in Industry</label>
+            <div class="value">@(_model.YearsofExperiance > 0 ? $"{_model.YearsofExperiance} Years" : "-")</div>
+        </div>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">
+        <div class="section-icon">🏢</div> Property Assets
+    </div>
+    <div class="grid-2 mb-15">
+        <div class="field">
+            <label>Banking Assets</label>
+            <div class="value">₹ @(_bankAssetsAll?.Sum(b => b.Value).ToString("N2") ?? "0.00")</div>
+        </div>
+        <div class="field">
+            <label>Building Assets</label>
+            <div class="value">₹ @(_buildingAssetsAll?.Sum(b => b.PropertyValue).ToString("N2") ?? "0.00")</div>
+        </div>
+        <div class="field">
+            <label>Land Assets</label>
+            <div class="value">₹ @(_landAssetsAll?.Sum(l => l.PropertyValue).ToString("N2") ?? "0.00")</div>
+        </div>
+        <div class="field">
+            <label>Movable Assets</label>
+            <div class="value">₹ @(_model.AssetValue.ToString("N2"))</div>
+        </div>
+    </div>
+    <div class="summary-bar">
+        <span style="font-size: 0.85rem; color: var(--label-color); font-weight: normal; text-transform: uppercase;">TOTAL COMBINED VALUATION</span>
+        <span>₹ @GetTotalAssets().ToString("N2")</span>
+    </div>
+</div>
+
+               <div class="section">
+    <div class="section-title">
+        <div class="section-icon">📊</div> Sales Performance Review
+    </div>
+    <table class="sales-table table-th-center">
+        <thead>
+            <tr>
+                <th rowspan="2" style="vertical-align: bottom;">PRODUCT CATEGORY</th>
+                <th colspan="2" style="border-bottom: 1px solid var(--border-color);">LAST FY</th>
+                <th colspan="2" style="border-bottom: 1px solid var(--border-color);">CURRENT FY (TARGET)</th>
+            </tr>
+            <tr>
+                <th style="background-color: #f8fafc;">Qty (MT)</th>
+                <th style="background-color: #f8fafc;">Value (Lakh)</th>
+                <th style="background-color: #f8fafc;">Qty (MT)</th>
+                <th style="background-color: #f8fafc;">Value (Lakh)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_productsAll != null && _productsAll.Any() && (_annualSales.Any() || _salesPlanningAll.Any()))
+            {
+                // Grab all unique product IDs present in either the past year's data or this year's forecast
+                var productIds = _annualSales.Select(a => a.ProductId)
+                                    .Union(_salesPlanningAll.Select(s => s.ProductId))
+                                    .Distinct()
+                                    .ToList();
+
+                @foreach (var pId in productIds)
+                {
+                    var product = _productsAll.FirstOrDefault(p => p.Id == pId);
+                    
+                    // --- 1. Calculate Last FY Data (From Annual Sales) ---
+                    var lastFyData = _annualSales.Where(a => a.ProductId == pId).ToList();
+                    var lastFyQty = lastFyData.Sum(a => a.OwnRetailsSaleQty + a.SaleToDealerQty);
+                    var lastFyVal = lastFyData.Sum(a => a.OwnRetailsSaleAmount + a.SaleToDealerAmount);
+
+                    // --- 2. Calculate Current FY Target (From Sales Planning) ---
+                    var targetData = _salesPlanningAll.Where(s => s.ProductId == pId).ToList();
+                    var targetQty = targetData.Sum(s => s.AprilQty + s.MayQty + s.JuneQty + s.JulyQty + 
+                                                        s.AugustQty + s.SeptemberQty + s.OctoberQty + s.NovemberQty + 
+                                                        s.DecemberQty + s.JanuaryQty + s.FebruaryQty + s.MarchQty);
+                    var targetVal = targetData.Sum(s => s.AprilAmount + s.MayAmount + s.JuneAmount + s.JulyAmount + 
+                                                        s.AugustAmount + s.SeptemberAmount + s.OctoberAmount + s.NovemberAmount + 
+                                                        s.DecemberAmount + s.JanuaryAmount + s.FebruaryAmount + s.MarchAmount);
+
+                    <tr>
+                        <td>@(product?.Name ?? "Unknown")</td>
+                        <td>@lastFyQty.ToString("N2")</td>
+                        <td>@lastFyVal.ToString("N2")</td>
+                        <td>@targetQty.ToString("N2")</td>
+                        <td>@targetVal.ToString("N2")</td>
+                    </tr>
+                }
+
+                <tr style="background-color: var(--card-bg); font-weight: bold;">
+                    <td style="color: var(--primary-dark);">Grand Total</td>
+                    <td>@_annualSales.Sum(a => a.OwnRetailsSaleQty + a.SaleToDealerQty).ToString("N2")</td>
+                    <td>@_annualSales.Sum(a => a.OwnRetailsSaleAmount + a.SaleToDealerAmount).ToString("N2")</td>
+                    <td>
+                        @_salesPlanningAll.Sum(s => s.AprilQty + s.MayQty + s.JuneQty + s.JulyQty + s.AugustQty + s.SeptemberQty + s.OctoberQty + s.NovemberQty + s.DecemberQty + s.JanuaryQty + s.FebruaryQty + s.MarchQty).ToString("N2")
+                    </td>
+                    <td>
+                        @_salesPlanningAll.Sum(s => s.AprilAmount + s.MayAmount + s.JuneAmount + s.JulyAmount + s.AugustAmount + s.SeptemberAmount + s.OctoberAmount + s.NovemberAmount + s.DecemberAmount + s.JanuaryAmount + s.FebruaryAmount + s.MarchAmount).ToString("N2")
+                    </td>
+                </tr>
+            }
+            else
+            {
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 20px; color: var(--label-color);">No Sales Performance Data Available</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div class="section">
+    <div class="section-title">
+        <div class="section-icon">🤝</div> Other Companies Handled
+    </div>
+
+    @if (_experiences != null && _experiences.Any())
+    {
+        @foreach (var exp in _experiences)
+        {
+            // Match the company ID to the competitor list to get the actual name
+            var companyName = _companyAll.FirstOrDefault(c => c.Id.ToString() == exp.CompanyId)?.Name ?? "Unknown";
+
+            <div class="sub-card mb-15">
+                <div class="grid-3">
+                    <div class="field">
+                        <label>Company Name</label>
+                        <div class="value">@companyName</div>
+                    </div>
+                    <div class="field">
+                        <label>Quantity (MT)</label>
+                        <div class="value">@exp.Quantity.ToString("N2")</div>
+                    </div>
+                    <div class="field">
+                        <label>Value (Lakhs)</label>
+                        <div class="value">@exp.TurnOver.ToString("N2")</div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Other Companies Handled</div>
+    }
+</div>
+               <div class="section">
+    <div class="section-title">
+        <div class="section-icon">📋</div> Credit Limit Proposal Scoring
+    </div>
+    
+    @if (_proposal != null && _proposal.Id > 0)
+    {
+        @if (_model.InSpic)
+        {
+            <div class="sub-card mb-15">
+                <h3 class="sub-card-title">SPIC Valuation Score</h3>
+                <table class="sales-table table-th-center">
+                    <thead>
+                        <tr>
+                            <th>PARAMETER</th>
+                            <th style="width: 100px;">MARK</th>
+                            <th style="width: 100px;">MAX</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td style="text-align:left;">Total Urea Sales Volume</td><td>@_proposal.Q1Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Urea Sales Volume with SPIC</td><td>@_proposal.Q2Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Total Urea Sales Turnover</td><td>@_proposal.Q3Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Urea Sales Turnover with SPIC</td><td>@_proposal.Q4Mark</td><td>20</td></tr>
+                        <tr><td style="text-align:left;">Dealership tenure with SPIC</td><td>@_proposal.Q5Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Monthly Average Net Overdues</td><td>@_proposal.Q6Mark</td><td>20</td></tr>
+                        <tr><td style="text-align:left;">Property Value as % of Sales Turnover</td><td>@_proposal.Q8Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Available Security as % of Sales Turnover</td><td>@_proposal.Q10Mark</td><td>10</td></tr>
+                    </tbody>
+                </table>
+                <div class="summary-bar">
+                    <span style="font-size: 0.85rem; color: var(--label-color); text-transform: uppercase;">SPIC TOTAL SCORE</span>
+                    <span>@_proposal.Q11Mark / 100</span>
+                </div>
+            </div>
+        }
+
+        @if (_model.InGreenStar)
+        {
+            <div class="sub-card mb-15">
+                <h3 class="sub-card-title">Greenstar Valuation Score</h3>
+                <table class="sales-table table-th-center">
+                    <thead>
+                        <tr>
+                            <th>PARAMETER</th>
+                            <th style="width: 100px;">MARK</th>
+                            <th style="width: 100px;">MAX</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td style="text-align:left;">Total Fertilizer Sales Volume</td><td>@_proposal.GQ1Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Fertilizer Sales Volume with GFL</td><td>@_proposal.GQ2Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Total Fertilizer Sales Turnover</td><td>@_proposal.GQ3Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Fertilizer Sales Turnover with GFL</td><td>@_proposal.GQ4Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">SP Turnover</td><td>@_proposal.GQ5Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Dealership tenure with GFL</td><td>@_proposal.GQ6Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Monthly Average Net Overdues</td><td>@_proposal.GQ7Mark</td><td>20</td></tr>
+                        <tr><td style="text-align:left;">Property Value as % of Sales Turnover</td><td>@_proposal.GQ9Mark</td><td>10</td></tr>
+                        <tr><td style="text-align:left;">Available Security as % of Sales Turnover</td><td>@_proposal.GQ11Mark</td><td>10</td></tr>
+                    </tbody>
+                </table>
+                <div class="summary-bar">
+                    <span style="font-size: 0.85rem; color: var(--label-color); text-transform: uppercase;">GREENSTAR TOTAL SCORE</span>
+                    <span>@_proposal.GQ12Mark / 100</span>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Scoring Data Available</div>
+    }
+</div>
+
+<div class="section">
+    <div class="section-title">
+        <div class="section-icon">✅</div> Recommended Credit Limit
+    </div>
+    
+    @if (_proposal != null && _proposal.Id > 0)
+    {
+        <div class="grid-3 mb-15">
+            <div class="field">
+                <label>Existing Credit Limit Amount</label>
+                <div class="value">₹ @_proposal.ExistingCreditLimitAmount.ToString("N2")</div>
+            </div>
+            
+            @if (_model.InSpic)
+            {
+                <div class="field">
+                    <label>SPIC Additional Credit Limit</label>
+                    <div class="value">₹ @_proposal.AdditionalCreditLimit.ToString("N2")</div>
+                </div>
+            }
+
+            @if (_model.InGreenStar)
+            {
+                <div class="field">
+                    <label>Greenstar Additional Credit Limit</label>
+                    <div class="value">₹ @_proposal.GreenstarAdditionalCreditLimit.ToString("N2")</div>
+                </div>
+            }
+        </div>
+        <div class="summary-bar">
+            <span style="font-size: 0.85rem; color: var(--label-color); text-transform: uppercase;">COMBINED ADDITIONAL LIMIT</span>
+            <span>₹ @((_proposal.AdditionalCreditLimit + _proposal.GreenstarAdditionalCreditLimit).ToString("N2"))</span>
+        </div>
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Credit Limit Data Available</div>
+    }
+</div>
 
                 @* <div class="section">
                     <div class="section-title">
@@ -1699,7 +1680,30 @@
     private List<LocationItemDto> _headquartersAll = new();
     private List<BankItemDto> _banksAll = new();
     private List<DealerItemDto> _dealersAll = new();
-
+    private List<Category> _categoriesAll = new();
+private List<Product> _productsAll = new();
+private List<AnnualSaleDataLastFYofDealerRegistration> _annualSales = new();
+private List<DealerMarketDetail> _marketDetails = new();
+private List<Crop> _cropsAll = new();
+private List<DealerOwnershipInfo> _savedPartners = new();
+private List<PartnerFamilyDetails> _familyAll = new();
+private List<PartnerOccupation> _occupationsAll = new();
+private List<RelationshipItemDto> _relationshipsAll = new();
+private List<SectorItemDto> _sectorsAll = new();
+private List<SalesPlanningInDealerRegistration> _salesPlanningAll = new();
+private List<Unit> _unitsAll = new();
+private List<DealerAssetBank> _bankAssetsAll = new();
+private List<DealerAssetLand> _landAssetsAll = new();
+private List<DealerAssetBuilding> _buildingAssetsAll = new();
+private List<DealerLoanLiabilities> _loanLiabilitiesAll = new();
+private DealerCreditLimitProposal _proposal = new();
+private List<WarehouseEntity> _warehousesAll = new();
+private List<RackPoint> _rackPointsAll = new();
+private List<Port> _portsAll = new();
+private List<DealerWarehouseFacilities> _savedWarehouses = new();
+private List<DealerRailFacilities> _savedRails = new();
+private List<DealerPortFacilities> _savedPorts = new();
+private List<DealerCompaniesOperatingInArea> _companiesOperatingAll = new();
     private string? _errorMessage;
 
 
@@ -1716,9 +1720,15 @@
             _banksAll = await Http.GetFromJsonAsync<List<BankItemDto>>("api/Bank/all") ?? new();
             _dealersAll = await Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/all") ?? new();
             _companyAll = await Http.GetFromJsonAsync<List<Competitor>>("api/Competitor/all") ?? new();
-          
-
-
+          _categoriesAll = await Http.GetFromJsonAsync<List<Category>>("api/Category") ?? new();
+        _productsAll = await Http.GetFromJsonAsync<List<Product>>("api/Product") ?? new();
+        _cropsAll = await Http.GetFromJsonAsync<List<Crop>>("api/Crop") ?? new();
+        _relationshipsAll = await Http.GetFromJsonAsync<List<RelationshipItemDto>>("api/Relationship/all") ?? new();
+        _sectorsAll = await Http.GetFromJsonAsync<List<SectorItemDto>>("api/Sector/all") ?? new();
+        _unitsAll = await Http.GetFromJsonAsync<List<Unit>>("api/Unit") ?? new();
+        _warehousesAll = await Http.GetFromJsonAsync<List<WarehouseEntity>>("api/Warehouse") ?? new();
+        _rackPointsAll = await Http.GetFromJsonAsync<List<RackPoint>>("api/RackPoint") ?? new();
+        _portsAll = await Http.GetFromJsonAsync<List<Port>>("api/Port") ?? new();
             // Load main dealer
             if (dealerId.HasValue && dealerId.Value > 0)
             {
@@ -1737,6 +1747,50 @@
     _experiences = _experiences
         .Where(x => x.DealerId == dealerId.Value)
         .ToList();
+    var allSales = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all") ?? new();
+    _annualSales = allSales.Where(x => x.DealerId == dealerId.Value).ToList();
+    var allMarketDetails = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new();
+     _marketDetails = allMarketDetails.Where(x => x.DealerId == dealerId.Value).ToList();
+     var allPartners = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all") ?? new();
+            _savedPartners = allPartners.Where(x => x.DealerId == dealerId.Value).ToList();
+
+            // Only fetch family & occupations linked to this dealer's partners
+            var partnerIds = _savedPartners.Select(p => p.Id).ToList();
+
+            var allFamily = await Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails/all") ?? new();
+            _familyAll = allFamily.Where(f => partnerIds.Contains(f.OwnershipPartnerId)).ToList();
+
+            var allOcc = await Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation/all") ?? new();
+            _occupationsAll = allOcc.Where(o => partnerIds.Contains(o.OwnershipPartnerId)).ToList();
+            var allSalesPlan = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new();
+            _salesPlanningAll = allSalesPlan.Where(x => x.DealerId == dealerId.Value).ToList();
+
+            var allBankAssets = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new();
+            _bankAssetsAll = allBankAssets.Where(a => a.DealerId == dealerId.Value).ToList();
+
+            var allLandAssets = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand/all") ?? new();
+            _landAssetsAll = allLandAssets.Where(a => a.DealerId == dealerId.Value).ToList();
+
+            var allBuildingAssets = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all") ?? new();
+            _buildingAssetsAll = allBuildingAssets.Where(a => a.DealerId == dealerId.Value).ToList();
+
+            var allLoans = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities/all") ?? new();
+            _loanLiabilitiesAll = allLoans.Where(a => a.DealerId == dealerId.Value).ToList();
+
+            var allProposals = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all") ?? new();
+            _proposal = allProposals.FirstOrDefault(p => p.DealerId == dealerId.Value) ?? new();
+
+            var allWh = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new();
+            _savedWarehouses = allWh.Where(w => w.DealerId == dealerId.Value).ToList();
+
+            var allRail = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities/all") ?? new();
+            _savedRails = allRail.Where(r => r.DealerId == dealerId.Value).ToList();
+
+            var allPort = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities/all") ?? new();
+            _savedPorts = allPort.Where(p => p.DealerId == dealerId.Value).ToList();
+
+            var allCompaniesOperating = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new();
+            _companiesOperatingAll = allCompaniesOperating.Where(c => c.DealerId == dealerId.Value).ToList();
 }
         }
         catch (Exception ex)
@@ -1794,7 +1848,54 @@
             _ => "Unknown"
         };
     }
+    private string GetIrrigationText(DealerMarketDetail block)
+{
+    var types = new List<string>();
+    if (block.IsCanal) types.Add("Canal");
+    if (block.IsTank) types.Add("Tank");
+    if (block.IsWell) types.Add("Well");
+    return types.Count > 0 ? string.Join(", ", types) : "—";
+}
+    private string GetRelationshipName(int id) => _relationshipsAll.FirstOrDefault(r => r.Id == id)?.Name ?? "—";
 
+private string GetSectorName(int id) => _sectorsAll.FirstOrDefault(s => s.Id == id)?.Name ?? "—";
+
+private string GetEntityTypeName(int? entityType)
+{
+    if (!entityType.HasValue) return "-";
+    return ((EntityType)entityType.Value) switch
+    {
+        EntityType.soleProprietor => "Sole Proprietor",
+        EntityType.Partnership => "Partnership",
+        EntityType.LLP => "LLP",
+        EntityType.PvtLtd => "PVT LTD",
+        EntityType.PubLtd => "PUB LTD",
+        EntityType.Society => "Society",
+        _ => "-"
+    };
+}
+private decimal GetTotalFixedAssets()
+{
+    decimal bankTotal = _bankAssetsAll?.Sum(b => b.Value) ?? 0;
+    decimal landTotal = _landAssetsAll?.Sum(l => l.PropertyValue) ?? 0;
+    decimal buildingTotal = _buildingAssetsAll?.Sum(b => b.PropertyValue) ?? 0;
+    return bankTotal + landTotal + buildingTotal;
+}
+
+private decimal GetTotalAssets()
+{
+    return GetTotalFixedAssets() + _model.AssetValue;
+}
+
+private decimal GetTotalLoans()
+{
+    return _loanLiabilitiesAll?.Sum(l => l.LoanValue) ?? 0;
+}
+
+private decimal GetNetFinancialPosition()
+{
+    return GetTotalAssets() - GetTotalLoans();
+}
     // --- DTO Definitions (matching your Register component) --- //
     public class DealerFormModel
     {
@@ -1925,4 +2026,306 @@ public class Competitor
         public int Id { get; set; }
         public string Name { get; set; } = "";
     }
+public class Category
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public int UnitId { get; set; }
+}
+
+public class Product
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public int CategoryId { get; set; }
+}
+
+public class AnnualSaleDataLastFYofDealerRegistration
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public int CategoryId { get; set; }
+    public int ProductId { get; set; }
+    public decimal OwnRetailsSaleQty { get; set; }
+    public decimal OwnRetailsSaleAmount { get; set; }
+    public decimal SaleToDealerQty { get; set; }
+    public decimal SaleToDealerAmount { get; set; }
+}
+public enum Months 
+{ 
+    January, February, March, April, May, June, July, August, September, October, November, December 
+}
+
+public class Crop
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
+
+public class DealerMarketDetail
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public string NameOfBlock { get; set; } = "";
+    public int MajorCrops { get; set; }
+    public int NoOfDealer { get; set; }
+    public int NoOfFarmer { get; set; }
+    public Months SeasonFromMonth { get; set; }
+    public Months SeasonToMonth { get; set; }
+    public bool IsCanal { get; set; }
+    public bool IsTank { get; set; }
+    public bool IsWell { get; set; }
+}
+public enum EntityType
+{
+    soleProprietor = 1,
+    Partnership,
+    LLP,
+    PvtLtd,
+    PubLtd,
+    Society
+}
+
+public enum Gender { Male, Female, Other }
+public enum MaritalStatus { Single, Married, Divorced, Widowed }
+
+public class DealerOwnershipInfo
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public string Name { get; set; } = "";
+    public string? FatherName { get; set; }
+    public Gender Gender { get; set; }
+    public MaritalStatus MaritalStatus { get; set; }
+    public string PhoneNumber { get; set; } = "";
+    public string? Email { get; set; }
+    public string? AadhaarNumber { get; set; }
+    public string? AadhaarFilePath { get; set; }
+    public string? PANNumber { get; set; }
+    public string? PANFilePath { get; set; }
+    public string? ProprietorImagePath { get; set; }
+    public string? ShopNoORRoomNoOrBlockNo { get; set; }
+    public string? Street { get; set; }
+    public string? SubVillage { get; set; }
+    public string? Village { get; set; }
+    public string? PinCode { get; set; }
+    public string? Block { get; set; }
+    public string? Taluk { get; set; }
+    public int DistrictId { get; set; }
+    public int StateId { get; set; }
+}
+
+public class PartnerFamilyDetails
+{
+    public int Id { get; set; }
+    public int OwnershipPartnerId { get; set; }
+    public string FamilyMemberName { get; set; } = "";
+    public DateTime DateOfBirth { get; set; }
+    public int Age { get; set; }
+    public int RelationshipId { get; set; }
+    public string? Occupation { get; set; }
+}
+
+public class PartnerOccupation
+{
+    public int Id { get; set; }
+    public int OwnershipPartnerId { get; set; }
+    public string NameofCompany { get; set; } = "";
+    public int SectorId { get; set; }
+    public decimal AnnualTurnover { get; set; }
+}
+
+public class RelationshipItemDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
+
+public class SectorItemDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
+public class Unit
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
+
+public class SalesPlanningInDealerRegistration
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public int CategoryId { get; set; }
+    public int ProductId { get; set; }
+    
+    // Volume (Qty)
+    public decimal AprilQty { get; set; }
+    public decimal MayQty { get; set; }
+    public decimal JuneQty { get; set; }
+    public decimal JulyQty { get; set; }
+    public decimal AugustQty { get; set; }
+    public decimal SeptemberQty { get; set; }
+    public decimal OctoberQty { get; set; }
+    public decimal NovemberQty { get; set; }
+    public decimal DecemberQty { get; set; }
+    public decimal JanuaryQty { get; set; }
+    public decimal FebruaryQty { get; set; }
+    public decimal MarchQty { get; set; }
+
+    // Value (Amount)
+    public decimal AprilAmount { get; set; }
+    public decimal MayAmount { get; set; }
+    public decimal JuneAmount { get; set; }
+    public decimal JulyAmount { get; set; }
+    public decimal AugustAmount { get; set; }
+    public decimal SeptemberAmount { get; set; }
+    public decimal OctoberAmount { get; set; }
+    public decimal NovemberAmount { get; set; }
+    public decimal DecemberAmount { get; set; }
+    public decimal JanuaryAmount { get; set; }
+    public decimal FebruaryAmount { get; set; }
+    public decimal MarchAmount { get; set; }
+}
+public class DealerAssetBank
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public int BankId { get; set; }
+    public string? BankBranch { get; set; }
+    public decimal Value { get; set; }
+    public string? Remarks { get; set; }
+}
+
+public class DealerAssetLand
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public string? LandName { get; set; }
+    public string? SurvayNumber { get; set; }
+    public decimal LandSize { get; set; }
+    public decimal PropertyValue { get; set; }
+    public string? UploadedECDocumentPath { get; set; }
+    public string? UploadedLandDocumentPath { get; set; }
+    public string? UploadedValuationCertificatePath { get; set; }
+}
+
+public class DealerAssetBuilding
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public string? BuildingName { get; set; }
+    public decimal PropertyValue { get; set; }
+    public string? SurveyNumber { get; set; }
+    public decimal LandSize { get; set; }
+    public string? Remarks { get; set; }
+    public string? ShopNoORRoomNoOrBlockNo { get; set; }
+    public string? Street { get; set; }
+    public string? SubVillage { get; set; }
+    public string? Village { get; set; }
+    public string? PinCode { get; set; }
+    public string? Block { get; set; }
+    public string? Taluk { get; set; }
+    public int DistrictId { get; set; }
+    public int StateId { get; set; }
+    public string? UploadedECDocumentPath { get; set; }
+    public string? UploadedBuildingDocumentPath { get; set; }
+    public string? UploadedValuationCertificatePath { get; set; }
+}
+
+public class DealerLoanLiabilities
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public string? LoanSource { get; set; }
+    public decimal LoanValue { get; set; }
+    public string? Remarks { get; set; }
+}
+public class DealerCreditLimitProposal
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public decimal ExistingCreditLimitAmount { get; set; }
+    
+    // SPIC Scores
+    public double Q1Mark { get; set; }
+    public double Q2Mark { get; set; }
+    public double Q3Mark { get; set; }
+    public double Q4Mark { get; set; }
+    public double Q5Mark { get; set; }
+    public double Q6Mark { get; set; }
+    public double Q7Mark { get; set; }
+    public double Q8Mark { get; set; }
+    public double Q9Mark { get; set; }
+    public double Q10Mark { get; set; }
+    public double Q11Mark { get; set; } // Total Spic Mark
+    
+    // Greenstar Scores
+    public double GQ1Mark { get; set; }
+    public double GQ2Mark { get; set; }
+    public double GQ3Mark { get; set; }
+    public double GQ4Mark { get; set; }
+    public double GQ5Mark { get; set; }
+    public double GQ6Mark { get; set; }
+    public double GQ7Mark { get; set; }
+    public double GQ8Mark { get; set; }
+    public double GQ9Mark { get; set; }
+    public double GQ10Mark { get; set; }
+    public double GQ11Mark { get; set; }
+    public double GQ12Mark { get; set; } // Total Greenstar Mark
+    
+    // Additional Limits
+    public decimal AdditionalCreditLimit { get; set; }
+    public decimal GreenstarAdditionalCreditLimit { get; set; }
+}
+public class WarehouseEntity
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
+
+public class RackPoint
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
+
+public class Port
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
+
+public class DealerWarehouseFacilities
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public int WarehouseId { get; set; }
+    public double Distance { get; set; }
+    public double Freight { get; set; }
+}
+
+public class DealerRailFacilities
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public int RailFacilitiesId { get; set; }
+    public double Distance { get; set; }
+    public double Freight { get; set; }
+}
+
+public class DealerPortFacilities
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public int PortId { get; set; }
+    public double Distance { get; set; }
+    public double Freight { get; set; }
+}
+public class DealerCompaniesOperatingInArea
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public string? CompaniesOperating { get; set; }
+}
 }
