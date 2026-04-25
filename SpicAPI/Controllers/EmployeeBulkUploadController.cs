@@ -1,5 +1,6 @@
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
 using static SPIC.Core.Entities.EmployeeRegistration;
@@ -19,6 +20,8 @@ namespace SpicAPI.Controllers
             _logger = logger;
         }
 
+        // POST /api/employeebulkupload/bulk-upload
+        // Excel columns: EmployeeID | EmpName | UserName | Permission | State | Region | HQ | PhoneNumber | EmailID
         [HttpPost("bulk-upload")]
         public async Task<IActionResult> BulkUpload(IFormFile file)
         {
@@ -29,6 +32,16 @@ namespace SpicAPI.Controllers
             if (ext != ".xlsx" && ext != ".xls")
                 return BadRequest(new { Success = false, Message = "Only Excel files (.xlsx/.xls) are supported" });
 
+            // Pre-load lookup tables (name → id, case-insensitive)
+            var stateMap = await _db.States
+                .ToDictionaryAsync(s => s.StateName.Trim(), s => s.Id, StringComparer.OrdinalIgnoreCase);
+
+            var regionMap = await _db.Regions
+                .ToDictionaryAsync(r => r.RegionName.Trim(), r => r.Id, StringComparer.OrdinalIgnoreCase);
+
+            var hqMap = await _db.Headquarters
+                .ToDictionaryAsync(h => h.HeadquarterName.Trim(), h => h.Id, StringComparer.OrdinalIgnoreCase);
+
             using var stream = file.OpenReadStream();
             using var workbook = new XLWorkbook(stream);
             var worksheet = workbook.Worksheets.First();
@@ -38,78 +51,190 @@ namespace SpicAPI.Controllers
             if (lastHeaderCell == 0)
                 return BadRequest(new { Success = false, Message = "Empty worksheet or missing header row" });
 
-            var headerMap = new Dictionary<string,int>();
+            var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             for (int c = 1; c <= lastHeaderCell; c++)
             {
-                var raw = headerRow.Cell(c).GetString();
-                var n = NormalizeHeader(raw);
-                if (!string.IsNullOrEmpty(n) && !headerMap.ContainsKey(n)) headerMap[n] = c;
+                var n = NormalizeHeader(headerRow.Cell(c).GetString());
+                if (!string.IsNullOrEmpty(n) && !headerMap.ContainsKey(n))
+                    headerMap[n] = c;
             }
 
-            // required header: name
-            if (!headerMap.ContainsKey("name") && !headerMap.ContainsKey("employeename") && !headerMap.ContainsKey("employeename"))
-            {
-                return BadRequest(new { Success = false, Message = "Invalid template. Missing column: Name" });
-            }
+            string Cell(IXLRow row, string key) =>
+                headerMap.TryGetValue(key, out var col) ? row.Cell(col).GetString().Trim() : string.Empty;
 
-            var rows = worksheet.RowsUsed().Skip(1);
+            var rows = worksheet.RowsUsed().Skip(1).ToList();
             var now = DateTime.UtcNow;
-            var errors = new List<string>();
+
+            // Grouped errors: category → list of messages
+            var groupedErrors = new Dictionary<string, List<string>>();
+            void AddError(string group, string msg)
+            {
+                if (!groupedErrors.ContainsKey(group)) groupedErrors[group] = new();
+                groupedErrors[group].Add(msg);
+            }
+
             int inserted = 0;
+            int skipped = 0;
+
+            // Collect existing employee codes and usernames to avoid repeated DB hits
+            var existingCodes = await _db.EmployeeInformation
+                .Where(e => e.EmployeeCode != null && e.EmployeeCode != "")
+                .Select(e => e.EmployeeCode)
+                .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
+
+            var existingUserNames = await _db.Employeelogins
+                .Select(l => l.UserId)
+                .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
 
             using var tx = await _db.Database.BeginTransactionAsync();
             try
             {
                 foreach (var row in rows)
                 {
+                    int rowNum = row.RowNumber();
                     try
                     {
-                        var name = GetCellString(row, headerMap, "name");
-                        if (string.IsNullOrWhiteSpace(name))
+                        // --- Read columns ---
+                        var employeeId = Cell(row, "employeeid");
+                        var empName    = Cell(row, "empname");
+                        if (string.IsNullOrWhiteSpace(empName)) empName = Cell(row, "employeename");
+                        var userName   = Cell(row, "username");
+                        var permission = Cell(row, "permission");
+                        var stateName  = Cell(row, "state");
+                        var regionName = Cell(row, "region");
+                        var hqName     = Cell(row, "hq");
+                        var phone      = Cell(row, "phonenumber");
+                        var email      = Cell(row, "emailid");
+                        if (string.IsNullOrWhiteSpace(email)) email = Cell(row, "email");
+
+                        // --- Validation ---
+                        if (string.IsNullOrWhiteSpace(empName))
                         {
-                            errors.Add($"Row {row.RowNumber()}: Name empty");
+                            AddError("Missing Name", $"Row {rowNum}: Employee name is empty.");
+                            skipped++;
                             continue;
                         }
 
-                        var code = GetCellString(row, headerMap, "employeecode");
-                        var personalPhone = GetCellString(row, headerMap, "personalphonenumber");
-                        var officialPhone = GetCellString(row, headerMap, "officialphonenumber");
-                        var email = GetCellString(row, headerMap, "email");
-                        var createdBy = GetCellString(row, headerMap, "createdby");
-
-                        // duplicate check: prefer code, then email
-                        if (!string.IsNullOrEmpty(code) && _db.EmployeeInformation.Any(e => e.EmployeeCode.ToLower() == code.ToLower()))
+                        if (string.IsNullOrWhiteSpace(userName))
                         {
-                            errors.Add($"Row {row.RowNumber()}: EmployeeCode '{code}' already exists, skipped");
+                            AddError("Missing UserName", $"Row {rowNum} ({empName}): UserName is empty.");
+                            skipped++;
                             continue;
                         }
 
-                        if (!string.IsNullOrEmpty(email) && _db.EmployeeInformation.Any(e => e.Email.ToLower() == email.ToLower()))
+                        if (string.IsNullOrWhiteSpace(phone))
                         {
-                            errors.Add($"Row {row.RowNumber()}: Email '{email}' already exists, skipped");
+                            AddError("Missing Phone", $"Row {rowNum} ({empName}): PhoneNumber is empty — used as password.");
+                            skipped++;
                             continue;
                         }
 
-                        var ent = new EmployeeInformation
+                        // Duplicate checks
+                        if (!string.IsNullOrWhiteSpace(employeeId) && existingCodes.Contains(employeeId))
                         {
-                            EmployeeCode = string.IsNullOrWhiteSpace(code) ? null ?? "" : code,
-                            Name = name,
-                            PersonalPhoneNumber = personalPhone,
-                            OfficialPhoneNumber = officialPhone,
-                            Email = email,
-                            CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "bulk-upload" : createdBy,
+                            AddError("Duplicate EmployeeID", $"Row {rowNum} ({empName}): EmployeeID '{employeeId}' already exists.");
+                            skipped++;
+                            continue;
+                        }
+
+                        if (existingUserNames.Contains(userName))
+                        {
+                            AddError("Duplicate UserName", $"Row {rowNum} ({empName}): UserName '{userName}' already exists.");
+                            skipped++;
+                            continue;
+                        }
+
+                        // Parse role (Permission column)
+                        if (!Enum.TryParse<AppRole>(permission, ignoreCase: true, out var role))
+                        {
+                            AddError("Invalid Role", $"Row {rowNum} ({empName}): Permission '{permission}' is not a valid role.");
+                            skipped++;
+                            continue;
+                        }
+
+                        // Only specific roles are allowed via bulk upload
+                        // SMD, SMM  → State only
+                        // RM, RMD   → State + Region
+                        // MDO, MO, JMDO → HQ only
+                        bool isStateRole  = role == AppRole.SMD || role == AppRole.SMM;
+                        bool isRegionRole = role == AppRole.RM  || role == AppRole.RMD;
+                        bool isHqRole     = role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
+
+                        if (!isStateRole && !isRegionRole && !isHqRole)
+                        {
+                            AddError("Role Not Allowed", $"Row {rowNum} ({empName}): Role '{role}' cannot be created via bulk upload.");
+                            skipped++;
+                            continue;
+                        }
+
+                        // Resolve location IDs based on role rules
+                        int stateId = 0, regionId = 0, hqId = 0;
+
+                        if (isStateRole || isRegionRole)
+                        {
+                            if (string.IsNullOrWhiteSpace(stateName))
+                                AddError("Missing State", $"Row {rowNum} ({empName}): State is required for role '{role}'.");
+                            else if (!stateMap.TryGetValue(stateName, out stateId))
+                                AddError("Unknown State", $"Row {rowNum} ({empName}): State '{stateName}' not found — set to 0.");
+                        }
+
+                        if (isRegionRole)
+                        {
+                            if (string.IsNullOrWhiteSpace(regionName))
+                                AddError("Missing Region", $"Row {rowNum} ({empName}): Region is required for role '{role}'.");
+                            else if (!regionMap.TryGetValue(regionName, out regionId))
+                                AddError("Unknown Region", $"Row {rowNum} ({empName}): Region '{regionName}' not found — set to 0.");
+                        }
+
+                        if (isHqRole)
+                        {
+                            if (string.IsNullOrWhiteSpace(hqName))
+                                AddError("Missing HQ", $"Row {rowNum} ({empName}): HQ is required for role '{role}'.");
+                            else if (!hqMap.TryGetValue(hqName, out hqId))
+                                AddError("Unknown HQ", $"Row {rowNum} ({empName}): HQ '{hqName}' not found — set to 0.");
+                        }
+
+                        // --- Insert EmployeeInformation ---
+                        var emp = new EmployeeInformation
+                        {
+                            EmployeeCode = employeeId ?? "",
+                            Name = empName,
+                            PersonalPhoneNumber = phone,
+                            OfficialPhoneNumber = phone,
+                            Email = email ?? "",
+                            CreatedBy = "bulk-upload",
                             UpdatedBy = "bulk-upload",
                             CreatedAt = now,
                             UpdatedAt = now
                         };
+                        _db.EmployeeInformation.Add(emp);
+                        await _db.SaveChangesAsync(); // flush to get emp.Id
 
-                        _db.Add(ent);
+                        // --- Insert Employeelogin (phone number as password via UserId) ---
+                        var login = new Employeelogin
+                        {
+                            EmployeeInformationID = emp.Id,
+                            UserId = userName,   // username
+                            Role = role,
+                            StateId = stateId,
+                            RegionId = regionId,
+                            HeadquartersId = hqId,
+                            ZoneId = 0,
+                            IsActive = true
+                        };
+                        _db.Employeelogins.Add(login);
+
+                        // Track to catch duplicates within the same file
+                        existingCodes.Add(employeeId ?? "");
+                        existingUserNames.Add(userName);
+
                         inserted++;
                     }
                     catch (Exception exRow)
                     {
-                        _logger.LogWarning(exRow, "Row parse error");
-                        errors.Add($"Row {row.RowNumber()} error: {exRow.Message}");
+                        _logger.LogWarning(exRow, "Row {Row} parse error", rowNum);
+                        AddError("Row Error", $"Row {rowNum}: {exRow.Message}");
+                        skipped++;
                     }
                 }
 
@@ -123,19 +248,16 @@ namespace SpicAPI.Controllers
                 return StatusCode(500, new { Success = false, Message = "Bulk upload failed", Error = ex.Message });
             }
 
-            return Ok(new { Success = true, Inserted = inserted, Errors = errors });
+            return Ok(new
+            {
+                Success = true,
+                Inserted = inserted,
+                Skipped = skipped,
+                GroupedErrors = groupedErrors
+            });
         }
 
-        private static string GetCellString(IXLRow row, Dictionary<string,int> headerMap, string key)
-        {
-            if (headerMap.TryGetValue(key, out var col)) return row.Cell(col).GetString().Trim();
-            var lgd = "lgd" + key;
-            if (headerMap.TryGetValue(lgd, out col)) return row.Cell(col).GetString().Trim();
-            var fms = "fms" + key;
-            if (headerMap.TryGetValue(fms, out col)) return row.Cell(col).GetString().Trim();
-            return string.Empty;
-        }
-
-        private static string NormalizeHeader(string h) => (h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("-", "").ToLowerInvariant();
+        private static string NormalizeHeader(string h) =>
+            (h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("-", "").ToLowerInvariant();
     }
 }

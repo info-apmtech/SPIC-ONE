@@ -18,39 +18,8 @@
             <div class="page-subtitle" style="font-size: 0.85rem; color: #6B7280; margin-top: 4px;">
                 Create and assign employee to role and location
             </div>
-
-    @if (_showUploadModal)
-    {
-        <div class="modal-backdrop fade show"></div>
-        <div class="modal fade show d-block" tabindex="-1" role="dialog">
-            <div class="modal-dialog modal-dialog-centered" role="document">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Bulk Upload Employees</h5>
-                        <button type="button" class="btn-close" @onclick="() => _showUploadModal = false"></button>
-                    </div>
-                    <div class="modal-body">
-                        <InputFile OnChange="OnEmployeeFileSelected" />
-                        <div style="margin-top:10px;">
-                            @if (_isUploading)
-                            {
-                                <p class="text-muted">Uploading...</p>
-                            }
-                            else if (!string.IsNullOrEmpty(_uploadResult))
-                            {
-                                <p>@_uploadResult</p>
-                            }
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
         </div>
         <div class="badge-director">@(!string.IsNullOrEmpty(SelectedRole) ? SelectedRole : "Director")</div>
-        <div style="margin-left:12px">
-            <button class="btn-outline-green" @onclick="() => _showUploadModal = true"><i class="bi bi-cloud-arrow-up"></i> Bulk Upload</button>
-        </div>
     </div>
 
     <div class="main-card">
@@ -77,26 +46,13 @@
         </div>
         <div class="row g-4 align-items-end">
 
-            @if (SelectedRole == "RM" || SelectedRole == "SMD" || SelectedRole == "SMM" || SelectedRole == "MDO" || SelectedRole == "JMDO" || SelectedRole == "RMD")
-            {
-                <div class="col-md-3">
-                    <label class="form-lbl">Zone</label>
-                    <select class="form-inp" @bind="vm.Login.ZoneId">
-                        <option value="All">Select Zone</option>
-                        @foreach (var z in Zones)
-                        {
-                            <option value="@z.Id">@z.Name</option>
-                        }
-                    </select>
-                </div>
-            }
-
-            @if (SelectedRole == "RM" || SelectedRole == "SMD" || SelectedRole == "SMM" || SelectedRole == "MDO" || SelectedRole == "JMDO" || SelectedRole == "MO" || SelectedRole == "RMD")
+            @* SMD, SMM → State only *@
+            @if (SelectedRole == "SMD" || SelectedRole == "SMM")
             {
                 <div class="col-md-3">
                     <label class="form-lbl">State</label>
                     <select class="form-inp" @bind="vm.Login.StateId">
-                        <option value="All">Select State</option>
+                        <option value="0">Select State</option>
                         @foreach (var s in States)
                         {
                             <option value="@s.Id">@s.Name</option>
@@ -105,12 +61,23 @@
                 </div>
             }
 
-            @if (SelectedRole == "RM" || SelectedRole == "MDO" || SelectedRole == "JMDO" || SelectedRole == "RMD")
+            @* RM, RMD → State + Region *@
+            @if (SelectedRole == "RM" || SelectedRole == "RMD")
             {
+                <div class="col-md-3">
+                    <label class="form-lbl">State</label>
+                    <select class="form-inp" @bind="vm.Login.StateId">
+                        <option value="0">Select State</option>
+                        @foreach (var s in States)
+                        {
+                            <option value="@s.Id">@s.Name</option>
+                        }
+                    </select>
+                </div>
                 <div class="col-md-3">
                     <label class="form-lbl">Region</label>
                     <select class="form-inp" @bind="vm.Login.RegionId">
-                        <option value="All">Select Region</option>
+                        <option value="0">Select Region</option>
                         @foreach (var r in Regions)
                         {
                             <option value="@r.Id">@r.Name</option>
@@ -119,17 +86,26 @@
                 </div>
             }
 
-            @if (SelectedRole == "MO" || SelectedRole == "MDO" || SelectedRole == "JMDO" || SelectedRole == "RMD")
+            @* MDO, MO, JMDO → HQ only *@
+            @if (SelectedRole == "MDO" || SelectedRole == "MO" || SelectedRole == "JMDO")
             {
                 <div class="col-md-3">
                     <label class="form-lbl">Headquarters</label>
                     <select class="form-inp" @bind="vm.Login.HeadquartersId">
-                        <option value="All">Select Headquarters</option>
+                        <option value="0">Select Headquarters</option>
                         @foreach (var h in Headquarters)
                         {
                             <option value="@h.Id">@h.Name</option>
                         }
                     </select>
+                </div>
+            }
+
+            @if (SelectedRole != "SMD" && SelectedRole != "SMM" && SelectedRole != "RM" && SelectedRole != "RMD" &&
+                 SelectedRole != "MDO" && SelectedRole != "MO" && SelectedRole != "JMDO" && !string.IsNullOrEmpty(SelectedRole))
+            {
+                <div class="col-12">
+                    <p class="text-muted small"><i class="bi bi-info-circle me-1"></i>No location specification required for this role.</p>
                 </div>
             }
         </div>
@@ -218,9 +194,6 @@
 
     private bool IsEditMode = false;
     private int EditingEmployeeId = 0;
-    private bool _showUploadModal = false;
-    private bool _isUploading = false;
-    private string _uploadResult = string.Empty;
 
     private static readonly AppRole[] AllowedRoles = new[]
     {
@@ -404,46 +377,6 @@
     private void Cancel()
     {
         ResetForm();
-    }
-
-    private async Task OnEmployeeFileSelected(InputFileChangeEventArgs e)
-    {
-        var file = e.File;
-        if (file == null) return;
-
-        _isUploading = true;
-        _uploadResult = string.Empty;
-
-        try
-        {
-            using var ms = new MemoryStream();
-            await file.OpenReadStream(20 * 1024 * 1024).CopyToAsync(ms);
-            ms.Position = 0;
-
-            using var content = new MultipartFormDataContent();
-            var fileContent = new StreamContent(ms);
-            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
-            content.Add(fileContent, "file", file.Name);
-
-            var resp = await Http.PostAsync("api/EmployeeBulkUpload/bulk-upload", content);
-            var body = await resp.Content.ReadAsStringAsync();
-            if (resp.IsSuccessStatusCode)
-            {
-                _uploadResult = "Upload successful";
-            }
-            else
-            {
-                _uploadResult = "Upload failed: " + body;
-            }
-        }
-        catch (Exception ex)
-        {
-            _uploadResult = "Upload error: " + ex.Message;
-        }
-        finally
-        {
-            _isUploading = false;
-        }
     }
 
     public class LocationItemDto

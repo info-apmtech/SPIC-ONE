@@ -2,8 +2,10 @@
 @using System.Net.Http.Json
 @using System.Text.Json
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
 @inject HttpClient Http
 @inject NavigationManager NavManager
+@inject LoginState LoginState
 
 <div class="container-fluid py-4 px-0">
 
@@ -397,6 +399,7 @@
 			};
 			await Task.WhenAll(tasks);
 			BuildCompletionSet();
+			ApplyRoleFilter();
 			ApplyFilters();
 		}
 		catch { }
@@ -404,6 +407,17 @@
 		{
 			_isLoading = false;
 		}
+	}
+
+	private void ApplyRoleFilter()
+	{
+		if (LoginState.IsStateRole)
+			_allDealers = _allDealers.Where(d => d.StateId == LoginState.StateId).ToList();
+		else if (LoginState.IsRegionRole)
+			_allDealers = _allDealers.Where(d => d.Region == LoginState.RegionId).ToList();
+		else if (LoginState.IsHQRole)
+			_allDealers = _allDealers.Where(d => d.HQ == LoginState.HQId).ToList();
+		// Admin/Director/AVP/CorporateAdmin — no filter
 	}
 
 	// A dealer is considered "complete" (submitted) when their PinCode is filled in,

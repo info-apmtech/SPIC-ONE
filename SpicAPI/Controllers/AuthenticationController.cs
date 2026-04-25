@@ -1,10 +1,12 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using Spic.Infrastructure.Data;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -20,16 +22,19 @@ namespace SpicAPI.Controllers
         private readonly IConfiguration _config;
         private readonly UserManager<UserInfo> _userManager;
         private readonly SignInManager<UserInfo> _signInManager;
+        private readonly AppDbContext _db;
 
         public AuthenticationController(
             IUserService userService,
             UserManager<UserInfo> userManager,
             SignInManager<UserInfo> signInManager,
-            IConfiguration config)
+            IConfiguration config,
+            AppDbContext db)
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _config = config;
+            _db = db;
         }
 
 
@@ -48,7 +53,7 @@ namespace SpicAPI.Controllers
             if (!result.Succeeded)
                 return Unauthorized("Invalid username or password");
 
-            var token = GenerateJwtToken(user);
+            var token = await GenerateJwtToken(user);
 
             var handler = new JwtSecurityTokenHandler();
             var jwtToken = handler.ReadToken(token) as JwtSecurityToken;
@@ -63,7 +68,7 @@ namespace SpicAPI.Controllers
             return Ok(responseData);
         }
 
-        private string GenerateJwtToken(UserInfo user)
+        private async Task<string> GenerateJwtToken(UserInfo user)
         {
             var jwtConfig = _config.GetSection("Jwt");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"]!));
@@ -76,6 +81,11 @@ namespace SpicAPI.Controllers
                 new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
                 new Claim(ClaimTypes.Role, user.Role.ToString())
             };
+
+            var empLogin = await _db.Employeelogins.FirstOrDefaultAsync(l => l.UserId == user.UserName);
+            claims.Add(new Claim("spic:state_id", empLogin?.StateId.ToString() ?? "0"));
+            claims.Add(new Claim("spic:region_id", empLogin?.RegionId.ToString() ?? "0"));
+            claims.Add(new Claim("spic:hq_id", empLogin?.HeadquartersId.ToString() ?? "0"));
 
             var token = new JwtSecurityToken(
                 issuer: jwtConfig["Issuer"],
