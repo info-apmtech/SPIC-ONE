@@ -1,5 +1,6 @@
 ﻿@page "/DealershipPDF/{dealerId:int?}"
-@layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
+@* @implements IDisposable *@
+@using Microsoft.AspNetCore.Components
 @using System.Net.Http.Json
 @inject HttpClient Http
 @inject SPIC.MauiBlazorApp.Shared.Services.PlatformService Platform
@@ -526,7 +527,7 @@
                     </div>
                 </div>
 
-                <div class="section">
+                @*  <div class="section">
                     <div class="section-title">
                         <div class="section-icon">📉</div> Experience Details
                     </div>
@@ -576,8 +577,55 @@
                             </div>
                         </div>
                     </div>
+                </div>  *@ 
+                <div class="section">
+    <div class="section-title">
+        <div class="section-icon">📉</div> Experience Details
+    </div>
+
+    @if (_experiences != null && _experiences.Any())
+    {
+        @foreach (var exp in _experiences)
+        {
+            var companyName = _companyAll
+                .FirstOrDefault(c => c.Id.ToString() == exp.CompanyId)?.Name ?? "Unknown";
+
+            <div class="sub-card">
+                <div class="exp-header">
+                    <h3>@companyName</h3>
+                    <div class="exp-meta">
+                        <span>@exp.NoOfYears Years</span>
+                        <span class="badge-active">
+                            @(exp.IsActive ? "Active" : "Inactive")
+                        </span>
+                    </div>
                 </div>
 
+                <div class="grid-3">
+                    <div class="field">
+                        <label>Experience</label>
+                        <div class="value">@exp.NoOfYears Years</div>
+                    </div>
+
+                    <div class="field">
+                        <label>Total Quantity</label>
+                        <div class="value">@exp.Quantity.ToString("N0") MT</div>
+                    </div>
+
+                    <div class="field">
+                        <label>Annual Turnover</label>
+                        <div class="value">₹ @exp.TurnOver.ToString("N1") Lakhs</div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="value">No Experience Data Available</div>
+    }
+</div>
+            
                 <div class="section">
                     <div class="section-title">
                         <div class="section-icon">📊</div> Annual Sales Data
@@ -1633,20 +1681,27 @@
 
 </html>
 
-@code {
+@code { 
+
+
     [Parameter]
     public int? dealerId { get; set; }
-
     private DealerFormModel _model = new();
+
     private bool _isLoading = true;
 
     // Lookup data lists
+    private List<Competitor> _companyAll = new();
+  private List<DealerExperience> _experiences = new();
     private List<LocationItemDto> _statesAll = new();
     private List<LocationItemDto> _DistrictAll = new();
     private List<LocationItemDto> _regionsAll = new();
     private List<LocationItemDto> _headquartersAll = new();
     private List<BankItemDto> _banksAll = new();
     private List<DealerItemDto> _dealersAll = new();
+
+    private string? _errorMessage;
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -1660,6 +1715,9 @@
             _headquartersAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all") ?? new();
             _banksAll = await Http.GetFromJsonAsync<List<BankItemDto>>("api/Bank/all") ?? new();
             _dealersAll = await Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/all") ?? new();
+            _companyAll = await Http.GetFromJsonAsync<List<Competitor>>("api/Competitor/all") ?? new();
+          
+
 
             // Load main dealer
             if (dealerId.HasValue && dealerId.Value > 0)
@@ -1668,12 +1726,23 @@
                 if (result != null)
                 {
                     _model = result;
-                }
-            }
+                } 
+               
+              
+            } 
+            if (dealerId.HasValue && dealerId.Value > 0)
+{
+    _experiences = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience/all") ?? new();
+
+    _experiences = _experiences
+        .Where(x => x.DealerId == dealerId.Value)
+        .ToList();
+}
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading document: {ex.Message}");
+            // Console.WriteLine($"Error loading document: {ex.Message}");
+             _errorMessage = ex.Message;
         }
         finally
         {
@@ -1704,10 +1773,11 @@
         if (_model.InSpic) return "SPIC";
         if (_model.InGreenStar) return "GreenStar";
         return "-";
-    }
+    } 
+    
+   
 
-    private string GetStateName(int id) =>
-    _statesAll.FirstOrDefault(x => x.Id == id)?.StateName ?? "-";
+    private string GetStateName(int id) =>_statesAll.FirstOrDefault(x => x.Id == id)?.StateName ?? "-";
     private string GetDistrictName(int id) => _DistrictAll.FirstOrDefault(x => x.Id == id)?.DistrictName ?? "-";
     private string GetRegionName(int id) => _regionsAll.FirstOrDefault(x => x.Id == id)?.RegionName ?? "-";
     private string GetHqName(int id) => _headquartersAll.FirstOrDefault(x => x.Id == id)?.HeadquarterName ?? "-";
@@ -1838,5 +1908,21 @@
         public int Id { get; set; }
         public string DealerCode { get; set; } = "";
         public string FirmName { get; set; } = "";
+    } 
+   
+    public class DealerExperience
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public string? CompanyId { get; set; }
+    public int NoOfYears { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal TurnOver { get; set; }
+    public bool IsActive { get; set; }
+} 
+public class Competitor
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
     }
 }
