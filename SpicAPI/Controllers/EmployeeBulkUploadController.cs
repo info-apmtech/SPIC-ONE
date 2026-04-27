@@ -1,4 +1,5 @@
 using ClosedXML.Excel;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
@@ -13,11 +14,16 @@ namespace SpicAPI.Controllers
     {
         private readonly AppDbContext _db;
         private readonly ILogger<EmployeeBulkUploadController> _logger;
+        private readonly UserManager<UserInfo> _userManager;
 
-        public EmployeeBulkUploadController(AppDbContext db, ILogger<EmployeeBulkUploadController> logger)
+        public EmployeeBulkUploadController(
+            AppDbContext db,
+            ILogger<EmployeeBulkUploadController> logger,
+            UserManager<UserInfo> userManager)
         {
             _db = db;
             _logger = logger;
+            _userManager = userManager;
         }
 
         // POST /api/employeebulkupload/bulk-upload
@@ -96,15 +102,15 @@ namespace SpicAPI.Controllers
                     {
                         // --- Read columns ---
                         var employeeId = Cell(row, "employeeid");
-                        var empName    = Cell(row, "empname");
+                        var empName = Cell(row, "empname");
                         if (string.IsNullOrWhiteSpace(empName)) empName = Cell(row, "employeename");
-                        var userName   = Cell(row, "username");
+                        var userName = Cell(row, "username");
                         var permission = Cell(row, "permission");
-                        var stateName  = Cell(row, "state");
+                        var stateName = Cell(row, "state");
                         var regionName = Cell(row, "region");
-                        var hqName     = Cell(row, "hq");
-                        var phone      = Cell(row, "phonenumber");
-                        var email      = Cell(row, "emailid");
+                        var hqName = Cell(row, "hq");
+                        var phone = Cell(row, "phonenumber");
+                        var email = Cell(row, "emailid");
                         if (string.IsNullOrWhiteSpace(email)) email = Cell(row, "email");
 
                         // --- Validation ---
@@ -156,9 +162,9 @@ namespace SpicAPI.Controllers
                         // SMD, SMM  → State only
                         // RM, RMD   → State + Region
                         // MDO, MO, JMDO → HQ only
-                        bool isStateRole  = role == AppRole.SMD || role == AppRole.SMM;
-                        bool isRegionRole = role == AppRole.RM  || role == AppRole.RMD;
-                        bool isHqRole     = role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
+                        bool isStateRole = role == AppRole.SMD || role == AppRole.SMM;
+                        bool isRegionRole = role == AppRole.RM || role == AppRole.RMD;
+                        bool isHqRole = role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
 
                         if (!isStateRole && !isRegionRole && !isHqRole)
                         {
@@ -194,7 +200,34 @@ namespace SpicAPI.Controllers
                                 AddError("Unknown HQ", $"Row {rowNum} ({empName}): HQ '{hqName}' not found — set to 0.");
                         }
 
-                        // --- Insert EmployeeInformation ---
+                        // ---  Create ASP.NET Core Identity User First ---
+                        var user = new UserInfo
+                        {
+                            UserName = userName,
+                            Password = phone,
+                            Email = email ?? "",
+                            PhoneNumber = phone,
+                            Name = empName,
+                            Role = role,
+                            CreatedAt = now,
+                            CreatedBy = "bulk-upload",
+                            UpdatedAt = now,
+                            UpdatedBy = "bulk-upload",
+                            IsActive = true
+                        };
+
+                        // Use phone number as the initial password
+                        var identityResult = await _userManager.CreateAsync(user, phone);
+
+                        if (!identityResult.Succeeded)
+                        {
+                            var errors = string.Join(", ", identityResult.Errors.Select(e => e.Description));
+                            AddError("Identity Error", $"Row {rowNum} ({empName}): Failed to create login - {errors}");
+                            skipped++;
+                            continue;
+                        }
+
+                        // ---  Insert EmployeeInformation ---
                         var emp = new EmployeeInformation
                         {
                             EmployeeCode = employeeId ?? "",
