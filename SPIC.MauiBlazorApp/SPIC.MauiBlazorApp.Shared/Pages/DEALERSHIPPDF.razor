@@ -1011,7 +1011,122 @@ else
         <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Family Details Available</div>
     }
 </div> *@ 
+@if (_savedPartners != null && _savedPartners.Any())
+{
+    @foreach (var partner in _savedPartners)
+    {
+        <div class="section">
+            <div class="section-title mb-2">
+                <div class="section-icon">👤</div>  <div class="section-text">Proprietor Details</div>
+            </div>
+            <div class="proprietor-wrap">
+                <div class="prop-fields">
+                    <div class="grid-2">
+                        <div class="field">
+                            <label>Name</label>
+                            <div class="value">@(partner.Name ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>Father Name</label>
+                            <div class="value">@(partner.FatherName ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>Aadhar No</label>
+                            <div class="value">@(partner.AadhaarNumber ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>PAN NO</label>
+                            <div class="value">@(partner.PANNumber ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>Phone No</label>
+                            <div class="value">@(partner.PhoneNumber ?? "-")</div>
+                        </div>
+                        
+                        <div class="field">
+                            <label>Gender</label>
+                            <div class="value">@(partner.Gender.ToString())</div>
+                        </div>
 
+                        <div class="field">
+                            <label>Marital Status</label>
+                            <div class="value">@(partner.MaritalStatus.ToString())</div>
+                        </div>
+                    </div>
+                    <div class="grid-1 mt-15">
+                        <div class="field">
+                            <label>Email ID</label>
+                            <div class="value">@(partner.Email ?? "-")</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="prop-photo-box">
+                    <img src="@(string.IsNullOrWhiteSpace(partner.ProprietorImagePath) ? "https://via.placeholder.com/150x200/e2e8f0/64748b?text=Photo" : partner.ProprietorImagePath)" 
+                         onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200/e2e8f0/64748b?text=Photo';" 
+                         alt="Proprietor Photo">
+                </div>
+            </div>
+        </div>
+
+        <div class="section mb-4">
+            <div class="section-title mb-2">
+                <div class="section-icon">👨‍👩‍👧‍👦</div>  <div class="section-text">Family Members of @(partner.Name ?? "Proprietor")</div>
+            </div>
+            
+            @{
+                // Filter the global family list to only get members belonging to this specific partner.
+                // Change 'DealerOwnershipInfoId' if your foreign key is named something else (e.g., ProprietorId)
+                var partnerFamilyMembers = _familyAll?.Where(f => f.OwnershipPartnerId == partner.Id).ToList();
+            }
+
+            @if (partnerFamilyMembers != null && partnerFamilyMembers.Any())
+            {
+                @foreach (var fm in partnerFamilyMembers)
+                {
+                    <div class="sub-card">
+                        <div class="grid-3 mb-15">
+                            <div class="field">
+                                <label>Name</label>
+                                <div class="value">@(fm.FamilyMemberName ?? "-")</div>
+                            </div>
+                            <div class="field">
+                                <label>D.O.B</label>
+                                <div class="value">@fm.DateOfBirth.ToString("dd/MM/yyyy")</div>
+                            </div>
+                            <div class="field">
+                                <label>Age</label>
+                                <div class="value">@fm.Age Years</div>
+                            </div>
+                        </div>
+                        <div class="grid-2 mt-15">
+                            <div class="field">
+                                <label>Occupation</label>
+                                <div class="value">@(fm.Occupation ?? "-")</div>
+                            </div>
+                            <div class="field">
+                                <label>Relationship</label>
+                                <div class="value">@GetRelationshipName(fm.RelationshipId)</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Family Details Available</div>
+            }
+        </div>
+    }
+}
+else
+{
+    <div class="section">
+        <div class="section-title mb-2">
+            <div class="section-icon">👤</div>  <div class="section-text">Proprietor Details</div>
+        </div>
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Proprietor Details Available</div>
+    </div>
+}
 
                 <div class="section">
     <div class="section-title mb-2">
