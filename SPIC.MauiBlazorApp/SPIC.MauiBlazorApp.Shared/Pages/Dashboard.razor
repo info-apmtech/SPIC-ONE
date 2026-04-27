@@ -2,8 +2,10 @@
 @using System.Net.Http.Json
 @using System.Text.Json
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
 @inject HttpClient Http
 @inject NavigationManager NavManager
+@inject LoginState LoginState
 
 <div class="container-fluid py-4 px-0">
 
@@ -37,9 +39,9 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-gray"><i class="bi bi-file-earmark-text"></i></div>
-                    <div class="kpi-number">@_allDealers.Count(d => !_completeDealerIds.Contains(d.Id))</div>
+					<div class="kpi-number">@_allDealers.Count(d => d.AVPApproved == null && d.RMApproved == null && d.SMApproved == null)</div>
 				</div>
-				<div class="kpi-label">Drafts</div>
+				<div class="kpi-label">Submitted</div>
 			</div>
 		</div>
 		<div class="col">
@@ -392,12 +394,13 @@
 			// Only 3 API calls needed — completion is determined by PinCode presence on the dealer record itself
 			var tasks = new Task[]
 			{
-				Task.Run(async () => _allDealers      = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/all") ?? new()),
+				Task.Run(async () => _allDealers      = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/submitted") ?? new()),
 				Task.Run(async () => _regionsAll      = await Http.GetFromJsonAsync<List<RegionDto>>("api/Region/all") ?? new()),
 				Task.Run(async () => _headquartersAll = await Http.GetFromJsonAsync<List<HeadquarterDto>>("api/Headquarter/all") ?? new()),
 			};
 			await Task.WhenAll(tasks);
 			BuildCompletionSet();
+			ApplyRoleFilter();
 			ApplyFilters();
 		}
 		catch { }
@@ -405,6 +408,17 @@
 		{
 			_isLoading = false;
 		}
+	}
+
+	private void ApplyRoleFilter()
+	{
+		if (LoginState.IsStateRole)
+			_allDealers = _allDealers.Where(d => d.StateId == LoginState.StateId).ToList();
+		else if (LoginState.IsRegionRole)
+			_allDealers = _allDealers.Where(d => d.Region == LoginState.RegionId).ToList();
+		else if (LoginState.IsHQRole)
+			_allDealers = _allDealers.Where(d => d.HQ == LoginState.HQId).ToList();
+		// Admin/Director/AVP/CorporateAdmin — no filter
 	}
 
 	// A dealer is considered "complete" (submitted) when their PinCode is filled in,

@@ -30,10 +30,40 @@ namespace SpicAPI.Controllers
 				query = query.Where(x => x.Region == regionId);
 			else if ((role == "SM") && int.TryParse(stateClaim, out var stateId))
 				query = query.Where(x => x.StateId == stateId);
-            else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId))
-                query = query.Where(x => x.HQ == hqId);
-            else
+			else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId))
+				query = query.Where(x => x.HQ == hqId);
+			else
 				query = query.Where(x => x.CreatedBy == userId);
+			return Ok(await query.ToListAsync());
+		}
+
+		/// <summary>
+		/// Returns only dealers that have submitted their basic info (PinCode is present).
+		/// Used by the Dashboard — drafts without a PinCode are excluded.
+		/// </summary>
+		[HttpGet("submitted")]
+		public async Task<IActionResult> GetSubmitted()
+		{
+			var query = _repo.GetAllWithInactive()
+				.Where(x => x.PinCode != null && x.PinCode != "");
+
+			var role = User.FindFirst(ClaimTypes.Role)?.Value;
+			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			var regionClaim = User.FindFirst("spic:region_id")?.Value;
+			var stateClaim = User.FindFirst("spic:state_id")?.Value;
+			var hqClaim = User.FindFirst("spic:hq_id")?.Value;
+
+			if (role == "Admin" || role == "CorporateAdmin" || role == "Director" || role == "AVP")
+				return Ok(await query.ToListAsync());
+			if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
+				query = query.Where(x => x.StateId == stateId);
+			else if ((role == "RM" || role == "RMD") && int.TryParse(regionClaim, out var regionId) && regionId > 0)
+				query = query.Where(x => x.Region == regionId);
+			else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId) && hqId > 0)
+				query = query.Where(x => x.HQ == hqId);
+			else
+				query = query.Where(x => x.CreatedBy == userId);
+
 			return Ok(await query.ToListAsync());
 		}
 	}
