@@ -1,5 +1,4 @@
 ﻿@page "/DealershipPDF/{dealerId:int?}"
-@* @implements IDisposable *@
 @layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
 @using Microsoft.AspNetCore.Components
 @using System.Net.Http.Json
@@ -251,6 +250,34 @@
           .doc-body { overflow: visible !important; }
           @@page { size: A4 portrait; margin: 8mm; }
       }
+
+      .partnerships-text {
+        background-color: #FACC15; /* Vibrant yellow */
+        color: #374151; /* Dark gray text */
+        display: flex;
+        align-items: center;
+        padding-left: 16px;
+        font-weight: 700;
+        font-size: 1.05rem;
+        flex-grow: 1;
+    }
+
+    .partnerships-pill-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .partnerships-pill-tag {
+        background-color: #F0FDF4; /* Very light green background */
+        border: 1px solid #86EFAC; /* Light green border */
+        color: #065F46; /* Dark green text */
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
   </style>
 
 </head>
@@ -534,57 +561,7 @@
                     </div>
                 </div>
 
-                @*  <div class="section">
-                    <div class="section-title mb-2">
-                        <div class="section-icon">📉</div> Experience Details
-                    </div>
-                    <div class="sub-card">
-                        <div class="exp-header">
-                            <h3>SPIC Fertilizers Limited</h3>
-                            <div class="exp-meta">
-                                <span>2015 - Present</span>
-                                <span class="badge-active">Active</span>
-                            </div>
-                        </div>
-                        <div class="grid-3">
-                            <div class="field">
-                                <label>Experience</label>
-                                <div class="value">9 Years</div>
-                            </div>
-                            <div class="field">
-                                <label>Total Quantity</label>
-                                <div class="value">2,400 MT</div>
-                            </div>
-                            <div class="field">
-                                <label>Annual Turnover</label>
-                                <div class="value">₹ 148 Lakhs</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="sub-card">
-                        <div class="exp-header">
-                            <h3>GreenStar Limited</h3>
-                            <div class="exp-meta">
-                                <span>2018 - Present</span>
-                                <span class="badge-active">Active</span>
-                            </div>
-                        </div>
-                        <div class="grid-3">
-                            <div class="field">
-                                <label>Experience</label>
-                                <div class="value">6 Years</div>
-                            </div>
-                            <div class="field">
-                                <label>Total Quantity</label>
-                                <div class="value">1,200 MT</div>
-                            </div>
-                            <div class="field">
-                                <label>Annual Turnover</label>
-                                <div class="value">₹ 95 Lakhs</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>  *@ 
+               
                 <div class="section">
     <div class="section-title mb-2">
         <div class="section-icon">📉</div>   <div class="section-text">Experience Details</div>
@@ -615,12 +592,12 @@
                     </div>
 
                     <div class="field">
-                        <label>Total Quantity</label>
+                        <label>Total Quantity MT</label>
                         <div class="value">@exp.Quantity.ToString("N0") MT</div>
                     </div>
 
                     <div class="field">
-                        <label>Annual Turnover</label>
+                        <label>Annual Turnover Lakhs</label>
                         <div class="value">₹ @exp.TurnOver.ToString("N1") Lakhs</div>
                     </div>
                 </div>
@@ -643,7 +620,8 @@
                                 <th>Product Name</th>
                                 <th style="text-align: center;">Own Retail Sales (MT)</th>
                                 <th style="text-align: center;">Sales to Dealers (MT)</th>
-                                <th style="text-align: center;">MT Total Values</th>
+                                <th style="text-align: center;">MT TotalQTY</th>
+                                 <th style="text-align: center;">Total TO (₹)in Lakhs</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -661,9 +639,8 @@
                         </td>
                         <td style="text-align: center;">@sale.OwnRetailsSaleQty.ToString("N2")</td>
                         <td style="text-align: center;">@sale.SaleToDealerQty.ToString("N2")</td>
-                        <td style="text-align: center;">
-                            @((sale.OwnRetailsSaleQty + sale.SaleToDealerQty).ToString("N2")) / 
-                            ₹@((sale.OwnRetailsSaleAmount + sale.SaleToDealerAmount).ToString("N2"))
+                        <td style="text-align: center;">@((sale.OwnRetailsSaleQty + sale.SaleToDealerQty).ToString("N2")) </td>
+                         <td style="text-align: center;">₹@((sale.OwnRetailsSaleAmount + sale.SaleToDealerAmount).ToString("N2"))
                         </td>
                     </tr>
                 }
@@ -671,9 +648,8 @@
                     <td style="font-weight: bold; color: var(--primary-dark);">Grand Total</td>
                     <td style="text-align: center; font-weight: bold;">@_annualSales.Sum(s => s.OwnRetailsSaleQty).ToString("N2")</td>
                     <td style="text-align: center; font-weight: bold;">@_annualSales.Sum(s => s.SaleToDealerQty).ToString("N2")</td>
-                    <td style="text-align: center; font-weight: bold; color: var(--primary-green);">
-                        @_annualSales.Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty).ToString("N2") / 
-                        ₹@_annualSales.Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount).ToString("N2")
+                    <td style="text-align: center; font-weight: bold; color: var(--primary-green);">@_annualSales.Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty).ToString("N2") </td>
+                     <td style="text-align: center; font-weight: bold; color: var(--primary-green);"> ₹@_annualSales.Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount).ToString("N2")
                     </td>
                 </tr>
             }
@@ -684,60 +660,8 @@
                 </tr>
             }
         </tbody>
-@*                         <tbody>
-                            <tr>
-                                <td>NC UREA <span class="product-desc">Nitrogen Fertilizer</span></td>
-                                <td>124</td>
-                                <td>14</td>
-                                <td>136</td>
-                            </tr>
-                            <tr>
-                                <td>DAP <span class="product-desc">18:46:0</span></td>
-                                <td>124</td>
-                                <td>14</td>
-                                <td>136</td>
-                            </tr>
-                            <tr>
-                                <td>NPK <span class="product-desc">20:20:0:13</span></td>
-                                <td>124</td>
-                                <td>14</td>
-                                <td>136</td>
-                            </tr>
-                            <tr>
-                                <td>NPK <span class="product-desc">15:15:15</span></td>
-                                <td>124</td>
-                                <td>14</td>
-                                <td>136</td>
-                            </tr>
-                            <tr>
-                                <td>NPK <span class="product-desc">10:26:26</span></td>
-                                <td>124</td>
-                                <td>14</td>
-                                <td>136</td>
-                            </tr>
-                            <tr>
-                                <td>SSP - P & G</td>
-                                <td>124</td>
-                                <td>14</td>
-                                <td>136</td>
-                            </tr>
-                            <tr>
-                                <td>SP Sales Value (IN Lakhs)</td>
-                                <td>124</td>
-                                <td>14</td>
-                                <td>136</td>
-                            </tr>
-                            <tr>
-                                <td>WSF</td>
-                                <td>124</td>
-                                <td>14</td>
-                                <td>136</td>
-                            </tr>
-                            <tr>
-                                <td colspan="4">Grand Total</td>
-                            </tr>
-                        </tbody>
- *@                    </table>
+
+                     </table>
                 </div>
 
 <div class="section">
@@ -894,25 +818,89 @@
     <div class="section-title mb-2">
         <div class="section-icon">🤝</div>  <div class="section-text">Authorized Dealer Partnerships</div>
     </div>
-    <div class="pill-group">
+   <div class="partnerships-pill-group">
         @if (_companiesOperatingAll != null && _companiesOperatingAll.Any())
         {
             @foreach (var comp in _companiesOperatingAll)
             {
                 @if (!string.IsNullOrWhiteSpace(comp.CompaniesOperating))
                 {
-                    <span class="pill-tag">@comp.CompaniesOperating</span>
+                    <span class="partnerships-pill-tag">@comp.CompaniesOperating</span>
                 }
             }
         }
         else
         {
-            <span class="value" style="border: none; padding: 0; color: var(--label-color);">No Partnerships Available</span>
+            <span style="color: #6B7280; font-size: 0.85rem; font-weight: 500;">No Partnerships Available</span>
         }
     </div>
+    
 </div>
 
-@if (_savedPartners != null && _savedPartners.Any())
+@* @if (_savedPartners != null && _savedPartners.Any())
+{
+    @foreach (var partner in _savedPartners)
+    {
+        <div class="section">
+            <div class="section-title mb-2">
+                <div class="section-icon">👤</div>  <div class="section-text">Proprietor Details</div>
+            </div>
+            <div class="proprietor-wrap">
+                <div class="prop-fields">
+                    <div class="grid-2">
+                       
+                        <div class="field">
+                            <label>Name</label>
+                            <div class="value">@(partner.Name ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>Father Name</label>
+                            <div class="value">@(partner.FatherName ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>Aadhar No</label>
+                            <div class="value">@(partner.AadhaarNumber ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>PAN NO</label>
+                            <div class="value">@(partner.PANNumber ?? "-")</div>
+                        </div>
+                        <div class="field">
+                            <label>Phone No</label>
+                            <div class="value">@(partner.PhoneNumber ?? "-")</div>
+                        </div>
+                         <div class="field">
+                            <label>Gender</label>
+                            <div class="value">@(partner.Gender ?? "-")</div>
+                        </div>
+                    </div>
+                    <div class="grid-1 mt-15">
+                        <div class="field">
+                            <label>Email ID</label>
+                            <div class="value">@(partner.Email ?? "-")</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="prop-photo-box">
+                    <img src="@(string.IsNullOrEmpty(partner.ProprietorImagePath) ? "https://via.placeholder.com/150x200/e2e8f0/64748b?text=Photo" : partner.ProprietorImagePath)">
+                </div>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <div class="section">
+        <div class="section-title mb-2">
+            <div class="section-icon">👤</div>  <div class="section-text">Proprietor Details</div>
+        </div>
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Proprietor Details Available</div>
+    </div>
+} *@
+
+
+
+@* @if (_savedPartners != null && _savedPartners.Any())
 {
     @foreach (var partner in _savedPartners)
     {
@@ -924,10 +912,6 @@
                 <div class="prop-fields">
                     <div class="grid-2">
                         <div class="field">
-                            <label>Business Entity Type</label>
-                            <div class="value">@GetEntityTypeName(_model.EntityType)</div>
-                        </div>
-                        <div class="field">
                             <label>Name</label>
                             <div class="value">@(partner.Name ?? "-")</div>
                         </div>
@@ -937,7 +921,7 @@
                         </div>
                         <div class="field">
                             <label>Aadhar No</label>
-                            <div class="value">[Aadhaar Redacted]</div>
+                            <div class="value">@(partner.AadhaarNumber ?? "-")</div>
                         </div>
                         <div class="field">
                             <label>PAN NO</label>
@@ -946,6 +930,16 @@
                         <div class="field">
                             <label>Phone No</label>
                             <div class="value">@(partner.PhoneNumber ?? "-")</div>
+                        </div>
+                        
+                        <div class="field">
+                            <label>Gender</label>
+                            <div class="value">@(partner.Gender.ToString())</div>
+                        </div>
+
+                        <div class="field">
+                            <label>Marital Status</label>
+                            <div class="value">@(partner.MaritalStatus.ToString())</div>
                         </div>
                     </div>
                     <div class="grid-1 mt-15">
@@ -956,7 +950,9 @@
                     </div>
                 </div>
                 <div class="prop-photo-box">
-                    <img src="@(string.IsNullOrEmpty(partner.ProprietorImagePath) ? "https://via.placeholder.com/150x200/e2e8f0/64748b?text=Photo" : partner.ProprietorImagePath)" alt="Proprietor Photo">
+                    <img src="@(string.IsNullOrWhiteSpace(partner.ProprietorImagePath) ? "https://via.placeholder.com/150x200/e2e8f0/64748b?text=Photo" : partner.ProprietorImagePath)" 
+                         onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200/e2e8f0/64748b?text=Photo';" 
+                         alt="Proprietor Photo">
                 </div>
             </div>
         </div>
@@ -971,7 +967,7 @@ else
         <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Proprietor Details Available</div>
     </div>
 }
-
+ 
 
                 <div class="section">
     <div class="section-title mb-2">
@@ -1014,7 +1010,8 @@ else
     {
         <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Family Details Available</div>
     }
-</div>
+</div> *@ 
+
 
                 <div class="section">
     <div class="section-title mb-2">
@@ -1143,36 +1140,6 @@ else
     {
         <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Sales Planning Data Available</div>
     }
-</div>
-
-                <div class="section">
-    <div class="section-title mb-2">
-        <div class="section-icon">💰</div>  <div class="section-text">Investment & Godowns</div>
-    </div>
-    <div class="grid-2 mb-15">
-        <div class="field">
-            <label>Capital Investment (₹)</label>
-            <div class="value">₹ @(_model.CapitalInvestment.ToString("N2"))</div>
-        </div>
-        <div class="field">
-            <label>Cash Credit Limit (₹)</label>
-            <div class="value">₹ @(_model.CashCreditLimit.ToString("N2"))</div>
-        </div>
-        <div class="field">
-            <label>Own Godown Capacity</label>
-            <div class="value">@(_model.OwnGodownCapacity) MT</div>
-        </div>
-        <div class="field">
-            <label>Rent Godown Capacity</label>
-            <div class="value">@(_model.RentGodownCapacity) MT</div>
-        </div>
-    </div>
-    <div class="grid-1">
-        <div class="field">
-            <label>Investment Remarks</label>
-            <div class="value">@(_model.CapitalInvestmentRemarks ?? "-")</div>
-        </div>
-    </div>
 </div>
 
 <div class="section">
@@ -1479,41 +1446,8 @@ else
     </table>
 </div>
 
-<div class="section">
-    <div class="section-title mb-2">
-        <div class="section-icon">🤝</div> Other Companies Handled
-    </div>
 
-    @if (_experiences != null && _experiences.Any())
-    {
-        @foreach (var exp in _experiences)
-        {
-            // Match the company ID to the competitor list to get the actual name
-            var companyName = _companyAll.FirstOrDefault(c => c.Id.ToString() == exp.CompanyId)?.Name ?? "Unknown";
 
-            <div class="sub-card mb-15">
-                <div class="grid-3">
-                    <div class="field">
-                        <label>Company Name</label>
-                        <div class="value">@companyName</div>
-                    </div>
-                    <div class="field">
-                        <label>Quantity (MT)</label>
-                        <div class="value">@exp.Quantity.ToString("N2")</div>
-                    </div>
-                    <div class="field">
-                        <label>Value (Lakhs)</label>
-                        <div class="value">@exp.TurnOver.ToString("N2")</div>
-                    </div>
-                </div>
-            </div>
-        }
-    }
-    else
-    {
-        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Other Companies Handled</div>
-    }
-</div>
                <div class="section">
     <div class="section-title mb-2">
         <div class="section-icon">📋</div>  <div class="section-text">Credit Limit Proposal Scoring</div>
@@ -1628,25 +1562,7 @@ else
     }
 </div>
 
-                @* <div class="section">
-                    <div class="section-title mb-2">
-                        <div class="section-icon">💵</div> Trade Deposit Details
-                    </div>
-                    <div class="grid-3">
-                        <div class="field">
-                            <label>Trade Deposit Amount</label>
-                            <div class="value">₹ @(_model.TradeDepositAmount.ToString("N2"))</div>
-                        </div>
-                        <div class="field">
-                            <label>Receipt No</label>
-                            <div class="value">@(_model.TradeDepositReceiptNo ?? "-")</div>
-                        </div>
-                        <div class="field">
-                            <label>Deposit Date</label>
-                            <div class="value">@(_model.TradeDepositDate?.ToString("dd MMM yyyy") ?? "-")</div>
-                        </div>
-                    </div>r
-                </div> *@
+                
 
             </div>
         </div>
