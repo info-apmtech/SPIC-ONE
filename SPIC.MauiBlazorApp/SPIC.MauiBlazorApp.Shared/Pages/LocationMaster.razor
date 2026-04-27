@@ -402,30 +402,52 @@
 
 							</div>
 
-							@if (_showDeleteConfirm)
-							{
-								<div class="modal-backdrop fade show"></div>
-								<div class="modal fade show d-block" tabindex="-1" role="dialog">
-									<div class="modal-dialog modal-dialog-centered" role="document">
-										<div class="modal-content">
-											<div class="modal-header">
-												<h5 class="modal-title">Confirm Delete</h5>
-												<button type="button" class="btn-close" @onclick="CancelDelete"></button>
-											</div>
-											<div class="modal-body">
-												<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
-												<p class="text-muted mb-0">This action cannot be undone.</p>
-											</div>
-											<div class="modal-footer">
-												<button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
-												<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
-													@(_isDeleting ? "Deleting..." : "Delete")
-												</button>
-											</div>
-										</div>
-									</div>
-								</div>
-							}
+@if (_showDeleteConfirm)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">@(_dependencyWarnings.Any() ? "Cannot Delete" : "Confirm Delete")</h5>
+					<button type="button" class="btn-close" @onclick="CancelDelete"></button>
+				</div>
+				<div class="modal-body">
+					@if (_dependencyWarnings.Any())
+					{
+						<div class="alert alert-warning mb-0">
+							<p class="mb-2"><strong>@_deleteTarget?.Name</strong> cannot be deleted because it is mapped to the following:</p>
+							<ul class="mb-2" style="font-size: 0.9rem;">
+								@foreach (var warning in _dependencyWarnings)
+								{
+									<li>@warning</li>
+								}
+							</ul>
+							<p class="mb-0 text-muted" style="font-size: 0.85rem;">Please remove or reassign these mappings first.</p>
+						</div>
+					}
+					else
+					{
+						<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
+						<p class="text-muted mb-0">This action cannot be undone.</p>
+					}
+				</div>
+				<div class="modal-footer">
+					<button class="btn btn-secondary" @onclick="CancelDelete">
+						@(_dependencyWarnings.Any() ? "Close" : "Cancel")
+					</button>
+					
+					@if (!_dependencyWarnings.Any())
+					{
+						<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+							@(_isDeleting ? "Deleting..." : "Delete")
+						</button>
+					}
+				</div>
+			</div>
+		</div>
+	</div>
+}
 
 							@if (_showUploadModal)
 							{
@@ -583,7 +605,7 @@
 	private bool _showDeleteConfirm;
 	private bool _isDeleting;
 	private LocationItemDto? _deleteTarget;
-
+	private List<string> _dependencyWarnings = new();
 
 	// Search & filter
 	private string _searchText = "";
@@ -836,6 +858,40 @@
 	private void DeleteItem(LocationItemDto item)
 	{
 		_deleteTarget = item;
+		_dependencyWarnings.Clear();
+
+		// Check for dependencies based on the active tab
+		switch (ActiveTab)
+		{
+			case "Zones":
+				var mappedStates = _statesAll.Where(s => s.ZoneId == item.Id).Select(s => s.Name).ToList();
+				if (mappedStates.Any())
+					_dependencyWarnings.Add($"States: {string.Join(", ", mappedStates)}");
+				break;
+
+			case "States":
+				var mappedDistricts = _districtsAll.Where(d => d.StateId == item.Id).Select(d => d.Name).ToList();
+				if (mappedDistricts.Any())
+					_dependencyWarnings.Add($"Districts: {string.Join(", ", mappedDistricts)}");
+
+				var mappedRegions = _regionsAll.Where(r => r.StateId == item.Id).Select(r => r.Name).ToList();
+				if (mappedRegions.Any())
+					_dependencyWarnings.Add($"Regions: {string.Join(", ", mappedRegions)}");
+				break;
+
+			case "Districts":
+				var mappedSubDistricts = _subDistrictsAll.Where(sd => sd.DistrictId == item.Id).Select(sd => sd.Name).ToList();
+				if (mappedSubDistricts.Any())
+					_dependencyWarnings.Add($"Sub-Districts: {string.Join(", ", mappedSubDistricts)}");
+				break;
+
+			case "Regions":
+				var mappedHeadquarters = _headquartersAll.Where(hq => hq.RegionId == item.Id).Select(hq => hq.Name).ToList();
+				if (mappedHeadquarters.Any())
+					_dependencyWarnings.Add($"Headquarters: {string.Join(", ", mappedHeadquarters)}");
+				break;
+		}
+
 		_showDeleteConfirm = true;
 	}
 
@@ -873,6 +929,7 @@
 	{
 		_showDeleteConfirm = false;
 		_deleteTarget = null;
+		_dependencyWarnings.Clear();
 	}
 
 	private async Task ToggleStatus(LocationItemDto item)
