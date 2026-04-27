@@ -1,0 +1,1248 @@
+﻿@page "/ReviewDealer"
+
+<style>
+    body {
+        background-color: #F4F7FB; /* Updated background color based on the image */
+    }
+
+    /* --- Header --- */
+    .page-header-row {
+        margin-bottom: 24px;
+        margin-top: 24px;
+    }
+    .page-title {
+        color: #1F2937;
+        font-weight: 700;
+        font-size: 1.4rem;
+        margin: 0;
+    }
+    .page-subtitle {
+        font-size: 0.85rem;
+        color: #6B7280;
+        margin-top: 4px;
+    }
+
+    /* --- Top KPI Cards --- */
+    .kpi-container {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+        overflow-x: auto;
+        padding-bottom: 8px; 
+    }
+    .kpi-card {
+        flex: 1;
+        min-width: 140px;
+        background-color: #ffffff;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .kpi-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        margin-bottom: 12px;
+    }
+    .kpi-title {
+        font-size: 0.75rem;
+        color: #6B7280;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    .kpi-value {
+        font-size: 0.85rem;
+        color: #1F2937;
+        font-weight: 700;
+    }
+
+    /* KPI Colors */
+    .bg-yellow { background-color: #FEF3C7; color: #D97706; }
+    .bg-blue { background-color: #E0F2FE; color: #2563EB; }
+    .bg-pink { background-color: #FCE7F3; color: #DB2777; }
+    .bg-green { background-color: #D1FAE5; color: #059669; }
+    .bg-indigo { background-color: #E0E7FF; color: #4F46E5; }
+    .bg-orange { background-color: #FFEDD5; color: #EA580C; }
+
+    /* --- Accordions --- */
+    .custom-accordion {
+        background-color: #ffffff;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        margin-bottom: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        transition: all 0.3s ease;
+    }
+    .custom-accordion.active {
+        border-left: 4px solid #059669; /* Green active border */
+    }
+    .accordion-header {
+        padding: 16px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 700;
+        color: #1F2937;
+        font-size: 0.95rem;
+        cursor: pointer;
+        user-select: none;
+    }
+    .accordion-header i {
+        color: #9CA3AF;
+        transition: transform 0.3s ease;
+    }
+    .custom-accordion.active .accordion-header i {
+        transform: rotate(180deg);
+    }
+    
+    .accordion-body {
+        padding: 24px;
+        background-color: #F8FAFC; 
+        border-top: 1px solid #E5E7EB;
+        display: none; 
+    }
+    .custom-accordion.active .accordion-body {
+        display: block; 
+    }
+
+    /* --- Inner Detail Cards --- */
+    .detail-card {
+        background-color: #ffffff;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        overflow: hidden;
+        height: 100%;
+    }
+    .detail-card-header {
+        background-color: #ECFDF5; /* Light green */
+        padding: 12px 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #D1FAE5;
+    }
+    .detail-card-title {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #065F46;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+    }
+    .detail-card-title i { font-size: 1rem; }
+    .edit-icon {
+        color: #059669;
+        font-size: 1rem;
+        cursor: pointer;
+    }
+
+    .detail-card-body {
+        padding: 16px;
+    }
+    .data-row {
+        display: flex;
+        margin-bottom: 12px;
+        align-items: flex-start;
+    }
+    .data-row:last-child {
+        margin-bottom: 0;
+    }
+    .data-label {
+        width: 40%;
+        font-size: 0.75rem;
+        color: #6B7280;
+        font-weight: 500;
+        padding-right: 12px;
+    }
+    .data-value {
+        width: 60%;
+        font-size: 0.75rem;
+        color: #1F2937;
+        font-weight: 600;
+        word-break: break-word;
+    }
+
+    /* --- Table Specific Styles --- */
+    .sales-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: center;
+    }
+    .sales-table th {
+        color: #065F46;
+        font-weight: 600;
+        font-size: 0.75rem;
+        padding: 14px;
+        border-bottom: 1px solid #E5E7EB;
+        background-color: #ffffff;
+    }
+    .sales-table td {
+        padding: 14px;
+        font-size: 0.75rem;
+        color: #4B5563;
+        border-bottom: 1px solid #E5E7EB;
+    }
+    .sales-table tr:last-child td { border-bottom: none; }
+    
+    .grand-total-row {
+        background: linear-gradient(to right, #D1FAE5, #A7F3D0);
+        font-weight: 700;
+    }
+    .grand-total-row td {
+        color: #065F46;
+        font-weight: 700;
+    }
+
+    /* Additional Specific UI Elements */
+    .company-pill {
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: #4B5563;
+        background-color: #ffffff;
+    }
+    .total-pill {
+        background: linear-gradient(to right, #D1FAE5, #A7F3D0);
+        color: #065F46;
+        font-weight: 700;
+        font-size: 0.8rem;
+        padding: 12px 24px;
+        border-radius: 8px;
+        display: inline-block;
+    }
+    
+    /* Enclosures Specific */
+    .enclosure-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 12px;
+        padding: 16px;
+    }
+    .enclosure-btn {
+        background-color: #ffffff;
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        padding: 10px 16px;
+        font-size: 0.75rem;
+        color: #4B5563;
+        font-weight: 500;
+        text-align: center;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .enclosure-btn:hover {
+        background-color: #F9FAFB;
+        border-color: #D1D5DB;
+    }
+
+    /* --- Footer --- */
+    .footer-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 24px;
+        padding-top: 24px;
+    }
+    .btn-prev {
+        background-color: transparent;
+        color: #6B7280;
+        border: none;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 0;
+    }
+    .btn-prev:hover { color: #1F2937; }
+    
+    .btn-submit {
+        background-color: #3B82F6;
+        color: #ffffff;
+        border: none;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 12px 24px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: 0.2s;
+    }
+    .btn-submit:hover { background-color: #2563EB; }
+</style>
+
+<div class="container-fluid py-4 px-4" style="max-width: 1300px; margin: auto;">
+     
+    <div class="page-header-row">
+        <h1 class="page-title">Review - Dealer Application</h1>
+        <div class="page-subtitle">Review and approve dealer registration</div>
+    </div>
+
+    <div class="kpi-container">
+        <div class="kpi-card">
+            <div class="kpi-icon bg-yellow"><i class="bi bi-building"></i></div>
+            <div class="kpi-title">Dealer Name</div>
+            <div class="kpi-value">SPIC & GFL (Both)</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon bg-blue"><i class="bi bi-qr-code"></i></div>
+            <div class="kpi-title">Dealer ID</div>
+            <div class="kpi-value">DLR-2026-MH-1234</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon bg-pink"><i class="bi bi-award"></i></div>
+            <div class="kpi-title">Total Experience</div>
+            <div class="kpi-value">12 Years</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon bg-green"><i class="bi bi-graph-up-arrow"></i></div>
+            <div class="kpi-title">Total Sales</div>
+            <div class="kpi-value">₹45.2 Crores</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon bg-indigo"><i class="bi bi-piggy-bank"></i></div>
+            <div class="kpi-title">Investment</div>
+            <div class="kpi-value">₹8.2 Crores</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon bg-pink"><i class="bi bi-file-earmark-text"></i></div>
+            <div class="kpi-title">Credit Limit</div>
+            <div class="kpi-value">₹52.8 Crores</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon bg-orange"><i class="bi bi-search"></i></div>
+            <div class="kpi-title">Status</div>
+            <div class="kpi-value">Under Review</div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsCompanyDetailsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsCompanyDetailsOpen = !IsCompanyDetailsOpen">
+            Company Details
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-file-earmark-text"></i> Basic Information</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Company</div><div class="data-value">Kumar Agro Enterprises</div></div>
+                            <div class="data-row"><div class="data-label">State</div><div class="data-value">Tamil Nadu</div></div>
+                            <div class="data-row"><div class="data-label">Region</div><div class="data-value">North Region</div></div>
+                            <div class="data-row"><div class="data-label">HQ</div><div class="data-value">Delhi HQ</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-briefcase"></i> Business Information</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Dealer Name</div><div class="data-value">Kumar Agro Enterprises</div></div>
+                            <div class="data-row"><div class="data-label">Firm Name</div><div class="data-value">Delhi HQ</div></div>
+                            <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">DLR-2026-MH-1234</div></div>
+                            <div class="data-row"><div class="data-label">Depot/Design</div><div class="data-value">Ramesh Fertilizers Distributors</div></div>
+                            <div class="data-row"><div class="data-label">Date of Appointment</div><div class="data-value">15 March 2026</div></div>
+                            <div class="data-row"><div class="data-label">Business Type</div><div class="data-value">Private Limited Company</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-geo-alt"></i> Primary Location</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Google Map URL</div><div class="data-value text-primary">https://maps.google.com/?q=10.9601,79.3843</div></div>
+                            <div class="data-row"><div class="data-label">Shop No / Room No / Block No</div><div class="data-value">12/44, Ground Floor</div></div>
+                            <div class="data-row"><div class="data-label">Street / Area / Locality</div><div class="data-value">Main Bazaar Road, Kumbakonam Town</div></div>
+                            <div class="data-row"><div class="data-label">Sub Village</div><div class="data-value">East Street</div></div>
+                            <div class="data-row"><div class="data-label">Village</div><div class="data-value">Kumbakonam</div></div>
+                            <div class="data-row"><div class="data-label">Pincode</div><div class="data-value">612001</div></div>
+                            <div class="data-row"><div class="data-label">Block</div><div class="data-value">Kumbakonam Block</div></div>
+                            <div class="data-row"><div class="data-label">Taluk</div><div class="data-value">Kumbakonam Block</div></div>
+                            <div class="data-row"><div class="data-label">District</div><div class="data-value">Thanjavur</div></div>
+                            <div class="data-row"><div class="data-label">State</div><div class="data-value">Tamil Nadu</div></div>
+                            <div class="data-row"><div class="data-label">Official Contact Number</div><div class="data-value">9876543210</div></div>
+                            <div class="data-row"><div class="data-label">WhatsApp Number</div><div class="data-value">9876543210</div></div>
+                            <div class="data-row"><div class="data-label">Alternative Number</div><div class="data-value">9876543215</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-shield-check"></i> Tax & Compliance</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">GST Number</div><div class="data-value">22ABCDE1234F1Z5</div></div>
+                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">File Size</div><div class="data-value">2.4 MB</div></div>
+                            <div class="data-row mt-4"><div class="data-label">PAN Number</div><div class="data-value">ABCDE1234F</div></div>
+                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">File Size</div><div class="data-value">2.4 MB</div></div>
+                            <div class="data-row mt-4"><div class="data-label">Aadhaar Number</div><div class="data-value">4567 8901 2345</div></div>
+                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">File Size</div><div class="data-value">2.4 MB</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-box-seam"></i> Wholesale Fertilizer Details</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Wholesale Fertilizer License</div><div class="data-value">TN Wholesale Fertilizer License - Kumar Agro Traders Pvt Ltd</div></div>
+                            <div class="data-row"><div class="data-label">Expiry Date</div><div class="data-value">31 December 2027</div></div>
+                            <div class="data-row"><div class="data-label">mFMS Code</div><div class="data-value">TNWH6123456789</div></div>
+                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">File Size</div><div class="data-value">2.4 MB</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-shop"></i> Retail Fertilizer Details</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Retail Fertilizer License Details</div><div class="data-value">TN Retail Fertilizer License - Kumar Agro Traders Pvt Ltd</div></div>
+                            <div class="data-row"><div class="data-label">Expiry Date</div><div class="data-value">31 December 2027</div></div>
+                            <div class="data-row"><div class="data-label">mFMS Code</div><div class="data-value">TNWH6123456789</div></div>
+                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">File Size</div><div class="data-value">2.4 MB</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Bank Details</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Account Holder Name</div><div class="data-value">Kumar Agro Traders Pvt Ltd</div></div>
+                            <div class="data-row"><div class="data-label">Account Number</div><div class="data-value">4567890123456789</div></div>
+                            <div class="data-row"><div class="data-label">Bank Name</div><div class="data-value">Indian Bank</div></div>
+                            <div class="data-row"><div class="data-label">Bank Branch</div><div class="data-value">Kumbakonam Main Branch</div></div>
+                            <div class="data-row"><div class="data-label">IFSC Code</div><div class="data-value">IDIB000K001</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-pc-display"></i> Office Automation</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Do you have office automation</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">Are you Enrolled in eDAK?</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsExperienceOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsExperienceOpen = !IsExperienceOpen">
+            Experience In Fertilizer Trade
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-person-workspace"></i> Experience</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Company Name:</div><div class="data-value">Kumar Agro Enterprises</div></div>
+                            <div class="data-row"><div class="data-label">Number of years:</div><div class="data-value">7 Years</div></div>
+                            <div class="data-row"><div class="data-label">Quantity (MT):</div><div class="data-value">1,500</div></div>
+                            <div class="data-row"><div class="data-label">Turnover (Lakhs):</div><div class="data-value">₹ 95L</div></div>
+                            <div class="data-row"><div class="data-label">Still Active:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-person-workspace"></i> Experience</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Company Name:</div><div class="data-value">Kumar Agro Enterprises</div></div>
+                            <div class="data-row"><div class="data-label">Number of years:</div><div class="data-value">7 Years</div></div>
+                            <div class="data-row"><div class="data-label">Quantity (MT):</div><div class="data-value">1,500</div></div>
+                            <div class="data-row"><div class="data-label">Turnover (Lakhs):</div><div class="data-value">₹ 95L</div></div>
+                            <div class="data-row"><div class="data-label">Still Active:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsAnnualSalesOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsAnnualSalesOpen = !IsAnnualSalesOpen">
+            Annual Sales Data
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="detail-card">
+                <div class="detail-card-header">
+                    <h4 class="detail-card-title"><i class="bi bi-file-earmark-spreadsheet"></i> Last Financial Year</h4>
+                    <i class="bi bi-pencil-square edit-icon"></i>
+                </div>
+                <div class="table-responsive">
+                    <table class="sales-table">
+                        <thead>
+                            <tr>
+                                <th>S:No</th>
+                                <th>Product</th>
+                                <th>Own Retail Sales (MT)</th>
+                                <th>Sales to Dealers (MT)</th>
+                                <th>Total (MT)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td>NC Urea</td>
+                                <td>900</td>
+                                <td>300</td>
+                                <td>1,200</td>
+                            </tr>
+                            <tr>
+                                <td>2</td>
+                                <td>NC Urea</td>
+                                <td>900</td>
+                                <td>300</td>
+                                <td>1,200</td>
+                            </tr>
+                            <tr>
+                                <td>3</td>
+                                <td>NC Urea</td>
+                                <td>900</td>
+                                <td>300</td>
+                                <td>1,200</td>
+                            </tr>
+                            <tr class="grand-total-row">
+                                <td colspan="2" style="text-align: right; padding-right: 40px;">GRAND TOTAL</td>
+                                <td>3,650 MT</td>
+                                <td>1,050 MT</td>
+                                <td>4,700 MT</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsWarehouseOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsWarehouseOpen = !IsWarehouseOpen">
+            Warehouse & Logistics
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-building"></i> Kumbakonam Central Warehouse</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">5.5 KM</div></div>
+                            <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">₹120 / MT</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-building"></i> Kumbakonam Central Warehouse</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">5.5 KM</div></div>
+                            <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">₹120 / MT</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-truck"></i> Thanjavur Railway Yard</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">5.5 KM</div></div>
+                            <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">₹120 / MT</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-truck"></i> Thanjavur Railway Yard</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">5.5 KM</div></div>
+                            <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">₹120 / MT</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-water"></i> Nagapattinam Port</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">5.5 KM</div></div>
+                            <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">₹120 / MT</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-water"></i> Nagapattinam Port</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">5.5 KM</div></div>
+                            <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">₹120 / MT</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsMarketDetailsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsMarketDetailsOpen = !IsMarketDetailsOpen">
+            Market Details
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-grid-fill"></i> Kumbakonam Block</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Major Crops:</div><div class="data-value">Paddy, Sugarcane</div></div>
+                            <div class="data-row"><div class="data-label">No of Dealers:</div><div class="data-value">25</div></div>
+                            <div class="data-row"><div class="data-label">No of Farmers:</div><div class="data-value">3,200</div></div>
+                            <div class="data-row"><div class="data-label">Season (From → To):</div><div class="data-value">June → January</div></div>
+                            <div class="data-row"><div class="data-label">Irrigation Type:</div><div class="data-value">Canal</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-grid-fill"></i> Kumbakonam Block</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Major Crops:</div><div class="data-value">Wheat</div></div>
+                            <div class="data-row"><div class="data-label">No of Dealers:</div><div class="data-value">25</div></div>
+                            <div class="data-row"><div class="data-label">No of Farmers:</div><div class="data-value">3,200</div></div>
+                            <div class="data-row"><div class="data-label">Season (From → To):</div><div class="data-value">June → January</div></div>
+                            <div class="data-row"><div class="data-label">Irrigation Type:</div><div class="data-value">Canal</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsProprietorDetailsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsProprietorDetailsOpen = !IsProprietorDetailsOpen">
+            Proprietor Details
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-person-badge"></i> Ownership Information</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Business Entity Type</div><div class="data-value">Partnership</div></div>
+                            <div class="data-row"><div class="data-label">Proprietor Name:</div><div class="data-value">R. Kumar</div></div>
+                            <div class="data-row"><div class="data-label">Son of:</div><div class="data-value">Ramasamy</div></div>
+                            <div class="data-row"><div class="data-label">Phone Number:</div><div class="data-value">9876543210</div></div>
+                            <div class="data-row"><div class="data-label">Email:</div><div class="data-value">rkumar.agro@gmail.com</div></div>
+                            <div class="data-row"><div class="data-label">Aadhaar Number:</div><div class="data-value">4321 5678 9012</div></div>
+                            <div class="data-row"><div class="data-label">Aadhaar Document:</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">Uploaded Image:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-briefcase"></i> Other Occupation / Agencies</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Do you have other occupation or agencies?</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">Name of Company</div><div class="data-value">Kumar Agro Traders</div></div>
+                            <div class="data-row"><div class="data-label">Sector:</div><div class="data-value">Agriculture Trading</div></div>
+                            <div class="data-row"><div class="data-label">Annual Turnover:</div><div class="data-value">₹ 18,50,000</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-people"></i> Family Members</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Family Member Name:</div><div class="data-value">Lakshmi Kumar</div></div>
+                            <div class="data-row"><div class="data-label">D.O.B:</div><div class="data-value">15/08/1988</div></div>
+                            <div class="data-row"><div class="data-label">Age:</div><div class="data-value">37</div></div>
+                            <div class="data-row"><div class="data-label">Relationship:</div><div class="data-value">Spouse</div></div>
+                            <div class="data-row"><div class="data-label">Occupation:</div><div class="data-value">Homemaker</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-people"></i> Family Members</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Family Member Name:</div><div class="data-value">Lakshmi Kumar</div></div>
+                            <div class="data-row"><div class="data-label">D.O.B:</div><div class="data-value">15/08/1988</div></div>
+                            <div class="data-row"><div class="data-label">Age:</div><div class="data-value">37</div></div>
+                            <div class="data-row"><div class="data-label">Relationship:</div><div class="data-value">Spouse</div></div>
+                            <div class="data-row"><div class="data-label">Occupation:</div><div class="data-value">Homemaker</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsCompaniesOperatingOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsCompaniesOperatingOpen = !IsCompaniesOperatingOpen">
+            Companies Operating In Your Place
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="detail-card">
+                <div class="detail-card-header">
+                    <h4 class="detail-card-title"><i class="bi bi-building"></i> Selected Companies</h4>
+                    <i class="bi bi-pencil-square edit-icon"></i>
+                </div>
+                <div class="detail-card-body">
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        <div class="company-pill">SPIC</div>
+                        <div class="company-pill">Greenstar</div>
+                        <div class="company-pill">Coromandel</div>
+                        <div class="company-pill">IFFCO</div>
+                        <div class="company-pill">Nagarjuna</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsSalesPlanningOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsSalesPlanningOpen = !IsSalesPlanningOpen">
+            Sales Planning & Forecast
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="detail-card">
+                <div class="detail-card-header">
+                    <h4 class="detail-card-title"><i class="bi bi-file-earmark-bar-graph"></i> Business Entity Type</h4>
+                    <i class="bi bi-pencil-square edit-icon"></i>
+                </div>
+                <div class="table-responsive">
+                    <table class="sales-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2">S:No</th>
+                                <th rowspan="2">Product Name / Category</th>
+                                <th colspan="2">April</th>
+                                <th colspan="2">May</th>
+                                <th colspan="2">June</th>
+                            </tr>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Lakhs</th>
+                                <th>Metric</th>
+                                <th>Lakhs</th>
+                                <th>Metric</th>
+                                <th>Lakhs</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td>NC Urea</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                            </tr>
+                            <tr>
+                                <td>2</td>
+                                <td>NC Urea</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                            </tr>
+                            <tr>
+                                <td>3</td>
+                                <td>NC Urea</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="detail-card-body pb-3 pt-0">
+                    <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 16px;">
+                        <div class="total-pill">Total Volume: 0.00 Units</div>
+                        <div class="total-pill">Total Forecast Value: 0.00 ₹</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsInvestmentOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsInvestmentOpen = !IsInvestmentOpen">
+            Investment
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Assets (Banking)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Bank Name:</div><div class="data-value">Indian Bank</div></div>
+                            <div class="data-row"><div class="data-label">Bank Branch:</div><div class="data-value">Thanjavur Main Branch</div></div>
+                            <div class="data-row"><div class="data-label">Value (₹):</div><div class="data-value">₹ 12,50,000</div></div>
+                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">Includes savings balance and fixed deposits maintained for business operations.</div></div>
+                            <div class="data-row"><div class="data-label">Document:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Assets (Banking)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Bank Name:</div><div class="data-value">Indian Bank</div></div>
+                            <div class="data-row"><div class="data-label">Bank Branch:</div><div class="data-value">Thanjavur Main Branch</div></div>
+                            <div class="data-row"><div class="data-label">Value (₹):</div><div class="data-value">₹ 12,50,000</div></div>
+                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">Includes savings balance and fixed deposits maintained for business operations.</div></div>
+                            <div class="data-row"><div class="data-label">Document:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-map"></i> Assets (Land)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Land Name:</div><div class="data-value">Kumar Agricultural Land</div></div>
+                            <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">142/3A</div></div>
+                            <div class="data-row"><div class="data-label">Land Size (in Cent):</div><div class="data-value">250 Cent</div></div>
+                            <div class="data-row"><div class="data-label">Property Value (₹ in Lakhs):</div><div class="data-value">₹ 35,00,000</div></div>
+                            <div class="data-row"><div class="data-label">Land Document:</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-map"></i> Assets (Land)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Land Name:</div><div class="data-value">Kumar Agricultural Land</div></div>
+                            <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">142/3A</div></div>
+                            <div class="data-row"><div class="data-label">Land Size (in Cent):</div><div class="data-value">250 Cent</div></div>
+                            <div class="data-row"><div class="data-label">Property Value (₹ in Lakhs):</div><div class="data-value">₹ 35,00,000</div></div>
+                            <div class="data-row"><div class="data-label">Land Document:</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-house"></i> Assets (Building)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Building Name:</div><div class="data-value">Kumar Agro Warehouse</div></div>
+                            <div class="data-row"><div class="data-label">Property Value (₹):</div><div class="data-value">₹ 28,00,000</div></div>
+                            <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">142/3A</div></div>
+                            <div class="data-row"><div class="data-label">Land Size (in Square Ft):</div><div class="data-value">5000 Sq.ft</div></div>
+                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">RCC structured warehouse used for fertilizer storage with proper ventilation and loading access.</div></div>
+                            <div class="data-row"><div class="data-label">Building Document:</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-house"></i> Assets (Building)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Building Name:</div><div class="data-value">Kumar Agro Warehouse</div></div>
+                            <div class="data-row"><div class="data-label">Property Value (₹):</div><div class="data-value">₹ 28,00,000</div></div>
+                            <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">142/3A</div></div>
+                            <div class="data-row"><div class="data-label">Land Size (in Square Ft):</div><div class="data-value">5000 Sq.ft</div></div>
+                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">RCC structured warehouse used for fertilizer storage with proper ventilation and loading access.</div></div>
+                            <div class="data-row"><div class="data-label">Building Document:</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-truck"></i> Movable</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Movable Assets Value (₹):</div><div class="data-value">₹ 12,50,000</div></div>
+                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">Includes tractor, delivery vehicle, shop equipment, storage racks, and generator used for daily operations.</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-buildings"></i> Infrastructure</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Own Godown Capacity:</div><div class="data-value">500 MT</div></div>
+                            <div class="data-row"><div class="data-label">Rent Godown Capacity:</div><div class="data-value">300 MT</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Loan Liabilities</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Loan Source / Institution:</div><div class="data-value">State Bank of India</div></div>
+                            <div class="data-row"><div class="data-label">Loan Value:</div><div class="data-value">₹ 2,00,000</div></div>
+                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">Working capital loan</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bar-chart"></i> Net Financial Position</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Capital Position:</div><div class="data-value">₹10,00,000</div></div>
+                            <div class="data-row"><div class="data-label">Assets:</div><div class="data-value">₹75,00,000</div></div>
+                            <div class="data-row"><div class="data-label">Loans:</div><div class="data-value">₹4,50,000</div></div>
+                            <div class="data-row"><div class="data-label">Net Value:</div><div class="data-value">₹80,50,000</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsCreditLimitOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsCreditLimitOpen = !IsCreditLimitOpen">
+            Credit Limit Proposal 
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-person-badge"></i> Dealer Summary</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Firm Name:</div><div class="data-value">Kumar Agro Traders Pvt Ltd</div></div>
+                            <div class="data-row"><div class="data-label">Total Investment:</div><div class="data-value">₹80.5 Lakhs</div></div>
+                            <div class="data-row"><div class="data-label">Storage Capacity:</div><div class="data-value">800 MT</div></div>
+                            <div class="data-row"><div class="data-label">Experience:</div><div class="data-value">12 Years</div></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-building-add"></i> Property Assets (Collateral)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Primary Warehouse:</div><div class="data-value">1,240 MT</div></div>
+                            <div class="data-row"><div class="data-label">Office Complex:</div><div class="data-value">₹85.0 Lakhs</div></div>
+                            <div class="data-row"><div class="data-label">Total Valuation:</div><div class="data-value">₹1.85 Crores</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-graph-up"></i> Sales Performance Review</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="sales-table">
+                                <thead>
+                                    <tr>
+                                        <th>S:No</th>
+                                        <th>Product Name / Category</th>
+                                        <th>FY 21-22</th>
+                                        <th>FY 22-23</th>
+                                        <th>FY 23-24</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>1</td>
+                                        <td>NC Urea</td>
+                                        <td>420</td>
+                                        <td>900</td>
+                                        <td>300</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td>NC Urea</td>
+                                        <td>420</td>
+                                        <td>900</td>
+                                        <td>300</td>
+                                    </tr>
+                                    <tr>
+                                        <td>3</td>
+                                        <td>NC Urea</td>
+                                        <td>420</td>
+                                        <td>900</td>
+                                        <td>300</td>
+                                    </tr>
+                                    <tr class="grand-total-row">
+                                        <td colspan="2" style="text-align: center;">GRAND TOTAL (MT)</td>
+                                        <td>1,075</td>
+                                        <td>1,285</td>
+                                        <td>1,500</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-building-check"></i> Other Companies Handled</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Company:</div><div class="data-value">Kumar Agro Traders Pvt Ltd</div></div>
+                            <div class="data-row"><div class="data-label">Qty (MT):</div><div class="data-value">450</div></div>
+                            <div class="data-row"><div class="data-label">Value (₹ Lakhs):</div><div class="data-value">₹4,50,000</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-building-check"></i> Other Companies Handled</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Company:</div><div class="data-value">Kumar Agro Traders Pvt Ltd</div></div>
+                            <div class="data-row"><div class="data-label">Qty (MT):</div><div class="data-value">450</div></div>
+                            <div class="data-row"><div class="data-label">Value (₹ Lakhs):</div><div class="data-value">₹4,50,000</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-calendar3"></i> Fiscal Year 2023-24</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="sales-table">
+                                <thead>
+                                    <tr>
+                                        <th>S:No</th>
+                                        <th>Parameter</th>
+                                        <th>Values</th>
+                                        <th>Mark</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>1</td>
+                                        <td>Net Worth</td>
+                                        <td>$2.4M</td>
+                                        <td>30</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td>Net Worth</td>
+                                        <td>$2.4M</td>
+                                        <td>20</td>
+                                    </tr>
+                                    <tr>
+                                        <td>3</td>
+                                        <td>Net Worth</td>
+                                        <td>$2.4M</td>
+                                        <td>30</td>
+                                    </tr>
+                                    <tr class="grand-total-row">
+                                        <td colspan="2" style="text-align: center;">GRAND TOTAL</td>
+                                        <td>$6.9M</td>
+                                        <td>90</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsEnclosuresOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsEnclosuresOpen = !IsEnclosuresOpen">
+            Enclosures 
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="detail-card">
+                <div class="detail-card-header">
+                    <h4 class="detail-card-title"><i class="bi bi-folder-check"></i> Submitted Documents</h4>
+                    <i class="bi bi-pencil-square edit-icon"></i>
+                </div>
+                <div class="enclosure-grid">
+                    <div class="enclosure-btn">GST Certificate</div>
+                    <div class="enclosure-btn">PAN Copy</div>
+                    <div class="enclosure-btn">Aadhaar Copy</div>
+                    <div class="enclosure-btn">Fertilizers Sales License Copy</div>
+                    <div class="enclosure-btn">Specimen Signature</div>
+                    
+                    <div class="enclosure-btn">Warehouse License</div>
+                    <div class="enclosure-btn">Trade License</div>
+                    <div class="enclosure-btn">Photograph</div>
+                    <div class="enclosure-btn">Bank Guarantee Certificate</div>
+                    <div class="enclosure-btn">IT Returns for Last Years</div>
+                    
+                    <div class="enclosure-btn">IT Returns for Last 2nd Years</div>
+                    <div class="enclosure-btn">Valuation Certificate</div>
+                    <div class="enclosure-btn">List of Retailers With Complete Details</div>
+                    <div class="enclosure-btn">Partnership Deed</div>
+                    <div class="enclosure-btn">Board Resolution</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-actions">
+        <button class="btn-prev"><i class="bi bi-chevron-left"></i> Previous Step</button>
+        <button class="btn-submit">Submit Registration</button>
+    </div>
+</div>
+
+@code {
+    // Blazor State Variables to control the open/close behavior of each accordion
+    private bool IsCompanyDetailsOpen { get; set; } = false;
+    private bool IsExperienceOpen { get; set; } = false;
+    private bool IsAnnualSalesOpen { get; set; } = false;
+    private bool IsWarehouseOpen { get; set; } = false;
+    private bool IsMarketDetailsOpen { get; set; } = false;
+    private bool IsProprietorDetailsOpen { get; set; } = false;
+    private bool IsCompaniesOperatingOpen { get; set; } = false;
+    private bool IsSalesPlanningOpen { get; set; } = false;
+    private bool IsInvestmentOpen { get; set; } = false;
+    private bool IsCreditLimitOpen { get; set; } = false;
+    private bool IsEnclosuresOpen { get; set; } = false;
+}
