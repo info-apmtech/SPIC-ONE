@@ -1553,10 +1553,12 @@ border-radius: 12px;
         </div>
     </div>
 
-    <div class="footer-actions">
-      @*   <button class="btn-prev"><i class="bi bi-chevron-left"></i> Previous Step</button> *@
-        <button class="btn-submit">RM Approval</button>
-    </div>
+ @if (CanShowApprovalButton())
+{
+    <button class="btn-submit" @onclick="ApproveDealer" disabled="@_isApproving">
+        @(_isApproving ? "Approving..." : ApprovalButtonText())
+    </button>
+}
 </div>
 
 @code {
@@ -1572,4 +1574,86 @@ border-radius: 12px;
     private bool IsInvestmentOpen { get; set; } = false;
     private bool IsCreditLimitOpen { get; set; } = false;
     private bool IsEnclosuresOpen { get; set; } = false;
+  
+    private string _currentUserRole = "RM"; // replace with login role
+private bool _isApproving = false;
+
+private bool IsDealerSubmitted()
+{
+    return _dealer != null;
+}
+
+private readonly string[] RmRoles = { "RM", "RMD" };
+private readonly string[] SmRoles = { "SMD", "SMM" };
+private readonly string[] FinalApprovalRoles = { "AVP", "CorporateAdmin" };
+
+private bool CanShowApprovalButton()
+{
+    if (_dealer == null)
+        return false;
+
+    if (RmRoles.Contains(_currentUserRole))
+        return _dealer.RMApproved == null;
+
+    if (SmRoles.Contains(_currentUserRole))
+        return _dealer.RMApproved == true && _dealer.SMApproved == null;
+
+    if (FinalApprovalRoles.Contains(_currentUserRole))
+        return _dealer.RMApproved == true 
+            && _dealer.SMApproved == true 
+            && _dealer.AVPApproved == null;
+
+    return false;
+}
+
+private string ApprovalButtonText()
+{
+    if (RmRoles.Contains(_currentUserRole))
+        return "RM Approval";
+
+    if (SmRoles.Contains(_currentUserRole))
+        return "SM Approval";
+
+    if (FinalApprovalRoles.Contains(_currentUserRole))
+        return "Approve";
+
+    return "Approve";
+}
+private async Task ApproveDealer()
+{
+    if (_dealer == null) return;
+
+    _isApproving = true;
+
+    try
+    {
+       if (RmRoles.Contains(_currentUserRole))
+{
+    _dealer.RMApproved = true;
+}
+else if (SmRoles.Contains(_currentUserRole))
+{
+    _dealer.SMApproved = true;
+}
+else if (FinalApprovalRoles.Contains(_currentUserRole))
+{
+    _dealer.AVPApproved = true;
+    _dealer.Status = DR.DealerStatus.Active;
+}
+
+        var response = await Http.PutAsJsonAsync(
+            $"api/DealerRegistration/{_dealer.Id}",
+            _dealer
+        );
+
+        if (!response.IsSuccessStatusCode)
+        {
+            // optional: show error message
+        }
+    }
+    finally
+    {
+        _isApproving = false;
+    }
+}
 }
