@@ -30,6 +30,9 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 		public int RegionId { get; private set; }
 		public int HQId { get; private set; }
 
+		// Current authenticated user id (from token claims)
+		public string? UserId { get; private set; }
+
 		public bool IsAdmin => UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP;
 		public bool IsStateRole => UserRole is AppRole.SMD or AppRole.SMM;
 		public bool IsRegionRole => UserRole is AppRole.RM or AppRole.RMD;
@@ -76,6 +79,14 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 					RegionId = rid;
 				if (root.TryGetProperty("spic:hq_id", out var hp) && int.TryParse(hp.GetString(), out var hid))
 					HQId = hid;
+
+				// Try to parse user identifier from common claim names
+				string? uid = null;
+				if (root.TryGetProperty("sub", out var sub)) uid = sub.GetString();
+				if (string.IsNullOrEmpty(uid) && root.TryGetProperty("nameid", out var nameid)) uid = nameid.GetString();
+				if (string.IsNullOrEmpty(uid) && root.TryGetProperty("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", out var nid)) uid = nid.GetString();
+				if (string.IsNullOrEmpty(uid) && root.TryGetProperty("spic:user_id", out var sup)) uid = sup.GetString();
+				UserId = uid;
 			}
 			catch { }
 		}

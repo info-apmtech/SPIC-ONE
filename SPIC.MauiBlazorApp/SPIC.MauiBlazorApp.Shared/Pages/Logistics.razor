@@ -1,6 +1,7 @@
 ﻿@page "/Logistics"
 @using System.Net.Http.Json
 @inject HttpClient Http
+@inject IJSRuntime JS
 
 <div class="container-fluid">
 
@@ -446,8 +447,18 @@
 		.Skip((_currentPage - 1) * _pageSize)
 		.Take(_pageSize);
 
-	protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
 	{
+		try
+		{
+			var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+			if (!string.IsNullOrEmpty(token))
+			{
+				_currentUserId = GetUserIdFromToken(token);
+			}
+		}
+		catch { }
+
 		await LoadLookups();
 		await LoadData();
 	}
@@ -536,17 +547,17 @@
 		{
 			_isSaving = true;
 
-			object payload = ActiveTab switch
+            object payload = ActiveTab switch
 			{
 				"Warehouse" => _isEditing
-					? new { Id = _editingId!.Value, _warehouseForm.Name, _warehouseForm.GoogleURL, _warehouseForm.IsActive, UpdatedBy = "current-user" }
-					: new { _warehouseForm.Name, _warehouseForm.GoogleURL, _warehouseForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+					? new { Id = _editingId!.Value, _warehouseForm.Name, _warehouseForm.GoogleURL, _warehouseForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
+					: new { _warehouseForm.Name, _warehouseForm.GoogleURL, _warehouseForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
 				"Rake Point" => _isEditing
-					? (object)new { Id = _editingId!.Value, _rakePointForm.Name, _rakePointForm.GoogleURL, _rakePointForm.RailwayCode, _rakePointForm.StateId, _rakePointForm.DistrictId, _rakePointForm.IsActive, UpdatedBy = "current-user" }
-					: new { _rakePointForm.Name, _rakePointForm.GoogleURL, _rakePointForm.RailwayCode, _rakePointForm.StateId, _rakePointForm.DistrictId, _rakePointForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+					? (object)new { Id = _editingId!.Value, _rakePointForm.Name, _rakePointForm.GoogleURL, _rakePointForm.RailwayCode, _rakePointForm.StateId, _rakePointForm.DistrictId, _rakePointForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
+					: new { _rakePointForm.Name, _rakePointForm.GoogleURL, _rakePointForm.RailwayCode, _rakePointForm.StateId, _rakePointForm.DistrictId, _rakePointForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
 				"Port" => _isEditing
-						? (object)new { Id = _editingId!.Value, _portForm.Name, _portForm.GoogleURL, _portForm.StateId, _portForm.DistrictId, _portForm.IsActive, UpdatedBy = "current-user" }
-						: new { _portForm.Name, _portForm.GoogleURL, _portForm.StateId, _portForm.DistrictId, _portForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
+						? (object)new { Id = _editingId!.Value, _portForm.Name, _portForm.GoogleURL, _portForm.StateId, _portForm.DistrictId, _portForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
+						: new { _portForm.Name, _portForm.GoogleURL, _portForm.StateId, _portForm.DistrictId, _portForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
 				_ => new { }
 			};
 
@@ -730,6 +741,36 @@
 	{
 		_message = message;
 		_isError = isError;
+	}
+
+	// current user id parsed from JWT token (string because Identity user id may be non-int)
+	private string? _currentUserId;
+
+	private string? GetUserIdFromToken(string token)
+	{
+		try
+		{
+			if (string.IsNullOrWhiteSpace(token)) return null;
+			var raw = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+			var parts = raw.Split('.');
+			if (parts.Length < 2) return null;
+			var payload = parts[1];
+			switch (payload.Length % 4)
+			{
+				case 2: payload += "=="; break;
+				case 3: payload += "="; break;
+			}
+			payload = payload.Replace('-', '+').Replace('_', '/');
+			var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+			using var doc = System.Text.Json.JsonDocument.Parse(json);
+			var root = doc.RootElement;
+			if (root.TryGetProperty("sub", out var sub)) return sub.GetString();
+			if (root.TryGetProperty("nameid", out var nid)) return nid.GetString();
+			if (root.TryGetProperty("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", out var id2)) return id2.GetString();
+			if (root.TryGetProperty("spic:user_id", out var sup)) return sup.GetString();
+		}
+		catch { }
+		return null;
 	}
 
 	// Pagination helpers
