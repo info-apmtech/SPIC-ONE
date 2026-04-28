@@ -39,20 +39,40 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-gray"><i class="bi bi-file-earmark-text"></i></div>
-					<div class="kpi-number">@_allDealers.Count(d => d.AVPApproved == null && d.RMApproved == null && d.SMApproved == null)</div>
+					<div class="kpi-number">@_allDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == null)</div>
 				</div>
 				<div class="kpi-label">Submitted</div>
 			</div>
 		</div>
 		<div class="col">
-			<div class="kpi-card">
-				<div class="kpi-header">
-					<div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                    <div class="kpi-number">@_allDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.AVPApproved == null && d.RMApproved != false && d.SMApproved != false)</div>
-				</div>
-				<div class="kpi-label">Pending Approval</div>
-			</div>
+	<div class="kpi-card">
+		<div class="kpi-header">
+			<div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
+			<div class="kpi-number">@_allDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == null)</div>
 		</div>
+		<div class="kpi-label">In RM</div>
+	</div>
+</div>
+       <div class="col">
+	<div class="kpi-card">
+		<div class="kpi-header">
+			<div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
+			<div class="kpi-number">@_allDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == null)</div>
+		</div>
+		<div class="kpi-label">In SMM</div>
+	</div>
+</div>
+     </div>
+<div class="row g-3 mb-4">
+         <div class="col">
+	<div class="kpi-card">
+		<div class="kpi-header">
+			<div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
+			<div class="kpi-number">@_allDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)</div>
+		</div>
+		<div class="kpi-label">In Office</div>
+	</div>
+</div>
 		<div class="col">
 			<div class="kpi-card">
 				<div class="kpi-header">
@@ -154,39 +174,45 @@
 				var statusName = GetStatusName(dealer.Status);
 				var regionName = _regionsAll.FirstOrDefault(r => r.Id == dealer.Region)?.RegionName ?? "-";
 				var hqName = _headquartersAll.FirstOrDefault(h => h.Id == dealer.HQ)?.HeadquarterName ?? "-";
+				var isPendingForMe = IsPendingForMe(dealer);
 
 				<div class="col-md-4">
-					<div class="reg-card">
+					<div class="reg-card @(isPendingForMe ? "border-primary shadow-sm" : "")">
 						<div class="card-top-row">
-                    @if (approvalStatus == "Approved")
-					{
-						<div class="progress-circle p-100">
-							<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
-						</div>
-					}
-					else if (approvalStatus == "Pending")
-					{
-						<div class="progress-circle p-60">
-							<div class="progress-inner">
-								<div class="progress-val">Pending</div>
-								<div class="progress-steps">@approvalStatus</div>
-							</div>
-						</div>
-					}
-					else
-					{
-						<div class="progress-circle p-30">
-							<div class="progress-inner">
-								<div class="progress-val">
-									@(approvalStatus == "Draft" ? "Draft" : approvalStatus == "Rejected" ? "!" : "...")
+							@if (approvalStatus == "Approved")
+							{
+								<div class="progress-circle p-100">
+									<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
 								</div>
-								<div class="progress-steps">@approvalStatus</div>
-							</div>
-						</div>
-					}
+							}
+							else if (approvalStatus == "In RM" || approvalStatus == "In SMM" || approvalStatus == "In AVP")
+							{
+								<div class="progress-circle p-60">
+									<div class="progress-inner">
+										<div class="progress-val">@approvalStatus</div>
+										<div class="progress-steps">@approvalStatus</div>
+									</div>
+								</div>
+							}
+							else
+							{
+								<div class="progress-circle p-30">
+									<div class="progress-inner">
+										<div class="progress-val">
+											@(approvalStatus == "Draft" ? "Draft" : approvalStatus == "Rejected" ? "!" : "...")
+										</div>
+										<div class="progress-steps">@approvalStatus</div>
+									</div>
+								</div>
+							}
+							
 							<div class="d-flex flex-column align-items-end gap-2">
 								<div class="badge-group">
-									@if (approvalStatus == "Approved")
+									@if (isPendingForMe)
+									{
+										<span class="badge-custom bg-primary text-white border-0">Action Required</span>
+									}
+									else if (approvalStatus == "Approved")
 									{
 										<span class="badge-custom badge-green-dashboard" style="background:#D1FAE5; color:#047857;">Approved</span>
 									}
@@ -194,22 +220,18 @@
 									{
 										<span class="badge-custom" style="background:#FEE2E2; color:#DC2626;">Rejected</span>
 									}
-									else if (approvalStatus == "Pending")
-									{
-										<span class="badge-custom badge-yellow">Pending</span>
-									}
-									else if (IsDealerComplete(dealer.Id))
-									{
-										<span class="badge-custom badge-green-dashboard" style="background:#D1FAE5; color:#047857;">Submitted</span>
-									}
-									else
+									else if (approvalStatus == "Draft")
 									{
 										<span class="badge-custom badge-yellow">Draft</span>
 									}
+									else
+									{
+										<span class="badge-custom badge-yellow">@approvalStatus</span>
+									}
 									<span class="badge-custom @(statusName == "Active" ? "badge-green-dashboard" : "badge-yellow")">@statusName</span>
 								</div>
-                                <div class="d-flex gap-2">
-                                    @if (LoginState.IsAdmin)
+								<div class="d-flex gap-2">
+									@if (LoginState.IsAdmin || isPendingForMe)
 									{
 										<button class="btn-continue-blue" @onclick="() => ReviewDealer(dealer.Id)"><i class="bi bi-search me-1"></i> Review</button>
 									}
@@ -399,7 +421,6 @@
 		_isLoading = true;
 		try
 		{
-			// Only 3 API calls needed — completion is determined by PinCode presence on the dealer record itself
 			var tasks = new Task[]
 			{
 				Task.Run(async () => _allDealers      = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/submitted") ?? new()),
@@ -426,11 +447,8 @@
 			_allDealers = _allDealers.Where(d => d.Region == LoginState.RegionId).ToList();
 		else if (LoginState.IsHQRole)
 			_allDealers = _allDealers.Where(d => d.HQ == LoginState.HQId).ToList();
-		// Admin/Director/AVP/CorporateAdmin — no filter
 	}
 
-	// A dealer is considered "complete" (submitted) when their PinCode is filled in,
-	// which indicates the address/basic details section has been saved.
 	private void BuildCompletionSet()
 	{
 		_completeDealerIds = _allDealers
@@ -440,6 +458,54 @@
 	}
 
 	private bool IsDealerComplete(int dealerId) => _completeDealerIds.Contains(dealerId);
+
+	// Determines exactly where the application is in the workflow
+	private string GetApprovalStatus(DealerDto d)
+	{
+		// 1. Rejections take priority
+		if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)
+			return "Rejected";
+
+		// 2. Final approval
+		if (d.AVPApproved == true)
+			return "Approved";
+
+		// 3. Not submitted yet
+		if (!IsDealerComplete(d.Id))
+			return "Draft";
+
+		// 4. Workflow Queue Routing
+		if (d.RMApproved == null)
+			return "In RM";
+		
+		if (d.RMApproved == true && d.SMApproved == null)
+			return "In SMM";
+
+		if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
+			return "In AVP";
+
+		return "Submitted";
+	}
+
+	// Determines if the current user needs to act on this dealer. 
+	// This pushes the card to the top and adds the "Action Required" badge.
+	private bool IsPendingForMe(DealerDto d)
+	{
+		if (!IsDealerComplete(d.Id)) return false;
+		
+		// If rejected by anyone, it's dead in the water, no action required
+		if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false) return false;
+
+		var status = GetApprovalStatus(d);
+
+		if (LoginState.IsRegionRole && status == "In RM") return true;
+		if (LoginState.IsStateRole && status == "In SMM") return true;
+		
+		// Assuming AVP maps to IsAdmin or a specific corporate role. Adjust if you have a distinct AVP boolean.
+		if (LoginState.IsAdmin && status == "In AVP") return true;
+
+		return false;
+	}
 
 	private void ApplyFilters()
 	{
@@ -469,40 +535,15 @@
 		if (!string.IsNullOrEmpty(_filterEntityType))
 			query = query.Where(d => string.Equals(d.BusinessEntityType, _filterEntityType, StringComparison.OrdinalIgnoreCase));
 
+		// SORTING: Pending for the logged-in user ALWAYS floats to the top, then follows user's sort preference
 		query = _sortOrder switch
 		{
-			"oldest" => query.OrderBy(d => d.UpdatedAt),
-			"name" => query.OrderBy(d => d.FirmName),
-			_ => query.OrderByDescending(d => d.UpdatedAt)
+			"oldest" => query.OrderByDescending(d => IsPendingForMe(d)).ThenBy(d => d.UpdatedAt),
+			"name"   => query.OrderByDescending(d => IsPendingForMe(d)).ThenBy(d => d.FirmName),
+			_        => query.OrderByDescending(d => IsPendingForMe(d)).ThenByDescending(d => d.UpdatedAt)
 		};
 
 		_filteredDealers = query.ToList();
-	}
-
-	private string GetApprovalStatus(DealerDto d)
-	{
-       // 1. Rejections take priority
-		if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)
-			return "Rejected";
-
-		// 2. Final approval
-		if (d.AVPApproved == true)
-			return "Approved";
-
-		// 3. Pending approval (match KPI): dealer is complete and awaiting AVP while RM/SM are not explicitly false
-		if (IsDealerComplete(d.Id) && d.AVPApproved == null && d.RMApproved != false && d.SMApproved != false)
-			return "Pending";
-
-		// 4. Pending if internal approvals started
-		if (d.RMApproved == true || d.SMApproved == true)
-			return "Pending";
-
-		// 5. Submitted if all steps complete
-		if (IsDealerComplete(d.Id))
-			return "Submitted";
-
-		// 6. Default to Draft
-		return "Draft";
 	}
 
 	private string GetStatusName(int status) => status switch
@@ -659,4 +700,3 @@
 		public string HeadquarterName { get; set; } = "";
 	}
 }
-
