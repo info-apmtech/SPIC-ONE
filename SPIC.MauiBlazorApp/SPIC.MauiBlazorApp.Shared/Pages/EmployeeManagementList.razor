@@ -3,10 +3,90 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
 @using SPIC.Core.Entities
+@using System.Text
 @using static SPIC.Core.Entities.EmployeeRegistration
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject IJSRuntime JSRuntime
+
+<script>
+    window.exportInterop = {
+        // Triggers a file download in the browser
+        downloadFile: function (fileName, contentType, base64String) {
+            const link = document.createElement('a');
+            link.download = fileName;
+            link.href = `data:${contentType};base64,${base64String}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        },
+        // Copies text to the user's clipboard
+        copyText: function (text) {
+            navigator.clipboard.writeText(text).then(function () {
+                alert("Table data copied to clipboard!");
+            }).catch(function (err) {
+                console.error('Could not copy text: ', err);
+            });
+        },
+        // Opens a new window and triggers the print dialog
+        printTable: function (htmlContent, title) {
+            const printWindow = window.open('', '', 'height=600,width=800');
+            printWindow.document.write('<html><head><title>' + title + '</title>');
+            printWindow.document.write('<style>');
+            printWindow.document.write('body { font-family: Arial, sans-serif; }');
+            printWindow.document.write('table { border-collapse: collapse; width: 100%; margin-top: 20px; }');
+            printWindow.document.write('th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }');
+            printWindow.document.write('th { background-color: #f2f2f2; }');
+            printWindow.document.write('</style></head><body>');
+            printWindow.document.write('<h2>' + title + '</h2>');
+            printWindow.document.write(htmlContent);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.focus();
+            
+            setTimeout(function() {
+                printWindow.print();
+                printWindow.close();
+            }, 250);
+        },
+        // Generates and downloads a real PDF file
+        downloadPdf: function (htmlContent, fileName) {
+            const generate = function () {
+                const element = document.createElement('div');
+                element.innerHTML = `
+                    <style>
+                        body { font-family: Arial, sans-serif; }
+                        table { border-collapse: collapse; width: 100%; font-size: 12px; }
+                        th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+                        th { background-color: #f2f2f2; font-weight: bold; }
+                        h2 { text-align: center; color: #333; }
+                    </style>
+                    <h2>Employee Data</h2>
+                    ${htmlContent}
+                `;
+                
+                html2pdf().set({
+                    margin: 0.5,
+                    filename: fileName,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2 },
+                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+                }).from(element).save();
+            };
+
+            // Dynamically load html2pdf.js if it hasn't been loaded yet
+            if (typeof html2pdf === 'undefined') {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                script.onload = generate;
+                document.head.appendChild(script);
+            } else {
+                generate();
+            }
+        }
+    };
+</script>
 
 <div class="container-fluid py-4 px-4">
 
@@ -91,94 +171,151 @@
         <div class="search-box main-search">
             <i class="bi bi-search"></i>
             <input type="text" placeholder="Search employees..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
-            </div>
+        </div>
 
-            <div class="filter-selects">
-                <select class="form-inp" @bind="_roleFilter" @bind:after="ApplyFilter">
-                    <option value="All">All Role</option>
-                    @foreach (var role in Enum.GetValues<AppRole>())
-                    {
-                        <option value="@role">@role</option>
-                    }
-                </select>
+        <div class="filter-selects">
+            <select class="form-inp" @bind="_roleFilter" @bind:after="ApplyFilter">
+                <option value="All">All Role</option>
+                @foreach (var role in Enum.GetValues<AppRole>())
+                {
+                    <option value="@role">@role</option>
+                }
+            </select>
 
-                <select class="form-inp" @bind="_stateFilter" @bind:after="ApplyFilter">
-                    <option value="All">All States</option>
-                    @foreach (var s in states)
-                    {
-                        <option value="@s.Id">@(!string.IsNullOrWhiteSpace(s.StateName) ? s.StateName : s.ZoneName)</option>
-                    }
-                </select>
+            <select class="form-inp" @bind="_stateFilter" @bind:after="ApplyFilter">
+                <option value="All">All States</option>
+                @foreach (var s in states)
+                {
+                    <option value="@s.Id">@(!string.IsNullOrWhiteSpace(s.StateName) ? s.StateName : s.ZoneName)</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="main-card">
+        <div class="section-header d-flex justify-content-between align-items-center mb-3">
+            <h3 class="section-title mb-0">Employee List</h3>
+            <div class="search-box small-search">
+                <i class="bi bi-search"></i>
+                <input type="text" placeholder="Search employees..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
             </div>
         </div>
 
-        <div class="main-card">
-            <div class="section-header">
-                <h3 class="section-title">Employee List</h3>
-                <div class="search-box small-search">
-                    <i class="bi bi-search"></i>
-                    <input type="text" placeholder="Search employees..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
-                    </div>
-                </div>
+        <div class="export-buttons mb-3 d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportCopy">
+                <i class="bi bi-front"></i> Copy
+            </button>
+            <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportCsv">
+                <i class="bi bi-filetype-csv"></i> CSV
+            </button>
+            <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportPdf">
+                <i class="bi bi-filetype-pdf"></i> PDF
+            </button>
+            <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportExcel">
+                <i class="bi bi-file-earmark-excel"></i> Excel
+            </button>
+            <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportPrint">
+                <i class="bi bi-printer"></i> Print
+            </button>
+        </div>
 
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
+        <div class="table-responsive">
+            <table class="data-table table table-bordered table-hover">
+                <thead>
+                    <tr>
+                        <th style="width: 60px; text-align: center;">S:No</th>
+                        <th>Employee ID</th>
+                        <th>Name</th>
+                        <th>User Name</th>
+                        <th>Password</th>
+                        <th>Role</th>
+                        <th>State</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_isLoading)
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center text-muted">Loading...</td>
+                        </tr>
+                    }
+                    else if (!PagedItems.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center text-muted">No data available in table</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
+                        {
+                            var login = GetLogin(item.Id);
                             <tr>
-                                <th style="width: 60px; text-align: center;">S:No</th>
-                                <th>Employee ID</th>
-                                <th>Name</th>
-                                <th>User Name</th>
-                                <th>Password</th>
-                                <th>Role</th>
-                                @* <th>Zone</th> *@
-                                <th>State</th>
-                                <th>Action</th>
+                                <td class="text-center text-muted">@((_currentPage - 1) * _pageSize + index + 1)</td>
+                                <td>@item.EmployeeCode</td>
+                                <td>@item.Name</td>
+                                <td class="text-muted">@GetUserName(login?.UserId)</td>
+                                <td class="text-muted">@GetPassword(item.Id, login?.UserId)</td>
+                                <td><span class="role-badge">@(login is null ? "-" : login.Role.ToString())</span></td>
+                                <td>@GetStateName(login?.StateId)</td>
+                                <td>
+                                    <div class="action-icons">
+                                        <i class="bi bi-pencil-square text-primary icon-edit me-2" style="cursor:pointer;" @onclick="() => EditEmployee(item.Id)"></i>
+                                        <i class="bi bi-trash text-danger icon-del" style="cursor:pointer;" @onclick="() => DeleteEmployee(item.Id)"></i>
+                                    </div>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            @if (_isLoading)
-                            {
-                                <tr>
-                                    <td colspan="9" class="text-center text-muted">Loading...</td>
-                                </tr>
-                            }
-                            else if (!PagedItems.Any())
-                            {
-                                <tr>
-                                    <td colspan="9" class="text-center text-muted">No employees found.</td>
-                                </tr>
-                            }
-                            else
-                            {
-                                @foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
-                                {
-                                    var login = GetLogin(item.Id);
-                                    <tr>
-                                        <td class="text-center text-muted">@((_currentPage - 1) * _pageSize + index + 1)</td>
-                                        <td>@item.EmployeeCode</td>
-                                        <td>@item.Name</td>
-                                        <td class="text-muted">@GetUserName(login?.UserId)</td>
-                                        <td class="text-muted">@GetPassword(item.Id, login?.UserId)</td>
-                                        <td><span class="role-badge">@(login is null ? "-" : login.Role.ToString())</span></td>
-                                        @* <td>@GetZoneName(login?.ZoneId)</td> *@
-                                        <td>@GetStateName(login?.StateId)</td>
-                                        <td>
-                                           @*  <button class="btn btn-sm btn-primary me-2" @onclick="() => EditEmployee(item.Id)">Edit</button>
-                                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteEmployee(item.Id)">Delete</button> *@
-                                            <div class="action-icons">
-                                                <i class="bi bi-pencil-square icon-edit" @onclick="() => EditEmployee(item.Id)"></i>
-                                                <i class="bi bi-trash icon-del" @onclick="() => DeleteEmployee(item.Id)"></i>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                        }
+                    }
+                </tbody>
+            </table>
         </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <div class="d-flex align-items-center gap-2 text-muted small">
+                <span>Show</span>
+                <select class="form-select form-select-sm" style="width: auto;" @bind="_pageSize" @bind:after="ChangePageSize">
+                    <option value="10">10</option>
+                    <option value="16">16</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+                <span>entries</span>
+                <span class="ms-3 border-start ps-3">
+                    Showing @((FilteredItems.Count > 0) ? ((_currentPage - 1) * _pageSize + 1) : 0)
+                    to @Math.Min(_currentPage * _pageSize, FilteredItems.Count)
+                    of @FilteredItems.Count entries
+                </span>
+            </div>
+            
+            <nav>
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(_currentPage <= 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="PreviousPage">Previous</button>
+                    </li>
+                    @foreach (var p in GetPageNumbers())
+                    {
+                        if (p == -1)
+                        {
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        }
+                        else
+                        {
+                            <li class="page-item @(p == _currentPage ? "active" : "")">
+                                <button class="page-link" @onclick="() => GoToPage(p)">@p</button>
+                            </li>
+                        }
+                    }
+                    <li class="page-item @(_currentPage >= TotalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="NextPage">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
 
 @code {
     private List<EmployeeInformation> employees = new();
@@ -211,6 +348,95 @@
     private List<EmployeeInformation> PagedItems = new();
 
     private int TotalPages => FilteredItems.Count == 0 ? 1 : (int)Math.Ceiling((double)FilteredItems.Count / _pageSize);
+    private void ChangePageSize()
+    {
+        _currentPage = 1;
+        RecalculatePage();
+    }
+
+    // ==========================================
+    // EXPORT & PRINT LOGIC
+    // ==========================================
+
+    private async Task ExportCopy()
+    {
+        if (!FilteredItems.Any()) return;
+        var sb = new StringBuilder();
+        sb.AppendLine("Employee ID\tName\tUser Name\tPassword\tRole\tState");
+
+        foreach (var item in FilteredItems)
+        {
+            var login = GetLogin(item.Id);
+            sb.AppendLine($"{item.EmployeeCode}\t{item.Name}\t{GetUserName(login?.UserId)}\t{GetPassword(item.Id, login?.UserId)}\t{(login is null ? "-" : login.Role.ToString())}\t{GetStateName(login?.StateId)}");
+        }
+        await JSRuntime.InvokeVoidAsync("exportInterop.copyText", sb.ToString());
+    }
+
+    private async Task ExportCsv()
+    {
+        if (!FilteredItems.Any()) return;
+        var sb = new StringBuilder();
+        sb.AppendLine("Employee ID,Name,User Name,Password,Role,State");
+
+        foreach (var item in FilteredItems)
+        {
+            var login = GetLogin(item.Id);
+            var uName = GetUserName(login?.UserId)?.Replace(",", " ");
+            var pass = GetPassword(item.Id, login?.UserId)?.Replace(",", " ");
+            var role = login is null ? "-" : login.Role.ToString();
+            var state = GetStateName(login?.StateId)?.Replace(",", " ");
+            sb.AppendLine($"{item.EmployeeCode},{item.Name},{uName},{pass},{role},{state}");
+        }
+
+        var fileContent = Encoding.UTF8.GetBytes(sb.ToString());
+        var base64 = Convert.ToBase64String(fileContent);
+        await JSRuntime.InvokeVoidAsync("exportInterop.downloadFile", $"Employees_{DateTime.Now:yyyyMMdd}.csv", "text/csv", base64);
+    }
+
+    private async Task ExportExcel()
+    {
+        if (!FilteredItems.Any()) return;
+        var html = GenerateHtmlTable();
+        var fileContent = Encoding.UTF8.GetBytes(html);
+        var base64 = Convert.ToBase64String(fileContent);
+        await JSRuntime.InvokeVoidAsync("exportInterop.downloadFile", $"Employees_{DateTime.Now:yyyyMMdd}.xls", "application/vnd.ms-excel", base64);
+    }
+
+    private async Task ExportPrint()
+    {
+        if (!FilteredItems.Any()) return;
+        var html = GenerateHtmlTable();
+        await JSRuntime.InvokeVoidAsync("exportInterop.printTable", html, "Employee Data");
+    }
+
+    private async Task ExportPdf()
+    {
+        if (!FilteredItems.Any()) return;
+        var html = GenerateHtmlTable();
+        var fileName = $"Employees_{DateTime.Now:yyyyMMdd}.pdf";
+        await JSRuntime.InvokeVoidAsync("exportInterop.downloadPdf", html, fileName);
+    }
+
+    private string GenerateHtmlTable()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("<table><thead><tr><th>Employee ID</th><th>Name</th><th>User Name</th><th>Password</th><th>Role</th><th>State</th></tr></thead><tbody>");
+        
+        foreach (var item in FilteredItems)
+        {
+            var login = GetLogin(item.Id);
+            sb.Append("<tr>");
+            sb.Append($"<td>{item.EmployeeCode}</td>");
+            sb.Append($"<td>{item.Name}</td>");
+            sb.Append($"<td>{GetUserName(login?.UserId)}</td>");
+            sb.Append($"<td>{GetPassword(item.Id, login?.UserId)}</td>");
+            sb.Append($"<td>{(login is null ? "-" : login.Role.ToString())}</td>");
+            sb.Append($"<td>{GetStateName(login?.StateId)}</td>");
+            sb.Append("</tr>");
+        }
+        sb.Append("</tbody></table>");
+        return sb.ToString();
+    }
 
     protected override async Task OnInitializedAsync()
     {
