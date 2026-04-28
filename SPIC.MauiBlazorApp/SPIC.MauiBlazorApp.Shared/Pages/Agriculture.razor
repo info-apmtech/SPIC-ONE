@@ -310,24 +310,45 @@
 							<div class="modal-dialog modal-dialog-centered" role="document">
 								<div class="modal-content">
 									<div class="modal-header">
-										<h5 class="modal-title">Confirm Delete</h5>
+										<h5 class="modal-title">@(_dependencyWarnings.Any() ? "Cannot Delete" : "Confirm Delete")</h5>
 										<button type="button" class="btn-close" @onclick="CancelDelete"></button>
 									</div>
 									<div class="modal-body">
-										<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
-										<p class="text-muted mb-0">This action cannot be undone.</p>
+										@if (_dependencyWarnings.Any())
+										{
+											<div class="alert alert-warning mb-0">
+												<p class="mb-2"><strong>@_deleteTarget?.Name</strong> cannot be deleted because it is mapped to the following:</p>
+												<ul class="mb-2" style="font-size: 0.9rem;">
+													@foreach (var warning in _dependencyWarnings)
+													{
+														<li>@warning</li>
+													}
+												</ul>
+												<p class="mb-0 text-muted" style="font-size: 0.85rem;">Please remove or reassign these mappings first.</p>
+											</div>
+										}
+										else
+										{
+											<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
+											<p class="text-muted mb-0">This action cannot be undone.</p>
+										}
 									</div>
 									<div class="modal-footer">
-										<button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
-										<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
-											@(_isDeleting ? "Deleting..." : "Delete")
+										<button class="btn btn-secondary" @onclick="CancelDelete">
+											@(_dependencyWarnings.Any() ? "Close" : "Cancel")
 										</button>
+										
+										@if (!_dependencyWarnings.Any())
+										{
+											<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+												@(_isDeleting ? "Deleting..." : "Delete")
+											</button>
+										}
 									</div>
 								</div>
 							</div>
 						</div>
 					}
-
 @code {
 	private readonly List<string> TabOptions = ["Crops", "Competitors", "Sector", "Units", "Categories", "Products"];
 
@@ -399,6 +420,7 @@
 	private bool _showDeleteConfirm;
 	private bool _isDeleting;
 	private AgriItemDto? _deleteTarget;
+	private List<string> _dependencyWarnings = new();
 
 	// Upload modal state
 	private bool _showUploadModal = false;
@@ -614,8 +636,27 @@
 	private void DeleteItem(AgriItemDto item)
 	{
 		_deleteTarget = item;
+		_dependencyWarnings.Clear();
+
+		// Check for dependencies based on the active tab
+		switch (ActiveTab)
+		{
+			case "Units":
+				var mappedCategories = _categoriesAll.Where(c => c.UnitId == item.Id).Select(c => c.Name).ToList();
+				if (mappedCategories.Any())
+					_dependencyWarnings.Add($"Categories: {string.Join(", ", mappedCategories)}");
+				break;
+
+			case "Categories":
+				var mappedProducts = _productsAll.Where(p => p.CategoryId == item.Id).Select(p => p.Name).ToList();
+				if (mappedProducts.Any())
+					_dependencyWarnings.Add($"Products: {string.Join(", ", mappedProducts)}");
+				break;
+		}
+
 		_showDeleteConfirm = true;
 	}
+
 
 	private async Task ConfirmDelete()
 	{
@@ -651,6 +692,7 @@
 	{
 		_showDeleteConfirm = false;
 		_deleteTarget = null;
+		_dependencyWarnings.Clear(); 
 	}
 
 	private async Task ToggleStatus(AgriItemDto item)
