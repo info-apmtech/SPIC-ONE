@@ -174,19 +174,18 @@
                     {
                         @foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
                         {
-                            var login = GetLogin(item.Id);
                             <tr>
                                 <td class="text-center text-muted">@((_currentPage - 1) * _pageSize + index + 1)</td>
                                 <td>@item.EmployeeCode</td>
                                 <td>@item.Name</td>
-                                <td class="text-muted">@GetUserName(login?.UserId)</td>
-                                <td class="text-muted">@GetPassword(item.Id, login?.UserId)</td>
-                                <td><span class="role-badge">@(login is null ? "-" : login.Role.ToString())</span></td>
-                                <td>@GetStateName(login?.StateId)</td>
+                                <td class="text-muted">@item.UserName</td>
+                                <td class="text-muted">@item.Password</td>
+                                <td><span class="role-badge">@item.Role</span></td>
+                                <td>@item.StateName</td>
                                 <td>
                                     <div class="action-icons">
-                                        <i class="bi bi-pencil-square text-primary icon-edit me-2" style="cursor:pointer;" @onclick="() => EditEmployee(item.Id)"></i>
-                                        <i class="bi bi-trash text-danger icon-del" style="cursor:pointer;" @onclick="() => DeleteEmployee(item.Id)"></i>
+                                        <i class="bi bi-pencil-square text-primary icon-edit me-2" style="cursor:pointer;" title="Edit Employee" @onclick="() => EditEmployee(item.EmployeeId)"></i>
+                                        <i class="bi bi-trash text-danger icon-del" style="cursor:pointer;" title="Delete Employee" @onclick="() => DeleteEmployee(item.EmployeeId)"></i>
                                     </div>
                                 </td>
                             </tr>
@@ -247,7 +246,6 @@
     private List<UserInfoDto> users = new();
     private List<LocationItemDto> states = new();
 
-    private Dictionary<int, Employeelogin> loginByEmployee = new();
     private Dictionary<string, UserInfoDto> userById = new();
     private Dictionary<int, string> stateNameById = new();
     private Dictionary<string, UserInfoDto> userByGuid = new(StringComparer.OrdinalIgnoreCase);
@@ -266,10 +264,9 @@
     private int _uploadSkipped = 0;
     private Dictionary<string, List<string>> _uploadGroupedErrors = new();
 
-    private List<EmployeeInformation> FilteredItems = new();
-    private List<EmployeeInformation> PagedItems = new();
+    private List<EmployeeGridItem> FilteredItems = new();
+    private List<EmployeeGridItem> PagedItems = new();
 
-    // Data URI Strings for Native Browser Downloads
     private string _csvDataUri = "";
     private string _excelDataUri = "";
     private string _pdfDataUri = "";
@@ -296,7 +293,6 @@
         users = await Http.GetFromJsonAsync<List<UserInfoDto>>("api/UserInfo/all") ?? new();
         states = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
 
-        loginByEmployee = logins.Where(l => l.EmployeeInformationID > 0).ToDictionary(l => l.EmployeeInformationID, l => l);
         userById = users.Where(u => !string.IsNullOrWhiteSpace(u.UserName)).ToDictionary(u => u.UserName!, u => u, StringComparer.OrdinalIgnoreCase);
         userByGuid = users.Where(u => !string.IsNullOrWhiteSpace(u.Id)).ToDictionary(u => u.Id, u => u, StringComparer.OrdinalIgnoreCase);
         stateNameById = states.ToDictionary(s => s.Id, s => string.IsNullOrWhiteSpace(s.StateName) ? "-" : s.StateName);
@@ -304,9 +300,6 @@
         ApplyFilter();
         _isLoading = false;
     }
-
-    private Employeelogin? GetLogin(int empId)
-        => empId > 0 && loginByEmployee.TryGetValue(empId, out var l) ? l : null;
 
     private string GetUserName(string? userId)
     {
@@ -332,32 +325,75 @@
     private void ApplyFilter()
     {
         var q = (_searchText ?? string.Empty).Trim();
-        IEnumerable<EmployeeInformation> query = employees;
+        var allItems = new List<EmployeeGridItem>();
+
+        // 1. Flatten the Data: One row per login
+        foreach (var emp in employees)
+        {
+            var empLogins = logins.Where(l => l.EmployeeInformationID == emp.Id).ToList();
+
+            if (empLogins.Any())
+            {
+                foreach (var login in empLogins)
+                {
+                    allItems.Add(new EmployeeGridItem
+                    {
+                        EmployeeId = emp.Id,
+                        LoginId = login.Id,
+                        EmployeeCode = emp.EmployeeCode ?? "",
+                        Name = emp.Name ?? "",
+                        UserName = GetUserName(login.UserId),
+                        Password = GetPassword(emp.Id, login.UserId),
+                        Role = login.Role.ToString(),
+                        StateId = login.StateId,
+                        StateName = GetStateName(login.StateId)
+                    });
+                }
+            }
+            else
+            {
+                // Employee exists but has no login assigned yet
+                allItems.Add(new EmployeeGridItem
+                {
+                    EmployeeId = emp.Id,
+                    LoginId = 0,
+                    EmployeeCode = emp.EmployeeCode ?? "",
+                    Name = emp.Name ?? "",
+                    UserName = "-",
+                    Password = GetPassword(emp.Id, null),
+                    Role = "-",
+                    StateId = 0,
+                    StateName = "-"
+                });
+            }
+        }
+
+        // 2. Apply text and dropdown filters
+        IEnumerable<EmployeeGridItem> query = allItems;
 
         if (!string.IsNullOrEmpty(q))
         {
             query = query.Where(e =>
-                (e.Name ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)
-                || (e.EmployeeCode ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)
-                || GetUserName(GetLogin(e.Id)?.UserId).Contains(q, StringComparison.OrdinalIgnoreCase)
-                || GetPassword(e.Id, GetLogin(e.Id)?.UserId).Contains(q, StringComparison.OrdinalIgnoreCase));
+                e.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || e.EmployeeCode.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || e.UserName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || e.Password.Contains(q, StringComparison.OrdinalIgnoreCase));
         }
 
         if (!string.Equals(_roleFilter, "All", StringComparison.OrdinalIgnoreCase))
         {
-            query = query.Where(e => string.Equals(GetLogin(e.Id)?.Role.ToString(), _roleFilter, StringComparison.OrdinalIgnoreCase));
+            query = query.Where(e => string.Equals(e.Role, _roleFilter, StringComparison.OrdinalIgnoreCase));
         }
 
         if (!string.Equals(_stateFilter, "All", StringComparison.OrdinalIgnoreCase) && int.TryParse(_stateFilter, out var sid))
         {
-            query = query.Where(e => GetLogin(e.Id)?.StateId == sid);
+            query = query.Where(e => e.StateId == sid);
         }
 
         FilteredItems = query.ToList();
         _currentPage = 1;
         RecalculatePage();
         
-        // Regenerate file data whenever the table data changes
         GenerateExportDataUris();
     }
 
@@ -479,10 +515,6 @@
         }
     }
 
-    // ==========================================
-    // EXPORT LOGIC: COPY & PRINT (Requires JSRuntime)
-    // ==========================================
-
     private async Task ExportCopy()
     {
         if (!FilteredItems.Any()) return;
@@ -491,11 +523,9 @@
 
         foreach (var item in FilteredItems)
         {
-            var login = GetLogin(item.Id);
-            sb.AppendLine($"{item.EmployeeCode}\t{item.Name}\t{GetUserName(login?.UserId)}\t{GetPassword(item.Id, login?.UserId)}\t{(login is null ? "-" : login.Role.ToString())}\t{GetStateName(login?.StateId)}");
+            sb.AppendLine($"{item.EmployeeCode}\t{item.Name}\t{item.UserName}\t{item.Password}\t{item.Role}\t{item.StateName}");
         }
         
-        // Native browser clipboard API called via JSRuntime
         await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", sb.ToString());
         await JSRuntime.InvokeVoidAsync("alert", "Table data copied to clipboard!");
     }
@@ -509,14 +539,13 @@
         
         foreach (var item in FilteredItems)
         {
-            var login = GetLogin(item.Id);
             sb.Append("<tr>");
             sb.Append($"<td>{item.EmployeeCode}</td>");
             sb.Append($"<td>{item.Name}</td>");
-            sb.Append($"<td>{GetUserName(login?.UserId)}</td>");
-            sb.Append($"<td>{GetPassword(item.Id, login?.UserId)}</td>");
-            sb.Append($"<td>{(login is null ? "-" : login.Role.ToString())}</td>");
-            sb.Append($"<td>{GetStateName(login?.StateId)}</td>");
+            sb.Append($"<td>{item.UserName}</td>");
+            sb.Append($"<td>{item.Password}</td>");
+            sb.Append($"<td>{item.Role}</td>");
+            sb.Append($"<td>{item.StateName}</td>");
             sb.Append("</tr>");
         }
         sb.Append("</tbody></table>");
@@ -533,10 +562,6 @@
         await JSRuntime.InvokeVoidAsync("eval", js);
     }
 
-    // ==========================================
-    // EXPORT LOGIC: ZERO-JS FILE GENERATOR
-    // ==========================================
-
     private void GenerateExportDataUris()
     {
         if (!FilteredItems.Any())
@@ -545,17 +570,15 @@
             return;
         }
 
-        // 1. Generate CSV natively in C#
+        // CSV
         var sb = new StringBuilder();
         sb.AppendLine("Employee ID,Name,User Name,Password,Role,State");
-
         foreach (var item in FilteredItems)
         {
-            var login = GetLogin(item.Id);
-            var uName = GetUserName(login?.UserId)?.Replace(",", " ");
-            var pass = GetPassword(item.Id, login?.UserId)?.Replace(",", " ");
-            var role = login is null ? "-" : login.Role.ToString();
-            var state = GetStateName(login?.StateId)?.Replace(",", " ");
+            var uName = item.UserName.Replace(",", " ");
+            var pass = item.Password.Replace(",", " ");
+            var role = item.Role.Replace(",", " ");
+            var state = item.StateName.Replace(",", " ");
             sb.AppendLine($"{item.EmployeeCode},{item.Name},{uName},{pass},{role},{state}");
         }
 
@@ -563,12 +586,7 @@
         var csvBase64 = Convert.ToBase64String(csvBytes);
         _csvDataUri = $"data:text/csv;base64,{csvBase64}";
 
-        // ---------------------------------------------------------------------------------
-        // 2. Generate Excel (Requires 'ClosedXML' NuGet Package)
-        // ---------------------------------------------------------------------------------
-        // Uncomment the code below once you install the ClosedXML NuGet package in your project
-        
-        
+        // Excel
         using var workbook = new ClosedXML.Excel.XLWorkbook();
         var worksheet = workbook.Worksheets.Add("Employees");
         
@@ -582,29 +600,23 @@
         for (int i = 0; i < FilteredItems.Count; i++)
         {
             var item = FilteredItems[i];
-            var login = GetLogin(item.Id);
             worksheet.Cell(i + 2, 1).Value = item.EmployeeCode;
             worksheet.Cell(i + 2, 2).Value = item.Name;
-            worksheet.Cell(i + 2, 3).Value = GetUserName(login?.UserId);
-            worksheet.Cell(i + 2, 4).Value = GetPassword(item.Id, login?.UserId);
-            worksheet.Cell(i + 2, 5).Value = login is null ? "-" : login.Role.ToString();
-            worksheet.Cell(i + 2, 6).Value = GetStateName(login?.StateId);
+            worksheet.Cell(i + 2, 3).Value = item.UserName;
+            worksheet.Cell(i + 2, 4).Value = item.Password;
+            worksheet.Cell(i + 2, 5).Value = item.Role;
+            worksheet.Cell(i + 2, 6).Value = item.StateName;
         }
 
         using var excelStream = new MemoryStream();
         workbook.SaveAs(excelStream);
         var excelBase64 = Convert.ToBase64String(excelStream.ToArray());
         _excelDataUri = $"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{excelBase64}";
-        
 
-        // ---------------------------------------------------------------------------------
-        // 3. Generate PDF (Requires 'QuestPDF' NuGet Package)
-        // ---------------------------------------------------------------------------------
-        // Uncomment the code below once you install the QuestPDF NuGet package in your project
-        
-        
+        // PDF
         QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
-        var pdfBytes = QuestPDF.Fluent.Document.Create(container => {
+        var pdfBytes = QuestPDF.Fluent.Document.Create(container =>
+        {
             container.Page(page =>
             {
                 page.Size(QuestPDF.Helpers.PageSizes.A4);
@@ -635,13 +647,12 @@
 
                     foreach (var item in FilteredItems)
                     {
-                        var login = GetLogin(item.Id);
                         table.Cell().Text(item.EmployeeCode);
                         table.Cell().Text(item.Name);
-                        table.Cell().Text(GetUserName(login?.UserId));
-                        table.Cell().Text(GetPassword(item.Id, login?.UserId));
-                        table.Cell().Text(login is null ? "-" : login.Role.ToString());
-                        table.Cell().Text(GetStateName(login?.StateId));
+                        table.Cell().Text(item.UserName);
+                        table.Cell().Text(item.Password);
+                        table.Cell().Text(item.Role);
+                        table.Cell().Text(item.StateName);
                     }
                 });
             });
@@ -649,7 +660,20 @@
 
         var pdfBase64 = Convert.ToBase64String(pdfBytes);
         _pdfDataUri = $"data:application/pdf;base64,{pdfBase64}";
-        
+    }
+
+    // New DTO class strictly for holding flattened grid data
+    private class EmployeeGridItem
+    {
+        public int EmployeeId { get; set; }
+        public int LoginId { get; set; }
+        public string EmployeeCode { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string UserName { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string Role { get; set; } = "-";
+        public int StateId { get; set; }
+        public string StateName { get; set; } = "-";
     }
 
     private class BulkUploadResult

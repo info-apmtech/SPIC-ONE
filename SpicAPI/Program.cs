@@ -25,12 +25,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
 {
-	options.Password.RequireDigit = false;
-	options.Password.RequireLowercase = false;
-	options.Password.RequireUppercase = false;
-	options.Password.RequireNonAlphanumeric = false;
-	options.Password.RequiredLength = 6;
-	options.User.RequireUniqueEmail = true;
+    options.Password.RequireDigit = false;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequiredLength = 6;
+    options.User.RequireUniqueEmail = false;
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
@@ -45,66 +45,66 @@ var jwtAudience = builder.Configuration["Jwt:Audience"];
 
 builder.Services.AddAuthentication(options =>
 {
-	options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-	options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
-	options.RequireHttpsMetadata = false;
-	options.SaveToken = true;
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
 
-	options.TokenValidationParameters = new TokenValidationParameters
-	{
-		ValidateIssuer = true,
-		ValidateAudience = true,
-		ValidateLifetime = true,
-		ValidateIssuerSigningKey = true,
-		ValidIssuer = jwtIssuer,
-		ValidAudience = jwtAudience,
-		IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!)),
-		RoleClaimType = ClaimTypes.Role,
-		NameClaimType = ClaimTypes.Name,
-		ClockSkew = TimeSpan.Zero
-	};
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!)),
+        RoleClaimType = ClaimTypes.Role,
+        NameClaimType = ClaimTypes.Name,
+        ClockSkew = TimeSpan.Zero
+    };
 });
 
 builder.Services.AddAuthorization();
 
 builder.Services.AddSwaggerGen(c =>
 {
-	c.SwaggerDoc("v1", new OpenApiInfo
-	{
-		Title = "SPIC API",
-		Version = "v1"
-	});
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "SPIC API",
+        Version = "v1"
+    });
 
-	c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-	{
-		Name = "Authorization",
-		Type = SecuritySchemeType.Http,
-		Scheme = "bearer",
-		BearerFormat = "JWT",
-		In = ParameterLocation.Header,
-		Description = "Enter your JWT token"
-	});
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter your JWT token"
+    });
 
-	c.AddSecurityRequirement(document =>
-	{
-		return new OpenApiSecurityRequirement
-		{
-			[
-				new OpenApiSecuritySchemeReference("Bearer", document)
-			] = new List<string>()
-		};
-	});
+    c.AddSecurityRequirement(document =>
+    {
+        return new OpenApiSecurityRequirement
+        {
+            [
+                new OpenApiSecuritySchemeReference("Bearer", document)
+            ] = new List<string>()
+        };
+    });
 });
 
 var app = builder.Build();
 
 //if (app.Environment.IsDevelopment())
 //{
-	app.UseSwagger();
-	app.UseSwaggerUI();
+app.UseSwagger();
+app.UseSwaggerUI();
 //}
 
 app.UseHttpsRedirection();

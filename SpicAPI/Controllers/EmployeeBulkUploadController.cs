@@ -79,11 +79,11 @@ namespace SpicAPI.Controllers
             int inserted = 0;
             int skipped = 0;
 
-            // Collect existing codes to avoid DB hits
-            var existingCodes = await _db.EmployeeInformation
+            // Collect existing employees to avoid DB hits and handle duplicates smartly
+            var existingEmployees = await _db.EmployeeInformation
                 .Where(e => e.EmployeeCode != null && e.EmployeeCode != "")
-                .Select(e => e.EmployeeCode)
-                .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
+                .GroupBy(e => e.EmployeeCode)
+                .ToDictionaryAsync(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
             // FIX: Check the actual AppUsers table for existing UserNames to prevent silent crashes
             var existingUserNames = await _userManager.Users
@@ -137,13 +137,6 @@ namespace SpicAPI.Controllers
                         if (phone.Length < 6)
                         {
                             AddError("Invalid Password length", $"Row {rowNum} ({empName}): Phone number must be at least 6 characters.");
-                            skipped++;
-                            continue;
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(employeeId) && existingCodes.Contains(employeeId))
-                        {
-                            AddError("Duplicate EmployeeID", $"Row {rowNum} ({empName}): EmployeeID '{employeeId}' already exists.");
                             skipped++;
                             continue;
                         }
@@ -204,6 +197,8 @@ namespace SpicAPI.Controllers
                         }
 
                         // ---  1. Create AppUsers (UserInfo) First ---
+                        var currentUser = User?.Identity?.Name ?? "Unknown";
+
                         var user = new UserInfo
                         {
                             UserName = userName,
@@ -213,13 +208,12 @@ namespace SpicAPI.Controllers
                             Name = empName,
                             Role = role,
                             CreatedAt = now,
-                            CreatedBy = "bulk-upload",
+                            CreatedBy = currentUser,
                             UpdatedAt = now,
-                            UpdatedBy = "bulk-upload",
+                            UpdatedBy = currentUser,
                             IsActive = true
                         };
 
-                        // This will hash the phone number and save the AppUser
                         var identityResult = await _userManager.CreateAsync(user, phone);
 
                         if (!identityResult.Succeeded)
@@ -230,21 +224,38 @@ namespace SpicAPI.Controllers
                             continue;
                         }
 
-                        // ---  2. Insert EmployeeInformation ---
-                        var emp = new EmployeeInformation
+                        // ---  2. Insert OR Reuse EmployeeInformation ---
+                        EmployeeInformation emp;
+
+                        if (!string.IsNullOrWhiteSpace(employeeId) && existingEmployees.TryGetValue(employeeId, out var existingEmp))
                         {
-                            EmployeeCode = employeeId ?? "",
-                            Name = empName,
-                            PersonalPhoneNumber = phone,
-                            OfficialPhoneNumber = phone,
-                            Email = email ?? "",
-                            CreatedBy = "bulk-upload",
-                            UpdatedBy = "bulk-upload",
-                            CreatedAt = now,
-                            UpdatedAt = now
-                        };
-                        _db.EmployeeInformation.Add(emp);
-                        await _db.SaveChangesAsync(); // flush to get emp.Id
+                            // REUSE existing employee record
+                            emp = existingEmp;
+                        }
+                        else
+                        {
+                            // CREATE new employee record
+                            emp = new EmployeeInformation
+                            {
+                                EmployeeCode = employeeId ?? "",
+                                Name = empName,
+                                PersonalPhoneNumber = phone,
+                                OfficialPhoneNumber = phone,
+                                Email = email ?? "",
+                                CreatedBy = currentUser,
+                                UpdatedBy = currentUser,
+                                CreatedAt = now,
+                                UpdatedAt = now
+                            };
+                            _db.EmployeeInformation.Add(emp);
+                            await _db.SaveChangesAsync(); // flush to get emp.Id
+
+                            // Add to dictionary so subsequent rows in the same excel file can reuse it
+                            if (!string.IsNullOrWhiteSpace(employeeId))
+                            {
+                                existingEmployees[employeeId] = emp;
+                            }
+                        }
 
                         // --- 3. Insert Employeelogin ---
                         var login = new Employeelogin
@@ -260,9 +271,7 @@ namespace SpicAPI.Controllers
                         };
                         _db.Employeelogins.Add(login);
 
-                        existingCodes.Add(employeeId ?? "");
                         existingUserNames.Add(userName);
-
                         inserted++;
                     }
                     catch (Exception exRow)
