@@ -1,0 +1,2187 @@
+﻿@page "/SavedDealerReview"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components
+@using DR = SPIC.Core.Entities
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LoadingService Loading
+@inject LoginState LoginState
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "dealerId")]
+    public int? dealerId { get; set; }
+
+    private DR.DealerRegistration? _dealer;
+    private bool _isLoading = false;
+
+    // Related data
+    private List<DR.DealerExperience> _experiences = new();
+    private List<DR.AnnualSaleDataLastFYofDealerRegistration> _annualSales = new();
+    private List<DR.DealerWarehouseFacilities> _warehouses = new();
+    private List<DR.DealerRailFacilities> _rails = new();
+    private List<DR.DealerPortFacilities> _ports = new();
+    private List<DR.DealerMarketDetail> _marketDetails = new();
+    private List<DR.DealerCompaniesOperatingInArea> _companies = new();
+    private DR.DealerOwnershipInfo? _ownership;
+    private List<DR.PartnerFamilyDetails> _partners = new();
+    private List<DR.PartnerOccupation> _occupations = new();
+    private List<DR.SalesPlanningInDealerRegistration> _salesPlanning = new();
+    private List<DR.DealerAssetBank> _assetBanks = new();
+    private List<DR.DealerAssetLand> _assetLands = new();
+    private List<DR.DealerAssetBuilding> _assetBuildings = new();
+    private List<DR.DealerLoanLiabilities> _loans = new();
+    private DR.DealerCreditLimitProposal? _creditProposal;
+    private List<DR.DealerCreditLimitSalesPerformance> _creditSales = new();
+    private DR.DealerRegistrationDocuments? _documents;
+
+    // Lookup names
+    private string? _stateName;
+    private string? _regionName;
+    private string? _hqName;
+    private string? _districtName;
+    private string? _bankName;
+    private Dictionary<int, string> _productNames = new();
+    private Dictionary<int, string> _bankNames = new();
+    private decimal _totalSalesQty = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (dealerId.HasValue && dealerId.Value > 0)
+        {
+            Loading.Show();
+            _isLoading = true;
+            try
+            {
+                _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{dealerId}");
+                if (_dealer != null)
+                {
+                    await FetchRelatedData(_dealer.Id);
+                    await LoadLookups();
+                }
+            }
+            catch { }
+            finally
+            {
+                _isLoading = false;
+                Loading.Hide();
+            }
+        }
+    }
+    private async Task FetchRelatedData(int id)
+    {
+        try
+        {
+            var t1 = Http.GetFromJsonAsync<List<DR.DealerExperience>>($"api/DealerExperience/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _experiences = t.Result; });
+            var t2 = Http.GetFromJsonAsync<List<DR.AnnualSaleDataLastFYofDealerRegistration>>($"api/AnnualSaleDataLastFY/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _annualSales = t.Result; });
+            var t3 = Http.GetFromJsonAsync<List<DR.DealerWarehouseFacilities>>($"api/DealerWarehouseFacilities/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _warehouses = t.Result; });
+            var t4 = Http.GetFromJsonAsync<List<DR.DealerRailFacilities>>($"api/DealerRailFacilities/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _rails = t.Result; });
+            var t5 = Http.GetFromJsonAsync<List<DR.DealerPortFacilities>>($"api/DealerPortFacilities/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _ports = t.Result; });
+            var t6 = Http.GetFromJsonAsync<List<DR.DealerMarketDetail>>($"api/DealerMarketDetail/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _marketDetails = t.Result; });
+            var t7 = Http.GetFromJsonAsync<List<DR.DealerCompaniesOperatingInArea>>($"api/DealerCompaniesOperatingInArea/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _companies = t.Result; });
+            var t8 = Http.GetFromJsonAsync<List<DR.PartnerFamilyDetails>>($"api/PartnerFamilyDetails/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _partners = t.Result; });
+            var t9 = Http.GetFromJsonAsync<List<DR.PartnerOccupation>>($"api/PartnerOccupation/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _occupations = t.Result; });
+            var t10 = Http.GetFromJsonAsync<List<DR.SalesPlanningInDealerRegistration>>($"api/SalesPlanning/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _salesPlanning = t.Result; });
+            var t11 = Http.GetFromJsonAsync<List<DR.DealerAssetBank>>($"api/DealerAssetBank/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _assetBanks = t.Result; });
+            var t12 = Http.GetFromJsonAsync<List<DR.DealerAssetLand>>($"api/DealerAssetLand/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _assetLands = t.Result; });
+            var t13 = Http.GetFromJsonAsync<List<DR.DealerAssetBuilding>>($"api/DealerAssetBuilding/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _assetBuildings = t.Result; });
+            var t14 = Http.GetFromJsonAsync<List<DR.DealerLoanLiabilities>>($"api/DealerLoanLiabilities/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _loans = t.Result; });
+            var t15 = Http.GetFromJsonAsync<List<DR.DealerCreditLimitSalesPerformance>>($"api/DealerCreditLimitSalesPerformance/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _creditSales = t.Result; });
+            var t16 = Http.GetFromJsonAsync<List<DR.DealerRegistrationDocuments>>($"api/DealerRegistrationDocuments/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _documents = t.Result.FirstOrDefault(); });
+
+            var t17 = Http.GetFromJsonAsync<List<DR.DealerOwnershipInfo>>($"api/DealerOwnershipInfo/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _ownership = t.Result.FirstOrDefault(); });
+            var t18 = Http.GetFromJsonAsync<List<DR.DealerCreditLimitProposal>>($"api/DealerCreditLimitProposal/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _creditProposal = t.Result.FirstOrDefault(); });
+
+            await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18);
+        }
+        catch { }
+    }
+
+    private async Task LoadLookups()
+    {
+        try
+        {
+            if (_dealer == null) return;
+            if (_dealer.StateId > 0)
+            {
+                var state = await Http.GetFromJsonAsync<DR.State>($"api/State/{_dealer.StateId}");
+                _stateName = state?.StateName;
+            }
+            if (_dealer.Region > 0)
+            {
+                var region = await Http.GetFromJsonAsync<DR.Region>($"api/Region/{_dealer.Region}");
+                _regionName = region?.RegionName;
+            }
+            if (_dealer.HQ > 0)
+            {
+                var hq = await Http.GetFromJsonAsync<DR.Headquarter>($"api/Headquarter/{_dealer.HQ}");
+                _hqName = hq?.HeadquarterName;
+            }
+            if (_dealer.DistrictId > 0)
+            {
+                var district = await Http.GetFromJsonAsync<DR.District>($"api/District/{_dealer.DistrictId}");
+                _districtName = district?.DistrictName;
+            }
+            if (_dealer.BankId > 0)
+            {
+                try
+                {
+                    var bank = await Http.GetFromJsonAsync<DR.Bank>($"api/Bank/{_dealer.BankId}");
+                    _bankName = bank?.Name;
+                }
+                catch { }
+            }
+        }
+        catch { }
+    }
+    private IEnumerable<(string title, string? path)> GetEnclosureItems()
+    {
+        var list = new List<(string, string?)>();
+        list.Add(("GST Certificate", _dealer?.GSTFilePath));
+        list.Add(("PAN Copy", _dealer?.PANFilePath));
+        list.Add(("Aadhaar Copy", _dealer?.AadhaarFilePath));
+        list.Add(("Wholesale License", _dealer?.WholesaleLicenseFilePath));
+        list.Add(("Specimen Signature", _documents?.SpecimanFilePath));
+
+        list.Add(("Warehouse License", _documents?.ValuationCertificateFilePath));
+        list.Add(("Trade License", _documents?.PartnershipDeadFilePath));
+        list.Add(("Photograph", _ownership?.ProprietorImagePath));
+        list.Add(("Bank Guarantee Certificate", _documents?.BankGauranteeFilePath));
+        list.Add(("IT Returns FY1", _documents?.FY1ITReturnFilePath));
+
+        list.Add(("IT Returns FY2", _documents?.FY2ITReturnFilePath));
+        list.Add(("Valuation Certificate", _documents?.ValuationCertificateFilePath));
+        list.Add(("Retailer List", _documents?.RetailerListFilePath));
+        list.Add(("Partnership Deed", _documents?.PartnershipDeadFilePath));
+        list.Add(("Board Resolution", _documents?.BoardReasolutionFilePath));
+
+        return list;
+    }
+
+    private string GetEnclosureHtml()
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var item in GetEnclosureItems())
+        {
+            if (!string.IsNullOrEmpty(item.path))
+            {
+                sb.Append($"<a class=\"enclosure-btn\" href=\"api/DealerFile/view/{System.Uri.EscapeDataString(item.path)}\" target=\"_blank\">{System.Net.WebUtility.HtmlEncode(item.title)}</a>");
+            }
+            else
+            {
+                sb.Append($"<div class=\"enclosure-btn\">{System.Net.WebUtility.HtmlEncode(item.title)}</div>");
+            }
+        }
+        return sb.ToString();
+    }
+
+    private decimal GetCapitalPosition() => _dealer?.CapitalInvestment ?? 0m;
+
+    private decimal GetTotalAssets()
+    {
+        decimal banks = _assetBanks?.Sum(x => x.Value) ?? 0m;
+        decimal lands = _assetLands?.Sum(x => x.PropertyValue) ?? 0m;
+        decimal buildings = _assetBuildings?.Sum(x => x.PropertyValue) ?? 0m;
+        decimal movables = _dealer?.AssetValue ?? 0m;
+        return banks + lands + buildings + movables;
+    }
+
+    private decimal GetTotalLoans() => _loans?.Sum(x => x.LoanValue) ?? 0m;
+
+    private decimal GetNetValue() => GetCapitalPosition() + GetTotalAssets() - GetTotalLoans();
+     private List<TimelineItem> TimelineItems = new()
+    {
+        new("Submitted by MO", "Submitted", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-green", "bi bi-check-lg", "card-green", "badge-green"),
+        new("Sent Back by RM", "Sent Back", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-red", "bi bi-exclamation-lg", "card-red", "badge-red"),
+        new("Under Review by MO", "Resubmitted", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-blue", "bi bi-arrow-clockwise", "card-blue", "badge-blue"),
+        new("Under Review by RM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
+        new("Under Review by SM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
+        new("Under Review by AVP", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange")
+    };
+
+    public record TimelineItem(
+        string Title,
+        string Status,
+        string UserName,
+        string DateText,
+        string DotClass,
+        string Icon,
+        string CardClass,
+        string BadgeClass
+    );
+
+}
+
+<style>
+   
+
+    /* --- Header --- */
+    .page-header-row {
+        margin-bottom: 24px;
+        margin-top: 24px;
+    }
+    .page-title {
+        color: #1F2937;
+        font-weight: 700;
+        font-size: 1.4rem;
+        margin: 0;
+    }
+    .page-subtitle {
+        font-size: 0.85rem;
+        color: #6B7280;
+        margin-top: 4px;
+    }
+
+    /* --- Top KPI Cards --- */
+    .kpi-container {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+        overflow-x: auto;
+        padding-bottom: 8px; 
+    }
+    .kpi-card {
+        flex: 1;
+        min-width: 140px;
+        /* background-color: #ffffff; */ 
+        background: linear-gradient(9deg, #ffc10726, var(--bs-white) 100%);
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+      .kpi-cardss {
+        flex: 1;
+        min-width: 140px;
+      
+        background: linear-gradient(180deg, var(--bs-light-bg-subtle), #E9FFFF 100%);    
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .kpi-card-co {
+        flex: 1;
+        min-width: 140px;   
+background:linear-gradient(180deg, var(--bs-light-bg-subtle), #d8b8dc5c 100%);
+        border-radius: 12px;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+     .kpi-card-co1 {
+        flex: 1;
+        min-width: 140px;   
+background: linear-gradient(178deg, var(--bs-light-bg-subtle), #E9F0FF 100%);        border-radius: 12px;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    } 
+
+    .kpi-card-c {
+        flex: 1;
+        min-width: 140px;   
+background: linear-gradient(170deg, var(--bs-light-bg-subtle), #FFE9F3 100%);
+border-radius: 12px;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    } 
+     
+       
+    .kpi-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        margin-bottom: 12px;
+    }
+    .kpi-title {
+        font-size: 0.75rem;
+        color: #6B7280;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    .kpi-value {
+        font-size: 0.85rem;
+        color: #1F2937;
+        font-weight: 700;
+    }
+
+    /* KPI Colors */
+    .bg-yellow { background-color: #FEF3C7; color: #D97706; }
+    .bg-blue { background-color: #E0F2FE; color: #2563EB; }
+    .bg-pink { background-color: #FCE7F3; color: #DB2777; }
+    .bg-green { background-color: #D1FAE5; color: #059669; }
+    .bg-indigo { background-color: #E0E7FF; color: #4F46E5; }
+    .bg-orange { background-color: #FFEDD5; color: #EA580C; }
+
+    /* --- Accordions --- */
+    .custom-accordion {
+        background-color: #ffffff;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        margin-bottom: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        transition: all 0.3s ease;
+    }
+    .custom-accordion.active {
+        border-left: 4px solid #059669; /* Green active border */
+    }
+    .accordion-header {
+        padding: 16px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 700;
+        color: #1F2937;
+        font-size: 0.95rem;
+        cursor: pointer;
+        user-select: none;
+    }
+    .accordion-header i {
+        color: #9CA3AF;
+        transition: transform 0.3s ease;
+    }
+    .custom-accordion.active .accordion-header i {
+        transform: rotate(180deg);
+    }
+    
+    .accordion-body {
+        padding: 24px;
+        background-color: #F8FAFC; 
+        border-top: 1px solid #E5E7EB;
+        display: none; 
+    }
+    .custom-accordion.active .accordion-body {
+        display: block; 
+    }
+
+    /* --- Inner Detail Cards --- */
+    .detail-card {
+        background-color: #ffffff;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        overflow: hidden;
+        height: 100%;
+    }
+    .detail-card-header {
+        background-color: #ECFDF5; /* Light green */
+        padding: 12px 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #D1FAE5;
+    }
+    .detail-card-title {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #065F46;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+    }
+    .detail-card-title i { font-size: 1rem; }
+    .edit-icon {
+        color: #059669;
+        font-size: 1rem;
+        cursor: pointer;
+    }
+
+    .detail-card-body {
+        padding: 16px;
+    }
+    .data-row {
+        display: flex;
+        margin-bottom: 12px;
+        align-items: flex-start;
+    }
+    .data-row:last-child {
+        margin-bottom: 0;
+    }
+    .data-label {
+        width: 40%;
+        font-size: 0.75rem;
+        color: #6B7280;
+        font-weight: 500;
+        padding-right: 12px;
+    }
+    .data-value {
+        width: 60%;
+        font-size: 0.75rem;
+        color: #1F2937;
+        font-weight: 600;
+        word-break: break-word;
+    }
+
+    /* --- Table Specific Styles --- */
+    .sales-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: center;
+    }
+    .sales-table th {
+        color: #065F46;
+        font-weight: 600;
+        font-size: 0.75rem;
+        padding: 14px;
+        border-bottom: 1px solid #E5E7EB;
+        background-color: #ffffff;
+    }
+    .sales-table td {
+        padding: 14px;
+        font-size: 0.75rem;
+        color: #4B5563;
+        border-bottom: 1px solid #E5E7EB;
+    }
+    .sales-table tr:last-child td { border-bottom: none; }
+    
+    .grand-total-row {
+        background: linear-gradient(to right, #D1FAE5, #A7F3D0);
+        font-weight: 700;
+    }
+    .grand-total-row td {
+        color: #065F46;
+        font-weight: 700;
+    }
+
+    /* Additional Specific UI Elements */
+    .company-pill {
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: #4B5563;
+        background-color: #ffffff;
+    }
+    .total-pill {
+        background: linear-gradient(to right, #D1FAE5, #A7F3D0);
+        color: #065F46;
+        font-weight: 700;
+        font-size: 0.8rem;
+        padding: 12px 24px;
+        border-radius: 8px;
+        display: inline-block;
+    }
+    
+    /* Enclosures Specific */
+    .enclosure-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 12px;
+        padding: 16px;
+    }
+    .enclosure-btn {
+        background-color: #ffffff;
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        padding: 10px 16px;
+        font-size: 0.75rem;
+        color: #4B5563;
+        font-weight: 500;
+        text-align: center;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .enclosure-btn:hover {
+        background-color: #F9FAFB;
+        border-color: #D1D5DB;
+    }
+
+    /* --- Footer --- */
+    .footer-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 24px;
+        padding-top: 24px;
+    }
+    .btn-prev {
+        background-color: transparent;
+        color: #6B7280;
+        border: none;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 0;
+    }
+    .btn-prev:hover { color: #1F2937; }
+    
+    .btn-submit {
+        background-color: #3B82F6;
+        color: #ffffff;
+        border: none;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 12px 24px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: 0.2s;
+    }
+    .btn-submit:hover { background-color: #2563EB; }
+    .info-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 78px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+.info-label {
+    font-size: 12px;
+    color: #111827;
+    margin-bottom: 8px;
+}
+
+.info-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #047857;
+}
+
+.info-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+
+.purple { background: #f5d0fe; color: #9333ea; }
+.orange { background: #ffedd5; color: #c2410c; }
+.cyan { background: #cffafe; color: #0891b2; }
+.yellow { background: #fef3c7; color: #d97706; }
+
+.status-badge {
+    background: #fef3c7;
+    color: #f97316;
+    border: 1px solid #fdba74;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.approval-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    overflow-x: auto;
+}
+
+.approval-step {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: max-content;
+}
+
+.step-circle {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #d1d5db;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.completed .step-circle {
+    background: #dcfce7;
+    color: #22c55e;
+    border: 1px solid #86efac;
+    font-size: 24px;
+}
+
+.active .step-circle {
+    background: #cffafe;
+    color: #0891b2;
+}
+
+.pending .step-circle {
+    background: #d1d5db;
+    color: #fff;
+}
+
+.step-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #374151;
+}
+
+.step-status {
+    font-size: 13px;
+    color: #9ca3af;
+}
+
+.completed .step-status {
+    color: #059669;
+}
+
+.active .step-status {
+    color: #f97316;
+}
+
+.step-line {
+    height: 3px;
+    min-width: 150px;
+    background: #d1d5db;
+    margin: 0 24px;
+}
+
+.completed-line {
+    background: #22c55e;
+}
+
+.active-line {
+    background: linear-gradient(to right, #f97316 45%, #d1d5db 45%);
+}
+
+@@media (max-width: 768px) {
+    .approval-card {
+        padding: 16px;
+    }
+
+    .step-line {
+        min-width: 70px;
+        margin: 0 14px;
+    }
+
+    .step-title {
+        font-size: 15px;
+    }
+
+    .step-status {
+        font-size: 12px;
+    }
+}
+
+.timeline-box {
+    background: #fff;
+    border: 1px solid #e6e9ee;
+    border-radius: 14px;
+    padding: 22px;
+    margin-bottom: 24px;
+}
+
+.timeline-heading {
+    font-size: 16px;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 18px;
+}
+
+.timeline-scroll {
+    position: relative;
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding-top: 12px;
+}
+
+.timeline-track {
+    position: absolute;
+    top: 28px;
+    left: 78px;
+    right: 78px;
+    height: 2px;
+    background: #e5e7eb;
+    z-index: 0;
+}
+
+.timeline-col {
+    position: relative;
+    z-index: 1;
+    width: 155px;
+    min-width: 155px;
+}
+
+.timeline-dot {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    margin: 0 auto 15px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 19px;
+}
+
+.dot-green {
+    background: #047857;
+}
+
+.dot-red {
+    background: #dc2626;
+}
+
+.dot-blue {
+    background: #3b82f6;
+}
+
+.dot-gray {
+    background: #cbd5e1;
+}
+
+.timeline-small-card {
+    min-height: 100px;
+    border-radius: 8px;
+    border: 1px solid #edf0f5;
+    padding: 11px;
+    background: #f9fafb;
+}
+
+.card-green {
+    background: #f0fdf4;
+}
+
+.card-red {
+    background: #fff1f2;
+}
+
+.card-blue {
+    background: #f8fbff;
+}
+
+.timeline-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.2;
+}
+
+.timeline-status {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 10px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    font-weight: 600;
+}
+
+.badge-green {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.badge-red {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.badge-blue {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+.badge-orange {
+    background: #ffedd5;
+    color: #f97316;
+}
+
+.timeline-user {
+    margin-top: 12px;
+    font-size: 12px;
+    color: #374151;
+}
+
+.timeline-date {
+    margin-top: 7px;
+    font-size: 10px;
+    color: #6b7280;
+}
+
+.sent-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #444;
+    margin-bottom: 18px;
+}
+
+.detail-box {
+    background: #fff;
+    border: 1px solid #e6e9ee;
+    border-radius: 12px;
+    padding: 24px;
+    min-height: 225px;
+}
+
+.detail-box h5 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 20px;
+}
+
+.info-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    margin-bottom: 18px;
+    font-size: 13px;
+}
+
+.info-row span {
+    color: #667085;
+}
+
+.info-row strong {
+    color: #374151;
+    font-weight: 600;
+}
+
+.remarks {
+    padding-left: 20px;
+    margin: 0;
+}
+
+.remarks li {
+    margin-bottom: 18px;
+    font-size: 13px;
+    color: #374151;
+    font-weight: 500;
+}
+
+@@media (max-width: 768px) {
+    .timeline-col {
+        width: 145px;
+        min-width: 145px;
+    }
+
+    .timeline-track {
+        left: 72px;
+        right: 72px;
+    }
+
+    .info-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+}
+</style>
+
+<div class="container-fluid py-4 px-4">
+     
+    <div class="page-header-row">
+        <h1 class="page-title">Review - Dealer Application</h1>
+        <div class="page-subtitle">Review and approve dealer registration</div>
+    </div>
+
+   <div class="container-fluid py-3">
+
+    <!-- Top Info Cards -->
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="info-card">
+                <div>
+                    <div class="info-label">Dealer Name</div>
+                    <div class="info-value">Agro Enterprises Pvt Ltd</div>
+                </div>
+                <div class="info-icon purple">
+                    <i class="bi bi-person"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="info-card">
+                <div>
+                    <div class="info-label">Dealer Code</div>
+                    <div class="info-value">DLR-2026-MH-1234</div>
+                </div>
+                <div class="info-icon orange">
+                    <i class="bi bi-upc-scan"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="info-card">
+                <div>
+                    <div class="info-label">Submitted By</div>
+                    <div class="info-value">MO - Amit Sharma</div>
+                </div>
+                <div class="info-icon cyan">
+                    <i class="bi bi-person-badge"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="info-card">
+                <div>
+                    <div class="info-label">Status</div>
+                    <span class="status-badge">Pending</span>
+                </div>
+                <div class="info-icon yellow">
+                    <i class="bi bi-file-earmark-text"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approval Progress -->
+    <div class="approval-card mb-3">
+        <div class="approval-step completed">
+            <div class="step-circle">
+                <i class="bi bi-check-lg"></i>
+            </div>
+            <div>
+                <div class="step-title">MO</div>
+                <div class="step-status">Submitted</div>
+            </div>
+        </div>
+
+        <div class="step-line completed-line"></div>
+
+        <div class="approval-step active">
+            <div class="step-circle">RM</div>
+            <div>
+                <div class="step-title">RM</div>
+                <div class="step-status">Under Review</div>
+            </div>
+        </div>
+
+        <div class="step-line active-line"></div>
+
+        <div class="approval-step pending">
+            <div class="step-circle">SM</div>
+            <div>
+                <div class="step-title">SM</div>
+                <div class="step-status">Pending</div>
+            </div>
+        </div>
+
+        <div class="step-line"></div>
+
+        <div class="approval-step pending">
+            <div class="step-circle">AVP</div>
+            <div>
+                <div class="step-title">AVP</div>
+                <div class="step-status">Pending</div>
+            </div>
+        </div>
+    </div>
+   <div class="timeline-box">
+    <h5 class="timeline-heading">Timeline</h5>
+
+    <div class="timeline-scroll">
+        <div class="timeline-track"></div>
+
+        @foreach (var item in TimelineItems)
+        {
+            <div class="timeline-col">
+                <div class="timeline-dot @item.DotClass">
+                    @if (!string.IsNullOrEmpty(item.Icon))
+                    {
+                        <i class="@item.Icon"></i>
+                    }
+                </div>
+
+                <div class="timeline-small-card @item.CardClass">
+                    <div class="d-flex justify-content-between">
+                        <div class="timeline-title">@item.Title</div>
+                        <i class="bi bi-eye text-primary"></i>
+                    </div>
+
+                    <span class="timeline-status @item.BadgeClass">@item.Status</span>
+
+                    <div class="timeline-user">@item.UserName</div>
+
+                    <div class="timeline-date">
+                        <i class="bi bi-calendar-event"></i>
+                        @item.DateText
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<h4 class="sent-title">Sent Back by Regional Manager</h4>
+
+<div class="row g-4">
+    <div class="col-12 col-lg-6">
+        <div class="detail-box">
+            <h5>Action Details</h5>
+
+            <div class="info-row">
+                <span>Action</span>
+                <strong>Sent Back</strong>
+            </div>
+
+            <div class="info-row">
+                <span>Action By</span>
+                <strong>Ramesh Kumar</strong>
+            </div>
+
+            <div class="info-row">
+                <span>Role</span>
+                <strong>Marketing Officer (MO)</strong>
+            </div>
+
+            <div class="info-row">
+                <span>Date & Time</span>
+                <strong>18-Apr-2026, 11.30 AM</strong>
+            </div>
+
+            <div class="info-row">
+                <span>Stage</span>
+                <strong>Marketing Officer (MO) Review</strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="detail-box">
+            <h5>Remarks</h5>
+
+            <ul class="remarks">
+                <li>Sales data mismatch for FY 23-24.</li>
+                <li>Sales data mismatch for FY 23-24.</li>
+                <li>Sales data mismatch for FY 23-24.</li>
+                <li>Sales data mismatch for FY 23-24.</li>
+                <li>Sales data mismatch for FY 23-24.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+</div>
+
+
+    <div class="custom-accordion @(IsCompanyDetailsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsCompanyDetailsOpen = !IsCompanyDetailsOpen">
+            Company Details
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-file-earmark-text"></i> Basic Information</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Company</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">State</div><div class="data-value">@(_stateName ?? (_dealer != null ? _dealer.StateId.ToString() : "-"))</div></div>
+                            <div class="data-row"><div class="data-label">Region</div><div class="data-value">@(_regionName ?? (_dealer != null ? _dealer.Region.ToString() : "-"))</div></div>
+                            <div class="data-row"><div class="data-label">HQ</div><div class="data-value">@(_hqName ?? (_dealer != null ? _dealer.HQ.ToString() : "-"))</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-briefcase"></i> Business Information</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Dealer Name</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Firm Name</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">@(_dealer?.DealerCode ?? (_dealer != null ? $"DL-{_dealer.Id}" : "-"))</div></div>
+                            <div class="data-row"><div class="data-label">Date of Appointment</div><div class="data-value">@(_dealer?.DateOfAppointment.ToString("dd MMM yyyy") ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Business Type</div><div class="data-value">@(_dealer?.BusinessEntityType ?? "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-geo-alt"></i> Primary Location</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Google Map URL</div><div class="data-value text-primary">@(_dealer?.GoogleMapURL ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Shop No / Room No / Block No</div><div class="data-value">@(_dealer?.ShopNoORRoomNoOrBlockNo ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Street / Area / Locality</div><div class="data-value">@(_dealer?.Street ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Sub Village</div><div class="data-value">@(_dealer?.SubVillage ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Village</div><div class="data-value">@(_dealer?.Village ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Pincode</div><div class="data-value">@(_dealer?.PinCode ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Block</div><div class="data-value">@(_dealer?.Block ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Taluk</div><div class="data-value">@(_dealer?.Taluk ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">District</div><div class="data-value">@(_districtName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">State</div><div class="data-value">@(_stateName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Official Contact Number</div><div class="data-value">@(_dealer?.OfficialContactNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">WhatsApp Number</div><div class="data-value">@(_dealer?.WhatsAppNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Alternative Number</div><div class="data-value">@(_dealer?.AlternativeNumber ?? "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-shield-check"></i> Tax & Compliance</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">GST Number</div><div class="data-value">@(_dealer?.GSTNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.GSTFilePath) ? "Yes" : "No")</div></div>
+                            <div class="data-row mt-4"><div class="data-label">PAN Number</div><div class="data-value">@(_dealer?.PANNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.PANFilePath) ? "Yes" : "No")</div></div>
+                            <div class="data-row mt-4"><div class="data-label">Aadhaar Number</div><div class="data-value">@(_dealer?.AadhaarNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.AadhaarFilePath) ? "Yes" : "No")</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-box-seam"></i> Wholesale Fertilizer Details</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Wholesale Fertilizer License</div><div class="data-value">@(_dealer?.WholeSaleFertilizerLicenseNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Expiry Date</div><div class="data-value">@(_dealer?.WholesaleLicenseExpiryDate != DateTime.MinValue ? _dealer?.WholesaleLicenseExpiryDate.ToString("dd MMM yyyy") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">mFMS Code</div><div class="data-value">@(_dealer?.WholesalemFMSCode ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.WholesaleLicenseFilePath) ? "Yes" : "No")</div></div>
+                            @if (!string.IsNullOrEmpty(_dealer?.WholesaleLicenseFilePath))
+                            {
+                                <div class="data-row"><div class="data-label">View File</div><div class="data-value"><a href="@($"api/DealerFile/view/{Uri.EscapeDataString(_dealer.WholesaleLicenseFilePath)}")" target="_blank">Open</a></div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-shop"></i> Retail Fertilizer Details</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Retail Fertilizer License Details</div><div class="data-value">@(_dealer?.RetailFertilizerLicenseNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Expiry Date</div><div class="data-value">@(_dealer?.RetailLicenseExpiryDate != DateTime.MinValue ? _dealer?.RetailLicenseExpiryDate.ToString("dd MMM yyyy") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">mFMS Code</div><div class="data-value">@(_dealer?.RetailmFMSCode ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.RetailLicenseFilePath) ? "Yes" : "No")</div></div>
+                            @if (!string.IsNullOrEmpty(_dealer?.RetailLicenseFilePath))
+                            {
+                                <div class="data-row"><div class="data-label">View File</div><div class="data-value"><a href="@($"api/DealerFile/view/{Uri.EscapeDataString(_dealer.RetailLicenseFilePath)}")" target="_blank">Open</a></div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Bank Details</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Account Holder Name</div><div class="data-value">@(_dealer?.AccountHolderName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Account Number</div><div class="data-value">@(_dealer?.AccountNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Bank Name</div><div class="data-value">@(_bankName ?? _dealer?.BankId.ToString() ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Bank Branch</div><div class="data-value">@(_dealer?.Branch ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">IFSC Code</div><div class="data-value">@(_dealer?.IFSC ?? "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-pc-display"></i> Office Automation</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Do you have office automation</div><div class="data-value">@(_dealer != null ? (_dealer.IsOfficeAutomation ? "Yes" : "No") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">Expected Automation Date</div><div class="data-value">@(_dealer?.ExpectedOfficeAutomationDate.HasValue == true && _dealer.ExpectedOfficeAutomationDate.Value != DateTime.MinValue ? _dealer.ExpectedOfficeAutomationDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">Enrolled in eDAK</div><div class="data-value">@(_dealer != null ? (_dealer.IsSDWA ? "Yes" : "No") : "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsExperienceOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsExperienceOpen = !IsExperienceOpen">
+            Experience In Fertilizer Trade
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-person-workspace"></i> Experience</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (_experiences != null && _experiences.Any())
+                            {
+                                foreach (var exp in _experiences)
+                                {
+                                    <div class="data-row"><div class="data-label">Company Name:</div><div class="data-value">@exp.CompanyId</div></div>
+                                    <div class="data-row"><div class="data-label">Number of years:</div><div class="data-value">@exp.NoOfYears @("Years")</div></div>
+                                    <div class="data-row"><div class="data-label">Quantity (MT):</div><div class="data-value">@exp.Quantity</div></div>
+                                    <div class="data-row"><div class="data-label">Turnover (Lakhs):</div><div class="data-value">@exp.TurnOver</div></div>
+                                    <div class="data-row"><div class="data-label">Still Active:</div><div class="data-value">@(exp.IsActive ? "Yes" : "No")</div></div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Experience</div><div class="data-value">No experience data</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                @* <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-person-workspace"></i> Experience</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (_experiences != null && _experiences.Count > 1)
+                            {
+                                var idx = 0;
+                                foreach (var exp in _experiences.Skip(1))
+                                {
+                                    <div class="data-row"><div class="data-label">Company Name:</div><div class="data-value">@exp.CompanyId</div></div>
+                                    <div class="data-row"><div class="data-label">Number of years:</div><div class="data-value">@exp.NoOfYears @("Years")</div></div>
+                                    <div class="data-row"><div class="data-label">Quantity (MT):</div><div class="data-value">@exp.Quantity</div></div>
+                                    <div class="data-row"><div class="data-label">Turnover (Lakhs):</div><div class="data-value">@exp.TurnOver</div></div>
+                                    <div class="data-row"><div class="data-label">Still Active:</div><div class="data-value">@(exp.IsActive ? "Yes" : "No")</div></div>
+                                    <div class="mb-2"></div>
+                                    idx++;
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Experience</div><div class="data-value">No additional experience entries</div></div>
+                            }
+                        </div>
+                    </div>
+                </div> *@
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsAnnualSalesOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsAnnualSalesOpen = !IsAnnualSalesOpen">
+            Annual Sales Data
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="detail-card">
+                <div class="detail-card-header">
+                    <h4 class="detail-card-title"><i class="bi bi-file-earmark-spreadsheet"></i> Last Financial Year</h4>
+                    <i class="bi bi-pencil-square edit-icon"></i>
+                </div>
+                <div class="table-responsive">
+                    <table class="sales-table">
+                        <thead>
+                            <tr>
+                                <th>S:No</th>
+                                <th>Product</th>
+                                <th>Own Retail Sales (MT)</th>
+                                <th>Sales to Dealers (MT)</th>
+                                <th>Total (MT)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_annualSales != null && _annualSales.Any())
+                            {
+                                var idx = 1;
+                                foreach (var a in _annualSales)
+                                {
+                                    <tr>
+                                        <td>@idx</td>
+                                        <td>@a.ProductId</td>
+                                        <td>@a.OwnRetailsSaleQty</td>
+                                        <td>@a.SaleToDealerQty</td>
+                                        <td>@(a.OwnRetailsSaleQty + a.SaleToDealerQty)</td>
+                                    </tr>
+                                    idx++;
+                                }
+                                <tr class="grand-total-row">
+                                    <td colspan="2" style="text-align: right; padding-right: 40px;">GRAND TOTAL</td>
+                                    <td>@_annualSales.Sum(x => x.OwnRetailsSaleQty) MT</td>
+                                    <td>@_annualSales.Sum(x => x.SaleToDealerQty) MT</td>
+                                    <td>@(_annualSales.Sum(x => x.OwnRetailsSaleQty + x.SaleToDealerQty)) MT</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                <tr><td colspan="5">No annual sales data</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsWarehouseOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsWarehouseOpen = !IsWarehouseOpen">
+            Warehouse & Logistics
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+                <div class="row g-4">
+                @if (_warehouses != null && _warehouses.Any())
+                {
+                    foreach (var w in _warehouses)
+                    {
+                        <div class="col-md-6">
+                            <div class="detail-card">
+                                <div class="detail-card-header">
+                                    <h4 class="detail-card-title"><i class="bi bi-building"></i> Warehouse / Depot</h4>
+                                    <i class="bi bi-pencil-square edit-icon"></i>
+                                </div>
+                                <div class="detail-card-body">
+                                    <div class="data-row"><div class="data-label">Warehouse Id:</div><div class="data-value">@w.WarehouseId</div></div>
+                                    <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@w.Distance</div></div>
+                                    <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@w.Freight</div></div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="col-12"><div class="text-muted">No warehouse/logistics data</div></div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsMarketDetailsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsMarketDetailsOpen = !IsMarketDetailsOpen">
+            Market Details
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                @if (_marketDetails != null && _marketDetails.Any())
+                {
+                    foreach (var m in _marketDetails)
+                    {
+                        <div class="col-md-6">
+                            <div class="detail-card">
+                                <div class="detail-card-header">
+                                    <h4 class="detail-card-title"><i class="bi bi-grid-fill"></i> @m.NameOfBlock</h4>
+                                    <i class="bi bi-pencil-square edit-icon"></i>
+                                </div>
+                                <div class="detail-card-body">
+                                    <div class="data-row"><div class="data-label">Major Crops:</div><div class="data-value">@m.MajorCrops</div></div>
+                                    <div class="data-row"><div class="data-label">No of Dealers:</div><div class="data-value">@m.NoOfDealer</div></div>
+                                    <div class="data-row"><div class="data-label">No of Farmers:</div><div class="data-value">@m.NoOfFarmer</div></div>
+                                    <div class="data-row"><div class="data-label">Season (From → To):</div><div class="data-value">@m.SeasonFromMonth → @m.SeasonToMonth</div></div>
+                                    <div class="data-row"><div class="data-label">Irrigation Type:</div><div class="data-value">@((m.IsCanal ? "Canal " : "") + (m.IsTank ? "Tank " : "") + (m.IsWell ? "Well" : ""))</div></div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="col-12"><div class="text-muted">No market details</div></div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsProprietorDetailsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsProprietorDetailsOpen = !IsProprietorDetailsOpen">
+            Proprietor Details
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-person-badge"></i> Ownership Information</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (_ownership != null)
+                            {
+                                <div class="data-row"><div class="data-label">Business Entity Type</div><div class="data-value">@_dealer?.BusinessEntityType ?? "-"</div></div>
+                                <div class="data-row"><div class="data-label">Proprietor Name:</div><div class="data-value">@_ownership.Name</div></div>
+                                <div class="data-row"><div class="data-label">Father Name:</div><div class="data-value">@_ownership.FatherName</div></div>
+                                <div class="data-row"><div class="data-label">Phone Number:</div><div class="data-value">@_ownership.PhoneNumber</div></div>
+                                <div class="data-row"><div class="data-label">Email:</div><div class="data-value">@_ownership.Email</div></div>
+                                <div class="data-row"><div class="data-label">Aadhaar Number:</div><div class="data-value">@_ownership.AadhaarNumber</div></div>
+                                <div class="data-row"><div class="data-label">Aadhaar Document:</div><div class="data-value">@(!string.IsNullOrEmpty(_ownership.AadhaarFilePath) ? "Yes" : "No")</div></div>
+                                <div class="data-row"><div class="data-label">Uploaded Image:</div><div class="data-value">@(!string.IsNullOrEmpty(_ownership.ProprietorImagePath) ? "Yes" : "No")</div></div>
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Ownership</div><div class="data-value">No ownership info</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-briefcase"></i> Other Occupation / Agencies</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (_occupations != null && _occupations.Any())
+                            {
+                                foreach (var oc in _occupations)
+                                {
+                                    <div class="data-row"><div class="data-label">Name of Company</div><div class="data-value">@oc.NameofCompany</div></div>
+                                    <div class="data-row"><div class="data-label">Sector:</div><div class="data-value">@oc.SectorId</div></div>
+                                    <div class="data-row"><div class="data-label">Annual Turnover:</div><div class="data-value">@oc.AnnualTurnover</div></div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Other Occupation</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-people"></i> Family Members</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (_partners != null && _partners.Any())
+                            {
+                                foreach (var p in _partners)
+                                {
+                                    <div class="data-row"><div class="data-label">Family Member Name:</div><div class="data-value">@p.FamilyMemberName</div></div>
+                                    <div class="data-row"><div class="data-label">D.O.B:</div><div class="data-value">@p.DateOfBirth.ToString("dd/MM/yyyy")</div></div>
+                                    <div class="data-row"><div class="data-label">Age:</div><div class="data-value">@p.Age</div></div>
+                                    <div class="data-row"><div class="data-label">Relationship:</div><div class="data-value">@p.RelationshipId</div></div>
+                                    <div class="data-row"><div class="data-label">Occupation:</div><div class="data-value">@p.Occupation ?? "-"</div></div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Family Members</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+               @*  <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-people"></i> Family Members</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Family Member Name:</div><div class="data-value">Lakshmi Kumar</div></div>
+                            <div class="data-row"><div class="data-label">D.O.B:</div><div class="data-value">15/08/1988</div></div>
+                            <div class="data-row"><div class="data-label">Age:</div><div class="data-value">37</div></div>
+                            <div class="data-row"><div class="data-label">Relationship:</div><div class="data-value">Spouse</div></div>
+                            <div class="data-row"><div class="data-label">Occupation:</div><div class="data-value">Homemaker</div></div>
+                        </div>
+                    </div>
+                </div> *@
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsCompaniesOperatingOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsCompaniesOperatingOpen = !IsCompaniesOperatingOpen">
+            Companies Operating In Your Place
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="detail-card">
+                <div class="detail-card-header">
+                    <h4 class="detail-card-title"><i class="bi bi-building"></i> Selected Companies</h4>
+                    <i class="bi bi-pencil-square edit-icon"></i>
+                </div>
+                <div class="detail-card-body">
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        @if (_companies != null && _companies.Any())
+                        {
+                            foreach (var c in _companies)
+                            {
+                                <div class="company-pill">@(!string.IsNullOrWhiteSpace(c.CompaniesOperating) ? c.CompaniesOperating : "Unknown")</div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="company-pill">None</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsSalesPlanningOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsSalesPlanningOpen = !IsSalesPlanningOpen">
+            Sales Planning & Forecast
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="detail-card">
+                <div class="detail-card-header">
+                    <h4 class="detail-card-title"><i class="bi bi-file-earmark-bar-graph"></i> Business Entity Type</h4>
+                    <i class="bi bi-pencil-square edit-icon"></i>
+                </div>
+                <div class="table-responsive">
+                    <table class="sales-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2">S:No</th>
+                                <th rowspan="2">Product Name / Category</th>
+                                <th colspan="2">April</th>
+                                <th colspan="2">May</th>
+                                <th colspan="2">June</th>
+                            </tr>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Lakhs</th>
+                                <th>Metric</th>
+                                <th>Lakhs</th>
+                                <th>Metric</th>
+                                <th>Lakhs</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td>NC Urea</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                            </tr>
+                            <tr>
+                                <td>2</td>
+                                <td>NC Urea</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                            </tr>
+                            <tr>
+                                <td>3</td>
+                                <td>NC Urea</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                                <td>12,450 MT</td>
+                                <td>₹ 24.5 L</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="detail-card-body pb-3 pt-0">
+                    <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 16px;">
+                        <div class="total-pill">Total Volume: 0.00 Units</div>
+                        <div class="total-pill">Total Forecast Value: 0.00 ₹</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsInvestmentOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsInvestmentOpen = !IsInvestmentOpen">
+            Investment
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Assets (Banking)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (_assetBanks != null && _assetBanks.Any())
+                            {
+                                foreach (var b in _assetBanks)
+                                {
+                                    <div class="data-row"><div class="data-label">Bank Name:</div><div class="data-value">@b.BankId</div></div>
+                                    <div class="data-row"><div class="data-label">Bank Branch:</div><div class="data-value">@b.BankBranch</div></div>
+                                    <div class="data-row"><div class="data-label">Value (₹):</div><div class="data-value">@b.Value</div></div>
+                                    <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@b.Remarks</div></div>
+                                    <div class="data-row"><div class="data-label">Document:</div><div class="data-value">@(!string.IsNullOrEmpty(b.FileUploadPath) ? "Yes" : "No")</div></div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Bank Assets</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+               @*  <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Assets (Banking)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Bank Name:</div><div class="data-value">Indian Bank</div></div>
+                            <div class="data-row"><div class="data-label">Bank Branch:</div><div class="data-value">Thanjavur Main Branch</div></div>
+                            <div class="data-row"><div class="data-label">Value (₹):</div><div class="data-value">₹ 12,50,000</div></div>
+                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">Includes savings balance and fixed deposits maintained for business operations.</div></div>
+                            <div class="data-row"><div class="data-label">Document:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div> *@
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-map"></i> Assets (Land)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (_assetLands != null && _assetLands.Any())
+                            {
+                                foreach (var l in _assetLands)
+                                {
+                                    <div class="data-row"><div class="data-label">Land Name:</div><div class="data-value">@l.LandName</div></div>
+                                    <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">@l.SurvayNumber</div></div>
+                                    <div class="data-row"><div class="data-label">Land Size (in Cent):</div><div class="data-value">@l.LandSize</div></div>
+                                    <div class="data-row"><div class="data-label">Property Value (₹ in Lakhs):</div><div class="data-value">@l.PropertyValue</div></div>
+                                    <div class="data-row"><div class="data-label">Land Document:</div><div class="data-value">@(!string.IsNullOrEmpty(l.UploadedLandDocumentPath) ? "Yes" : "No")</div></div>
+                                    <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">@(!string.IsNullOrEmpty(l.UploadedECDocumentPath) ? "Yes" : "No")</div></div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Land Assets</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+              @*   <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-map"></i> Assets (Land)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Land Name:</div><div class="data-value">Kumar Agricultural Land</div></div>
+                            <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">142/3A</div></div>
+                            <div class="data-row"><div class="data-label">Land Size (in Cent):</div><div class="data-value">250 Cent</div></div>
+                            <div class="data-row"><div class="data-label">Property Value (₹ in Lakhs):</div><div class="data-value">₹ 35,00,000</div></div>
+                            <div class="data-row"><div class="data-label">Land Document:</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div> *@
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-house"></i> Assets (Building)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (_assetBuildings != null && _assetBuildings.Any())
+                            {
+                                foreach (var bld in _assetBuildings)
+                                {
+                                    <div class="data-row"><div class="data-label">Building Name:</div><div class="data-value">@bld.BuildingName</div></div>
+                                    <div class="data-row"><div class="data-label">Property Value (₹):</div><div class="data-value">@bld.PropertyValue</div></div>
+                                    <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">@bld.SurveyNumber</div></div>
+                                    <div class="data-row"><div class="data-label">Land Size (in Square Ft):</div><div class="data-value">@bld.LandSize</div></div>
+                                    <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@bld.Remarks</div></div>
+                                    <div class="data-row"><div class="data-label">Building Document:</div><div class="data-value">@(!string.IsNullOrEmpty(bld.UploadedBuildingDocumentPath) ? "Yes" : "No")</div></div>
+                                    <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">@(!string.IsNullOrEmpty(bld.UploadedECDocumentPath) ? "Yes" : "No")</div></div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Building Assets</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+             @*    <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-house"></i> Assets (Building)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Building Name:</div><div class="data-value">Kumar Agro Warehouse</div></div>
+                            <div class="data-row"><div class="data-label">Property Value (₹):</div><div class="data-value">₹ 28,00,000</div></div>
+                            <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">142/3A</div></div>
+                            <div class="data-row"><div class="data-label">Land Size (in Square Ft):</div><div class="data-value">5000 Sq.ft</div></div>
+                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">RCC structured warehouse used for fertilizer storage with proper ventilation and loading access.</div></div>
+                            <div class="data-row"><div class="data-label">Building Document:</div><div class="data-value">Yes</div></div>
+                            <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">Yes</div></div>
+                        </div>
+                    </div>
+                </div> *@
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-truck"></i> Movable</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Movable Assets Value (₹):</div><div class="data-value">@(_dealer?.AssetValue ?? 0)</div></div>
+                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@(_dealer?.Remarks ?? "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-buildings"></i> Infrastructure</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Own Godown Capacity:</div><div class="data-value">@(_dealer?.OwnGodownCapacity ?? 0) MT</div></div>
+                            <div class="data-row"><div class="data-label">Rent Godown Capacity:</div><div class="data-value">@(_dealer?.RentGodownCapacity ?? 0) MT</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Loan Liabilities</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (_loans != null && _loans.Any())
+                            {
+                                foreach (var ln in _loans)
+                                {
+                                    <div class="data-row"><div class="data-label">Loan Source / Institution:</div><div class="data-value">@ln.LoanSource</div></div>
+                                    <div class="data-row"><div class="data-label">Loan Value:</div><div class="data-value">@ln.LoanValue</div></div>
+                                    <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@ln.Remarks</div></div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Loans</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bar-chart"></i> Net Financial Position</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Capital Position:</div><div class="data-value">@($"₹{GetCapitalPosition():N0}")</div></div>
+                            <div class="data-row"><div class="data-label">Assets:</div><div class="data-value">@($"₹{GetTotalAssets():N0}")</div></div>
+                            <div class="data-row"><div class="data-label">Loans:</div><div class="data-value">@($"₹{GetTotalLoans():N0}")</div></div>
+                            <div class="data-row"><div class="data-label">Net Value:</div><div class="data-value">@($"₹{GetNetValue():N0}")</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsCreditLimitOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsCreditLimitOpen = !IsCreditLimitOpen">
+            Credit Limit Proposal 
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-person-badge"></i> Dealer Summary</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Firm Name:</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Total Investment:</div><div class="data-value">₹@(_dealer?.CapitalInvestment.ToString("N0") ?? "0")</div></div>
+                            <div class="data-row"><div class="data-label">Storage Capacity:</div><div class="data-value">@(_dealer?.OwnGodownCapacity ?? 0) MT</div></div>
+                            <div class="data-row"><div class="data-label">Experience:</div><div class="data-value">@(_dealer?.YearsofExperiance ?? 0) Years</div></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-building-add"></i> Property Assets (Collateral)</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if ((_assetLands != null && _assetLands.Any()) || (_assetBuildings != null && _assetBuildings.Any()) || (_assetBanks != null && _assetBanks.Any()))
+                            {
+                                var landsTotal = _assetLands?.Sum(x => x.PropertyValue) ?? 0m;
+                                var buildingsTotal = _assetBuildings?.Sum(x => x.PropertyValue) ?? 0m;
+                                var banksTotal = _assetBanks?.Sum(x => x.Value) ?? 0m;
+
+                                if (_assetLands != null && _assetLands.Any())
+                                {
+                                    <div class="data-row"><div class="data-label">Lands (Total Valuation):</div><div class="data-value">₹@landsTotal.ToString("N0")</div></div>
+                                    foreach (var l in _assetLands)
+                                    {
+                                        <div class="data-row"><div class="data-label">&nbsp;&nbsp;• @l.LandName</div><div class="data-value">₹@(l.PropertyValue.ToString("N0"))</div></div>
+                                    }
+                                }
+
+                                if (_assetBuildings != null && _assetBuildings.Any())
+                                {
+                                    <div class="data-row"><div class="data-label">Buildings (Total Valuation):</div><div class="data-value">₹@buildingsTotal.ToString("N0")</div></div>
+                                    foreach (var bld in _assetBuildings)
+                                    {
+                                        <div class="data-row"><div class="data-label">&nbsp;&nbsp;• @bld.BuildingName</div><div class="data-value">₹@(bld.PropertyValue.ToString("N0"))</div></div>
+                                    }
+                                }
+
+                                if (_assetBanks != null && _assetBanks.Any())
+                                {
+                                    <div class="data-row"><div class="data-label">Bank Assets (Total):</div><div class="data-value">₹@banksTotal.ToString("N0")</div></div>
+                                    foreach (var b in _assetBanks)
+                                    {
+                                        <div class="data-row"><div class="data-label">&nbsp;&nbsp;• @b.BankBranch</div><div class="data-value">₹@(b.Value.ToString("N0"))</div></div>
+                                    }
+                                }
+
+                                <div class="data-row"><div class="data-label">Total Valuation:</div><div class="data-value">₹@((landsTotal + buildingsTotal + banksTotal).ToString("N0"))</div></div>
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Property Assets</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-graph-up"></i> Sales Performance Review</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="sales-table">
+                                <thead>
+                                    <tr>
+                                        <th>S:No</th>
+                                        <th>Product Name / Category</th>
+                                        <th>FY 21-22</th>
+                                        <th>FY 22-23</th>
+                                        <th>FY 23-24</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>1</td>
+                                        <td>NC Urea</td>
+                                        <td>420</td>
+                                        <td>900</td>
+                                        <td>300</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td>NC Urea</td>
+                                        <td>420</td>
+                                        <td>900</td>
+                                        <td>300</td>
+                                    </tr>
+                                    <tr>
+                                        <td>3</td>
+                                        <td>NC Urea</td>
+                                        <td>420</td>
+                                        <td>900</td>
+                                        <td>300</td>
+                                    </tr>
+                                    <tr class="grand-total-row">
+                                        <td colspan="2" style="text-align: center;">GRAND TOTAL (MT)</td>
+                                        <td>1,075</td>
+                                        <td>1,285</td>
+                                        <td>1,500</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-building-check"></i> Other Companies Handled</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (_companies != null && _companies.Any())
+                            {
+                                foreach (var c in _companies)
+                                {
+                                <div class="data-row"><div class="data-label">Company:</div><div class="data-value">@c.CompaniesOperating</div></div>
+                                <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Companies</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+              @*   <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-building-check"></i> Other Companies Handled</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Company:</div><div class="data-value">Kumar Agro Traders Pvt Ltd</div></div>
+                            <div class="data-row"><div class="data-label">Qty (MT):</div><div class="data-value">450</div></div>
+                            <div class="data-row"><div class="data-label">Value (₹ Lakhs):</div><div class="data-value">₹4,50,000</div></div>
+                        </div>
+                    </div>
+                </div> *@
+
+                <div class="col-12">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-calendar3"></i> Fiscal Year 2023-24</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="sales-table">
+                                <thead>
+                                    <tr>
+                                        <th>S:No</th>
+                                        <th>Parameter</th>
+                                        <th>Values</th>
+                                        <th>Mark</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>1</td>
+                                        <td>Net Worth</td>
+                                        <td>$2.4M</td>
+                                        <td>30</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td>Net Worth</td>
+                                        <td>$2.4M</td>
+                                        <td>20</td>
+                                    </tr>
+                                    <tr>
+                                        <td>3</td>
+                                        <td>Net Worth</td>
+                                        <td>$2.4M</td>
+                                        <td>30</td>
+                                    </tr>
+                                    <tr class="grand-total-row">
+                                        <td colspan="2" style="text-align: center;">GRAND TOTAL</td>
+                                        <td>$6.9M</td>
+                                        <td>90</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-accordion @(IsEnclosuresOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="() => IsEnclosuresOpen = !IsEnclosuresOpen">
+            Enclosures 
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="detail-card">
+                <div class="detail-card-header">
+                    <h4 class="detail-card-title"><i class="bi bi-folder-check"></i> Submitted Documents</h4>
+                    <i class="bi bi-pencil-square edit-icon"></i>
+                </div>
+                <div class="enclosure-grid">
+                    @if (_documents != null)
+                    {
+                        @((MarkupString)GetEnclosureHtml())
+                    }
+                    else
+                    {
+                        <div class="enclosure-btn">No documents submitted</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+ 
+</div>
+<div class="d-flex justify-content-end gap-2 mt-3">
+    
+    <button class="btn btn-outline-warning px-3">
+        <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
+    </button>
+    @if (CanShowApprovalButton())
+{
+    <button class="btn-submit px-3" @onclick="ApproveDealer" disabled="@_isApproving">
+        @(_isApproving ? "Processing..." : ApprovalButtonText())
+    </button>
+}
+   @*  <button class="btn btn-primary px-3">
+        <i class="bi bi-check2-circle me-1"></i> Proceed to SM
+    </button> *@
+
+</div>
+
+@code {
+    // Blazor State Variables to control the open/close behavior of each accordion
+    private bool IsCompanyDetailsOpen { get; set; } = false;
+    private bool IsExperienceOpen { get; set; } = false;
+    private bool IsAnnualSalesOpen { get; set; } = false;
+    private bool IsWarehouseOpen { get; set; } = false;
+    private bool IsMarketDetailsOpen { get; set; } = false;
+    private bool IsProprietorDetailsOpen { get; set; } = false;
+    private bool IsCompaniesOperatingOpen { get; set; } = false;
+    private bool IsSalesPlanningOpen { get; set; } = false;
+    private bool IsInvestmentOpen { get; set; } = false;
+    private bool IsCreditLimitOpen { get; set; } = false;
+    private bool IsEnclosuresOpen { get; set; } = false;
+  
+    // private string _currentUserRole = "RM"; // replace with login role
+private bool _isApproving = false;
+
+private bool IsDealerSubmitted()
+{
+    return _dealer != null;
+}
+
+private readonly string[] RmRoles = { "RM", "RMD" };
+private readonly string[] SmRoles = { "SMD", "SMM" };
+private readonly string[] FinalApprovalRoles = { "AVP", "CorporateAdmin" };
+
+private bool CanShowApprovalButton()
+{
+    if (_dealer == null)
+        return false;
+
+    if (LoginState.IsRegionRole)
+        return _dealer.RMApproved == null;
+
+    if (LoginState.IsStateRole)
+        return _dealer.RMApproved == true && _dealer.SMApproved == null;
+
+    if (LoginState.IsAdmin)
+        return _dealer.RMApproved == true
+            && _dealer.SMApproved == true
+            && _dealer.AVPApproved == null;
+
+    return false;
+}
+
+private string ApprovalButtonText()
+{
+    if (LoginState.IsRegionRole)
+        return "Proceed to SM";
+
+    if (LoginState.IsStateRole)
+        return "Proceed to AVP";
+
+    if (LoginState.IsAdmin)
+        return "Approve";
+
+    return "Approve";
+}
+private async Task ApproveDealer()
+{
+    if (_dealer == null) return;
+
+    _isApproving = true;
+
+    try
+    {
+        if (LoginState.IsRegionRole)
+        {
+            _dealer.RMApproved = true;
+        }
+        else if (LoginState.IsStateRole)
+        {
+            _dealer.SMApproved = true;
+        }
+        else if (LoginState.IsAdmin)
+        {
+            _dealer.AVPApproved = true;
+            _dealer.Status = DR.DealerStatus.Active;
+        }
+
+        var response = await Http.PutAsJsonAsync(
+            $"api/DealerRegistration/{_dealer.Id}",
+            _dealer
+        );
+
+        if (response.IsSuccessStatusCode)
+        {
+            Nav.NavigateTo("/Dashboard");
+        }
+    }
+    finally
+    {
+        _isApproving = false;
+    }
+}
+}
