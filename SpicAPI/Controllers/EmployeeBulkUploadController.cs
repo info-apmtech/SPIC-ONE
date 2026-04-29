@@ -155,15 +155,12 @@ namespace SpicAPI.Controllers
                             continue;
                         }
 
-                        // Only specific roles are allowed via bulk upload
-                        // SMD, SMM  → State only
-                        // RM, RMD   → State + Region
-                        // MDO, MO, JMDO → HQ only
-                        bool isStateRole = role == AppRole.SMD || role == AppRole.SMM;
-                        bool isRegionRole = role == AppRole.RM || role == AppRole.RMD;
-                        bool isHqRole = role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
+                        // --- Role Definitions ---
+                        bool isSmRole = role == AppRole.SMD || role == AppRole.SMM;
+                        bool isRmRole = role == AppRole.RM || role == AppRole.RMD;
+                        bool isMoRole = role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
 
-                        if (!isStateRole && !isRegionRole && !isHqRole)
+                        if (!isSmRole && !isRmRole && !isMoRole)
                         {
                             AddError("Role Not Allowed", $"Row {rowNum} ({empName}): Role '{role}' cannot be created via bulk upload.");
                             skipped++;
@@ -172,28 +169,49 @@ namespace SpicAPI.Controllers
 
                         int stateId = 0, regionId = 0, hqId = 0;
 
-                        if (isStateRole || isRegionRole)
+                        // --- Extract All Provided Locations ---
+                        if (!string.IsNullOrWhiteSpace(stateName))
                         {
-                            if (string.IsNullOrWhiteSpace(stateName))
-                                AddError("Missing State", $"Row {rowNum} ({empName}): State is required for role '{role}'.");
-                            else if (!stateMap.TryGetValue(stateName, out stateId))
-                                AddError("Unknown State", $"Row {rowNum} ({empName}): State '{stateName}' not found — set to 0.");
+                            if (stateMap.TryGetValue(stateName, out var sId)) stateId = sId;
+                            else AddError("Unknown State", $"Row {rowNum} ({empName}): State '{stateName}' not found.");
                         }
 
-                        if (isRegionRole)
+                        if (!string.IsNullOrWhiteSpace(regionName))
                         {
-                            if (string.IsNullOrWhiteSpace(regionName))
-                                AddError("Missing Region", $"Row {rowNum} ({empName}): Region is required for role '{role}'.");
-                            else if (!regionMap.TryGetValue(regionName, out regionId))
-                                AddError("Unknown Region", $"Row {rowNum} ({empName}): Region '{regionName}' not found — set to 0.");
+                            if (regionMap.TryGetValue(regionName, out var rId)) regionId = rId;
+                            else AddError("Unknown Region", $"Row {rowNum} ({empName}): Region '{regionName}' not found.");
                         }
 
-                        if (isHqRole)
+                        if (!string.IsNullOrWhiteSpace(hqName))
                         {
-                            if (string.IsNullOrWhiteSpace(hqName))
-                                AddError("Missing HQ", $"Row {rowNum} ({empName}): HQ is required for role '{role}'.");
-                            else if (!hqMap.TryGetValue(hqName, out hqId))
-                                AddError("Unknown HQ", $"Row {rowNum} ({empName}): HQ '{hqName}' not found — set to 0.");
+                            if (hqMap.TryGetValue(hqName, out var hId)) hqId = hId;
+                            else AddError("Unknown HQ", $"Row {rowNum} ({empName}): HQ '{hqName}' not found.");
+                        }
+
+                        // --- Apply Your Specific Rules ---
+                        if (isMoRole) // MO, MDO, JMDO -> Requires State, Region, HQ
+                        {
+                            if (stateId == 0) AddError("Missing State", $"Row {rowNum} ({empName}): State is required for {role}.");
+                            if (regionId == 0) AddError("Missing Region", $"Row {rowNum} ({empName}): Region is required for {role}.");
+                            if (hqId == 0) AddError("Missing HQ", $"Row {rowNum} ({empName}): HQ is required for {role}.");
+                        }
+                        else if (isRmRole) // RM, RMD -> Requires State, Region
+                        {
+                            if (stateId == 0) AddError("Missing State", $"Row {rowNum} ({empName}): State is required for {role}.");
+                            if (regionId == 0) AddError("Missing Region", $"Row {rowNum} ({empName}): Region is required for {role}.");
+                        }
+                        else if (isSmRole) // SMD, SMM -> Requires State
+                        {
+                            if (stateId == 0) AddError("Missing State", $"Row {rowNum} ({empName}): State is required for {role}.");
+                        }
+
+                        // Skip row if any required location failed validation
+                        if ((isMoRole && (stateId == 0 || regionId == 0 || hqId == 0)) ||
+                            (isRmRole && (stateId == 0 || regionId == 0)) ||
+                            (isSmRole && stateId == 0))
+                        {
+                            skipped++;
+                            continue;
                         }
 
                         // ---  1. Create AppUsers (UserInfo) First ---

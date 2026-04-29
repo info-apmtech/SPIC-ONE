@@ -194,6 +194,7 @@
 
     private bool IsEditMode = false;
     private int EditingEmployeeId = 0;
+    private int EditingLoginId = 0;
 
     private static readonly AppRole[] AllowedRoles = new[]
     {
@@ -218,11 +219,11 @@
 
         var uri = new Uri(Nav.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        var editIdValue = query["editId"];
+        var editLoginIdValue = query["editLoginId"];
 
-        if (int.TryParse(editIdValue, out var editId))
+        if (int.TryParse(editLoginIdValue, out var loginId))
         {
-            await LoadForEdit(editId);
+            await LoadForEdit(loginId);
         }
     }
 
@@ -303,8 +304,7 @@
                     UpdatedBy = "System"
                 };
 
-                var loginUpdateResponse = await Http.PutAsJsonAsync($"api/EmployeeLoginSetup/{EditingEmployeeId}", loginRequest);
-
+                var loginUpdateResponse = await Http.PutAsJsonAsync($"api/EmployeeLoginSetup/login/{EditingLoginId}", loginRequest);
                 if (!loginUpdateResponse.IsSuccessStatusCode)
                 {
                     var error = await loginUpdateResponse.Content.ReadAsStringAsync();
@@ -324,22 +324,26 @@
         }
     }
 
-    private async Task LoadForEdit(int employeeId)
+    private async Task LoadForEdit(int loginId)
     {
         try
         {
             Loading.Show();
 
-            var employee = await Http.GetFromJsonAsync<EmployeeInformation>($"api/EmployeeRegistration/{employeeId}");
-            var loginData = await Http.GetFromJsonAsync<EmployeeLoginCreateRequest>($"api/EmployeeLoginSetup/by-employee/{employeeId}");
+            // 1. Fetch the specific login first
+            var loginData = await Http.GetFromJsonAsync<EmployeeLoginCreateRequest>($"api/EmployeeLoginSetup/by-login/{loginId}");
+        
+            if (loginData == null) throw new Exception("Unable to load login data");
 
-            if (employee == null || loginData == null)
-                throw new Exception("Unable to load employee data");
+            // 2. Fetch the shared employee info based on the ID inside the login data
+            var employee = await Http.GetFromJsonAsync<EmployeeInformation>($"api/EmployeeRegistration/{loginData.EmployeeInformationID}");
+
+            if (employee == null) throw new Exception("Unable to load employee data");
 
             vm.Employee = employee;
             vm.Login = new Employeelogin
             {
-                EmployeeInformationID = employeeId,
+                EmployeeInformationID = employee.Id,
                 Role = loginData.Role,
                 ZoneId = loginData.ZoneId,
                 StateId = loginData.StateId,
@@ -354,7 +358,8 @@
                 Password = loginData.Password
             };
 
-            EditingEmployeeId = employeeId;
+            EditingEmployeeId = employee.Id;
+            EditingLoginId = loginId; 
             IsEditMode = true;
         }
         catch (Exception ex)
@@ -366,7 +371,6 @@
             Loading.Hide();
         }
     }
-
     private void ResetForm()
     {
         vm = new EmployeeRegistrationVM();
