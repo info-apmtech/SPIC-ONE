@@ -1,6 +1,7 @@
 ﻿@page "/Agriculture"
 @using System.Net.Http.Json
 @inject HttpClient Http
+@inject IJSRuntime JS
 
 <div class="container-fluid">
 
@@ -440,8 +441,19 @@
 		.Skip((_currentPage - 1) * _pageSize)
 		.Take(_pageSize);
 
-	protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
 	{
+		// read jwt token from sessionStorage to extract current user id for CreatedBy/UpdatedBy
+		try
+		{
+			var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+			if (!string.IsNullOrEmpty(token))
+			{
+				_currentUserId = GetUserIdFromToken(token);
+			}
+		}
+		catch { }
+
 		await LoadAllData();
 		ApplyFilter();
 		_isLoading = false;
@@ -543,15 +555,15 @@
 
 			object payload = ActiveTab switch
 			{
-				"Categories" => _isEditing
-					? new { Id = _editingId!.Value, _categoryForm.Name, _categoryForm.UnitId, _categoryForm.IsSpecialityProduct, _categoryForm.IsActive, UpdatedBy = "current-user" }
-					: new { _categoryForm.Name, _categoryForm.UnitId, _categoryForm.IsSpecialityProduct, _categoryForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
-				"Products" => _isEditing
-					? (object)new { Id = _editingId!.Value, _productForm.Name, _productForm.CategoryId, _productForm.IsActive, UpdatedBy = "current-user" }
-					: new { _productForm.Name, _productForm.CategoryId, _productForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" },
-				_ => _isEditing
-					? (object)new { Id = _editingId!.Value, _simpleForm.Name, _simpleForm.IsActive, UpdatedBy = "current-user" }
-					: new { _simpleForm.Name, _simpleForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, UpdatedBy = "current-user" }
+          "Categories" => _isEditing
+				? new { Id = _editingId!.Value, _categoryForm.Name, _categoryForm.UnitId, _categoryForm.IsSpecialityProduct, _categoryForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
+				: new { _categoryForm.Name, _categoryForm.UnitId, _categoryForm.IsSpecialityProduct, _categoryForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
+            "Products" => _isEditing
+				? (object)new { Id = _editingId!.Value, _productForm.Name, _productForm.CategoryId, _productForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
+				: new { _productForm.Name, _productForm.CategoryId, _productForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
+         _ => _isEditing
+				? (object)new { Id = _editingId!.Value, _simpleForm.Name, _simpleForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
+				: new { _simpleForm.Name, _simpleForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") }
 			};
 
 			HttpResponseMessage response;
@@ -744,6 +756,36 @@
 		"Sector" => "Sector",
 		_ => pluralName.TrimEnd('s')
 	};
+
+	// current user id parsed from JWT token (string because Identity user id may be non-int)
+	private string? _currentUserId;
+
+	private string? GetUserIdFromToken(string token)
+	{
+		try
+		{
+			if (string.IsNullOrWhiteSpace(token)) return null;
+			var raw = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+			var parts = raw.Split('.');
+			if (parts.Length < 2) return null;
+			var payload = parts[1];
+			switch (payload.Length % 4)
+			{
+				case 2: payload += "=="; break;
+				case 3: payload += "="; break;
+			}
+			payload = payload.Replace('-', '+').Replace('_', '/');
+			var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+			using var doc = System.Text.Json.JsonDocument.Parse(json);
+			var root = doc.RootElement;
+			if (root.TryGetProperty("sub", out var sub)) return sub.GetString();
+			if (root.TryGetProperty("nameid", out var nid)) return nid.GetString();
+			if (root.TryGetProperty("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", out var id2)) return id2.GetString();
+			if (root.TryGetProperty("spic:user_id", out var sup)) return sup.GetString();
+		}
+		catch { }
+		return null;
+	}
 
 	private void ShowMessage(string message, bool isError)
 	{

@@ -48,7 +48,7 @@ namespace SpicAPI.Controllers
 				System.Linq.Expressions.Expression.Constant(dealerId));
 			var predicate = System.Linq.Expressions.Expression.Lambda<Func<T, bool>>(body, param);
 
-			var items = await _repo.GetWhere(predicate).ToListAsync();
+			var items = await _repo.GetWhere(predicate).AsNoTracking().ToListAsync();
 			return Ok(items);
 		}
 
