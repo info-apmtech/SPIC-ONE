@@ -68,6 +68,12 @@ namespace SpicAPI.Controllers
             return Ok(responseData);
         }
 
+        [HttpPost("logout")]
+        public IActionResult Logout()
+        {
+            return Ok(new { message = "Logged out successfully" });
+        }
+
         private async Task<string> GenerateJwtToken(UserInfo user)
         {
             var jwtConfig = _config.GetSection("Jwt");

@@ -33,9 +33,9 @@
 				@* <button class="icon-btn"><i class="bi bi-bell"></i></button> *@
 				<button class="icon-btn"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationBell.svg" alt="Notification" class="iconimg" /></button>
 				<div class="profile">
-					<NavLink class="nav-link" href="/login" Match="NavLinkMatch.All">
-						A
-					</NavLink>
+					<button class="btn btn-link nav-link p-0" @onclick="Logout">
+						<i class="bi bi-box-arrow-right"></i>
+					</button>
 				</div>
 				<i class="bi bi-chevron-down text-secondary"></i>
 			</div>
@@ -70,6 +70,8 @@
 				Dashboard
 			</NavLink>
 
+			@if (LoginState.IsAdmin)
+			{
 			<NavLink class="nav-link" href="/Purchases">
 				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
 				Purchases
@@ -113,16 +115,12 @@
 				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
 				Employee
 			</NavLink>
-			@* <NavLink class="nav-link" href="/Settings">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
-		Settings
-	</NavLink> *@
 
 			<div class="settings-menu-wrapper">
 				<a href="javascript:void(0);"
 					   class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
 					   @onclick="ToggleSettingsMenu">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />@* <span class=""><i class="bi bi-gear"></i></span> *@
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
 					Settings
 					<i class="bi @(isSettingsOpen ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
 				</a>
@@ -148,6 +146,7 @@
 					</ul>
 				}
 			</div>
+			}
 		</nav>
 	</div>
 </div>
@@ -177,6 +176,20 @@
 	private void ToggleSettingsMenu()
 	{
 		isSettingsOpen = !isSettingsOpen;
+	}
+
+	private async Task Logout()
+	{
+		try
+		{
+			await Http.PostAsync("api/authentication/logout", null);
+		}
+		catch { }
+
+		LoginState.Token = null;
+		Http.DefaultRequestHeaders.Authorization = null;
+		await JS.InvokeVoidAsync("sessionStorage.removeItem", "jwt_token");
+		Navigation.NavigateTo("/login", forceLoad: true);
 	}
 
 	private bool IsSettingsSectionActive()
