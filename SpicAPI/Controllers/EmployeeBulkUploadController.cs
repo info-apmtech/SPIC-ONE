@@ -26,8 +26,6 @@ namespace SpicAPI.Controllers
             _userManager = userManager;
         }
 
-        // POST /api/employeebulkupload/bulk-upload
-        // Excel columns: EmployeeID | EmpName | UserName | Permission | State | Region | HQ | PhoneNumber | EmailID
         [HttpPost("bulk-upload")]
         public async Task<IActionResult> BulkUpload(IFormFile file)
         {
@@ -71,7 +69,6 @@ namespace SpicAPI.Controllers
             var rows = worksheet.RowsUsed().Skip(1).ToList();
             var now = DateTime.UtcNow;
 
-            // Grouped errors: category → list of messages
             var groupedErrors = new Dictionary<string, List<string>>();
             void AddError(string group, string msg)
             {
@@ -82,14 +79,16 @@ namespace SpicAPI.Controllers
             int inserted = 0;
             int skipped = 0;
 
-            // Collect existing employee codes and usernames to avoid repeated DB hits
-            var existingCodes = await _db.EmployeeInformation
+            // Collect existing employees to avoid DB hits and handle duplicates smartly
+            var existingEmployees = await _db.EmployeeInformation
                 .Where(e => e.EmployeeCode != null && e.EmployeeCode != "")
-                .Select(e => e.EmployeeCode)
-                .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
+                .GroupBy(e => e.EmployeeCode)
+                .ToDictionaryAsync(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-            var existingUserNames = await _db.Employeelogins
-                .Select(l => l.UserId)
+            // FIX: Check the actual AppUsers table for existing UserNames to prevent silent crashes
+            var existingUserNames = await _userManager.Users
+                .Where(u => u.UserName != null)
+                .Select(u => u.UserName)
                 .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
 
             using var tx = await _db.Database.BeginTransactionAsync();
@@ -100,7 +99,6 @@ namespace SpicAPI.Controllers
                     int rowNum = row.RowNumber();
                     try
                     {
-                        // --- Read columns ---
                         var employeeId = Cell(row, "employeeid");
                         var empName = Cell(row, "empname");
                         if (string.IsNullOrWhiteSpace(empName)) empName = Cell(row, "employeename");
@@ -135,10 +133,10 @@ namespace SpicAPI.Controllers
                             continue;
                         }
 
-                        // Duplicate checks
-                        if (!string.IsNullOrWhiteSpace(employeeId) && existingCodes.Contains(employeeId))
+                        // Phone number must be at least 6 digits to pass Identity Password requirements
+                        if (phone.Length < 6)
                         {
-                            AddError("Duplicate EmployeeID", $"Row {rowNum} ({empName}): EmployeeID '{employeeId}' already exists.");
+                            AddError("Invalid Password length", $"Row {rowNum} ({empName}): Phone number must be at least 6 characters.");
                             skipped++;
                             continue;
                         }
@@ -150,7 +148,6 @@ namespace SpicAPI.Controllers
                             continue;
                         }
 
-                        // Parse role (Permission column)
                         if (!Enum.TryParse<AppRole>(permission, ignoreCase: true, out var role))
                         {
                             AddError("Invalid Role", $"Row {rowNum} ({empName}): Permission '{permission}' is not a valid role.");
@@ -158,49 +155,68 @@ namespace SpicAPI.Controllers
                             continue;
                         }
 
-                        // Only specific roles are allowed via bulk upload
-                        // SMD, SMM  → State only
-                        // RM, RMD   → State + Region
-                        // MDO, MO, JMDO → HQ only
-                        bool isStateRole = role == AppRole.SMD || role == AppRole.SMM;
-                        bool isRegionRole = role == AppRole.RM || role == AppRole.RMD;
-                        bool isHqRole = role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
+                        // --- Role Definitions ---
+                        bool isSmRole = role == AppRole.SMD || role == AppRole.SMM;
+                        bool isRmRole = role == AppRole.RM || role == AppRole.RMD;
+                        bool isMoRole = role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
 
-                        if (!isStateRole && !isRegionRole && !isHqRole)
+                        if (!isSmRole && !isRmRole && !isMoRole)
                         {
                             AddError("Role Not Allowed", $"Row {rowNum} ({empName}): Role '{role}' cannot be created via bulk upload.");
                             skipped++;
                             continue;
                         }
 
-                        // Resolve location IDs based on role rules
                         int stateId = 0, regionId = 0, hqId = 0;
 
-                        if (isStateRole || isRegionRole)
+                        // --- Extract All Provided Locations ---
+                        if (!string.IsNullOrWhiteSpace(stateName))
                         {
-                            if (string.IsNullOrWhiteSpace(stateName))
-                                AddError("Missing State", $"Row {rowNum} ({empName}): State is required for role '{role}'.");
-                            else if (!stateMap.TryGetValue(stateName, out stateId))
-                                AddError("Unknown State", $"Row {rowNum} ({empName}): State '{stateName}' not found — set to 0.");
+                            if (stateMap.TryGetValue(stateName, out var sId)) stateId = sId;
+                            else AddError("Unknown State", $"Row {rowNum} ({empName}): State '{stateName}' not found.");
                         }
 
-                        if (isRegionRole)
+                        if (!string.IsNullOrWhiteSpace(regionName))
                         {
-                            if (string.IsNullOrWhiteSpace(regionName))
-                                AddError("Missing Region", $"Row {rowNum} ({empName}): Region is required for role '{role}'.");
-                            else if (!regionMap.TryGetValue(regionName, out regionId))
-                                AddError("Unknown Region", $"Row {rowNum} ({empName}): Region '{regionName}' not found — set to 0.");
+                            if (regionMap.TryGetValue(regionName, out var rId)) regionId = rId;
+                            else AddError("Unknown Region", $"Row {rowNum} ({empName}): Region '{regionName}' not found.");
                         }
 
-                        if (isHqRole)
+                        if (!string.IsNullOrWhiteSpace(hqName))
                         {
-                            if (string.IsNullOrWhiteSpace(hqName))
-                                AddError("Missing HQ", $"Row {rowNum} ({empName}): HQ is required for role '{role}'.");
-                            else if (!hqMap.TryGetValue(hqName, out hqId))
-                                AddError("Unknown HQ", $"Row {rowNum} ({empName}): HQ '{hqName}' not found — set to 0.");
+                            if (hqMap.TryGetValue(hqName, out var hId)) hqId = hId;
+                            else AddError("Unknown HQ", $"Row {rowNum} ({empName}): HQ '{hqName}' not found.");
                         }
 
-                        // ---  Create ASP.NET Core Identity User First ---
+                        // --- Apply Your Specific Rules ---
+                        if (isMoRole) // MO, MDO, JMDO -> Requires State, Region, HQ
+                        {
+                            if (stateId == 0) AddError("Missing State", $"Row {rowNum} ({empName}): State is required for {role}.");
+                            if (regionId == 0) AddError("Missing Region", $"Row {rowNum} ({empName}): Region is required for {role}.");
+                            if (hqId == 0) AddError("Missing HQ", $"Row {rowNum} ({empName}): HQ is required for {role}.");
+                        }
+                        else if (isRmRole) // RM, RMD -> Requires State, Region
+                        {
+                            if (stateId == 0) AddError("Missing State", $"Row {rowNum} ({empName}): State is required for {role}.");
+                            if (regionId == 0) AddError("Missing Region", $"Row {rowNum} ({empName}): Region is required for {role}.");
+                        }
+                        else if (isSmRole) // SMD, SMM -> Requires State
+                        {
+                            if (stateId == 0) AddError("Missing State", $"Row {rowNum} ({empName}): State is required for {role}.");
+                        }
+
+                        // Skip row if any required location failed validation
+                        if ((isMoRole && (stateId == 0 || regionId == 0 || hqId == 0)) ||
+                            (isRmRole && (stateId == 0 || regionId == 0)) ||
+                            (isSmRole && stateId == 0))
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        // ---  1. Create AppUsers (UserInfo) First ---
+                        var currentUser = User?.Identity?.Name ?? "Unknown";
+
                         var user = new UserInfo
                         {
                             UserName = userName,
@@ -210,44 +226,60 @@ namespace SpicAPI.Controllers
                             Name = empName,
                             Role = role,
                             CreatedAt = now,
-                            CreatedBy = "bulk-upload",
+                            CreatedBy = currentUser,
                             UpdatedAt = now,
-                            UpdatedBy = "bulk-upload",
+                            UpdatedBy = currentUser,
                             IsActive = true
                         };
 
-                        // Use phone number as the initial password
                         var identityResult = await _userManager.CreateAsync(user, phone);
 
                         if (!identityResult.Succeeded)
                         {
                             var errors = string.Join(", ", identityResult.Errors.Select(e => e.Description));
-                            AddError("Identity Error", $"Row {rowNum} ({empName}): Failed to create login - {errors}");
+                            AddError("AppUser Save Error", $"Row {rowNum} ({empName}): {errors}");
                             skipped++;
                             continue;
                         }
 
-                        // ---  Insert EmployeeInformation ---
-                        var emp = new EmployeeInformation
-                        {
-                            EmployeeCode = employeeId ?? "",
-                            Name = empName,
-                            PersonalPhoneNumber = phone,
-                            OfficialPhoneNumber = phone,
-                            Email = email ?? "",
-                            CreatedBy = "bulk-upload",
-                            UpdatedBy = "bulk-upload",
-                            CreatedAt = now,
-                            UpdatedAt = now
-                        };
-                        _db.EmployeeInformation.Add(emp);
-                        await _db.SaveChangesAsync(); // flush to get emp.Id
+                        // ---  2. Insert OR Reuse EmployeeInformation ---
+                        EmployeeInformation emp;
 
-                        // --- Insert Employeelogin (phone number as password via UserId) ---
+                        if (!string.IsNullOrWhiteSpace(employeeId) && existingEmployees.TryGetValue(employeeId, out var existingEmp))
+                        {
+                            // REUSE existing employee record
+                            emp = existingEmp;
+                        }
+                        else
+                        {
+                            // CREATE new employee record
+                            emp = new EmployeeInformation
+                            {
+                                EmployeeCode = employeeId ?? "",
+                                Name = empName,
+                                PersonalPhoneNumber = phone,
+                                OfficialPhoneNumber = phone,
+                                Email = email ?? "",
+                                CreatedBy = currentUser,
+                                UpdatedBy = currentUser,
+                                CreatedAt = now,
+                                UpdatedAt = now
+                            };
+                            _db.EmployeeInformation.Add(emp);
+                            await _db.SaveChangesAsync(); // flush to get emp.Id
+
+                            // Add to dictionary so subsequent rows in the same excel file can reuse it
+                            if (!string.IsNullOrWhiteSpace(employeeId))
+                            {
+                                existingEmployees[employeeId] = emp;
+                            }
+                        }
+
+                        // --- 3. Insert Employeelogin ---
                         var login = new Employeelogin
                         {
                             EmployeeInformationID = emp.Id,
-                            UserId = userName,   // username
+                            UserId = user.Id,
                             Role = role,
                             StateId = stateId,
                             RegionId = regionId,
@@ -257,10 +289,7 @@ namespace SpicAPI.Controllers
                         };
                         _db.Employeelogins.Add(login);
 
-                        // Track to catch duplicates within the same file
-                        existingCodes.Add(employeeId ?? "");
                         existingUserNames.Add(userName);
-
                         inserted++;
                     }
                     catch (Exception exRow)
