@@ -665,42 +665,78 @@
                                  <th style="text-align: center;">Total TO (₹)in Lakhs</th>
                             </tr>
                         </thead>
-                        <tbody>
-            @if (_annualSales != null && _annualSales.Any())
-            {
-                @foreach (var sale in _annualSales)
-                {
-                    var product = _productsAll.FirstOrDefault(p => p.Id == sale.ProductId);
-                    var category = _categoriesAll.FirstOrDefault(c => c.Id == sale.CategoryId);
+                       <tbody>
+@if (_annualSales != null && _annualSales.Any())
+{
+    var totalOwnRetailQty = _annualSales.Sum(s => s.OwnRetailsSaleQty);
+    var totalDealerQty = _annualSales.Sum(s => s.SaleToDealerQty);
+    var totalQty = _annualSales.Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty);
 
-                    <tr>
-                        <td>
-                            @(product?.Name ?? "Unknown") 
-                            <span class="product-desc">@(category?.Name ?? "")</span>
-                        </td>
-                        <td style="text-align: center;">@sale.OwnRetailsSaleQty.ToString("N2")</td>
-                        <td style="text-align: center;">@sale.SaleToDealerQty.ToString("N2")</td>
-                        <td style="text-align: center;">@((sale.OwnRetailsSaleQty + sale.SaleToDealerQty).ToString("N2")) </td>
-                         <td style="text-align: center;">₹@((sale.OwnRetailsSaleAmount + sale.SaleToDealerAmount).ToString("N2"))
-                        </td>
-                    </tr>
-                }
-                <tr style="background-color: var(--card-bg);">
-                    <td style="font-weight: bold; color: var(--primary-dark);">Grand Total</td>
-                    <td style="text-align: center; font-weight: bold;">@_annualSales.Sum(s => s.OwnRetailsSaleQty).ToString("N2")</td>
-                    <td style="text-align: center; font-weight: bold;">@_annualSales.Sum(s => s.SaleToDealerQty).ToString("N2")</td>
-                    <td style="text-align: center; font-weight: bold; color: var(--primary-green);">@_annualSales.Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty).ToString("N2") </td>
-                     <td style="text-align: center; font-weight: bold; color: var(--primary-green);"> ₹@_annualSales.Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount).ToString("N2")
-                    </td>
-                </tr>
-            }
-            else
-            {
-                <tr>
-                    <td colspan="4" style="text-align: center; padding: 20px; color: var(--label-color);">No Annual Sales Data Available</td>
-                </tr>
-            }
-        </tbody>
+    var totalOwnRetailAmt = _annualSales.Sum(s => s.OwnRetailsSaleAmount);
+    var totalDealerAmt = _annualSales.Sum(s => s.SaleToDealerAmount);
+    var totalAmount = _annualSales.Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount);
+
+    @foreach (var sale in _annualSales)
+    {
+        var product = _productsAll.FirstOrDefault(p => p.Id == sale.ProductId);
+        var category = _categoriesAll.FirstOrDefault(c => c.Id == sale.CategoryId);
+
+        <tr>
+            <td>
+                @(product?.Name ?? "Unknown") 
+                <span class="product-desc">@(category?.Name ?? "")</span>
+            </td>
+
+            <td style="text-align: center;">
+                @sale.OwnRetailsSaleQty.ToString("N2")
+            </td>
+
+            <td style="text-align: center;">
+                @sale.SaleToDealerQty.ToString("N2")
+            </td>
+
+            <td style="text-align: center;">
+                @( (sale.OwnRetailsSaleQty + sale.SaleToDealerQty).ToString("N2") )
+            </td>
+
+            <td style="text-align: center;">
+                ₹@( (sale.OwnRetailsSaleAmount + sale.SaleToDealerAmount).ToString("N2") )
+            </td>
+        </tr>
+    }
+
+    <!-- 🔥 Grand Total Row -->
+    <tr style="background-color: var(--card-bg);">
+        <td style="font-weight: bold; color: var(--primary-dark);">
+            Grand Total
+        </td>
+
+        <td style="text-align: center; font-weight: bold;">
+            @totalOwnRetailQty.ToString("N2")
+        </td>
+
+        <td style="text-align: center; font-weight: bold;">
+            @totalDealerQty.ToString("N2")
+        </td>
+
+        <td style="text-align: center; font-weight: bold; color: var(--primary-green);">
+            @totalQty.ToString("N2")
+        </td>
+
+        <td style="text-align: center; font-weight: bold; color: var(--primary-green);">
+            ₹@totalAmount.ToString("N2")
+        </td>
+    </tr>
+}
+else
+{
+    <tr>
+        <td colspan="5" style="text-align: center; padding: 20px; color: var(--label-color);">
+            No Annual Sales Data Available
+        </td>
+    </tr>
+}
+</tbody>
 
                      </table>
                 </div>

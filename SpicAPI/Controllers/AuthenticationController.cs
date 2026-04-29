@@ -82,8 +82,12 @@ namespace SpicAPI.Controllers
                 new Claim(ClaimTypes.Role, user.Role.ToString())
             };
 
-            var empLogin = await _db.Employeelogins.FirstOrDefaultAsync(l => l.UserId == user.UserName);
-            claims.Add(new Claim("spic:state_id", empLogin?.StateId.ToString() ?? "0"));
+            //var empLogin = await _db.Employeelogins.FirstOrDefaultAsync(l => l.UserId == user.UserName);
+			var empLogin = await _db.Employeelogins
+	.FirstOrDefaultAsync(l =>
+		l.UserId == user.Id ||
+		l.UserId == user.UserName);
+			claims.Add(new Claim("spic:state_id", empLogin?.StateId.ToString() ?? "0"));
             claims.Add(new Claim("spic:region_id", empLogin?.RegionId.ToString() ?? "0"));
             claims.Add(new Claim("spic:hq_id", empLogin?.HeadquartersId.ToString() ?? "0"));
 

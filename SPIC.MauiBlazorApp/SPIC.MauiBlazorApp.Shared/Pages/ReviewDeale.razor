@@ -5,6 +5,7 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject LoginState LoginState
 
 @code {
     [Parameter]
@@ -1556,7 +1557,7 @@ border-radius: 12px;
  @if (CanShowApprovalButton())
 {
     <button class="btn-submit" @onclick="ApproveDealer" disabled="@_isApproving">
-        @(_isApproving ? "Approving..." : ApprovalButtonText())
+        @(_isApproving ? "Processing..." : ApprovalButtonText())
     </button>
 }
 </div>
@@ -1575,7 +1576,7 @@ border-radius: 12px;
     private bool IsCreditLimitOpen { get; set; } = false;
     private bool IsEnclosuresOpen { get; set; } = false;
   
-    private string _currentUserRole = "RM"; // replace with login role
+    // private string _currentUserRole = "RM"; // replace with login role
 private bool _isApproving = false;
 
 private bool IsDealerSubmitted()
@@ -1592,15 +1593,15 @@ private bool CanShowApprovalButton()
     if (_dealer == null)
         return false;
 
-    if (RmRoles.Contains(_currentUserRole))
+    if (LoginState.IsRegionRole)
         return _dealer.RMApproved == null;
 
-    if (SmRoles.Contains(_currentUserRole))
+    if (LoginState.IsStateRole)
         return _dealer.RMApproved == true && _dealer.SMApproved == null;
 
-    if (FinalApprovalRoles.Contains(_currentUserRole))
-        return _dealer.RMApproved == true 
-            && _dealer.SMApproved == true 
+    if (LoginState.IsAdmin)
+        return _dealer.RMApproved == true
+            && _dealer.SMApproved == true
             && _dealer.AVPApproved == null;
 
     return false;
@@ -1608,13 +1609,13 @@ private bool CanShowApprovalButton()
 
 private string ApprovalButtonText()
 {
-    if (RmRoles.Contains(_currentUserRole))
-        return "RM Approval";
+    if (LoginState.IsRegionRole)
+        return "Proceed to SM";
 
-    if (SmRoles.Contains(_currentUserRole))
-        return "SM Approval";
+    if (LoginState.IsStateRole)
+        return "Proceed to AVP";
 
-    if (FinalApprovalRoles.Contains(_currentUserRole))
+    if (LoginState.IsAdmin)
         return "Approve";
 
     return "Approve";
@@ -1627,28 +1628,28 @@ private async Task ApproveDealer()
 
     try
     {
-       if (RmRoles.Contains(_currentUserRole))
-{
-    _dealer.RMApproved = true;
-}
-else if (SmRoles.Contains(_currentUserRole))
-{
-    _dealer.SMApproved = true;
-}
-else if (FinalApprovalRoles.Contains(_currentUserRole))
-{
-    _dealer.AVPApproved = true;
-    _dealer.Status = DR.DealerStatus.Active;
-}
+        if (LoginState.IsRegionRole)
+        {
+            _dealer.RMApproved = true;
+        }
+        else if (LoginState.IsStateRole)
+        {
+            _dealer.SMApproved = true;
+        }
+        else if (LoginState.IsAdmin)
+        {
+            _dealer.AVPApproved = true;
+            _dealer.Status = DR.DealerStatus.Active;
+        }
 
         var response = await Http.PutAsJsonAsync(
             $"api/DealerRegistration/{_dealer.Id}",
             _dealer
         );
 
-        if (!response.IsSuccessStatusCode)
+        if (response.IsSuccessStatusCode)
         {
-            // optional: show error message
+            Nav.NavigateTo("/Dashboard");
         }
     }
     finally
