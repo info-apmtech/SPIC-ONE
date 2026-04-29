@@ -184,8 +184,8 @@
                                 <td>@item.StateName</td>
                                 <td>
                                     <div class="action-icons">
-                                        <i class="bi bi-pencil-square text-primary icon-edit me-2" style="cursor:pointer;" title="Edit Employee" @onclick="() => EditEmployee(item.EmployeeId)"></i>
-                                        <i class="bi bi-trash text-danger icon-del" style="cursor:pointer;" title="Delete Employee" @onclick="() => DeleteEmployee(item.EmployeeId)"></i>
+                                        <i class="bi bi-pencil-square text-primary icon-edit me-2" style="cursor:pointer;" title="Edit Employee" @onclick="() => EditEmployee(item.LoginId)"></i>
+                                        <i class="bi bi-trash text-danger icon-del" style="cursor:pointer;" title="Delete Role" @onclick="() => DeleteEmployee(item.LoginId)"></i>
                                     </div>
                                 </td>
                             </tr>
@@ -402,17 +402,22 @@
         PagedItems = FilteredItems.Skip((_currentPage - 1) * _pageSize).Take(_pageSize).ToList();
     }
 
-    private void EditEmployee(int employeeId)
+    private void EditEmployee(int loginId)
     {
-        Nav.NavigateTo($"/EmployeeRegistration?editId={employeeId}");
+        Nav.NavigateTo($"/EmployeeRegistration?editLoginId={loginId}");
     }
 
-    private async Task DeleteEmployee(int employeeId)
+    private async Task DeleteEmployee(int loginId)
     {
-        var response = await Http.DeleteAsync($"api/EmployeeLoginSetup/{employeeId}");
-        if (response.IsSuccessStatusCode)
+        bool isConfirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this role? This action cannot be undone.");
+
+        if (isConfirmed)
         {
-            await LoadData();
+            var response = await Http.DeleteAsync($"api/EmployeeLoginSetup/login/{loginId}");
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadData();
+            }
         }
     }
 

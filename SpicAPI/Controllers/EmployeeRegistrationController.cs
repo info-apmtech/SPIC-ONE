@@ -339,6 +339,115 @@ namespace SpicAPI.Controllers
                 message = "Employee deleted successfully"
             });
         }
+        [HttpDelete("login/{loginId}")]
+        public async Task<IActionResult> DeleteSpecificLogin(int loginId)
+        {
+            var login = await _employeeLoginRepo.GetByIdAsync(loginId);
+            if (login == null)
+                return NotFound("Employeelogin not found");
+
+            var empId = login.EmployeeInformationID;
+
+            // 1. Delete the Identity User account
+            var user = await _userManager.FindByIdAsync(login.UserId);
+            if (user != null)
+            {
+                await _userManager.DeleteAsync(user);
+            }
+
+            // 2. Delete the specific role/login
+            await _employeeLoginRepo.DeleteAsync(loginId);
+
+            // 3. Check if this was the last remaining role for the employee. 
+            // If they have no logins left, delete the main employee record.
+            var remainingLogins = await _employeeLoginRepo
+                .GetWhere(x => x.EmployeeInformationID == empId)
+                .CountAsync();
+
+            if (remainingLogins == 0)
+            {
+                await _employeeInfoRepo.DeleteAsync(empId);
+            }
+
+            return Ok(new { message = "Specific login deleted successfully" });
+        }
+        [HttpGet("by-login/{loginId}")]
+        public async Task<IActionResult> GetByLoginId(int loginId)
+        {
+            var login = await _employeeLoginRepo.GetByIdAsync(loginId);
+            if (login == null)
+                return NotFound("Employeelogin not found");
+
+            var employee = await _employeeInfoRepo.GetByIdAsync(login.EmployeeInformationID);
+            var user = await _userManager.FindByIdAsync(login.UserId);
+
+            return Ok(new EmployeeLoginCreateRequest
+            {
+                EmployeeInformationID = employee.Id,
+                UserName = user?.UserName ?? "",
+                Password = user?.Password ?? "",
+                Email = user?.Email,
+                Name = employee.Name,
+                DesignationId = user?.DesignationId,
+                Role = login.Role,
+                ZoneId = login.ZoneId,
+                StateId = login.StateId,
+                RegionId = login.RegionId,
+                HeadquartersId = login.HeadquartersId,
+                IsActive = login.IsActive,
+                CreatedBy = employee.CreatedBy,
+                UpdatedBy = employee.UpdatedBy
+            });
+        }
+
+        [HttpPut("login/{loginId}")]
+        public async Task<IActionResult> UpdateSpecificLogin(int loginId, [FromBody] EmployeeLoginCreateRequest request)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var login = await _employeeLoginRepo.GetByIdAsync(loginId);
+            if (login == null) return NotFound("Employeelogin not found");
+
+            var employee = await _employeeInfoRepo.GetByIdAsync(login.EmployeeInformationID);
+            var user = await _userManager.FindByIdAsync(login.UserId);
+
+            var existingUserWithSameName = await _userManager.FindByNameAsync(request.UserName);
+            if (existingUserWithSameName != null && existingUserWithSameName.Id != user.Id)
+                return BadRequest("Username already exists");
+
+            // Update Identity User
+            user.UserName = request.UserName;
+            user.NormalizedUserName = request.UserName.ToUpper();
+            user.Email = request.Email ?? user.Email;
+            user.NormalizedEmail = (request.Email ?? user.Email ?? "").ToUpper();
+            user.Name = request.Name ?? user.Name;
+            user.DesignationId = request.DesignationId;
+            user.Role = request.Role;
+            user.IsActive = request.IsActive;
+            user.UpdatedAt = DateTime.Now;
+            user.UpdatedBy = User?.Identity?.Name ?? "System";
+            user.Password = request.Password;
+
+            if (!string.IsNullOrWhiteSpace(request.Password))
+            {
+                user.PasswordHash = _userManager.PasswordHasher.HashPassword(user, request.Password);
+            }
+
+            var userUpdateResult = await _userManager.UpdateAsync(user);
+            if (!userUpdateResult.Succeeded) return BadRequest(userUpdateResult.Errors.Select(x => x.Description));
+
+            // Update Login/Role details
+            login.Role = request.Role;
+            login.ZoneId = request.ZoneId;
+            login.StateId = request.StateId;
+            login.RegionId = request.RegionId;
+            login.HeadquartersId = request.HeadquartersId;
+            login.IsActive = request.IsActive;
+
+            await _employeeLoginRepo.PatchAsync(login.Id, login);
+
+            return Ok(new { message = "Employee role details updated successfully" });
+        }
     }
 
     [Authorize]
