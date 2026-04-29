@@ -910,99 +910,75 @@ border-radius: 12px;
 
    <div class="container-fluid py-3">
 
-    <!-- Top Info Cards -->
-    <div class="row g-3 mb-3">
-        <div class="col-12 col-md-6 col-lg-3">
-            <div class="info-card">
-                <div>
-                    <div class="info-label">Dealer Name</div>
-                    <div class="info-value">Agro Enterprises Pvt Ltd</div>
-                </div>
-                <div class="info-icon purple">
-                    <i class="bi bi-person"></i>
-                </div>
+   <!-- Top Info Cards -->
+<div class="row g-3 mb-3">
+    <div class="col-12 col-md-6 col-lg-3">
+        <div class="info-card">
+            <div>
+                <div class="info-label">Dealer Name</div>
+                <div class="info-value">@(_dealer?.FirmName ?? "-")</div>
             </div>
-        </div>
-
-        <div class="col-12 col-md-6 col-lg-3">
-            <div class="info-card">
-                <div>
-                    <div class="info-label">Dealer Code</div>
-                    <div class="info-value">DLR-2026-MH-1234</div>
-                </div>
-                <div class="info-icon orange">
-                    <i class="bi bi-upc-scan"></i>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-12 col-md-6 col-lg-3">
-            <div class="info-card">
-                <div>
-                    <div class="info-label">Submitted By</div>
-                    <div class="info-value">MO - Amit Sharma</div>
-                </div>
-                <div class="info-icon cyan">
-                    <i class="bi bi-person-badge"></i>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-12 col-md-6 col-lg-3">
-            <div class="info-card">
-                <div>
-                    <div class="info-label">Status</div>
-                    <span class="status-badge">Pending</span>
-                </div>
-                <div class="info-icon yellow">
-                    <i class="bi bi-file-earmark-text"></i>
-                </div>
+            <div class="info-icon purple">
+                <i class="bi bi-person"></i>
             </div>
         </div>
     </div>
 
-    <!-- Approval Progress -->
-    <div class="approval-card mb-3">
-        <div class="approval-step completed">
-            <div class="step-circle">
-                <i class="bi bi-check-lg"></i>
-            </div>
+    <div class="col-12 col-md-6 col-lg-3">
+        <div class="info-card">
             <div>
-                <div class="step-title">MO</div>
-                <div class="step-status">Submitted</div>
+                <div class="info-label">Dealer Code</div>
+                <div class="info-value">@(_dealer?.DealerCode ?? (_dealer != null ? $"DL-{_dealer.Id}" : "-"))</div>
             </div>
-        </div>
-
-        <div class="step-line completed-line"></div>
-
-        <div class="approval-step active">
-            <div class="step-circle">RM</div>
-            <div>
-                <div class="step-title">RM</div>
-                <div class="step-status">Under Review</div>
-            </div>
-        </div>
-
-        <div class="step-line active-line"></div>
-
-        <div class="approval-step pending">
-            <div class="step-circle">SM</div>
-            <div>
-                <div class="step-title">SM</div>
-                <div class="step-status">Pending</div>
-            </div>
-        </div>
-
-        <div class="step-line"></div>
-
-        <div class="approval-step pending">
-            <div class="step-circle">AVP</div>
-            <div>
-                <div class="step-title">AVP</div>
-                <div class="step-status">Pending</div>
+            <div class="info-icon orange">
+                <i class="bi bi-upc-scan"></i>
             </div>
         </div>
     </div>
+
+    <div class="col-12 col-md-6 col-lg-3">
+        <div class="info-card">
+            <div>
+                <div class="info-label">Submitted By</div>
+                <div class="info-value">@GetSubmittedByText()</div>
+            </div>
+            <div class="info-icon cyan">
+                <i class="bi bi-person-badge"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-3">
+        <div class="info-card">
+            <div>
+                <div class="info-label">Status</div>
+                <span class="status-badge">@GetDealerStatusText()</span>
+            </div>
+            <div class="info-icon yellow">
+                <i class="bi bi-file-earmark-text"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+   <!-- Approval Progress -->
+<div class="approval-card mb-3">
+
+    @RenderApprovalStep("MO", GetMoClass(), GetMoStatus(), true)
+
+    <div class="step-line @GetLineClass("MO")"></div>
+
+    @RenderApprovalStep("RM", GetRmClass(), GetRmStatus())
+
+    <div class="step-line @GetLineClass("RM")"></div>
+
+    @RenderApprovalStep("SM", GetSmClass(), GetSmStatus())
+
+    <div class="step-line @GetLineClass("SM")"></div>
+
+    @RenderApprovalStep("AVP", GetAvpClass(), GetAvpStatus())
+
+</div>
    <div class="timeline-box">
     <h5 class="timeline-heading">Timeline</h5>
 
@@ -2077,15 +2053,19 @@ border-radius: 12px;
     <button class="btn btn-outline-warning px-3">
         <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
     </button>
-    @if (CanShowApprovalButton())
+   @*  @if (CanShowApprovalButton())
 {
     <button class="btn-submit px-3" @onclick="ApproveDealer" disabled="@_isApproving">
         @(_isApproving ? "Processing..." : ApprovalButtonText())
     </button>
+} *@
+ @if (CanShowApprovalButton())
+{
+    <button class="btn btn-primary px-3" @onclick="ApproveDealer" disabled="@_isApproving">
+        <i class="bi bi-check2-circle me-1"></i>
+        @(_isApproving ? "Processing..." : ApprovalButtonText())
+    </button>
 }
-   @*  <button class="btn btn-primary px-3">
-        <i class="bi bi-check2-circle me-1"></i> Proceed to SM
-    </button> *@
 
 </div>
 
@@ -2120,12 +2100,15 @@ private bool CanShowApprovalButton()
     if (_dealer == null)
         return false;
 
+    // RM can approve first
     if (LoginState.IsRegionRole)
         return _dealer.RMApproved == null;
 
+    // SM can approve only after RM
     if (LoginState.IsStateRole)
         return _dealer.RMApproved == true && _dealer.SMApproved == null;
 
+    // Admin / AVP can final approve only after SM
     if (LoginState.IsAdmin)
         return _dealer.RMApproved == true
             && _dealer.SMApproved == true
@@ -2147,9 +2130,11 @@ private string ApprovalButtonText()
 
     return "Approve";
 }
+
 private async Task ApproveDealer()
 {
-    if (_dealer == null) return;
+    if (_dealer == null)
+        return;
 
     _isApproving = true;
 
@@ -2176,12 +2161,168 @@ private async Task ApproveDealer()
 
         if (response.IsSuccessStatusCode)
         {
-            Nav.NavigateTo("/Dashboard");
+            Nav.NavigateTo("/Dashboard", forceLoad: true);
         }
     }
     finally
     {
         _isApproving = false;
     }
+}
+
+private string GetSubmittedByText()
+{
+    if (_dealer == null)
+        return "-";
+
+    // Change property names if your DealerRegistration has different fields
+    if (!string.IsNullOrWhiteSpace(_dealer.CreatedBy))
+        return _dealer.CreatedBy;
+
+    if (!string.IsNullOrWhiteSpace(_dealer.CreatedBy))
+        return _dealer.CreatedBy;
+
+    return "-";
+}
+
+private string GetDealerStatusText()
+{
+    if (_dealer == null)
+        return "-";
+
+    if (_dealer.AVPApproved == true)
+        return "Approved";
+
+    if (_dealer.SMApproved == true)
+        return "Pending AVP";
+
+    if (_dealer.RMApproved == true)
+        return "Pending SM";
+
+    if (_dealer.RMApproved == false || _dealer.SMApproved == false || _dealer.AVPApproved == false)
+        return "Sent Back";
+
+    return "Pending RM";
+}
+private RenderFragment RenderApprovalStep(
+    string title,
+    string stepClass,
+    string status,
+    bool showCheckIcon = false
+) => @<div class="approval-step @stepClass">
+    <div class="step-circle">
+        @if (stepClass == "completed")
+        {
+            <i class="bi bi-check-lg"></i>
+        }
+        else
+        {
+            @title
+        }
+    </div>
+    <div>
+        <div class="step-title">@title</div>
+        <div class="step-status">@status</div>
+    </div>
+</div>;
+
+private string GetMoClass()
+{
+    return _dealer != null ? "completed" : "pending";
+}
+
+private string GetRmClass()
+{
+    if (_dealer == null) return "pending";
+
+    if (_dealer.RMApproved == true)
+        return "completed";
+
+    if (_dealer.RMApproved == null)
+        return "active";
+
+    return "pending";
+}
+
+private string GetSmClass()
+{
+    if (_dealer == null) return "pending";
+
+    if (_dealer.RMApproved == true && _dealer.SMApproved == true)
+        return "completed";
+
+    if (_dealer.RMApproved == true && _dealer.SMApproved == null)
+        return "active";
+
+    return "pending";
+}
+
+private string GetAvpClass()
+{
+    if (_dealer == null) return "pending";
+
+    if (_dealer.AVPApproved == true)
+        return "completed";
+
+    if (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null)
+        return "active";
+
+    return "pending";
+}
+
+private string GetMoStatus()
+{
+    return _dealer != null ? "Submitted" : "Pending";
+}
+
+private string GetRmStatus()
+{
+    if (_dealer?.RMApproved == true) return "Approved";
+    if (_dealer?.RMApproved == false) return "Sent Back";
+    if (_dealer != null) return "Under Review";
+
+    return "Pending";
+}
+
+private string GetSmStatus()
+{
+    if (_dealer?.SMApproved == true) return "Approved";
+    if (_dealer?.SMApproved == false) return "Sent Back";
+    if (_dealer?.RMApproved == true) return "Under Review";
+
+    return "Pending";
+}
+
+private string GetAvpStatus()
+{
+    if (_dealer?.AVPApproved == true) return "Approved";
+    if (_dealer?.AVPApproved == false) return "Sent Back";
+    if (_dealer?.RMApproved == true && _dealer.SMApproved == true) return "Under Review";
+
+    return "Pending";
+}
+
+private string GetLineClass(string afterStep)
+{
+    if (_dealer == null) return "";
+
+    return afterStep switch
+    {
+        "MO" => _dealer.RMApproved == true ? "completed-line" : "active-line",
+
+        "RM" => _dealer.RMApproved == true && _dealer.SMApproved == true
+            ? "completed-line"
+            : _dealer.RMApproved == true
+                ? "active-line"
+                : "",
+
+        "SM" => _dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == true
+            ? "completed-line"
+            : _dealer.RMApproved == true && _dealer.SMApproved == true
+                ? "active-line"
+                : "",
+
+        _ => ""
+    };
 }
 }
