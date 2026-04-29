@@ -26,8 +26,6 @@ namespace SpicAPI.Controllers
             _userManager = userManager;
         }
 
-        // POST /api/employeebulkupload/bulk-upload
-        // Excel columns: EmployeeID | EmpName | UserName | Permission | State | Region | HQ | PhoneNumber | EmailID
         [HttpPost("bulk-upload")]
         public async Task<IActionResult> BulkUpload(IFormFile file)
         {
@@ -71,7 +69,6 @@ namespace SpicAPI.Controllers
             var rows = worksheet.RowsUsed().Skip(1).ToList();
             var now = DateTime.UtcNow;
 
-            // Grouped errors: category → list of messages
             var groupedErrors = new Dictionary<string, List<string>>();
             void AddError(string group, string msg)
             {
@@ -82,14 +79,16 @@ namespace SpicAPI.Controllers
             int inserted = 0;
             int skipped = 0;
 
-            // Collect existing employee codes and usernames to avoid repeated DB hits
+            // Collect existing codes to avoid DB hits
             var existingCodes = await _db.EmployeeInformation
                 .Where(e => e.EmployeeCode != null && e.EmployeeCode != "")
                 .Select(e => e.EmployeeCode)
                 .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
 
-            var existingUserNames = await _db.Employeelogins
-                .Select(l => l.UserId)
+            // FIX: Check the actual AppUsers table for existing UserNames to prevent silent crashes
+            var existingUserNames = await _userManager.Users
+                .Where(u => u.UserName != null)
+                .Select(u => u.UserName)
                 .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
 
             using var tx = await _db.Database.BeginTransactionAsync();
@@ -100,7 +99,6 @@ namespace SpicAPI.Controllers
                     int rowNum = row.RowNumber();
                     try
                     {
-                        // --- Read columns ---
                         var employeeId = Cell(row, "employeeid");
                         var empName = Cell(row, "empname");
                         if (string.IsNullOrWhiteSpace(empName)) empName = Cell(row, "employeename");
@@ -135,7 +133,14 @@ namespace SpicAPI.Controllers
                             continue;
                         }
 
-                        // Duplicate checks
+                        // Phone number must be at least 6 digits to pass Identity Password requirements
+                        if (phone.Length < 6)
+                        {
+                            AddError("Invalid Password length", $"Row {rowNum} ({empName}): Phone number must be at least 6 characters.");
+                            skipped++;
+                            continue;
+                        }
+
                         if (!string.IsNullOrWhiteSpace(employeeId) && existingCodes.Contains(employeeId))
                         {
                             AddError("Duplicate EmployeeID", $"Row {rowNum} ({empName}): EmployeeID '{employeeId}' already exists.");
@@ -150,7 +155,6 @@ namespace SpicAPI.Controllers
                             continue;
                         }
 
-                        // Parse role (Permission column)
                         if (!Enum.TryParse<AppRole>(permission, ignoreCase: true, out var role))
                         {
                             AddError("Invalid Role", $"Row {rowNum} ({empName}): Permission '{permission}' is not a valid role.");
@@ -173,7 +177,6 @@ namespace SpicAPI.Controllers
                             continue;
                         }
 
-                        // Resolve location IDs based on role rules
                         int stateId = 0, regionId = 0, hqId = 0;
 
                         if (isStateRole || isRegionRole)
@@ -200,7 +203,7 @@ namespace SpicAPI.Controllers
                                 AddError("Unknown HQ", $"Row {rowNum} ({empName}): HQ '{hqName}' not found — set to 0.");
                         }
 
-                        // ---  Create ASP.NET Core Identity User First ---
+                        // ---  1. Create AppUsers (UserInfo) First ---
                         var user = new UserInfo
                         {
                             UserName = userName,
@@ -216,18 +219,18 @@ namespace SpicAPI.Controllers
                             IsActive = true
                         };
 
-                        // Use phone number as the initial password
+                        // This will hash the phone number and save the AppUser
                         var identityResult = await _userManager.CreateAsync(user, phone);
 
                         if (!identityResult.Succeeded)
                         {
                             var errors = string.Join(", ", identityResult.Errors.Select(e => e.Description));
-                            AddError("Identity Error", $"Row {rowNum} ({empName}): Failed to create login - {errors}");
+                            AddError("AppUser Save Error", $"Row {rowNum} ({empName}): {errors}");
                             skipped++;
                             continue;
                         }
 
-                        // ---  Insert EmployeeInformation ---
+                        // ---  2. Insert EmployeeInformation ---
                         var emp = new EmployeeInformation
                         {
                             EmployeeCode = employeeId ?? "",
@@ -243,11 +246,11 @@ namespace SpicAPI.Controllers
                         _db.EmployeeInformation.Add(emp);
                         await _db.SaveChangesAsync(); // flush to get emp.Id
 
-                        // --- Insert Employeelogin (phone number as password via UserId) ---
+                        // --- 3. Insert Employeelogin ---
                         var login = new Employeelogin
                         {
                             EmployeeInformationID = emp.Id,
-                            UserId = userName,   // username
+                            UserId = user.Id,
                             Role = role,
                             StateId = stateId,
                             RegionId = regionId,
@@ -257,7 +260,6 @@ namespace SpicAPI.Controllers
                         };
                         _db.Employeelogins.Add(login);
 
-                        // Track to catch duplicates within the same file
                         existingCodes.Add(employeeId ?? "");
                         existingUserNames.Add(userName);
 
