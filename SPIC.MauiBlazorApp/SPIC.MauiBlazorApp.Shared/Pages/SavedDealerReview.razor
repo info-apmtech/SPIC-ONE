@@ -190,14 +190,26 @@
 
     private decimal GetNetValue() => GetCapitalPosition() + GetTotalAssets() - GetTotalLoans();
      private List<TimelineItem> TimelineItems = new()
-    {
-        new("Submitted by MO", "Submitted", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-green", "bi bi-check-lg", "card-green", "badge-green"),
-        new("Sent Back by RM", "Sent Back", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-red", "bi bi-exclamation-lg", "card-red", "badge-red"),
-        new("Under Review by MO", "Resubmitted", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-blue", "bi bi-arrow-clockwise", "card-blue", "badge-blue"),
-        new("Under Review by RM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
-        new("Under Review by SM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
-        new("Under Review by AVP", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange")
-    };
+     {
+         new("Submitted by MO", "Submitted", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-green", "bi bi-check-lg", "card-green", "badge-green"),
+         new("Sent Back by RM", "Sent Back", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-red", "bi bi-exclamation-lg", "card-red", "badge-red"),
+         new("Under Review by MO", "Resubmitted", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-blue", "bi bi-arrow-clockwise", "card-blue", "badge-blue"),
+         new("Under Review by RM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
+         new("Under Review by SM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
+         new("Under Review by AVP", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange")
+     };
+
+     private bool IsSendBackPopupVisible { get; set; } = false;
+
+     private void ShowSendBackPopup()
+     {
+         IsSendBackPopupVisible = true;
+     }
+
+     private void HideSendBackPopup()
+     {
+         IsSendBackPopupVisible = false;
+     }
 
     public record TimelineItem(
         string Title,
@@ -902,14 +914,17 @@ border-radius: 12px;
 </style>
 
 <div class="container-fluid py-4 px-4">
-     
+
     <div class="page-header-row">
         <h1 class="page-title">Review - Dealer Application</h1>
         <div class="page-subtitle">Review and approve dealer registration</div>
     </div>
 
-   <div class="container-fluid py-3">
-
+    <div class="container-fluid py-3">
+        @if (IsSendBackPopupVisible)
+        {
+            <SendBackPopup OnClose="HideSendBackPopup" />
+        }
     <!-- Top Info Cards -->
     <div class="row g-3 mb-3">
         <div class="col-12 col-md-6 col-lg-3">
@@ -2073,8 +2088,8 @@ border-radius: 12px;
  
 </div>
 <div class="d-flex justify-content-end gap-2 mt-3">
-    
-    <button class="btn btn-outline-warning px-3">
+
+    <button class="btn btn-outline-warning px-3" @onclick="ShowSendBackPopup">
         <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
     </button>
     @if (CanShowApprovalButton())
