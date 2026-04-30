@@ -305,6 +305,45 @@
     object-fit: cover;
     display: block;
 }
+
+
+
+
+    /* --- PRINT FIX FOR WIDE TABLES --- */
+    @@media print {
+        /* 1. Force the page to print in Landscape mode so wide tables fit */
+        @@page {
+            size: landscape;
+            margin: 10mm;
+        }
+        
+        /* 2. Remove the scrollbar clipping that cuts off the right side */
+        .table-responsive {
+            overflow: visible !important;
+            width: 100% !important;
+        }
+
+        /* 3. Slightly reduce font size and padding to ensure all 13 columns fit */
+        .spic-table {
+            width: 100% !important;
+            font-size: 10px !important; 
+        }
+        .spic-table th, .spic-table td {
+            padding: 4px !important;
+        }
+
+        /* 4. Force background colors to show up in the PDF/Printout */
+        .table-val-box, .section-title, .section-icon {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        
+        .form-card {
+            margin-bottom: 20px !important;
+            page-break-inside: avoid; /* Prevents the table from splitting awkwardly across pages */
+        }
+    }
+
   </style>
 
 </head>
@@ -1280,7 +1319,7 @@ else
                 </table>
 
                 <div class="totals-wrapper">
-                    <div class="totals-box">
+                    @* <div class="totals-box">
                         <div class="total-col">
                             <span class="total-label">Grand Total Volume</span>
                             <span class="total-val">@catTotalVolume.ToString("N0") @catUnit</span>
@@ -1289,7 +1328,17 @@ else
                             <span class="total-label">Grand Total Forecast Value</span>
                             <span class="total-val">₹ @catTotalValue.ToString("N0")</span>
                         </div>
-                    </div>
+                    </div> *@
+                    <div class="totals-box d-flex flex-wrap align-items-center" style="gap: 2rem; background-color: #F9FAFB; padding: 12px 16px; border-radius: 6px; border: 1px solid #E5E7EB;">
+    <div class="total-col d-flex align-items-center" style="gap: 8px;">
+        <span class="total-label" style="color: #6B7280; font-weight: 500;">Grand Total Volume:</span>
+        <span class="total-val" style="color: #1F2937; font-weight: 700;">@catTotalVolume.ToString("N0") @catUnit</span>
+    </div>
+    <div class="total-col d-flex align-items-center" style="gap: 8px;">
+        <span class="total-label" style="color: #6B7280; font-weight: 500;">Grand Total Forecast Value:</span>
+        <span class="total-val" style="color: #059669; font-weight: 700;">₹ @catTotalValue.ToString("N0")</span>
+    </div>
+</div>
                 </div>
             </div>
 
@@ -2912,7 +2961,7 @@ else
 
 
 
-               <div class="section">
+@*       <div class="section">
     <div class="section-title mb-2">
         <div class="section-icon">📋</div>  <div class="section-text">Credit Limit Proposal Scoring</div>
     </div>
@@ -2984,7 +3033,967 @@ else
     {
         <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Scoring Data Available</div>
     }
+</div> *@
+
+
+
+@* @if (_proposal != null && _proposal.Id > 0)
+{
+    @if (_model.InSpic)
+    {
+
+        <div class="section-title mb-2">
+        <div class="section-icon">📋</div>  SPIC Valuation <div class="section-text"></div>
+    </div>
+
+
+        <div class="form-card mb-5">
+            
+            <div class="table-wrapper">
+                <div class="table-responsive">
+                    <table class="spic-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="width:4%;">S.No</th>
+                                <th rowspan="2">Critical Parameter</th>
+                                <th rowspan="2" style="width:10%;">Measure</th>
+                                <th rowspan="2" style="width:7%;">Weightage (%)</th>
+                                <th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+                                <th colspan="5" class="text-center">Norms / Marks</th>
+                                <th colspan="2" class="text-center">Dealer Score</th>
+                            </tr>
+                            <tr>
+                                <th class="text-center">1</th>
+                                <th class="text-center">2</th>
+                                <th class="text-center">3</th>
+                                <th class="text-center">4</th>
+                                <th class="text-center">5</th>
+                                <th class="text-center" style="width:8%;">Value</th>
+                                <th class="text-center" style="width:6%;">Marks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 1. Total Urea Sales Volume -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">1</td>
+                                <td rowspan="2" class="align-middle">Total Urea Sales Volume during last year</td>
+                                <td rowspan="8" class="text-center align-middle text-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">MT</td>
+                                <td class="text-center">&gt;3000</td>
+                                <td class="text-center">&gt;1500</td>
+                                <td class="text-center">&gt;1000</td>
+                                <td class="text-center">&gt;500</td>
+                                <td class="text-center">&lt;500</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q1Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+
+                            <!-- 2. Urea Sales Volume with SPIC -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">2</td>
+                                <td rowspan="2" class="align-middle">Urea Sales Volume with SPIC during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">MT</td>
+                                <td class="text-center">&gt;500</td>
+                                <td class="text-center">&gt;300</td>
+                                <td class="text-center">&gt;200</td>
+                                <td class="text-center">&gt;100</td>
+                                <td class="text-center">&lt;100</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q2Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+
+                            <!-- 3. Total Urea Sales Turnover -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">3</td>
+                                <td rowspan="2" class="align-middle">Total Urea Sales Turnover during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&gt;200</td>
+                                <td class="text-center">&gt;100</td>
+                                <td class="text-center">&gt;60</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&lt;30</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q3Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+
+                            <!-- 4. Urea Sales Turnover with SPIC -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">4</td>
+                                <td rowspan="2" class="align-middle">Urea Sales Turnover with SPIC during last year</td>
+                                <td rowspan="2" class="text-center align-middle">20</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&gt;20</td>
+                                <td class="text-center">&gt;15</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&lt;10</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q4Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td>
+                            </tr>
+
+                            <!-- 5. Dealership tenure -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">5</td>
+                                <td rowspan="2" class="align-middle">Dealership tenure with SPIC</td>
+                                <td rowspan="2" class="text-center align-middle text-muted">Loyalty to SPIC</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Years</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&gt;8</td>
+                                <td class="text-center">&gt;6</td>
+                                <td class="text-center">&gt;4</td>
+                                <td class="text-center">&gt;1</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q5Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+
+                            <!-- 6. Monthly Average Net Overdues -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">6</td>
+                                <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+                                <td rowspan="2" class="text-center align-middle"></td>
+                                <td rowspan="2" class="text-center align-middle">20</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&lt;1</td>
+                                <td class="text-center">&lt;5</td>
+                                <td class="text-center">&lt;10</td>
+                                <td class="text-center">&lt;20</td>
+                                <td class="text-center">&lt;30</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q6Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td>
+                            </tr>
+
+                            <!-- 7. Value of dealer's property -->
+                            <tr>
+                                <td class="text-center align-middle">7</td>
+                                <td class="align-middle">Value of dealer's property - Fixed Assets</td>
+                                <td rowspan="3" class="text-center align-middle text-muted">Financial Soundness</td>
+                                <td rowspan="3" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td></td><td></td><td></td><td></td><td></td>
+                                <td class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td class="text-center align-middle text-muted">-</td>
+                            </tr>
+
+                            <!-- 8. Property Value as % -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">8</td>
+                                <td rowspan="2" class="align-middle">Property Value as % of the Sales Turnover with SPIC during last year</td>
+                                <td class="text-center">%</td>
+                                <td class="text-center">&gt;50</td>
+                                <td class="text-center">&gt;40</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&gt;20</td>
+                                <td class="text-center">&gt;10</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q8Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+
+                            <!-- 9. Available Security -->
+                            <tr>
+                                <td class="text-center align-middle">9</td>
+                                <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+                                <td rowspan="3" class="text-center align-middle text-muted">Credit Security</td>
+                                <td rowspan="3" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td></td><td></td><td></td><td></td><td></td>
+                                <td class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td class="text-center align-middle text-muted">-</td>
+                            </tr>
+
+                            <!-- 10. Available Security as % -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with SPIC during last year</td>
+                                <td class="text-center">%</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&gt;8</td>
+                                <td class="text-center">&gt;6</td>
+                                <td class="text-center">&gt;4</td>
+                                <td class="text-center">&lt;4</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q10Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="11"><strong>Grand Total</strong></td>
+                                <td class="text-center"><strong style="color: #059669; font-size: 1.1rem;">@_proposal.Q11Mark / 100</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_model.InGreenStar)
+    {
+
+        <div class="section-title mb-2">
+    <div class="section-icon">📋</div>  <div class="section-text"> Greenstar Valuation</div>
 </div>
+        <div class="form-card mb-5">
+           
+            <div class="table-wrapper">
+                <div class="table-responsive">
+                    <table class="spic-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="width:4%;">S.No</th>
+                                <th rowspan="2">Critical Parameter</th>
+                                <th rowspan="2" style="width:10%;">Measure</th>
+                                <th rowspan="2" style="width:7%;">Weightage (%)</th>
+                                <th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+                                <th colspan="5" class="text-center">Norms / Marks</th>
+                                <th colspan="2" class="text-center">Dealer Score</th>
+                            </tr>
+                            <tr>
+                                <th class="text-center">1</th>
+                                <th class="text-center">2</th>
+                                <th class="text-center">3</th>
+                                <th class="text-center">4</th>
+                                <th class="text-center">5</th>
+                                <th class="text-center" style="width:8%;">Value</th>
+                                <th class="text-center" style="width:6%;">Marks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 1. Total Fertilizer Sales Volume -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">1</td>
+                                <td rowspan="2" class="align-middle">Total Fertilizer Sales Volume during last year</td>
+                                <td rowspan="10" class="text-center align-middle text-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">MT</td>
+                                <td class="text-center">&gt;3000</td>
+                                <td class="text-center">&gt;1500</td>
+                                <td class="text-center">&gt;1000</td>
+                                <td class="text-center">&gt;500</td>
+                                <td class="text-center">&lt;500</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ1Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 2. Fertilizer Sales Volume with GFL -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">2</td>
+                                <td rowspan="2" class="align-middle">Fertilizer Sales Volume with GFL during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">MT</td>
+                                <td class="text-center">&gt;500</td>
+                                <td class="text-center">&gt;300</td>
+                                <td class="text-center">&gt;200</td>
+                                <td class="text-center">&gt;100</td>
+                                <td class="text-center">&lt;100</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ2Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 3. Total Fertilizer Sales Turnover -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">3</td>
+                                <td rowspan="2" class="align-middle">Total Fertilizer Sales Turnover during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&gt;200</td>
+                                <td class="text-center">&gt;100</td>
+                                <td class="text-center">&gt;60</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&lt;30</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ3Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 4. Fertilizer Sales Turnover with GFL -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">4</td>
+                                <td rowspan="2" class="align-middle">Fertilizer Sales Turnover with GFL during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&gt;20</td>
+                                <td class="text-center">&gt;15</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&lt;10</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ4Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 5. SP Turnover -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">5</td>
+                                <td rowspan="2" class="align-middle">SP Turnover during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&gt;20</td>
+                                <td class="text-center">&gt;15</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&lt;10</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ5Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 6. Dealership tenure -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">6</td>
+                                <td rowspan="2" class="align-middle">Dealership tenure with GFL</td>
+                                <td rowspan="2" class="text-center align-middle text-muted">Loyalty</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Years</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&gt;8</td>
+                                <td class="text-center">&gt;6</td>
+                                <td class="text-center">&gt;4</td>
+                                <td class="text-center">&gt;1</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ6Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 7. Monthly Average Net Overdues -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">7</td>
+                                <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+                                <td rowspan="2" class="text-center align-middle text-muted"></td>
+                                <td rowspan="2" class="text-center align-middle">20</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&lt;1</td>
+                                <td class="text-center">&lt;5</td>
+                                <td class="text-center">&lt;10</td>
+                                <td class="text-center">&lt;20</td>
+                                <td class="text-center">&lt;30</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ7Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
+
+                            <!-- 8. Value of dealer's property -->
+                            <tr>
+                                <td class="text-center align-middle">8</td>
+                                <td class="align-middle">Value of dealer's property - Fixed Assets</td>
+                                <td rowspan="3" class="text-center align-middle text-muted">Financial Soundness</td>
+                                <td rowspan="3" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td></td><td></td><td></td><td></td><td></td>
+                                <td class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td class="text-center align-middle text-muted">-</td>
+                            </tr>
+
+                            <!-- 9. Property Value as % -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">9</td>
+                                <td rowspan="2" class="align-middle">Property Value as % of the Sales Turnover with GFL during last year</td>
+                                <td class="text-center">%</td>
+                                <td class="text-center">&gt;50</td>
+                                <td class="text-center">&gt;40</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&gt;20</td>
+                                <td class="text-center">&gt;10</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ9Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 10. Available Security -->
+                            <tr>
+                                <td class="text-center align-middle">10</td>
+                                <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+                                <td rowspan="3" class="text-center align-middle text-muted">Credit Security</td>
+                                <td rowspan="3" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td></td><td></td><td></td><td></td><td></td>
+                                <td class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td class="text-center align-middle text-muted">-</td>
+                            </tr>
+
+                            <!-- 11. Available Security as % -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">11</td>
+                                <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with GFL during last year</td>
+                                <td class="text-center">%</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&gt;8</td>
+                                <td class="text-center">&gt;6</td>
+                                <td class="text-center">&gt;4</td>
+                                <td class="text-center">&lt;4</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ11Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="11"><strong>Grand Total</strong></td>
+                                <td class="text-center"><strong style="color: #059669; font-size: 1.1rem;">@_proposal.GQ12Mark / 100</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Scoring Data Available</div>
+}
+ *@
+
+ 
+
+@if (_proposal != null && _proposal.Id > 0)
+{
+    @if (_model.InSpic)
+    {
+        <div class="section-title mb-2">
+            <div class="section-icon">📋</div>  SPIC Valuation <div class="section-text"></div>
+        </div>
+
+        <div class="form-card mb-5">
+            <div class="table-wrapper">
+                <div class="table-responsive">
+                    <table class="spic-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="width:4%;">S.No</th>
+                                <th rowspan="2">Critical Parameter</th>
+                                <th rowspan="2" style="width:10%;">Measure</th>
+                                <th rowspan="2" style="width:7%;">Weightage (%)</th>
+                                <th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+                                <th colspan="5" class="text-center">Norms / Marks</th>
+                                <th colspan="2" class="text-center">Dealer Score</th>
+                            </tr>
+                            <tr>
+                                <th class="text-center">1</th>
+                                <th class="text-center">2</th>
+                                <th class="text-center">3</th>
+                                <th class="text-center">4</th>
+                                <th class="text-center">5</th>
+                                <th class="text-center" style="width:8%;">Value</th>
+                                <th class="text-center" style="width:6%;">Marks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 1. Total Urea Sales Volume -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">1</td>
+                                <td rowspan="2" class="align-middle">Total Urea Sales Volume during last year</td>
+                                <td rowspan="8" class="text-center align-middle text-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">MT</td>
+                                <td class="text-center">&gt;3000</td>
+                                <td class="text-center">&gt;1500</td>
+                                <td class="text-center">&gt;1000</td>
+                                <td class="text-center">&gt;500</td>
+                                <td class="text-center">&lt;500</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q1Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+
+                            <!-- 2. Urea Sales Volume with SPIC -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">2</td>
+                                <td rowspan="2" class="align-middle">Urea Sales Volume with SPIC during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">MT</td>
+                                <td class="text-center">&gt;500</td>
+                                <td class="text-center">&gt;300</td>
+                                <td class="text-center">&gt;200</td>
+                                <td class="text-center">&gt;100</td>
+                                <td class="text-center">&lt;100</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q2Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+
+                            <!-- 3. Total Urea Sales Turnover -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">3</td>
+                                <td rowspan="2" class="align-middle">Total Urea Sales Turnover during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&gt;200</td>
+                                <td class="text-center">&gt;100</td>
+                                <td class="text-center">&gt;60</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&lt;30</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q3Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+
+                            <!-- 4. Urea Sales Turnover with SPIC -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">4</td>
+                                <td rowspan="2" class="align-middle">Urea Sales Turnover with SPIC during last year</td>
+                                <td rowspan="2" class="text-center align-middle">20</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&gt;20</td>
+                                <td class="text-center">&gt;15</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&lt;10</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q4Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td>
+                            </tr>
+
+                            <!-- 5. Dealership tenure -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">5</td>
+                                <td rowspan="2" class="align-middle">Dealership tenure with SPIC</td>
+                                <td rowspan="2" class="text-center align-middle text-muted">Loyalty to SPIC</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Years</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&gt;8</td>
+                                <td class="text-center">&gt;6</td>
+                                <td class="text-center">&gt;4</td>
+                                <td class="text-center">&gt;1</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q5Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+
+                            <!-- 6. Monthly Average Net Overdues -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">6</td>
+                                <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+                                <td rowspan="2" class="text-center align-middle"></td>
+                                <td rowspan="2" class="text-center align-middle">20</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&lt;1</td>
+                                <td class="text-center">&lt;5</td>
+                                <td class="text-center">&lt;10</td>
+                                <td class="text-center">&lt;20</td>
+                                <td class="text-center">&lt;30</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q6Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td>
+                            </tr>
+
+                            <!-- 7. Value of dealer's property -->
+                            <tr>
+                                <td class="text-center align-middle">7</td>
+                                <td class="align-middle">Value of dealer's property - Fixed Assets</td>
+                                <td rowspan="3" class="text-center align-middle text-muted">Financial Soundness</td>
+                                <td rowspan="3" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td></td><td></td><td></td><td></td><td></td>
+                                <td class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td class="text-center align-middle text-muted">-</td>
+                            </tr>
+
+                            <!-- 8. Property Value as % -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">8</td>
+                                <td rowspan="2" class="align-middle">Property Value as % of the Sales Turnover with SPIC during last year</td>
+                                <td class="text-center">%</td>
+                                <td class="text-center">&gt;50</td>
+                                <td class="text-center">&gt;40</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&gt;20</td>
+                                <td class="text-center">&gt;10</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q8Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+
+                            <!-- 9. Available Security -->
+                            <tr>
+                                <td class="text-center align-middle">9</td>
+                                <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+                                <td rowspan="3" class="text-center align-middle text-muted">Credit Security</td>
+                                <td rowspan="3" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td></td><td></td><td></td><td></td><td></td>
+                                <td class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td class="text-center align-middle text-muted">-</td>
+                            </tr>
+
+                            <!-- 10. Available Security as % -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with SPIC during last year</td>
+                                <td class="text-center">%</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&gt;8</td>
+                                <td class="text-center">&gt;6</td>
+                                <td class="text-center">&gt;4</td>
+                                <td class="text-center">&lt;4</td>
+                                <td rowspan="2" class="align-middle">
+                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
+                                </td>
+                                <td rowspan="2" class="text-center align-middle">
+                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q10Mark</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-center text-muted">Marks</td>
+                                <td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="11"><strong>Grand Total</strong></td>
+                                <td class="text-center"><strong style="color: #059669; font-size: 1.1rem;">@_proposal.Q11Mark / 100</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_model.InGreenStar)
+    {
+        <div class="section-title mb-2">
+            <div class="section-icon">📋</div>  <div class="section-text"> Greenstar Valuation</div>
+        </div>
+        <div class="form-card mb-5">
+            <div class="table-wrapper">
+                <div class="table-responsive">
+                    <table class="spic-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="width:4%;">S.No</th>
+                                <th rowspan="2">Critical Parameter</th>
+                                <th rowspan="2" style="width:10%;">Measure</th>
+                                <th rowspan="2" style="width:7%;">Weightage (%)</th>
+                                <th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+                                <th colspan="5" class="text-center">Norms / Marks</th>
+                                <th colspan="2" class="text-center">Dealer Score</th>
+                            </tr>
+                            <tr>
+                                <th class="text-center">1</th>
+                                <th class="text-center">2</th>
+                                <th class="text-center">3</th>
+                                <th class="text-center">4</th>
+                                <th class="text-center">5</th>
+                                <th class="text-center" style="width:8%;">Value</th>
+                                <th class="text-center" style="width:6%;">Marks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 1. Total Fertilizer Sales Volume -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">1</td>
+                                <td rowspan="2" class="align-middle">Total Fertilizer Sales Volume during last year</td>
+                                <td rowspan="10" class="text-center align-middle text-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">MT</td>
+                                <td class="text-center">&gt;3000</td>
+                                <td class="text-center">&gt;1500</td>
+                                <td class="text-center">&gt;1000</td>
+                                <td class="text-center">&gt;500</td>
+                                <td class="text-center">&lt;500</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ1Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 2. Fertilizer Sales Volume with GFL -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">2</td>
+                                <td rowspan="2" class="align-middle">Fertilizer Sales Volume with GFL during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">MT</td>
+                                <td class="text-center">&gt;500</td>
+                                <td class="text-center">&gt;300</td>
+                                <td class="text-center">&gt;200</td>
+                                <td class="text-center">&gt;100</td>
+                                <td class="text-center">&lt;100</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ2Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 3. Total Fertilizer Sales Turnover -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">3</td>
+                                <td rowspan="2" class="align-middle">Total Fertilizer Sales Turnover during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&gt;200</td>
+                                <td class="text-center">&gt;100</td>
+                                <td class="text-center">&gt;60</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&lt;30</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ3Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 4. Fertilizer Sales Turnover with GFL -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">4</td>
+                                <td rowspan="2" class="align-middle">Fertilizer Sales Turnover with GFL during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&gt;20</td>
+                                <td class="text-center">&gt;15</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&lt;10</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ4Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 5. SP Turnover -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">5</td>
+                                <td rowspan="2" class="align-middle">SP Turnover during last year</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&gt;20</td>
+                                <td class="text-center">&gt;15</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&lt;10</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ5Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 6. Dealership tenure -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">6</td>
+                                <td rowspan="2" class="align-middle">Dealership tenure with GFL</td>
+                                <td rowspan="2" class="text-center align-middle text-muted">Loyalty</td>
+                                <td rowspan="2" class="text-center align-middle">10</td>
+                                <td class="text-center">Years</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&gt;8</td>
+                                <td class="text-center">&gt;6</td>
+                                <td class="text-center">&gt;4</td>
+                                <td class="text-center">&gt;1</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ6Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 7. Monthly Average Net Overdues -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">7</td>
+                                <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+                                <td rowspan="2" class="text-center align-middle text-muted"></td>
+                                <td rowspan="2" class="text-center align-middle">20</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td class="text-center">&lt;1</td>
+                                <td class="text-center">&lt;5</td>
+                                <td class="text-center">&lt;10</td>
+                                <td class="text-center">&lt;20</td>
+                                <td class="text-center">&lt;30</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ7Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
+
+                            <!-- 8. Value of dealer's property -->
+                            <tr>
+                                <td class="text-center align-middle">8</td>
+                                <td class="align-middle">Value of dealer's property - Fixed Assets</td>
+                                <td rowspan="3" class="text-center align-middle text-muted">Financial Soundness</td>
+                                <td rowspan="3" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td></td><td></td><td></td><td></td><td></td>
+                                <td class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td class="text-center align-middle text-muted">-</td>
+                            </tr>
+
+                            <!-- 9. Property Value as % -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">9</td>
+                                <td rowspan="2" class="align-middle">Property Value as % of the Sales Turnover with GFL during last year</td>
+                                <td class="text-center">%</td>
+                                <td class="text-center">&gt;50</td>
+                                <td class="text-center">&gt;40</td>
+                                <td class="text-center">&gt;30</td>
+                                <td class="text-center">&gt;20</td>
+                                <td class="text-center">&gt;10</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ9Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                            <!-- 10. Available Security -->
+                            <tr>
+                                <td class="text-center align-middle">10</td>
+                                <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+                                <td rowspan="3" class="text-center align-middle text-muted">Credit Security</td>
+                                <td rowspan="3" class="text-center align-middle">10</td>
+                                <td class="text-center">Rs. Lakhs</td>
+                                <td></td><td></td><td></td><td></td><td></td>
+                                <td class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td class="text-center align-middle text-muted">-</td>
+                            </tr>
+
+                            <!-- 11. Available Security as % -->
+                            <tr>
+                                <td rowspan="2" class="text-center align-middle">11</td>
+                                <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with GFL during last year</td>
+                                <td class="text-center">%</td>
+                                <td class="text-center">&gt;10</td>
+                                <td class="text-center">&gt;8</td>
+                                <td class="text-center">&gt;6</td>
+                                <td class="text-center">&gt;4</td>
+                                <td class="text-center">&lt;4</td>
+                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
+                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ11Mark</div></td>
+                            </tr>
+                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="11"><strong>Grand Total</strong></td>
+                                <td class="text-center"><strong style="color: #059669; font-size: 1.1rem;">@_proposal.GQ12Mark / 100</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Scoring Data Available</div>
+}
+
+
 
 <div class="section">
     <div class="section-title mb-2">
