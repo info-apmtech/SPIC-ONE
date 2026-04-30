@@ -148,23 +148,35 @@
     private IEnumerable<(string title, string? path)> GetEnclosureItems()
     {
         var list = new List<(string, string?)>();
+
+        // From DealerRegistration
         list.Add(("GST Certificate", _dealer?.GSTFilePath));
         list.Add(("PAN Copy", _dealer?.PANFilePath));
         list.Add(("Aadhaar Copy", _dealer?.AadhaarFilePath));
         list.Add(("Wholesale License", _dealer?.WholesaleLicenseFilePath));
-        list.Add(("Specimen Signature", _documents?.SpecimanFilePath));
+        list.Add(("Retail License", _dealer?.RetailLicenseFilePath));
 
-        list.Add(("Warehouse License", _documents?.ValuationCertificateFilePath));
-        list.Add(("Trade License", _documents?.PartnershipDeadFilePath));
-        list.Add(("Photograph", _ownership?.ProprietorImagePath));
-        list.Add(("Bank Guarantee Certificate", _documents?.BankGauranteeFilePath));
-        list.Add(("IT Returns FY1", _documents?.FY1ITReturnFilePath));
+        // From DealerOwnershipInfo
+        list.Add(("Proprietor Photograph", _ownership?.ProprietorImagePath));
+        list.Add(("Proprietor Aadhaar", _ownership?.AadhaarFilePath));
+        list.Add(("Proprietor PAN", _ownership?.PANFilePath));
 
-        list.Add(("IT Returns FY2", _documents?.FY2ITReturnFilePath));
-        list.Add(("Valuation Certificate", _documents?.ValuationCertificateFilePath));
-        list.Add(("Retailer List", _documents?.RetailerListFilePath));
-        list.Add(("Partnership Deed", _documents?.PartnershipDeadFilePath));
-        list.Add(("Board Resolution", _documents?.BoardReasolutionFilePath));
+        // From DealerRegistrationDocuments
+        if (_documents != null)
+        {
+            list.Add(("Specimen Signature", _documents.SpecimanFilePath));
+            list.Add(("Greenstar Specimen", _documents.GreenstarSpecimanFilePath));
+            list.Add(("Bank Guarantee Certificate", _documents.BankGauranteeFilePath));
+            list.Add(("IT Returns FY1", _documents.FY1ITReturnFilePath));
+            list.Add(("IT Returns FY2", _documents.FY2ITReturnFilePath));
+            list.Add(("Valuation Certificate", _documents.ValuationCertificateFilePath));
+            list.Add(("Retailer List", _documents.RetailerListFilePath));
+            list.Add(("Partnership Deed", _documents.PartnershipDeadFilePath));
+            list.Add(("Board Resolution", _documents.BoardReasolutionFilePath));
+            list.Add(("Affidavit", _documents.AffidavitFilePath));
+            list.Add(("Authorization Letter", _documents.AuthorizationLetterFilePath));
+            list.Add(("Deed of Guarantee", _documents.DeedOfGuaranteeFilePath));
+        }
 
         return list;
     }
@@ -1296,18 +1308,21 @@ border-radius: 12px;
                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-file-earmark-text"></i> Basic Information</h4>
+                            <h4 class="detail-card-title"><i class="bi bi-activity"></i> Status Details</h4>
                             <i class="bi bi-pencil-square edit-icon"></i>
                         </div>
                         <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Company</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">State</div><div class="data-value">@(_stateName ?? (_dealer != null ? _dealer.StateId.ToString() : "-"))</div></div>
-                            <div class="data-row"><div class="data-label">Region</div><div class="data-value">@(_regionName ?? (_dealer != null ? _dealer.Region.ToString() : "-"))</div></div>
-                            <div class="data-row"><div class="data-label">HQ</div><div class="data-value">@(_hqName ?? (_dealer != null ? _dealer.HQ.ToString() : "-"))</div></div>
+                            <div class="data-row"><div class="data-label">Status</div><div class="data-value">@(_dealer?.Status.ToString() ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Last Transaction Date</div><div class="data-value">@(_dealer?.LastTransactionDate.HasValue == true && _dealer.LastTransactionDate.Value != DateTime.MinValue ? _dealer.LastTransactionDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">Is Last Transaction Sale</div><div class="data-value">@(_dealer != null ? (_dealer.IsLastTransactionIsSale.HasValue && _dealer.IsLastTransactionIsSale.Value ? "Yes" : "No") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">Debtor Balance</div><div class="data-value">₹@(_dealer?.DebitorBalance.ToString("N2") ?? "0")</div></div>
+                            <div class="data-row"><div class="data-label">Final Amount Settled</div><div class="data-value">@(_dealer != null ? (_dealer.IsFinalAmountSettled.HasValue && _dealer.IsFinalAmountSettled.Value ? "Yes" : "No") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">Final Approval Date</div><div class="data-value">@(_dealer?.FinalApprovalDate.HasValue == true && _dealer.FinalApprovalDate.Value != DateTime.MinValue ? _dealer.FinalApprovalDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">Settlement Date</div><div class="data-value">@(_dealer?.SettlementDate.HasValue == true && _dealer.SettlementDate.Value != DateTime.MinValue ? _dealer.SettlementDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">Settlement Amount</div><div class="data-value">₹@(_dealer?.SettlementAmount.ToString("N2") ?? "0")</div></div>
                         </div>
                     </div>
                 </div>
-
                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
@@ -1315,11 +1330,26 @@ border-radius: 12px;
                             <i class="bi bi-pencil-square edit-icon"></i>
                         </div>
                         <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Dealer Name</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
                             <div class="data-row"><div class="data-label">Firm Name</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
                             <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">@(_dealer?.DealerCode ?? (_dealer != null ? $"DL-{_dealer.Id}" : "-"))</div></div>
                             <div class="data-row"><div class="data-label">Date of Appointment</div><div class="data-value">@(_dealer?.DateOfAppointment.ToString("dd MMM yyyy") ?? "-")</div></div>
                             <div class="data-row"><div class="data-label">Business Type</div><div class="data-value">@(_dealer?.BusinessEntityType ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Years of Experience</div><div class="data-value">@(_dealer?.YearsofExperiance > 0 ? $"{_dealer.YearsofExperiance} Years" : "-")</div></div>
+                            <div class="data-row"><div class="data-label">Entity Type</div><div class="data-value">@(_dealer?.EntityType?.ToString() ?? "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-cash-stack"></i> Investment & Credit</h4>
+                            <i class="bi bi-pencil-square edit-icon"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Capital Investment</div><div class="data-value">₹@(_dealer?.CapitalInvestment.ToString("N2") ?? "0")</div></div>
+                            <div class="data-row"><div class="data-label">Investment Remarks</div><div class="data-value">@(_dealer?.CapitalInvestmentRemarks ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Cash Credit Limit</div><div class="data-value">₹@(_dealer?.CashCreditLimit.ToString("N2") ?? "0")</div></div>
+                            <div class="data-row"><div class="data-label">Credit Limit Remarks</div><div class="data-value">@(_dealer?.CashCreditLimitRrmarks ?? "-")</div></div>
                         </div>
                     </div>
                 </div>
@@ -1518,9 +1548,13 @@ border-radius: 12px;
                             <tr>
                                 <th>S:No</th>
                                 <th>Product</th>
-                                <th>Own Retail Sales (MT)</th>
-                                <th>Sales to Dealers (MT)</th>
-                                <th>Total (MT)</th>
+                                <th>Category</th>
+                                <th>Own Retail Qty (MT)</th>
+                                <th>Own Retail Amount (₹)</th>
+                                <th>Sales to Dealers Qty (MT)</th>
+                                <th>Sales to Dealers Amount (₹)</th>
+                                <th>Total Qty (MT)</th>
+                                <th>Total Amount (₹)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1529,25 +1563,34 @@ border-radius: 12px;
                                 var idx = 1;
                                 foreach (var a in _annualSales)
                                 {
+                                    var product = _products.FirstOrDefault(p => p.Id == a.ProductId);
+                                    var category = _categories.FirstOrDefault(c => c.Id == a.CategoryId);
                                     <tr>
                                         <td>@idx</td>
-                                        <td>@a.ProductId</td>
-                                        <td>@a.OwnRetailsSaleQty</td>
-                                        <td>@a.SaleToDealerQty</td>
-                                        <td>@(a.OwnRetailsSaleQty + a.SaleToDealerQty)</td>
+                                        <td>@(product?.Name ?? a.ProductId.ToString())</td>
+                                        <td>@(category?.Name ?? a.CategoryId.ToString())</td>
+                                        <td>@a.OwnRetailsSaleQty.ToString("N2")</td>
+                                        <td>@a.OwnRetailsSaleAmount.ToString("N2")</td>
+                                        <td>@a.SaleToDealerQty.ToString("N2")</td>
+                                        <td>@a.SaleToDealerAmount.ToString("N2")</td>
+                                        <td>@((a.OwnRetailsSaleQty + a.SaleToDealerQty).ToString("N2"))</td>
+                                        <td>@((a.OwnRetailsSaleAmount + a.SaleToDealerAmount).ToString("N2"))</td>
                                     </tr>
                                     idx++;
                                 }
                                 <tr class="grand-total-row">
-                                    <td colspan="2" style="text-align: right; padding-right: 40px;">GRAND TOTAL</td>
-                                    <td>@_annualSales.Sum(x => x.OwnRetailsSaleQty) MT</td>
-                                    <td>@_annualSales.Sum(x => x.SaleToDealerQty) MT</td>
-                                    <td>@(_annualSales.Sum(x => x.OwnRetailsSaleQty + x.SaleToDealerQty)) MT</td>
+                                    <td colspan="3" style="text-align: right; padding-right: 40px;">GRAND TOTAL</td>
+                                    <td>@_annualSales.Sum(x => x.OwnRetailsSaleQty).ToString("N2")</td>
+                                    <td>@_annualSales.Sum(x => x.OwnRetailsSaleAmount).ToString("N2")</td>
+                                    <td>@_annualSales.Sum(x => x.SaleToDealerQty).ToString("N2")</td>
+                                    <td>@_annualSales.Sum(x => x.SaleToDealerAmount).ToString("N2")</td>
+                                    <td>@_annualSales.Sum(x => x.OwnRetailsSaleQty + x.SaleToDealerQty).ToString("N2")</td>
+                                    <td>@_annualSales.Sum(x => x.OwnRetailsSaleAmount + x.SaleToDealerAmount).ToString("N2")</td>
                                 </tr>
                             }
                             else
                             {
-                                <tr><td colspan="5">No annual sales data</td></tr>
+                                <tr><td colspan="9">No annual sales data</td></tr>
                             }
                         </tbody>
                     </table>
@@ -1563,23 +1606,66 @@ border-radius: 12px;
         </div>
         <div class="accordion-body">
                 <div class="row g-4">
-                @if (_warehouses != null && _warehouses.Any())
+                @if ((_warehouses != null && _warehouses.Any()) || (_rails != null && _rails.Any()) || (_ports != null && _ports.Any()))
                 {
-                    foreach (var w in _warehouses)
+                    @if (_warehouses != null && _warehouses.Any())
                     {
-                        <div class="col-md-6">
-                            <div class="detail-card">
-                                <div class="detail-card-header">
-                                    <h4 class="detail-card-title"><i class="bi bi-building"></i> Warehouse / Depot</h4>
-                                    <i class="bi bi-pencil-square edit-icon"></i>
-                                </div>
-                                <div class="detail-card-body">
-                                    <div class="data-row"><div class="data-label">Warehouse Id:</div><div class="data-value">@w.WarehouseId</div></div>
-                                    <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@w.Distance</div></div>
-                                    <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@w.Freight</div></div>
+                        foreach (var w in _warehouses)
+                        {
+                            <div class="col-md-6">
+                                <div class="detail-card">
+                                    <div class="detail-card-header">
+                                        <h4 class="detail-card-title"><i class="bi bi-building"></i> Warehouse / Depot</h4>
+                                        <i class="bi bi-pencil-square edit-icon"></i>
+                                    </div>
+                                    <div class="detail-card-body">
+                                        <div class="data-row"><div class="data-label">Warehouse Id:</div><div class="data-value">@w.WarehouseId</div></div>
+                                        <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@w.Distance</div></div>
+                                        <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@w.Freight</div></div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        }
+                    }
+
+                    @if (_rails != null && _rails.Any())
+                    {
+                        foreach (var r in _rails)
+                        {
+                            <div class="col-md-6">
+                                <div class="detail-card">
+                                    <div class="detail-card-header">
+                                        <h4 class="detail-card-title"><i class="bi bi-train-front"></i> Rail Facilities</h4>
+                                        <i class="bi bi-pencil-square edit-icon"></i>
+                                    </div>
+                                    <div class="detail-card-body">
+                                        <div class="data-row"><div class="data-label">Rail Facility Id:</div><div class="data-value">@r.RailFacilitiesId</div></div>
+                                        <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@r.Distance</div></div>
+                                        <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@r.Freight</div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+
+                    @if (_ports != null && _ports.Any())
+                    {
+                        foreach (var p in _ports)
+                        {
+                            <div class="col-md-6">
+                                <div class="detail-card">
+                                    <div class="detail-card-header">
+                                        <h4 class="detail-card-title"><i class="bi bi-water"></i> Port Facilities</h4>
+                                        <i class="bi bi-pencil-square edit-icon"></i>
+                                    </div>
+                                    <div class="detail-card-body">
+                                        <div class="data-row"><div class="data-label">Port Id:</div><div class="data-value">@p.PortId</div></div>
+                                        <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@p.Distance</div></div>
+                                        <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@p.Freight</div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
                     }
                 }
                 else
@@ -1645,11 +1731,27 @@ border-radius: 12px;
                                 <div class="data-row"><div class="data-label">Business Entity Type</div><div class="data-value">@_dealer?.BusinessEntityType ?? "-"</div></div>
                                 <div class="data-row"><div class="data-label">Proprietor Name:</div><div class="data-value">@_ownership.Name</div></div>
                                 <div class="data-row"><div class="data-label">Father Name:</div><div class="data-value">@_ownership.FatherName</div></div>
+                                <div class="data-row"><div class="data-label">Gender:</div><div class="data-value">@_ownership.Gender.ToString()</div></div>
+                                <div class="data-row"><div class="data-label">Marital Status:</div><div class="data-value">@_ownership.MaritalStatus.ToString()</div></div>
+                                <div class="data-row"><div class="data-label">Date of Birth:</div><div class="data-value">@_ownership.DOB.ToString("dd/MM/yyyy")</div></div>
                                 <div class="data-row"><div class="data-label">Phone Number:</div><div class="data-value">@_ownership.PhoneNumber</div></div>
                                 <div class="data-row"><div class="data-label">Email:</div><div class="data-value">@_ownership.Email</div></div>
                                 <div class="data-row"><div class="data-label">Aadhaar Number:</div><div class="data-value">@_ownership.AadhaarNumber</div></div>
                                 <div class="data-row"><div class="data-label">Aadhaar Document:</div><div class="data-value">@(!string.IsNullOrEmpty(_ownership.AadhaarFilePath) ? "Yes" : "No")</div></div>
+                                <div class="data-row"><div class="data-label">PAN Number:</div><div class="data-value">@_ownership.PANNumber</div></div>
+                                <div class="data-row"><div class="data-label">PAN Document:</div><div class="data-value">@(!string.IsNullOrEmpty(_ownership.PANFilePath) ? "Yes" : "No")</div></div>
                                 <div class="data-row"><div class="data-label">Uploaded Image:</div><div class="data-value">@(!string.IsNullOrEmpty(_ownership.ProprietorImagePath) ? "Yes" : "No")</div></div>
+
+                                <div class="mt-3 mb-2"><strong>Address Details</strong></div>
+                                <div class="data-row"><div class="data-label">Shop No / Room No / Block No:</div><div class="data-value">@(_ownership.ShopNoORRoomNoOrBlockNo ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Street:</div><div class="data-value">@(_ownership.Street ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Sub Village:</div><div class="data-value">@(_ownership.SubVillage ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Village:</div><div class="data-value">@(_ownership.Village ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Pin Code:</div><div class="data-value">@(_ownership.PinCode ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Block:</div><div class="data-value">@(_ownership.Block ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Taluk:</div><div class="data-value">@(_ownership.Taluk ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">District:</div><div class="data-value">@(_ownership.DistrictId > 0 ? _ownership.DistrictId.ToString() : "-")</div></div>
+                                <div class="data-row"><div class="data-label">State:</div><div class="data-value">@(_ownership.StateId > 0 ? _ownership.StateId.ToString() : "-")</div></div>
                             }
                             else
                             {
@@ -1855,7 +1957,7 @@ border-radius: 12px;
                                     <div class="data-row"><div class="data-label">Bank Branch:</div><div class="data-value">@b.BankBranch</div></div>
                                     <div class="data-row"><div class="data-label">Value (₹):</div><div class="data-value">@b.Value</div></div>
                                     <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@b.Remarks</div></div>
-                                    <div class="data-row"><div class="data-label">Document:</div><div class="data-value">@(!string.IsNullOrEmpty(b.FileUploadPath) ? "Yes" : "No")</div></div>
+                                    <div class="data-row"><div class="data-label">Document:</div><div class="data-value">@(!string.IsNullOrEmpty(b.FileUploadPath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(b.FileUploadPath)}\" target=\"_blank\">View</a>" : "No")</div></div>
                                     <div class="mb-2"></div>
                                 }
                             }
@@ -1897,7 +1999,8 @@ border-radius: 12px;
                                     <div class="data-row"><div class="data-label">Land Size (in Cent):</div><div class="data-value">@l.LandSize</div></div>
                                     <div class="data-row"><div class="data-label">Property Value (₹ in Lakhs):</div><div class="data-value">@l.PropertyValue</div></div>
                                     <div class="data-row"><div class="data-label">Land Document:</div><div class="data-value">@(!string.IsNullOrEmpty(l.UploadedLandDocumentPath) ? "Yes" : "No")</div></div>
-                                    <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">@(!string.IsNullOrEmpty(l.UploadedECDocumentPath) ? "Yes" : "No")</div></div>
+                                    <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">@(!string.IsNullOrEmpty(l.UploadedECDocumentPath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(l.UploadedECDocumentPath)}\" target=\"_blank\">View</a>" : "No")</div></div>
+                                    <div class="data-row"><div class="data-label">Valuation Certificate:</div><div class="data-value">@(!string.IsNullOrEmpty(l.UploadedValuationCertificatePath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(l.UploadedValuationCertificatePath)}\" target=\"_blank\">View</a>" : "No")</div></div>
                                     <div class="mb-2"></div>
                                 }
                             }
@@ -1940,8 +2043,9 @@ border-radius: 12px;
                                     <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">@bld.SurveyNumber</div></div>
                                     <div class="data-row"><div class="data-label">Land Size (in Square Ft):</div><div class="data-value">@bld.LandSize</div></div>
                                     <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@bld.Remarks</div></div>
-                                    <div class="data-row"><div class="data-label">Building Document:</div><div class="data-value">@(!string.IsNullOrEmpty(bld.UploadedBuildingDocumentPath) ? "Yes" : "No")</div></div>
-                                    <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">@(!string.IsNullOrEmpty(bld.UploadedECDocumentPath) ? "Yes" : "No")</div></div>
+                                    <div class="data-row"><div class="data-label">Building Document:</div><div class="data-value">@(!string.IsNullOrEmpty(bld.UploadedBuildingDocumentPath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(bld.UploadedBuildingDocumentPath)}\" target=\"_blank\">View</a>" : "No")</div></div>
+                                    <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">@(!string.IsNullOrEmpty(bld.UploadedECDocumentPath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(bld.UploadedECDocumentPath)}\" target=\"_blank\">View</a>" : "No")</div></div>
+                                    <div class="data-row"><div class="data-label">Valuation Certificate:</div><div class="data-value">@(!string.IsNullOrEmpty(bld.UploadedValuationCertificatePath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(bld.UploadedValuationCertificatePath)}\" target=\"_blank\">View</a>" : "No")</div></div>
                                     <div class="mb-2"></div>
                                 }
                             }
@@ -2037,208 +2141,184 @@ border-radius: 12px;
 
     <div class="custom-accordion @(IsCreditLimitOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsCreditLimitOpen = !IsCreditLimitOpen">
-            Credit Limit Proposal 
+            Credit Limit Proposal
             <i class="bi bi-chevron-down"></i>
         </div>
         <div class="accordion-body">
             <div class="row g-4">
-                <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-person-badge"></i> Dealer Summary</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Firm Name:</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">Total Investment:</div><div class="data-value">₹@(_dealer?.CapitalInvestment.ToString("N0") ?? "0")</div></div>
-                            <div class="data-row"><div class="data-label">Storage Capacity:</div><div class="data-value">@(_dealer?.OwnGodownCapacity ?? 0) MT</div></div>
-                            <div class="data-row"><div class="data-label">Experience:</div><div class="data-value">@(_dealer?.YearsofExperiance ?? 0) Years</div></div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-building-add"></i> Property Assets (Collateral)</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            @if ((_assetLands != null && _assetLands.Any()) || (_assetBuildings != null && _assetBuildings.Any()) || (_assetBanks != null && _assetBanks.Any()))
-                            {
-                                var landsTotal = _assetLands?.Sum(x => x.PropertyValue) ?? 0m;
-                                var buildingsTotal = _assetBuildings?.Sum(x => x.PropertyValue) ?? 0m;
-                                var banksTotal = _assetBanks?.Sum(x => x.Value) ?? 0m;
-
-                                if (_assetLands != null && _assetLands.Any())
-                                {
-                                    <div class="data-row"><div class="data-label">Lands (Total Valuation):</div><div class="data-value">₹@landsTotal.ToString("N0")</div></div>
-                                    foreach (var l in _assetLands)
-                                    {
-                                        <div class="data-row"><div class="data-label">&nbsp;&nbsp;• @l.LandName</div><div class="data-value">₹@(l.PropertyValue.ToString("N0"))</div></div>
-                                    }
-                                }
-
-                                if (_assetBuildings != null && _assetBuildings.Any())
-                                {
-                                    <div class="data-row"><div class="data-label">Buildings (Total Valuation):</div><div class="data-value">₹@buildingsTotal.ToString("N0")</div></div>
-                                    foreach (var bld in _assetBuildings)
-                                    {
-                                        <div class="data-row"><div class="data-label">&nbsp;&nbsp;• @bld.BuildingName</div><div class="data-value">₹@(bld.PropertyValue.ToString("N0"))</div></div>
-                                    }
-                                }
-
-                                if (_assetBanks != null && _assetBanks.Any())
-                                {
-                                    <div class="data-row"><div class="data-label">Bank Assets (Total):</div><div class="data-value">₹@banksTotal.ToString("N0")</div></div>
-                                    foreach (var b in _assetBanks)
-                                    {
-                                        <div class="data-row"><div class="data-label">&nbsp;&nbsp;• @b.BankBranch</div><div class="data-value">₹@(b.Value.ToString("N0"))</div></div>
-                                    }
-                                }
-
-                                <div class="data-row"><div class="data-label">Total Valuation:</div><div class="data-value">₹@((landsTotal + buildingsTotal + banksTotal).ToString("N0"))</div></div>
-                            }
-                            else
-                            {
-                                <div class="data-row"><div class="data-label">Property Assets</div><div class="data-value">None</div></div>
-                            }
+                @if (_creditProposal != null)
+                {
+                    <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-credit-card"></i> Existing Credit Limit</h4>
+                                <i class="bi bi-pencil-square edit-icon"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Amount:</div><div class="data-value">₹@_creditProposal.ExistingCreditLimitAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">From:</div><div class="data-value">@_creditProposal.ExistingCreditLimitFrom.ToString("dd MMM yyyy")</div></div>
+                                <div class="data-row"><div class="data-label">To:</div><div class="data-value">@_creditProposal.ExistingCreditLimitTo.ToString("dd MMM yyyy")</div></div>
+                                <div class="data-row"><div class="data-label">Additional Credit Limit:</div><div class="data-value">₹@_creditProposal.AdditionalCreditLimit.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">Greenstar Additional:</div><div class="data-value">₹@_creditProposal.GreenstarAdditionalCreditLimit.ToString("N2")</div></div>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="col-12">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-graph-up"></i> Sales Performance Review</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="sales-table">
-                                <thead>
-                                    <tr>
-                                        <th>S:No</th>
-                                        <th>Product Name / Category</th>
-                                        <th>FY 21-22</th>
-                                        <th>FY 22-23</th>
-                                        <th>FY 23-24</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>1</td>
-                                        <td>NC Urea</td>
-                                        <td>420</td>
-                                        <td>900</td>
-                                        <td>300</td>
-                                    </tr>
-                                    <tr>
-                                        <td>2</td>
-                                        <td>NC Urea</td>
-                                        <td>420</td>
-                                        <td>900</td>
-                                        <td>300</td>
-                                    </tr>
-                                    <tr>
-                                        <td>3</td>
-                                        <td>NC Urea</td>
-                                        <td>420</td>
-                                        <td>900</td>
-                                        <td>300</td>
-                                    </tr>
-                                    <tr class="grand-total-row">
-                                        <td colspan="2" style="text-align: center;">GRAND TOTAL (MT)</td>
-                                        <td>1,075</td>
-                                        <td>1,285</td>
-                                        <td>1,500</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                    <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-calendar-week"></i> Fiscal Years</h4>
+                                <i class="bi bi-pencil-square edit-icon"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">FY1:</div><div class="data-value">@_creditProposal.FY1</div></div>
+                                <div class="data-row"><div class="data-label">FY2:</div><div class="data-value">@_creditProposal.FY2</div></div>
+                                <div class="data-row"><div class="data-label">FY3:</div><div class="data-value">@_creditProposal.FY3</div></div>
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-building-check"></i> Other Companies Handled</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            @if (_companies != null && _companies.Any())
-                            {
-                                foreach (var c in _companies)
-                                {
-                                <div class="data-row"><div class="data-label">Company:</div><div class="data-value">@c.CompaniesOperating</div></div>
-                                <div class="mb-2"></div>
-                                }
-                            }
-                            else
-                            {
-                                <div class="data-row"><div class="data-label">Companies</div><div class="data-value">None</div></div>
-                            }
-                        </div>
-                    </div>
-                </div>
-              @*   <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-building-check"></i> Other Companies Handled</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Company:</div><div class="data-value">Kumar Agro Traders Pvt Ltd</div></div>
-                            <div class="data-row"><div class="data-label">Qty (MT):</div><div class="data-value">450</div></div>
-                            <div class="data-row"><div class="data-label">Value (₹ Lakhs):</div><div class="data-value">₹4,50,000</div></div>
-                        </div>
-                    </div>
-                </div> *@
 
-                <div class="col-12">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-calendar3"></i> Fiscal Year 2023-24</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="sales-table">
-                                <thead>
-                                    <tr>
-                                        <th>S:No</th>
-                                        <th>Parameter</th>
-                                        <th>Values</th>
-                                        <th>Mark</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>1</td>
-                                        <td>Net Worth</td>
-                                        <td>$2.4M</td>
-                                        <td>30</td>
-                                    </tr>
-                                    <tr>
-                                        <td>2</td>
-                                        <td>Net Worth</td>
-                                        <td>$2.4M</td>
-                                        <td>20</td>
-                                    </tr>
-                                    <tr>
-                                        <td>3</td>
-                                        <td>Net Worth</td>
-                                        <td>$2.4M</td>
-                                        <td>30</td>
-                                    </tr>
-                                    <tr class="grand-total-row">
-                                        <td colspan="2" style="text-align: center;">GRAND TOTAL</td>
-                                        <td>$6.9M</td>
-                                        <td>90</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                    <div class="col-12">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-clipboard-data"></i> Performance Marks (Q1-Q11)</h4>
+                                <i class="bi bi-pencil-square edit-icon"></i>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="sales-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Parameter</th>
+                                            <th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Q5</th><th>Q6</th>
+                                            <th>Q7</th><th>Q8</th><th>Q9</th><th>Q10</th><th>Q11</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Product Marks</td>
+                                            <td>@_creditProposal.Q1Mark</td><td>@_creditProposal.Q2Mark</td>
+                                            <td>@_creditProposal.Q3Mark</td><td>@_creditProposal.Q4Mark</td>
+                                            <td>@_creditProposal.Q5Mark</td><td>@_creditProposal.Q6Mark</td>
+                                            <td>@_creditProposal.Q7Mark</td><td>@_creditProposal.Q8Mark</td>
+                                            <td>@_creditProposal.Q9Mark</td><td>@_creditProposal.Q10Mark</td>
+                                            <td>@_creditProposal.Q11Mark</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Group Marks</td>
+                                            <td>@_creditProposal.GQ1Mark</td><td>@_creditProposal.GQ2Mark</td>
+                                            <td>@_creditProposal.GQ3Mark</td><td>@_creditProposal.GQ4Mark</td>
+                                            <td>@_creditProposal.GQ5Mark</td><td>@_creditProposal.GQ6Mark</td>
+                                            <td>@_creditProposal.GQ7Mark</td><td>@_creditProposal.GQ8Mark</td>
+                                            <td>@_creditProposal.GQ9Mark</td><td>@_creditProposal.GQ10Mark</td>
+                                            <td>@_creditProposal.GQ11Mark</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                </div>
+
+                    <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-bank2"></i> SPIC Securities</h4>
+                                <i class="bi bi-pencil-square edit-icon"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">FD Number:</div><div class="data-value">@(_creditProposal.SpicFDNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">FD Details:</div><div class="data-value">@(_creditProposal.SpicFDOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">FD Amount:</div><div class="data-value">₹@_creditProposal.SpicFDAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">BG Number:</div><div class="data-value">@(_creditProposal.SpicBGNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">BG Details:</div><div class="data-value">@(_creditProposal.SpicBGOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">BG Amount:</div><div class="data-value">₹@_creditProposal.SpicBGAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Number:</div><div class="data-value">@(_creditProposal.SpicCollateralNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Details:</div><div class="data-value">@(_creditProposal.SpicCollateralOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Amount:</div><div class="data-value">₹@_creditProposal.SpicCollateralAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Number:</div><div class="data-value">@(_creditProposal.SpicTradeDepositNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Details:</div><div class="data-value">@(_creditProposal.SpicTradeDepositOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Amount:</div><div class="data-value">₹@_creditProposal.SpicTradeDepositAmount.ToString("N2")</div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-bank2"></i> Greenstar Securities</h4>
+                                <i class="bi bi-pencil-square edit-icon"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">FD Number:</div><div class="data-value">@(_creditProposal.GreenstarFDNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">FD Details:</div><div class="data-value">@(_creditProposal.GreenstarFDOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">FD Amount:</div><div class="data-value">₹@_creditProposal.GreenstarFDAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">BG Number:</div><div class="data-value">@(_creditProposal.GreenstarBGNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">BG Details:</div><div class="data-value">@(_creditProposal.GreenstarBGOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">BG Amount:</div><div class="data-value">₹@_creditProposal.GreenstarBGAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Number:</div><div class="data-value">@(_creditProposal.GreenstarCollateralNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Details:</div><div class="data-value">@(_creditProposal.GreenstarCollateralOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Amount:</div><div class="data-value">₹@_creditProposal.GreenstarCollateralAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Number:</div><div class="data-value">@(_creditProposal.GreenstarTradeDepositNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Details:</div><div class="data-value">@(_creditProposal.GreenstarTradeDepositOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Amount:</div><div class="data-value">₹@_creditProposal.GreenstarTradeDepositAmount.ToString("N2")</div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (_creditSales != null && _creditSales.Any())
+                    {
+                        <div class="col-12">
+                            <div class="detail-card">
+                                <div class="detail-card-header">
+                                    <h4 class="detail-card-title"><i class="bi bi-graph-up"></i> Sales Performance</h4>
+                                    <i class="bi bi-pencil-square edit-icon"></i>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="sales-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Product</th>
+                                                <th>Category</th>
+                                                <th>FY1 Qty</th>
+                                                <th>FY1 Amount</th>
+                                                <th>FY2 Qty</th>
+                                                <th>FY2 Amount</th>
+                                                <th>FY3 Qty</th>
+                                                <th>FY3 Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var s in _creditSales)
+                                            {
+                                                var pName = _productNames.ContainsKey(s.ProductId) ? _productNames[s.ProductId] : s.ProductId.ToString();
+                                                var catName = _categories.FirstOrDefault(c => c.Id == s.CategoryId)?.Name ?? s.CategoryId.ToString();
+                                                <tr>
+                                                    <td>@pName</td>
+                                                    <td>@catName</td>
+                                                    <td>@s.FY1Qty.ToString("N2")</td>
+                                                    <td>₹@s.FY1Amount.ToString("N2")</td>
+                                                    <td>@s.FY2Qty.ToString("N2")</td>
+                                                    <td>₹@s.FY2Amount.ToString("N2")</td>
+                                                    <td>@s.FY3Qty.ToString("N2")</td>
+                                                    <td>₹@s.FY3Amount.ToString("N2")</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="col-12">
+                        <div class="detail-card">
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Credit Limit Proposal</div><div class="data-value">No proposal data available</div></div>
+                            </div>
+                        </div>
+                    </div>
+                }
             </div>
         </div>
     </div>
