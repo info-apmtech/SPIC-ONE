@@ -43,6 +43,10 @@
     private string? _bankName;
     private Dictionary<int, string> _productNames = new();
     private Dictionary<int, string> _bankNames = new();
+    private List<DR.Category> _categories = new();
+    private List<DR.Product> _products = new();
+    private List<DR.Unit> _units = new();
+    private static readonly string[] _months = ["April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February", "March"];
     private decimal _totalSalesQty = 0;
 
     protected override async Task OnInitializedAsync()
@@ -131,9 +135,16 @@
                 }
                 catch { }
             }
+
+            // Load sales planning lookups
+            _categories = await Http.GetFromJsonAsync<List<DR.Category>>("api/Category") ?? new();
+            _units = await Http.GetFromJsonAsync<List<DR.Unit>>("api/Unit") ?? new();
+            _products = await Http.GetFromJsonAsync<List<DR.Product>>("api/Product") ?? new();
+            _productNames = _products.ToDictionary(p => p.Id, p => p.Name);
         }
         catch { }
     }
+
     private IEnumerable<(string title, string? path)> GetEnclosureItems()
     {
         var list = new List<(string, string?)>();
@@ -189,40 +200,210 @@
     private decimal GetTotalLoans() => _loans?.Sum(x => x.LoanValue) ?? 0m;
 
     private decimal GetNetValue() => GetCapitalPosition() + GetTotalAssets() - GetTotalLoans();
-     private List<TimelineItem> TimelineItems = new()
-     {
-         new("Submitted by MO", "Submitted", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-green", "bi bi-check-lg", "card-green", "badge-green"),
-         new("Sent Back by RM", "Sent Back", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-red", "bi bi-exclamation-lg", "card-red", "badge-red"),
-         new("Under Review by MO", "Resubmitted", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-blue", "bi bi-arrow-clockwise", "card-blue", "badge-blue"),
-         new("Under Review by RM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
-         new("Under Review by SM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
-         new("Under Review by AVP", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange")
-     };
 
-     private bool IsSendBackPopupVisible { get; set; } = false;
+    private static decimal GetSalesQty(DR.SalesPlanningInDealerRegistration row, int monthIndex)
+    {
+        return monthIndex switch
+        {
+            0 => row.AprilQty,
+            1 => row.MayQty,
+            2 => row.JuneQty,
+            3 => row.JulyQty,
+            4 => row.AugustQty,
+            5 => row.SeptemberQty,
+            6 => row.OctoberQty,
+            7 => row.NovemberQty,
+            8 => row.DecemberQty,
+            9 => row.JanuaryQty,
+            10 => row.FebruaryQty,
+            11 => row.MarchQty,
+            _ => 0
+        };
+    }
 
-     private void ShowSendBackPopup()
+    private static decimal GetSalesAmount(DR.SalesPlanningInDealerRegistration row, int monthIndex)
+    {
+        return monthIndex switch
+        {
+            0 => row.AprilAmount,
+            1 => row.MayAmount,
+            2 => row.JuneAmount,
+            3 => row.JulyAmount,
+            4 => row.AugustAmount,
+            5 => row.SeptemberAmount,
+            6 => row.OctoberAmount,
+            7 => row.NovemberAmount,
+            8 => row.DecemberAmount,
+            9 => row.JanuaryAmount,
+            10 => row.FebruaryAmount,
+            11 => row.MarchAmount,
+            _ => 0
+        };
+    }
+
+    private string GetUnitName(DR.SalesPlanningInDealerRegistration item)
+    {
+        var category = _categories.FirstOrDefault(c => c.Id == item.CategoryId);
+        return _units.FirstOrDefault(u => u.Id == category?.UnitId)?.Name ?? "MT";
+    }
+
+    private decimal GetTotalSalesVolume()
+    {
+        if (_salesPlanning == null) return 0;
+        decimal total = 0;
+        foreach (var item in _salesPlanning)
+        {
+            for (int i = 0; i < _months.Length; i++)
+            {
+                total += GetSalesQty(item, i);
+            }
+        }
+        return total;
+    }
+
+    private decimal GetTotalForecastValue()
+    {
+        if (_salesPlanning == null) return 0;
+        decimal total = 0;
+        foreach (var item in _salesPlanning)
+        {
+            for (int i = 0; i < _months.Length; i++)
+            {
+                total += GetSalesAmount(item, i);
+            }
+        }
+        return total;
+    }
+
+    private List<TimelineItem> TimelineItems = new()
      {
-         IsSendBackPopupVisible = true;
+          new("Submitted by MO", "Submitted", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-green", "bi bi-check-lg", "card-green", "badge-green"),
+          new("Sent Back by RM", "Sent Back", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-red", "bi bi-exclamation-lg", "card-red", "badge-red"),
+          new("Under Review by MO", "Resubmitted", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-blue", "bi bi-arrow-clockwise", "card-blue", "badge-blue"),
+          new("Under Review by RM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
+          new("Under Review by SM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
+          new("Under Review by AVP", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange")
+      };
+
+      private bool IsSendBackPopupVisible { get; set; } = false;
+
+      private void ShowSendBackPopup()
+      {
+          IsSendBackPopupVisible = true;
+      }
+
+      private void HideSendBackPopup()
+      {
+          IsSendBackPopupVisible = false;
+      }
+
+     public record TimelineItem(
+         string Title,
+         string Status,
+         string UserName,
+         string DateText,
+         string DotClass,
+         string Icon,
+         string CardClass,
+         string BadgeClass
+     );
+
+     // Blazor State Variables to control the open/close behavior of each accordion
+     private bool IsCompanyDetailsOpen { get; set; } = false;
+     private bool IsExperienceOpen { get; set; } = false;
+     private bool IsAnnualSalesOpen { get; set; } = false;
+     private bool IsWarehouseOpen { get; set; } = false;
+     private bool IsMarketDetailsOpen { get; set; } = false;
+     private bool IsProprietorDetailsOpen { get; set; } = false;
+     private bool IsCompaniesOperatingOpen { get; set; } = false;
+     private bool IsSalesPlanningOpen { get; set; } = false;
+     private bool IsInvestmentOpen { get; set; } = false;
+     private bool IsCreditLimitOpen { get; set; } = false;
+     private bool IsEnclosuresOpen { get; set; } = false;
+
+     // private string _currentUserRole = "RM"; // replace with login role
+     private bool _isApproving = false;
+
+     private bool IsDealerSubmitted()
+     {
+         return _dealer != null;
      }
 
-     private void HideSendBackPopup()
+     private readonly string[] RmRoles = { "RM", "RMD" };
+     private readonly string[] SmRoles = { "SMD", "SMM" };
+     private readonly string[] FinalApprovalRoles = { "AVP", "CorporateAdmin" };
+
+     private bool CanShowApprovalButton()
      {
-         IsSendBackPopupVisible = false;
+         if (_dealer == null)
+             return false;
+
+         if (LoginState.IsRegionRole)
+             return _dealer.RMApproved == null;
+
+         if (LoginState.IsStateRole)
+             return _dealer.RMApproved == true && _dealer.SMApproved == null;
+
+         if (LoginState.IsAdmin)
+             return _dealer.RMApproved == true
+                 && _dealer.SMApproved == true
+                 && _dealer.AVPApproved == null;
+
+         return false;
      }
 
-    public record TimelineItem(
-        string Title,
-        string Status,
-        string UserName,
-        string DateText,
-        string DotClass,
-        string Icon,
-        string CardClass,
-        string BadgeClass
-    );
+     private string ApprovalButtonText()
+     {
+         if (LoginState.IsRegionRole)
+             return "Proceed to SM";
 
-}
+         if (LoginState.IsStateRole)
+             return "Proceed to AVP";
+
+         if (LoginState.IsAdmin)
+             return "Approve";
+
+         return "Approve";
+     }
+
+     private async Task ApproveDealer()
+     {
+         if (_dealer == null) return;
+
+         _isApproving = true;
+
+         try
+         {
+             if (LoginState.IsRegionRole)
+             {
+                 _dealer.RMApproved = true;
+             }
+             else if (LoginState.IsStateRole)
+             {
+                 _dealer.SMApproved = true;
+             }
+             else if (LoginState.IsAdmin)
+             {
+                 _dealer.AVPApproved = true;
+                 _dealer.Status = DR.DealerStatus.Active;
+             }
+
+             var response = await Http.PutAsJsonAsync(
+                 $"api/DealerRegistration/{_dealer.Id}",
+                 _dealer
+             );
+
+             if (response.IsSuccessStatusCode)
+             {
+                 Nav.NavigateTo("/Dashboard");
+             }
+         }
+         finally
+         {
+             _isApproving = false;
+         }
+     }
+ }
 
 <style>
    
@@ -1582,71 +1763,73 @@ border-radius: 12px;
             <i class="bi bi-chevron-down"></i>
         </div>
         <div class="accordion-body">
-            <div class="detail-card">
-                <div class="detail-card-header">
-                    <h4 class="detail-card-title"><i class="bi bi-file-earmark-bar-graph"></i> Business Entity Type</h4>
-                    <i class="bi bi-pencil-square edit-icon"></i>
-                </div>
-                <div class="table-responsive">
-                    <table class="sales-table">
-                        <thead>
-                            <tr>
-                                <th rowspan="2">S:No</th>
-                                <th rowspan="2">Product Name / Category</th>
-                                <th colspan="2">April</th>
-                                <th colspan="2">May</th>
-                                <th colspan="2">June</th>
-                            </tr>
-                            <tr>
-                                <th>Metric</th>
-                                <th>Lakhs</th>
-                                <th>Metric</th>
-                                <th>Lakhs</th>
-                                <th>Metric</th>
-                                <th>Lakhs</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>1</td>
-                                <td>NC Urea</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                            </tr>
-                            <tr>
-                                <td>2</td>
-                                <td>NC Urea</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                            </tr>
-                            <tr>
-                                <td>3</td>
-                                <td>NC Urea</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="detail-card-body pb-3 pt-0">
-                    <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 16px;">
-                        <div class="total-pill">Total Volume: 0.00 Units</div>
-                        <div class="total-pill">Total Forecast Value: 0.00 ₹</div>
+            @if (_salesPlanning != null && _salesPlanning.Any())
+            {
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h4 class="detail-card-title"><i class="bi bi-file-earmark-bar-graph"></i> Sales Planning & Forecast</h4>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="sales-table">
+                            <thead>
+                                <tr>
+                                    <th rowspan="2" style="min-width: 180px; position: sticky; left: 0; background: #fff; z-index: 2;">Product Name</th>
+                                    @foreach (var month in _months)
+                                    {
+                                        <th colspan="2" class="text-center border-start">@month</th>
+                                    }
+                                </tr>
+                                <tr>
+                                    @foreach (var month in _months)
+                                    {
+                                        <th class="text-center text-muted fw-normal border-start">Qty</th>
+                                        <th class="text-center text-muted fw-normal">Lakhs</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in _salesPlanning)
+                                {
+                                    var product = _products.FirstOrDefault(p => p.Id == item.ProductId);
+                                    var category = _categories.FirstOrDefault(c => c.Id == item.CategoryId);
+                                    var unitName = category != null ? (_units.FirstOrDefault(u => u.Id == category.UnitId)?.Name ?? "MT") : "MT";
+                                    <tr>
+                                        <td class="fw-medium text-dark" style="position: sticky; left: 0; background: #fff; z-index: 1;">@(product?.Name ?? "Unknown") (@unitName)</td>
+                                        @for (int i = 0; i < _months.Length; i++)
+                                        {
+                                            <td class="border-start">@GetSalesQty(item, i).ToString("N2")</td>
+                                            <td>₹@GetSalesAmount(item, i).ToString("N2")</td>
+                                        }
+                                    </tr>
+                                }
+                                <tr class="grand-total-row">
+                                    <td style="text-align: right; padding-right: 40px; position: sticky; left: 0; background: #fff; z-index: 1;">GRAND TOTAL</td>
+                                    @for (int i = 0; i < _months.Length; i++)
+                                    {
+                                        var monthIndex = i;
+                                        <td class="border-start">@(_salesPlanning.Sum(x => GetSalesQty(x, monthIndex)).ToString("N2"))</td>
+                                        <td>₹@(_salesPlanning.Sum(x => GetSalesAmount(x, monthIndex)).ToString("N2"))</td>
+                                    }
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="detail-card-body pb-3 pt-0">
+                        <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 16px;">
+                            <div class="total-pill">Total Volume: @GetTotalSalesVolume().ToString("N2") @( _salesPlanning.FirstOrDefault() != null ? GetUnitName(_salesPlanning.FirstOrDefault()!) : "Units")</div>
+                            <div class="total-pill">Total Forecast Value: ₹@GetTotalForecastValue().ToString("N2") Lakhs</div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            }
+            else
+            {
+                <div class="detail-card">
+                    <div class="detail-card-body">
+                        <div class="data-row"><div class="data-label">Sales Planning</div><div class="data-value">No sales planning data available</div></div>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 
@@ -2103,100 +2286,3 @@ border-radius: 12px;
     </button> *@
 
 </div>
-
-@code {
-    // Blazor State Variables to control the open/close behavior of each accordion
-    private bool IsCompanyDetailsOpen { get; set; } = false;
-    private bool IsExperienceOpen { get; set; } = false;
-    private bool IsAnnualSalesOpen { get; set; } = false;
-    private bool IsWarehouseOpen { get; set; } = false;
-    private bool IsMarketDetailsOpen { get; set; } = false;
-    private bool IsProprietorDetailsOpen { get; set; } = false;
-    private bool IsCompaniesOperatingOpen { get; set; } = false;
-    private bool IsSalesPlanningOpen { get; set; } = false;
-    private bool IsInvestmentOpen { get; set; } = false;
-    private bool IsCreditLimitOpen { get; set; } = false;
-    private bool IsEnclosuresOpen { get; set; } = false;
-  
-    // private string _currentUserRole = "RM"; // replace with login role
-private bool _isApproving = false;
-
-private bool IsDealerSubmitted()
-{
-    return _dealer != null;
-}
-
-private readonly string[] RmRoles = { "RM", "RMD" };
-private readonly string[] SmRoles = { "SMD", "SMM" };
-private readonly string[] FinalApprovalRoles = { "AVP", "CorporateAdmin" };
-
-private bool CanShowApprovalButton()
-{
-    if (_dealer == null)
-        return false;
-
-    if (LoginState.IsRegionRole)
-        return _dealer.RMApproved == null;
-
-    if (LoginState.IsStateRole)
-        return _dealer.RMApproved == true && _dealer.SMApproved == null;
-
-    if (LoginState.IsAdmin)
-        return _dealer.RMApproved == true
-            && _dealer.SMApproved == true
-            && _dealer.AVPApproved == null;
-
-    return false;
-}
-
-private string ApprovalButtonText()
-{
-    if (LoginState.IsRegionRole)
-        return "Proceed to SM";
-
-    if (LoginState.IsStateRole)
-        return "Proceed to AVP";
-
-    if (LoginState.IsAdmin)
-        return "Approve";
-
-    return "Approve";
-}
-private async Task ApproveDealer()
-{
-    if (_dealer == null) return;
-
-    _isApproving = true;
-
-    try
-    {
-        if (LoginState.IsRegionRole)
-        {
-            _dealer.RMApproved = true;
-        }
-        else if (LoginState.IsStateRole)
-        {
-            _dealer.SMApproved = true;
-        }
-        else if (LoginState.IsAdmin)
-        {
-            _dealer.AVPApproved = true;
-            _dealer.Status = DR.DealerStatus.Active;
-        }
-
-        var response = await Http.PutAsJsonAsync(
-            $"api/DealerRegistration/{_dealer.Id}",
-            _dealer
-        );
-
-        if (response.IsSuccessStatusCode)
-        {
-            Nav.NavigateTo("/Dashboard");
-        }
-    }
-    finally
-    {
-        _isApproving = false;
-    }
-}
-}

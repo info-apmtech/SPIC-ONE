@@ -41,9 +41,13 @@
     private string? _hqName;
     private string? _districtName;
     private string? _bankName;
-    private Dictionary<int, string> _productNames = new();
-    private Dictionary<int, string> _bankNames = new();
-    private decimal _totalSalesQty = 0;
+private Dictionary<int, string> _productNames = new();
+private Dictionary<int, string> _bankNames = new();
+private List<DR.Category> _categories = new();
+private List<DR.Product> _products = new();
+private List<DR.Unit> _units = new();
+private static readonly string[] _months = ["April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February", "March"];
+private decimal _totalSalesQty = 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -97,43 +101,49 @@
         catch { }
     }
 
-    private async Task LoadLookups()
+private async Task LoadLookups()
+{
+    try
     {
-        try
+        if (_dealer == null) return;
+        if (_dealer.StateId > 0)
         {
-            if (_dealer == null) return;
-            if (_dealer.StateId > 0)
-            {
-                var state = await Http.GetFromJsonAsync<DR.State>($"api/State/{_dealer.StateId}");
-                _stateName = state?.StateName;
-            }
-            if (_dealer.Region > 0)
-            {
-                var region = await Http.GetFromJsonAsync<DR.Region>($"api/Region/{_dealer.Region}");
-                _regionName = region?.RegionName;
-            }
-            if (_dealer.HQ > 0)
-            {
-                var hq = await Http.GetFromJsonAsync<DR.Headquarter>($"api/Headquarter/{_dealer.HQ}");
-                _hqName = hq?.HeadquarterName;
-            }
-            if (_dealer.DistrictId > 0)
-            {
-                var district = await Http.GetFromJsonAsync<DR.District>($"api/District/{_dealer.DistrictId}");
-                _districtName = district?.DistrictName;
-            }
-            if (_dealer.BankId > 0)
-            {
-                try
-                {
-                    var bank = await Http.GetFromJsonAsync<DR.Bank>($"api/Bank/{_dealer.BankId}");
-                    _bankName = bank?.Name;
-                }
-                catch { }
-            }
+            var state = await Http.GetFromJsonAsync<DR.State>($"api/State/{_dealer.StateId}");
+            _stateName = state?.StateName;
         }
-        catch { }
+        if (_dealer.Region > 0)
+        {
+            var region = await Http.GetFromJsonAsync<DR.Region>($"api/Region/{_dealer.Region}");
+            _regionName = region?.RegionName;
+        }
+        if (_dealer.HQ > 0)
+        {
+            var hq = await Http.GetFromJsonAsync<DR.Headquarter>($"api/Headquarter/{_dealer.HQ}");
+            _hqName = hq?.HeadquarterName;
+        }
+        if (_dealer.DistrictId > 0)
+        {
+            var district = await Http.GetFromJsonAsync<DR.District>($"api/District/{_dealer.DistrictId}");
+            _districtName = district?.DistrictName;
+        }
+        if (_dealer.BankId > 0)
+        {
+            try
+            {
+                var bank = await Http.GetFromJsonAsync<DR.Bank>($"api/Bank/{_dealer.BankId}");
+                _bankName = bank?.Name;
+            }
+            catch { }
+        }
+
+        // Load sales planning lookups
+        _categories = await Http.GetFromJsonAsync<List<DR.Category>>("api/Category") ?? new();
+        _units = await Http.GetFromJsonAsync<List<DR.Unit>>("api/Unit") ?? new();
+        _products = await Http.GetFromJsonAsync<List<DR.Product>>("api/Product") ?? new();
+        _productNames = _products.ToDictionary(p => p.Id, p => p.Name);
     }
+    catch { }
+}
     private IEnumerable<(string title, string? path)> GetEnclosureItems()
     {
         var list = new List<(string, string?)>();
@@ -189,6 +199,74 @@
     private decimal GetTotalLoans() => _loans?.Sum(x => x.LoanValue) ?? 0m;
 
     private decimal GetNetValue() => GetCapitalPosition() + GetTotalAssets() - GetTotalLoans();
+
+    private static decimal GetSalesQty(DR.SalesPlanningInDealerRegistration row, int monthIndex) => monthIndex switch
+    {
+        0 => row.AprilQty,
+        1 => row.MayQty,
+        2 => row.JuneQty,
+        3 => row.JulyQty,
+        4 => row.AugustQty,
+        5 => row.SeptemberQty,
+        6 => row.OctoberQty,
+        7 => row.NovemberQty,
+        8 => row.DecemberQty,
+        9 => row.JanuaryQty,
+        10 => row.FebruaryQty,
+        11 => row.MarchQty,
+        _ => 0
+    };
+
+    private static decimal GetSalesAmount(DR.SalesPlanningInDealerRegistration row, int monthIndex) => monthIndex switch
+    {
+        0 => row.AprilAmount,
+        1 => row.MayAmount,
+        2 => row.JuneAmount,
+        3 => row.JulyAmount,
+        4 => row.AugustAmount,
+        5 => row.SeptemberAmount,
+        6 => row.OctoberAmount,
+        7 => row.NovemberAmount,
+        8 => row.DecemberAmount,
+        9 => row.JanuaryAmount,
+        10 => row.FebruaryAmount,
+        11 => row.MarchAmount,
+        _ => 0
+    };
+
+    private string GetUnitName(DR.SalesPlanningInDealerRegistration item)
+    {
+        var category = _categories.FirstOrDefault(c => c.Id == item.CategoryId);
+        return _units.FirstOrDefault(u => u.Id == category?.UnitId)?.Name ?? "MT";
+    }
+
+    private decimal GetTotalSalesVolume()
+    {
+        if (_salesPlanning == null) return 0;
+        decimal total = 0;
+        foreach (var item in _salesPlanning)
+        {
+            for (int i = 0; i < _months.Length; i++)
+            {
+                total += GetSalesQty(item, i);
+            }
+        }
+        return total;
+    }
+
+    private decimal GetTotalForecastValue()
+    {
+        if (_salesPlanning == null) return 0;
+        decimal total = 0;
+        foreach (var item in _salesPlanning)
+        {
+            for (int i = 0; i < _months.Length; i++)
+            {
+                total += GetSalesAmount(item, i);
+            }
+        }
+        return total;
+    }
 
 }
 
@@ -1051,71 +1129,73 @@ border-radius: 12px;
             <i class="bi bi-chevron-down"></i>
         </div>
         <div class="accordion-body">
+        @if (_salesPlanning != null && _salesPlanning.Any())
+        {
             <div class="detail-card">
                 <div class="detail-card-header">
-                    <h4 class="detail-card-title"><i class="bi bi-file-earmark-bar-graph"></i> Business Entity Type</h4>
-                    <i class="bi bi-pencil-square edit-icon"></i>
+                    <h4 class="detail-card-title"><i class="bi bi-file-earmark-bar-graph"></i> Sales Planning & Forecast</h4>
                 </div>
                 <div class="table-responsive">
                     <table class="sales-table">
                         <thead>
                             <tr>
-                                <th rowspan="2">S:No</th>
-                                <th rowspan="2">Product Name / Category</th>
-                                <th colspan="2">April</th>
-                                <th colspan="2">May</th>
-                                <th colspan="2">June</th>
+                                <th rowspan="2" style="min-width: 180px; position: sticky; left: 0; background: #fff; z-index: 2;">Product Name</th>
+                                @foreach (var month in _months)
+                                {
+                                    <th colspan="2" class="text-center border-start">@month</th>
+                                }
                             </tr>
                             <tr>
-                                <th>Metric</th>
-                                <th>Lakhs</th>
-                                <th>Metric</th>
-                                <th>Lakhs</th>
-                                <th>Metric</th>
-                                <th>Lakhs</th>
+                                @foreach (var month in _months)
+                                {
+                                    <th class="text-center text-muted fw-normal border-start">Qty</th>
+                                    <th class="text-center text-muted fw-normal">Lakhs</th>
+                                }
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
-                                <td>1</td>
-                                <td>NC Urea</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                            </tr>
-                            <tr>
-                                <td>2</td>
-                                <td>NC Urea</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                            </tr>
-                            <tr>
-                                <td>3</td>
-                                <td>NC Urea</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
-                                <td>12,450 MT</td>
-                                <td>₹ 24.5 L</td>
+                            @foreach (var item in _salesPlanning)
+                            {
+                                var product = _products.FirstOrDefault(p => p.Id == item.ProductId);
+                                var category = _categories.FirstOrDefault(c => c.Id == item.CategoryId);
+                                var unitName = category != null ? (_units.FirstOrDefault(u => u.Id == category.UnitId)?.Name ?? "MT") : "MT";
+                                <tr>
+                                    <td class="fw-medium text-dark" style="position: sticky; left: 0; background: #fff; z-index: 1;">@(product?.Name ?? "Unknown") (@unitName)</td>
+                                    @for (int i = 0; i < _months.Length; i++)
+                                    {
+                                        <td class="border-start">@GetSalesQty(item, i).ToString("N2")</td>
+                                        <td>₹@GetSalesAmount(item, i).ToString("N2")</td>
+                                    }
+                                </tr>
+                            }
+                            <tr class="grand-total-row">
+                                <td style="text-align: right; padding-right: 40px; position: sticky; left: 0; background: #fff; z-index: 1;">GRAND TOTAL</td>
+                                @for (int i = 0; i < _months.Length; i++)
+                                {
+                                    var monthIndex = i;
+                                    <td class="border-start">@(_salesPlanning.Sum(x => GetSalesQty(x, monthIndex)).ToString("N2"))</td>
+                                    <td>₹@(_salesPlanning.Sum(x => GetSalesAmount(x, monthIndex)).ToString("N2"))</td>
+                                }
                             </tr>
                         </tbody>
                     </table>
                 </div>
                 <div class="detail-card-body pb-3 pt-0">
                     <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 16px;">
-                        <div class="total-pill">Total Volume: 0.00 Units</div>
-                        <div class="total-pill">Total Forecast Value: 0.00 ₹</div>
+                        <div class="total-pill">Total Volume: @GetTotalSalesVolume().ToString("N2") @( _salesPlanning.FirstOrDefault() != null ? GetUnitName(_salesPlanning.FirstOrDefault()!) : "Units")</div>
+                        <div class="total-pill">Total Forecast Value: ₹@GetTotalForecastValue().ToString("N2") Lakhs</div>
                     </div>
                 </div>
             </div>
+        }
+        else
+        {
+            <div class="detail-card">
+                <div class="detail-card-body">
+                    <div class="data-row"><div class="data-label">Sales Planning</div><div class="data-value">No sales planning data available</div></div>
+                </div>
+            </div>
+        }
         </div>
     </div>
 
