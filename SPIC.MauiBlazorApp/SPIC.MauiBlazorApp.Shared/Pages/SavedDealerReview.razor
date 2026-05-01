@@ -1,4 +1,5 @@
 ﻿@page "/SavedDealerReview"
+@rendermode InteractiveServer
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components
 @using DR = SPIC.Core.Entities
@@ -6,6 +7,7 @@
 @inject NavigationManager Nav
 @inject LoadingService Loading
 @inject LoginState LoginState
+@inject IJSRuntime JS
 
 @code {
     [Parameter]
@@ -297,17 +299,31 @@
           new("Under Review by AVP", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange")
       };
 
-      private bool IsSendBackPopupVisible { get; set; } = false;
+      private bool IsSendBackPopupVisible { get; set; } 
 
-      private void ShowSendBackPopup()
-      {
-          IsSendBackPopupVisible = true;
-      }
+ private async Task ShowSendBackPopup()
+{
+    IsSendBackPopupVisible = true;
+    try
+    {
+        await JS.InvokeVoidAsync("console.log", "ShowSendBackPopup: popup visible set to true");
+    }
+    catch { }
+    StateHasChanged();
+}
 
-      private void HideSendBackPopup()
-      {
-          IsSendBackPopupVisible = false;
-      }
+ private async Task HideSendBackPopup()
+{
+    IsSendBackPopupVisible = false;
+    try { await JS.InvokeVoidAsync("console.log", "HideSendBackPopup: popup hidden"); } catch { }
+    StateHasChanged();
+}
+
+private void HandleDealerRejected()
+{
+    IsSendBackPopupVisible = false;
+    Nav.NavigateTo("/Dashboard");
+}
 
      public record TimelineItem(
          string Title,
@@ -415,6 +431,7 @@
              _isApproving = false;
          }
      }
+    
  }
 
 <style>
@@ -1114,10 +1131,14 @@ border-radius: 12px;
     </div>
 
     <div class="container-fluid py-3">
-        @if (IsSendBackPopupVisible)
-        {
-            <SendBackPopup OnClose="HideSendBackPopup" />
-        }
+@if (IsSendBackPopupVisible)
+{
+    <SendBackPopup 
+        Dealer="@_dealer"
+        LoginState="@LoginState"
+        OnClose="@HideSendBackPopup"
+        OnRejected="@HandleDealerRejected" />
+}
     <!-- Top Info Cards -->
     <div class="row g-3 mb-3">
         <div class="col-12 col-md-6 col-lg-3">
@@ -2352,9 +2373,11 @@ border-radius: 12px;
 </div>
 <div class="d-flex justify-content-end gap-2 mt-3">
 
-    <button class="btn btn-outline-warning px-3" @onclick="ShowSendBackPopup">
-        <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
-    </button>
+  <button type="button"
+        class="btn btn-outline-warning px-3"
+        @onclick="@ShowSendBackPopup">
+    <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
+</button>
     @if (CanShowApprovalButton())
 {
     <button class="btn-submit px-3" @onclick="ApproveDealer" disabled="@_isApproving">
