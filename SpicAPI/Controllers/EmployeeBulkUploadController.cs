@@ -168,25 +168,99 @@ namespace SpicAPI.Controllers
                         }
 
                         int stateId = 0, regionId = 0, hqId = 0;
+                        var currentUser = User?.Identity?.Name ?? "Unknown";
 
-                        // --- Extract All Provided Locations ---
+                        // 1. Resolve State (Strictly required to exist)
                         if (!string.IsNullOrWhiteSpace(stateName))
                         {
-                            if (stateMap.TryGetValue(stateName, out var sId)) stateId = sId;
-                            else AddError("Unknown State", $"Row {rowNum} ({empName}): State '{stateName}' not found.");
+                            if (stateMap.TryGetValue(stateName, out var sId))
+                            {
+                                stateId = sId;
+                            }
+                            else
+                            {
+                                AddError("Unknown State", $"Row {rowNum} ({empName}): State '{stateName}' not found in database.");
+                            }
                         }
 
+                        // 2. Resolve Region (Auto-create if missing)
                         if (!string.IsNullOrWhiteSpace(regionName))
                         {
-                            if (regionMap.TryGetValue(regionName, out var rId)) regionId = rId;
-                            else AddError("Unknown Region", $"Row {rowNum} ({empName}): Region '{regionName}' not found.");
+                            if (regionMap.TryGetValue(regionName, out var rId))
+                            {
+                                regionId = rId;
+                            }
+                            else if (stateId > 0) // Only auto-create if we have a valid State to link it to
+                            {
+                                var newRegion = new Region
+                                {
+                                    RegionName = regionName,
+                                    StateId = stateId,
+                                    IsActive = true,
+                                    CreatedAt = now,
+                                    UpdatedBy = currentUser
+                                };
+
+                                _db.Regions.Add(newRegion);
+                                await _db.SaveChangesAsync();
+
+                                regionId = newRegion.Id;
+                                regionMap[regionName] = regionId;
+                            }
+                            else
+                            {
+                                AddError("Missing/Invalid State", $"Row {rowNum} ({empName}): Cannot auto-create Region '{regionName}' because a valid State is missing.");
+                            }
                         }
 
+                        // 3. Resolve Headquarter (Auto-create if missing)
                         if (!string.IsNullOrWhiteSpace(hqName))
                         {
-                            if (hqMap.TryGetValue(hqName, out var hId)) hqId = hId;
-                            else AddError("Unknown HQ", $"Row {rowNum} ({empName}): HQ '{hqName}' not found.");
+                            if (hqMap.TryGetValue(hqName, out var hId))
+                            {
+                                hqId = hId;
+                            }
+                            else if (regionId > 0) // Only auto-create if we have a valid Region to link it to
+                            {
+                                var newHq = new Headquarter
+                                {
+                                    HeadquarterName = hqName,
+                                    RegionId = regionId,
+                                    IsActive = true,
+                                    CreatedAt = now,
+                                    UpdatedBy = currentUser
+                                };
+
+                                _db.Headquarters.Add(newHq);
+                                await _db.SaveChangesAsync();
+
+                                hqId = newHq.Id;
+                                hqMap[hqName] = hqId;
+                            }
+                            else
+                            {
+                                AddError("Missing/Invalid Region", $"Row {rowNum} ({empName}): Cannot auto-create HQ '{hqName}' because a valid Region is missing.");
+                            }
                         }
+
+                        // --- Extract All Provided Locations ---
+                        //if (!string.IsNullOrWhiteSpace(stateName))
+                        //{
+                        //    if (stateMap.TryGetValue(stateName, out var sId)) stateId = sId;
+                        //    else AddError("Unknown State", $"Row {rowNum} ({empName}): State '{stateName}' not found.");
+                        //}
+
+                        //if (!string.IsNullOrWhiteSpace(regionName))
+                        //{
+                        //    if (regionMap.TryGetValue(regionName, out var rId)) regionId = rId;
+                        //    else AddError("Unknown Region", $"Row {rowNum} ({empName}): Region '{regionName}' not found.");
+                        //}
+
+                        //if (!string.IsNullOrWhiteSpace(hqName))
+                        //{
+                        //    if (hqMap.TryGetValue(hqName, out var hId)) hqId = hId;
+                        //    else AddError("Unknown HQ", $"Row {rowNum} ({empName}): HQ '{hqName}' not found.");
+                        //}
 
                         // --- Apply Your Specific Rules ---
                         if (isMoRole) // MO, MDO, JMDO -> Requires State, Region, HQ
@@ -215,7 +289,6 @@ namespace SpicAPI.Controllers
                         }
 
                         // ---  1. Create AppUsers (UserInfo) First ---
-                        var currentUser = User?.Identity?.Name ?? "Unknown";
 
                         var user = new UserInfo
                         {
