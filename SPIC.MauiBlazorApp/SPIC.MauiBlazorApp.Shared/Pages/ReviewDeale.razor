@@ -1634,12 +1634,12 @@ border-radius: 12px;
         </div>
     </div>
 
- @if (CanShowApprovalButton())
+ @* @if (CanShowApprovalButton())
 {
     <button class="btn-submit" @onclick="ApproveDealer" disabled="@_isApproving">
         @(_isApproving ? "Processing..." : ApprovalButtonText())
     </button>
-}
+} *@
 </div>
 
 @code {
@@ -1668,73 +1668,73 @@ private readonly string[] RmRoles = { "RM", "RMD" };
 private readonly string[] SmRoles = { "SMD", "SMM" };
 private readonly string[] FinalApprovalRoles = { "AVP", "CorporateAdmin" };
 
-private bool CanShowApprovalButton()
-{
-    if (_dealer == null)
-        return false;
+// private bool CanShowApprovalButton()
+// {
+//     if (_dealer == null)
+//         return false;
 
-    if (LoginState.IsRegionRole)
-        return _dealer.RMApproved == null;
+//     if (LoginState.IsRegionRole)
+//         return _dealer.RMApproved == null;
 
-    if (LoginState.IsStateRole)
-        return _dealer.RMApproved == true && _dealer.SMApproved == null;
+//     if (LoginState.IsStateRole)
+//         return _dealer.RMApproved == true && _dealer.SMApproved == null;
 
-    if (LoginState.IsAdmin)
-        return _dealer.RMApproved == true
-            && _dealer.SMApproved == true
-            && _dealer.AVPApproved == null;
+//     if (LoginState.IsAdmin)
+//         return _dealer.RMApproved == true
+//             && _dealer.SMApproved == true
+//             && _dealer.AVPApproved == null;
 
-    return false;
-}
+//     return false;
+// }
 
-private string ApprovalButtonText()
-{
-    if (LoginState.IsRegionRole)
-        return "Proceed to SM";
+// private string ApprovalButtonText()
+// {
+//     if (LoginState.IsRegionRole)
+//         return "Proceed to SM";
 
-    if (LoginState.IsStateRole)
-        return "Proceed to AVP";
+//     if (LoginState.IsStateRole)
+//         return "Proceed to AVP";
 
-    if (LoginState.IsAdmin)
-        return "Approve";
+//     if (LoginState.IsAdmin)
+//         return "Approve";
 
-    return "Approve";
-}
-private async Task ApproveDealer()
-{
-    if (_dealer == null) return;
+//     return "Approve";
+// }
+// private async Task ApproveDealer()
+// {
+//     if (_dealer == null) return;
 
-    _isApproving = true;
+//     _isApproving = true;
 
-    try
-    {
-        if (LoginState.IsRegionRole)
-        {
-            _dealer.RMApproved = true;
-        }
-        else if (LoginState.IsStateRole)
-        {
-            _dealer.SMApproved = true;
-        }
-        else if (LoginState.IsAdmin)
-        {
-            _dealer.AVPApproved = true;
-            _dealer.Status = DR.DealerStatus.Active;
-        }
+//     try
+//     {
+//         if (LoginState.IsRegionRole)
+//         {
+//             _dealer.RMApproved = true;
+//         }
+//         else if (LoginState.IsStateRole)
+//         {
+//             _dealer.SMApproved = true;
+//         }
+//         else if (LoginState.IsAdmin)
+//         {
+//             _dealer.AVPApproved = true;
+//             _dealer.Status = DR.DealerStatus.Active;
+//         }
 
-        var response = await Http.PutAsJsonAsync(
-            $"api/DealerRegistration/{_dealer.Id}",
-            _dealer
-        );
+//         var response = await Http.PutAsJsonAsync(
+//             $"api/DealerRegistration/{_dealer.Id}",
+//             _dealer
+//         );
 
-        if (response.IsSuccessStatusCode)
-        {
-            Nav.NavigateTo("/Dashboard");
-        }
-    }
-    finally
-    {
-        _isApproving = false;
-    }
-}
+//         if (response.IsSuccessStatusCode)
+//         {
+//             Nav.NavigateTo("/Dashboard");
+//         }
+//     }
+//     finally
+//     {
+//         _isApproving = false;
+//     }
+// }
 }
