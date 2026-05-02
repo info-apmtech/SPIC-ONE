@@ -141,6 +141,9 @@ private async Task LoadLookups()
         _units = await Http.GetFromJsonAsync<List<DR.Unit>>("api/Unit") ?? new();
         _products = await Http.GetFromJsonAsync<List<DR.Product>>("api/Product") ?? new();
         _productNames = _products.ToDictionary(p => p.Id, p => p.Name);
+            // load bank names map
+            var banks = await Http.GetFromJsonAsync<List<DR.Bank>>("api/Bank") ?? new List<DR.Bank>();
+            _bankNames = banks.ToDictionary(b => b.Id, b => b.Name);
     }
     catch { }
 }
@@ -199,6 +202,31 @@ private async Task LoadLookups()
     private decimal GetTotalLoans() => _loans?.Sum(x => x.LoanValue) ?? 0m;
 
     private decimal GetNetValue() => GetCapitalPosition() + GetTotalAssets() - GetTotalLoans();
+
+    private string GetApprovalStage()
+    {
+        if (_dealer == null) return "-";
+
+        if (_dealer.RMApproved == false || _dealer.SMApproved == false || _dealer.AVPApproved == false)
+            return "Rejected";
+
+        if (_dealer.AVPApproved == true)
+            return "Approved";
+
+        bool isComplete = _dealer.PinCode != null && _dealer.PinCode.Trim() != "";
+        if (!isComplete) return "Submitted";
+
+        if (_dealer.RMApproved == null)
+            return "In RM";
+
+        if (_dealer.RMApproved == true && _dealer.SMApproved == null)
+            return "In SMM";
+
+        if (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null)
+            return "In AVP";
+
+        return "Submitted";
+    }
 
     private static decimal GetSalesQty(DR.SalesPlanningInDealerRegistration row, int monthIndex) => monthIndex switch
     {
@@ -628,12 +656,12 @@ border-radius: 12px;
         <div class="kpi-card-co">
             <div class="kpi-icon bg-pink"><i class="bi bi-award"></i></div>
             <div class="kpi-title">Total Experience</div>
-            <div class="kpi-value">@(_dealer?.YearsofExperiance.ToString() ?? "-")</div>
+            <div class="kpi-value">@(_dealer?.YearsofExperiance > 0 ? _dealer.YearsofExperiance.ToString() : "-")</div>
         </div>
         <div class="kpi-card">
             <div class="kpi-icon bg-green"><i class="bi bi-graph-up-arrow"></i></div>
             <div class="kpi-title">Total Sales</div>
-            <div class="kpi-value">-</div>
+            <div class="kpi-value">@GetTotalSalesVolume().ToString("N2")</div>
         </div>
         <div class="kpi-card-co1">
             <div class="kpi-icon bg-indigo"><i class="bi bi-piggy-bank"></i></div>
@@ -643,12 +671,12 @@ border-radius: 12px;
         <div class="kpi-card-c">
             <div class="kpi-icon bg-pink"><i class="bi bi-file-earmark-text"></i></div>
             <div class="kpi-title">Credit Limit</div>
-            <div class="kpi-value">-</div>
+            <div class="kpi-value">@(_creditProposal != null ? ($"₹{_creditProposal.ExistingCreditLimitAmount:N2}") : "-")</div>
         </div>
         <div class="kpi-card">
             <div class="kpi-icon bg-orange"><i class="bi bi-search"></i></div>
             <div class="kpi-title">Status</div>
-            <div class="kpi-value">Under Review</div>
+            <div class="kpi-value">@(GetApprovalStage())</div>
         </div>
     </div>
 
@@ -897,10 +925,10 @@ border-radius: 12px;
                                 {
                                     <tr>
                                         <td>@idx</td>
-                                        <td>@a.ProductId</td>
-                                        <td>@a.OwnRetailsSaleQty</td>
-                                        <td>@a.SaleToDealerQty</td>
-                                        <td>@(a.OwnRetailsSaleQty + a.SaleToDealerQty)</td>
+                                        <td>@(_products.FirstOrDefault(p => p.Id == a.ProductId)?.Name ?? a.ProductId.ToString())</td>
+                                        <td>@a.OwnRetailsSaleQty.ToString("N2")</td>
+                                        <td>@a.SaleToDealerQty.ToString("N2")</td>
+                                        <td>@(a.OwnRetailsSaleQty + a.SaleToDealerQty).ToString("N2")</td>
                                     </tr>
                                     idx++;
                                 }
@@ -1459,7 +1487,7 @@ border-radius: 12px;
                                     <div class="data-row"><div class="data-label">Bank Assets (Total):</div><div class="data-value">₹@banksTotal.ToString("N0")</div></div>
                                     foreach (var b in _assetBanks)
                                     {
-                                        <div class="data-row"><div class="data-label">&nbsp;&nbsp;• @b.BankBranch</div><div class="data-value">₹@(b.Value.ToString("N0"))</div></div>
+                                        <div class="data-row"><div class="data-label">&nbsp;&nbsp;• @(_bankNames.ContainsKey(b.BankId) ? _bankNames[b.BankId] : b.BankId.ToString())</div><div class="data-value">₹@(b.Value.ToString("N0"))</div></div>
                                     }
                                 }
 
@@ -1491,33 +1519,33 @@ border-radius: 12px;
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td>1</td>
-                                        <td>NC Urea</td>
-                                        <td>420</td>
-                                        <td>900</td>
-                                        <td>300</td>
-                                    </tr>
-                                    <tr>
-                                        <td>2</td>
-                                        <td>NC Urea</td>
-                                        <td>420</td>
-                                        <td>900</td>
-                                        <td>300</td>
-                                    </tr>
-                                    <tr>
-                                        <td>3</td>
-                                        <td>NC Urea</td>
-                                        <td>420</td>
-                                        <td>900</td>
-                                        <td>300</td>
-                                    </tr>
-                                    <tr class="grand-total-row">
-                                        <td colspan="2" style="text-align: center;">GRAND TOTAL (MT)</td>
-                                        <td>1,075</td>
-                                        <td>1,285</td>
-                                        <td>1,500</td>
-                                    </tr>
+                                    @if (_creditSales != null && _creditSales.Any())
+                                    {
+                                        var idx2 = 1;
+                                        foreach (var s in _creditSales)
+                                        {
+                                            var pName = _productNames.ContainsKey(s.ProductId) ? _productNames[s.ProductId] : s.ProductId.ToString();
+                                            var catName = _categories.FirstOrDefault(c => c.Id == s.CategoryId)?.Name ?? s.CategoryId.ToString();
+                                            <tr>
+                                                <td>@idx2</td>
+                                                <td>@(pName + " / " + catName)</td>
+                                                <td>@s.FY1Qty.ToString("N2")</td>
+                                                <td>@s.FY2Qty.ToString("N2")</td>
+                                                <td>@s.FY3Qty.ToString("N2")</td>
+                                            </tr>
+                                            idx2++;
+                                        }
+                                        <tr class="grand-total-row">
+                                            <td colspan="2" style="text-align: center;">GRAND TOTAL (MT)</td>
+                                            <td>@_creditSales.Sum(x => x.FY1Qty).ToString("N2")</td>
+                                            <td>@_creditSales.Sum(x => x.FY2Qty).ToString("N2")</td>
+                                            <td>@_creditSales.Sum(x => x.FY3Qty).ToString("N2")</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="5">No sales performance data available</td></tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>
