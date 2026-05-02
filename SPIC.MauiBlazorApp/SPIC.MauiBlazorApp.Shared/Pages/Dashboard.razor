@@ -30,7 +30,7 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-green"><i class="bi bi-file-earmark-check"></i></div>
-					<div class="kpi-number">@_allDealers.Count</div>
+                    <div class="kpi-number">@_filteredDealers.Count</div>
 				</div>
 				<div class="kpi-label">Total Registrations</div>
 			</div>
@@ -39,25 +39,25 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-gray"><i class="bi bi-file-earmark-text"></i></div>
-					<div class="kpi-number">@_allDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == null)</div>
+            <div class="kpi-number">@_filteredDealers.Count(d => GetApprovalStatus(d) == "Draft")</div>
 				</div>
-				<div class="kpi-label">Submitted</div>
+				<div class="kpi-label">Draft</div>
 			</div>
 		</div>
 		<div class="col">
 	<div class="kpi-card">
-		<div class="kpi-header">
-			<div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-			<div class="kpi-number">@_allDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == null)</div>
+            <div class="kpi-header">
+				<div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
+			<div class="kpi-number">@_filteredDealers.Count(d => (_completeDealerIds.Contains(d.Id) && d.RMApproved == null) || (d.RMApproved == true && d.SMApproved == false))</div>
 		</div>
 		<div class="kpi-label">In RM</div>
 	</div>
 </div>
        <div class="col">
 	<div class="kpi-card">
-		<div class="kpi-header">
-			<div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-			<div class="kpi-number">@_allDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == null)</div>
+            <div class="kpi-header">
+				<div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
+			<div class="kpi-number">@_filteredDealers.Count(d => (_completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == null) || (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false))</div>
 		</div>
 		<div class="kpi-label">In SMM</div>
 	</div>
@@ -68,7 +68,7 @@
 	<div class="kpi-card">
 		<div class="kpi-header">
 			<div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-			<div class="kpi-number">@_allDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)</div>
+            <div class="kpi-number">@_filteredDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)</div>
 		</div>
 		<div class="kpi-label">In Office</div>
 	</div>
@@ -77,7 +77,7 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-green"><i class="bi bi-check-circle"></i></div>
-					<div class="kpi-number">@_allDealers.Count(d => d.AVPApproved == true)</div>
+                    <div class="kpi-number">@_filteredDealers.Count(d => d.AVPApproved == true)</div>
 				</div>
 				<div class="kpi-label">Approved</div>
 			</div>
@@ -86,9 +86,12 @@
 			<div class="kpi-card">
 				<div class="kpi-header">
 					<div class="kpi-icon bg-light-red"><i class="bi bi-x-circle"></i></div>
-					<div class="kpi-number">@_allDealers.Count(d => d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)</div>
+                    <div class="kpi-number">@CountRejectedTotal()</div>
 				</div>
-				<div class="kpi-label">Rejected / Returned</div>
+                <div class="kpi-label">Rejected / Returned</div>
+				<div class="kpi-subtext text-muted" style="font-size:0.85rem; padding:6px 12px;">
+					RM: @CountRejectedByRM() &nbsp;|&nbsp; SMM: @CountRejectedBySMM() &nbsp;|&nbsp; AVP: @CountRejectedByAVP()
+				</div>
 			</div>
 		</div>
 		<div class="col">
@@ -96,11 +99,11 @@
 				<div class="kpi-label mb-2">Status</div>
 				<div class="d-flex justify-content-between align-items-center mb-2">
 					<div class="status-list"><span class="status-dot bg-success"></span> Active</div>
-					<div class="fw-bold fs-6">@_allDealers.Count(d => d.Status == 0)</div>
+                    <div class="fw-bold fs-6">@_filteredDealers.Count(d => d.Status == 0)</div>
 				</div>
 				<div class="d-flex justify-content-between align-items-center">
 					<div class="status-list"><span class="status-dot" style="background-color: #F59E0B;"></span> Inact / Term</div>
-					<div class="fw-bold fs-6">@_allDealers.Count(d => d.Status == 1) / @_allDealers.Count(d => d.Status == 2)</div>
+                    <div class="fw-bold fs-6">@_filteredDealers.Count(d => d.Status == 1) / @_filteredDealers.Count(d => d.Status == 2)</div>
 				</div>
 			</div>
 		</div>
@@ -194,17 +197,17 @@
 									</div>
 								</div>
 							}
-							else
-							{
-								<div class="progress-circle p-30">
-									<div class="progress-inner">
-										<div class="progress-val">
-											@(approvalStatus == "Draft" ? "Draft" : approvalStatus == "Rejected" ? "!" : "...")
-										</div>
-										<div class="progress-steps">@approvalStatus</div>
-									</div>
-								</div>
-							}
+            else
+			{
+				<div class="progress-circle p-30">
+					<div class="progress-inner">
+						<div class="progress-val">
+							@(approvalStatus == "Draft" ? "Draft" : approvalStatus.StartsWith("Rejected") ? "!" : "...")
+						</div>
+						<div class="progress-steps">@approvalStatus</div>
+					</div>
+				</div>
+			}
 							
 							<div class="d-flex flex-column align-items-end gap-2">
 								<div class="badge-group">
@@ -216,9 +219,9 @@
 									{
 										<span class="badge-custom badge-green-dashboard" style="background:#D1FAE5; color:#047857;">Approved</span>
 									}
-									else if (approvalStatus == "Rejected")
+      else if (approvalStatus.StartsWith("Rejected"))
 									{
-										<span class="badge-custom" style="background:#FEE2E2; color:#DC2626;">Rejected</span>
+           <span class="badge-custom" style="background:#FEE2E2; color:#DC2626;">@approvalStatus</span>
 									}
 									else if (approvalStatus == "Draft")
 									{
@@ -231,20 +234,21 @@
 									<span class="badge-custom @(statusName == "Active" ? "badge-green-dashboard" : "badge-yellow")">@statusName</span>
 								</div>
 								<div class="d-flex gap-2">
-    @if (LoginState.IsAdmin || isPendingForMe || LoginState.IsStateRole || LoginState.IsRegionRole) 
-    {
-        // Only show Review button if the dealer is not approved
-        @if (approvalStatus != "Approved")
-        {
-            <button class="btn-continue-blue" @onclick="() => ReviewDealer(dealer.Id)">
-                <i class="bi bi-search me-1"></i> Review
-            </button>
-        }
-    }
+    @if (CanShowReviewButton(dealer))
+	{
+		// Only show Review button if the dealer is not approved
+		@if (approvalStatus != "Approved")
+		{
+			<button class="btn-continue-blue" @onclick="() => ReviewDealer(dealer.Id)">
+				<i class="bi bi-search me-1"></i> Review
+			</button>
+		}
+	}
     else
     {
         // Only show Edit button if the dealer is not approved
-        @if (approvalStatus != "Approved")
+        // Do not show Edit for rejected items — they should be reviewed instead
+		@if (approvalStatus != "Approved" && !approvalStatus.StartsWith("Rejected"))
         {
             <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
                 <i class="bi bi-pencil-square me-1"></i> Edit
@@ -425,20 +429,75 @@
 		await LoadData();
 	}
 
-	private HashSet<int> _completeDealerIds = new();
+    private HashSet<int> _completeDealerIds = new();
+	// Per-dealer completed step counts (used to determine if all 12 steps are done)
+	private Dictionary<int, int> _dealerStepCounts = new();
+
+	// Related data caches used to evaluate completeness
+	private List<DealerExperience> _allExperiences = new();
+	private List<AnnualSaleDataLastFYofDealerRegistration> _allAnnualSales = new();
+	private List<DealerWarehouseFacilities> _allWarehouses = new();
+	private List<DealerRailFacilities> _allRails = new();
+	private List<DealerPortFacilities> _allPorts = new();
+	private List<DealerMarketDetail> _allMarketDetails = new();
+	private List<DealerCompaniesOperatingInArea> _allCompaniesOperating = new();
+	private List<DealerOwnershipInfo> _allOwnerships = new();
+	private List<PartnerFamilyDetails> _allPartners = new();
+	private List<PartnerOccupation> _allOccupations = new();
+	private List<SalesPlanningInDealerRegistration> _allSalesPlanning = new();
+	private List<DealerAssetBank> _allAssetBanks = new();
+	private List<DealerAssetLand> _allAssetLands = new();
+	private List<DealerAssetBuilding> _allAssetBuildings = new();
+	private List<DealerLoanLiabilities> _allLoans = new();
+	private List<DealerCreditLimitProposal> _allCreditProposals = new();
+	private List<DealerCreditLimitSalesPerformance> _allCreditSales = new();
+	private List<DealerRegistrationDocuments> _allDocuments = new();
 
 	private async Task LoadData()
 	{
 		_isLoading = true;
 		try
 		{
-			var tasks = new Task[]
+           // Always fetch dealers first. If other lookups fail we still want dealer list to show.
+			try
 			{
-				Task.Run(async () => _allDealers      = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/submitted") ?? new()),
-				Task.Run(async () => _regionsAll      = await Http.GetFromJsonAsync<List<RegionDto>>("api/Region/all") ?? new()),
-				Task.Run(async () => _headquartersAll = await Http.GetFromJsonAsync<List<HeadquarterDto>>("api/Headquarter/all") ?? new()),
-			};
-			await Task.WhenAll(tasks);
+				_allDealers = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/submitted") ?? new();
+			}
+			catch
+			{
+				_allDealers = new();
+			}
+
+			// try load regions/headquarters but do not fail the whole flow if they error
+			try
+			{
+				var lookupTasks = new Task[] {
+					Task.Run(async () => _regionsAll = await Http.GetFromJsonAsync<List<RegionDto>>("api/Region/all") ?? new()),
+					Task.Run(async () => _headquartersAll = await Http.GetFromJsonAsync<List<HeadquarterDto>>("api/Headquarter/all") ?? new())
+				};
+				await Task.WhenAll(lookupTasks);
+			}
+			catch { }
+
+			// Load related entities individually. Failures here should not prevent the main list from showing.
+			try { _allExperiences = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience") ?? new(); } catch { _allExperiences = new(); }
+			try { _allAnnualSales = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFYofDealerRegistration") ?? new(); } catch { _allAnnualSales = new(); }
+			try { _allWarehouses = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities") ?? new(); } catch { _allWarehouses = new(); }
+			try { _allRails = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities") ?? new(); } catch { _allRails = new(); }
+			try { _allPorts = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities") ?? new(); } catch { _allPorts = new(); }
+			try { _allMarketDetails = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail") ?? new(); } catch { _allMarketDetails = new(); }
+			try { _allCompaniesOperating = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea") ?? new(); } catch { _allCompaniesOperating = new(); }
+			try { _allOwnerships = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo") ?? new(); } catch { _allOwnerships = new(); }
+			try { _allPartners = await Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails") ?? new(); } catch { _allPartners = new(); }
+			try { _allOccupations = await Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation") ?? new(); } catch { _allOccupations = new(); }
+			try { _allSalesPlanning = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning") ?? new(); } catch { _allSalesPlanning = new(); }
+			try { _allAssetBanks = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank") ?? new(); } catch { _allAssetBanks = new(); }
+			try { _allAssetLands = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand") ?? new(); } catch { _allAssetLands = new(); }
+			try { _allAssetBuildings = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding") ?? new(); } catch { _allAssetBuildings = new(); }
+			try { _allLoans = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities") ?? new(); } catch { _allLoans = new(); }
+			try { _allCreditProposals = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal") ?? new(); } catch { _allCreditProposals = new(); }
+			try { _allCreditSales = await Http.GetFromJsonAsync<List<DealerCreditLimitSalesPerformance>>("api/DealerCreditLimitSalesPerformance") ?? new(); } catch { _allCreditSales = new(); }
+			try { _allDocuments = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments") ?? new(); } catch { _allDocuments = new(); }
 			BuildCompletionSet();
 			ApplyRoleFilter();
 			ApplyFilters();
@@ -489,20 +548,68 @@
 
 	private void BuildCompletionSet()
 	{
-		_completeDealerIds = _allDealers
-			.Where(d => !string.IsNullOrWhiteSpace(d.PinCode))
-			.Select(d => d.Id)
-			.ToHashSet();
+        _dealerStepCounts.Clear();
+		foreach (var d in _allDealers)
+		{
+			// Count completed distinct sections for this dealer. Requirements: 12 steps total.
+			int count = 0;
+			if (!string.IsNullOrWhiteSpace(d.PinCode)) count++; // basic info
+			if (_allExperiences.Any(x => x.DealerId == d.Id)) count++; // experience
+			if (_allAnnualSales.Any(x => x.DealerId == d.Id)) count++; // annual sales
+			if (_allWarehouses.Any(x => x.DealerId == d.Id) || _allRails.Any(x => x.DealerId == d.Id) || _allPorts.Any(x => x.DealerId == d.Id)) count++; // logistics
+			if (_allMarketDetails.Any(x => x.DealerId == d.Id)) count++; // market details
+			if (_allCompaniesOperating.Any(x => x.DealerId == d.Id)) count++; // companies operating
+			if (_allOwnerships.Any(x => x.DealerId == d.Id)) count++; // ownership/proprietor
+         // partners/occupations reference an ownership record via OwnershipPartnerId -> DealerOwnershipInfo.Id
+			bool hasPartner = _allPartners.Any(p => _allOwnerships.Any(o => o.Id == p.OwnershipPartnerId && o.DealerId == d.Id));
+			bool hasOccupation = _allOccupations.Any(o => _allOwnerships.Any(own => own.Id == o.OwnershipPartnerId && own.DealerId == d.Id));
+			if (hasPartner || hasOccupation) count++; // partners/occupations
+			if (_allSalesPlanning.Any(x => x.DealerId == d.Id)) count++; // sales planning
+			if (_allAssetBanks.Any(x => x.DealerId == d.Id) || _allAssetLands.Any(x => x.DealerId == d.Id) || _allAssetBuildings.Any(x => x.DealerId == d.Id)) count++; // assets
+			if (_allLoans.Any(x => x.DealerId == d.Id)) count++; // loans
+           bool hasCreditProposal = _allCreditProposals.Any(cp => cp.DealerId == d.Id);
+			bool hasCreditSales = _allCreditSales.Any(s => _allCreditProposals.Any(cp => cp.Id == s.CreditLimitId && cp.DealerId == d.Id));
+			if (hasCreditProposal || hasCreditSales) count++; // credit proposal/performance
+			if (_allDocuments.Any(x => x.DealerId == d.Id)) count++; // documents/enclosures
+
+			_dealerStepCounts[d.Id] = count;
+		}
+
+		_completeDealerIds = _dealerStepCounts.Where(kv => kv.Value >= 12).Select(kv => kv.Key).ToHashSet();
 	}
 
-	private bool IsDealerComplete(int dealerId) => _completeDealerIds.Contains(dealerId);
+   private bool IsDealerComplete(int dealerId) => _dealerStepCounts.TryGetValue(dealerId, out var c) && c >= 12;
+
+	private int CountRejectedTotal()
+	{
+		return _filteredDealers.Count(d => d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false);
+	}
+
+	private int CountRejectedByRM()
+	{
+		return _filteredDealers.Count(d => d.RMApproved == false);
+	}
+
+	private int CountRejectedBySMM()
+	{
+		return _filteredDealers.Count(d => d.SMApproved == false);
+	}
+
+	private int CountRejectedByAVP()
+	{
+		return _filteredDealers.Count(d => d.AVPApproved == false);
+	}
 
 	// Determines exactly where the application is in the workflow
 	private string GetApprovalStatus(DealerDto d)
 	{
-		// 1. Rejections take priority
-		if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)
-			return "Rejected";
+      // 1. Rejections take priority - return which role rejected
+		if (d.RMApproved == false)
+			return "Rejected by RM";
+		if (d.SMApproved == false)
+			return "Rejected by SMM";
+		if (d.AVPApproved == false)
+			return "Rejected by AVP";
 
 		// 2. Final approval
 		if (d.AVPApproved == true)
@@ -527,32 +634,75 @@
 
 	// Determines if the current user needs to act on this dealer. 
 	// This pushes the card to the top and adds the "Action Required" badge.
-	private bool IsPendingForMe(DealerDto d)
-{
-    if (!IsDealerComplete(d.Id))
-        return false;
+    private bool IsPendingForMe(DealerDto d)
+	{
+		var status = GetApprovalStatus(d);
 
-    if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)
-        return false;
+		// Determine if this is a rejection that should be shown to the previous role
+		var showForRejected = false;
+		if (!string.IsNullOrEmpty(status) && status.StartsWith("Rejected"))
+		{
+			if (LoginState.IsRegionRole && d.RMApproved == true && d.SMApproved == false)
+				showForRejected = true;
+			if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false)
+				showForRejected = true;
+		}
 
-    // If dealer is already approved, do not show the Review or Edit buttons
-    if (d.AVPApproved == true) 
-        return false;  // Already approved, do not show buttons
+		// Do not show pending for incomplete dealers unless it's a send-back rejection
+		if (!IsDealerComplete(d.Id) && !showForRejected)
+			return false;
 
-    // RM role - In RM status
-    if (LoginState.IsRegionRole && d.RMApproved == null)
-        return true; // Show Review button when In RM
+		// If dealer is already fully approved, do not show the Review or Edit buttons
+		if (d.AVPApproved == true)
+			return false;
 
-    // SMM role - In SMM status
-    if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == null)
-        return true; // Show Review button when In SMM
+		// For each role determine whether this dealer requires action for that role.
+		// RegionRole (RM) should act on dealers that are still in RM OR that were sent back by SMM
+		if (LoginState.IsRegionRole)
+		{
+			// Pending if RM has not approved yet
+			if (d.RMApproved == null)
+				return true;
 
-    // Admin role - In AVP status
-    if (LoginState.IsAdmin && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
-        return true; // Show Review button when In AVP
+			// Also pending for RM if SMM has rejected it (sent back to RM)
+			if (d.RMApproved == true && d.SMApproved == false)
+				return true;
 
-    return false;
-}
+			// Also pending if this is a send-back rejection targeted at RM
+			if (showForRejected)
+				return true;
+
+			return false;
+		}
+
+		// StateRole (SMM) should act on dealers that are in SMM OR that were sent back by AVP
+		if (LoginState.IsStateRole)
+		{
+			if (d.RMApproved == true && d.SMApproved == null)
+				return true;
+
+			// AVP rejected -> shown in SMM queue
+			if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false)
+				return true;
+
+			// Also pending if this is a send-back rejection targeted at SMM
+			if (showForRejected)
+				return true;
+
+			return false;
+		}
+
+		// Admin role handles AVP (final) stage
+		if (LoginState.IsAdmin)
+		{
+			if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
+				return true;
+
+			return false;
+		}
+
+		return false;
+	}
 
 	private void ApplyFilters()
 	{
@@ -675,13 +825,52 @@
 	private void ReviewDealer(int dealerId)
 	{
 			// NavManager.NavigateTo($"/SavedDealerReview?dealerId={dealerId}");
-			NavManager.NavigateTo($"/ReviewDealer?dealerId={dealerId}");
+			NavManager.NavigateTo($"/SavedDealerReview?dealerId={dealerId}");
 	}
 
 	private void ConfirmDelete(DealerDto dealer)
 	{
 		_dealerToDelete = dealer;
 		_showDeleteConfirm = true;
+	}
+
+	// Determines whether the Review button should be shown to the current user for this dealer.
+	private bool CanShowReviewButton(DealerDto d)
+	{
+        if (d == null) return false;
+
+		var status = GetApprovalStatus(d);
+
+	// Determine if this is a rejection that should be shown to the previous role
+	var showForRejected = false;
+	if (!string.IsNullOrEmpty(status) && status.StartsWith("Rejected"))
+	{
+		// SM rejected -> appears in RM queue when RM had previously approved
+		if (LoginState.IsRegionRole && d.RMApproved == true && d.SMApproved == false)
+			showForRejected = true;
+
+		// AVP rejected -> appears in SMM queue when RM & SM had previously approved
+		if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false)
+			showForRejected = true;
+	}
+
+	// Must be fully completed (100%) unless this is a rejected record that was sent back
+	if (!IsDealerComplete(d.Id) && !showForRejected)
+		return false;
+
+	// Only show review when the application is in RM, SMM or AVP stage or when it's a send-back
+	if (!(status == "In RM" || status == "In SMM" || status == "In AVP" || showForRejected))
+		return false;
+
+		// Allow listed roles: Admin, HQ/MO, RM, SM, AVP and the dealer owner
+		if (LoginState.IsAdmin) return true;
+		if (LoginState.IsHQRole) return true; // MO/MDO/JMDO
+		if (LoginState.IsRegionRole) return true; // RM
+		if (LoginState.IsStateRole) return true; // SM
+		// dealer who created the record
+		if (!string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy) return true;
+
+		return false;
 	}
 
 	private void CancelDelete()
@@ -719,6 +908,7 @@
 		public bool InSpic { get; set; }
 		public bool InGreenStar { get; set; }
 		public string? DealerCode { get; set; }
+       public string? CreatedBy { get; set; }
 		public string? SPICCode { get; set; }
 		public string? GreenStarCode { get; set; }
 		public int StateId { get; set; }

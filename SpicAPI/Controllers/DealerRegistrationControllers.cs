@@ -8,9 +8,16 @@ namespace SpicAPI.Controllers
 {
 
     [Route("api/[controller]")]
-	public class DealerRegistrationController : GenericCrudController<DealerRegistration>
+    public class DealerRegistrationController : GenericCrudController<DealerRegistration>
 	{
-		public DealerRegistrationController(IGenericRepository<DealerRegistration> repo): base(repo){}
+		private readonly IGenericRepository<DealerApprovalHistory>? _historyRepo;
+
+		// Single constructor: historyRepo is optional so existing DI registrations (without historyRepo)
+		// continue to work. If historyRepo is registered it will be injected automatically.
+		public DealerRegistrationController(IGenericRepository<DealerRegistration> repo, IGenericRepository<DealerApprovalHistory>? historyRepo = null) : base(repo)
+		{
+			_historyRepo = historyRepo;
+		}
 
 		[HttpGet("all")]
 		public override async Task<IActionResult> GetAllWithInactive()
@@ -35,6 +42,60 @@ namespace SpicAPI.Controllers
 			else
 				query = query.Where(x => x.CreatedBy == userId);
 			return Ok(await query.ToListAsync());
+		}
+
+		[HttpPost("{id}/send-back")]
+		public async Task<IActionResult> SendBack(int id, [FromBody] DealerSendBackRequest request)
+		{
+			var dealer = await _repo.GetByIdAsync(id);
+			if (dealer == null) return NotFound();
+
+			var role = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+
+			// Record history entry
+			var remarks = new System.Text.StringBuilder();
+			remarks.AppendLine($"Reason: {request.Reason}");
+			remarks.AppendLine($"Priority: {request.Priority}");
+			if (request.Sections != null && request.Sections.Any())
+				remarks.AppendLine($"Sections: {string.Join(", ", request.Sections)}");
+			if (!string.IsNullOrWhiteSpace(request.TargetRole))
+				remarks.AppendLine($"TargetRole: {request.TargetRole}");
+
+			var history = new DealerApprovalHistory
+			{
+				DealerId = id,
+				ApprovedBy = userId,
+				Role = request.TargetRole ?? role,
+				ApprovedAt = DateTime.Now,
+				Remarks = remarks.ToString()
+			};
+
+            if (_historyRepo != null)
+			{
+				await _historyRepo.CreateAsync(history);
+			}
+
+			// Update dealer approval flags depending on the caller role
+			if (role == "RM" || role == "RMD")
+				dealer.RMApproved = false;
+			else if (role == "SMD" || role == "SMM")
+				dealer.SMApproved = false;
+			else if (role == "AVP" || role == "CorporateAdmin" || role == "Admin")
+				dealer.AVPApproved = false;
+
+			await _repo.PatchAsync(id, dealer);
+
+			return Ok(new { message = "Send back recorded" });
+		}
+
+		public class DealerSendBackRequest
+		{
+			public int DealerId { get; set; }
+			public string Reason { get; set; } = "";
+			public string Priority { get; set; } = "High";
+			public List<string> Sections { get; set; } = new List<string>();
+			public string? TargetRole { get; set; }
 		}
 
 		/// <summary>

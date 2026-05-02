@@ -1,4 +1,5 @@
 ﻿@page "/SavedDealerReview"
+@rendermode InteractiveServer
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components
 @using DR = SPIC.Core.Entities
@@ -6,6 +7,7 @@
 @inject NavigationManager Nav
 @inject LoadingService Loading
 @inject LoginState LoginState
+@inject IJSRuntime JS
 
 @code {
     [Parameter]
@@ -34,6 +36,7 @@
     private DR.DealerCreditLimitProposal? _creditProposal;
     private List<DR.DealerCreditLimitSalesPerformance> _creditSales = new();
     private DR.DealerRegistrationDocuments? _documents;
+    private List<DR.DealerApprovalHistory> _approvalHistory = new();
 
     // Lookup names
     private string? _stateName;
@@ -95,8 +98,12 @@
 
             var t17 = Http.GetFromJsonAsync<List<DR.DealerOwnershipInfo>>($"api/DealerOwnershipInfo/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _ownership = t.Result.FirstOrDefault(); });
             var t18 = Http.GetFromJsonAsync<List<DR.DealerCreditLimitProposal>>($"api/DealerCreditLimitProposal/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _creditProposal = t.Result.FirstOrDefault(); });
+            var t19 = Http.GetFromJsonAsync<List<DR.DealerApprovalHistory>>($"api/DealerApprovalHistory/byDealer/{id}").ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion && t.Result != null) _approvalHistory = t.Result.OrderByDescending(h => h.ApprovedAt).ToList(); });
 
-            await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18);
+            await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19);
+
+            // Build timeline items from approval history
+            BuildTimelineFromHistory();
         }
         catch { }
     }
@@ -287,27 +294,53 @@
         return total;
     }
 
-    private List<TimelineItem> TimelineItems = new()
-     {
-          new("Submitted by MO", "Submitted", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-green", "bi bi-check-lg", "card-green", "badge-green"),
-          new("Sent Back by RM", "Sent Back", "Ajith Kumar", "10 Apr 2026, 04:15 PM", "dot-red", "bi bi-exclamation-lg", "card-red", "badge-red"),
-          new("Under Review by MO", "Resubmitted", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-blue", "bi bi-arrow-clockwise", "card-blue", "badge-blue"),
-          new("Under Review by RM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
-          new("Under Review by SM", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange"),
-          new("Under Review by AVP", "Pending", "Ramesh Kumar", "10 Apr 2026, 04:15 PM", "dot-gray", "", "", "badge-orange")
-      };
+    private List<TimelineItem> TimelineItems = new();
 
-      private bool IsSendBackPopupVisible { get; set; } = false;
+    private void BuildTimelineFromHistory()
+    {
+        TimelineItems.Clear();
+        if (_approvalHistory == null || !_approvalHistory.Any()) return;
 
-      private void ShowSendBackPopup()
-      {
-          IsSendBackPopupVisible = true;
-      }
+        foreach (var h in _approvalHistory.OrderBy(h => h.ApprovedAt))
+        {
+            var title = h.Role ?? "Action";
+            var status = h.Remarks?.Contains("Sent Back") == true || h.Remarks?.Contains("Sections:") == true ? "Sent Back" : "Updated";
+            var user = h.ApprovedBy ?? "System";
+            var dateText = h.ApprovedAt.ToString("dd-MMM-yyyy\nhh:mm tt");
+            var dotClass = status == "Sent Back" ? "dot-red" : "dot-green";
+            var icon = status == "Sent Back" ? "bi bi-arrow-counterclockwise" : "bi bi-check-lg";
+            var cardClass = status == "Sent Back" ? "card-red" : "card-green";
+            var badgeClass = status == "Sent Back" ? "badge-red" : "badge-green";
 
-      private void HideSendBackPopup()
-      {
-          IsSendBackPopupVisible = false;
-      }
+            TimelineItems.Add(new TimelineItem(title, status, user, dateText, dotClass, icon, cardClass, badgeClass));
+        }
+    }
+
+      private bool IsSendBackPopupVisible { get; set; } 
+
+ private async Task ShowSendBackPopup()
+{
+    IsSendBackPopupVisible = true;
+    try
+    {
+        await JS.InvokeVoidAsync("console.log", "ShowSendBackPopup: popup visible set to true");
+    }
+    catch { }
+    StateHasChanged();
+}
+
+ private async Task HideSendBackPopup()
+{
+    IsSendBackPopupVisible = false;
+    try { await JS.InvokeVoidAsync("console.log", "HideSendBackPopup: popup hidden"); } catch { }
+    StateHasChanged();
+}
+
+private void HandleDealerRejected()
+{
+    IsSendBackPopupVisible = false;
+    Nav.NavigateTo("/Dashboard");
+}
 
      public record TimelineItem(
          string Title,
@@ -341,6 +374,33 @@
          return _dealer != null;
      }
 
+    private string GetApprovalStage()
+    {
+        if (_dealer == null) return "-";
+
+        // Rejection takes precedence
+        if (_dealer.RMApproved == false || _dealer.SMApproved == false || _dealer.AVPApproved == false)
+            return "Rejected";
+
+        if (_dealer.AVPApproved == true)
+            return "Approved";
+
+        // Check completion: if not complete, mark as Submitted
+        bool isComplete = _dealer.PinCode != null && _dealer.PinCode.Trim() != "";
+        if (!isComplete) return "Submitted";
+
+        if (_dealer.RMApproved == null)
+            return "In RM";
+
+        if (_dealer.RMApproved == true && _dealer.SMApproved == null)
+            return "In SMM";
+
+        if (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null)
+            return "In AVP";
+
+        return "Submitted";
+    }
+
      private readonly string[] RmRoles = { "RM", "RMD" };
      private readonly string[] SmRoles = { "SMD", "SMM" };
      private readonly string[] FinalApprovalRoles = { "AVP", "CorporateAdmin" };
@@ -350,16 +410,21 @@
          if (_dealer == null)
              return false;
 
-         if (LoginState.IsRegionRole)
-             return _dealer.RMApproved == null;
+        // Region (RM) can approve when RM not yet approved OR when SMM has rejected and sent back to RM
+        if (LoginState.IsRegionRole)
+            return _dealer.RMApproved == null
+                || (_dealer.RMApproved == true && _dealer.SMApproved == false);
 
-         if (LoginState.IsStateRole)
-             return _dealer.RMApproved == true && _dealer.SMApproved == null;
+        // State (SMM) can approve when SM not yet approved OR when AVP has rejected and sent back to SMM
+        if (LoginState.IsStateRole)
+            return (_dealer.RMApproved == true && _dealer.SMApproved == null)
+                || (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == false);
 
-         if (LoginState.IsAdmin)
-             return _dealer.RMApproved == true
-                 && _dealer.SMApproved == true
-                 && _dealer.AVPApproved == null;
+        // Admin handles final approval only when AVP approval is pending
+        if (LoginState.IsAdmin)
+            return _dealer.RMApproved == true
+                && _dealer.SMApproved == true
+                && _dealer.AVPApproved == null;
 
          return false;
      }
@@ -415,6 +480,7 @@
              _isApproving = false;
          }
      }
+    
  }
 
 <style>
@@ -1114,17 +1180,21 @@ border-radius: 12px;
     </div>
 
     <div class="container-fluid py-3">
-        @if (IsSendBackPopupVisible)
-        {
-            <SendBackPopup OnClose="HideSendBackPopup" />
-        }
+@if (IsSendBackPopupVisible)
+{
+    <SendBackPopup 
+        Dealer="@_dealer"
+        LoginState="@LoginState"
+        OnClose="@HideSendBackPopup"
+        OnRejected="@HandleDealerRejected" />
+}
     <!-- Top Info Cards -->
     <div class="row g-3 mb-3">
         <div class="col-12 col-md-6 col-lg-3">
             <div class="info-card">
                 <div>
                     <div class="info-label">Dealer Name</div>
-                    <div class="info-value">Agro Enterprises Pvt Ltd</div>
+                    <div class="info-value">@(_dealer?.FirmName ?? "-")</div>
                 </div>
                 <div class="info-icon purple">
                     <i class="bi bi-person"></i>
@@ -1136,7 +1206,7 @@ border-radius: 12px;
             <div class="info-card">
                 <div>
                     <div class="info-label">Dealer Code</div>
-                    <div class="info-value">DLR-2026-MH-1234</div>
+                    <div class="info-value">@(_dealer?.DealerCode ?? ($"DL-{_dealer?.Id}"))</div>
                 </div>
                 <div class="info-icon orange">
                     <i class="bi bi-upc-scan"></i>
@@ -1148,7 +1218,7 @@ border-radius: 12px;
             <div class="info-card">
                 <div>
                     <div class="info-label">Submitted By</div>
-                    <div class="info-value">MO - Amit Sharma</div>
+                    <div class="info-value">@(_dealer?.CreatedBy ?? "-")</div>
                 </div>
                 <div class="info-icon cyan">
                     <i class="bi bi-person-badge"></i>
@@ -1160,7 +1230,7 @@ border-radius: 12px;
             <div class="info-card">
                 <div>
                     <div class="info-label">Status</div>
-                    <span class="status-badge">Pending</span>
+                    <span class="status-badge">@(GetApprovalStage())</span>
                 </div>
                 <div class="info-icon yellow">
                     <i class="bi bi-file-earmark-text"></i>
@@ -1187,7 +1257,7 @@ border-radius: 12px;
             <div class="step-circle">RM</div>
             <div>
                 <div class="step-title">RM</div>
-                <div class="step-status">Under Review</div>
+                <div class="step-status">@( _dealer?.RMApproved == null ? "Under Review" : (_dealer.RMApproved == true ? "Approved" : "Rejected") )</div>
             </div>
         </div>
 
@@ -1197,7 +1267,7 @@ border-radius: 12px;
             <div class="step-circle">SM</div>
             <div>
                 <div class="step-title">SM</div>
-                <div class="step-status">Pending</div>
+                <div class="step-status">@(_dealer?.SMApproved == null ? "Pending" : (_dealer.SMApproved == true ? "Approved" : "Rejected"))</div>
             </div>
         </div>
 
@@ -1207,7 +1277,7 @@ border-radius: 12px;
             <div class="step-circle">AVP</div>
             <div>
                 <div class="step-title">AVP</div>
-                <div class="step-status">Pending</div>
+                <div class="step-status">@(_dealer?.AVPApproved == null ? "Pending" : (_dealer.AVPApproved == true ? "Approved" : "Rejected"))</div>
             </div>
         </div>
     </div>
@@ -1247,55 +1317,78 @@ border-radius: 12px;
     </div>
 </div>
 
-<h4 class="sent-title">Sent Back by Regional Manager</h4>
+</div>
 
-<div class="row g-4">
-    <div class="col-12 col-lg-6">
-        <div class="detail-box">
-            <h5>Action Details</h5>
+<h4 class="sent-title">Recent Actions</h4>
 
-            <div class="info-row">
-                <span>Action</span>
-                <strong>Sent Back</strong>
+@if (_approvalHistory != null && _approvalHistory.Any())
+{
+    var latest = _approvalHistory.First();
+    <div class="row g-4">
+        <div class="col-12 col-lg-6">
+            <div class="detail-box">
+                <h5>Action Details</h5>
+
+                <div class="info-row">
+                    <span>Action</span>
+                    <strong>@(latest.Remarks?.Contains("Sections:") == true ? "Sent Back" : "Updated")</strong>
+                </div>
+
+                <div class="info-row">
+                    <span>Action By</span>
+                    <strong>@(latest.ApprovedBy ?? "-")</strong>
+                </div>
+
+                <div class="info-row">
+                    <span>Role</span>
+                    <strong>@(latest.Role ?? "-")</strong>
+                </div>
+
+                <div class="info-row">
+                    <span>Date & Time</span>
+                    <strong>@(latest.ApprovedAt.ToString("dd-MMM-yyyy, hh:mm tt"))</strong>
+                </div>
+
+                <div class="info-row">
+                    <span>Stage</span>
+                    <strong>@(latest.Role != null ? $"{latest.Role} Review" : "-")</strong>
+                </div>
             </div>
+        </div>
 
-            <div class="info-row">
-                <span>Action By</span>
-                <strong>Ramesh Kumar</strong>
-            </div>
+        <div class="col-12 col-lg-6">
+            <div class="detail-box">
+                <h5>Remarks</h5>
 
-            <div class="info-row">
-                <span>Role</span>
-                <strong>Marketing Officer (MO)</strong>
-            </div>
-
-            <div class="info-row">
-                <span>Date & Time</span>
-                <strong>18-Apr-2026, 11.30 AM</strong>
-            </div>
-
-            <div class="info-row">
-                <span>Stage</span>
-                <strong>Marketing Officer (MO) Review</strong>
+                <ul class="remarks">
+                    @if (!string.IsNullOrWhiteSpace(latest.Remarks))
+                    {
+                        var lines = latest.Remarks.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var line in lines)
+                        {
+                            <li>@line</li>
+                        }
+                    }
+                    else
+                    {
+                        <li>No remarks</li>
+                    }
+                </ul>
             </div>
         </div>
     </div>
-
-    <div class="col-12 col-lg-6">
-        <div class="detail-box">
-            <h5>Remarks</h5>
-
-            <ul class="remarks">
-                <li>Sales data mismatch for FY 23-24.</li>
-                <li>Sales data mismatch for FY 23-24.</li>
-                <li>Sales data mismatch for FY 23-24.</li>
-                <li>Sales data mismatch for FY 23-24.</li>
-                <li>Sales data mismatch for FY 23-24.</li>
-            </ul>
+}
+else
+{
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="detail-box">
+                <h5>Recent Actions</h5>
+                <div class="text-muted">No recent actions available.</div>
+            </div>
         </div>
     </div>
-</div>
-</div>
+}
 
 
     <div class="custom-accordion @(IsCompanyDetailsOpen ? "active" : "")">
@@ -2352,9 +2445,11 @@ border-radius: 12px;
 </div>
 <div class="d-flex justify-content-end gap-2 mt-3">
 
-    <button class="btn btn-outline-warning px-3" @onclick="ShowSendBackPopup">
-        <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
-    </button>
+  <button type="button"
+        class="btn btn-outline-warning px-3"
+        @onclick="@ShowSendBackPopup">
+    <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
+</button>
     @if (CanShowApprovalButton())
 {
     <button class="btn-submit px-3" @onclick="ApproveDealer" disabled="@_isApproving">
