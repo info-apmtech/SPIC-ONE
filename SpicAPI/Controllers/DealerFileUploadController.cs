@@ -45,7 +45,7 @@ namespace SpicAPI.Controllers
 			var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
 
           var pdfOrImageDocTypes = new[] { "GST", "PAN", "Aadhaar", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN",
-				"Specimen", "BankGuarantee", "ITReturn1", "ITReturn2", "ValuationCertificate", "PartnershipDeed", "BoardResolution", "Affidavit",
+				"Specimen", "GreenstarSpecimen", "BankGuarantee", "DeedOfGuarantee", "ITReturn1", "ITReturn2", "ValuationCertificate", "PartnershipDeed", "BoardResolution", "Affidavit",
 				// Investment / Assets related docs
 				"LandEC", "LandPropertyDoc", "LandValuationCert",
 				"BuildingEC", "BuildingPropertyDoc", "BuildingValuationCert" };

@@ -34,9 +34,16 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 		public string? UserId { get; private set; }
 
 		public bool IsAdmin => UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP;
-		public bool IsStateRole => UserRole is AppRole.SMD or AppRole.SMM;
-		public bool IsRegionRole => UserRole is AppRole.RM or AppRole.RMD;
-		public bool IsHQRole => UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO;
+  public bool IsStateRole => UserRole is AppRole.SMD or AppRole.SMM;
+	public bool IsRegionRole => UserRole is AppRole.RM or AppRole.RMD;
+	public bool IsHQRole => UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO;
+
+	// Specific role group helpers
+	public bool IsHQCreatorRole => UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO;
+	public bool IsRMGroup => UserRole is AppRole.RM or AppRole.RMD;
+	public bool IsSMGroup => UserRole is AppRole.SMD or AppRole.SMM;
+	public bool IsDirectorOrAVP => UserRole is AppRole.Director or AppRole.AVP;
+	public bool IsReviewerRole => UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP or AppRole.SMD or AppRole.SMM or AppRole.RM or AppRole.RMD;
 
 		private void ParseClaims(string? token)
 		{

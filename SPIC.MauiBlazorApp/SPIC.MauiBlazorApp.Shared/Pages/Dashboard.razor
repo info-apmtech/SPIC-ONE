@@ -234,27 +234,26 @@
 									<span class="badge-custom @(statusName == "Active" ? "badge-green-dashboard" : "badge-yellow")">@statusName</span>
 								</div>
 								<div class="d-flex gap-2">
-    @if (CanShowReviewButton(dealer))
+    @if (IsDealerComplete(dealer.Id))
 	{
-		// Only show Review button if the dealer is not approved
-		@if (approvalStatus != "Approved")
+		// If dealer is 100% complete, show Review when allowed
+		if (CanShowReviewButton(dealer) && approvalStatus != "Approved")
 		{
 			<button class="btn-continue-blue" @onclick="() => ReviewDealer(dealer.Id)">
 				<i class="bi bi-search me-1"></i> Review
 			</button>
 		}
 	}
-    else
-    {
-        // Only show Edit button if the dealer is not approved
-        // Do not show Edit for rejected items — they should be reviewed instead
-		@if (approvalStatus != "Approved" && !approvalStatus.StartsWith("Rejected"))
-        {
-            <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
-                <i class="bi bi-pencil-square me-1"></i> Edit
-            </button>
-        }
-    }
+	else
+	{
+		// Not complete -> allow Edit for the owner (but not for rejected items)
+		if (approvalStatus != "Approved" && !approvalStatus.StartsWith("Rejected"))
+		{
+			<button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
+				<i class="bi bi-pencil-square me-1"></i> Edit
+			</button>
+		}
+	}
     <button class="btn-view" @onclick="() => EditDealer(dealer.Id)"><i class="bi bi-eye"></i> View</button>
     <a class="btn-view" href="/DealershipPDF/@dealer.Id"><i class="bi bi-file-earmark-pdf me-1"></i> PDF</a>
     <button class="btn-dots" style="color:#DC2626;" @onclick="() => ConfirmDelete(dealer)"><i class="bi bi-trash"></i></button>
@@ -854,19 +853,18 @@
 			showForRejected = true;
 	}
 
-	// Must be fully completed (100%) unless this is a rejected record that was sent back
-	if (!IsDealerComplete(d.Id) && !showForRejected)
+   // Must be fully completed (100%) unless this is a rejected record or was sent back
+	if (!IsDealerComplete(d.Id) && !showForRejected && !(status != null && status.StartsWith("Rejected")))
 		return false;
 
-	// Only show review when the application is in RM, SMM or AVP stage or when it's a send-back
-	if (!(status == "In RM" || status == "In SMM" || status == "In AVP" || showForRejected))
+	// Only show review when the application is in RM, SMM or AVP stage or when it's a send-back or rejected
+	if (!(status == "In RM" || status == "In SMM" || status == "In AVP" || showForRejected || (status != null && status.StartsWith("Rejected"))))
 		return false;
 
-		// Allow listed roles: Admin, HQ/MO, RM, SM, AVP and the dealer owner
-		if (LoginState.IsAdmin) return true;
-		if (LoginState.IsHQRole) return true; // MO/MDO/JMDO
-		if (LoginState.IsRegionRole) return true; // RM
-		if (LoginState.IsStateRole) return true; // SM
+       // Allow listed roles: reviewers and the dealer owner
+		if (LoginState.IsReviewerRole) return true;
+		// HQ creator roles should not automatically get Review unless they are the creator
+		if (LoginState.IsHQCreatorRole) return !string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy;
 		// dealer who created the record
 		if (!string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy) return true;
 

@@ -410,17 +410,23 @@ private void HandleDealerRejected()
          if (_dealer == null)
              return false;
 
-        // Region (RM) can approve when RM not yet approved OR when SMM has rejected and sent back to RM
-        if (LoginState.IsRegionRole)
+        // RM group (RM, RMD) can approve when RM not yet approved OR when SMM has rejected and sent back to RM
+        if (LoginState.IsRMGroup)
             return _dealer.RMApproved == null
                 || (_dealer.RMApproved == true && _dealer.SMApproved == false);
 
-        // State (SMM) can approve when SM not yet approved OR when AVP has rejected and sent back to SMM
-        if (LoginState.IsStateRole)
+        // SM group (SMD, SMM) can approve when SM not yet approved OR when AVP has rejected and sent back to SMM
+        if (LoginState.IsSMGroup)
             return (_dealer.RMApproved == true && _dealer.SMApproved == null)
                 || (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == false);
 
-        // Admin handles final approval only when AVP approval is pending
+        // Director or AVP act as final approval group
+        if (LoginState.IsDirectorOrAVP)
+            return _dealer.RMApproved == true
+                && _dealer.SMApproved == true
+                && _dealer.AVPApproved == null;
+
+        // Admin/CorporateAdmin can also final approve via reviewer flow
         if (LoginState.IsAdmin)
             return _dealer.RMApproved == true
                 && _dealer.SMApproved == true
@@ -431,13 +437,13 @@ private void HandleDealerRejected()
 
      private string ApprovalButtonText()
      {
-         if (LoginState.IsRegionRole)
+         if (LoginState.IsRMGroup)
              return "Proceed to SM";
 
-         if (LoginState.IsStateRole)
+         if (LoginState.IsSMGroup)
              return "Proceed to AVP";
 
-         if (LoginState.IsAdmin)
+         if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
              return "Approve";
 
          return "Approve";
@@ -451,15 +457,15 @@ private void HandleDealerRejected()
 
          try
          {
-             if (LoginState.IsRegionRole)
+             if (LoginState.IsRMGroup)
              {
                  _dealer.RMApproved = true;
              }
-             else if (LoginState.IsStateRole)
+             else if (LoginState.IsSMGroup)
              {
                  _dealer.SMApproved = true;
              }
-             else if (LoginState.IsAdmin)
+             else if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
              {
                  _dealer.AVPApproved = true;
                  _dealer.Status = DR.DealerStatus.Active;
