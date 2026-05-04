@@ -28,7 +28,7 @@
 			{
 				var step = FormStepData.Steps.FirstOrDefault(x => x.StepNo == i);
 
-				<div class="progress-segment @(i <= CurrentStep.StepNo ? "active" : "")"
+				<div class="progress-segment @(i <= CurrentStep.StepNo ? "active" : "") @(step?.HasError == true ? "error" : "")"
 					 title="@step?.Title"
 					 @onclick="() => NavigateToStep(step)">
 				</div>
@@ -45,6 +45,12 @@
 	{
 		SetCurrentStep();
 		Nav.LocationChanged += HandleLocationChanged;
+		FormStepData.OnStateChanged += HandleStateChanged;
+	}
+
+	private void HandleStateChanged()
+	{
+		InvokeAsync(StateHasChanged);
 	}
 
 	private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
@@ -74,5 +80,6 @@
 	public void Dispose()
 	{
 		Nav.LocationChanged -= HandleLocationChanged;
+		FormStepData.OnStateChanged -= HandleStateChanged;
 	}
 }

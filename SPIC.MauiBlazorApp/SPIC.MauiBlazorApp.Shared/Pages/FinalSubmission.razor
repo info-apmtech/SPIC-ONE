@@ -768,6 +768,7 @@
     {
         if (_incompleteSections > 0)
         {
+            SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(12, true);
             ShowMessage($"Please complete all {_incompleteSections} incomplete section(s) before submitting.", true);
             return;
         }
@@ -780,12 +781,14 @@
             _dealer.Status = DealerStatus.Active;
             var resp = await Http.PutAsJsonAsync($"api/DealerRegistration/{_dealer.Id}", _dealer);
             resp.EnsureSuccessStatusCode();
+            SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(12, false);
             ShowMessage("Registration submitted successfully!", false);
             await Task.Delay(1500);
             Nav.NavigateTo($"/ReviewDealer?dealerId={DealerId}");
         }
         catch (Exception ex)
         {
+            SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(12, true);
             ShowMessage($"Error submitting registration: {ex.Message}", true);
         }
         finally
