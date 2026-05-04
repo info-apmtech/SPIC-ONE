@@ -1,172 +1,350 @@
 ﻿@using System.Net.Http.Json
 @using DR = SPIC.Core.Entities
 @inject HttpClient Http
+
 <style>
-/* SendBack popup styles */
-.sb-header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding-bottom:8px; }
-.sb-title { font-size:1.25rem; margin:0; font-weight:700; }
-.sb-subtitle { color:#6b7280; font-size:0.85rem; margin-top:4px; }
-.btn-close-custom { background:transparent; border-radius:50%; border:1px solid rgba(0,0,0,0.06); width:36px; height:36px; display:flex; align-items:center; justify-content:center; }
-.alert-red{ background:#fff1f2; border:1px solid #fee2e2; border-radius:6px; padding:12px; }
-.icon-circle-red{ width:36px; height:36px; border-radius:50%; background:#fee2e2; display:flex; align-items:center; justify-content:center; }
-.alert-title-red { font-weight:700; color:#9b1c1c; margin:0 0 6px 0; }
-.alert-body { color:#7c2b2b; margin:0; }
-.reason-textarea{ width:100%; border:1px solid #e6e6e6; border-radius:6px; padding:12px; min-height:110px; resize:vertical; }
-.corrections-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:10px; margin-top:8px; }
-.correction-item{ display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid #a7f3d0; border-radius:8px; background:#f8fffb; }
-.correction-item input[type=checkbox]{ width:18px; height:18px; }
-.priority-group{ display:flex; gap:12px; align-items:center; margin-top:8px; }
-.priority-item input[type=radio]{ margin-right:6px; }
-.alert-yellow{ background:#fffbeb; border:1px solid #fef3c7; border-radius:6px; padding:12px; margin-top:12px; }
-.btn-cancel{ background:#fff; border:1px solid #e5e7eb; padding:8px 14px; border-radius:6px; }
-.btn-send-back{ background:#ef4444; color:#fff; border:none; padding:8px 14px; border-radius:6px; }
-.char-count{ color:#6b7280; font-size:0.85rem; }
+    /* Modal Container */
+    .modal-backdrop-custom {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        background: rgba(0,0,0,0.4);
+    }
+    
+    .modal-content-custom {
+        max-width: 900px;
+        width: 96%;
+        background: #ffffff;
+        border-radius: 12px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        border: 1px solid rgba(0,0,0,0.06);
+        padding: 24px 32px;
+        /* Hide scrollbar */
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    .modal-content-custom::-webkit-scrollbar {
+        display: none;
+    }
 
-@@media (max-width: 768px){
-    .corrections-grid{ grid-template-columns: repeat(1, 1fr); }
-}
-.modal-content {
-    max-width: 980px;
-    width: 96%;
-    border-radius: 8px;
-    max-height: 90vh;
-    overflow: auto;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-    border: 1px solid rgba(0,0,0,0.06);
+    /* Typography & Headers */
+    .sb-title { font-size: 1.35rem; margin: 0; font-weight: 700; color: #1f2937; }
+    .sb-subtitle { color: #6b7280; font-size: 0.9rem; margin-top: 4px; }
+    .section-title { font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 12px; margin-top: 24px; }
 
-    /* Hide scrollbar */
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
+    /* Close Button */
+    .btn-close-custom { 
+        background: transparent; 
+        border-radius: 50%; 
+        border: 1px solid #d1d5db; 
+        width: 32px; 
+        height: 32px; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        color: #4b5563;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .btn-close-custom:hover { background: #f3f4f6; }
 
-.modal-content::-webkit-scrollbar {
-    display: none;
-}
+    /* Red Alert Box */
+    .alert-red { 
+        background: #fef2f2; 
+        border-radius: 8px; 
+        padding: 16px; 
+        display: flex; 
+        gap: 16px;
+        margin-top: 16px;
+        margin-bottom: 24px;
+    }
+    .icon-circle-red { 
+        width: 36px; 
+        height: 36px; 
+        border-radius: 50%; 
+        background: #fee2e2; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        flex-shrink: 0;
+    }
+    .alert-title-red { font-weight: 700; color: #b91c1c; margin: 0 0 4px 0; font-size: 0.95rem; }
+    .alert-body-red { color: #7f1d1d; margin: 0; font-size: 0.85rem; }
+
+    /* Textarea */
+    .reason-textarea { 
+        width: 100%; 
+        border: 1px solid #d1d5db; 
+        border-radius: 8px; 
+        padding: 12px 16px; 
+        min-height: 120px; 
+        resize: vertical; 
+        font-size: 0.95rem;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+    .reason-textarea:focus { border-color: #9ca3af; }
+    .char-count { color: #9ca3af; font-size: 0.85rem; font-weight: 500; }
+
+    /* Corrections Grid (Checkboxes) */
+    .corrections-grid { 
+        display: grid; 
+        grid-template-columns: repeat(3, 1fr); 
+        gap: 16px; 
+    }
+    .correction-item { 
+        display: flex; 
+        align-items: center; 
+        gap: 12px; 
+        padding: 12px 16px; 
+        border-radius: 8px; 
+        border: 1px solid #e5e7eb; 
+        background: #ffffff; 
+        cursor: pointer;
+        transition: all 0.2s;
+        user-select: none;
+    }
+    .correction-item.selected {
+        border-color: #10b981; /* Green border */
+    }
+    
+    /* Custom Checkbox Design */
+    .custom-checkbox {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        border: 2px solid #e5e7eb;
+        background: #f3f4f6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+    .correction-item.selected .custom-checkbox {
+        background: #059669;
+        border-color: #059669;
+    }
+    .correction-item.selected .custom-checkbox::after {
+        content: '\2713'; /* Checkmark */
+        color: white;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    .correction-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    /* Priority Radio Buttons */
+    .priority-group { display: flex; gap: 24px; align-items: center; }
+    .priority-item { 
+        display: flex; 
+        align-items: center; 
+        gap: 8px; 
+        font-size: 0.95rem; 
+        font-weight: 600; 
+        color: #4b5563; 
+        cursor: pointer;
+    }
+    /* Custom Radio for Red styling */
+    .priority-item input[type="radio"] {
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border: 2px solid #d1d5db;
+        border-radius: 50%;
+        outline: none;
+        cursor: pointer;
+        position: relative;
+    }
+    .priority-item input[type="radio"]:checked {
+        border-color: #dc2626;
+    }
+    .priority-item input[type="radio"]:checked::before {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 8px;
+        height: 8px;
+        background-color: #dc2626;
+        border-radius: 50%;
+    }
+
+    /* Yellow Alert Box */
+    .alert-yellow { 
+        background: #fefce8; 
+        border: 1px solid #fef08a; 
+        border-radius: 8px; 
+        padding: 16px; 
+        display: flex;
+        gap: 16px;
+        margin-top: 24px; 
+        margin-bottom: 24px; 
+    }
+    .icon-circle-yellow { 
+        width: 32px; 
+        height: 32px; 
+        border-radius: 50%; 
+        background: #fef08a; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        flex-shrink: 0;
+    }
+    .alert-title-yellow { font-weight: 700; color: #a16207; margin: 0 0 4px 0; font-size: 0.95rem; }
+    .alert-body-yellow { color: #713f12; margin: 0; font-size: 0.85rem; }
+
+    /* Footer Buttons */
+    .action-buttons { display: flex; justify-content: flex-end; gap: 16px; }
+    .btn-cancel { 
+        background: #ffffff; 
+        border: 1px solid #d1d5db; 
+        color: #4b5563;
+        font-weight: 600;
+        padding: 10px 20px; 
+        border-radius: 6px; 
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+    .btn-send-back { 
+        background: #dc2626; 
+        color: #ffffff; 
+        font-weight: 600;
+        border: none; 
+        padding: 10px 20px; 
+        border-radius: 6px; 
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+    .btn-send-back:disabled, .btn-cancel:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    @@media (max-width: 768px) {
+        .corrections-grid { grid-template-columns: repeat(1, 1fr); }
+        .modal-content-custom { padding: 16px; }
+    }
 </style>
 
-<div class="backdrop" @onclick="ClosePopup" style="position:fixed; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; z-index:99999; background: rgba(0,0,0,0.55);">
-    <div class="modal-content" > 
-       @*  <div class="container-fluid px-2 px-sm-3 px-lg-4"> *@
-            <div class="main-card mx-auto">
-                <div class="p-3 p-sm-3 p-md-4 d-flex flex-column gap-section">
-
-                    <header class="sb-header mb-3">
-                        <div class="sb-header-left">
-                            <h1 class="sb-title">Send Back Application</h1>
-                            <div class="sb-subtitle">@ApplicationText</div>
-                        </div>
-
-
-
-                        <button type="button" class="btn-close-custom" @onclick="ClosePopup" aria-label="Close">
-                            <i class="bi bi-x" style="font-size:1.1rem;"></i>
-                        </button>
-                    </header>
-
-                    <div class="alert-red p-2">
-                        <div class="d-flex align-items-start gap-3">
-                            <div class="icon-circle-red">
-                                <i class="bi bi-exclamation-circle" style="font-size:0.9rem;color:#bc0000;"></i>
-                            </div>
-                            <div>
-                                <p class="alert-title-red">
-                                    This action will send the application back to @GetRoleTargetText()
-                                </p>
-                        <p class="alert-body">
-                            Please provide the reason and select sections that require correction.
-                        </p>
-                            </div>
-                        </div>
-
-                    <div class="sb-section">
-                        <h3 class="section-title mt-3">Reason for sending back</h3>
-
-                        <textarea class="reason-textarea"
-                                  placeholder="Please provide the reason."
-                                  maxlength="500"
-                                  rows="4"
-                                  @bind="Reason"
-                                  @bind:event="oninput">
-                        </textarea>
-
-                        <div class="d-flex justify-content-end">
-                            <span class="char-count">@Reason.Length/500</span>
-                        </div>
-
-                        @if (!string.IsNullOrWhiteSpace(ErrorMessage))
-                        {
-                            <div class="text-danger small mt-2">@ErrorMessage</div>
-                        }
-                    </div>
-                    </div>
-
-                    @* replaced by styled section above *@
-
-                    <div>
-                        <h3 class="section-title mt-3">What needs to be corrected?</h3>
-
-                        <div class="corrections-grid">
-                            @foreach (var sec in CorrectionSections)
-                            {
-                                <label class="correction-item">
-                                    <input type="checkbox"
-                                           checked="@SelectedSections.Contains(sec)"
-                                           @onchange="e => ToggleSection(sec, e)" />
-                                    <span class="correction-label">@sec</span>
-                                </label>
-                            }
-                        </div>
-                    </div>
-
-                    <div>
-                        <h3 class="section-title mt-3">Priority Level</h3>
-
-                        <div class="priority-group">
-                            @foreach (var priority in Priorities)
-                            {
-                                <label class="priority-item" style="font-weight: bold;">
-                                    <input type="radio"
-                                           name="priority"
-                                           value="@priority"
-                                           checked="@(Priority == priority)"
-                                           @onchange="() => Priority = priority" />
-                                    <span class="priority-label">@priority</span>
-                                </label>
-                            }
-                        </div>
-                    </div>
-
-                    <div class="alert-yellow p-2 mb-3">
-                        <p class="alert-title-yellow">Please Note:</p>
-                        <p class="alert-body">
-                            The application will be moved back to @GetRoleTargetText(). They will be notified to make the required corrections and resubmit.
-                        </p>
-                    </div>
-
-                    <div class="d-flex justify-content-end gap-3">
-                        <button type="button" class="btn-cancel" @onclick="ClosePopup" disabled="@IsSubmitting">
-                            <i class="bi bi-x-lg"></i>
-                            Cancel
-                        </button>
-
-                        @* Dynamic label based on role *@
-                        <button type="button" class="btn-send-back" @onclick="RejectDealer" disabled="@IsSubmitting">
-                            <i class="bi bi-send"></i>
-                            @(IsSubmitting ? "Sending..." : SendBackButtonText())
-                        </button>
-                    </div>
-
-                </div>
+<div class="modal-backdrop-custom" @onclick="ClosePopup">
+    <div class="modal-content-custom" @onclick:stopPropagation="true"> 
+        
+        <header class="d-flex justify-content-between align-items-start">
+            <div>
+                <h1 class="sb-title">Send Back Application</h1>
+                <div class="sb-subtitle">@ApplicationText</div>
             </div>
-       @*  </div> *@
+            <button type="button" class="btn-close-custom" @onclick="ClosePopup" aria-label="Close">
+                <i class="bi bi-x" style="font-size: 1.2rem;"></i>
+            </button>
+        </header>
+
+        <div class="alert-red">
+            <div class="icon-circle-red">
+                <i class="bi bi-exclamation-circle" style="font-size: 1.1rem; color: #dc2626;"></i>
+            </div>
+            <div>
+                <p class="alert-title-red">This action will send the application back to @GetRoleTargetText()</p>
+                <p class="alert-body-red">Please provide the reason and select sections that require correction.</p>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="section-title mt-0">Reason for sending back</h3>
+            <textarea class="reason-textarea"
+                      placeholder="Please provide the reason and select sections that require correction."
+                      maxlength="500"
+                      rows="4"
+                      @bind="Reason"
+                      @bind:event="oninput">
+            </textarea>
+            <div class="d-flex justify-content-end mt-1">
+                <span class="char-count">@Reason.Length/500</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+            {
+                <div class="text-danger small mt-2 fw-bold">@ErrorMessage</div>
+            }
+        </div>
+
+        <div>
+            <h3 class="section-title">What needs to be corrected? (Select all that apply)</h3>
+            <div class="corrections-grid">
+                @foreach (var sec in CorrectionSections)
+                {
+                    bool isSelected = SelectedSections.Contains(sec);
+                    <label class="correction-item @(isSelected ? "selected" : "")">
+                        <input type="checkbox"
+                               class="d-none"
+                               checked="@isSelected"
+                               @onchange="e => ToggleSection(sec, e)" />
+                        <div class="custom-checkbox"></div>
+                        <span class="correction-label">@sec</span>
+                    </label>
+                }
+            </div>
+        </div>
+
+        <div>
+            <h3 class="section-title">Priority Level</h3>
+            <div class="priority-group">
+                @foreach (var priority in Priorities)
+                {
+                    <label class="priority-item">
+                        <input type="radio"
+                               name="priority"
+                               value="@priority"
+                               checked="@(Priority == priority)"
+                               @onchange="() => Priority = priority" />
+                        <span>@priority</span>
+                    </label>
+                }
+            </div>
+        </div>
+
+        <div class="alert-yellow">
+            <div class="icon-circle-yellow">
+                <i class="bi bi-exclamation-circle" style="font-size: 1rem; color: #ca8a04;"></i>
+            </div>
+            <div>
+                <p class="alert-title-yellow">Please Note:</p>
+                <p class="alert-body-yellow">
+                    The application will be moved back to @GetRoleTargetText(). They will be notified to make the required corrections and resubmit.
+                </p>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button type="button" class="btn-cancel" @onclick="ClosePopup" disabled="@IsSubmitting">
+                <i class="bi bi-x-lg"></i>
+                Cancel
+            </button>
+            <button type="button" class="btn-send-back" @onclick="RejectDealer" disabled="@IsSubmitting">
+                <i class="bi bi-send"></i>
+                @(IsSubmitting ? "Sending..." : SendBackButtonText())
+            </button>
+        </div>
+
     </div>
 </div>
 
-                            @code {
+@code {
     [Parameter] public DR.DealerRegistration? Dealer { get; set; } = default!;
-[Parameter] public LoginState LoginState { get; set; } = default!;
-[Parameter] public EventCallback OnClose { get; set; }
-[Parameter] public EventCallback OnRejected { get; set; }
+    [Parameter] public LoginState LoginState { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnRejected { get; set; }
 
     private string Reason { get; set; } = "";
     private string Priority { get; set; } = "High";
@@ -193,7 +371,7 @@
         "Enclosures",
         "Retail Fertilizer Details",
         "Sales Performance Review",
-        "Other"
+        "Other (Please specify in remarks)"
     };
 
     private string SendBackButtonText()
@@ -219,14 +397,8 @@
 
     protected override void OnInitialized()
     {
-        SelectedSections = new HashSet<string>
-        {
-            "Tax & Compliance",
-            "Ownership Information",
-            "Loan Liabilities",
-            "Primary Location",
-            "Enclosures"
-        };
+        // Removed the pre-populated default values so checkboxes start unchecked.
+        SelectedSections = new HashSet<string>();
     }
 
     private void ToggleSection(string section, ChangeEventArgs e)
@@ -293,9 +465,6 @@
                 Dealer.AVPApproved = false;
             }
 
-            // Change this status name according to your enum
-            // Dealer.Status = DR.DealerStatus.SentBack;
-
             var updateResponse = await Http.PutAsJsonAsync(
                 $"api/DealerRegistration/{Dealer.Id}",
                 Dealer
@@ -361,50 +530,4 @@
         public List<string> Sections { get; set; } = new();
         public string? TargetRole { get; set; }
     }
-//     private async Task RejectDealer()
-// {
-//     ErrorMessage = null;
-
-//     if (string.IsNullOrWhiteSpace(Reason))
-//     {
-//         ErrorMessage = "Reason is required.";
-//         return;
-//     }
-
-//     IsSubmitting = true;
-
-//     try
-//     {
-//         if (LoginState.IsRegionRole)
-//         {
-//             Dealer.RMApproved = false;
-//         }
-//         else if (LoginState.IsStateRole)
-//         {
-//             Dealer.SMApproved = false;
-//         }
-//         else if (LoginState.IsAdmin)
-//         {
-//             Dealer.AVPApproved = false;
-//         }
-
-//         var response = await Http.PutAsJsonAsync(
-//             $"api/DealerRegistration/{Dealer.Id}",
-//             Dealer
-//         );
-
-//         if (response.IsSuccessStatusCode)
-//         {
-//             await OnRejected.InvokeAsync();
-//         }
-//         else
-//         {
-//             ErrorMessage = "Unable to send back dealer application.";
-//         }
-//     }
-//     finally
-//     {
-//         IsSubmitting = false;
-//     }
-// }
 }
