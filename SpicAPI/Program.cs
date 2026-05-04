@@ -20,7 +20,11 @@ builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
-            b => b.MigrationsAssembly("Spic.Infrastructure")
+            b =>
+            {
+                b.MigrationsAssembly("Spic.Infrastructure");
+                b.CommandTimeout(600);
+            }
     ));
 
 builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
@@ -31,6 +35,7 @@ builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequiredLength = 6;
     options.User.RequireUniqueEmail = false;
+    options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+& ";
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();

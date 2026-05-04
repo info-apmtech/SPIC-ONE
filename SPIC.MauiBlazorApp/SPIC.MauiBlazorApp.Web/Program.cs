@@ -7,13 +7,13 @@ using System.IO;
 var builder = WebApplication.CreateBuilder(args);
 // ✅ ADD THIS HERE
 builder.Services.AddDataProtection()
-	.PersistKeysToFileSystem(new DirectoryInfo(
-		Path.Combine(builder.Environment.ContentRootPath, "keys")))
-	.SetApplicationName("SPIC");
+    .PersistKeysToFileSystem(new DirectoryInfo(
+        Path.Combine(builder.Environment.ContentRootPath, "keys")))
+    .SetApplicationName("SPIC");
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-	.AddInteractiveServerComponents();
+    .AddInteractiveServerComponents();
 
 // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
@@ -23,14 +23,18 @@ builder.Services.AddScoped<LoadingService>();
 // ADD THIS
 builder.Services.AddSingleton(new PlatformService
 {
-	IsWeb = true
+    IsWeb = true
 });
 builder.Services.AddScoped(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
     var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
     //var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
-    return new HttpClient { BaseAddress = new Uri(baseUrl) };
+    return new HttpClient
+    {
+        BaseAddress = new Uri(baseUrl),
+        Timeout = TimeSpan.FromMinutes(30)
+    };
 });
 
 var app = builder.Build();
@@ -38,8 +42,8 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-	app.UseExceptionHandler("/Error", createScopeForErrors: true);
-	app.UseHsts();
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    app.UseHsts();
 }
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
@@ -50,8 +54,8 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 
 app.MapRazorComponents<App>()
-	.AddInteractiveServerRenderMode()
-	.AddAdditionalAssemblies(
-		typeof(SPIC.MauiBlazorApp.Shared._Imports).Assembly);
+    .AddInteractiveServerRenderMode()
+    .AddAdditionalAssemblies(
+        typeof(SPIC.MauiBlazorApp.Shared._Imports).Assembly);
 
 app.Run();
