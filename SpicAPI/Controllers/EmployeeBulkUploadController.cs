@@ -168,7 +168,9 @@ namespace SpicAPI.Controllers
                         }
 
                         int stateId = 0, regionId = 0, hqId = 0;
-                        var currentUser = User?.Identity?.Name ?? "Unknown";
+                        var currentUser = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                                          ?? User?.Identity?.Name 
+                                          ?? "Unknown";
 
                         // 1. Resolve State (Strictly required to exist)
                         if (!string.IsNullOrWhiteSpace(stateName))
