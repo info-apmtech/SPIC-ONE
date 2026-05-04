@@ -862,13 +862,18 @@
 		return false;
 
        // Allow listed roles: reviewers and the dealer owner
-		if (LoginState.IsReviewerRole) return true;
-		// HQ creator roles should not automatically get Review unless they are the creator
-		if (LoginState.IsHQCreatorRole) return !string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy;
-		// dealer who created the record
-		if (!string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy) return true;
+         if (LoginState.IsReviewerRole)
+				return true;
 
-		return false;
+			// If the current user created this record, allow owner access unless they are an HQ-creator role
+			if (!string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy)
+			{
+				if (LoginState.IsHQCreatorRole)
+					return false; // prevent self-review for MO/MDO/JMDO
+				return true;
+			}
+
+			return false;
 	}
 
 	private void CancelDelete()
