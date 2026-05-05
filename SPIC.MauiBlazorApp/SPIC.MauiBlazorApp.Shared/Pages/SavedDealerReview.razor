@@ -77,6 +77,7 @@
             }
         }
     }
+
     private async Task FetchRelatedData(int id)
     {
         try
@@ -104,11 +105,8 @@
 
             await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19);
 
-            // Load submitter and approver names (used in timeline)
             await LoadSubmittedByName();
             await LoadApprovalUserNames();
-
-            // Build timeline items from approval history
             BuildTimelineFromHistory();
         }
         catch { }
@@ -149,7 +147,6 @@
                 catch { }
             }
 
-            // Load sales planning lookups
             _categories = await Http.GetFromJsonAsync<List<DR.Category>>("api/Category") ?? new();
             _units = await Http.GetFromJsonAsync<List<DR.Unit>>("api/Unit") ?? new();
             _products = await Http.GetFromJsonAsync<List<DR.Product>>("api/Product") ?? new();
@@ -215,20 +212,15 @@
     private IEnumerable<(string title, string? path)> GetEnclosureItems()
     {
         var list = new List<(string, string?)>();
-
-        // From DealerRegistration
         list.Add(("GST Certificate", _dealer?.GSTFilePath));
         list.Add(("PAN Copy", _dealer?.PANFilePath));
         list.Add(("Aadhaar Copy", _dealer?.AadhaarFilePath));
         list.Add(("Wholesale License", _dealer?.WholesaleLicenseFilePath));
         list.Add(("Retail License", _dealer?.RetailLicenseFilePath));
-
-        // From DealerOwnershipInfo
         list.Add(("Proprietor Photograph", _ownership?.ProprietorImagePath));
         list.Add(("Proprietor Aadhaar", _ownership?.AadhaarFilePath));
         list.Add(("Proprietor PAN", _ownership?.PANFilePath));
 
-        // From DealerRegistrationDocuments
         if (_documents != null)
         {
             list.Add(("Specimen Signature", _documents.SpecimanFilePath));
@@ -244,7 +236,6 @@
             list.Add(("Authorization Letter", _documents.AuthorizationLetterFilePath));
             list.Add(("Deed of Guarantee", _documents.DeedOfGuaranteeFilePath));
         }
-
         return list;
     }
 
@@ -266,7 +257,6 @@
     }
 
     private decimal GetCapitalPosition() => _dealer?.CapitalInvestment ?? 0m;
-
     private decimal GetTotalAssets()
     {
         decimal banks = _assetBanks?.Sum(x => x.Value) ?? 0m;
@@ -275,49 +265,17 @@
         decimal movables = _dealer?.AssetValue ?? 0m;
         return banks + lands + buildings + movables;
     }
-
     private decimal GetTotalLoans() => _loans?.Sum(x => x.LoanValue) ?? 0m;
-
     private decimal GetNetValue() => GetCapitalPosition() + GetTotalAssets() - GetTotalLoans();
 
     private static decimal GetSalesQty(DR.SalesPlanningInDealerRegistration row, int monthIndex)
     {
-        return monthIndex switch
-        {
-            0 => row.AprilQty,
-            1 => row.MayQty,
-            2 => row.JuneQty,
-            3 => row.JulyQty,
-            4 => row.AugustQty,
-            5 => row.SeptemberQty,
-            6 => row.OctoberQty,
-            7 => row.NovemberQty,
-            8 => row.DecemberQty,
-            9 => row.JanuaryQty,
-            10 => row.FebruaryQty,
-            11 => row.MarchQty,
-            _ => 0
-        };
+        return monthIndex switch { 0 => row.AprilQty, 1 => row.MayQty, 2 => row.JuneQty, 3 => row.JulyQty, 4 => row.AugustQty, 5 => row.SeptemberQty, 6 => row.OctoberQty, 7 => row.NovemberQty, 8 => row.DecemberQty, 9 => row.JanuaryQty, 10 => row.FebruaryQty, 11 => row.MarchQty, _ => 0 };
     }
 
     private static decimal GetSalesAmount(DR.SalesPlanningInDealerRegistration row, int monthIndex)
     {
-        return monthIndex switch
-        {
-            0 => row.AprilAmount,
-            1 => row.MayAmount,
-            2 => row.JuneAmount,
-            3 => row.JulyAmount,
-            4 => row.AugustAmount,
-            5 => row.SeptemberAmount,
-            6 => row.OctoberAmount,
-            7 => row.NovemberAmount,
-            8 => row.DecemberAmount,
-            9 => row.JanuaryAmount,
-            10 => row.FebruaryAmount,
-            11 => row.MarchAmount,
-            _ => 0
-        };
+        return monthIndex switch { 0 => row.AprilAmount, 1 => row.MayAmount, 2 => row.JuneAmount, 3 => row.JulyAmount, 4 => row.AugustAmount, 5 => row.SeptemberAmount, 6 => row.OctoberAmount, 7 => row.NovemberAmount, 8 => row.DecemberAmount, 9 => row.JanuaryAmount, 10 => row.FebruaryAmount, 11 => row.MarchAmount, _ => 0 };
     }
 
     private string GetUnitName(DR.SalesPlanningInDealerRegistration item)
@@ -331,12 +289,8 @@
         if (_salesPlanning == null) return 0;
         decimal total = 0;
         foreach (var item in _salesPlanning)
-        {
             for (int i = 0; i < _months.Length; i++)
-            {
                 total += GetSalesQty(item, i);
-            }
-        }
         return total;
     }
 
@@ -345,12 +299,8 @@
         if (_salesPlanning == null) return 0;
         decimal total = 0;
         foreach (var item in _salesPlanning)
-        {
             for (int i = 0; i < _months.Length; i++)
-            {
                 total += GetSalesAmount(item, i);
-            }
-        }
         return total;
     }
 
@@ -360,7 +310,6 @@
     {
         TimelineItems.Clear();
 
-        // 1) First: Submitted item (from dealer.CreatedBy / CreatedAt)
         if (_dealer != null)
         {
             var submitUser = "System";
@@ -374,14 +323,11 @@
             TimelineItems.Add(new TimelineItem("Submitted", "Submitted", submitUser, createdDateText, "dot-green", "bi bi-check-lg", "card-green", "badge-green"));
         }
 
-        // 2) Approval history events (resubmits / sent-backs / updates)
         if (_approvalHistory != null && _approvalHistory.Any())
         {
             foreach (var h in _approvalHistory.OrderBy(h => h.ApprovedAt))
             {
                 var title = !string.IsNullOrEmpty(h.Role) ? h.Role : "Action";
-
-                // Determine status label from remarks
                 var status = "Updated";
                 if (!string.IsNullOrEmpty(h.Remarks))
                 {
@@ -389,7 +335,6 @@
                     else if (h.Remarks.Contains("Resubmitted")) status = "Resubmitted";
                 }
 
-                // Resolve user display name if available
                 var userId = h.ApprovedBy;
                 var user = "System";
                 if (!string.IsNullOrEmpty(userId))
@@ -398,10 +343,7 @@
                     else user = userId;
                 }
 
-                // Friendly date
                 var dateText = h.ApprovedAt.ToString("dd-MMM-yyyy\nhh:mm tt");
-
-                // Visual classes
                 var dotClass = status == "Sent Back" ? "dot-red" : status == "Resubmitted" ? "dot-blue" : "dot-green";
                 var icon = status == "Sent Back" ? "bi bi-arrow-counterclockwise" : status == "Resubmitted" ? "bi bi-arrow-repeat" : "bi bi-check-lg";
                 var cardClass = status == "Sent Back" ? "card-red" : status == "Resubmitted" ? "card-blue" : "card-green";
@@ -411,17 +353,13 @@
             }
         }
 
-        // 3) Append role-based overview steps so the full flow is visible (RM -> SMM -> AVP)
         if (_dealer != null)
         {
-            // helper to find latest history row for a role
             static DR.DealerApprovalHistory? LastForRole(IEnumerable<DR.DealerApprovalHistory> hist, string roleToken)
             {
-                return hist?.Where(h => !string.IsNullOrEmpty(h.Role) && h.Role.Contains(roleToken, StringComparison.OrdinalIgnoreCase))
-                            .OrderByDescending(h => h.ApprovedAt).FirstOrDefault();
+                return hist?.Where(h => !string.IsNullOrEmpty(h.Role) && h.Role.Contains(roleToken, StringComparison.OrdinalIgnoreCase)).OrderByDescending(h => h.ApprovedAt).FirstOrDefault();
             }
 
-            // RM step
             var rmStatus = "Pending";
             string rmUser = "-";
             DateTime rmDate = _dealer.UpdatedAt;
@@ -439,7 +377,6 @@
             var rmCard = rmStatus == "Sent Back" ? "card-red" : rmStatus == "Approved" ? "card-green" : "card-blue";
             TimelineItems.Add(new TimelineItem("Under Review by RM", rmStatus, rmUser, rmDateText, rmDot, "bi bi-clock", rmCard, rmStatus == "Sent Back" ? "badge-red" : "badge-blue"));
 
-            // SMM step
             var smStatus = "Pending";
             string smUser = "-";
             DateTime smDate = _dealer.UpdatedAt;
@@ -457,7 +394,6 @@
             var smCard = smStatus == "Sent Back" ? "card-red" : smStatus == "Approved" ? "card-green" : "card-blue";
             TimelineItems.Add(new TimelineItem("Under Review by SMM", smStatus, smUser, smDateText, smDot, "bi bi-clock", smCard, smStatus == "Sent Back" ? "badge-red" : "badge-blue"));
 
-            // AVP step
             var avpStatus = "Pending";
             string avpUser = "-";
             DateTime avpDate = _dealer.UpdatedAt;
@@ -477,76 +413,146 @@
         }
     }
 
-      private bool IsSendBackPopupVisible { get; set; } 
+    // ------------- SEND BACK POPUP LOGIC -------------
+    private bool IsSendBackPopupVisible { get; set; }
 
- private async Task ShowSendBackPopup()
-{
-    IsSendBackPopupVisible = true;
-    try
+    private async Task ShowSendBackPopup()
     {
-        await JS.InvokeVoidAsync("console.log", "ShowSendBackPopup: popup visible set to true");
+        IsSendBackPopupVisible = true;
+        try { await JS.InvokeVoidAsync("console.log", "ShowSendBackPopup: popup visible set to true"); } catch { }
+        StateHasChanged();
     }
-    catch { }
-    StateHasChanged();
-}
 
- private async Task HideSendBackPopup()
-{
-    IsSendBackPopupVisible = false;
-    try { await JS.InvokeVoidAsync("console.log", "HideSendBackPopup: popup hidden"); } catch { }
-    StateHasChanged();
-}
+    private async Task HideSendBackPopup()
+    {
+        IsSendBackPopupVisible = false;
+        try { await JS.InvokeVoidAsync("console.log", "HideSendBackPopup: popup hidden"); } catch { }
+        StateHasChanged();
+    }
 
-private void HandleDealerRejected()
-{
-    IsSendBackPopupVisible = false;
-    Nav.NavigateTo("/Dashboard");
-}
+    private void HandleDealerRejected()
+    {
+        IsSendBackPopupVisible = false;
+        Nav.NavigateTo("/Dashboard");
+    }
 
-     public record TimelineItem(
-         string Title,
-         string Status,
-         string UserName,
-         string DateText,
-         string DotClass,
-         string Icon,
-         string CardClass,
-         string BadgeClass
-     );
+    // ------------- CONFIRM PROCEED POPUP LOGIC -------------
+    private bool IsConfirmProceedPopupVisible { get; set; } = false;
+    private string ConfirmRemarks { get; set; } = "";
+    private bool _isApproving = false;
 
-     // Blazor State Variables to control the open/close behavior of each accordion
-     private bool IsCompanyDetailsOpen { get; set; } = false;
-     private bool IsExperienceOpen { get; set; } = false;
-     private bool IsAnnualSalesOpen { get; set; } = false;
-     private bool IsWarehouseOpen { get; set; } = false;
-     private bool IsMarketDetailsOpen { get; set; } = false;
-     private bool IsProprietorDetailsOpen { get; set; } = false;
-     private bool IsCompaniesOperatingOpen { get; set; } = false;
-     private bool IsSalesPlanningOpen { get; set; } = false;
-     private bool IsInvestmentOpen { get; set; } = false;
-     private bool IsCreditLimitOpen { get; set; } = false;
-     private bool IsEnclosuresOpen { get; set; } = false;
+    private void ShowConfirmProceedPopup()
+    {
+        ConfirmRemarks = ""; // Reset remarks field when modal opens
+        IsConfirmProceedPopupVisible = true;
+        StateHasChanged();
+    }
 
-     // private string _currentUserRole = "RM"; // replace with login role
-     private bool _isApproving = false;
+    private void HideConfirmProceedPopup()
+    {
+        IsConfirmProceedPopupVisible = false;
+        StateHasChanged();
+    }
 
-     private bool IsDealerSubmitted()
-     {
-         return _dealer != null;
-     }
+    private string GetCurrentStageTarget()
+    {
+        if (LoginState == null) return "Review";
+        if (LoginState.IsRMGroup) return "RM Review";
+        if (LoginState.IsSMGroup) return "SM Review";
+        if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return "AVP Review";
+        return "Review";
+    }
+
+    private string GetNextStageTarget()
+    {
+        if (LoginState == null) return "Next Stage";
+        if (LoginState.IsRMGroup) return "State Manager (SM) Review";
+        if (LoginState.IsSMGroup) return "AVP Review";
+        if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return "Final Approval";
+        return "Next Stage";
+    }
+
+    private async Task ApproveDealer()
+    {
+        if (_dealer == null) return;
+
+        _isApproving = true;
+        StateHasChanged(); // Show "Processing..."
+
+        try
+        {
+            if (LoginState.IsRMGroup)
+            {
+                _dealer.RMApproved = true;
+            }
+            else if (LoginState.IsSMGroup)
+            {
+                _dealer.SMApproved = true;
+            }
+            else if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
+            {
+                _dealer.AVPApproved = true;
+                _dealer.Status = DR.DealerStatus.Active;
+            }
+
+            // Note: If your system accepts remarks during approval, uncomment and assign here:
+            // _dealer.Remarks = ConfirmRemarks;
+
+            var response = await Http.PutAsJsonAsync($"api/DealerRegistration/{_dealer.Id}", _dealer);
+
+            if (response.IsSuccessStatusCode)
+            {
+                IsConfirmProceedPopupVisible = false;
+                Nav.NavigateTo("/Dashboard");
+            }
+        }
+        finally
+        {
+            _isApproving = false;
+            StateHasChanged();
+        }
+    }
+
+
+    public record TimelineItem(
+        string Title,
+        string Status,
+        string UserName,
+        string DateText,
+        string DotClass,
+        string Icon,
+        string CardClass,
+        string BadgeClass
+    );
+
+    // Blazor State Variables to control the open/close behavior of each accordion
+    private bool IsCompanyDetailsOpen { get; set; } = false;
+    private bool IsExperienceOpen { get; set; } = false;
+    private bool IsAnnualSalesOpen { get; set; } = false;
+    private bool IsWarehouseOpen { get; set; } = false;
+    private bool IsMarketDetailsOpen { get; set; } = false;
+    private bool IsProprietorDetailsOpen { get; set; } = false;
+    private bool IsCompaniesOperatingOpen { get; set; } = false;
+    private bool IsSalesPlanningOpen { get; set; } = false;
+    private bool IsInvestmentOpen { get; set; } = false;
+    private bool IsCreditLimitOpen { get; set; } = false;
+    private bool IsEnclosuresOpen { get; set; } = false;
+
+    private bool IsDealerSubmitted()
+    {
+        return _dealer != null;
+    }
 
     private string GetApprovalStage()
     {
         if (_dealer == null) return "-";
 
-        // Rejection takes precedence
         if (_dealer.RMApproved == false || _dealer.SMApproved == false || _dealer.AVPApproved == false)
             return "Rejected";
 
         if (_dealer.AVPApproved == true)
             return "Approved";
 
-        // Check completion: if not complete, mark as Submitted
         bool isComplete = _dealer.PinCode != null && _dealer.PinCode.Trim() != "";
         if (!isComplete) return "Submitted";
 
@@ -562,781 +568,145 @@ private void HandleDealerRejected()
         return "Submitted";
     }
 
-     private readonly string[] RmRoles = { "RM", "RMD" };
-     private readonly string[] SmRoles = { "SMD", "SMM" };
-     private readonly string[] FinalApprovalRoles = { "AVP", "CorporateAdmin" };
+    private readonly string[] RmRoles = { "RM", "RMD" };
+    private readonly string[] SmRoles = { "SMD", "SMM" };
+    private readonly string[] FinalApprovalRoles = { "AVP", "CorporateAdmin" };
 
-     private bool CanShowApprovalButton()
-     {
-         if (_dealer == null)
-             return false;
+    private bool CanShowApprovalButton()
+    {
+        if (_dealer == null)
+            return false;
 
-        // RM group (RM, RMD) can approve when RM not yet approved OR when SMM has rejected and sent back to RM
         if (LoginState.IsRMGroup)
-            return _dealer.RMApproved == null
-                || (_dealer.RMApproved == true && _dealer.SMApproved == false);
+            return _dealer.RMApproved == null || (_dealer.RMApproved == true && _dealer.SMApproved == false);
 
-        // SM group (SMD, SMM) can approve when SM not yet approved OR when AVP has rejected and sent back to SMM
         if (LoginState.IsSMGroup)
-            return (_dealer.RMApproved == true && _dealer.SMApproved == null)
-                || (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == false);
+            return (_dealer.RMApproved == true && _dealer.SMApproved == null) || (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == false);
 
-        // Director or AVP act as final approval group
         if (LoginState.IsDirectorOrAVP)
-            return _dealer.RMApproved == true
-                && _dealer.SMApproved == true
-                && _dealer.AVPApproved == null;
+            return _dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null;
 
-        // Admin/CorporateAdmin can also final approve via reviewer flow
         if (LoginState.IsAdmin)
-            return _dealer.RMApproved == true
-                && _dealer.SMApproved == true
-                && _dealer.AVPApproved == null;
+            return _dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null;
 
-         return false;
-     }
+        return false;
+    }
 
-     private string ApprovalButtonText()
-     {
-         if (LoginState.IsRMGroup)
-             return "Proceed to SM";
+    private string ApprovalButtonText()
+    {
+        if (LoginState.IsRMGroup) return "Proceed to SM";
+        if (LoginState.IsSMGroup) return "Proceed to AVP";
+        if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return "Approve";
+        return "Approve";
+    }
+}
 
-         if (LoginState.IsSMGroup)
-             return "Proceed to AVP";
-
-         if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
-             return "Approve";
-
-         return "Approve";
-     }
-
-     private async Task ApproveDealer()
-     {
-         if (_dealer == null) return;
-
-         _isApproving = true;
-
-         try
-         {
-             if (LoginState.IsRMGroup)
-             {
-                 _dealer.RMApproved = true;
-             }
-             else if (LoginState.IsSMGroup)
-             {
-                 _dealer.SMApproved = true;
-             }
-             else if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
-             {
-                 _dealer.AVPApproved = true;
-                 _dealer.Status = DR.DealerStatus.Active;
-             }
-
-             var response = await Http.PutAsJsonAsync(
-                 $"api/DealerRegistration/{_dealer.Id}",
-                 _dealer
-             );
-
-             if (response.IsSuccessStatusCode)
-             {
-                 Nav.NavigateTo("/Dashboard");
-             }
-         }
-         finally
-         {
-             _isApproving = false;
-         }
-     }
-    
- }
-
+<!-- MAIN STYLES -->
 <style>
-   
-
     /* --- Header --- */
-    .page-header-row {
-        margin-bottom: 24px;
-        margin-top: 24px;
-    }
-    .page-title {
-        color: #1F2937;
-        font-weight: 700;
-        font-size: 1.4rem;
-        margin: 0;
-    }
-    .page-subtitle {
-        font-size: 0.85rem;
-        color: #6B7280;
-        margin-top: 4px;
-    }
+    .page-header-row { margin-bottom: 24px; margin-top: 24px; }
+    .page-title { color: #1F2937; font-weight: 700; font-size: 1.4rem; margin: 0; }
+    .page-subtitle { font-size: 0.85rem; color: #6B7280; margin-top: 4px; }
 
     /* --- Top KPI Cards --- */
-    .kpi-container {
-        display: flex;
-        gap: 12px;
-        margin-bottom: 24px;
-        overflow-x: auto;
-        padding-bottom: 8px; 
-    }
-    .kpi-card {
-        flex: 1;
-        min-width: 140px;
-        /* background-color: #ffffff; */ 
-        background: linear-gradient(9deg, #ffc10726, var(--bs-white) 100%);
-        border: 1px solid #E5E7EB;
-        border-radius: 12px;
-        padding: 16px 12px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-    }
-      .kpi-cardss {
-        flex: 1;
-        min-width: 140px;
-      
-        background: linear-gradient(180deg, var(--bs-light-bg-subtle), #E9FFFF 100%);    
-        border: 1px solid #E5E7EB;
-        border-radius: 12px;
-        padding: 16px 12px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-    }
-    .kpi-card-co {
-        flex: 1;
-        min-width: 140px;   
-background:linear-gradient(180deg, var(--bs-light-bg-subtle), #d8b8dc5c 100%);
-        border-radius: 12px;
-        padding: 16px 12px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-    }
-     .kpi-card-co1 {
-        flex: 1;
-        min-width: 140px;   
-background: linear-gradient(178deg, var(--bs-light-bg-subtle), #E9F0FF 100%);        border-radius: 12px;
-        padding: 16px 12px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-    } 
-
-    .kpi-card-c {
-        flex: 1;
-        min-width: 140px;   
-background: linear-gradient(170deg, var(--bs-light-bg-subtle), #FFE9F3 100%);
-border-radius: 12px;
-        padding: 16px 12px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-    } 
-     
-       
-    .kpi-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.2rem;
-        margin-bottom: 12px;
-    }
-    .kpi-title {
-        font-size: 0.75rem;
-        color: #6B7280;
-        font-weight: 600;
-        margin-bottom: 4px;
-    }
-    .kpi-value {
-        font-size: 0.85rem;
-        color: #1F2937;
-        font-weight: 700;
-    }
-
-    /* KPI Colors */
-    .bg-yellow { background-color: #FEF3C7; color: #D97706; }
-    .bg-blue { background-color: #E0F2FE; color: #2563EB; }
-    .bg-pink { background-color: #FCE7F3; color: #DB2777; }
-    .bg-green { background-color: #D1FAE5; color: #059669; }
-    .bg-indigo { background-color: #E0E7FF; color: #4F46E5; }
-    .bg-orange { background-color: #FFEDD5; color: #EA580C; }
+    .kpi-container { display: flex; gap: 12px; margin-bottom: 24px; overflow-x: auto; padding-bottom: 8px; }
+    .kpi-card { flex: 1; min-width: 140px; background: linear-gradient(9deg, #ffc10726, var(--bs-white) 100%); border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px 12px; display: flex; flex-direction: column; align-items: center; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+    .kpi-icon { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-bottom: 12px; }
+    .kpi-title { font-size: 0.75rem; color: #6B7280; font-weight: 600; margin-bottom: 4px; }
+    .kpi-value { font-size: 0.85rem; color: #1F2937; font-weight: 700; }
 
     /* --- Accordions --- */
-    .custom-accordion {
-        background-color: #ffffff;
-        border: 1px solid #E5E7EB;
-        border-radius: 12px;
-        margin-bottom: 12px;
-        overflow: hidden;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-        transition: all 0.3s ease;
-    }
-    .custom-accordion.active {
-        border-left: 4px solid #059669; /* Green active border */
-    }
-    .accordion-header {
-        padding: 16px 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-weight: 700;
-        color: #1F2937;
-        font-size: 0.95rem;
-        cursor: pointer;
-        user-select: none;
-    }
-    .accordion-header i {
-        color: #9CA3AF;
-        transition: transform 0.3s ease;
-    }
-    .custom-accordion.active .accordion-header i {
-        transform: rotate(180deg);
-    }
-    
-    .accordion-body {
-        padding: 24px;
-        background-color: #F8FAFC; 
-        border-top: 1px solid #E5E7EB;
-        display: none; 
-    }
-    .custom-accordion.active .accordion-body {
-        display: block; 
-    }
+    .custom-accordion { background-color: #ffffff; border: 1px solid #E5E7EB; border-radius: 12px; margin-bottom: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.02); transition: all 0.3s ease; }
+    .custom-accordion.active { border-left: 4px solid #059669; }
+    .accordion-header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; font-weight: 700; color: #1F2937; font-size: 0.95rem; cursor: pointer; user-select: none; }
+    .accordion-header i { color: #9CA3AF; transition: transform 0.3s ease; }
+    .custom-accordion.active .accordion-header i { transform: rotate(180deg); }
+    .accordion-body { padding: 24px; background-color: #F8FAFC; border-top: 1px solid #E5E7EB; display: none; }
+    .custom-accordion.active .accordion-body { display: block; }
 
     /* --- Inner Detail Cards --- */
-    .detail-card {
-        background-color: #ffffff;
-        border: 1px solid #E5E7EB;
-        border-radius: 12px;
-        overflow: hidden;
-        height: 100%;
-    }
-    .detail-card-header {
-        background-color: #ECFDF5; /* Light green */
-        padding: 12px 16px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 1px solid #D1FAE5;
-    }
-    .detail-card-title {
-        font-size: 0.85rem;
-        font-weight: 700;
-        color: #065F46;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 0;
-    }
-    .detail-card-title i { font-size: 1rem; }
-    .edit-icon {
-        color: #059669;
-        font-size: 1rem;
-        cursor: pointer;
-    }
-
-    .detail-card-body {
-        padding: 16px;
-    }
-    .data-row {
-        display: flex;
-        margin-bottom: 12px;
-        align-items: flex-start;
-    }
-    .data-row:last-child {
-        margin-bottom: 0;
-    }
-    .data-label {
-        width: 40%;
-        font-size: 0.75rem;
-        color: #6B7280;
-        font-weight: 500;
-        padding-right: 12px;
-    }
-    .data-value {
-        width: 60%;
-        font-size: 0.75rem;
-        color: #1F2937;
-        font-weight: 600;
-        word-break: break-word;
-    }
+    .detail-card { background-color: #ffffff; border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; height: 100%; }
+    .detail-card-header { background-color: #ECFDF5; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #D1FAE5; }
+    .detail-card-title { font-size: 0.85rem; font-weight: 700; color: #065F46; display: flex; align-items: center; gap: 8px; margin: 0; }
+    .edit-icon { color: #059669; font-size: 1rem; cursor: pointer; }
+    .detail-card-body { padding: 16px; }
+    .data-row { display: flex; margin-bottom: 12px; align-items: flex-start; }
+    .data-row:last-child { margin-bottom: 0; }
+    .data-label { width: 40%; font-size: 0.75rem; color: #6B7280; font-weight: 500; padding-right: 12px; }
+    .data-value { width: 60%; font-size: 0.75rem; color: #1F2937; font-weight: 600; word-break: break-word; }
 
     /* --- Table Specific Styles --- */
-    .sales-table {
-        width: 100%;
-        border-collapse: collapse;
-        text-align: center;
-    }
-    .sales-table th {
-        color: #065F46;
-        font-weight: 600;
-        font-size: 0.75rem;
-        padding: 14px;
-        border-bottom: 1px solid #E5E7EB;
-        background-color: #ffffff;
-    }
-    .sales-table td {
-        padding: 14px;
-        font-size: 0.75rem;
-        color: #4B5563;
-        border-bottom: 1px solid #E5E7EB;
-    }
+    .sales-table { width: 100%; border-collapse: collapse; text-align: center; }
+    .sales-table th { color: #065F46; font-weight: 600; font-size: 0.75rem; padding: 14px; border-bottom: 1px solid #E5E7EB; background-color: #ffffff; }
+    .sales-table td { padding: 14px; font-size: 0.75rem; color: #4B5563; border-bottom: 1px solid #E5E7EB; }
     .sales-table tr:last-child td { border-bottom: none; }
-    
-    .grand-total-row {
-        background: linear-gradient(to right, #D1FAE5, #A7F3D0);
-        font-weight: 700;
-    }
-    .grand-total-row td {
-        color: #065F46;
-        font-weight: 700;
-    }
+    .grand-total-row { background: linear-gradient(to right, #D1FAE5, #A7F3D0); font-weight: 700; }
+    .grand-total-row td { color: #065F46; font-weight: 700; }
 
     /* Additional Specific UI Elements */
-    .company-pill {
-        border: 1px solid #E5E7EB;
-        border-radius: 8px;
-        padding: 12px;
-        text-align: center;
-        font-size: 0.75rem;
-        font-weight: 500;
-        color: #4B5563;
-        background-color: #ffffff;
-    }
-    .total-pill {
-        background: linear-gradient(to right, #D1FAE5, #A7F3D0);
-        color: #065F46;
-        font-weight: 700;
-        font-size: 0.8rem;
-        padding: 12px 24px;
-        border-radius: 8px;
-        display: inline-block;
-    }
-    
-    /* Enclosures Specific */
-    .enclosure-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 12px;
-        padding: 16px;
-    }
-    .enclosure-btn {
-        background-color: #ffffff;
-        border: 1px solid #E5E7EB;
-        border-radius: 8px;
-        padding: 10px 16px;
-        font-size: 0.75rem;
-        color: #4B5563;
-        font-weight: 500;
-        text-align: center;
-        cursor: pointer;
-        transition: 0.2s;
-    }
-    .enclosure-btn:hover {
-        background-color: #F9FAFB;
-        border-color: #D1D5DB;
-    }
+    .company-pill { border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px; text-align: center; font-size: 0.75rem; font-weight: 500; color: #4B5563; background-color: #ffffff; }
+    .total-pill { background: linear-gradient(to right, #D1FAE5, #A7F3D0); color: #065F46; font-weight: 700; font-size: 0.8rem; padding: 12px 24px; border-radius: 8px; display: inline-block; }
+    .enclosure-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding: 16px; }
+    .enclosure-btn { background-color: #ffffff; border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px 16px; font-size: 0.75rem; color: #4B5563; font-weight: 500; text-align: center; cursor: pointer; transition: 0.2s; }
+    .enclosure-btn:hover { background-color: #F9FAFB; border-color: #D1D5DB; }
 
     /* --- Footer --- */
-    .footer-actions {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-top: 24px;
-        padding-top: 24px;
-    }
-    .btn-prev {
-        background-color: transparent;
-        color: #6B7280;
-        border: none;
-        font-size: 0.85rem;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 10px 0;
-    }
-    .btn-prev:hover { color: #1F2937; }
-    
-    .btn-submit {
-        background-color: #3B82F6;
-        color: #ffffff;
-        border: none;
-        font-size: 0.85rem;
-        font-weight: 600;
-        padding: 12px 24px;
-        border-radius: 8px;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        transition: 0.2s;
-    }
+    .btn-submit { background-color: #3B82F6; color: #ffffff; border: none; font-size: 0.85rem; font-weight: 600; padding: 12px 24px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; }
     .btn-submit:hover { background-color: #2563EB; }
-    .info-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    padding: 16px;
-    min-height: 78px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,.08);
-}
+    
+    .info-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; min-height: 78px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .info-label { font-size: 12px; color: #111827; margin-bottom: 8px; }
+    .info-value { font-size: 14px; font-weight: 700; color: #047857; }
+    .info-icon { width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .purple { background: #f5d0fe; color: #9333ea; }
+    .orange { background: #ffedd5; color: #c2410c; }
+    .cyan { background: #cffafe; color: #0891b2; }
+    .yellow { background: #fef3c7; color: #d97706; }
+    .status-badge { background: #fef3c7; color: #f97316; border: 1px solid #fdba74; padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; }
 
-.info-label {
-    font-size: 12px;
-    color: #111827;
-    margin-bottom: 8px;
-}
+    .approval-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px 22px; display: flex; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.08); overflow-x: auto; }
+    .approval-step { display: flex; align-items: center; gap: 14px; min-width: max-content; }
+    .step-circle { width: 48px; height: 48px; border-radius: 50%; background: #d1d5db; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
+    .completed .step-circle { background: #dcfce7; color: #22c55e; border: 1px solid #86efac; font-size: 24px; }
+    .active .step-circle { background: #cffafe; color: #0891b2; }
+    .pending .step-circle { background: #d1d5db; color: #fff; }
+    .step-title { font-size: 18px; font-weight: 700; color: #374151; }
+    .step-status { font-size: 13px; color: #9ca3af; }
+    .completed .step-status { color: #059669; }
+    .active .step-status { color: #f97316; }
+    .step-line { height: 3px; min-width: 150px; background: #d1d5db; margin: 0 24px; }
+    .completed-line { background: #22c55e; }
+    .active-line { background: linear-gradient(to right, #f97316 45%, #d1d5db 45%); }
 
-.info-value {
-    font-size: 14px;
-    font-weight: 700;
-    color: #047857;
-}
-
-.info-icon {
-    width: 38px;
-    height: 38px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-}
-
-.purple { background: #f5d0fe; color: #9333ea; }
-.orange { background: #ffedd5; color: #c2410c; }
-.cyan { background: #cffafe; color: #0891b2; }
-.yellow { background: #fef3c7; color: #d97706; }
-
-.status-badge {
-    background: #fef3c7;
-    color: #f97316;
-    border: 1px solid #fdba74;
-    padding: 4px 14px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.approval-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 18px 22px;
-    display: flex;
-    align-items: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,.08);
-    overflow-x: auto;
-}
-
-.approval-step {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    min-width: max-content;
-}
-
-.step-circle {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: #d1d5db;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 16px;
-}
-
-.completed .step-circle {
-    background: #dcfce7;
-    color: #22c55e;
-    border: 1px solid #86efac;
-    font-size: 24px;
-}
-
-.active .step-circle {
-    background: #cffafe;
-    color: #0891b2;
-}
-
-.pending .step-circle {
-    background: #d1d5db;
-    color: #fff;
-}
-
-.step-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #374151;
-}
-
-.step-status {
-    font-size: 13px;
-    color: #9ca3af;
-}
-
-.completed .step-status {
-    color: #059669;
-}
-
-.active .step-status {
-    color: #f97316;
-}
-
-.step-line {
-    height: 3px;
-    min-width: 150px;
-    background: #d1d5db;
-    margin: 0 24px;
-}
-
-.completed-line {
-    background: #22c55e;
-}
-
-.active-line {
-    background: linear-gradient(to right, #f97316 45%, #d1d5db 45%);
-}
-
-@@media (max-width: 768px) {
-    .approval-card {
-        padding: 16px;
-    }
-
-    .step-line {
-        min-width: 70px;
-        margin: 0 14px;
-    }
-
-    .step-title {
-        font-size: 15px;
-    }
-
-    .step-status {
-        font-size: 12px;
-    }
-}
-
-.timeline-box {
-    background: #fff;
-    border: 1px solid #e6e9ee;
-    border-radius: 14px;
-    padding: 22px;
-    margin-bottom: 24px;
-}
-
-.timeline-heading {
-    font-size: 16px;
-    font-weight: 700;
-    color: #374151;
-    margin-bottom: 18px;
-}
-
-.timeline-scroll {
-    position: relative;
-    display: flex;
-    gap: 16px;
-    overflow-x: auto;
-    padding-top: 12px;
-}
-
-.timeline-track {
-    position: absolute;
-    top: 28px;
-    left: 78px;
-    right: 78px;
-    height: 2px;
-    background: #e5e7eb;
-    z-index: 0;
-}
-
-.timeline-col {
-    position: relative;
-    z-index: 1;
-    width: 155px;
-    min-width: 155px;
-}
-
-.timeline-dot {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    margin: 0 auto 15px auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-size: 19px;
-}
-
-.dot-green {
-    background: #047857;
-}
-
-.dot-red {
-    background: #dc2626;
-}
-
-.dot-blue {
-    background: #3b82f6;
-}
-
-.dot-gray {
-    background: #cbd5e1;
-}
-
-.timeline-small-card {
-    min-height: 100px;
-    border-radius: 8px;
-    border: 1px solid #edf0f5;
-    padding: 11px;
-    background: #f9fafb;
-}
-
-.card-green {
-    background: #f0fdf4;
-}
-
-.card-red {
-    background: #fff1f2;
-}
-
-.card-blue {
-    background: #f8fbff;
-}
-
-.timeline-title {
-    font-size: 12px;
-    font-weight: 700;
-    color: #111827;
-    line-height: 1.2;
-}
-
-.timeline-status {
-    display: inline-block;
-    margin-top: 8px;
-    font-size: 10px;
-    padding: 3px 7px;
-    border-radius: 5px;
-    font-weight: 600;
-}
-
-.badge-green {
-    background: #d1fae5;
-    color: #059669;
-}
-
-.badge-red {
-    background: #fee2e2;
-    color: #dc2626;
-}
-
-.badge-blue {
-    background: #dbeafe;
-    color: #2563eb;
-}
-
-.badge-orange {
-    background: #ffedd5;
-    color: #f97316;
-}
-
-.timeline-user {
-    margin-top: 12px;
-    font-size: 12px;
-    color: #374151;
-}
-
-.timeline-date {
-    margin-top: 7px;
-    font-size: 10px;
-    color: #6b7280;
-}
-
-.sent-title {
-    font-size: 20px;
-    font-weight: 700;
-    color: #444;
-    margin-bottom: 18px;
-}
-
-.detail-box {
-    background: #fff;
-    border: 1px solid #e6e9ee;
-    border-radius: 12px;
-    padding: 24px;
-    min-height: 225px;
-}
-
-.detail-box h5 {
-    font-size: 16px;
-    font-weight: 700;
-    color: #374151;
-    margin-bottom: 20px;
-}
-
-.info-row {
-    display: grid;
-    grid-template-columns: 140px 1fr;
-    margin-bottom: 18px;
-    font-size: 13px;
-}
-
-.info-row span {
-    color: #667085;
-}
-
-.info-row strong {
-    color: #374151;
-    font-weight: 600;
-}
-
-.remarks {
-    padding-left: 20px;
-    margin: 0;
-}
-
-.remarks li {
-    margin-bottom: 18px;
-    font-size: 13px;
-    color: #374151;
-    font-weight: 500;
-}
-
-@@media (max-width: 768px) {
-    .timeline-col {
-        width: 145px;
-        min-width: 145px;
-    }
-
-    .timeline-track {
-        left: 72px;
-        right: 72px;
-    }
-
-    .info-row {
-        grid-template-columns: 1fr;
-        gap: 4px;
-    }
-}
+    .timeline-box { background: #fff; border: 1px solid #e6e9ee; border-radius: 14px; padding: 22px; margin-bottom: 24px; }
+    .timeline-heading { font-size: 16px; font-weight: 700; color: #374151; margin-bottom: 18px; }
+    .timeline-scroll { position: relative; display: flex; gap: 16px; overflow-x: auto; padding-top: 12px; }
+    .timeline-track { position: absolute; top: 28px; left: 78px; right: 78px; height: 2px; background: #e5e7eb; z-index: 0; }
+    .timeline-col { position: relative; z-index: 1; width: 155px; min-width: 155px; }
+    .timeline-dot { width: 34px; height: 34px; border-radius: 50%; margin: 0 auto 15px auto; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 19px; }
+    .dot-green { background: #047857; }
+    .dot-red { background: #dc2626; }
+    .dot-blue { background: #3b82f6; }
+    .dot-gray { background: #cbd5e1; }
+    .timeline-small-card { min-height: 100px; border-radius: 8px; border: 1px solid #edf0f5; padding: 11px; background: #f9fafb; }
+    .card-green { background: #f0fdf4; }
+    .card-red { background: #fff1f2; }
+    .card-blue { background: #f8fbff; }
+    .timeline-title { font-size: 12px; font-weight: 700; color: #111827; line-height: 1.2; }
+    .timeline-status { display: inline-block; margin-top: 8px; font-size: 10px; padding: 3px 7px; border-radius: 5px; font-weight: 600; }
+    .badge-green { background: #d1fae5; color: #059669; }
+    .badge-red { background: #fee2e2; color: #dc2626; }
+    .badge-blue { background: #dbeafe; color: #2563eb; }
+    .timeline-user { margin-top: 12px; font-size: 12px; color: #374151; }
+    .timeline-date { margin-top: 7px; font-size: 10px; color: #6b7280; }
+    .sent-title { font-size: 20px; font-weight: 700; color: #444; margin-bottom: 18px; }
+    .detail-box { background: #fff; border: 1px solid #e6e9ee; border-radius: 12px; padding: 24px; min-height: 225px; }
+    .detail-box h5 { font-size: 16px; font-weight: 700; color: #374151; margin-bottom: 20px; }
+    .info-row { display: grid; grid-template-columns: 140px 1fr; margin-bottom: 18px; font-size: 13px; }
+    .info-row span { color: #667085; }
+    .info-row strong { color: #374151; font-weight: 600; }
+    .remarks { padding-left: 20px; margin: 0; }
+    .remarks li { margin-bottom: 18px; font-size: 13px; color: #374151; font-weight: 500; }
 </style>
 
 <div class="container-fluid py-4 px-4">
@@ -1346,15 +716,136 @@ border-radius: 12px;
         <div class="page-subtitle">Review and approve dealer registration</div>
     </div>
 
-   @*  <div class="container-fluid py-3"> *@
-@if (IsSendBackPopupVisible)
-{
-    <SendBackPopup 
-        Dealer="@_dealer"
-        LoginState="@LoginState"
-        OnClose="@HideSendBackPopup"
-        OnRejected="@HandleDealerRejected" />
-}
+    @if (IsSendBackPopupVisible)
+    {
+        <SendBackPopup 
+            Dealer="@_dealer"
+            LoginState="@LoginState"
+            OnClose="@HideSendBackPopup"
+            OnRejected="@HandleDealerRejected" />
+    }
+
+    <!-- ================== CONFIRM PROCEED POPUP ================== -->
+    @if (IsConfirmProceedPopupVisible)
+    {
+        <style>
+            /* Scoped popup styles */
+            .cp-wrapper * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+            .cp-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.4); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 1055; }
+            .cp-modal-content { background-color: #ffffff; width: 100%; max-width: 850px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); display: flex; flex-direction: column; }
+            .cp-modal-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 24px 32px 16px; }
+            .cp-modal-title { font-size: 1.5rem; font-weight: 700; color: #374151; margin-bottom: 8px; }
+            .cp-modal-subtitle { font-size: 0.95rem; color: #6b7280; }
+            .cp-btn-close { background: transparent; border: none; color: #4b5563; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s; }
+            .cp-btn-close:hover { color: #111827; }
+            .cp-modal-body { padding: 0 32px; }
+            .cp-section-title { font-size: 1.05rem; font-weight: 600; color: #374151; margin-bottom: 16px; }
+            .cp-optional-text { font-weight: 400; color: #6b7280; font-size: 0.95rem; }
+            .cp-summary-section { margin-top: 12px; margin-bottom: 28px; }
+            .cp-summary-grid { display: grid; grid-template-columns: 1fr 1fr; row-gap: 16px; column-gap: 32px; }
+            .cp-summary-item { display: flex; font-size: 0.95rem; }
+            .cp-summary-label { color: #6b7280; flex: 0 0 180px; }
+            .cp-summary-value { color: #1f2937; font-weight: 500; }
+            .cp-remarks-section { margin-bottom: 24px; }
+            .cp-remarks-input { width: 100%; min-height: 100px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px; resize: vertical; font-size: 0.95rem; color: #374151; outline: none; transition: border-color 0.2s; }
+            .cp-remarks-input:focus { border-color: #d1d5db; }
+            .cp-info-alert { background-color: #eff6ff; border-radius: 8px; padding: 16px 20px; display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+            .cp-alert-icon { width: 32px; height: 32px; background-color: #dbeafe; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+            .cp-alert-text { color: #6b7280; font-size: 0.95rem; margin: 0; line-height: 1.5; }
+            .cp-modal-footer { display: flex; justify-content: flex-end; gap: 16px; padding: 20px 32px 32px; }
+            .cp-btn { display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 6px; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+            .cp-btn-cancel { background-color: #ffffff; border: 1px solid #d1d5db; color: #4b5563; }
+            .cp-btn-cancel:hover { background-color: #f9fafb; color: #1f2937; }
+            .cp-btn-confirm { background-color: #115e59; border: 1px solid #115e59; color: #ffffff; }
+            .cp-btn-confirm:hover { background-color: #0f514e; }
+            .cp-btn-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
+            @@media (max-width: 768px) { .cp-summary-grid { grid-template-columns: 1fr; } .cp-summary-label { flex: 0 0 150px; } .cp-modal-header, .cp-modal-body, .cp-modal-footer { padding-left: 20px; padding-right: 20px; } }
+        </style>
+
+        <div class="cp-wrapper">
+            <div class="cp-modal-overlay" @onclick="HideConfirmProceedPopup">
+                <div class="cp-modal-content" @onclick:stopPropagation="true">
+                    
+                    <header class="cp-modal-header">
+                        <div class="header-text">
+                            <h1 class="cp-modal-title">Confirm Proceed</h1>
+                            <p class="cp-modal-subtitle">Are you sure you want to approve and forward this application to @GetNextStageTarget()?</p>
+                        </div>
+                        <button class="cp-btn-close" aria-label="Close modal" @onclick="HideConfirmProceedPopup">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="15" y1="9" x2="9" y2="15"></line>
+                                <line x1="9" y1="9" x2="15" y2="15"></line>
+                            </svg>
+                        </button>
+                    </header>
+
+                    <div class="cp-modal-body">
+                        <section class="cp-summary-section">
+                            <h2 class="cp-section-title">Application Summary</h2>
+                            <div class="cp-summary-grid">
+                                <div class="cp-summary-item">
+                                    <span class="cp-summary-label">Application Ref No</span>
+                                    <span class="cp-summary-value">: @(_dealer?.DealerCode ?? $"DL-{_dealer?.Id}")</span>
+                                </div>
+                                <div class="cp-summary-item">
+                                    <span class="cp-summary-label">Dealer Name</span>
+                                    <span class="cp-summary-value">: @(_dealer?.FirmName ?? "-")</span>
+                                </div>
+                                <div class="cp-summary-item">
+                                    <span class="cp-summary-label">Proposed Credit Limit</span>
+                                    <span class="cp-summary-value">: ₹ @(_dealer?.CashCreditLimit.ToString("N2") ?? "0.00")</span>
+                                </div>
+                                <div class="cp-summary-item">
+                                    <span class="cp-summary-label">Current Stage</span>
+                                    <span class="cp-summary-value">: @GetCurrentStageTarget()</span>
+                                </div>
+                                <div class="cp-summary-item">
+                                    <span class="cp-summary-label">Next Stage</span>
+                                    <span class="cp-summary-value">: @GetNextStageTarget()</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="cp-remarks-section">
+                            <h2 class="cp-section-title">Remarks <span class="cp-optional-text">(optional)</span></h2>
+                            <textarea class="cp-remarks-input" @bind="ConfirmRemarks" placeholder="Enter Remarks Optional"></textarea>
+                        </section>
+
+                        <div class="cp-info-alert">
+                            <div class="cp-alert-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                                </svg>
+                            </div>
+                            <p class="cp-alert-text">Once You Proceed the Application will be Forwarded to @GetNextStageTarget() and you will not be able to edit it</p>
+                        </div>
+                    </div>
+
+                    <footer class="cp-modal-footer">
+                        <button class="cp-btn cp-btn-cancel" @onclick="HideConfirmProceedPopup" disabled="@_isApproving">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                            Cancel
+                        </button>
+                        <button class="cp-btn cp-btn-confirm" @onclick="ApproveDealer" disabled="@_isApproving">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            @(_isApproving ? "Processing..." : "Confirm & Proceed")
+                        </button>
+                    </footer>
+
+                </div>
+            </div>
+        </div>
+    }
+    <!-- ================== END CONFIRM PROCEED POPUP ================== -->
+
     <!-- Top Info Cards -->
     <div class="row g-3 mb-3">
         <div class="col-12 col-md-6 col-lg-3">
@@ -1381,7 +872,7 @@ border-radius: 12px;
             </div>
         </div>
 
-        <div class="col-12 col-md-6 col-lg-3">
+        @* <div class="col-12 col-md-6 col-lg-3">
             <div class="info-card">
                 <div>
                     <div class="info-label">Submitted By</div>
@@ -1391,8 +882,20 @@ border-radius: 12px;
                     <i class="bi bi-person-badge"></i>
                 </div>
             </div>
-        </div>
+        </div> *@
 
+        <div class="col-12 col-md-6 col-lg-3">
+    <div class="info-card">
+        <div>
+            <div class="info-label">Submitted By</div>
+            
+            <div class="info-value">@(_submittedByName ?? _dealer?.CreatedBy ?? "-")</div>
+        </div>
+        <div class="info-icon cyan">
+            <i class="bi bi-person-badge"></i>
+        </div>
+    </div>
+</div>
         <div class="col-12 col-md-6 col-lg-3">
             <div class="info-card">
                 <div>
@@ -1483,8 +986,6 @@ border-radius: 12px;
         }
     </div>
 </div>
-
-@* </div> *@
 
 <h4 class="sent-title">Recent Actions</h4>
 
@@ -1759,34 +1260,6 @@ else
                         </div>
                     </div>
                 </div>
-                @* <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-person-workspace"></i> Experience</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            @if (_experiences != null && _experiences.Count > 1)
-                            {
-                                var idx = 0;
-                                foreach (var exp in _experiences.Skip(1))
-                                {
-                                    <div class="data-row"><div class="data-label">Company Name:</div><div class="data-value">@exp.CompanyId</div></div>
-                                    <div class="data-row"><div class="data-label">Number of years:</div><div class="data-value">@exp.NoOfYears @("Years")</div></div>
-                                    <div class="data-row"><div class="data-label">Quantity (MT):</div><div class="data-value">@exp.Quantity</div></div>
-                                    <div class="data-row"><div class="data-label">Turnover (Lakhs):</div><div class="data-value">@exp.TurnOver</div></div>
-                                    <div class="data-row"><div class="data-label">Still Active:</div><div class="data-value">@(exp.IsActive ? "Yes" : "No")</div></div>
-                                    <div class="mb-2"></div>
-                                    idx++;
-                                }
-                            }
-                            else
-                            {
-                                <div class="data-row"><div class="data-label">Experience</div><div class="data-value">No additional experience entries</div></div>
-                            }
-                        </div>
-                    </div>
-                </div> *@
             </div>
         </div>
     </div>
@@ -2070,21 +1543,6 @@ else
                         </div>
                     </div>
                 </div>
-               @*  <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-people"></i> Family Members</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Family Member Name:</div><div class="data-value">Lakshmi Kumar</div></div>
-                            <div class="data-row"><div class="data-label">D.O.B:</div><div class="data-value">15/08/1988</div></div>
-                            <div class="data-row"><div class="data-label">Age:</div><div class="data-value">37</div></div>
-                            <div class="data-row"><div class="data-label">Relationship:</div><div class="data-value">Spouse</div></div>
-                            <div class="data-row"><div class="data-label">Occupation:</div><div class="data-value">Homemaker</div></div>
-                        </div>
-                    </div>
-                </div> *@
             </div>
         </div>
     </div>
@@ -2228,21 +1686,7 @@ else
                         </div>
                     </div>
                 </div>
-               @*  <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Assets (Banking)</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Bank Name:</div><div class="data-value">Indian Bank</div></div>
-                            <div class="data-row"><div class="data-label">Bank Branch:</div><div class="data-value">Thanjavur Main Branch</div></div>
-                            <div class="data-row"><div class="data-label">Value (₹):</div><div class="data-value">₹ 12,50,000</div></div>
-                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">Includes savings balance and fixed deposits maintained for business operations.</div></div>
-                            <div class="data-row"><div class="data-label">Document:</div><div class="data-value">Yes</div></div>
-                        </div>
-                    </div>
-                </div> *@
+                
                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
@@ -2271,22 +1715,7 @@ else
                         </div>
                     </div>
                 </div>
-              @*   <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-map"></i> Assets (Land)</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Land Name:</div><div class="data-value">Kumar Agricultural Land</div></div>
-                            <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">142/3A</div></div>
-                            <div class="data-row"><div class="data-label">Land Size (in Cent):</div><div class="data-value">250 Cent</div></div>
-                            <div class="data-row"><div class="data-label">Property Value (₹ in Lakhs):</div><div class="data-value">₹ 35,00,000</div></div>
-                            <div class="data-row"><div class="data-label">Land Document:</div><div class="data-value">Yes</div></div>
-                            <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">Yes</div></div>
-                        </div>
-                    </div>
-                </div> *@
+                
                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
@@ -2316,23 +1745,7 @@ else
                         </div>
                     </div>
                 </div>
-             @*    <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-house"></i> Assets (Building)</h4>
-                            <i class="bi bi-pencil-square edit-icon"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Building Name:</div><div class="data-value">Kumar Agro Warehouse</div></div>
-                            <div class="data-row"><div class="data-label">Property Value (₹):</div><div class="data-value">₹ 28,00,000</div></div>
-                            <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">142/3A</div></div>
-                            <div class="data-row"><div class="data-label">Land Size (in Square Ft):</div><div class="data-value">5000 Sq.ft</div></div>
-                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">RCC structured warehouse used for fertilizer storage with proper ventilation and loading access.</div></div>
-                            <div class="data-row"><div class="data-label">Building Document:</div><div class="data-value">Yes</div></div>
-                            <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">Yes</div></div>
-                        </div>
-                    </div>
-                </div> *@
+                
                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
@@ -2608,20 +2021,20 @@ else
         </div>
     </div>
 
- 
 </div>
+
 @if (CanShowApprovalButton())
 {
-<div class="d-flex justify-content-end gap-2 mt-3">
+    <div class="d-flex justify-content-end gap-2 mt-3 mb-5 px-4">
 
-  <button type="button"
-        class="btn btn-outline-warning px-3"
-        @onclick="@ShowSendBackPopup">
-    <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
-</button>
-    
-    <button class="btn-submit px-3" @onclick="ApproveDealer" disabled="@_isApproving">
+      <button type="button"
+            class="btn btn-outline-warning px-3"
+            @onclick="@ShowSendBackPopup">
+        <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
+    </button>
+        
+      <button class="btn-submit px-3" @onclick="ShowConfirmProceedPopup" disabled="@_isApproving">
         @(_isApproving ? "Processing..." : ApprovalButtonText())
     </button>
-</div>
+    </div>
 }
