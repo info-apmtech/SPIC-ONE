@@ -7,6 +7,22 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 {
 	public static class FormStepData
 	{
+		public static Action? OnStateChanged;
+
+		public static void MarkStepError(int stepNo, bool hasError)
+		{
+			var step = Steps.FirstOrDefault(x => x.StepNo == stepNo);
+			if (step != null)
+				step.HasError = hasError;
+			OnStateChanged?.Invoke();
+		}
+
+		public static void ClearAllErrors()
+		{
+			foreach (var step in Steps)
+				step.HasError = false;
+			OnStateChanged?.Invoke();
+		}
 		public static List<FormStepModel> Steps = new()
 	{
 		new FormStepModel { StepNo = 1, Title = "Market Details & Territory Coverage", Route = "/Register", PreviousRoute = "/Dashboard", NextRoute = "/Experience" },
