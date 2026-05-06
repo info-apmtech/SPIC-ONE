@@ -1,8 +1,9 @@
-﻿@page "/Experience"
+@page "/Experience"
 @using System.Net.Http.Json
 @using System.Text.Json.Nodes
 @using Microsoft.AspNetCore.Components
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.FormFlow
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
@@ -92,7 +93,7 @@
 				<label class="form-label-custom">Turnover (Lakhs)</label>
 
 				<div class="input-icon-left-wrapper">
-					<span class="input-icon-left">₹</span>
+					<span class="input-icon-left">?</span>
 
 					<input type="number"
 						   class="form-control-custom w-100 input-with-left-icon"
@@ -180,7 +181,7 @@
 								</div>
 								<div class="stat-box">
 									<div class="stat-label">Annual Turnover</div>
-									<div class="stat-value">₹ @exp.TurnOver.ToString("N1") <small>Lakhs</small></div>
+									<div class="stat-value">? @exp.TurnOver.ToString("N1") <small>Lakhs</small></div>
 								</div>
 							</div>
 						</div>
@@ -422,6 +423,8 @@
 	private async Task HandleNext()
 	{
 		await SaveYearsOfExperience();
+		var hasError = _yearsOfExperience <= 0 || _experiences.Count == 0;
+		FormStepData.MarkStepError(2, hasError);
 		Loading.Show();
 		Nav.NavigateTo($"/AnnualSales?dealerId={DealerId}");
 	}

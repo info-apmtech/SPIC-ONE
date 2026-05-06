@@ -7,6 +7,7 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 <div class="container-fluid py-4 px-0">
 
@@ -233,8 +234,9 @@
         {
             Loading.Show();
 
-            vm.Employee.CreatedBy ??= "System";
-            vm.Employee.UpdatedBy = "System";
+            var currentUser = LoginState.UserId ?? "System";
+            vm.Employee.CreatedBy ??= currentUser;
+            vm.Employee.UpdatedBy = currentUser;
 
             if (!IsEditMode)
             {
@@ -265,8 +267,8 @@
                     RegionId = vm.Login.RegionId,
                     HeadquartersId = vm.Login.HeadquartersId,
                     IsActive = vm.Login.IsActive,
-                    CreatedBy = "System",
-                    UpdatedBy = "System"
+                    CreatedBy = currentUser,
+                    UpdatedBy = currentUser
                 };
 
                 var loginResponse = await Http.PostAsJsonAsync("api/EmployeeLoginSetup", loginRequest);
@@ -301,7 +303,7 @@
                     RegionId = vm.Login.RegionId,
                     HeadquartersId = vm.Login.HeadquartersId,
                     IsActive = vm.Login.IsActive,
-                    UpdatedBy = "System"
+                    UpdatedBy = currentUser
                 };
 
                 var loginUpdateResponse = await Http.PutAsJsonAsync($"api/EmployeeLoginSetup/login/{EditingLoginId}", loginRequest);

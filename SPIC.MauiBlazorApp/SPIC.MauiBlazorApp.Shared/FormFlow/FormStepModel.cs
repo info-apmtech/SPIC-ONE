@@ -11,5 +11,6 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 		public string Route { get; set; } = string.Empty;
 		public string PreviousRoute { get; set; } = string.Empty;
 		public string NextRoute { get; set; } = string.Empty;
+		public bool HasError { get; set; }
 	}
 }
