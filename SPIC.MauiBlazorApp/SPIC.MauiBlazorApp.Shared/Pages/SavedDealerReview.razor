@@ -312,104 +312,61 @@
 
         if (_dealer != null)
         {
+            // 1. Initial Submit Step
             var submitUser = "System";
             if (!string.IsNullOrEmpty(_dealer.CreatedBy))
             {
                 if (_userNames.ContainsKey(_dealer.CreatedBy)) submitUser = _userNames[_dealer.CreatedBy];
                 else submitUser = _dealer.CreatedBy;
             }
-            var createdAt = _dealer.CreatedAt;
-            var createdDateText = createdAt.ToString("dd-MMM-yyyy\nhh:mm tt");
+            var createdDateText = _dealer.CreatedAt.ToString("dd-MMM-yyyy hh:mm tt");
+            
             TimelineItems.Add(new TimelineItem("Submitted", "Submitted", submitUser, createdDateText, "dot-green", "bi bi-check-lg", "card-green", "badge-green"));
-        }
 
-        if (_approvalHistory != null && _approvalHistory.Any())
-        {
-            foreach (var h in _approvalHistory.OrderBy(h => h.ApprovedAt))
-            {
-                var title = !string.IsNullOrEmpty(h.Role) ? h.Role : "Action";
-                var status = "Updated";
-                if (!string.IsNullOrEmpty(h.Remarks))
-                {
-                    if (h.Remarks.Contains("Sections:") || h.Remarks.Contains("Sent Back")) status = "Sent Back";
-                    else if (h.Remarks.Contains("Resubmitted")) status = "Resubmitted";
-                }
-
-                var userId = h.ApprovedBy;
-                var user = "System";
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    if (_userNames.ContainsKey(userId)) user = _userNames[userId];
-                    else user = userId;
-                }
-
-                var dateText = h.ApprovedAt.ToString("dd-MMM-yyyy\nhh:mm tt");
-                var dotClass = status == "Sent Back" ? "dot-red" : status == "Resubmitted" ? "dot-blue" : "dot-green";
-                var icon = status == "Sent Back" ? "bi bi-arrow-counterclockwise" : status == "Resubmitted" ? "bi bi-arrow-repeat" : "bi bi-check-lg";
-                var cardClass = status == "Sent Back" ? "card-red" : status == "Resubmitted" ? "card-blue" : "card-green";
-                var badgeClass = status == "Sent Back" ? "badge-red" : status == "Resubmitted" ? "badge-blue" : "badge-green";
-
-                TimelineItems.Add(new TimelineItem(title, status, user, dateText, dotClass, icon, cardClass, badgeClass));
-            }
-        }
-
-        if (_dealer != null)
-        {
+            // Helper to get latest record per role
             static DR.DealerApprovalHistory? LastForRole(IEnumerable<DR.DealerApprovalHistory> hist, string roleToken)
             {
                 return hist?.Where(h => !string.IsNullOrEmpty(h.Role) && h.Role.Contains(roleToken, StringComparison.OrdinalIgnoreCase)).OrderByDescending(h => h.ApprovedAt).FirstOrDefault();
             }
 
-            var rmStatus = "Pending";
-            string rmUser = "-";
-            DateTime rmDate = _dealer.UpdatedAt;
-            if (_dealer.RMApproved == true) rmStatus = "Approved";
-            else if (_dealer.RMApproved == false) rmStatus = "Sent Back";
+            // 2. RM Step
+            var rmStatus = _dealer.RMApproved == true ? "Approved" : (_dealer.RMApproved == false ? "Sent Back" : "Pending");
             var lastRm = LastForRole(_approvalHistory, "RM");
-            if (lastRm != null)
-            {
-                if (!string.IsNullOrEmpty(lastRm.ApprovedBy) && _userNames.ContainsKey(lastRm.ApprovedBy)) rmUser = _userNames[lastRm.ApprovedBy];
-                else if (!string.IsNullOrEmpty(lastRm.ApprovedBy)) rmUser = lastRm.ApprovedBy;
-                rmDate = lastRm.ApprovedAt;
-            }
-            var rmDateText = rmDate.ToString("dd-MMM-yyyy\nhh:mm tt");
-            var rmDot = rmStatus == "Sent Back" ? "dot-red" : rmStatus == "Approved" ? "dot-green" : "dot-gray";
-            var rmCard = rmStatus == "Sent Back" ? "card-red" : rmStatus == "Approved" ? "card-green" : "card-blue";
-            TimelineItems.Add(new TimelineItem("Under Review by RM", rmStatus, rmUser, rmDateText, rmDot, "bi bi-clock", rmCard, rmStatus == "Sent Back" ? "badge-red" : "badge-blue"));
+            string rmUser = lastRm != null ? (_userNames.ContainsKey(lastRm.ApprovedBy ?? "") ? _userNames[lastRm.ApprovedBy!] : lastRm.ApprovedBy ?? "-") : "-";
+            string rmDateText = lastRm != null ? lastRm.ApprovedAt.ToString("dd-MMM-yyyy hh:mm tt") : "-";
+            
+            var rmDot = rmStatus == "Sent Back" ? "dot-red" : (rmStatus == "Pending" ? "dot-gray" : "dot-green");
+            var rmIcon = rmStatus == "Sent Back" ? "bi bi-arrow-counterclockwise" : "bi bi-clock";
+            var rmCard = rmStatus == "Sent Back" ? "card-red" : (rmStatus == "Pending" ? "card-pending" : "card-green");
+            var rmBadge = rmStatus == "Sent Back" ? "badge-red" : "badge-blue"; // Blue badge used for both Approved and Pending in image
+            
+            TimelineItems.Add(new TimelineItem("Under Review by RM", rmStatus, rmUser, rmDateText, rmDot, rmIcon, rmCard, rmBadge));
 
-            var smStatus = "Pending";
-            string smUser = "-";
-            DateTime smDate = _dealer.UpdatedAt;
-            if (_dealer.SMApproved == true) smStatus = "Approved";
-            else if (_dealer.SMApproved == false) smStatus = "Sent Back";
+            // 3. SMM Step
+            var smStatus = _dealer.SMApproved == true ? "Approved" : (_dealer.SMApproved == false ? "Sent Back" : "Pending");
             var lastSm = LastForRole(_approvalHistory, "SM");
-            if (lastSm != null)
-            {
-                if (!string.IsNullOrEmpty(lastSm.ApprovedBy) && _userNames.ContainsKey(lastSm.ApprovedBy)) smUser = _userNames[lastSm.ApprovedBy];
-                else if (!string.IsNullOrEmpty(lastSm.ApprovedBy)) smUser = lastSm.ApprovedBy;
-                smDate = lastSm.ApprovedAt;
-            }
-            var smDateText = smDate.ToString("dd-MMM-yyyy\nhh:mm tt");
-            var smDot = smStatus == "Sent Back" ? "dot-red" : smStatus == "Approved" ? "dot-green" : "dot-gray";
-            var smCard = smStatus == "Sent Back" ? "card-red" : smStatus == "Approved" ? "card-green" : "card-blue";
-            TimelineItems.Add(new TimelineItem("Under Review by SMM", smStatus, smUser, smDateText, smDot, "bi bi-clock", smCard, smStatus == "Sent Back" ? "badge-red" : "badge-blue"));
+            string smUser = lastSm != null ? (_userNames.ContainsKey(lastSm.ApprovedBy ?? "") ? _userNames[lastSm.ApprovedBy!] : lastSm.ApprovedBy ?? "-") : "-";
+            string smDateText = lastSm != null ? lastSm.ApprovedAt.ToString("dd-MMM-yyyy hh:mm tt") : "-";
+            
+            var smDot = smStatus == "Sent Back" ? "dot-red" : (smStatus == "Pending" ? "dot-gray" : "dot-green");
+            var smIcon = smStatus == "Sent Back" ? "bi bi-arrow-counterclockwise" : "bi bi-clock";
+            var smCard = smStatus == "Sent Back" ? "card-red" : (smStatus == "Pending" ? "card-pending" : "card-green");
+            var smBadge = smStatus == "Sent Back" ? "badge-red" : "badge-blue";
 
-            var avpStatus = "Pending";
-            string avpUser = "-";
-            DateTime avpDate = _dealer.UpdatedAt;
-            if (_dealer.AVPApproved == true) avpStatus = "Approved";
-            else if (_dealer.AVPApproved == false) avpStatus = "Sent Back";
+            TimelineItems.Add(new TimelineItem("Under Review by SMM", smStatus, smUser, smDateText, smDot, smIcon, smCard, smBadge));
+
+            // 4. AVP Step
+            var avpStatus = _dealer.AVPApproved == true ? "Approved" : (_dealer.AVPApproved == false ? "Sent Back" : "Pending");
             var lastAvp = LastForRole(_approvalHistory, "AVP");
-            if (lastAvp != null)
-            {
-                if (!string.IsNullOrEmpty(lastAvp.ApprovedBy) && _userNames.ContainsKey(lastAvp.ApprovedBy)) avpUser = _userNames[lastAvp.ApprovedBy];
-                else if (!string.IsNullOrEmpty(lastAvp.ApprovedBy)) avpUser = lastAvp.ApprovedBy;
-                avpDate = lastAvp.ApprovedAt;
-            }
-            var avpDateText = avpDate.ToString("dd-MMM-yyyy\nhh:mm tt");
-            var avpDot = avpStatus == "Sent Back" ? "dot-red" : avpStatus == "Approved" ? "dot-green" : "dot-gray";
-            var avpCard = avpStatus == "Sent Back" ? "card-red" : avpStatus == "Approved" ? "card-green" : "card-blue";
-            TimelineItems.Add(new TimelineItem("Under Review by AVP", avpStatus, avpUser, avpDateText, avpDot, "bi bi-clock", avpCard, avpStatus == "Sent Back" ? "badge-red" : "badge-blue"));
+            string avpUser = lastAvp != null ? (_userNames.ContainsKey(lastAvp.ApprovedBy ?? "") ? _userNames[lastAvp.ApprovedBy!] : lastAvp.ApprovedBy ?? "-") : "-";
+            string avpDateText = lastAvp != null ? lastAvp.ApprovedAt.ToString("dd-MMM-yyyy hh:mm tt") : "-";
+            
+            var avpDot = avpStatus == "Sent Back" ? "dot-red" : (avpStatus == "Pending" ? "dot-gray" : "dot-green");
+            var avpIcon = avpStatus == "Sent Back" ? "bi bi-arrow-counterclockwise" : "bi bi-clock";
+            var avpCard = avpStatus == "Sent Back" ? "card-red" : (avpStatus == "Pending" ? "card-pending" : "card-green");
+            var avpBadge = avpStatus == "Sent Back" ? "badge-red" : "badge-blue";
+
+            TimelineItems.Add(new TimelineItem("Under Review by AVP", avpStatus, avpUser, avpDateText, avpDot, avpIcon, avpCard, avpBadge));
         }
     }
 
@@ -443,7 +400,7 @@
 
     private void ShowConfirmProceedPopup()
     {
-        ConfirmRemarks = ""; // Reset remarks field when modal opens
+        ConfirmRemarks = ""; 
         IsConfirmProceedPopupVisible = true;
         StateHasChanged();
     }
@@ -477,7 +434,7 @@
         if (_dealer == null) return;
 
         _isApproving = true;
-        StateHasChanged(); // Show "Processing..."
+        StateHasChanged(); 
 
         try
         {
@@ -494,9 +451,6 @@
                 _dealer.AVPApproved = true;
                 _dealer.Status = DR.DealerStatus.Active;
             }
-
-            // Note: If your system accepts remarks during approval, uncomment and assign here:
-            // _dealer.Remarks = ConfirmRemarks;
 
             var response = await Http.PutAsJsonAsync($"api/DealerRegistration/{_dealer.Id}", _dealer);
 
@@ -678,27 +632,137 @@
     .completed-line { background: #22c55e; }
     .active-line { background: linear-gradient(to right, #f97316 45%, #d1d5db 45%); }
 
-    .timeline-box { background: #fff; border: 1px solid #e6e9ee; border-radius: 14px; padding: 22px; margin-bottom: 24px; }
-    .timeline-heading { font-size: 16px; font-weight: 700; color: #374151; margin-bottom: 18px; }
-    .timeline-scroll { position: relative; display: flex; gap: 16px; overflow-x: auto; padding-top: 12px; }
-    .timeline-track { position: absolute; top: 28px; left: 78px; right: 78px; height: 2px; background: #e5e7eb; z-index: 0; }
-    .timeline-col { position: relative; z-index: 1; width: 155px; min-width: 155px; }
-    .timeline-dot { width: 34px; height: 34px; border-radius: 50%; margin: 0 auto 15px auto; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 19px; }
-    .dot-green { background: #047857; }
+    /* ========================================================
+       NEW TIMELINE CSS (MATCHING THE SCREENSHOT)
+       ======================================================== */
+    .timeline-box { 
+        background: #fff; 
+        border: 1px solid #e6e9ee; 
+        border-radius: 14px; 
+        padding: 24px; 
+        margin-bottom: 24px; 
+        box-shadow: 0 1px 3px rgba(0,0,0,.03);
+    }
+    .timeline-heading { 
+        font-size: 1.1rem; 
+        font-weight: 700; 
+        color: #374151; 
+        margin-bottom: 24px; 
+    }
+    
+    .timeline-scroll { 
+        display: flex; 
+        overflow-x: auto; 
+        padding-bottom: 12px;
+        scrollbar-width: thin; /* For Firefox */
+    }
+    .timeline-scroll::-webkit-scrollbar { height: 8px; }
+    .timeline-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+    
+    .timeline-col { 
+        position: relative; 
+        min-width: 240px; 
+        width: 240px; 
+        padding-right: 16px; 
+        display: flex; 
+        flex-direction: column; 
+    }
+    
+    /* Horizontal Line drawn perfectly center-to-center */
+    .timeline-col::after {
+        content: '';
+        position: absolute;
+        top: 16px; /* Half of the 32px dot */
+        left: 48px; /* Offset to start right after the first dot */
+        width: calc(100% - 32px); /* Stretch to the next item */
+        height: 2px;
+        background: #e5e7eb;
+        z-index: 1;
+    }
+    .timeline-col:last-child::after { 
+        display: none; 
+    }
+    
+    .timeline-dot { 
+        width: 32px; 
+        height: 32px; 
+        border-radius: 50%; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        color: #fff; 
+        font-size: 15px; 
+        margin-bottom: 16px;
+        margin-left: 16px; /* Align dot slightly inward */
+        z-index: 2; 
+        position: relative;
+    }
+    
+    .dot-green { background: #059669; }
     .dot-red { background: #dc2626; }
     .dot-blue { background: #3b82f6; }
     .dot-gray { background: #cbd5e1; }
-    .timeline-small-card { min-height: 100px; border-radius: 8px; border: 1px solid #edf0f5; padding: 11px; background: #f9fafb; }
-    .card-green { background: #f0fdf4; }
-    .card-red { background: #fff1f2; }
-    .card-blue { background: #f8fbff; }
-    .timeline-title { font-size: 12px; font-weight: 700; color: #111827; line-height: 1.2; }
-    .timeline-status { display: inline-block; margin-top: 8px; font-size: 10px; padding: 3px 7px; border-radius: 5px; font-weight: 600; }
+    
+    .timeline-small-card { 
+        width: 100%;
+        flex-grow: 1;
+        border-radius: 8px; 
+        border: 1px solid #edf0f5; 
+        padding: 16px; 
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .card-green { background: #f0fdf4; border-color: #dcfce7; }
+    .card-red { background: #fff1f2; border-color: #fee2e2; }
+    .card-pending { background: #f8fafc; border-color: #e2e8f0; } /* Pending matching the screenshot */
+    
+    .timeline-title-row { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: flex-start; 
+        margin-bottom: 12px; 
+    }
+    
+    .timeline-title { 
+        font-size: 0.85rem; 
+        font-weight: 700; 
+        color: #111827; 
+        line-height: 1.3; 
+        margin-right: 8px;
+    }
+    
+    .timeline-status { 
+        display: inline-block; 
+        font-size: 0.7rem; 
+        padding: 4px 10px; 
+        border-radius: 4px; 
+        font-weight: 600; 
+        width: fit-content;
+        margin-bottom: 16px;
+    }
+    
     .badge-green { background: #d1fae5; color: #059669; }
     .badge-red { background: #fee2e2; color: #dc2626; }
     .badge-blue { background: #dbeafe; color: #2563eb; }
-    .timeline-user { margin-top: 12px; font-size: 12px; color: #374151; }
-    .timeline-date { margin-top: 7px; font-size: 10px; color: #6b7280; }
+    
+    .timeline-user { 
+        font-size: 0.75rem; 
+        color: #4b5563; 
+        word-break: break-all; /* Prevents long names/GUIDs from breaking layout */
+        margin-bottom: 12px; 
+        line-height: 1.4; 
+    }
+    
+    .timeline-date { 
+        font-size: 0.7rem; 
+        color: #6b7280; 
+        display: flex; 
+        align-items: center; 
+        margin-top: auto; /* Pushes to bottom */
+    }
+    /* ======================================================== */
+
     .sent-title { font-size: 20px; font-weight: 700; color: #444; margin-bottom: 18px; }
     .detail-box { background: #fff; border: 1px solid #e6e9ee; border-radius: 12px; padding: 24px; min-height: 225px; }
     .detail-box h5 { font-size: 16px; font-weight: 700; color: #374151; margin-bottom: 20px; }
@@ -729,7 +793,6 @@
     @if (IsConfirmProceedPopupVisible)
     {
         <style>
-            /* Scoped popup styles */
             .cp-wrapper * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
             .cp-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.4); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 1055; }
             .cp-modal-content { background-color: #ffffff; width: 100%; max-width: 850px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); display: flex; flex-direction: column; }
@@ -872,30 +935,19 @@
             </div>
         </div>
 
-        @* <div class="col-12 col-md-6 col-lg-3">
+        <div class="col-12 col-md-6 col-lg-3">
             <div class="info-card">
                 <div>
                     <div class="info-label">Submitted By</div>
-                    <div class="info-value">@(_dealer?.CreatedBy ?? "-")</div>
+                    <div class="info-value">@(_submittedByName ?? _dealer?.CreatedBy ?? "-")</div>
                 </div>
                 <div class="info-icon cyan">
                     <i class="bi bi-person-badge"></i>
-                </div>
-            </div>
-        </div> *@
+                </div> 
 
-        <div class="col-12 col-md-6 col-lg-3">
-    <div class="info-card">
-        <div>
-            <div class="info-label">Submitted By</div>
-            
-            <div class="info-value">@(_submittedByName ?? _dealer?.CreatedBy ?? "-")</div>
+            </div>
         </div>
-        <div class="info-icon cyan">
-            <i class="bi bi-person-badge"></i>
-        </div>
-    </div>
-</div>
+
         <div class="col-12 col-md-6 col-lg-3">
             <div class="info-card">
                 <div>
@@ -951,113 +1003,114 @@
             </div>
         </div>
     </div>
-   <div class="timeline-box">
-    <h5 class="timeline-heading">Timeline</h5>
+    
+    <!-- Redesigned Horizontal Timeline View -->
+    <div class="timeline-box">
+        <h5 class="timeline-heading">Timeline</h5>
 
-    <div class="timeline-scroll">
-        <div class="timeline-track"></div>
-
-        @foreach (var item in TimelineItems)
-        {
-            <div class="timeline-col">
-                <div class="timeline-dot @item.DotClass">
-                    @if (!string.IsNullOrEmpty(item.Icon))
-                    {
-                        <i class="@item.Icon"></i>
-                    }
-                </div>
-
-                <div class="timeline-small-card @item.CardClass">
-                    <div class="d-flex justify-content-between">
-                        <div class="timeline-title">@item.Title</div>
-                        <i class="bi bi-eye text-primary"></i>
-                    </div>
-
-                    <span class="timeline-status @item.BadgeClass">@item.Status</span>
-
-                    <div class="timeline-user">@item.UserName</div>
-
-                    <div class="timeline-date">
-                        <i class="bi bi-calendar-event"></i>
-                        @item.DateText
-                    </div>
-                </div>
-            </div>
-        }
-    </div>
-</div>
-
-<h4 class="sent-title">Recent Actions</h4>
-
-@if (_approvalHistory != null && _approvalHistory.Any())
-{
-    var latest = _approvalHistory.First();
-    <div class="row g-4">
-        <div class="col-12 col-lg-6">
-            <div class="detail-box">
-                <h5>Action Details</h5>
-
-                <div class="info-row">
-                    <span>Action</span>
-                    <strong>@(latest.Remarks?.Contains("Sections:") == true ? "Sent Back" : "Updated")</strong>
-                </div>
-
-                <div class="info-row">
-                    <span>Action By</span>
-                    <strong>@(latest.ApprovedBy ?? "-")</strong>
-                </div>
-
-                <div class="info-row">
-                    <span>Role</span>
-                    <strong>@(latest.Role ?? "-")</strong>
-                </div>
-
-                <div class="info-row">
-                    <span>Date & Time</span>
-                    <strong>@(latest.ApprovedAt.ToString("dd-MMM-yyyy, hh:mm tt"))</strong>
-                </div>
-
-                <div class="info-row">
-                    <span>Stage</span>
-                    <strong>@(latest.Role != null ? $"{latest.Role} Review" : "-")</strong>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-12 col-lg-6">
-            <div class="detail-box">
-                <h5>Remarks</h5>
-
-                <ul class="remarks">
-                    @if (!string.IsNullOrWhiteSpace(latest.Remarks))
-                    {
-                        var lines = latest.Remarks.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var line in lines)
+        <div class="timeline-scroll">
+            @foreach (var item in TimelineItems)
+            {
+                <div class="timeline-col">
+                    <div class="timeline-dot @item.DotClass">
+                        @if (!string.IsNullOrEmpty(item.Icon))
                         {
-                            <li>@line</li>
+                            <i class="@item.Icon"></i>
                         }
-                    }
-                    else
-                    {
-                        <li>No remarks</li>
-                    }
-                </ul>
-            </div>
-        </div>
-    </div>
-}
-else
-{
-    <div class="row g-4">
-        <div class="col-12">
-            <div class="detail-box">
-                <h5>Recent Actions</h5>
-                <div class="text-muted">No recent actions available.</div>
-            </div>
-        </div>
-    </div>
-}
+                    </div>
 
+                    <div class="timeline-small-card @item.CardClass">
+                        <div class="timeline-title-row">
+                            <div class="timeline-title">@item.Title</div>
+                            <i class="bi bi-eye text-primary" style="cursor:pointer;"></i>
+                        </div>
+
+                        <span class="timeline-status @item.BadgeClass">@item.Status</span>
+
+                        <div class="timeline-user">@item.UserName</div>
+
+                        <div class="timeline-date">
+                            <i class="bi bi-calendar-event me-1"></i>
+                            @item.DateText
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <h4 class="sent-title">Recent Actions</h4>
+
+    @if (_approvalHistory != null && _approvalHistory.Any())
+    {
+        var latest = _approvalHistory.First();
+        <div class="row g-4">
+            <div class="col-12 col-lg-6">
+                <div class="detail-box">
+                    <h5>Action Details</h5>
+
+                    <div class="info-row">
+                        <span>Action</span>
+                        <strong>@(latest.Remarks?.Contains("Sections:") == true ? "Sent Back" : "Updated")</strong>
+                    </div>
+
+                    <div class="info-row">
+                        <span>Action By</span>
+                        <strong>@(latest.ApprovedBy ?? "-")</strong>
+                    </div>
+
+                    <div class="info-row">
+                        <span>Role</span>
+                        <strong>@(latest.Role ?? "-")</strong>
+                    </div>
+
+                    <div class="info-row">
+                        <span>Date & Time</span>
+                        <strong>@(latest.ApprovedAt.ToString("dd-MMM-yyyy, hh:mm tt"))</strong>
+                    </div>
+
+                    <div class="info-row">
+                        <span>Stage</span>
+                        <strong>@(latest.Role != null ? $"{latest.Role} Review" : "-")</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-6">
+                <div class="detail-box">
+                    <h5>Remarks</h5>
+
+                    <ul class="remarks">
+                        @if (!string.IsNullOrWhiteSpace(latest.Remarks))
+                        {
+                            var lines = latest.Remarks.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                            foreach (var line in lines)
+                            {
+                                <li>@line</li>
+                            }
+                        }
+                        else
+                        {
+                            <li>No remarks</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <div class="col-12">
+                <div class="detail-box">
+                    <h5>Recent Actions</h5>
+                    <div class="text-muted">No recent actions available.</div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Below are your Detail Accordions untouched from previous fixes -->
 
     <div class="custom-accordion @(IsCompanyDetailsOpen ? "active" : "") mt-3">
         <div class="accordion-header" @onclick="() => IsCompanyDetailsOpen = !IsCompanyDetailsOpen">
