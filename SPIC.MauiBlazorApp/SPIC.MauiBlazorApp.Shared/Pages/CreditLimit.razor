@@ -503,7 +503,7 @@
 								<td class="text-center">&gt;20</td>
 								<td class="text-center">&gt;10</td>
 								<td rowspan="2" class="align-middle">
-									<div class="table-val-box">@_spicValues[7].ToString("N2")</div>
+									<div class="table-val-box">@(_spicValueEntered[6] && _spicValueEntered[3] ? _spicValues[7].ToString("N2") : "0.00")</div>
 								</td>
 								<td rowspan="2" class="text-center align-middle">
 									<div class="table-val-box">@GetSpicMark(7).ToString("N0")</div>
@@ -537,7 +537,7 @@
 								<td class="text-center">&gt;4</td>
 								<td class="text-center">&lt;4</td>
 								<td rowspan="2" class="align-middle">
-									<div class="table-val-box">@_spicValues[9].ToString("N2")</div>
+									<div class="table-val-box">@(_spicValueEntered[8] && _spicValueEntered[3] ? _spicValues[9].ToString("N2") : "0.00")</div>
 								</td>
 								<td rowspan="2" class="text-center align-middle">
 									<div class="table-val-box">@GetSpicMark(9).ToString("N0")</div>
@@ -872,7 +872,7 @@
 								<td class="text-center">&gt;20</td>
 								<td class="text-center">&gt;10</td>
 								<td rowspan="2" class="align-middle">
-									<div class="table-val-box">@_greenstarValues[8].ToString("N2")</div>
+									<div class="table-val-box">@(_greenstarValueEntered[7] && _greenstarValueEntered[3] && _greenstarValueEntered[4] ? _greenstarValues[8].ToString("N2") : "0.00")</div>
 								</td>
 								<td rowspan="2" class="text-center align-middle">
 									<div class="table-val-box">@GetGreenstarMark(8).ToString("N0")</div>
@@ -906,7 +906,7 @@
 								<td class="text-center">&gt;4</td>
 								<td class="text-center">&lt;4</td>
 								<td rowspan="2" class="align-middle">
-									<div class="table-val-box">@_greenstarValues[10].ToString("N2")</div>
+									<div class="table-val-box">@(_greenstarValueEntered[9] && _greenstarValueEntered[3] && _greenstarValueEntered[4] ? _greenstarValues[10].ToString("N2") : "0.00")</div>
 								</td>
 								<td rowspan="2" class="text-center align-middle">
 									<div class="table-val-box">@GetGreenstarMark(10).ToString("N0")</div>
@@ -1000,6 +1000,8 @@
 	private bool _isError;
 	private double[] _spicValues = new double[10];
 	private double[] _greenstarValues = new double[11];
+	private bool[] _spicValueEntered = new bool[10];
+	private bool[] _greenstarValueEntered = new bool[11];
 
 	// Asset totals
 	private decimal BankingTotal => _bankAssets.Sum(b => b.Value);
@@ -1157,7 +1159,9 @@
 
 	private void InitValuesFromData()
 	{
-		// All values start at 0 — manual entry only
+		// All values start at 0 — marks show 0 until user enters a value
+		RecalculateSpicPercentages();
+		RecalculateGreenstarPercentages();
 	}
 
 	private void RecalculateSpicPercentages()
@@ -1315,14 +1319,20 @@
 	private void OnSpicValueChanged(int idx, ChangeEventArgs e)
 	{
 		if (double.TryParse(e.Value?.ToString(), out var val))
+		{
 			_spicValues[idx] = val;
+			_spicValueEntered[idx] = true;
+		}
 		RecalculateSpicPercentages();
 	}
 
 	private void OnGreenstarValueChanged(int idx, ChangeEventArgs e)
 	{
 		if (double.TryParse(e.Value?.ToString(), out var val))
+		{
 			_greenstarValues[idx] = val;
+			_greenstarValueEntered[idx] = true;
+		}
 		RecalculateGreenstarPercentages();
 	}
 
@@ -1341,7 +1351,17 @@
 		_ => 0
 	};
 
-	private double GetSpicMark(int idx) => CalculateMark(idx, _spicValues[idx]);
+	private double GetSpicMark(int idx)
+	{
+		if (idx == 7 || idx == 9)
+		{
+			bool depEntered = idx == 7
+				? _spicValueEntered[6] && _spicValueEntered[3]
+				: _spicValueEntered[8] && _spicValueEntered[3];
+			return !depEntered ? 0 : CalculateMark(idx, _spicValues[idx]);
+		}
+		return !_spicValueEntered[idx] ? 0 : CalculateMark(idx, _spicValues[idx]);
+	}
 
 	private static double CalculateGreenstarMark(int idx, double v) => idx switch
 	{
@@ -1359,7 +1379,17 @@
 		_ => 0
 	};
 
-	private double GetGreenstarMark(int idx) => CalculateGreenstarMark(idx, _greenstarValues[idx]);
+	private double GetGreenstarMark(int idx)
+	{
+		if (idx == 8 || idx == 10)
+		{
+			bool depEntered = idx == 8
+				? _greenstarValueEntered[7] && _greenstarValueEntered[3] && _greenstarValueEntered[4]
+				: _greenstarValueEntered[9] && _greenstarValueEntered[3] && _greenstarValueEntered[4];
+			return !depEntered ? 0 : CalculateGreenstarMark(idx, _greenstarValues[idx]);
+		}
+		return !_greenstarValueEntered[idx] ? 0 : CalculateGreenstarMark(idx, _greenstarValues[idx]);
+	}
 
 	// --- Save & Navigate ---
 	private async Task HandleNext()
