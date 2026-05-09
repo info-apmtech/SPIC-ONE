@@ -209,6 +209,15 @@
         catch { }
     }
 
+    // NEW: Ensure file urls point to API directly using Http.BaseAddress to resolve port 7032
+    private string GetFileUrl(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return "";
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        var segments = path.Split('/').Select(Uri.EscapeDataString);
+        return $"{baseUrl}/api/DealerFile/view/{string.Join("/", segments)}";
+    }
+
     private IEnumerable<(string title, string? path)> GetEnclosureItems()
     {
         var list = new List<(string, string?)>();
@@ -246,7 +255,8 @@
         {
             if (!string.IsNullOrEmpty(item.path))
             {
-                sb.Append($"<a class=\"enclosure-btn\" href=\"api/DealerFile/view/{System.Uri.EscapeDataString(item.path)}\" target=\"_blank\">{System.Net.WebUtility.HtmlEncode(item.title)}</a>");
+                // data-enhance-nav="false" is required to stop Blazor from intercepting the link
+                sb.Append($"<a class=\"enclosure-btn\" href=\"{GetFileUrl(item.path)}\" data-enhance-nav=\"false\">{System.Net.WebUtility.HtmlEncode(item.title)}</a>");
             }
             else
             {
@@ -440,15 +450,11 @@
         {
             if (LoginState.IsRMGroup)
             {
-                // RM approves -> mark RM approved and reset downstream approvals so it moves to SM queue
                 _dealer.RMApproved = true;
-                _dealer.SMApproved = null;
             }
             else if (LoginState.IsSMGroup)
             {
-                // SM approves -> mark SM approved and reset AVP approval so it moves to AVP queue
                 _dealer.SMApproved = true;
-                _dealer.AVPApproved = null;
             }
             else if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
             {
@@ -559,7 +565,6 @@
     }
 }
 
-<!-- MAIN STYLES -->
 <style>
     /* --- Header --- */
     .page-header-row { margin-bottom: 24px; margin-top: 24px; }
@@ -1334,7 +1339,7 @@
                             <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.WholesaleLicenseFilePath) ? "Yes" : "No")</div></div>
                             @if (!string.IsNullOrEmpty(_dealer?.WholesaleLicenseFilePath))
                             {
-                                <div class="data-row"><div class="data-label">View File</div><div class="data-value"><a href="@($"api/DealerFile/view/{Uri.EscapeDataString(_dealer.WholesaleLicenseFilePath)}")" target="_blank">Open</a></div></div>
+                                <div class="data-row"><div class="data-label">View File</div><div class="data-value"><a href="@GetFileUrl(_dealer.WholesaleLicenseFilePath)" data-enhance-nav="false" class="text-primary fw-bold">Open</a></div></div>
                             }
                         </div>
                     </div>
@@ -1353,7 +1358,7 @@
                             <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.RetailLicenseFilePath) ? "Yes" : "No")</div></div>
                             @if (!string.IsNullOrEmpty(_dealer?.RetailLicenseFilePath))
                             {
-                                <div class="data-row"><div class="data-label">View File</div><div class="data-value"><a href="@($"api/DealerFile/view/{Uri.EscapeDataString(_dealer.RetailLicenseFilePath)}")" target="_blank">Open</a></div></div>
+                                <div class="data-row"><div class="data-label">View File</div><div class="data-value"><a href="@GetFileUrl(_dealer.RetailLicenseFilePath)" data-enhance-nav="false" class="text-primary fw-bold">Open</a></div></div>
                             }
                         </div>
                     </div>
@@ -1840,7 +1845,19 @@
                                     <div class="data-row"><div class="data-label">Bank Branch:</div><div class="data-value">@b.BankBranch</div></div>
                                     <div class="data-row"><div class="data-label">Value (₹):</div><div class="data-value">@b.Value</div></div>
                                     <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@b.Remarks</div></div>
-                                    <div class="data-row"><div class="data-label">Document:</div><div class="data-value">@(!string.IsNullOrEmpty(b.FileUploadPath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(b.FileUploadPath)}\" target=\"_blank\">View</a>" : "No")</div></div>
+                                    <div class="data-row">
+                                        <div class="data-label">Document:</div>
+                                        <div class="data-value">
+                                            @if (!string.IsNullOrEmpty(b.FileUploadPath))
+                                            {
+                                                <a href="@GetFileUrl(b.FileUploadPath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
+                                            }
+                                            else
+                                            {
+                                                @("No")
+                                            }
+                                        </div>
+                                    </div>
                                     <div class="mb-2"></div>
                                 }
                             }
@@ -1867,9 +1884,45 @@
                                     <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">@l.SurvayNumber</div></div>
                                     <div class="data-row"><div class="data-label">Land Size (in Cent):</div><div class="data-value">@l.LandSize</div></div>
                                     <div class="data-row"><div class="data-label">Property Value (₹ in Lakhs):</div><div class="data-value">@l.PropertyValue</div></div>
-                                    <div class="data-row"><div class="data-label">Land Document:</div><div class="data-value">@(!string.IsNullOrEmpty(l.UploadedLandDocumentPath) ? "Yes" : "No")</div></div>
-                                    <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">@(!string.IsNullOrEmpty(l.UploadedECDocumentPath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(l.UploadedECDocumentPath)}\" target=\"_blank\">View</a>" : "No")</div></div>
-                                    <div class="data-row"><div class="data-label">Valuation Certificate:</div><div class="data-value">@(!string.IsNullOrEmpty(l.UploadedValuationCertificatePath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(l.UploadedValuationCertificatePath)}\" target=\"_blank\">View</a>" : "No")</div></div>
+                                    <div class="data-row">
+                                        <div class="data-label">Land Document:</div>
+                                        <div class="data-value">
+                                            @if (!string.IsNullOrEmpty(l.UploadedLandDocumentPath))
+                                            {
+                                                <a href="@GetFileUrl(l.UploadedLandDocumentPath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
+                                            }
+                                            else
+                                            {
+                                                @("No")
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="data-row">
+                                        <div class="data-label">EC Document:</div>
+                                        <div class="data-value">
+                                            @if (!string.IsNullOrEmpty(l.UploadedECDocumentPath))
+                                            {
+                                                <a href="@GetFileUrl(l.UploadedECDocumentPath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
+                                            }
+                                            else
+                                            {
+                                                @("No")
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="data-row">
+                                        <div class="data-label">Valuation Certificate:</div>
+                                        <div class="data-value">
+                                            @if (!string.IsNullOrEmpty(l.UploadedValuationCertificatePath))
+                                            {
+                                                <a href="@GetFileUrl(l.UploadedValuationCertificatePath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
+                                            }
+                                            else
+                                            {
+                                                @("No")
+                                            }
+                                        </div>
+                                    </div>
                                     <div class="mb-2"></div>
                                 }
                             }
@@ -1897,9 +1950,45 @@
                                     <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">@bld.SurveyNumber</div></div>
                                     <div class="data-row"><div class="data-label">Land Size (in Square Ft):</div><div class="data-value">@bld.LandSize</div></div>
                                     <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@bld.Remarks</div></div>
-                                    <div class="data-row"><div class="data-label">Building Document:</div><div class="data-value">@(!string.IsNullOrEmpty(bld.UploadedBuildingDocumentPath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(bld.UploadedBuildingDocumentPath)}\" target=\"_blank\">View</a>" : "No")</div></div>
-                                    <div class="data-row"><div class="data-label">EC Document:</div><div class="data-value">@(!string.IsNullOrEmpty(bld.UploadedECDocumentPath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(bld.UploadedECDocumentPath)}\" target=\"_blank\">View</a>" : "No")</div></div>
-                                    <div class="data-row"><div class="data-label">Valuation Certificate:</div><div class="data-value">@(!string.IsNullOrEmpty(bld.UploadedValuationCertificatePath) ? $"<a href=\"/api/DealerFile/view/{Uri.EscapeDataString(bld.UploadedValuationCertificatePath)}\" target=\"_blank\">View</a>" : "No")</div></div>
+                                    <div class="data-row">
+                                        <div class="data-label">Building Document:</div>
+                                        <div class="data-value">
+                                            @if (!string.IsNullOrEmpty(bld.UploadedBuildingDocumentPath))
+                                            {
+                                                <a href="@GetFileUrl(bld.UploadedBuildingDocumentPath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
+                                            }
+                                            else
+                                            {
+                                                @("No")
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="data-row">
+                                        <div class="data-label">EC Document:</div>
+                                        <div class="data-value">
+                                            @if (!string.IsNullOrEmpty(bld.UploadedECDocumentPath))
+                                            {
+                                                <a href="@GetFileUrl(bld.UploadedECDocumentPath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
+                                            }
+                                            else
+                                            {
+                                                @("No")
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="data-row">
+                                        <div class="data-label">Valuation Certificate:</div>
+                                        <div class="data-value">
+                                            @if (!string.IsNullOrEmpty(bld.UploadedValuationCertificatePath))
+                                            {
+                                                <a href="@GetFileUrl(bld.UploadedValuationCertificatePath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
+                                            }
+                                            else
+                                            {
+                                                @("No")
+                                            }
+                                        </div>
+                                    </div>
                                     <div class="mb-2"></div>
                                 }
                             }
