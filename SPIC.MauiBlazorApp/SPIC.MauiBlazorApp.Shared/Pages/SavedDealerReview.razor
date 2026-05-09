@@ -550,6 +550,20 @@
         return false;
     }
 
+    private string GetStepClass(bool? approved)
+    {
+        if (approved == true) return "completed";
+        if (approved == false) return "rejected";
+        return "pending";
+    }
+
+    private string GetLineClass(bool? approved)
+    {
+        if (approved == true) return "completed-line";
+        if (approved == false) return "rejected-line";
+        return "pending-line";
+    }
+
     private string ApprovalButtonText()
     {
         if (LoginState.IsRMGroup) return "Proceed to SM";
@@ -622,19 +636,25 @@
     .yellow { background: #fef3c7; color: #d97706; }
     .status-badge { background: #fef3c7; color: #f97316; border: 1px solid #fdba74; padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; }
 
-    .approval-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px 22px; display: flex; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.08); overflow-x: auto; }
+    .approval-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); width: 100%; }
+    .approval-steps-wrapper { display: flex; align-items: center; overflow-x: auto; }
     .approval-step { display: flex; align-items: center; gap: 14px; min-width: max-content; }
     .step-circle { width: 48px; height: 48px; border-radius: 50%; background: #d1d5db; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
     .completed .step-circle { background: #dcfce7; color: #22c55e; border: 1px solid #86efac; font-size: 24px; }
-    .active .step-circle { background: #cffafe; color: #0891b2; }
-    .pending .step-circle { background: #d1d5db; color: #fff; }
+    .active .step-circle { background: #fff3cd; color: #d97706; border: 1px solid #fde68a; }
+    .pending .step-circle { background: #fff3cd; color: #d97706; border: 1px solid #fde68a; }
+    .approval-step.rejected .step-circle { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
     .step-title { font-size: 18px; font-weight: 700; color: #374151; }
     .step-status { font-size: 13px; color: #9ca3af; }
     .completed .step-status { color: #059669; }
-    .active .step-status { color: #f97316; }
-    .step-line { height: 3px; min-width: 150px; background: #d1d5db; margin: 0 24px; }
+    .active .step-status { color: #d97706; }
+    .pending .step-status { color: #d97706; }
+    .approval-step.rejected .step-status { color: #dc2626; }
+    .step-line { height: 3px; min-width: 130px; background: #d1d5db; margin: 0 24px; }
     .completed-line { background: #22c55e; }
-    .active-line { background: linear-gradient(to right, #f97316 45%, #d1d5db 45%); }
+    .active-line { background: #f97316; }
+    .pending-line { background: #f97316; }
+    .rejected-line { background: #dc2626; }
 
     /* ========================================================
        NEW TIMELINE CSS (MATCHING THE SCREENSHOT)
@@ -779,10 +799,10 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: #f0faf3;
+            background: #F7FFFA;
             border: 1px solid #c3e6cb;
             border-radius: 12px;
-            padding: 18px 24px;
+            padding: 5px 24px;
             width: 100%;
             gap: 16px;
         }
@@ -856,7 +876,7 @@
         }
 </style>
 
-<div class="container-fluid py-4 px-4">
+<div class="container-fluid py-4 px-0">
 
     <div class="page-header-row">
         <h1 class="page-title">Review - Dealer Application</h1>
@@ -867,11 +887,18 @@
     {
         <div class="banner">
             <div class="banner-left">
-                <div class="icon-circle">
-                    <svg viewBox="0 0 24 24">
-                        <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                </div>
+           @*      <div class="icon-circle"> *@
+                  <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="80" height="80" rx="40" fill="#C1FFDE"/>
+<path d="M66.3336 35.2004L65.0669 38.3338C64.6669 39.4004 64.6669 40.5338 65.0669 41.6004L66.3336 44.7338C67.0669 46.6004 66.4669 48.7338 64.8003 49.9338L62.0003 51.8671C61.0669 52.5338 60.4669 53.5338 60.2003 54.6004L59.6003 57.9338C59.2003 59.9338 57.5336 61.4004 55.5336 61.4671L52.1336 61.6004C51.0003 61.6671 49.9336 62.1338 49.1336 62.9338L46.8003 65.4004C45.4003 66.8671 43.2003 67.2004 41.4669 66.2004L38.5336 64.4671C37.5336 63.8671 36.4003 63.7338 35.2669 64.0004L31.9336 64.8004C30.0003 65.2671 27.9336 64.3338 27.0003 62.5338L25.4669 59.4671C24.9336 58.4671 24.0669 57.6671 23.0003 57.3338L19.8003 56.2671C17.8669 55.6004 16.6669 53.7338 16.8669 51.7338L17.2003 48.3338C17.3336 47.2004 17.0003 46.0671 16.2669 45.2004L14.1336 42.5338C12.8669 40.9338 12.8669 38.7338 14.1336 37.1338L16.2669 34.4671C17.0003 33.6004 17.3336 32.4671 17.2003 31.3338L16.8669 27.9338C16.6669 25.9338 17.8669 24.0671 19.8003 23.4004L23.0003 22.3338C24.0669 22.0004 24.9336 21.2004 25.4669 20.2004L27.0003 17.1338C27.9336 15.3338 29.9336 14.4004 31.9336 14.8671L35.2669 15.6671C36.3336 15.9338 37.5336 15.8004 38.5336 15.2004L41.4669 13.4671C43.2003 12.4671 45.4003 12.7338 46.8003 14.2671L49.1336 16.7338C49.9336 17.5338 51.0003 18.0671 52.1336 18.0671L55.5336 18.2004C57.5336 18.2671 59.2669 19.7338 59.6003 21.7338L60.2003 25.0671C60.4003 26.2004 61.0669 27.2004 62.0003 27.8004L64.8003 29.7338C66.4669 31.2004 67.1336 33.3338 66.3336 35.2004Z" fill="#00D566"/>
+<g opacity="0.15">
+<path d="M28.9336 62.3331L27.4003 59.2665C26.8669 58.2665 26.0003 57.4665 24.9336 57.1331L21.7336 56.0665C19.8003 55.3998 18.6003 53.5331 18.8003 51.5331L19.1336 48.1331C19.2669 46.9998 18.9336 45.8665 18.2003 44.9998L16.0669 42.3331C14.8003 40.7331 14.8003 38.5331 16.0669 36.9331L18.2003 34.2665C18.9336 33.3998 19.2669 32.2665 19.1336 31.1331L18.8003 27.7331C18.6003 25.7331 19.8003 23.8665 21.7336 23.1998L24.9336 22.1331C26.0003 21.7998 26.8669 20.9998 27.4003 19.9998L28.9336 16.9331C29.4669 15.8665 30.4003 15.1331 31.4003 14.7998C29.6003 14.5331 27.8003 15.4665 27.0003 17.1331L25.4669 20.1998C24.9336 21.1998 24.0669 21.9998 23.0003 22.3331L19.8003 23.3998C17.8669 24.0665 16.6669 25.9331 16.8669 27.9331L17.2003 31.3331C17.3336 32.4665 17.0003 33.5998 16.2669 34.4665L14.1336 37.1331C12.8669 38.7331 12.8669 40.9331 14.1336 42.5331L16.2669 45.1998C17.0003 46.0665 17.3336 47.1998 17.2003 48.3331L16.8669 51.7331C16.6669 53.7331 17.8669 55.5998 19.8003 56.2665L23.0003 57.3331C24.0669 57.6665 24.9336 58.4665 25.4669 59.4665L27.0003 62.5331C27.9336 64.3331 29.9336 65.2665 31.9336 64.7998L32.3336 64.7331C30.8669 64.4665 29.6003 63.6665 28.9336 62.3331ZM40.4003 14.9998L43.3336 13.2665C43.6003 13.1331 43.8669 12.9998 44.1336 12.9331C43.2003 12.7998 42.2003 12.9998 41.4003 13.4665L38.4669 15.1998C38.2003 15.3331 37.9336 15.4665 37.6669 15.5331C38.6003 15.6665 39.5336 15.5331 40.4003 14.9998ZM54.0003 61.3331C53.6669 61.3331 53.3336 61.3998 53.0669 61.4665L55.4669 61.3331C55.8003 61.3331 56.0669 61.2665 56.4003 61.1998L54.0003 61.3331ZM43.3336 65.9331L40.4003 64.1998C39.4003 63.5998 38.2669 63.4665 37.1336 63.7331L36.7336 63.7998C37.3336 63.8665 37.8669 64.0665 38.4003 64.3331L41.3336 66.0665C42.4669 66.7331 43.7336 66.7998 44.9336 66.3998C44.4003 66.3998 43.8669 66.2665 43.3336 65.9331Z" fill="black"/>
+</g>
+<path d="M29.334 35.7332L37.6673 45.2665L54.734 31.5332" fill="#00D566"/>
+<path d="M35.6678 50.2013C34.7344 50.2013 33.8011 49.8013 33.1344 49.0679L24.8011 39.5346C23.6011 38.1346 23.7344 36.0679 25.0678 34.8013C26.4678 33.6013 28.5344 33.7346 29.8011 35.0679L36.0678 42.2013L50.6678 30.4679C52.0678 29.3346 54.2011 29.5346 55.3344 31.0013C56.4678 32.4679 56.2678 34.5346 54.8011 35.6679L37.7344 49.4679C37.1344 49.9346 36.4011 50.2013 35.6678 50.2013Z" fill="white"/>
+</svg>
+
+             @*    </div> *@
                 <div class="text-block">
                     <div class="title">
                         Application Successfully Approved ! 🎉
@@ -1075,6 +1102,7 @@
 
     <!-- Approval Progress -->
     <div class="approval-card mb-3">
+        <div class="approval-steps-wrapper">
         <div class="approval-step completed">
             <div class="step-circle">
                 <i class="bi bi-check-lg"></i>
@@ -1085,34 +1113,64 @@
             </div>
         </div>
 
-        <div class="step-line completed-line"></div>
+        <div class="step-line @GetLineClass(_dealer?.RMApproved)"></div>
 
-        <div class="approval-step active">
-            <div class="step-circle">RM</div>
+        <div class="approval-step @GetStepClass(_dealer?.RMApproved)">
+            <div class="step-circle">
+                @if (_dealer?.RMApproved == true)
+                {
+                    <i class="bi bi-check-lg"></i>
+                }
+                else
+                {
+                    <text>RM</text>
+                }
+            </div>
             <div>
                 <div class="step-title">RM</div>
                 <div class="step-status">@( _dealer?.RMApproved == null ? "Under Review" : (_dealer.RMApproved == true ? "Approved" : "Rejected") )</div>
             </div>
         </div>
 
-        <div class="step-line active-line"></div>
+        <div class="step-line @GetLineClass(_dealer?.SMApproved)"></div>
 
-        <div class="approval-step pending">
-            <div class="step-circle">SM</div>
+        <div class="approval-step @GetStepClass(_dealer?.SMApproved)">
+            <div class="step-circle">
+                @if (_dealer?.SMApproved == true)
+                {
+                    <i class="bi bi-check-lg"></i>
+                }
+                else
+                {
+                    <text>SM</text>
+                }
+            </div>
             <div>
                 <div class="step-title">SM</div>
                 <div class="step-status">@(_dealer?.SMApproved == null ? "Pending" : (_dealer.SMApproved == true ? "Approved" : "Rejected"))</div>
             </div>
         </div>
 
-        <div class="step-line"></div>
+        <div class="step-line @GetLineClass(_dealer?.AVPApproved)"></div>
 
-        <div class="approval-step pending">
-            <div class="step-circle">AVP</div>
+        <div class="approval-step @GetStepClass(_dealer?.AVPApproved)">
+            <div class="step-circle">
+                @if (_dealer?.AVPApproved == true)
+                {
+                    <i class="bi bi-check-lg"></i>
+                }
+                else
+                {
+                    <text>AVP</text>
+                }
+            </div>
             <div>
                 <div class="step-title">AVP</div>
                 <div class="step-status">@(_dealer?.AVPApproved == null ? "Pending" : (_dealer.AVPApproved == true ? "Approved" : "Rejected"))</div>
             </div>
+        </div>
+
+        <div class="step-line @GetLineClass(_dealer?.AVPApproved)"></div>
         </div>
     </div>
     
