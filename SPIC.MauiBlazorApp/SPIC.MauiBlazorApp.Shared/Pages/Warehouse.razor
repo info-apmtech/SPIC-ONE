@@ -499,6 +499,9 @@
 		{
 			ShowMessage($"Failed to load saved facilities: {ex.Message}", true);
 		}
+       // Update step validation state whenever saved facilities are loaded
+		var hasErrorAfterLoad = _savedWarehouses.Count < 1 || _savedRails.Count < 1 || _savedPorts.Count < 1;
+		FormStepData.MarkStepError(4, hasErrorAfterLoad);
 	}
 
 	// ── Google Maps URL → lat/lng extraction ──
@@ -598,6 +601,8 @@
 				}
 			}
 			ResetWarehouseForm();
+               // Re-evaluate step validation after change
+				FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
 		}
 		catch (Exception ex)
 		{
@@ -629,6 +634,8 @@
 		{
 			await Http.DeleteAsync($"api/DealerWarehouseFacilities/{wh.Id}");
 			_savedWarehouses.Remove(wh);
+           // Re-evaluate step validation after deletion
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
 		}
 		catch (Exception ex)
 		{
@@ -698,6 +705,8 @@
 				}
 			}
 			ResetRailForm();
+               // Re-evaluate step validation after change
+				FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
 		}
 		catch (Exception ex)
 		{
@@ -729,6 +738,8 @@
 		{
 			await Http.DeleteAsync($"api/DealerRailFacilities/{rail.Id}");
 			_savedRails.Remove(rail);
+           // Re-evaluate step validation after deletion
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
 		}
 		catch (Exception ex)
 		{
@@ -798,6 +809,8 @@
 				}
 			}
 			ResetPortForm();
+               // Re-evaluate step validation after change
+				FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
 		}
 		catch (Exception ex)
 		{
@@ -829,6 +842,8 @@
 		{
 			await Http.DeleteAsync($"api/DealerPortFacilities/{port.Id}");
 			_savedPorts.Remove(port);
+           // Re-evaluate step validation after deletion
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
 		}
 		catch (Exception ex)
 		{
