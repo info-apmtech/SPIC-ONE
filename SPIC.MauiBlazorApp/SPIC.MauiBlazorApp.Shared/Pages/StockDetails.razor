@@ -1,0 +1,402 @@
+﻿
+    @page "/StockDetails" 
+    <style>
+        :root {
+            --bg-body: #f4f7fa;
+            --bg-card: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --primary-blue: #3b82f6;
+            
+            /* KPI Theme Colors */
+            --theme-purple: #a855f7;
+            --bg-purple-light: #faf5ff;
+            
+            --theme-green: #22c55e;
+            --bg-green-light: #f0fdf4;
+            
+            --theme-yellow: #eab308;
+            --bg-yellow-light: #fefce8;
+            
+            --theme-teal: #06b6d4;
+            --bg-teal-light: #ecfeff;
+        }
+
+        
+
+        /* --- Page Header & Top Badges --- */
+        .page-title { font-size: 1.4rem; font-weight: 700; margin: 0; color: #111827; display: inline-block; }
+        .page-subtitle { font-size: 0.85rem; color: var(--text-muted); margin-top: 6px; }
+        
+        .top-badge {
+            background-color: #ffffff;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        /* Buttons */
+        .btn-outline-custom {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-outline-custom:hover { background: #f9fafb; color: var(--text-main); }
+        
+        .btn-primary-custom {
+            background: var(--primary-blue);
+            border: 1px solid var(--primary-blue);
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 6px 16px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-primary-custom:hover { background: #2563eb; color: #fff; }
+
+        /* --- KPI Cards --- */
+        .kpi-card {
+            border-radius: 10px;
+            padding: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center; /* Aligned center for this design */
+            position: relative;
+            overflow: hidden;
+            height: 100%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+        }
+        
+        /* Borders */
+        .kpi-purple { border-left: 4px solid var(--theme-purple); }
+        .kpi-green { border-left: 4px solid var(--theme-green); }
+        .kpi-yellow { border-left: 4px solid var(--theme-yellow); }
+        .kpi-teal { border-left: 4px solid var(--theme-teal); }
+
+        .kpi-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem; }
+        .kpi-value { font-size: 1.6rem; font-weight: 700; color: #111827; line-height: 1.2; margin: 0; }
+
+        .kpi-icon-wrapper {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            background: #ffffff;
+        }
+        .kpi-purple .kpi-icon-wrapper { color: var(--theme-purple); background: var(--bg-purple-light); }
+        .kpi-green .kpi-icon-wrapper { color: var(--theme-green); background: var(--bg-green-light); }
+        .kpi-yellow .kpi-icon-wrapper { color: var(--theme-yellow); background: var(--bg-yellow-light); }
+        .kpi-teal .kpi-icon-wrapper { color: var(--theme-teal); background: var(--bg-teal-light); }
+
+        /* --- Dashboard Main Card --- */
+        .dashboard-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            padding: 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+
+        /* --- Filters --- */
+        .filter-header { font-size: 0.9rem; font-weight: 600; color: var(--text-main); margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; }
+        .filter-label { font-size: 0.75rem; font-weight: 600; color: var(--text-main); margin-bottom: 6px; }
+        .custom-select {
+            background-color: #f9fafb;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            padding: 8px 12px;
+            width: 100%;
+        }
+        .custom-select:focus { border-color: var(--primary-blue); box-shadow: none; outline: none; }
+
+        /* --- Table Header & Search --- */
+        .table-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+        .card-title { font-size: 1.05rem; font-weight: 600; color: var(--text-main); margin: 0; }
+        
+        .search-container { position: relative; width: 260px; }
+        .search-container i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 0.85rem; }
+        .search-input {
+            width: 100%;
+            padding: 8px 12px 8px 32px;
+            background-color: #f9fafb;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            outline: none;
+        }
+
+        /* --- Table Styling --- */
+        .table-custom { margin-bottom: 0; border-collapse: separate; border-spacing: 0; }
+        .table-custom th {
+            background-color: #f9fafb;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 14px 12px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .table-custom th span.fw-normal {
+            font-weight: 500;
+            color: #9ca3af;
+        }
+        
+        .table-custom td {
+            font-size: 0.8rem;
+            color: var(--text-main);
+            padding: 16px 12px;
+            vertical-align: middle;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+        }
+        
+        /* Align specific columns */
+        .table-custom th:nth-child(2),
+        .table-custom td:nth-child(2) {
+            text-align: left;
+        }
+        
+        /* Grand Total Row */
+        .grand-total-row td {
+            background-color: #f0fdf4; /* Light green background */
+            font-weight: 600;
+            color: var(--text-main);
+            border-bottom: none;
+        }
+
+        /* --- Pagination --- */
+        .pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
+        .items-per-page { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-muted); }
+        .page-item { 
+            width: 32px; height: 32px; 
+            display: flex; align-items: center; justify-content: center; 
+            border: 1px solid var(--border-color); 
+            background: #fff; border-radius: 6px; 
+            font-size: 0.8rem; color: var(--text-muted); 
+            cursor: pointer; text-decoration: none; 
+        }
+        .page-item.active { background: #f3f4f6; color: var(--text-main); font-weight: 600; }
+        .page-item.dots { border: none; background: transparent; cursor: default; }
+    </style>
+
+<div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1500px;">
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start mb-4 gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-3">
+                <h1 class="page-title">Stock Details</h1>
+                <div class="d-flex gap-2">
+                    <span class="top-badge"><i class="bi bi-calendar3"></i> Date as on: 07 Apr 2025</span>
+                    <span class="top-badge"><i class="bi bi-calendar-event"></i> Month: April 2025</span>
+                </div>
+            </div>
+            <p class="page-subtitle">Consolidated stock and sales updated daily</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn-outline-custom"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
+            <button class="btn-outline-custom"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+            <button class="btn-outline-custom"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+            <button class="btn-primary-custom"><i class="bi bi-envelope"></i> Send Mail</button>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3 mb-4">
+        <div class="col">
+            <div class="kpi-card kpi-purple">
+                <div>
+                    <p class="kpi-label">Total Stock</p>
+                    <h2 class="kpi-value">43,092</h2>
+                </div>
+                <div class="kpi-icon-wrapper"><i class="bi bi-box-seam"></i></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="kpi-card kpi-green">
+                <div>
+                    <p class="kpi-label">Total Sales</p>
+                    <h2 class="kpi-value">6,087</h2>
+                </div>
+                <div class="kpi-icon-wrapper"><i class="bi bi-truck"></i></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="kpi-card kpi-yellow">
+                <div>
+                    <p class="kpi-label">Closing Stock</p>
+                    <h2 class="kpi-value">37,005</h2>
+                </div>
+                <div class="kpi-icon-wrapper"><i class="bi bi-bag"></i></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="kpi-card kpi-teal">
+                <div>
+                    <p class="kpi-label">Sales %</p>
+                    <h2 class="kpi-value">14%</h2>
+                </div>
+                <div class="kpi-icon-wrapper"><i class="bi bi-percent"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-card mb-4">
+        <div class="filter-header">
+            <span><i class="bi bi-funnel"></i> Filters</span>
+            <i class="bi bi-chevron-down text-muted" style="cursor: pointer;"></i>
+        </div>
+        <div class="row g-3">
+            <div class="col-12">
+                <label class="filter-label">State</label>
+                <select class="form-select custom-select"><option>All State</option></select>
+            </div>
+        </div>
+        <div class="d-flex justify-content-end mt-4 gap-2">
+            <button class="btn-outline-custom"><i class="bi bi-x"></i> Clear All</button>
+            <button class="btn-primary-custom"><i class="bi bi-funnel"></i> Apply Filters</button>
+        </div>
+    </div>
+
+    <div class="dashboard-card pb-2">
+        <div class="table-header-row">
+            <h3 class="card-title">Top Ranking Retailers List</h3>
+            <div class="search-container">
+                <i class="bi bi-search"></i>
+                <input type="text" class="search-input" placeholder="Search zones...">
+            </div>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-borderless custom-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;"><input class="form-check-input" type="checkbox"></th>
+                        <th>State</th>
+                        <th>Opening Stock <br><span class="fw-normal">(as on 1 Apr)</span></th>
+                        <th>Supplies <br><span class="fw-normal">(April)</span></th>
+                        <th>Total Stock</th>
+                        <th>Sales <br><span class="fw-normal">(1-6 Apr)</span></th>
+                        <th>Sales <br><span class="fw-normal">(7 Apr)</span></th>
+                        <th>Total Sales</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td>Tamil Nadu</td>
+                        <td>16,338</td>
+                        <td>571</td>
+                        <td>22,055</td>
+                        <td>571</td>
+                        <td>639</td>
+                        <td>1,210</td>
+                    </tr>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td>Tamil Nadu</td>
+                        <td>16,338</td>
+                        <td>571</td>
+                        <td>22,055</td>
+                        <td>571</td>
+                        <td>639</td>
+                        <td>1,210</td>
+                    </tr>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td>Tamil Nadu</td>
+                        <td>16,338</td>
+                        <td>571</td>
+                        <td>22,055</td>
+                        <td>571</td>
+                        <td>639</td>
+                        <td>1,210</td>
+                    </tr>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td>Tamil Nadu</td>
+                        <td>16,338</td>
+                        <td>571</td>
+                        <td>22,055</td>
+                        <td>571</td>
+                        <td>639</td>
+                        <td>1,210</td>
+                    </tr>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td>Tamil Nadu</td>
+                        <td>16,338</td>
+                        <td>571</td>
+                        <td>22,055</td>
+                        <td>571</td>
+                        <td>639</td>
+                        <td>1,210</td>
+                    </tr>
+                    
+                    <tr class="grand-total-row">
+                        <td></td>
+                        <td>Grand Total</td>
+                        <td>35,113</td>
+                        <td>7,978</td>
+                        <td>43,092</td>
+                        <td>43,092</td>
+                        <td>43,092</td>
+                        <td>86,184</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination-container mt-2">
+            <div class="items-per-page">
+                Items Per Page 
+                <select class="form-select form-select-sm" style="width: 70px; background-color: #fff;">
+                    <option>16</option>
+                    <option>25</option>
+                </select>
+            </div>
+            <div class="d-flex gap-1">
+                <a class="page-item"><i class="bi bi-chevron-left"></i></a>
+                <a class="page-item active">1</a>
+                <a class="page-item">2</a>
+                <a class="page-item">3</a>
+                <span class="page-item dots">..</span>
+                <a class="page-item">8</a>
+                <a class="page-item">9</a>
+                <a class="page-item">10</a>
+                <a class="page-item"><i class="bi bi-chevron-right"></i></a>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@code {
+
+}
