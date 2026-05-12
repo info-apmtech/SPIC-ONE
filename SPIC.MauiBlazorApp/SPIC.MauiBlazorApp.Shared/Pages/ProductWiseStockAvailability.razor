@@ -1,0 +1,418 @@
+﻿@page "/ProductWiseStockAvailability" 
+
+    <style>
+        :root {
+            --bg-body: #f4f7fa;
+            --bg-card: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --primary-blue: #3b82f6;
+            
+            /* KPI Theme Colors */
+            --theme-green: #22c55e;
+            --bg-green-light: #f0fdf4;
+            --text-green-dark: #16a34a;
+            
+            --theme-purple: #a855f7;
+            --bg-purple-light: #faf5ff;
+            --text-purple-dark: #9333ea;
+            
+            --theme-blue: #3b82f6;
+            --bg-blue-light: #eff6ff;
+            --text-blue-dark: #2563eb;
+            
+            --theme-lime: #84cc16;
+            --bg-lime-light: #f7fee7;
+            
+            --theme-red: #ef4444;
+            --bg-red-light: #fef2f2;
+            --text-red-dark: #dc2626;
+
+            /* Table Header Colors */
+            --th-green-bg: #ecfdf5;
+            --th-blue-bg: #eff6ff;
+            --th-pink-bg: #fdf4ff;
+        }
+
+       
+
+        /* --- Page Header --- */
+        .page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.2rem; color: #111827; }
+        .page-subtitle { font-size: 0.85rem; color: var(--text-muted); }
+        
+        /* Buttons */
+        .btn-outline-custom {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-outline-custom:hover { background: #f9fafb; color: var(--text-main); }
+        
+        .btn-primary-custom {
+            background: var(--primary-blue);
+            border: 1px solid var(--primary-blue);
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 6px 16px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-primary-custom:hover { background: #2563eb; color: #fff; }
+
+        /* --- KPI Cards --- */
+        .kpi-card {
+            border-radius: 10px;
+            padding: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            position: relative;
+            overflow: hidden;
+            height: 100%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            border: 1px solid var(--border-color);
+            background: #ffffff;
+        }
+        
+        /* Left Borders */
+        .kpi-green { border-left: 4px solid var(--theme-green); }
+        .kpi-purple { border-left: 4px solid var(--theme-purple); }
+        .kpi-blue { border-left: 4px solid var(--theme-blue); }
+        .kpi-lime { border-left: 4px solid var(--theme-lime); }
+        .kpi-red { border-left: 4px solid var(--theme-red); }
+
+        .kpi-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem; }
+        .kpi-value { font-size: 1.5rem; font-weight: 700; color: #111827; line-height: 1.2; margin-bottom: 0.25rem; }
+        .kpi-trend { font-size: 0.75rem; font-weight: 600; }
+        
+        /* Specific Trend Text Colors */
+        .kpi-green .kpi-trend { color: var(--text-green-dark); }
+        .kpi-purple .kpi-trend { color: var(--text-purple-dark); }
+        .kpi-blue .kpi-trend { color: var(--text-blue-dark); }
+        .kpi-lime .kpi-trend { color: var(--text-red-dark); } /* As per image, Manipur value is red */
+        .kpi-red .kpi-trend { color: var(--text-red-dark); }
+
+        .kpi-icon-wrapper {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            background: #ffffff;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .kpi-green .kpi-icon-wrapper { color: var(--theme-green); background: var(--bg-green-light); border: 1px solid #bbf7d0; }
+        .kpi-purple .kpi-icon-wrapper { color: var(--theme-purple); background: var(--bg-purple-light); border: 1px solid #e9d5ff; }
+        .kpi-blue .kpi-icon-wrapper { color: var(--theme-blue); background: var(--bg-blue-light); border: 1px solid #bfdbfe; }
+        .kpi-lime .kpi-icon-wrapper { color: var(--theme-lime); background: var(--bg-lime-light); border: 1px solid #d9f99d; }
+        .kpi-red .kpi-icon-wrapper { color: var(--theme-red); background: var(--bg-red-light); border: 1px solid #fecaca; }
+
+        /* --- Dashboard Main Card --- */
+        .dashboard-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            padding: 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+
+        /* --- Filters --- */
+        .filter-header { font-size: 0.9rem; font-weight: 600; color: var(--text-main); margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; }
+        .filter-label { font-size: 0.75rem; font-weight: 600; color: var(--text-main); margin-bottom: 6px; }
+        .custom-select, .custom-input {
+            background-color: #f9fafb;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            padding: 8px 12px;
+            width: 100%;
+        }
+        .custom-select:focus, .custom-input:focus { border-color: var(--primary-blue); box-shadow: none; outline: none; }
+
+        /* --- Table Header & Search --- */
+        .table-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+        .card-title { font-size: 1.05rem; font-weight: 600; color: var(--text-main); margin: 0; }
+        
+        .search-container { position: relative; width: 260px; }
+        .search-container i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 0.85rem; }
+        .search-input {
+            width: 100%;
+            padding: 8px 12px 8px 32px;
+            background-color: #f9fafb;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            outline: none;
+        }
+
+        /* --- Table Styling --- */
+        .table-custom { margin-bottom: 0; border-collapse: separate; border-spacing: 0; }
+        
+        .table-custom th {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+            vertical-align: middle;
+        }
+        
+        /* Grouped Header Colors */
+        .th-group-green { background-color: var(--th-green-bg); color: #047857; }
+        .th-group-blue { background-color: var(--th-blue-bg); color: #1d4ed8; }
+        .th-group-pink { background-color: var(--th-pink-bg); }
+        .th-group-default { background-color: #f9fafb; color: var(--text-muted); }
+        
+        .table-custom td {
+            font-size: 0.8rem;
+            color: var(--text-main);
+            padding: 14px 12px;
+            vertical-align: middle;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+        }
+        .table-custom td:first-child { text-align: left; font-weight: 500; }
+        
+        /* Grand Total Row */
+        .grand-total-row td {
+            background-color: #f9fafb;
+            font-weight: 700;
+            border-bottom: none;
+        }
+        .grand-total-row td:not(:first-child) {
+            color: var(--text-green-dark);
+        }
+
+        /* --- Pagination --- */
+        .pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
+        .items-per-page { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-muted); }
+        .page-item { 
+            width: 32px; height: 32px; 
+            display: flex; align-items: center; justify-content: center; 
+            border: 1px solid var(--border-color); 
+            background: #fff; border-radius: 6px; 
+            font-size: 0.8rem; color: var(--text-muted); 
+            cursor: pointer; text-decoration: none; 
+        }
+        .page-item.active { background: #f3f4f6; color: var(--text-main); font-weight: 600; }
+        .page-item.dots { border: none; background: transparent; cursor: default; }
+    </style>
+
+
+<div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1600px;">
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+        <div>
+            <h1 class="page-title">Product-wise Stock Availability</h1>
+            <p class="page-subtitle mb-0">State-wise product stock availability summary as on 01 May 2026</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn-outline-custom"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
+            <button class="btn-outline-custom"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+            <button class="btn-outline-custom"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+            <button class="btn-primary-custom"><i class="bi bi-envelope"></i> Send Mail</button>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-3 row-cols-lg-5 g-3 mb-4">
+        <div class="col">
+            <div class="kpi-card kpi-green">
+                <div>
+                    <p class="kpi-label">Total States</p>
+                    <h2 class="kpi-value">28</h2>
+                    <div class="kpi-trend">Active states</div>
+                </div>
+                <div class="kpi-icon-wrapper"><i class="bi bi-bank"></i></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="kpi-card kpi-purple">
+                <div>
+                    <p class="kpi-label">Total Products</p>
+                    <h2 class="kpi-value">16</h2>
+                    <div class="kpi-trend">SKUs tracked</div>
+                </div>
+                <div class="kpi-icon-wrapper"><i class="bi bi-box-seam"></i></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="kpi-card kpi-blue">
+                <div>
+                    <p class="kpi-label">Total Quantity (MT)</p>
+                    <h2 class="kpi-value">1,82,798</h2>
+                    <div class="kpi-trend">Across all states</div>
+                </div>
+                <div class="kpi-icon-wrapper"><i class="bi bi-box2-heart"></i></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="kpi-card kpi-lime">
+                <div>
+                    <p class="kpi-label">Highest Stock St...</p>
+                    <h2 class="kpi-value" style="font-size: 1.4rem;">Manipur</h2>
+                    <div class="kpi-trend">37,322 MT</div>
+                </div>
+                <div class="kpi-icon-wrapper"><i class="bi bi-buildings"></i></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="kpi-card kpi-red">
+                <div>
+                    <p class="kpi-label">Low Stock Alerts</p>
+                    <h2 class="kpi-value">0</h2>
+                    <div class="kpi-trend">States below threshold</div>
+                </div>
+                <div class="kpi-icon-wrapper"><i class="bi bi-boxes"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-card mb-4">
+        <div class="filter-header">
+            <span><i class="bi bi-funnel"></i> Filters</span>
+            <i class="bi bi-chevron-down text-muted" style="cursor: pointer;"></i>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="filter-label">Date Range</label>
+                <select class="form-select custom-select"><option>01 Apr 2025 - 28 Apr 2025</option></select>
+            </div>
+            <div class="col-md-3">
+                <label class="filter-label">State</label>
+                <select class="form-select custom-select"><option>All State</option></select>
+            </div>
+            <div class="col-md-3">
+                <label class="filter-label">Region</label>
+                <select class="form-select custom-select"><option>All Region</option></select>
+            </div>
+            <div class="col-md-3">
+                <label class="filter-label">Head Quarters</label>
+                <select class="form-select custom-select"><option>All Head Quarters</option></select>
+            </div>
+        </div>
+        <div class="d-flex justify-content-end mt-4 gap-2">
+            <button class="btn-outline-custom"><i class="bi bi-x"></i> Clear All</button>
+            <button class="btn-primary-custom"><i class="bi bi-funnel"></i> Apply Filters</button>
+        </div>
+    </div>
+
+    <div class="dashboard-card pb-2">
+        <div class="table-header-row">
+            <h3 class="card-title">Stock Availability List</h3>
+            <div class="search-container">
+                <i class="bi bi-search"></i>
+                <input type="text" class="search-input" placeholder="Search zones...">
+            </div>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-borderless custom-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="th-group-default border-end">State</th>
+                        <th colspan="3" class="th-group-green border-end">Normal Products</th>
+                        <th colspan="3" class="th-group-blue border-end">Imported Products</th>
+                        <th colspan="1" class="th-group-pink"></th>
+                    </tr>
+                    <tr>
+                        <th class="th-group-default">Urea 45kg</th>
+                        <th class="th-group-default">Urea 50kg</th>
+                        <th class="th-group-default border-end">DAP</th>
+                        
+                        <th class="th-group-default">Imp Urea 45</th>
+                        <th class="th-group-default">Imp DAP</th>
+                        <th class="th-group-default border-end">Imp 10-26-26</th>
+                        
+                        <th class="th-group-default">FOM</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Tamil Nadu</td>
+                        <td>3,254</td>
+                        <td>4,785</td>
+                        <td class="border-end">1,033</td>
+                        <td>352</td>
+                        <td>311</td>
+                        <td class="border-end">-</td>
+                        <td>124</td>
+                    </tr>
+                    <tr>
+                        <td>Karnataka</td>
+                        <td>3,254</td>
+                        <td>4,785</td>
+                        <td class="border-end">-</td>
+                        <td>352</td>
+                        <td>311</td>
+                        <td class="border-end">-</td>
+                        <td>124</td>
+                    </tr>
+                    <tr>
+                        <td>Kerala</td>
+                        <td>3,254</td>
+                        <td>4,785</td>
+                        <td class="border-end">1,033</td>
+                        <td>352</td>
+                        <td>-</td>
+                        <td class="border-end">-</td>
+                        <td>124</td>
+                    </tr>
+                    
+                    <tr class="grand-total-row">
+                        <td>Grand Total</td>
+                        <td>10,254</td>
+                        <td>12,785</td>
+                        <td class="border-end">2,033</td>
+                        <td>10,062</td>
+                        <td>622</td>
+                        <td class="border-end">-</td>
+                        <td>324</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination-container mt-3">
+            <div class="items-per-page">
+                Items Per Page 
+                <select class="form-select form-select-sm" style="width: 70px; background-color: #fff;">
+                    <option>16</option>
+                    <option>25</option>
+                </select>
+            </div>
+            <div class="d-flex gap-1">
+                <a class="page-item"><i class="bi bi-chevron-left"></i></a>
+                <a class="page-item active">1</a>
+                <a class="page-item">2</a>
+                <a class="page-item">3</a>
+                <span class="page-item dots">..</span>
+                <a class="page-item">8</a>
+                <a class="page-item">9</a>
+                <a class="page-item">10</a>
+                <a class="page-item"><i class="bi bi-chevron-right"></i></a>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+
+@code {
+
+}
