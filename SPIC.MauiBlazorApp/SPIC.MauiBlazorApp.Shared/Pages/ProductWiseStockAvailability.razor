@@ -35,11 +35,22 @@
             --th-pink-bg: #fdf4ff;
         }
 
-       
-
-        /* --- Page Header --- */
+        /* --- Page Header & Top Badges --- */
         .page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.2rem; color: #111827; }
         .page-subtitle { font-size: 0.85rem; color: var(--text-muted); }
+        
+        .top-badge {
+            background-color: #ffffff;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
         
         /* Buttons */
         .btn-outline-custom {
@@ -101,7 +112,7 @@
         .kpi-green .kpi-trend { color: var(--text-green-dark); }
         .kpi-purple .kpi-trend { color: var(--text-purple-dark); }
         .kpi-blue .kpi-trend { color: var(--text-blue-dark); }
-        .kpi-lime .kpi-trend { color: var(--text-red-dark); } /* As per image, Manipur value is red */
+        .kpi-lime .kpi-trend { color: var(--text-red-dark); }
         .kpi-red .kpi-trend { color: var(--text-red-dark); }
 
         .kpi-icon-wrapper {
@@ -161,8 +172,18 @@
             outline: none;
         }
 
-        /* --- Table Styling --- */
-        .table-custom { margin-bottom: 0; border-collapse: separate; border-spacing: 0; }
+        /* --- Table Styling (FIXED) --- */
+        .table-responsive {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden; /* Clips the table to ensure rounded corners */
+        }
+        
+        .table-custom { 
+            margin-bottom: 0; 
+            border-collapse: collapse; 
+            width: 100%; 
+        }
         
         .table-custom th {
             font-size: 0.75rem;
@@ -177,7 +198,8 @@
         .th-group-green { background-color: var(--th-green-bg); color: #047857; }
         .th-group-blue { background-color: var(--th-blue-bg); color: #1d4ed8; }
         .th-group-pink { background-color: var(--th-pink-bg); }
-        .th-group-default { background-color: #f9fafb; color: var(--text-muted); }
+        .th-group-default { background-color: #f9fafb; color: var(--text-main); }
+        .th-bg-white { background-color: #ffffff !important; color: var(--text-muted); }
         
         .table-custom td {
             font-size: 0.8rem;
@@ -187,20 +209,24 @@
             border-bottom: 1px solid var(--border-color);
             text-align: center;
         }
-        .table-custom td:first-child { text-align: left; font-weight: 500; }
+        
+        /* Vertical Separators */
+        .border-right-custom {
+            border-right: 1px solid var(--border-color) !important;
+        }
+        
+        .table-custom tr:last-child td { border-bottom: none; }
         
         /* Grand Total Row */
         .grand-total-row td {
-            background-color: #f9fafb;
+            background-color: var(--bg-green-light) !important;
             font-weight: 700;
             border-bottom: none;
-        }
-        .grand-total-row td:not(:first-child) {
-            color: var(--text-green-dark);
+            color: var(--text-green-dark) !important;
         }
 
         /* --- Pagination --- */
-        .pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
+        .pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 1.25rem; }
         .items-per-page { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-muted); }
         .page-item { 
             width: 32px; height: 32px; 
@@ -214,13 +240,15 @@
         .page-item.dots { border: none; background: transparent; cursor: default; }
     </style>
 
-
 <div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1600px;">
 
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start mb-4 gap-3">
         <div>
-            <h1 class="page-title">Product-wise Stock Availability</h1>
-            <p class="page-subtitle mb-0">State-wise product stock availability summary as on 01 May 2026</p>
+            <div class="d-flex align-items-center gap-3">
+                <h1 class="page-title">Product-wise Stock Availability</h1>
+               
+            </div>
+            <p class="page-subtitle">Consolidated stock and sales updated daily</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
             <button class="btn-outline-custom"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
@@ -230,69 +258,103 @@
         </div>
     </div>
 
-    <div class="row row-cols-1 row-cols-md-3 row-cols-lg-5 g-3 mb-4">
-        <div class="col">
-            <div class="kpi-card kpi-green">
-                <div>
-                    <p class="kpi-label">Total States</p>
-                    <h2 class="kpi-value">28</h2>
-                    <div class="kpi-trend">Active states</div>
+    <!-- KPI Cards -->
+    <div class="lc-stats-grid">
+        
+        <!-- Total Stock -->
+        <div class="lc-stat-card lc-theme-green">
+            <div class="lc-card-top">
+                <div class="lc-stat-info">
+                    <span class="lc-stat-title">Total Stock</span>
+                    <span class="lc-stat-value">4,820</span>
                 </div>
-                <div class="kpi-icon-wrapper"><i class="bi bi-bank"></i></div>
+                <div class="lc-icon-box">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                </div>
+            </div>
+            <div class="lc-stat-trend lc-text-green">
+                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
+                <span>12% vs last period</span>
             </div>
         </div>
-        <div class="col">
-            <div class="kpi-card kpi-purple">
-                <div>
-                    <p class="kpi-label">Total Products</p>
-                    <h2 class="kpi-value">16</h2>
-                    <div class="kpi-trend">SKUs tracked</div>
+
+        <!-- Under Review -->
+        <div class="lc-stat-card lc-theme-blue">
+            <div class="lc-card-top">
+                <div class="lc-stat-info">
+                    <span class="lc-stat-title">Under Review (MT)</span>
+                    <span class="lc-stat-value">4,820</span>
                 </div>
-                <div class="kpi-icon-wrapper"><i class="bi bi-box-seam"></i></div>
+                <div class="lc-icon-box">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><circle cx="10" cy="13" r="2"></circle><line x1="11.4" y1="14.4" x2="13.4" y2="16.4"></line></svg>
+                </div>
+            </div>
+            <div class="lc-stat-trend lc-text-green">
+                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
+                <span>3.5% vs last period</span>
             </div>
         </div>
-        <div class="col">
-            <div class="kpi-card kpi-blue">
-                <div>
-                    <p class="kpi-label">Total Quantity (MT)</p>
-                    <h2 class="kpi-value">1,82,798</h2>
-                    <div class="kpi-trend">Across all states</div>
+
+        <!-- In Progress -->
+        <div class="lc-stat-card lc-theme-orange">
+            <div class="lc-card-top">
+                <div class="lc-stat-info">
+                    <span class="lc-stat-title">In Progress (MT)</span>
+                    <span class="lc-stat-value">2,820</span>
                 </div>
-                <div class="kpi-icon-wrapper"><i class="bi bi-box2-heart"></i></div>
+                <div class="lc-icon-box">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                </div>
+            </div>
+            <div class="lc-stat-trend lc-text-green">
+                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
+                <span>1.2% vs last period</span>
             </div>
         </div>
-        <div class="col">
-            <div class="kpi-card kpi-lime">
-                <div>
-                    <p class="kpi-label">Highest Stock St...</p>
-                    <h2 class="kpi-value" style="font-size: 1.4rem;">Manipur</h2>
-                    <div class="kpi-trend">37,322 MT</div>
+
+        <!-- Liquidated -->
+        <div class="lc-stat-card lc-theme-teal">
+            <div class="lc-card-top">
+                <div class="lc-stat-info">
+                    <span class="lc-stat-title">Liquidated (MT)</span>
+                    <span class="lc-stat-value">3,120</span>
                 </div>
-                <div class="kpi-icon-wrapper"><i class="bi bi-buildings"></i></div>
+                <div class="lc-icon-box">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 14l2 2 4-4"></path></svg>
+                </div>
+            </div>
+            <div class="lc-stat-trend lc-text-green">
+                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
+                <span>7.2% vs last period</span>
             </div>
         </div>
-        <div class="col">
-            <div class="kpi-card kpi-red">
-                <div>
-                    <p class="kpi-label">Low Stock Alerts</p>
-                    <h2 class="kpi-value">0</h2>
-                    <div class="kpi-trend">States below threshold</div>
+
+        <!-- Pending Ack -->
+        <div class="lc-stat-card lc-theme-red">
+            <div class="lc-card-top">
+                <div class="lc-stat-info">
+                    <span class="lc-stat-title">Pending Ack</span>
+                    <span class="lc-stat-value">1,020</span>
                 </div>
-                <div class="kpi-icon-wrapper"><i class="bi bi-boxes"></i></div>
+                <div class="lc-icon-box">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22V12"></path><circle cx="12" cy="12" r="3" fill="#dc2626"></circle></svg>
+                </div>
+            </div>
+            <div class="lc-stat-trend lc-text-red">
+                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"></polyline><polyline points="16 17 22 17 22 11"></polyline></svg>
+                <span>6.10% vs last period</span>
             </div>
         </div>
+
     </div>
 
+    <!-- Filters -->
     <div class="dashboard-card mb-4">
         <div class="filter-header">
             <span><i class="bi bi-funnel"></i> Filters</span>
             <i class="bi bi-chevron-down text-muted" style="cursor: pointer;"></i>
         </div>
         <div class="row g-3">
-            <div class="col-md-3">
-                <label class="filter-label">Date Range</label>
-                <select class="form-select custom-select"><option>01 Apr 2025 - 28 Apr 2025</option></select>
-            </div>
             <div class="col-md-3">
                 <label class="filter-label">State</label>
                 <select class="form-select custom-select"><option>All State</option></select>
@@ -305,6 +367,10 @@
                 <label class="filter-label">Head Quarters</label>
                 <select class="form-select custom-select"><option>All Head Quarters</option></select>
             </div>
+            <div class="col-md-3">
+                <label class="filter-label">District</label>
+                <select class="form-select custom-select"><option>All District</option></select>
+            </div>
         </div>
         <div class="d-flex justify-content-end mt-4 gap-2">
             <button class="btn-outline-custom"><i class="bi bi-x"></i> Clear All</button>
@@ -312,11 +378,12 @@
         </div>
     </div>
 
-    <div class="dashboard-card pb-2">
+    <!-- Table Section -->
+    <div class="dashboard-card pb-3">
         <div class="table-header-row">
-            <h3 class="card-title">Stock Availability List</h3>
+            <h3 class="card-title mb-0">Stock Availability List</h3>
             <div class="search-container">
-                <i class="bi bi-search"></i>
+             
                 <input type="text" class="search-input" placeholder="Search zones...">
             </div>
         </div>
@@ -325,70 +392,71 @@
             <table class="table table-borderless custom-table">
                 <thead>
                     <tr>
-                        <th rowspan="2" class="th-group-default border-end">State</th>
-                        <th colspan="3" class="th-group-green border-end">Normal Products</th>
-                        <th colspan="3" class="th-group-blue border-end">Imported Products</th>
+                        <th rowspan="2" class="th-group-default border-right-custom" style="width: 15%;">State</th>
+                        <th colspan="3" class="th-group-green border-right-custom">Normal Products</th>
+                        <th colspan="3" class="th-group-blue border-right-custom">Imported Products</th>
                         <th colspan="1" class="th-group-pink"></th>
                     </tr>
                     <tr>
-                        <th class="th-group-default">Urea 45kg</th>
-                        <th class="th-group-default">Urea 50kg</th>
-                        <th class="th-group-default border-end">DAP</th>
+                        <th class="th-bg-white">Urea 45kg</th>
+                        <th class="th-bg-white">Urea 50kg</th>
+                        <th class="th-bg-white border-right-custom">DAP</th>
                         
-                        <th class="th-group-default">Imp Urea 45</th>
-                        <th class="th-group-default">Imp DAP</th>
-                        <th class="th-group-default border-end">Imp 10-26-26</th>
+                        <th class="th-bg-white">Imp Urea 45</th>
+                        <th class="th-bg-white">Imp DAP</th>
+                        <th class="th-bg-white border-right-custom">Imp 10-26-26</th>
                         
-                        <th class="th-group-default">FOM</th>
+                        <th class="th-bg-white">FOM</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td>Tamil Nadu</td>
+                        <td class="text-start fw-medium border-right-custom">Tamil Nadu</td>
                         <td>3,254</td>
                         <td>4,785</td>
-                        <td class="border-end">1,033</td>
-                        <td>352</td>
+                        <td class="border-right-custom">1,033</td>
+                        <td>362</td>
                         <td>311</td>
-                        <td class="border-end">-</td>
+                        <td class="border-right-custom">-</td>
                         <td>124</td>
                     </tr>
                     <tr>
-                        <td>Karnataka</td>
+                        <td class="text-start fw-medium border-right-custom">Karnataka</td>
                         <td>3,254</td>
                         <td>4,785</td>
-                        <td class="border-end">-</td>
-                        <td>352</td>
+                        <td class="border-right-custom">-</td>
+                        <td>362</td>
                         <td>311</td>
-                        <td class="border-end">-</td>
+                        <td class="border-right-custom">-</td>
                         <td>124</td>
                     </tr>
                     <tr>
-                        <td>Kerala</td>
+                        <td class="text-start fw-medium border-right-custom">Kerala</td>
                         <td>3,254</td>
                         <td>4,785</td>
-                        <td class="border-end">1,033</td>
-                        <td>352</td>
+                        <td class="border-right-custom">1,033</td>
+                        <td>362</td>
                         <td>-</td>
-                        <td class="border-end">-</td>
+                        <td class="border-right-custom">-</td>
                         <td>124</td>
                     </tr>
                     
                     <tr class="grand-total-row">
-                        <td>Grand Total</td>
+                        <td class="text-start border-right-custom">Grand Total</td>
                         <td>10,254</td>
                         <td>12,785</td>
-                        <td class="border-end">2,033</td>
+                        <td class="border-right-custom">2,033</td>
                         <td>10,062</td>
                         <td>622</td>
-                        <td class="border-end">-</td>
+                        <td class="border-right-custom">-</td>
                         <td>324</td>
                     </tr>
                 </tbody>
             </table>
         </div>
 
-        <div class="pagination-container mt-3">
+        <!-- Pagination -->
+        <div class="pagination-container">
             <div class="items-per-page">
                 Items Per Page 
                 <select class="form-select form-select-sm" style="width: 70px; background-color: #fff;">
@@ -411,7 +479,6 @@
     </div>
 
 </div>
-
 
 @code {
 
