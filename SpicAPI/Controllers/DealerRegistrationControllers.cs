@@ -66,7 +66,7 @@ namespace SpicAPI.Controllers
 			{
 				DealerId = id,
 				ApprovedBy = userId,
-				Role = request.TargetRole ?? role,
+				Role = role,
 				ApprovedAt = DateTime.Now,
 				Remarks = remarks.ToString()
 			};

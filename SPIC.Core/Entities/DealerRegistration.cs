@@ -169,6 +169,7 @@ namespace SPIC.Core.Entities
         public string Role { get; set; }
         public DateTime ApprovedAt { get; set; }
         public string Remarks { get; set; }
+        public bool IsApproved { get; set; }
     }
     public enum EntityType
     {
