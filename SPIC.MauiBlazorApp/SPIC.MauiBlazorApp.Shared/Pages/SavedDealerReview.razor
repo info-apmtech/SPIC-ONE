@@ -1218,63 +1218,65 @@
         </div>
     </div>
 
-    <h4 class="sent-title">Recent Actions</h4>
+    <h4 class="sent-title">Action History</h4>
 
     @if (_approvalHistory != null && _approvalHistory.Any())
     {
-        var latest = _approvalHistory.First();
         <div class="row g-4">
-            <div class="col-12 col-lg-6">
-                <div class="detail-box">
-                    <h5>Action Details</h5>
+            @foreach (var action in _approvalHistory)
+            {
+                <div class="col-12 col-lg-6">
+                    <div class="detail-box">
+                        <h5>Action Details</h5>
 
-                    <div class="info-row">
-                        <span>Action</span>
-                        <strong>@(latest.Remarks?.Contains("Sections:") == true ? "Sent Back" : "Updated")</strong>
-                    </div>
+                        <div class="info-row">
+                            <span>Action</span>
+                            <strong>@(action.Remarks?.Contains("Sections:") == true ? "Sent Back" : "Updated")</strong>
+                        </div>
 
-                    <div class="info-row">
-                        <span>Action By</span>
-                        <strong>@(latest.ApprovedBy ?? "-")</strong>
-                    </div>
+                        <div class="info-row">
+                            <span>Action By</span>
+                            <strong>@(action.ApprovedBy ?? "-")</strong>
+                        </div>
 
-                    <div class="info-row">
-                        <span>Role</span>
-                        <strong>@(latest.Role ?? "-")</strong>
-                    </div>
+                        <div class="info-row">
+                            <span>Role</span>
+                            <strong>@(action.Role ?? "-")</strong>
+                        </div>
 
-                    <div class="info-row">
-                        <span>Date & Time</span>
-                        <strong>@(latest.ApprovedAt.ToString("dd-MMM-yyyy, hh:mm tt"))</strong>
-                    </div>
+                        <div class="info-row">
+                            <span>Date & Time</span>
+                            <strong>@(action.ApprovedAt.ToString("dd-MMM-yyyy, hh:mm tt"))</strong>
+                        </div>
 
-                    <div class="info-row">
-                        <span>Stage</span>
-                        <strong>@(latest.Role != null ? $"{latest.Role} Review" : "-")</strong>
+                        <div class="info-row">
+                            <span>Stage</span>
+                            <strong>@(action.Role != null ? $"{action.Role} Review" : "-")</strong>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="col-12 col-lg-6">
-                <div class="detail-box">
-                    <h5>Remarks</h5>
+                <div class="col-12 col-lg-6">
+                    <div class="detail-box">
+                        <h5>Remarks</h5>
 
-                    <ul class="remarks">
-                        @if (!string.IsNullOrWhiteSpace(latest.Remarks))
-                        {
-                            var lines = latest.Remarks.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                            foreach (var line in lines)
+                        <ul class="remarks">
+                            @if (!string.IsNullOrWhiteSpace(action.Remarks))
                             {
-                                <li>@line</li>
+                                var lines = action.Remarks.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                                foreach (var line in lines)
+                                {
+                                    <li>@line</li>
+                                }
                             }
-                        }
-                        else
-                        {
-                            <li>No remarks</li>
-                        }
-                    </ul>
+                            else
+                            {
+                                <li>No remarks</li>
+                            }
+                        </ul>
+                    </div>
                 </div>
-            </div>
+            }
         </div>
     }
     else
@@ -1282,8 +1284,8 @@
         <div class="row g-4">
             <div class="col-12">
                 <div class="detail-box">
-                    <h5>Recent Actions</h5>
-                    <div class="text-muted">No recent actions available.</div>
+                    <h5>Action History</h5>
+                    <div class="text-muted">No actions available.</div>
                 </div>
             </div>
         </div>
