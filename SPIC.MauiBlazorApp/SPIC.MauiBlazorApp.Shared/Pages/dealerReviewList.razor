@@ -1,5 +1,6 @@
 ﻿@page "/DealerReviewList"
 @using System.Net.Http.Json
+@using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Services
 @inject HttpClient Http
 @inject NavigationManager NavManager
@@ -14,7 +15,7 @@
                 <h1 class="header-title">Dealer Applications Review</h1>
                 <p class="header-desc">Review and approve dealer registration</p>
             </div>
-            <span class="badge-role">Regional Manager (RM)</span>
+            <span class="badge-role">@(LoginState?.UserRole.ToString() ?? "User")</span>
         </div>
     </section>
 
@@ -31,7 +32,7 @@
                 </svg>
                 <div>
                     <p class="summary-card-title">Total Applications</p>
-                    <p class="summary-card-value">@_allDealers.Count</p>
+                    <p class="summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id))</p>
                 </div>
             </div>
 
@@ -43,7 +44,7 @@
                 </svg>
                 <div>
                     <p class="summary-card-title">Pending Review</p>
-                    <p class="summary-card-value">@_allDealers.Count(d => d.RMApproved == null || d.SMApproved == null || d.AVPApproved == null)</p>
+                    <p class="summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id) && (d.RMApproved == null || d.SMApproved == null || d.AVPApproved == null))</p>
                 </div>
             </div>
 
@@ -54,7 +55,7 @@
                 </svg>
                 <div>
                     <p class="summary-card-title">Verified</p>
-                    <p class="summary-card-value">@_allDealers.Count(d => d.AVPApproved == true)</p>
+                    <p class="summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id) && d.AVPApproved == true)</p>
                 </div>
             </div>
 
@@ -65,7 +66,7 @@
                 </svg>
                 <div>
                     <p class="summary-card-title">Sent Back</p>
-                    <p class="summary-card-value">@_allDealers.Count(d => d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)</p>
+                    <p class="summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id) && (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false))</p>
                 </div>
             </div>
         </div>
@@ -208,6 +209,28 @@
     private int _currentPage = 1;
     private int _pageSize = 16;
 
+    private Dictionary<int, int> _dealerStepCounts = new();
+
+    // Related data for 12-step completeness check
+    private List<DealerExperience> _allExperiences = new();
+    private List<AnnualSaleDataLastFYofDealerRegistration> _allAnnualSales = new();
+    private List<DealerWarehouseFacilities> _allWarehouses = new();
+    private List<DealerRailFacilities> _allRails = new();
+    private List<DealerPortFacilities> _allPorts = new();
+    private List<DealerMarketDetail> _allMarketDetails = new();
+    private List<DealerCompaniesOperatingInArea> _allCompaniesOperating = new();
+    private List<DealerOwnershipInfo> _allOwnerships = new();
+    private List<PartnerFamilyDetails> _allPartners = new();
+    private List<PartnerOccupation> _allOccupations = new();
+    private List<SalesPlanningInDealerRegistration> _allSalesPlanning = new();
+    private List<DealerAssetBank> _allAssetBanks = new();
+    private List<DealerAssetLand> _allAssetLands = new();
+    private List<DealerAssetBuilding> _allAssetBuildings = new();
+    private List<DealerLoanLiabilities> _allLoans = new();
+    private List<DealerCreditLimitProposal> _allCreditProposals = new();
+    private List<DealerCreditLimitSalesPerformance> _allCreditSales = new();
+    private List<DealerRegistrationDocuments> _allDocuments = new();
+
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(_filteredDealers.Count / (double)_pageSize));
     private IEnumerable<DealerDto> PagedItems => _filteredDealers
         .Skip((_currentPage - 1) * _pageSize)
@@ -245,6 +268,27 @@
         try
         {
             _allDealers = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/submitted") ?? new();
+
+            // Load related entities for 12-step completeness check
+            try { _allExperiences = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience") ?? new(); } catch { _allExperiences = new(); }
+            try { _allAnnualSales = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFYofDealerRegistration") ?? new(); } catch { _allAnnualSales = new(); }
+            try { _allWarehouses = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities") ?? new(); } catch { _allWarehouses = new(); }
+            try { _allRails = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities") ?? new(); } catch { _allRails = new(); }
+            try { _allPorts = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities") ?? new(); } catch { _allPorts = new(); }
+            try { _allMarketDetails = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail") ?? new(); } catch { _allMarketDetails = new(); }
+            try { _allCompaniesOperating = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea") ?? new(); } catch { _allCompaniesOperating = new(); }
+            try { _allOwnerships = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo") ?? new(); } catch { _allOwnerships = new(); }
+            try { _allPartners = await Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails") ?? new(); } catch { _allPartners = new(); }
+            try { _allOccupations = await Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation") ?? new(); } catch { _allOccupations = new(); }
+            try { _allSalesPlanning = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning") ?? new(); } catch { _allSalesPlanning = new(); }
+            try { _allAssetBanks = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank") ?? new(); } catch { _allAssetBanks = new(); }
+            try { _allAssetLands = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand") ?? new(); } catch { _allAssetLands = new(); }
+            try { _allAssetBuildings = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding") ?? new(); } catch { _allAssetBuildings = new(); }
+            try { _allLoans = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities") ?? new(); } catch { _allLoans = new(); }
+            try { _allCreditProposals = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal") ?? new(); } catch { _allCreditProposals = new(); }
+            try { _allCreditSales = await Http.GetFromJsonAsync<List<DealerCreditLimitSalesPerformance>>("api/DealerCreditLimitSalesPerformance") ?? new(); } catch { _allCreditSales = new(); }
+            try { _allDocuments = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments") ?? new(); } catch { _allDocuments = new(); }
+
             BuildCompletionSet();
             ApplyRoleFilter();
             ApplyFilter();
@@ -258,10 +302,32 @@
 
     private void BuildCompletionSet()
     {
-        _completeDealerIds = _allDealers
-            .Where(d => !string.IsNullOrWhiteSpace(d.PinCode))
-            .Select(d => d.Id)
-            .ToHashSet();
+        _dealerStepCounts.Clear();
+        foreach (var d in _allDealers)
+        {
+            int count = 0;
+            if (!string.IsNullOrWhiteSpace(d.PinCode)) count++;
+            if (_allExperiences.Any(x => x.DealerId == d.Id)) count++;
+            if (_allAnnualSales.Any(x => x.DealerId == d.Id)) count++;
+            if (_allWarehouses.Any(x => x.DealerId == d.Id) || _allRails.Any(x => x.DealerId == d.Id) || _allPorts.Any(x => x.DealerId == d.Id)) count++;
+            if (_allMarketDetails.Any(x => x.DealerId == d.Id)) count++;
+            if (_allCompaniesOperating.Any(x => x.DealerId == d.Id)) count++;
+            if (_allOwnerships.Any(x => x.DealerId == d.Id)) count++;
+            bool hasPartner = _allPartners.Any(p => _allOwnerships.Any(o => o.Id == p.OwnershipPartnerId && o.DealerId == d.Id));
+            bool hasOccupation = _allOccupations.Any(o => _allOwnerships.Any(own => own.Id == o.OwnershipPartnerId && own.DealerId == d.Id));
+            if (hasPartner || hasOccupation) count++;
+            if (_allSalesPlanning.Any(x => x.DealerId == d.Id)) count++;
+            if (_allAssetBanks.Any(x => x.DealerId == d.Id) || _allAssetLands.Any(x => x.DealerId == d.Id) || _allAssetBuildings.Any(x => x.DealerId == d.Id)) count++;
+            if (_allLoans.Any(x => x.DealerId == d.Id)) count++;
+            bool hasCreditProposal = _allCreditProposals.Any(cp => cp.DealerId == d.Id);
+            bool hasCreditSales = _allCreditSales.Any(s => _allCreditProposals.Any(cp => cp.Id == s.CreditLimitId && cp.DealerId == d.Id));
+            if (hasCreditProposal || hasCreditSales) count++;
+            if (_allDocuments.Any(x => x.DealerId == d.Id)) count++;
+
+            _dealerStepCounts[d.Id] = count;
+        }
+
+        _completeDealerIds = _dealerStepCounts.Where(kv => kv.Value >= 12).Select(kv => kv.Key).ToHashSet();
     }
 
     private void ApplyRoleFilter()
@@ -409,21 +475,22 @@
         public decimal CashCreditLimit { get; set; }
     }
 }
+
 <style>
     .page-wrapper {
         max-width: 1660px;
         margin: 0 auto;
-        padding: 24px 16px;
+        padding: 16px;
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 12px;
     }
 
     /* ── Header ── */
     .page-header {
         display: flex;
         flex-direction: column;
-        gap: 32px;
+        gap: 8px;
     }
 
     .header-row {
@@ -431,25 +498,25 @@
         flex-direction: row;
         align-items: flex-start;
         justify-content: space-between;
-        gap: 650px;
+        gap: 12px;
         flex-wrap: wrap;
     }
 
     .header-title {
-        font-size: 28px;
+        font-size: 20px;
         font-weight: 600;
         color: #47443f;
-        letter-spacing: -0.56px;
-        line-height: 40px;
+        letter-spacing: -0.4px;
+        line-height: 1.3;
         margin: 0;
     }
 
     .header-desc {
-        font-size: 18px;
+        font-size: 13px;
         font-weight: 400;
         color: #364153;
-        line-height: 20px;
-        margin: 0;
+        line-height: 1.4;
+        margin: 4px 0 0;
     }
 
     .badge-role {
@@ -458,9 +525,9 @@
         background-color: #dbfdfe;
         color: #3cb8ad;
         border: 1px solid #bef8ff;
-        border-radius: 8px;
-        padding: 4px 12px;
-        font-size: 14px;
+        border-radius: 7px;
+        padding: 3px 10px;
+        font-size: 12px;
         font-weight: 400;
         line-height: 20px;
         white-space: nowrap;
@@ -471,7 +538,7 @@
     .summary-grid {
         display: grid;
         grid-template-columns: repeat(1, 1fr);
-        gap: 24px;
+        gap: 12px;
     }
 
     @@media (min-width: 768px) {
@@ -483,14 +550,14 @@
     }
 
     .summary-card {
-        border-radius: 16px;
+        border-radius: 12px;
         border-width: 0.8px;
         border-style: solid;
-        padding: 10px;
+        padding: 10px 14px;
         display: flex;
         flex-direction: row;
         align-items: center;
-        gap: 24px;
+        gap: 14px;
     }
 
     .summary-card.card-total {
@@ -514,25 +581,25 @@
     }
 
     .summary-card-icon {
-        width: 56px;
-        height: 56px;
+        width: 40px;
+        height: 40px;
         flex-shrink: 0;
         object-fit: contain;
     }
 
     .summary-card-title {
-        font-size: 17px;
+        font-size: 12px;
         font-weight: 600;
         color: #395a45;
-        line-height: 32px;
-        margin: 0 0 8px 0;
+        line-height: 1.3;
+        margin: 0 0 2px 0;
     }
 
     .summary-card-value {
-        font-size: 28px;
+        font-size: 22px;
         font-weight: 600;
         color: #085726;
-        line-height: 42px;
+        line-height: 1.2;
         margin: 0;
     }
 
@@ -540,17 +607,17 @@
     .applications-card {
         background: #ffffff;
         border: 1px solid #e6ece9;
-        border-radius: 20px;
-        padding: 32px;
-        box-shadow: 4px 4px 12px rgba(233,233,233,0.25), -4px -4px 12px rgba(231,231,231,0.3);
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 3px 3px 10px rgba(233,233,233,0.2), -3px -3px 10px rgba(231,231,231,0.2);
     }
 
     .applications-header {
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        gap: 16px;
-        margin-bottom: 24px;
+        gap: 12px;
+        margin-bottom: 16px;
     }
 
     @@media (min-width: 768px) {
@@ -561,17 +628,17 @@
     }
 
     .applications-title {
-        font-size: 22px;
+        font-size: 16px;
         font-weight: 600;
         color: #36483d;
-        line-height: 32px;
+        line-height: 1.3;
         margin: 0;
     }
 
     /* ── Table Controls (Search + Filter) ── */
     .table-controls {
         display: flex;
-        gap: 12px;
+        gap: 10px;
         align-items: center;
         flex-wrap: wrap;
     }
@@ -579,45 +646,46 @@
     .search-box {
         position: relative;
         width: 100%;
-        max-width: 315px;
+        max-width: 260px;
     }
 
     @@media (min-width: 768px) {
-        .search-box { width: 315px; }
+        .search-box { width: 260px; }
     }
 
     .search-box i {
         position: absolute;
-        left: 12px;
+        left: 10px;
         top: 50%;
         transform: translateY(-50%);
         color: #bebebe;
-        font-size: 14px;
+        font-size: 13px;
     }
 
     .search-box input {
         width: 100%;
-        height: 44px;
+        height: 36px;
         border: none;
-        border-radius: 10px;
+        border-radius: 8px;
         background-color: #f3f3f3;
-        padding: 0 12px 0 40px;
+        padding: 0 10px 0 32px;
         font-size: 12px;
         font-weight: 400;
         color: #191c1d;
         font-family: 'Inter', Helvetica, sans-serif;
         outline: none;
+        box-sizing: border-box;
     }
 
     .search-box input::placeholder { color: #bebebe; }
 
     .filter-select {
-        height: 44px;
+        height: 36px;
         border: 1px solid #c6c6c6;
-        border-radius: 8px;
-        padding: 0 12px;
+        border-radius: 7px;
+        padding: 0 10px;
         background: #ffffff;
-        font-size: 14px;
+        font-size: 13px;
         color: #44494d;
         cursor: pointer;
         font-family: 'Inter', Helvetica, sans-serif;
@@ -626,7 +694,7 @@
     /* ── Table ── */
     .table-container {
         border: 1px solid #d8ebe1;
-        border-radius: 8px;
+        border-radius: 7px;
         overflow-x: auto;
         background: #ffffff;
     }
@@ -637,7 +705,7 @@
 
     .app-table {
         width: 100%;
-        min-width: 1180px;
+        min-width: 900px;
         border-collapse: separate;
         border-spacing: 0;
         margin: 0;
@@ -646,10 +714,10 @@
     .app-table thead tr th {
         background-color: #f2f3f3;
         border-bottom: 1px solid #d0dfd8;
-        padding: 18px 24px;
+        padding: 11px 16px;
         text-align: center;
         vertical-align: middle;
-        font-size: 16px;
+        font-size: 12px;
         font-weight: 600;
         color: #40493d;
         white-space: nowrap;
@@ -660,11 +728,10 @@
 
     .app-table tbody tr td {
         border-bottom: 1px solid #e8eeeb;
-        padding: 26px 24px;
+        padding: 12px 16px;
         text-align: center;
         vertical-align: middle;
-        height: 76px;
-        font-size: 14px;
+        font-size: 12px;
         font-weight: 400;
         color: #191c1d;
         white-space: nowrap;
@@ -678,19 +745,19 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 10px;
+        gap: 8px;
     }
 
     .dealer-avatar {
-        width: 32px;
-        height: 32px;
+        width: 26px;
+        height: 26px;
         border-radius: 50%;
         overflow: hidden;
         background-color: #e2e8f0;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
         color: #64748b;
         flex-shrink: 0;
@@ -703,9 +770,9 @@
         display: inline-flex;
         align-items: center;
         border: 1px solid;
-        border-radius: 8px;
-        padding: 4px 12px;
-        font-size: 14px;
+        border-radius: 7px;
+        padding: 3px 9px;
+        font-size: 12px;
         font-weight: 400;
         line-height: 20px;
         font-family: 'Inter', Helvetica, sans-serif;
@@ -729,8 +796,8 @@
         align-items: center;
         border: 1px solid;
         border-radius: 100px;
-        padding: 7px 16px;
-        font-size: 14px;
+        padding: 4px 12px;
+        font-size: 12px;
         font-weight: 500;
         line-height: 20px;
         font-family: 'Inter', Helvetica, sans-serif;
@@ -768,7 +835,7 @@
 
     .btn-action:hover { color: #6da7d9; opacity: 0.8; }
 
-    .btn-action svg { width: 16px; height: 16px; }
+    .btn-action svg { width: 15px; height: 15px; }
 
     /* ── Footer: Items Per Page + Pagination ── */
     .table-footer {
@@ -776,8 +843,8 @@
         flex-direction: column;
         justify-content: space-between;
         align-items: flex-start;
-        gap: 16px;
-        margin-top: 32px;
+        gap: 12px;
+        margin-top: 20px;
     }
 
     @@media (min-width: 768px) {
@@ -790,11 +857,11 @@
     .items-per-page {
         display: inline-flex;
         align-items: center;
-        gap: 16px;
+        gap: 10px;
     }
 
     .items-per-page-label {
-        font-size: 16px;
+        font-size: 13px;
         font-weight: 500;
         color: #44494d;
         white-space: nowrap;
@@ -802,13 +869,13 @@
     }
 
     .items-per-page select {
-        width: 80px;
-        height: 44px;
+        width: 68px;
+        height: 36px;
         border: 1px solid #c6c6c6;
-        border-radius: 8px;
-        padding: 0 12px;
+        border-radius: 7px;
+        padding: 0 8px;
         background: #ffffff;
-        font-size: 16px;
+        font-size: 13px;
         font-weight: 500;
         color: #44494d;
         cursor: pointer;
@@ -819,41 +886,41 @@
     .pagination-wrapper {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 8px;
         flex-wrap: wrap;
     }
 
     .page-nav-btn {
-        width: 32px;
-        height: 32px;
+        width: 28px;
+        height: 28px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         background: #ffffff;
         border: 1px solid #ededed;
-        border-radius: 8px;
+        border-radius: 7px;
         color: #484848;
         cursor: pointer;
         padding: 0;
     }
 
     .page-nav-btn.disabled {
-        opacity: 0.5;
+        opacity: 0.4;
         cursor: not-allowed;
     }
 
-    .page-nav-btn svg { width: 16px; height: 16px; }
+    .page-nav-btn svg { width: 14px; height: 14px; }
     .page-nav-btn:hover:not(.disabled) { background: #f9f9f9; }
 
     .page-number-btn {
-        min-width: 32px;
+        min-width: 28px;
         height: auto;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        border-radius: 8px;
-        padding: 9px 13px;
-        font-size: 16px;
+        border-radius: 7px;
+        padding: 5px 9px;
+        font-size: 13px;
         font-weight: 500;
         color: #484848;
         cursor: pointer;
