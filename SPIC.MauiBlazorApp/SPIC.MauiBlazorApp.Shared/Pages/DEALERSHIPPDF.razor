@@ -353,9 +353,21 @@
     {
         <div class="document-container">
             <header class="doc-header">
+                @if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
+                {
+
+                <div class="logo">
+                    <span>S</span> SPIC
+                </div>
+                }
+                else if(string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
+                {
+
                 <div class="logo">
                     <span>G</span> GREENSTAR
                 </div>
+                }
+
                 <div class="header-content">
                     <h1>DEALERSHIP APPLICATION FORM</h1>
                     <h2>GREENSTAR FERTILIZERS LIMITED</h2>
@@ -1588,6 +1600,7 @@ else
 </div>
 
 
+@if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")    {
 
 <div class="section">
     <div class="section-title mb-2">
@@ -1625,44 +1638,47 @@ else
         </div>
     </div>
 </div> 
+}
+                @if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
+                {
 
-<div class="section">
-     <div class="section-title mb-2">
-        <div class="section-icon">📈</div>  <div class="section-text">Greenstar Specimen Signature</div>
-    </div>
-    
-    <div class="grid-2 mb-15">
-        <div class="field">
-            <label>Specimen Uploaded</label>
-            <div class="value" style="display: flex; align-items: center; gap: 8px;">
-                @if (string.IsNullOrEmpty(_docs?.GreenstarSpecimanFilePath))
-                {
-                    <i class="bi bi-x-circle" style="color: #D97706; font-size: 1.2rem;"></i>
-                    <span style="color: #D97706; font-weight: 500;">No</span>
-                }
-                else
-                {
-                    <i class="bi bi-check-circle" style="color: #059669; font-size: 1.2rem;"></i>
-                    <span style="color: #059669; font-weight: 500;">Yes</span>
-                }
-            </div>
-        </div>   
-        <div class="field">
-            <label>File Name</label>
-            <div class="value">
-                @if (string.IsNullOrEmpty(_docs?.GreenstarSpecimanFilePath))
-                {
-                    <span style="color: #6B7280;">-</span>
-                }
-                else
-                {
-                    <span style="color: #059669; font-weight: 500;">@Path.GetFileName(_docs.GreenstarSpecimanFilePath)</span>
-                }
-            </div>
-        </div>
-    </div>
-</div>
+                    <div class="section">
+                        <div class="section-title mb-2">
+                            <div class="section-icon">📈</div>  <div class="section-text">Greenstar Specimen Signature</div>
+                        </div>
 
+                        <div class="grid-2 mb-15">
+                            <div class="field">
+                                <label>Specimen Uploaded</label>
+                                <div class="value" style="display: flex; align-items: center; gap: 8px;">
+                                    @if (string.IsNullOrEmpty(_docs?.GreenstarSpecimanFilePath))
+                                    {
+                                        <i class="bi bi-x-circle" style="color: #D97706; font-size: 1.2rem;"></i>
+                                        <span style="color: #D97706; font-weight: 500;">No</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-check-circle" style="color: #059669; font-size: 1.2rem;"></i>
+                                        <span style="color: #059669; font-weight: 500;">Yes</span>
+                                    }
+                                </div>
+                            </div>   
+                            <div class="field">
+                                <label>File Name</label>
+                                <div class="value">
+                                    @if (string.IsNullOrEmpty(_docs?.GreenstarSpecimanFilePath))
+                                    {
+                                        <span style="color: #6B7280;">-</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color: #059669; font-weight: 500;">@Path.GetFileName(_docs.GreenstarSpecimanFilePath)</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
 
 <div class="section">
     
@@ -3515,8 +3531,7 @@ else
 
 @if (_proposal != null && _proposal.Id > 0)
 {
-    @if (_model.InSpic)
-    {
+@if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")    {
         <div class="section-title mb-2">
             <div class="section-icon">📋</div>  SPIC Valuation <div class="section-text"></div>
         </div>
@@ -3771,8 +3786,7 @@ else
         </div>
     }
 
-    @if (_model.InGreenStar)
-    {
+@if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")    {
         <div class="section-title mb-2">
             <div class="section-icon">📋</div>  <div class="section-text"> Greenstar Valuation</div>
         </div>
@@ -4056,6 +4070,7 @@ else
 
     [Parameter]
     public int? dealerId { get; set; }
+    public string? SelectedCompany { get; set; }
     private DealerFormModel _model = new();
 
     private bool _isLoading = true;
@@ -4125,7 +4140,14 @@ private bool _showAuthorizationLetter => !_isSoleProprietor;
         try
         {
             // Load lookups
-
+            if (NavManager.Uri.Contains("company=SPIC", StringComparison.OrdinalIgnoreCase))
+        {
+            SelectedCompany = "SPIC";
+        }
+        else if (NavManager.Uri.Contains("company=GreenStar", StringComparison.OrdinalIgnoreCase))
+        {
+            SelectedCompany = "GreenStar";
+        }
 
             var allDocs = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments/all") ?? new();
 _docs = allDocs.FirstOrDefault(d => d.DealerId == dealerId.Value) ?? new();
