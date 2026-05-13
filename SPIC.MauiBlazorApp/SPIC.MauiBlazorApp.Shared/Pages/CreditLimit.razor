@@ -256,7 +256,7 @@
 			</div>
 		</div>
 	</div>
-	@if (_dealer.InSpic)
+	@if (_dealer.InSpic && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
 	{
 		<!-- Details of Securities SPIC -->
 		<div class="form-card">
@@ -602,7 +602,7 @@
 			</div>
 		</div>
 	}
-	@if (_dealer.InGreenStar)
+	@if (_dealer.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
 	{
 		<!-- Details of Securities Greenstar -->
 		<div class="form-card">
@@ -977,6 +977,7 @@
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int? DealerId { get; set; }
+	public string? SelectedCompany { get; set; }
 
 	private DealerReg _dealer = new();
 	private List<DealerAssetBank> _bankAssets = new();
@@ -1081,6 +1082,14 @@
 
 	protected override async Task OnInitializedAsync()
 	{
+		if (Nav.Uri.Contains("company=SPIC", StringComparison.OrdinalIgnoreCase))
+		{
+			SelectedCompany = "SPIC";
+		}
+		else if (Nav.Uri.Contains("company=GreenStar", StringComparison.OrdinalIgnoreCase))
+		{
+			SelectedCompany = "GreenStar";
+		}
 		// Load all master data in parallel
 		var fyTask = SafeGetAsync<List<FinancialYear>>("api/FinancialYear");
 		var catTask = SafeGetAsync<List<Category>>("api/Category");
