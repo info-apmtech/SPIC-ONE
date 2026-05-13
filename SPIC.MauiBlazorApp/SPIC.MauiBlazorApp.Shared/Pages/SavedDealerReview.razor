@@ -320,63 +320,36 @@
     {
         TimelineItems.Clear();
 
-        if (_dealer != null)
+        if (_dealer == null) return;
+
+        var submitUser = "System";
+        if (!string.IsNullOrEmpty(_dealer.CreatedBy))
         {
-            // 1. Initial Submit Step
-            var submitUser = "System";
-            if (!string.IsNullOrEmpty(_dealer.CreatedBy))
+            if (_userNames.ContainsKey(_dealer.CreatedBy)) submitUser = _userNames[_dealer.CreatedBy];
+            else submitUser = _dealer.CreatedBy;
+        }
+        var createdDateText = _dealer.CreatedAt.ToString("dd-MMM-yyyy hh:mm tt");
+
+        TimelineItems.Add(new TimelineItem("Submitted", "Submitted", submitUser, createdDateText, "dot-green", "bi bi-check-lg", "card-green", "badge-green"));
+
+        if (_approvalHistory != null && _approvalHistory.Any())
+        {
+            foreach (var h in _approvalHistory.OrderBy(h => h.ApprovedAt))
             {
-                if (_userNames.ContainsKey(_dealer.CreatedBy)) submitUser = _userNames[_dealer.CreatedBy];
-                else submitUser = _dealer.CreatedBy;
+                var roleName = h.Role ?? "Unknown";
+                var userName = !string.IsNullOrEmpty(h.ApprovedBy) && _userNames.ContainsKey(h.ApprovedBy)
+                    ? _userNames[h.ApprovedBy]
+                    : (h.ApprovedBy ?? "-");
+                var dateText = h.ApprovedAt.ToString("dd-MMM-yyyy hh:mm tt");
+                var status = h.IsApproved ? "Approved" : "Sent Back";
+
+                var dotClass = h.IsApproved ? "dot-green" : "dot-red";
+                var icon = h.IsApproved ? "bi bi-check-lg" : "bi bi-arrow-counterclockwise";
+                var cardClass = h.IsApproved ? "card-green" : "card-red";
+                var badgeClass = h.IsApproved ? "badge-green" : "badge-red";
+
+                TimelineItems.Add(new TimelineItem($"Under Review by {roleName}", status, userName, dateText, dotClass, icon, cardClass, badgeClass));
             }
-            var createdDateText = _dealer.CreatedAt.ToString("dd-MMM-yyyy hh:mm tt");
-            
-            TimelineItems.Add(new TimelineItem("Submitted", "Submitted", submitUser, createdDateText, "dot-green", "bi bi-check-lg", "card-green", "badge-green"));
-
-            // Helper to get latest record per role
-            static DR.DealerApprovalHistory? LastForRole(IEnumerable<DR.DealerApprovalHistory> hist, string roleToken)
-            {
-                return hist?.Where(h => !string.IsNullOrEmpty(h.Role) && h.Role.Contains(roleToken, StringComparison.OrdinalIgnoreCase)).OrderByDescending(h => h.ApprovedAt).FirstOrDefault();
-            }
-
-            // 2. RM Step
-            var rmStatus = _dealer.RMApproved == true ? "Approved" : (_dealer.RMApproved == false ? "Sent Back" : "Pending");
-            var lastRm = LastForRole(_approvalHistory, "RM");
-            string rmUser = lastRm != null ? (_userNames.ContainsKey(lastRm.ApprovedBy ?? "") ? _userNames[lastRm.ApprovedBy!] : lastRm.ApprovedBy ?? "-") : "-";
-            string rmDateText = lastRm != null ? lastRm.ApprovedAt.ToString("dd-MMM-yyyy hh:mm tt") : "-";
-            
-            var rmDot = rmStatus == "Sent Back" ? "dot-red" : (rmStatus == "Pending" ? "dot-gray" : "dot-green");
-            var rmIcon = rmStatus == "Sent Back" ? "bi bi-arrow-counterclockwise" : "bi bi-clock";
-            var rmCard = rmStatus == "Sent Back" ? "card-red" : (rmStatus == "Pending" ? "card-pending" : "card-green");
-            var rmBadge = rmStatus == "Sent Back" ? "badge-red" : "badge-blue"; // Blue badge used for both Approved and Pending in image
-            
-            TimelineItems.Add(new TimelineItem("Under Review by RM", rmStatus, rmUser, rmDateText, rmDot, rmIcon, rmCard, rmBadge));
-
-            // 3. SMM Step
-            var smStatus = _dealer.SMApproved == true ? "Approved" : (_dealer.SMApproved == false ? "Sent Back" : "Pending");
-            var lastSm = LastForRole(_approvalHistory, "SM");
-            string smUser = lastSm != null ? (_userNames.ContainsKey(lastSm.ApprovedBy ?? "") ? _userNames[lastSm.ApprovedBy!] : lastSm.ApprovedBy ?? "-") : "-";
-            string smDateText = lastSm != null ? lastSm.ApprovedAt.ToString("dd-MMM-yyyy hh:mm tt") : "-";
-            
-            var smDot = smStatus == "Sent Back" ? "dot-red" : (smStatus == "Pending" ? "dot-gray" : "dot-green");
-            var smIcon = smStatus == "Sent Back" ? "bi bi-arrow-counterclockwise" : "bi bi-clock";
-            var smCard = smStatus == "Sent Back" ? "card-red" : (smStatus == "Pending" ? "card-pending" : "card-green");
-            var smBadge = smStatus == "Sent Back" ? "badge-red" : "badge-blue";
-
-            TimelineItems.Add(new TimelineItem("Under Review by SMM", smStatus, smUser, smDateText, smDot, smIcon, smCard, smBadge));
-
-            // 4. AVP Step
-            var avpStatus = _dealer.AVPApproved == true ? "Approved" : (_dealer.AVPApproved == false ? "Sent Back" : "Pending");
-            var lastAvp = LastForRole(_approvalHistory, "AVP");
-            string avpUser = lastAvp != null ? (_userNames.ContainsKey(lastAvp.ApprovedBy ?? "") ? _userNames[lastAvp.ApprovedBy!] : lastAvp.ApprovedBy ?? "-") : "-";
-            string avpDateText = lastAvp != null ? lastAvp.ApprovedAt.ToString("dd-MMM-yyyy hh:mm tt") : "-";
-            
-            var avpDot = avpStatus == "Sent Back" ? "dot-red" : (avpStatus == "Pending" ? "dot-gray" : "dot-green");
-            var avpIcon = avpStatus == "Sent Back" ? "bi bi-arrow-counterclockwise" : "bi bi-clock";
-            var avpCard = avpStatus == "Sent Back" ? "card-red" : (avpStatus == "Pending" ? "card-pending" : "card-green");
-            var avpBadge = avpStatus == "Sent Back" ? "badge-red" : "badge-blue";
-
-            TimelineItems.Add(new TimelineItem("Under Review by AVP", avpStatus, avpUser, avpDateText, avpDot, avpIcon, avpCard, avpBadge));
         }
     }
 
@@ -453,10 +426,12 @@
             if (LoginState.IsRMGroup)
             {
                 _dealer.RMApproved = true;
+                if (_dealer.SMApproved == false) _dealer.SMApproved = null;
             }
             else if (LoginState.IsSMGroup)
             {
                 _dealer.SMApproved = true;
+                if (_dealer.AVPApproved == false) _dealer.AVPApproved = null;
             }
             else if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
             {
@@ -468,6 +443,18 @@
 
             if (response.IsSuccessStatusCode)
             {
+                var role = LoginState.UserRole.ToString();
+                var history = new DR.DealerApprovalHistory
+                {
+                    DealerId = _dealer.Id,
+                    ApprovedBy = LoginState.UserId ?? "",
+                    Role = role,
+                    ApprovedAt = DateTime.Now,
+                    Remarks = string.IsNullOrWhiteSpace(ConfirmRemarks) ? "" : ConfirmRemarks,
+                    IsApproved = true
+                };
+                try { await Http.PostAsJsonAsync("api/DealerApprovalHistory", history); } catch { }
+
                 IsConfirmProceedPopupVisible = false;
                 _showSuccessNotification = true;
                 StateHasChanged();
