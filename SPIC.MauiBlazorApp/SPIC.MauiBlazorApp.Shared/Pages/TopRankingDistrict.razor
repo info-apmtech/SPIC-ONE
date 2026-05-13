@@ -1,0 +1,326 @@
+﻿@page "/TopRankingDistrict" 
+
+    <style>
+        :root {
+            --bg-body: #f4f7fa;
+            --bg-card: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --primary-blue: #3b82f6;
+            
+            /* Theme Colors for Gradients & Borders */
+            --theme-green: #22c55e;
+            --bg-green-light: #f0fdf4;
+            
+            --theme-purple: #6366f1;
+            --bg-purple-light: #eef2ff;
+            
+            --theme-orange: #f59e0b;
+            --bg-orange-light: #fffbeb;
+            
+            --theme-cyan: #06b6d4;
+            --bg-cyan-light: #ecfeff;
+        }
+
+       
+
+        /* --- Page Header --- */
+        .page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.2rem; color: #111827; }
+        .page-subtitle { font-size: 0.85rem; color: var(--text-muted); }
+        
+        /* Buttons */
+        .btn-outline-custom {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-outline-custom:hover { background: #f9fafb; color: var(--text-main); }
+        
+        .btn-primary-custom {
+            background: var(--primary-blue);
+            border: 1px solid var(--primary-blue);
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 6px 16px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-primary-custom:hover { background: #2563eb; color: #fff; }
+
+        /* --- KPI Cards --- */
+        .kpi-card {
+            border-radius: 10px;
+            padding: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            position: relative;
+            overflow: hidden;
+            height: 100%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            border: 1px solid var(--border-color);
+        }
+        
+        /* Gradients and Borders */
+        .kpi-green {
+            border-left: 4px solid var(--theme-green);
+            background: linear-gradient(90deg, var(--bg-green-light) 0%, #ffffff 80%);
+        }
+        .kpi-purple {
+            border-left: 4px solid var(--theme-purple);
+            background: linear-gradient(90deg, var(--bg-purple-light) 0%, #ffffff 80%);
+        }
+        .kpi-orange {
+            border-left: 4px solid var(--theme-orange);
+            background: linear-gradient(90deg, var(--bg-orange-light) 0%, #ffffff 80%);
+        }
+        .kpi-cyan {
+            border-left: 4px solid var(--theme-cyan);
+            background: linear-gradient(90deg, var(--bg-cyan-light) 0%, #ffffff 80%);
+        }
+
+        .kpi-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem; }
+        .kpi-value { font-size: 1.6rem; font-weight: 700; color: #111827; line-height: 1.2; margin-bottom: 0.25rem; }
+        .kpi-trend { font-size: 0.75rem; font-weight: 500; color: var(--text-muted); }
+
+        .kpi-icon-wrapper {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            background: #ffffff;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .kpi-green .kpi-icon-wrapper { color: var(--theme-green); border: 1px solid #bbf7d0; }
+        .kpi-purple .kpi-icon-wrapper { color: var(--theme-purple); border: 1px solid #c7d2fe; }
+        .kpi-orange .kpi-icon-wrapper { color: var(--theme-orange); border: 1px solid #fde68a; }
+        .kpi-cyan .kpi-icon-wrapper { color: var(--theme-cyan); border: 1px solid #a5f3fc; }
+
+        /* --- Dashboard Main Card --- */
+        .dashboard-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            padding: 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+
+        /* --- Table Header & Search --- */
+        .table-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+        .card-title { font-size: 1.05rem; font-weight: 600; color: var(--text-main); margin: 0; }
+        
+        .search-container { position: relative; width: 260px; }
+        .search-container i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 0.85rem; }
+        .search-input {
+            width: 100%;
+            padding: 8px 12px 8px 32px;
+            background-color: #f9fafb;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            outline: none;
+        }
+
+        /* --- Table Styling --- */
+        .table-custom { margin-bottom: 0; }
+        .table-custom th {
+            background-color: #f9fafb;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+        }
+        .table-custom td {
+            font-size: 0.8rem;
+            color: var(--text-main);
+            padding: 14px 12px;
+            vertical-align: middle;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+        }
+        .table-custom tr:last-child td { border-bottom: none; }
+        
+        /* Trophy Icons */
+        .rank-icon { font-size: 1.2rem; }
+
+        /* --- Pagination --- */
+        .pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
+        .items-per-page { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-muted); }
+        .page-item { 
+            width: 32px; height: 32px; 
+            display: flex; align-items: center; justify-content: center; 
+            border: 1px solid var(--border-color); 
+            background: #fff; border-radius: 6px; 
+            font-size: 0.8rem; color: var(--text-muted); 
+            cursor: pointer; text-decoration: none; 
+        }
+        .page-item.active { background: #f3f4f6; color: var(--text-main); font-weight: 600; }
+        .page-item.dots { border: none; background: transparent; cursor: default; }
+    </style>
+
+<div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1500px;">
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+        <div>
+            <h1 class="page-title">Top Ranking Districts</h1>
+            <p class="page-subtitle mb-0">Districts ranked by higher quantity liquidation in less duration</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn-outline-custom"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
+            <button class="btn-outline-custom"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+            <button class="btn-outline-custom"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+            <button class="btn-primary-custom"><i class="bi bi-envelope"></i> Send Mail</button>
+        </div>
+    </div>
+
+     <div class="sr-stats-grid">
+        <div class="sr-stat-card sr-card-green">
+            <div class="sr-stat-content">
+                <p class="kpi-label">Total States</p>
+                    <h2 class="kpi-value">4</h2>
+                     <div class="kpi-trend text-purple">All time</div>
+            </div>
+            <div class="sr-stat-icon-box sr-icon-green"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg></div>
+        </div>
+
+        <div class="sr-stat-card sr-card-blue">
+            <div class="sr-stat-content">
+                <p class="kpi-label">Total Regions</p>
+                    <h2 class="kpi-value">6</h2>
+                     <div class="kpi-trend text-purple">All time</div>
+              
+                
+            </div>
+            <div class="sr-stat-icon-box sr-icon-blue"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="10" rx="2"></rect><path d="M12 12v6"></path><path d="M16 15h.01"></path><path d="M8 15h.01"></path><path d="M20 19v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"></path><path d="M2 15h20"></path></svg></div>
+        </div>
+
+        <div class="sr-stat-card sr-card-orange">
+            <div class="sr-stat-content">
+               <p class="kpi-label">Total HQs</p>
+                    <h2 class="kpi-value">3</h2>
+                     <div class="kpi-trend text-purple">All time</div>
+            </div>
+            <div class="sr-stat-icon-box sr-icon-orange"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M2 12h2"></path><path d="M20 12h2"></path></svg></div>
+        </div>
+
+        <div class="sr-stat-card sr-card-red">
+            <div class="sr-stat-content">
+               <p class="kpi-label">Total District</p>
+                    <h2 class="kpi-value">1</h2>
+                     <div class="kpi-trend text-purple">All time</div>
+            </div>
+            <div class="sr-stat-icon-box sr-icon-red"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="12" height="12" rx="2"></rect><path d="M17 9h4l2 4v4h-6"></path><circle cx="9" cy="18" r="2"></circle><circle cx="17" cy="18" r="2"></circle><path d="M1 10h4"></path><path d="M3 14h2"></path></svg></div>
+        </div>
+    </div>
+
+     <div class="sr-table-card">
+        <div class="sr-table-top">
+            <h3>Top Ranking Districts List</h3>
+            <input type="text" class="sr-search-input" placeholder="Search zones...">
+        </div>
+
+        <div class="sr-table-wrapper">
+            <table class="sr-table">
+                <thead>
+                    
+                    <tr>
+                        <th><input type="checkbox" class="sr-checkbox"></th>
+                        <th>Rank</th>
+                        <th>Wholesaler</th>
+                        <th>State</th>
+                        <th>Region</th>
+                        <th>HQ</th>
+                        <th>District</th>
+                        <th>Sub-District</th>
+                       
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td><span class="rank-icon">🏆</span></td>
+                        <td class="fw-medium">A.Sathyaraj Agencies</td>
+                        <td>Tamil Nadu</td>
+                        <td>Southern</td>
+                        <td>Coimbatore</td>
+                        <td>Coimbatore</td>
+                        <td>Sulur</td>
+                    </tr>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td><span class="rank-icon">🥈</span></td>
+                        <td class="fw-medium">A.Sathyaraj Agencies</td>
+                        <td>Tamil Nadu</td>
+                        <td>Southern</td>
+                        <td>Coimbatore</td>
+                        <td>Coimbatore</td>
+                        <td>Sulur</td>
+                    </tr>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td><span class="rank-icon">🥉</span></td>
+                        <td class="fw-medium">A.Sathyaraj Agencies</td>
+                        <td>Tamil Nadu</td>
+                        <td>Southern</td>
+                        <td>Coimbatore</td>
+                        <td>Coimbatore</td>
+                        <td>Sulur</td>
+                    </tr>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td class="fw-bold text-muted">4</td>
+                        <td class="fw-medium">A.Sathyaraj Agencies</td>
+                        <td>Tamil Nadu</td>
+                        <td>Southern</td>
+                        <td>Coimbatore</td>
+                        <td>Coimbatore</td>
+                        <td>Sulur</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="sr-pagination">
+            <div class="sr-page-size">
+                <span>Items Per Page</span>
+                <select class="sr-form-select" style="padding: 6px 32px 6px 12px; width: 65px;"><option>16</option></select>
+            </div>
+            <div class="sr-page-controls">
+                <button class="sr-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                <button class="sr-page-btn active">1</button>
+                <button class="sr-page-btn">2</button>
+                <button class="sr-page-btn">3</button>
+                <button class="sr-page-btn dots">..</button>
+                <button class="sr-page-btn">8</button>
+                <button class="sr-page-btn">9</button>
+                <button class="sr-page-btn">10</button>
+                <button class="sr-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+
+
+@code {
+
+}
