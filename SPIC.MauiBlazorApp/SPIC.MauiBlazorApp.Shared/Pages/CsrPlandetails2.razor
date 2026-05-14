@@ -1,0 +1,679 @@
+﻿@page "/csrplandetails2"
+
+<title>CSR-2 Management</title>
+<style>
+/*   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+ */
+
+
+/*   body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-size: 14px;
+    min-height: 100vh;
+    padding: 24px;
+  } */
+
+  .csr-heading {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+  }
+
+  .metrics-wrapper {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .metric-tile {
+    border-radius: var(--radius-lg);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid transparent;
+  }
+
+  .metric-tile.mint {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border-color: #a7f3d0;
+  }
+
+  .metric-tile.sky {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border-color: #bfdbfe;
+  }
+
+  .metric-tile.violet {
+    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+    border-color: #ddd6fe;
+  }
+
+  .metric-info .metric-caption {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+
+  .metric-info .metric-amount {
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .metric-info .metric-amount.mint { color: #059669; }
+  .metric-info .metric-amount.sky  { color: #2563eb; }
+  .metric-info .metric-amount.violet { color: #7c3aed; font-size: 17px; }
+
+  .metric-badge {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .metric-badge.mint   { background: #a7f3d0; }
+  .metric-badge.sky    { background: #bfdbfe; }
+  .metric-badge.violet { background: #ddd6fe; }
+
+  .metric-badge svg            { width: 22px; height: 22px; }
+  .metric-badge.mint svg       { stroke: #065f46; }
+  .metric-badge.sky svg        { stroke: #1e40af; }
+  .metric-badge.violet svg     { stroke: #5b21b6; }
+
+  .csr-panel {
+    background: var(--bg-white);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+  }
+
+  .csr-panel-heading {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+  }
+
+  .tri-col-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .tri-col-grid:last-child { margin-bottom: 0; }
+
+  .input-unit { display: flex; flex-direction: column; gap: 5px; }
+
+  .input-unit label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .input-unit select,
+  .input-unit input[type="text"],
+  .input-unit input[type="number"] {
+    width: 100%;
+    height: 38px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--text-muted);
+    background: var(--bg-white);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .input-unit select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 32px;
+    cursor: pointer;
+  }
+
+  .input-unit select:focus,
+  .input-unit input:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    color: var(--text-primary);
+  }
+
+  .dual-crop-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .crop-add-btn {
+    height: 38px;
+    padding: 0 16px;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+
+  .crop-add-btn:hover { background: var(--blue-hover); }
+  .crop-add-btn svg  { width: 14px; height: 14px; stroke: #fff; flex-shrink: 0; }
+
+  .breakdown-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .breakdown-item { display: flex; flex-direction: column; gap: 5px; }
+
+  .breakdown-item label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .breakdown-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .breakdown-input-row input[type="number"] {
+    flex: 1;
+    height: 38px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-white);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .breakdown-input-row input[type="number"]:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  }
+
+  .proof-upload-btn {
+    height: 38px;
+    padding: 0 14px;
+    background: var(--dark);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+
+  .proof-upload-btn:hover { background: var(--dark-hover); }
+  .proof-upload-btn svg  { width: 14px; height: 14px; stroke: #fff; flex-shrink: 0; }
+
+  .others-container {
+    margin-top: 14px;
+    max-width: calc(50% - 7px);
+  }
+
+  .others-container label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+  }
+
+  .others-container input[type="number"] {
+    width: 100%;
+    height: 38px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-white);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .others-container input[type="number"]:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  }
+
+  .action-bar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding-top: 4px;
+  }
+
+  .draft-save-btn {
+    height: 38px;
+    padding: 0 20px;
+    background: var(--bg-white);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .draft-save-btn:hover { background: var(--bg-secondary); border-color: #d1d5db; }
+  .draft-save-btn svg  { width: 15px; height: 15px; stroke: var(--text-secondary); }
+
+  .form-submit-btn {
+    height: 38px;
+    padding: 0 20px;
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.15s;
+  }
+
+  .form-submit-btn:hover { background: var(--blue-hover); }
+  .form-submit-btn svg  { width: 15px; height: 15px; stroke: #fff; }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+  input[type="number"] { -moz-appearance: textfield; }
+
+  @@media (max-width: 768px) {
+    body { padding: 16px; }
+    .metrics-wrapper  { grid-template-columns: 1fr; }
+    .tri-col-grid     { grid-template-columns: 1fr; }
+    .dual-crop-row    { grid-template-columns: 1fr; }
+    .breakdown-grid   { grid-template-columns: 1fr; }
+    .others-container { max-width: 100%; }
+  }
+</style>
+
+
+<div class="csr-heading">CSR-2 Management</div>
+
+<!-- Summary Cards -->
+<div class="metrics-wrapper">
+  <div class="metric-tile mint">
+    <div class="metric-info">
+      <div class="metric-caption">Approved Budget</div>
+      <div class="metric-amount mint">₹ 50,00,000</div>
+    </div>
+    <div class="metric-badge mint">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="8" width="18" height="12" rx="2"/>
+        <path d="M7 8V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/>
+        <line x1="12" y1="12" x2="12" y2="16"/>
+        <line x1="10" y1="14" x2="14" y2="14"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="metric-tile sky">
+    <div class="metric-info">
+      <div class="metric-caption">Actual Expense</div>
+      <div class="metric-amount sky">₹ 55,000</div>
+    </div>
+    <div class="metric-badge sky">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M12 8v4l3 3"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="metric-tile violet">
+    <div class="metric-info">
+      <div class="metric-caption">Difference</div>
+      <div class="metric-amount violet">₹50,000 (Saved)</div>
+    </div>
+    <div class="metric-badge violet">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M9 12l2 2 4-4"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- CSR-2 Plan Details -->
+<div class="csr-panel">
+  <div class="csr-panel-heading">CSR-2 Plan Details</div>
+  <div class="tri-col-grid">
+    <div class="input-unit">
+      <label>Program Type</label>
+      <select>
+        <option value="">Select program type</option>
+        <option>Education</option>
+        <option>Healthcare</option>
+        <option>Environment</option>
+        <option>Rural Development</option>
+      </select>
+    </div>
+    <div class="input-unit">
+      <label>Program Name</label>
+      <select>
+        <option value="">Select program name</option>
+        <option>Crop Support Initiative</option>
+        <option>Farmer Welfare Scheme</option>
+        <option>Irrigation Development</option>
+      </select>
+    </div>
+    <div class="input-unit">
+      <label>Number of Programs</label>
+      <input type="number" placeholder="Enter number of programs" min="0">
+    </div>
+  </div>
+  <div class="tri-col-grid">
+    <div class="input-unit">
+      <label>Budget</label>
+      <input type="number" placeholder="Enter budget" min="0">
+    </div>
+    <div class="input-unit">
+      <label>HQ</label>
+      <select>
+        <option value="">Select HQ</option>
+        <option>Mumbai</option>
+        <option>Delhi</option>
+        <option>Bangalore</option>
+        <option>Chennai</option>
+        <option>Hyderabad</option>
+      </select>
+    </div>
+    <div class="input-unit">
+      <label>Location</label>
+      <select>
+        <option value="">select location</option>
+        <option>Maharashtra</option>
+        <option>Karnataka</option>
+        <option>Tamil Nadu</option>
+        <option>Telangana</option>
+        <option>Gujarat</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Focus Details -->
+<div class="csr-panel">
+  <div class="csr-panel-heading">Focus Details</div>
+  <div class="dual-crop-row">
+    <div class="input-unit">
+      <label>Focused Crop</label>
+      <select>
+        <option value="">Select Crop</option>
+        <option>Rice</option>
+        <option>Wheat</option>
+        <option>Cotton</option>
+        <option>Sugarcane</option>
+        <option>Maize</option>
+      </select>
+    </div>
+    <button class="crop-add-btn" onclick="addCrop('crop')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Add Crop
+    </button>
+    <div class="input-unit">
+      <label>Focused Product</label>
+      <select>
+        <option value="">Select Product</option>
+        <option>Fertilizer</option>
+        <option>Pesticide</option>
+        <option>Seeds</option>
+        <option>Equipment</option>
+      </select>
+    </div>
+    <button class="crop-add-btn" onclick="addCrop('product')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Add Crop
+    </button>
+  </div>
+</div>
+
+<!-- Expense Breakdown -->
+<div class="csr-panel">
+  <div class="csr-panel-heading">Expense Breakdown</div>
+  <div class="breakdown-grid">
+
+    <div class="breakdown-item">
+      <label>Printing &amp; Stationary</label>
+      <div class="breakdown-input-row">
+        <input type="number" value="0" min="0">
+        <button class="proof-upload-btn" onclick="uploadProof(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload proof
+        </button>
+      </div>
+    </div>
+
+    <div class="breakdown-item">
+      <label>Publicity Material</label>
+      <div class="breakdown-input-row">
+        <input type="number" value="0" min="0">
+        <button class="proof-upload-btn" onclick="uploadProof(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload proof
+        </button>
+      </div>
+    </div>
+
+    <div class="breakdown-item">
+      <label>Stage Arrangements</label>
+      <div class="breakdown-input-row">
+        <input type="number" value="0" min="0">
+        <button class="proof-upload-btn" onclick="uploadProof(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload proof
+        </button>
+      </div>
+    </div>
+
+    <div class="breakdown-item">
+      <label>Service Charges – LCA</label>
+      <div class="breakdown-input-row">
+        <input type="number" value="0" min="0">
+        <button class="proof-upload-btn" onclick="uploadProof(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload proof
+        </button>
+      </div>
+    </div>
+
+    <div class="breakdown-item">
+      <label>Transport / Rent</label>
+      <div class="breakdown-input-row">
+        <input type="number" value="0" min="0">
+        <button class="proof-upload-btn" onclick="uploadProof(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload proof
+        </button>
+      </div>
+    </div>
+
+    <div class="breakdown-item">
+      <label>Jeep Running Expenses</label>
+      <div class="breakdown-input-row">
+        <input type="number" value="0" min="0">
+        <button class="proof-upload-btn" onclick="uploadProof(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload proof
+        </button>
+      </div>
+    </div>
+
+    <div class="breakdown-item">
+      <label>Refreshments</label>
+      <div class="breakdown-input-row">
+        <input type="number" value="0" min="0">
+        <button class="proof-upload-btn" onclick="uploadProof(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload proof
+        </button>
+      </div>
+    </div>
+
+    <div class="breakdown-item">
+      <label>Inputs</label>
+      <div class="breakdown-input-row">
+        <input type="number" value="0" min="0">
+        <button class="proof-upload-btn" onclick="uploadProof(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload proof
+        </button>
+      </div>
+    </div>
+
+    <div class="breakdown-item">
+      <label>Compliments</label>
+      <div class="breakdown-input-row">
+        <input type="number" value="0" min="0">
+        <button class="proof-upload-btn" onclick="uploadProof(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload proof
+        </button>
+      </div>
+    </div>
+
+    <div class="breakdown-item">
+      <label>Photography</label>
+      <div class="breakdown-input-row">
+        <input type="number" value="0" min="0">
+        <button class="proof-upload-btn" onclick="uploadProof(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload proof
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="others-container">
+    <label>Others</label>
+    <input type="number" value="0" min="0">
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="action-bar">
+  <button class="draft-save-btn" onclick="saveDraft()">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+      <polyline points="17 21 17 13 7 13 7 21"/>
+      <polyline points="7 3 7 8 15 8"/>
+    </svg>
+    Save Draft
+  </button>
+  <button class="form-submit-btn" onclick="submitForm()">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>
+    Submit CSR-1
+  </button>
+</div>
+
+<script>
+  function uploadProof(btn) {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*,.pdf,.doc,.docx';
+    inp.onchange = function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        btn.style.background = '#16a34a';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Uploaded';
+        setTimeout(() => {
+          btn.style.background = '';
+          btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Upload proof';
+        }, 3000);
+      }
+    };
+    inp.click();
+  }
+
+  function addCrop(type) {
+    alert('Add ' + (type === 'crop' ? 'Crop' : 'Product') + ' functionality triggered.');
+  }
+
+  function saveDraft() {
+    const btn = document.querySelector('.draft-save-btn');
+    btn.textContent = '✓ Draft Saved';
+    btn.style.color = '#16a34a';
+    btn.style.borderColor = '#16a34a';
+    setTimeout(() => {
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Draft';
+      btn.style.color = '';
+      btn.style.borderColor = '';
+    }, 2000);
+  }
+
+  function submitForm() {
+    const allSelects = document.querySelectorAll('.csr-panel select');
+    let valid = true;
+    allSelects.forEach(s => {
+      if (!s.value) {
+        s.style.borderColor = '#ef4444';
+        valid = false;
+        setTimeout(() => s.style.borderColor = '', 2000);
+      }
+    });
+    if (valid) {
+      const btn = document.querySelector('.form-submit-btn');
+      btn.textContent = '✓ Submitted!';
+      btn.style.background = '#16a34a';
+      setTimeout(() => {
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Submit CSR-1';
+        btn.style.background = '';
+      }, 2500);
+    }
+  }
+</script>
+
+
