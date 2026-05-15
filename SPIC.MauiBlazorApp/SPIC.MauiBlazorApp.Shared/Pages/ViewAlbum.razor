@@ -1,0 +1,143 @@
+﻿@page "/Album"
+
+<div class="container-fluid py-4 px-0">
+    <div class="va-wrapper">
+        
+        <div class="va-header-text">
+            <h1>Guest House Rooms</h1>
+            <p>Comfortable and modern guest house facilities for visiting dealers and partners.</p>
+        </div>
+
+        <div class="va-hero">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/image5.png" alt="Guest House Rooms Overview" onerror="this.style.backgroundColor='#475569';" />
+            
+            <div class="va-hero-overlay">
+                
+                <div class="va-badge">Guest House</div>
+                
+                <h2>Guest House Rooms</h2>
+                <p>Comfortable and modern guest house facilities for visiting dealers and partners.</p>
+                
+                <div class="va-meta-row">
+                    <div class="va-meta-item">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        Apr 18, 2026
+                    </div>
+                    
+                    <div class="va-meta-item">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        12 Photos
+                    </div>
+                    
+                    <div class="va-meta-item">
+                        <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                        2 Videos
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="va-controls-section">
+            <div class="va-tabs">
+                <button class="va-tab-btn @(ActiveFilter == "All Media" ? "active" : "")" @onclick="@(() => SetFilter("All Media"))">All Media</button>
+                <button class="va-tab-btn @(ActiveFilter == "Photos" ? "active" : "")" @onclick="@(() => SetFilter("Photos"))">Photos</button>
+                <button class="va-tab-btn @(ActiveFilter == "Videos" ? "active" : "")" @onclick="@(() => SetFilter("Videos"))">Videos</button>
+            </div>
+
+            <div class="va-search-container">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" class="va-search-input" placeholder="Search zones..." @bind="SearchQuery" @bind:event="oninput">
+            </div>
+        </div>
+
+        <div class="va-media-grid">
+            @foreach (var item in FilteredMedia)
+            {
+                if (item.Type == "Photo")
+                {
+                    <div class="va-media-card va-photo-card">
+                        <img src="@item.ImageUrl" alt="Guest House Photo" onerror="this.style.backgroundColor='#e2e8f0';" />
+                    </div>
+                }
+                else if (item.Type == "Video")
+                {
+                    <div class="va-media-card va-video-card">
+                        <div class="va-video-thumb">
+                            <div class="va-play-btn">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                            </div>
+                            <div class="va-video-duration">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                @item.Duration
+                            </div>
+                        </div>
+                        <div class="va-video-info">
+                            <h3 class="va-video-title">@item.Title</h3>
+                            <div class="va-video-meta">
+                                <span>@item.Category</span>
+                                <span>@item.Date</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+    </div>
+</div>
+@code {
+    // State variables
+    private string ActiveFilter { get; set; } = "All Media";
+    private string SearchQuery { get; set; } = "";
+
+    // Method to handle tab clicks
+    private void SetFilter(string filter)
+    {
+        ActiveFilter = filter;
+    }   
+
+    // Property that returns the filtered list based on tabs and search query
+    private IEnumerable<MediaItem> FilteredMedia => MediaItems
+        .Where(m => ActiveFilter == "All Media" || m.Type == ActiveFilter.TrimEnd('s')) 
+        .Where(m => string.IsNullOrWhiteSpace(SearchQuery) ||
+                    (m.Title != null && m.Title.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                    (m.Category != null && m.Category.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase)));
+
+    // Dummy Data Model
+    public class MediaItem
+    {
+        public string Type { get; set; } 
+        public string ImageUrl { get; set; }
+        public string Title { get; set; }
+        public string Category { get; set; }
+        public string Date { get; set; }
+        public string Duration { get; set; }
+    }
+
+    // Populate with dummy data to match your design
+    private List<MediaItem> MediaItems = new List<MediaItem>
+    {
+        new MediaItem { Type = "Photo", ImageUrl = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image12.png" },
+        new MediaItem { Type = "Photo", ImageUrl = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image13.png" },
+        new MediaItem { Type = "Photo", ImageUrl = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image14.png" },
+        new MediaItem { Type = "Photo", ImageUrl = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image15.png" },
+        new MediaItem { Type = "Photo", ImageUrl = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image16.png" },
+        new MediaItem { Type = "Photo", ImageUrl = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image17.png" },
+        new MediaItem { Type = "Photo", ImageUrl = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image18.png" },
+        new MediaItem { Type = "Photo", ImageUrl = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image19.png" },
+        
+        // Video Item
+        new MediaItem
+        {
+            Type = "Video",
+            Title = "Annual Meet Highlights 2026",
+            Category = "Meetings",
+            Date = "May 9, 2026",
+            Duration = "3:15"
+        }
+    };
+}
