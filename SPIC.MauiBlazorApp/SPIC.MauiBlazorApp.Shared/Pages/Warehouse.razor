@@ -25,6 +25,15 @@
 		<h3 class="fw-bold m-0 company-title">Warehouse & Logistics</h3>
 	</div>
 
+	<div class="logistics-note mb-4">
+		<div class="note-header">
+			<i class="bi bi-exclamation-circle"></i> Logistics Note Information
+		</div>
+		<p class="note-text">
+			A minimum of two Warehouses, two Rail Head, and two Port must be configured to proceed further
+		</p>
+	</div>
+
 	<div class="form-card">
 		<!-- Header -->
 		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
@@ -53,40 +62,53 @@
 						<h3 class="facility-card-title">Warehouse</h3>
 					</div>
 
-					<div class="mb-3">
+					<!-- SEARCHABLE DROPDOWN FOR WAREHOUSE -->
+					<div class="mb-3 position-relative">
 						<label class="custom-label">Facility Name</label>
-						<select class="custom-select" @onchange="OnWarehouseSelected">
-							<option value="0">Select Facility Name</option>
-							@foreach (var w in _warehouses)
-							{
-								<option value="@w.Id">@w.Name</option>
-							}
-						</select>
+						<input type="text" class="custom-input custom-select"
+							   placeholder="Search and Select Facility..."
+							   @bind="_warehouseSearchText"
+							   @bind:event="oninput"
+							   @onfocus="() => _showWarehouseDropdown = true"
+							   @onblur="HideWarehouseDropdownDelay" />
+
+						@if (_showWarehouseDropdown)
+						{
+							<div class="dropdown-list-container">
+								<div class="dropdown-item-custom text-muted" @onmousedown='() => SelectWarehouse(0, "")'>
+									-- Select Facility Name --
+								</div>
+								@foreach (var w in _warehouses.Where(x => string.IsNullOrWhiteSpace(_warehouseSearchText) ||
+																		  $"{x.WarehouseCode} - {x.Name}".Contains(_warehouseSearchText, StringComparison.OrdinalIgnoreCase)))
+								{
+									<!-- Updated to show WarehouseCode - Name -->
+									<div class="dropdown-item-custom" @onmousedown='() => SelectWarehouse(w.Id, $"{w.WarehouseCode} - {w.Name}")'>
+										@w.WarehouseCode - @w.Name
+									</div>
+								}
+							</div>
+						}
 					</div>
-					@* <div class="mb-3">
-						<label class="custom-label">Warehouse Code</label>
-						<input type="text" class="custom-input" placeholder="Enter warehouse code" @bind="_warehousecode">
-					</div> *@
 
 					<div class="row g-2 mb-4">
-							<div class="col-6">
-								<label class="custom-label">Distance (KM)</label>
-								<div class="input-icon-wrapper">
-									<input type="text" class="custom-input" placeholder="0.0" value="@WhDistanceDisplay" readonly>
-									<i class="bi bi-map"></i>
-								</div>
-							</div>
-							<div class="col-6">
-								<label class="custom-label">Freight (₹/ton/Km) </label>
-								<input type="number" class="custom-input" placeholder="0.0" @bind="_whFreight" step="0.01">
+						<div class="col-6">
+							<label class="custom-label">Distance (KM)</label>
+							<div class="input-icon-wrapper">
+								<input type="text" class="custom-input" placeholder="0.0" value="@WhDistanceDisplay" readonly>
+								<i class="bi bi-map"></i>
 							</div>
 						</div>
+						<div class="col-6">
+							<label class="custom-label">Freight (₹/ton/Km) </label>
+							<input type="number" class="custom-input" placeholder="0.0" @bind="_whFreight" step="0.01">
+						</div>
+					</div>
 
-						<div class="mt-auto">
-							<button class="btn-add-action" @onclick="AddWarehouse" disabled="@(_selectedWarehouseId == 0)">
-								<i class="bi bi-plus-lg"></i> @(_editingWhId > 0 ? "Update" : "Add") Warehouse
-							</button>
-						</div>
+					<div class="mt-auto">
+						<button class="btn-add-action" @onclick="AddWarehouse" disabled="@(_selectedWarehouseId == 0)">
+							<i class="bi bi-plus-lg"></i> @(_editingWhId > 0 ? "Update" : "Add") Warehouse
+						</button>
+					</div>
 				</div>
 			</div>
 
@@ -100,15 +122,31 @@
 						<h3 class="facility-card-title">Rail Head</h3>
 					</div>
 
-					<div class="mb-3">
+					<div class="mb-3 position-relative">
 						<label class="custom-label">Facility Name</label>
-						<select class="custom-select" @onchange="OnRailSelected">
-							<option value="0">Select Facility Name</option>
-							@foreach (var r in _rackPoints)
-							{
-								<option value="@r.Id">@r.Name</option>
-							}
-						</select>
+						<input type="text" class="custom-input custom-select"
+							   placeholder="Search and Select Facility..."
+							   @bind="_railSearchText"
+							   @bind:event="oninput"
+							   @onfocus="() => _showRailDropdown = true"
+							   @onblur="HideRailDropdownDelay" />
+
+						@if (_showRailDropdown)
+						{
+							<div class="dropdown-list-container">
+								<div class="dropdown-item-custom text-muted" @onmousedown='() => SelectRail(0, "")'>
+									-- Select Facility Name --
+								</div>
+								@foreach (var r in _rackPoints.Where(x => string.IsNullOrWhiteSpace(_railSearchText) ||
+																		  x.Name.Contains(_railSearchText, StringComparison.OrdinalIgnoreCase)))
+								{
+									<!-- Shows only Name -->
+									<div class="dropdown-item-custom" @onmousedown='() => SelectRail(r.Id, r.Name)'>
+										@r.Name
+									</div>
+								}
+							</div>
+						}
 					</div>
 
 					<div class="row g-2 mb-4">
@@ -143,15 +181,31 @@
 						<h3 class="facility-card-title">Port</h3>
 					</div>
 
-					<div class="mb-3">
+					<div class="mb-3 position-relative">
 						<label class="custom-label">Facility Name</label>
-						<select class="custom-select" @onchange="OnPortSelected">
-							<option value="0">Select Facility Name</option>
-							@foreach (var p in _ports)
-							{
-								<option value="@p.Id">@p.Name</option>
-							}
-						</select>
+						<input type="text" class="custom-input custom-select"
+							   placeholder="Search and Select Facility..."
+							   @bind="_portSearchText"
+							   @bind:event="oninput"
+							   @onfocus="() => _showPortDropdown = true"
+							   @onblur="HidePortDropdownDelay" />
+
+						@if (_showPortDropdown)
+						{
+							<div class="dropdown-list-container">
+								<div class="dropdown-item-custom text-muted" @onmousedown='() => SelectPort(0, "")'>
+									-- Select Facility Name --
+								</div>
+								@foreach (var p in _ports.Where(x => string.IsNullOrWhiteSpace(_portSearchText) ||
+																	 x.Name.Contains(_portSearchText, StringComparison.OrdinalIgnoreCase)))
+								{
+									<!-- Shows only Name -->
+									<div class="dropdown-item-custom" @onmousedown='() => SelectPort(p.Id, p.Name)'>
+										@p.Name
+									</div>
+								}
+							</div>
+						}
 					</div>
 
 					<div class="row g-2 mb-4">
@@ -323,14 +377,7 @@
 		</div>
 	</div>
 
-	<div class="logistics-note mb-4">
-		<div class="note-header">
-			<i class="bi bi-exclamation-circle"></i> Logistics Note Information
-		</div>
-		<p class="note-text">
-			A minimum of two Warehouses, one Rail Head, and one Port must be configured to proceed further
-		</p>
-	</div>
+	
 	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
@@ -428,6 +475,15 @@
 	private string WhDistanceDisplay => _whDistance > 0 ? _whDistance.ToString("F1") : "";
 	private string RailDistanceDisplay => _railDistance > 0 ? _railDistance.ToString("F1") : "";
 	private string PortDistanceDisplay => _portDistance > 0 ? _portDistance.ToString("F1") : "";
+
+	private string _warehouseSearchText = "";
+	private bool _showWarehouseDropdown = false;
+
+	private string _railSearchText = "";
+	private bool _showRailDropdown = false;
+    
+	private string _portSearchText = "";
+	private bool _showPortDropdown = false;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -609,13 +665,34 @@
 			ShowMessage($"Failed to save warehouse: {ex.Message}", true);
 		}
 	}
+	private void SelectWarehouse(int id, string displayText)
+	{
+		_warehouseSearchText = displayText;
+		_showWarehouseDropdown = false;
+        
+		// Trigger your existing logic by simulating the ChangeEventArgs
+		ChangeEventArgs e = new ChangeEventArgs { Value = id };
+		OnWarehouseSelected(e);
+	}
 
+	private async Task HideWarehouseDropdownDelay()
+	{
+		// Small delay to allow @onmousedown to fire before the dropdown disappears
+		await Task.Delay(200);
+		_showWarehouseDropdown = false;
+		StateHasChanged();
+	}
 	private void EditWarehouse(DealerWarehouseFacilities wh)
 	{
 		_selectedWarehouseId = wh.WarehouseId;
 		_whDistance = wh.Distance;
 		_whFreight = wh.Freight;
 		_editingWhId = wh.Id;
+		var selectedWh = _warehouses.FirstOrDefault(w => w.Id == _selectedWarehouseId);
+		if (selectedWh != null)
+		{
+			_warehouseSearchText = $"{selectedWh.WarehouseCode} - {selectedWh.Name}";
+		}
 	}
 
 	private void ConfirmDeleteWarehouse(DealerWarehouseFacilities wh)
@@ -649,6 +726,7 @@
 		_whDistance = 0;
 		_whFreight = 0;
 		_editingWhId = 0;
+		_warehouseSearchText = "";
 	}
 
 	// ── Rail Head ──
@@ -713,13 +791,48 @@
 			ShowMessage($"Failed to save rail head: {ex.Message}", true);
 		}
 	}
+	private void SelectRail(int id, string displayText)
+	{
+		_railSearchText = displayText;
+		_showRailDropdown = false;
+        
+		ChangeEventArgs e = new ChangeEventArgs { Value = id };
+		OnRailSelected(e);
+	}
 
+	private async Task HideRailDropdownDelay()
+	{
+		await Task.Delay(200);
+		_showRailDropdown = false;
+		StateHasChanged();
+	}
+
+	private void SelectPort(int id, string displayText)
+	{
+		_portSearchText = displayText;
+		_showPortDropdown = false;
+        
+		ChangeEventArgs e = new ChangeEventArgs { Value = id };
+		OnPortSelected(e);
+	}
+
+	private async Task HidePortDropdownDelay()
+	{
+		await Task.Delay(200);
+		_showPortDropdown = false;
+		StateHasChanged();
+	}
 	private void EditRailHead(DealerRailFacilities rail)
 	{
 		_selectedRailId = rail.RailFacilitiesId;
 		_railDistance = rail.Distance;
 		_railFreight = rail.Freight;
 		_editingRailId = rail.Id;
+		var selectedRail = _rackPoints.FirstOrDefault(r => r.Id == _selectedRailId);
+		if (selectedRail != null)
+		{
+			_railSearchText = selectedRail.Name;
+		}
 	}
 
 	private void ConfirmDeleteRail(DealerRailFacilities rail)
@@ -753,6 +866,7 @@
 		_railDistance = 0;
 		_railFreight = 0;
 		_editingRailId = 0;
+		_railSearchText = "";
 	}
 
 	// ── Port ──
@@ -824,6 +938,11 @@
 		_portDistance = port.Distance;
 		_portFreight = port.Freight;
 		_editingPortId = port.Id;
+		var selectedPort = _ports.FirstOrDefault(p => p.Id == _selectedPortId);
+		if (selectedPort != null)
+		{
+			_portSearchText = selectedPort.Name;
+		}
 	}
 
 	private void ConfirmDeletePort(DealerPortFacilities port)
@@ -857,6 +976,7 @@
 		_portDistance = 0;
 		_portFreight = 0;
 		_editingPortId = 0;
+		_portSearchText = "";
 	}
 
 	// ── Delete Confirmation ──
