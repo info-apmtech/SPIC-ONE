@@ -1,0 +1,562 @@
+﻿@page "/GrahapravesamScheme"
+
+<style>
+    :root {
+        --bg-body: #f4f6f8;
+        --bg-card: #ffffff;
+        --text-main: #1f2937;
+        --text-muted: #6b7280;
+        --border-color: #e5e7eb;
+        
+        --primary-blue: #2563eb;
+        --primary-blue-hover: #1d4ed8;
+        
+        /* Light backgrounds for stat boxes */
+        --bg-stat: #f3f4f6;
+        
+        /* Benefit box colors */
+        --bg-benefit-blue: #eff6ff;
+        --text-benefit-blue: #1e40af;
+        --bg-benefit-green: #f0fdf4;
+        --text-benefit-green: #16a34a;
+        
+        /* Document Icon Colors */
+        --icon-red: #ef4444;
+        --icon-blue: #3b82f6;
+        --icon-green: #10b981;
+        --icon-purple: #a855f7;
+    }
+
+   
+
+    /* --- Page Header --- */
+    .page-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 0.3rem;
+    }
+    .page-subtitle {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        margin-bottom: 2rem;
+    }
+
+    /* --- Base Card Styling --- */
+    .welfare-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        padding: 1.75rem;
+        margin-bottom: 1.5rem;
+        width: 100%;
+    }
+
+    /* --- Summary Header Card --- */
+    .summary-header {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+    @@media (min-width: 768px) {
+        .summary-header {
+            flex-direction: row;
+            align-items: flex-start;
+        }
+    }
+    .summary-icon-box {
+        width: 64px;
+        height: 64px;
+        background-color: #fef3c7; /* Light yellow */
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .summary-icon-box img {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+    }
+    .summary-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        color: var(--text-main);
+    }
+    .summary-desc {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        line-height: 1.6;
+        margin: 0;
+    }
+
+    /* --- Stat Grid Boxes --- */
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(1, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    @@media (min-width: 576px) {
+        .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @@media (min-width: 992px) {
+        .stat-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    .stat-box {
+        background-color: var(--bg-stat);
+        border-radius: 8px;
+        padding: 1.25rem;
+        border: 1px solid #f3f4f6;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .stat-label {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    .stat-value {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #16a34a; /* Green text for all as per new image */
+    }
+
+    /* --- Buttons --- */
+    .btn-action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    .btn-outline-custom {
+        background: #ffffff;
+        border: 1px solid var(--border-color);
+        color: #374151;
+        font-size: 0.9rem;
+        font-weight: 600;
+        padding: 0.6rem 1.5rem;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-outline-custom:hover { background: #f9fafb; }
+    
+    .btn-primary-custom {
+        background: var(--primary-blue);
+        border: 1px solid var(--primary-blue);
+        color: #ffffff;
+        font-size: 0.9rem;
+        font-weight: 600;
+        padding: 0.6rem 2rem;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-primary-custom:hover { background: var(--primary-blue-hover); }
+
+    /* --- Section Headers --- */
+    .section-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+    .section-header i { font-size: 1.25rem; }
+
+    /* Split Header (Icon Left, Text Right) */
+    .section-header-split {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.25rem;
+        padding-bottom: 0.5rem;
+    }
+    .section-header-split .icon-left {
+        color: #3b82f6;
+        font-size: 1.4rem;
+    }
+    .section-header-split .title-right {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin: 0;
+    }
+
+    /* --- Content Styling --- */
+    .content-text {
+        font-size: 0.9rem;
+        color: #4b5563;
+        line-height: 1.6;
+        margin: 0;
+    }
+    .custom-list { padding-left: 1.2rem; margin: 0; }
+    .custom-list li {
+        font-size: 0.9rem;
+        color: #4b5563;
+        margin-bottom: 0.75rem;
+        line-height: 1.5;
+    }
+    .custom-list li:last-child { margin-bottom: 0; }
+
+    /* --- Benefits Boxes --- */
+    .benefit-box { border-radius: 8px; padding: 1.25rem; height: 100%; }
+    .benefit-box.blue { background-color: var(--bg-benefit-blue); border: 1px solid #dbeafe; }
+    .benefit-box.green { background-color: var(--bg-benefit-green); border: 1px solid #dcfce7; }
+    .benefit-value { font-size: 1.35rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .benefit-box.blue .benefit-value { color: var(--text-benefit-blue); }
+    .benefit-box.green .benefit-value { color: var(--text-benefit-green); }
+    .benefit-desc { font-size: 0.85rem; color: #4b5563; margin: 0; font-weight: 500; }
+    .benefit-footer-text { font-size: 0.85rem; color: #6b7280; margin-top: 1.25rem; line-height: 1.5; }
+
+    /* --- Document List --- */
+    .doc-list-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 1.25rem 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+    @@media (min-width: 768px) {
+        .doc-list-item {
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+        }
+    }
+    .doc-list-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .doc-info { display: flex; align-items: center; gap: 12px; font-size: 0.9rem; font-weight: 600; color: var(--text-main); }
+    .doc-info i { font-size: 1.3rem; }
+    .icon-invitation { color: var(--icon-red); }
+    .icon-ownership { color: var(--icon-blue); }
+    .icon-dealer { color: var(--icon-green); }
+    .icon-address { color: var(--icon-purple); }
+    .doc-meta { font-size: 0.8rem; color: #9ca3af; font-weight: 500; }
+
+    /* --- Approval Flow Timeline --- */
+    .timeline { position: relative; margin-left: 0.5rem; padding-top: 0.5rem; margin-bottom: 0.5rem; }
+    .timeline-item { position: relative; padding-left: 3.5rem; margin-bottom: 2rem; }
+    .timeline-item:last-child { margin-bottom: 0; }
+    
+    .timeline-item::before { content: ''; position: absolute; left: 18px; top: 36px; bottom: -32px; width: 2px; background-color: #e5e7eb; }
+    .timeline-item:last-child::before { display: none; }
+    .timeline-item.completed::before { background-color: #22c55e; } 
+
+    .timeline-node { position: absolute; left: 0; top: 0; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 700; background: #fff; z-index: 1; }
+    .node-completed { border: 2px solid #22c55e; color: #22c55e; background: #ecfdf5; font-size: 1.3rem; }
+    .node-active { background: #cffafe; color: #0891b2; border: 2px solid #cffafe; }
+    .node-pending { background: #f3f4f6; color: #9ca3af; border: 2px solid #f3f4f6; }
+
+    .timeline-content h4 { font-size: 1rem; font-weight: 600; color: #1f2937; margin: 0 0 4px 0; }
+    .timeline-content p { font-size: 0.85rem; color: #6b7280; margin: 0; }
+    .timeline-content p.text-green { color: #16a34a; }
+
+    /* --- FAQ Accordions --- */
+    .faq-item { border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; }
+    .faq-header { padding: 16px; display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: 600; color: #1f2937; cursor: pointer; background: #ffffff; border-radius: 8px;}
+    .faq-body { padding: 0 16px 16px 16px; font-size: 0.85rem; color: #6b7280; line-height: 1.6; }
+
+    /* --- Important Notes Alerts --- */
+    .note-alert { padding: 16px; border-radius: 8px; font-size: 0.85rem; display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; line-height: 1.5;}
+    .note-alert:last-child { margin-bottom: 0; }
+    .note-orange { background-color: #fff7ed; color: #c2410c; }
+    .note-purple { background-color: #f5f3ff; color: #4338ca; }
+    .note-alert i { font-size: 1.2rem; margin-top: -2px; }
+
+    /* --- Support Banner --- */
+    .help-banner {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+        margin-bottom: 2rem;
+    }
+    @@media (min-width: 768px) {
+        .help-banner {
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+        }
+    }
+    .help-title { font-size: 1.1rem; font-weight: 700; color: #1f2937; margin: 0 0 6px 0; }
+    .help-desc { font-size: 0.9rem; color: #6b7280; margin: 0; }
+    .btn-support { 
+        border: 1px solid #e5e7eb; 
+        background: #fff; 
+        color: #374151; 
+        font-weight: 600; 
+        font-size: 0.9rem; 
+        padding: 10px 20px; 
+        border-radius: 8px; 
+        display: flex; 
+        align-items: center; 
+        gap: 8px; 
+        transition: 0.2s; 
+    }
+    .btn-support:hover { background: #f9fafb; }
+    .btn-support img { width: 20px; height: 20px; }
+
+</style>
+
+<div class="container-fluid py-5 px-4 px-lg-5" style="max-width: 1400px; margin: 0 auto;">
+    
+    <div class="mb-4">
+        <h1 class="page-title">Grahapravesam</h1>
+        <p class="page-subtitle">Housewarming gift assistance</p>
+    </div>
+
+    <div class="welfare-card">
+        <div class="summary-header">
+            <div class="summary-icon-box">
+                <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="Housewarming Avatar">
+            </div>
+            <div>
+                <h2 class="summary-title">Grahapravesam</h2>
+                <p class="summary-desc">Financial support for housewarming celebrations. A small gift from SDWA for your new beginning and the memories you'll build in your new home.</p>
+            </div>
+        </div>
+
+        <div class="stat-grid">
+            <div class="stat-box">
+                <span class="stat-label">Max Benefit</span>
+                <span class="stat-value">₹25,000</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Processing</span>
+                <span class="stat-value">7-15 Days</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Documents</span>
+                <span class="stat-value">2 required</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Eligibility</span>
+                <span class="stat-value">All Dealers</span>
+            </div>
+        </div>
+
+        <div class="btn-action-row mt-4">
+            <button class="btn-outline-custom">Back to Schemes</button>
+            <button class="btn-primary-custom">Apply Now</button>
+        </div>
+    </div>
+
+    <div class="welfare-card">
+        <div class="section-header-split">
+            <i class="bi bi-card-list icon-left"></i>
+            <h3 class="title-right">About the Scheme</h3>
+        </div>
+        <p class="content-text">
+            The Grahapravesam Welfare Scheme is designed to support registered SDWA dealers who have recently completed the construction or purchase of a new home. SDWA recognises that a housewarming is a significant life milestone and provides a one-time financial assistance to help celebrate this occasion with family and friends. The benefit aims to ease the financial burden associated with new home rituals and celebrations.
+        </p>
+    </div>
+
+    <div class="welfare-card">
+        <div class="section-header">
+            <i class="bi bi-ui-checks" style="color: #3b82f6;"></i> Eligibility Criteria
+        </div>
+        <ul class="custom-list">
+            <li>Must be a registered and active SDWA Dealer</li>
+            <li>Minimum quantity lifted as per current threshold</li>
+            <li>Valid beneficiary relationship document</li>
+            <li>Membership active for minimum required duration</li>
+            <li>No pending welfare application for same scheme</li>
+        </ul>
+    </div>
+
+    <div class="welfare-card">
+        <div class="section-header">
+            <i class="bi bi-cash-coin" style="color: #f59e0b;"></i> Benefits Provided
+        </div>
+        
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="benefit-box blue">
+                    <div class="benefit-value">₹25,000</div>
+                    <div class="benefit-desc">One-time Financial Assistance</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="benefit-box green">
+                    <div class="benefit-value">Priority</div>
+                    <div class="benefit-desc">Processing Support</div>
+                </div>
+            </div>
+        </div>
+        
+        <p class="benefit-footer-text">
+            The financial assistance is transferred directly to the registered dealer's bank account within the processing window after all approvals. No cash disbursements are made.
+        </p>
+    </div>
+
+    <div class="welfare-card">
+        <div class="section-header">
+            <i class="bi bi-folder-check" style="color: #3b82f6;"></i> Required Documents
+        </div>
+        
+        <div class="doc-list">
+            <div class="doc-list-item">
+                <div class="doc-info">
+                    <i class="bi bi-envelope-paper icon-invitation"></i> Invitation / Housewarming Card Copy
+                </div>
+                <div class="doc-meta">PDF, JPG, PNG - Max 5MB</div>
+            </div>
+            
+            <div class="doc-list-item">
+                <div class="doc-info">
+                    <i class="bi bi-house-door icon-ownership"></i> House Ownership Proof
+                </div>
+                <div class="doc-meta">PDF, JPG, PNG - Max 5MB</div>
+            </div>
+            
+            <div class="doc-list-item">
+                <div class="doc-info">
+                    <i class="bi bi-person-badge icon-dealer"></i> Dealer ID / Membership Card
+                </div>
+                <div class="doc-meta">PDF, JPG, PNG - Max 5MB</div>
+            </div>
+            
+            <div class="doc-list-item">
+                <div class="doc-info">
+                    <i class="bi bi-building icon-address"></i> Address Proof
+                </div>
+                <div class="doc-meta">PDF, JPG, PNG - Max 5MB</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="welfare-card">
+        <div class="section-header">
+            <i class="bi bi-diagram-3" style="color: #3b82f6;"></i> Approval Flow
+        </div>
+        
+        <div class="timeline">
+            <div class="timeline-item completed">
+                <div class="timeline-node node-completed"><i class="bi bi-check"></i></div>
+                <div class="timeline-content">
+                    <h4>Dealer Submits Application</h4>
+                    <p class="text-green">Online via SDWA Portal</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-node node-active">MO</div>
+                <div class="timeline-content">
+                    <h4>Marketing Officer Review</h4>
+                    <p>Initial verification · 1-2 days</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-node node-pending">RM</div>
+                <div class="timeline-content">
+                    <h4>Regional Manager Approval</h4>
+                    <p>Regional sign-off · 2-3 days</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-node node-pending">SM</div>
+                <div class="timeline-content">
+                    <h4>SMM Review</h4>
+                    <p>Senior Management · 1-2 days</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-node node-pending">SD</div>
+                <div class="timeline-content">
+                    <h4>SDWA Final Approval & Disbursement</h4>
+                    <p>Transfer within 2 working days of approval</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="welfare-card">
+        <div class="section-header">
+            <i class="bi bi-chat-dots-fill" style="color: #ef4444;"></i> Frequently Asked Questions
+        </div>
+        
+        <div class="faq-item">
+            <div class="faq-header">
+                Who can apply for Grahapravesam? <i class="bi bi-chevron-down text-muted"></i>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-header">
+                Who can apply for Grahapravesam? <i class="bi bi-chevron-down text-muted"></i>
+            </div>
+            <div class="faq-body">
+                Any registered and active SDWA dealer who has completed a housewarming ceremony within the last 3 months is eligible to apply, provided they meet the minimum quantity lifted criteria.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-header">
+                When should I submit the application? <i class="bi bi-chevron-down text-muted"></i>
+            </div>
+            <div class="faq-body">
+                Applications must be submitted within 3 months of the housewarming event date. Applications submitted after this window will not be accepted.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-header">
+                Can I re-upload documents after submission? <i class="bi bi-chevron-down text-muted"></i>
+            </div>
+            <div class="faq-body">
+                Yes. If the MO reviewer requests additional or revised documents, you will be notified and can re-upload within the portal. You cannot re-upload after final SDWA approval.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-header">
+                How do I track my application status? <i class="bi bi-chevron-down text-muted"></i>
+            </div>
+            <div class="faq-body">
+                After submission, you will receive an Application ID. Visit My Applications in the portal to track real-time approval status and receive SMS/email notifications at each stage.
+            </div>
+        </div>
+    </div>
+
+    <div class="welfare-card">
+        <div class="section-header">
+            <i class="bi bi-journal-bookmark-fill" style="color: #f59e0b;"></i> Important Notes
+        </div>
+        
+        <div class="note-alert note-orange">
+            <i class="bi bi-clock-history"></i>
+            <div>Application must be submitted within <strong>3 months</strong> of the housewarming event date. Late applications will not be processed.</div>
+        </div>
+        
+        <div class="note-alert note-purple">
+            <i class="bi bi-info-circle"></i>
+            <div>Only <strong>one application per event</strong> is permitted. Duplicate applications for the same housewarming will be automatically rejected.</div>
+        </div>
+    </div>
+
+    <div class="help-banner">
+        <div>
+            <h4 class="help-title">Need help?</h4>
+            <p class="help-desc">Our support team can assist with this scheme.</p>
+        </div>
+        <button class="btn-support">
+            <img src="https://cdn-icons-png.flaticon.com/512/4712/4712035.png" alt="Headset"> 
+            Chat with Support
+        </button>
+    </div>
+
+</div>
+
+@code {
+    // Interactive toggling logic for FAQs can be added here
+}
