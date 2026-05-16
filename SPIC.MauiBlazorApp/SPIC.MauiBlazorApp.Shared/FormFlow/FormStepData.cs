@@ -34,9 +34,11 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 		new FormStepModel { StepNo = 7, Title = "Define the legal ownership structure of your dealership.", Route = "/Proprietor", PreviousRoute = "/Companies", NextRoute = "/SalesPlaning" },
 		new FormStepModel { StepNo = 8, Title = "Define your projected sales volume for the upcoming fiscal year (April - March).", Route = "/SalesPlaning", PreviousRoute = "/Proprietor", NextRoute = "/Investment" },
 		new FormStepModel { StepNo = 9, Title = "Register the authorized individuals who will represent the dealership in official digital transactions and contract signings.", Route = "/Investment", PreviousRoute = "/SalesPlaning", NextRoute = "/CreditLimit" },
-		new FormStepModel { StepNo = 10, Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.", Route = "/CreditLimit", PreviousRoute = "/Investment", NextRoute = "/Enclosures" },
-		new FormStepModel { StepNo = 11, Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.", Route = "/Enclosures", PreviousRoute = "/CreditLimit", NextRoute = "/FinalSubmission" },
-		new FormStepModel { StepNo = 12, Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.", Route = "/FinalSubmission", PreviousRoute = "/Enclosures", NextRoute = "/Dashboard" }
+		new FormStepModel { StepNo = 10, Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.", Route = "/CreditLimit", PreviousRoute = "/Investment", NextRoute = "/CreditLimitForGreenStar" },
+		//new FormStepModel { StepNo = 11, Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.", Route = "/CreditLimitForSpic", PreviousRoute = "/CreditLimit", NextRoute = "/Enclosures" },
+		new FormStepModel { StepNo = 11, Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.", Route = "/CreditLimitForGreenStar", PreviousRoute = "/CreditLimit", NextRoute = "/Enclosures" },
+		new FormStepModel { StepNo = 12, Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.", Route = "/Enclosures", PreviousRoute = "/CreditLimitForGreenStar", NextRoute = "/FinalSubmission" },
+		new FormStepModel { StepNo = 13, Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.", Route = "/FinalSubmission", PreviousRoute = "/Enclosures", NextRoute = "/Dashboard" }
 	};
 
 		public static FormStepModel? GetStepByRoute(string route)
