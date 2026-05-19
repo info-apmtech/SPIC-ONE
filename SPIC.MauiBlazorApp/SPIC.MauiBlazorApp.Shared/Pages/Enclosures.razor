@@ -2168,12 +2168,22 @@
 			if (_existingDocsRecord && _docs.Id > 0)
 			{
 				var resp = await Http.PutAsJsonAsync($"api/DealerRegistrationDocuments/{_docs.Id}", _docs);
-				resp.EnsureSuccessStatusCode();
+				if (!resp.IsSuccessStatusCode)
+				{
+					var errorBody = await resp.Content.ReadAsStringAsync();
+					ShowMessage($"PUT failed ({resp.StatusCode}): {errorBody}", true);
+					return;
+				}
 			}
 			else
 			{
 				var resp = await Http.PostAsJsonAsync("api/DealerRegistrationDocuments", _docs);
-				resp.EnsureSuccessStatusCode();
+				if (!resp.IsSuccessStatusCode)
+				{
+					var errorBody = await resp.Content.ReadAsStringAsync();
+					ShowMessage($"POST failed ({resp.StatusCode}): {errorBody}", true);
+					return;
+				}
 				var created = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerRegistrationDocuments>>();
 				if (created?.Data != null)
 				{
