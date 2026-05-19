@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260519054909_v2.1UpdateInDealerRegistrationDocuments")]
+    partial class v21UpdateInDealerRegistrationDocuments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -524,6 +527,15 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("DealerId")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("ExistingCreditLimitAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("ExistingCreditLimitFrom")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("ExistingCreditLimitTo")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<int>("FY1")
                         .HasColumnType("integer");
 
@@ -568,15 +580,6 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<double>("GQ9Mark")
                         .HasColumnType("double precision");
-
-                    b.Property<decimal>("GSExistingCreditLimitAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("GSExistingCreditLimitFrom")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTime>("GSExistingCreditLimitTo")
-                        .HasColumnType("timestamp without time zone");
 
                     b.Property<decimal>("GreenstarAdditionalCreditLimit")
                         .HasColumnType("numeric");
@@ -668,15 +671,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("SpicCollateralOtherDetails")
                         .HasColumnType("text");
 
-                    b.Property<decimal>("SpicExistingCreditLimitAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("SpicExistingCreditLimitFrom")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTime>("SpicExistingCreditLimitTo")
-                        .HasColumnType("timestamp without time zone");
-
                     b.Property<decimal>("SpicFDAmount")
                         .HasColumnType("numeric");
 
@@ -698,47 +692,6 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("DealerCreditLimitProposals");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.DealerCreditLimitSales", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("CustomerName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CustomerNumber")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("GrossAmount")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ProductGroup")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Quantity")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("State")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("SubGroup")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("DealerCreditLimitSalesData");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerCreditLimitSalesPerformance", b =>
