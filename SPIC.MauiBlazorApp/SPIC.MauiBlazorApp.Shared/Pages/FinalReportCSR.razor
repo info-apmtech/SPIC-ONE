@@ -1,0 +1,873 @@
+﻿@page "/FinalReportCSRView"
+
+<style>
+    :root {
+        --bg-body: #f3f4f6;
+        --bg-card: #ffffff;
+        --text-dark: #1f2937;
+        --text-muted: #9ca3af;
+        --border-light: #e5e7eb;
+        
+        /* Theme Colors */
+        --theme-blue: #3b82f6;
+        --bg-blue-light: #eff6ff;
+        
+        --theme-green: #22c55e;
+        --bg-green-light: #f0fdf4;
+        
+        --theme-orange: #f59e0b;
+        --bg-orange-light: #fffbeb;
+        
+        --theme-red: #ef4444;
+        --bg-red-light: #fef2f2;
+        
+        --theme-gray: #6b7280;
+        --bg-gray-light: #f9fafb;
+    }
+
+    body {
+        background-color: var(--bg-body);
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .page-title {
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #374151;
+        margin-bottom: 1.5rem;
+    }
+
+    /* --- KPI Cards --- */
+    .csr-kpi-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        border-top: 4px solid transparent;
+    }
+    
+    /* Top Border Colors */
+    .border-blue { 
+        background: linear-gradient(90deg, #FFFFFF, #F2F7FF 100%);
+        border-top-color: var(--theme-blue); 
+    }
+    .border-green { 
+        border-top-color: var(--theme-green);
+        background: linear-gradient(90deg, #FFFFFF, #F2FFFA 100%);
+    }
+    .border-orange {
+        background: linear-gradient(90deg, #FFFFFF, #FFFAF1 100%);
+        border-top-color: var(--theme-orange); 
+    }
+    .border-red {
+        border-top-color: var(--theme-red);
+        background: linear-gradient(90deg, #FFFFFF,  #FFEFEF 100%);
+    }
+    .border-gray {
+        border-top-color: #d1d5db; 
+        background: linear-gradient(90deg, #FFFFFF,  #EEEEF3 100%);
+    }
+
+    .csr-kpi-body {
+        padding: 1.25rem 1.25rem 0.75rem 1.25rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .kpi-number {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: var(--text-dark);
+        line-height: 1;
+        margin-bottom: 0.4rem;
+    }
+
+    .kpi-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        font-weight: 500;
+        margin: 0;
+    }
+
+    .kpi-icon-box {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+    }
+    .icon-blue { background: var(--bg-blue-light); color: var(--theme-blue); border: 1px solid #dbeafe; }
+    .icon-green { background: var(--bg-green-light); color: var(--theme-green); border: 1px solid #dcfce7; }
+    .icon-orange { background: var(--bg-orange-light); color: var(--theme-orange); border: 1px solid #fef3c7; }
+    .icon-red { background: var(--bg-red-light); color: var(--theme-red); border: 1px solid #fee2e2; }
+    .icon-gray { background: var(--bg-gray-light); color: var(--theme-gray); border: 1px solid #f3f4f6; }
+
+    .csr-kpi-footer {
+        border-top: 1px solid #f3f4f6;
+        padding: 0.75rem 1.25rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.2s;
+    }
+    .csr-kpi-footer:hover { color: #4b5563; }
+
+    /* --- Dashboard Cards --- */
+    .dashboard-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+        padding: 1.25rem;
+        margin-bottom: 1.25rem;
+    }
+
+    /* --- Filters --- */
+    .filter-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-weight: 600;
+        color: #374151;
+        font-size: 0.95rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .filter-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #374151;
+        margin-bottom: 0.4rem;
+        display: block;
+    }
+
+    .form-control-custom, .form-select-custom {
+        background-color: #f9fafb;
+        border: 1px solid var(--border-light);
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: #6b7280;
+        padding: 0.6rem 0.75rem;
+        width: 100%;
+        outline: none;
+    }
+    .form-control-custom:focus, .form-select-custom:focus {
+        border-color: var(--theme-blue);
+    }
+
+    /* --- Buttons --- */
+    .btn-clear {
+        background: #ffffff;
+        border: 1px solid var(--border-light);
+        color: #4b5563;
+        font-size: 0.85rem;
+        font-weight: 500;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: 0.2s;
+    }
+    .btn-clear:hover { background: #f3f4f6; }
+
+    .btn-apply {
+        background: var(--theme-blue);
+        border: 1px solid var(--theme-blue);
+        color: #ffffff;
+        font-size: 0.85rem;
+        font-weight: 500;
+        padding: 0.5rem 1.2rem;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: 0.2s;
+    }
+    .btn-apply:hover { background: #2563eb; }
+
+    .btn-outline-custom {
+        background: #fff;
+        border: 1px solid var(--border-light);
+        color: #4b5563;
+        font-size: 0.8rem;
+        font-weight: 500;
+        padding: 6px 14px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s;
+    }
+    .btn-outline-custom:hover { background: #f9fafb; color: #1f2937; }
+    
+    .btn-primary-custom {
+        background: var(--theme-blue);
+        border: 1px solid var(--theme-blue);
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 500;
+        padding: 6px 16px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .btn-primary-custom:hover { background: #2563eb; color: #fff; }
+
+    /* --- Table Header & Search --- */
+    .table-header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 1.25rem;
+    }
+    .card-title { font-size: 1.1rem; font-weight: 700; color: #374151; margin: 0; }
+    
+    .search-container { position: relative; width: 220px; }
+    .search-container i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 0.85rem; }
+    .search-input {
+        width: 100%;
+        padding: 8px 12px 8px 32px;
+        background-color: #f9fafb;
+        border: 1px solid var(--border-light);
+        border-radius: 6px;
+        font-size: 0.8rem;
+        outline: none;
+    }
+
+    /* --- Scrollable Table Container --- */
+    .table-responsive {
+        max-height: 450px; 
+        overflow-y: auto;
+        overflow-x: auto; 
+        border-radius: 8px;
+        border: 1px solid var(--border-light);
+        margin-bottom: 1rem;
+    }
+
+    .table-responsive::-webkit-scrollbar { width: 8px; height: 8px; }
+    .table-responsive::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+    .table-responsive::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    .table-responsive::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    .table-custom { 
+        margin-bottom: 0; 
+        width: 100%; 
+        border-collapse: separate; 
+        border-spacing: 0;
+        min-width: 1500px; 
+        background: #fff;
+    }
+
+    .table-custom th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background-color: #f9fafb;
+        color: #6b7280;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 12px 10px;
+        border-bottom: 1px solid var(--border-light);
+        box-shadow: 0 1px 0 var(--border-light); 
+        text-align: center;
+        white-space: nowrap;
+    }
+    .table-custom th:nth-child(2), .table-custom th:nth-child(3) { text-align: left; }
+    
+    .table-custom td {
+        font-size: 0.8rem;
+        color: #1f2937;
+        padding: 14px 10px;
+        vertical-align: middle;
+        border-bottom: 1px solid var(--border-light);
+        text-align: center;
+        white-space: nowrap;
+    }
+    .table-custom td:nth-child(2), .table-custom td:nth-child(3) { text-align: left; }
+    .table-custom tr:last-child td { border-bottom: none; }
+
+    /* --- Badges --- */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .badge-approved { background-color: #dcfce7; color: #16a34a; }
+    .badge-validated { background-color: #fef9c3; color: #ca8a04; }
+    .badge-rejected { background-color: #fee2e2; color: #dc2626; }
+    .badge-submitted { background-color: #dbeafe; color: #2563eb; }
+    .badge-draft { background-color: #f3f4f6; color: #4b5563; }
+    .badge-pending { background-color: #fef9c3; color: #ca8a04; }
+    .badge-completed { background-color: #dcfce7; color: #16a34a; gap: 4px; }
+
+    /* Action Icons */
+    .action-icons { display: flex; align-items: center; justify-content: center; gap: 12px; }
+    .action-icon-view { color: #3b82f6; cursor: pointer; font-size: 1.1rem; }
+    .action-icon-delete { color: #ef4444; cursor: pointer; font-size: 1.1rem; }
+
+    /* --- Pagination --- */
+    .pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 1rem; }
+    .items-per-page { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #6b7280; }
+    .page-item { 
+        width: 32px; height: 32px; 
+        display: flex; align-items: center; justify-content: center; 
+        border: 1px solid var(--border-light); 
+        background: #fff; border-radius: 6px; 
+        font-size: 0.8rem; color: #6b7280; 
+        cursor: pointer; text-decoration: none; 
+    }
+    .page-item.active { background: #f3f4f6; color: #1f2937; font-weight: 600; }
+    .page-item.dots { border: none; background: transparent; cursor: default; }
+
+    /* --- Side Panel (Popup) CSS --- */
+    .side-panel-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: rgba(0,0,0,0.4);
+        z-index: 1040;
+        backdrop-filter: blur(2px);
+    }
+    
+    .side-panel {
+        position: fixed;
+        top: 0; right: 0; bottom: 0;
+        width: 450px;
+        background-color: #f8fafc;
+        z-index: 1050;
+        box-shadow: -4px 0 15px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        animation: slideInRight 0.3s ease-out forwards;
+    }
+    
+    @@keyframes slideInRight {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+    }
+
+    .sp-header {
+        padding: 20px 24px;
+        background: #f8fafc;
+        border-bottom: 1px solid var(--border-light);
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+    
+    .sp-title { font-size: 1.2rem; font-weight: 700; color: #1f2937; margin: 0 0 4px 0; }
+    .sp-subtitle { font-size: 0.85rem; color: #6b7280; margin: 0; }
+    .sp-close { background: none; border: none; font-size: 1.5rem; color: #9ca3af; cursor: pointer; line-height: 1; padding: 0; }
+    .sp-close:hover { color: #4b5563; }
+
+    .sp-body {
+        padding: 20px 24px;
+        overflow-y: auto;
+        flex-grow: 1;
+    }
+    
+    .sp-body::-webkit-scrollbar { width: 6px; }
+    .sp-body::-webkit-scrollbar-track { background: transparent; }
+    .sp-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+    .sp-section { margin-bottom: 24px; }
+    .sp-section-title {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #16a34a; /* Green title as per image */
+        margin-bottom: 12px;
+        border-bottom: 1px solid #e5e7eb;
+        padding-bottom: 6px;
+    }
+    
+    .sp-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 4px 0;
+        font-size: 0.8rem;
+    }
+    .sp-label { color: #6b7280; }
+    .sp-value { color: #1f2937; font-weight: 600; text-align: right; }
+    
+    /* Pill Badges */
+    .sp-pill-green { background: #dcfce7; color: #16a34a; padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; display: inline-block; margin: 2px; }
+    .sp-pill-blue { background: #dbeafe; color: #2563eb; padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; display: inline-block; margin: 2px; }
+    .sp-pill-dark { background: #374151; color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 0.65rem; margin-left: 6px; }
+
+    /* Vertical Timeline */
+    .vert-timeline {
+        position: relative;
+        padding-left: 24px;
+        margin-top: 10px;
+    }
+    .vert-timeline::before {
+        content: '';
+        position: absolute;
+        left: 9px;
+        top: 6px;
+        bottom: 10px;
+        width: 2px;
+        background-color: #22c55e;
+    }
+    .vt-item {
+        position: relative;
+        margin-bottom: 16px;
+    }
+    .vt-item:last-child { margin-bottom: 0; }
+    .vt-icon {
+        position: absolute;
+        left: -24px;
+        top: 2px;
+        width: 20px;
+        height: 20px;
+        background: #22c55e;
+        color: #fff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        z-index: 2;
+    }
+    .vt-content { font-size: 0.8rem; }
+    .vt-title { font-weight: 600; color: #1f2937; margin: 0 0 2px 0; }
+    .vt-desc { color: #6b7280; margin: 0; display: flex; align-items: center; }
+
+    .sp-footer {
+        padding: 16px 24px;
+        background: #fff;
+        border-top: 1px solid var(--border-light);
+        display: flex;
+        gap: 10px;
+    }
+    .sp-btn {
+        flex: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 0;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        border: none;
+        color: #fff;
+        transition: 0.2s;
+    }
+    .sp-btn-dark { background: #374151; }
+    .sp-btn-dark:hover { background: #1f2937; }
+    .sp-btn-green { background: #166534; }
+    .sp-btn-green:hover { background: #14532d; }
+    .sp-btn-blue { background: #2563eb; }
+    .sp-btn-blue:hover { background: #1d4ed8; }
+
+</style>
+
+<div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1600px;">
+    
+    <h1 class="page-title">Final Report - CSR Program Tracking</h1>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-5 g-3 mb-4">
+        <div class="col">
+            <div class="csr-kpi-card border-blue">
+                <div class="csr-kpi-body">
+                    <div>
+                        <div class="kpi-number">12</div>
+                        <p class="kpi-label">Total Programs</p>
+                    </div>
+                    <div class="kpi-icon-box icon-blue">
+                        <i class="bi bi-clipboard-check"></i>
+                    </div>
+                </div>
+                <a href="#" class="csr-kpi-footer">
+                    View all <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+        <div class="col">
+            <div class="csr-kpi-card border-green">
+                <div class="csr-kpi-body">
+                    <div>
+                        <div class="kpi-number">5</div>
+                        <p class="kpi-label">Approved</p>
+                    </div>
+                    <div class="kpi-icon-box icon-green">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                </div>
+                <a href="#" class="csr-kpi-footer">
+                    View approved <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+        <div class="col">
+            <div class="csr-kpi-card border-orange">
+                <div class="csr-kpi-body">
+                    <div>
+                        <div class="kpi-number">3</div>
+                        <p class="kpi-label">Pending</p>
+                    </div>
+                    <div class="kpi-icon-box icon-orange">
+                        <i class="bi bi-file-earmark-time"></i>
+                    </div>
+                </div>
+                <a href="#" class="csr-kpi-footer">
+                    View Pending <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+        <div class="col">
+            <div class="csr-kpi-card border-red">
+                <div class="csr-kpi-body">
+                    <div>
+                        <div class="kpi-number">2</div>
+                        <p class="kpi-label">Rejected</p>
+                    </div>
+                    <div class="kpi-icon-box icon-red">
+                        <i class="bi bi-file-earmark-x"></i>
+                    </div>
+                </div>
+                <a href="#" class="csr-kpi-footer">
+                    View Rejected <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+        <div class="col">
+            <div class="csr-kpi-card border-gray">
+                <div class="csr-kpi-body">
+                    <div>
+                        <div class="kpi-number">2</div>
+                        <p class="kpi-label">Drafts</p>
+                    </div>
+                    <div class="kpi-icon-box icon-gray">
+                        <i class="bi bi-journal-text"></i>
+                    </div>
+                </div>
+                <a href="#" class="csr-kpi-footer">
+                    View drafts <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-card mb-4">
+        <div class="filter-header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-filter-left fs-5"></i> Filters
+            </div>
+            <i class="bi bi-chevron-down text-muted" style="cursor: pointer;"></i>
+        </div>
+        
+        <div class="row g-3">
+            <div class="col-md-2">
+                <label class="filter-label">Date Range</label>
+                <div class="position-relative">
+                    <input type="text" class="form-control-custom pe-5" placeholder="01 Apr 2025 - 28 Apr 2025">
+                    <i class="bi bi-calendar3 position-absolute" style="right:12px; top:50%; transform:translateY(-50%); color:#9ca3af; font-size:0.9rem;"></i>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="filter-label">Program Type</label>
+                <select class="form-select-custom"><option>All Program Type</option></select>
+            </div>
+            <div class="col-md-3">
+                <label class="filter-label">Program Name</label>
+                <select class="form-select-custom"><option>All Program Name</option></select>
+            </div>
+            <div class="col-md-2">
+                <label class="filter-label">CSR Type</label>
+                <select class="form-select-custom"><option>All District</option></select>
+            </div>
+            <div class="col-md-3">
+                <label class="filter-label">Status</label>
+                <select class="form-select-custom"><option>All District</option></select>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end mt-4 gap-3">
+            <button class="btn-clear"><i class="bi bi-x"></i> Clear All</button>
+            <button class="btn-apply"><i class="bi bi-filter"></i> Apply Filters</button>
+        </div>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="table-header-row">
+            <div class="d-flex align-items-center gap-4">
+                <h3 class="card-title">CSR-1 plan list</h3>
+                <div class="search-container">
+                    <i class="bi bi-search"></i>
+                    <input type="text" class="search-input" placeholder="Search zones...">
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn-outline-custom"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
+                <button class="btn-outline-custom"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+                <button class="btn-outline-custom"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                <button class="btn-primary-custom"><i class="bi bi-envelope"></i> Send Mail</button>
+            </div>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table-custom">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;"><input class="form-check-input" type="checkbox"></th>
+                        <th>Program Type</th>
+                        <th>Program Name</th>
+                        <th>Submitted Date</th>
+                        <th>CSR - 1 Status</th>
+                        <th>CSR - 2 Status</th>
+                        <th>Sanction Number</th>
+                        <th>Report Status</th>
+                        <th>Total Expenses</th>
+                        <th>Approved Budget</th>
+                        <th>Remaining Budget</th>
+                        <th>Validation Due</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td>Training</td>
+                        <td>Crop Protection Workshop</td>
+                        <td>May 1, 2026</td>
+                        <td><span class="status-badge badge-approved">Approved</span></td>
+                        <td><span class="status-badge badge-approved">Approved</span></td>
+                        <td>CSR1-2026-045</td>
+                        <td><span class="status-badge badge-completed"><i class="bi bi-check-circle"></i> Completed</span></td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>May 10, 2026</td>
+                        <td>
+                            <div class="action-icons">
+                                <i class="bi bi-eye action-icon-view" @onclick="OpenViewPopup"></i>
+                                <i class="bi bi-trash action-icon-delete"></i>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox"></td>
+                        <td>Training</td>
+                        <td>Crop Protection Workshop</td>
+                        <td>May 1, 2026</td>
+                        <td><span class="status-badge badge-approved">Approved</span></td>
+                        <td><span class="status-badge badge-validated">Validated</span></td>
+                        <td>CSR1-2026-045</td>
+                        <td><span class="status-badge badge-pending">Pending</span></td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>May 10, 2026</td>
+                        <td>
+                            <div class="action-icons">
+                                <i class="bi bi-eye action-icon-view" @onclick="OpenViewPopup"></i>
+                                <i class="bi bi-trash action-icon-delete"></i>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination-container mt-3">
+            <div class="items-per-page">
+                Items Per Page 
+                <select class="form-select form-select-sm" style="width: 70px; background-color: #fff; box-shadow: none;">
+                    <option>16</option>
+                    <option>25</option>
+                </select>
+            </div>
+            <div class="d-flex gap-1">
+                <a class="page-item"><i class="bi bi-chevron-left"></i></a>
+                <a class="page-item active">1</a>
+                <a class="page-item">2</a>
+                <a class="page-item">3</a>
+                <span class="page-item dots">..</span>
+                <a class="page-item">8</a>
+                <a class="page-item">9</a>
+                <a class="page-item">10</a>
+                <a class="page-item"><i class="bi bi-chevron-right"></i></a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isViewPopupOpen)
+{
+    <div class="side-panel-overlay" @onclick="CloseViewPopup"></div>
+    <div class="side-panel">
+        
+        <div class="sp-header">
+            <div>
+                <h2 class="sp-title">CSR-1 Program Details</h2>
+                <p class="sp-subtitle">Crop Protection Workshop</p>
+            </div>
+            <button class="sp-close" @onclick="CloseViewPopup">&times;</button>
+        </div>
+
+        <div class="sp-body">
+            
+            <div class="sp-section">
+                <div class="sp-section-title">Program Information</div>
+                <div class="sp-row">
+                    <span class="sp-label">Program Type:</span>
+                    <span class="sp-value">Training</span>
+                </div>
+                <div class="sp-row">
+                    <span class="sp-label">Program Name:</span>
+                    <span class="sp-value">Crop Protection Workshop</span>
+                </div>
+                <div class="sp-row">
+                    <span class="sp-label">Status:</span>
+                    <span class="sp-value"><span class="sp-pill-green">Approved</span></span>
+                </div>
+                <div class="sp-row">
+                    <span class="sp-label">Sanction Number:</span>
+                    <span class="sp-value">CSR1-2026-045</span>
+                </div>
+            </div>
+
+            <div class="sp-section">
+                <div class="sp-section-title">Location Details</div>
+                <div class="sp-row">
+                    <span class="sp-label">District:</span>
+                    <span class="sp-value">Pune</span>
+                </div>
+                <div class="sp-row">
+                    <span class="sp-label">HQ:</span>
+                    <span class="sp-value">Pune, Maharashtra</span>
+                </div>
+            </div>
+
+            <div class="sp-section">
+                <div class="sp-section-title">Budget Details</div>
+                <div class="sp-row">
+                    <span class="sp-label">Total Budget:</span>
+                    <span class="sp-value">₹50,000</span>
+                </div>
+            </div>
+
+            <div class="sp-section">
+                <div class="sp-section-title">Expense Breakdown</div>
+                <div class="sp-row"><span class="sp-label">Printing & Stationary:</span><span class="sp-value">₹5,000</span></div>
+                <div class="sp-row"><span class="sp-label">Publicity Material:</span><span class="sp-value">₹8,000</span></div>
+                <div class="sp-row"><span class="sp-label">Stage Arrangements:</span><span class="sp-value">₹12,000</span></div>
+                <div class="sp-row"><span class="sp-label">Service Charges - LCA:</span><span class="sp-value">₹7,000</span></div>
+                <div class="sp-row"><span class="sp-label">Transport / Rent:</span><span class="sp-value">₹6,000</span></div>
+                <div class="sp-row"><span class="sp-label">Jeep Running Expenses:</span><span class="sp-value">₹4,000</span></div>
+                <div class="sp-row"><span class="sp-label">Refreshments:</span><span class="sp-value">₹5,000</span></div>
+                <div class="sp-row"><span class="sp-label">Inputs:</span><span class="sp-value">₹0</span></div>
+                <div class="sp-row"><span class="sp-label">Photography:</span><span class="sp-value">₹2,000</span></div>
+                <div class="sp-row"><span class="sp-label">Compliments:</span><span class="sp-value">₹1,000</span></div>
+                <div class="sp-row"><span class="sp-label">Others:</span><span class="sp-value">₹0</span></div>
+                <div class="sp-row mt-2 pt-2" style="border-top: 1px dashed #e5e7eb;">
+                    <span class="sp-label fw-bold text-dark">Total:</span>
+                    <span class="sp-value fs-6">₹50,000</span>
+                </div>
+            </div>
+
+            <div class="sp-section">
+                <div class="sp-section-title">Focus Areas</div>
+                <div class="mb-2">
+                    <span class="sp-label d-block mb-1">Focused Crops:</span>
+                    <span class="sp-pill-green">Cotton</span>
+                    <span class="sp-pill-green">Wheat</span>
+                    <span class="sp-pill-green">Sugarcane</span>
+                </div>
+                <div>
+                    <span class="sp-label d-block mb-1">Focused Products:</span>
+                    <span class="sp-pill-blue">Insecticide A</span>
+                    <span class="sp-pill-blue">Fungicide B</span>
+                    <span class="sp-pill-blue">Herbicide C</span>
+                </div>
+            </div>
+
+            <div class="sp-section">
+                <div class="sp-section-title">Approval Timeline</div>
+                <div class="vert-timeline">
+                    <div class="vt-item">
+                        <div class="vt-icon"><i class="bi bi-check"></i></div>
+                        <div class="vt-content">
+                            <h4 class="vt-title">Created</h4>
+                            <p class="vt-desc">John Doe (MO) <span class="sp-pill-dark">May 1, 2026</span></p>
+                        </div>
+                    </div>
+                    <div class="vt-item">
+                        <div class="vt-icon"><i class="bi bi-check"></i></div>
+                        <div class="vt-content">
+                            <h4 class="vt-title">Submitted</h4>
+                            <p class="vt-desc">John Doe (MO) <span class="sp-pill-dark">May 1, 2026</span></p>
+                        </div>
+                    </div>
+                    <div class="vt-item">
+                        <div class="vt-icon"><i class="bi bi-check"></i></div>
+                        <div class="vt-content">
+                            <h4 class="vt-title">Validated</h4>
+                            <p class="vt-desc">Regional MD <span class="sp-pill-dark">May 1, 2026</span></p>
+                        </div>
+                    </div>
+                    <div class="vt-item">
+                        <div class="vt-icon"><i class="bi bi-check"></i></div>
+                        <div class="vt-content">
+                            <h4 class="vt-title">Approved</h4>
+                            <p class="vt-desc">State MD <span class="sp-pill-dark">May 1, 2026</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sp-section">
+                <div class="sp-section-title">Status History</div>
+                <div class="sp-row">
+                    <span class="sp-label">Submitted Date:</span>
+                    <span class="sp-value">May 1, 2026</span>
+                </div>
+                <div class="sp-row">
+                    <span class="sp-label">Validation Due:</span>
+                    <span class="sp-value">May 10, 2026</span>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="sp-footer">
+            <button class="sp-btn sp-btn-dark"><i class="bi bi-box-arrow-up-right"></i> Open CSR-2</button>
+            <button class="sp-btn sp-btn-green"><i class="bi bi-printer"></i> Print</button>
+            <button class="sp-btn sp-btn-blue"><i class="bi bi-file-earmark-pdf"></i> Export PDF</button>
+        </div>
+
+    </div>
+}
+
+@code {
+    private bool isViewPopupOpen = false;
+
+    private void OpenViewPopup()
+    {
+        isViewPopupOpen = true;
+    }
+
+    private void CloseViewPopup()
+    {
+        isViewPopupOpen = false;
+    }
+}

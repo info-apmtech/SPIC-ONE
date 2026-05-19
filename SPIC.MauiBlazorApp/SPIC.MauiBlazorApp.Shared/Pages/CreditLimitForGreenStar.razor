@@ -1,0 +1,1276 @@
+﻿@page "/CreditLimitForGreenStar"
+@using System.Net.Http.Json
+@using SPIC.Core.Entities
+@using DealerReg = SPIC.Core.Entities.DealerRegistration
+@using SPIC.MauiBlazorApp.Shared.FormFlow
+@inject HttpClient Http
+@inject NavigationManager Nav
+<style>
+	.table-wrapper {
+		width: 100%;
+		max-width: 100%;
+		overflow: hidden;
+	}
+
+	.table-responsive {
+		max-height: 420px; /* vertical inline scroller */
+		overflow: auto; /* both x and y scroll */
+		width: 100%;
+		border: 1px solid #E5E7EB;
+		border-radius: 12px;
+	}
+
+	/* Prevent table from squeezing too much */
+	.spic-table {
+		width: 100%;
+		min-width: 900px; /* horizontal scroll for wide tables */
+		border-collapse: separate;
+		border-spacing: 0;
+	}
+
+		/* Sticky header */
+		.spic-table thead th {
+			position: sticky;
+			top: 0;
+			z-index: 5;
+			background: #F9FAFB;
+		}
+
+		/* For tables with 2 header rows */
+		.spic-table thead tr:nth-child(2) th {
+			top: 42px; /* adjust if your first header row height differs */
+			z-index: 6;
+		}
+
+		/* Keep footer visible style clean, not sticky */
+		.spic-table tfoot td {
+			background: #F9FAFB;
+		}
+
+	/* Better scrollbar behavior on mobile */
+	.table-responsive::-webkit-scrollbar {
+		height: 8px;
+		width: 8px;
+	}
+
+	.table-responsive::-webkit-scrollbar-thumb {
+		background: #CBD5E1;
+		border-radius: 999px;
+	}
+	.spic-table tfoot td {
+	background: #F9FAFB;
+	border-top: 2px solid #E5E7EB;
+	font-weight: 700;
+	position: sticky;
+	bottom: 0;
+	z-index: 4;
+}
+</style>
+<div class="container-fluid py-4 px-0">
+	<FormLoader />
+
+	@if (!string.IsNullOrEmpty(_message))
+	{
+		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+			@_message
+			<button type="button" class="btn-close" @onclick='() => _message = null'></button>
+		</div>
+	}
+
+	@* <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+		<h3 class="fw-bold m-0 company-title">Credit Limit Proposal</h3>
+		<button class="btn btn-outline-secondary" @onclick="HandleSkip">
+			<i class="bi bi-skip-forward"></i> Skip Credit Limit
+		</button>
+	</div> *@
+
+	<!-- Dealer Summary -->
+	<div class="form-card">
+		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+			<div class="card-header-title mb-0">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/DealerSummary.svg" class="formicon" /> Dealer Summary
+			</div>
+		</div>
+		<div class="row g-3">
+			<div class="col-md-3">
+				<div class="info-box">
+					<div class="info-label">Firm Name</div>
+					<div class="info-value">@(_dealer.FirmName ?? "-")</div>
+				</div>
+			</div>
+			<div class="col-md-3">
+				<div class="info-box">
+					<div class="info-label">Total Fixed Assets <span class="text-muted" style="font-size:0.75rem;">(Land + Building)</span></div>
+					<div class="info-value">₹ @((LandTotal + BuildingTotal).ToString("N0"))</div>
+				</div>
+			</div>
+			<div class="col-md-3">
+				<div class="info-box">
+					<div class="info-label">Godown Capacity</div>
+					<div class="info-value">@((_dealer.OwnGodownCapacity + _dealer.RentGodownCapacity).ToString("N0")) MT</div>
+				</div>
+			</div>
+			<div class="col-md-3">
+				<div class="info-box">
+					<div class="info-label">Experience</div>
+					<div class="info-value">@_dealer.YearsofExperiance years (in SPIC @_dealer.DateOfAppointment.ToString("dd/MM/yyyy"))</div>
+				</div>
+			</div>
+		</div>
+	</div> 
+
+	<!-- Existing Credit Limit -->
+	 <div class="form-card">
+		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+			<div class="card-header-title mb-0">
+				<i class="bi bi-credit-card-2-front" style="color:#2563EB;"></i> Existing Credit Limit
+			</div>
+		</div>
+		<div class="row g-3">
+			<div class="col-md-4">
+				<label class="form-label">Credit Limit Amount (₹)</label>
+				<input type="number" class="form-control-custom w-100" step="0.01"
+					   @bind="_proposal.ExistingCreditLimitAmount" />
+			</div>
+			<div class="col-md-4">
+				<label class="form-label">Valid From</label>
+				<input type="date" class="form-control-custom w-100"
+					   @bind="_proposal.ExistingCreditLimitFrom" />
+			</div>
+			<div class="col-md-4">
+				<label class="form-label">Valid To</label>
+				<input type="date" class="form-control-custom w-100"
+					   @bind="_proposal.ExistingCreditLimitTo" />
+			</div>
+		</div>
+	</div> 
+
+	<!-- Property Assets (Collateral) -->
+	 <div class="form-card">
+		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+			<div class="card-header-title mb-0">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/PropertyAssets.svg" class="formicon" /> Property Assets (Collateral)
+			</div>
+		</div>
+		<div class="row g-3 mb-4">
+			<div class="col-md-3">
+				<div class="asset-box blue">
+					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Bank.svg" class="verifyicon mb-1 mr-1" /> Banking</div>
+					<div class="asset-value">₹ @BankingTotal.ToString("N0")</div>
+				</div>
+			</div>
+			<div class="col-md-3">
+				<div class="asset-box gray">
+					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/land.svg" class="verifyicon" /> Land</div>
+					<div class="asset-value">₹ @LandTotal.ToString("N0")</div>
+				</div>
+			</div>
+			<div class="col-md-3">
+				<div class="asset-box pink">
+					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Building.svg" class="verifyicon mb-1 mr-1" /> Building</div>
+					<div class="asset-value">₹ @BuildingTotal.ToString("N0")</div>
+				</div>
+			</div>
+			<div class="col-md-3">
+				<div class="asset-box orange">
+					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Movable.svg" class="verifyicon" /> Movable</div>
+					<div class="asset-value">₹ @_dealer.AssetValue.ToString("N0")</div>
+				</div>
+			</div>
+		</div>
+		<div class="row g-3 mb-4">
+			<div class="col-md-4">
+				<div class="asset-box blue">
+					<div class="asset-title">Total Valuation</div>
+					<div class="asset-value">₹ @TotalPropertyValue.ToString("N0")</div>
+					<div class="asset-badge">TOTAL ASSETS</div>
+				</div>
+			</div>
+			<div class="col-md-4">
+				<div class="asset-box pink">
+					<div class="asset-title">Net Valuation</div>
+					<div class="asset-value">₹ @((TotalPropertyValue - LoansTotal).ToString("N0"))</div>
+					<div class="asset-badge">AFTER LIABILITIES</div>
+				</div>
+			</div>
+			<div class="col-md-4">
+				<div class="asset-box gray">
+					<div class="asset-title">LTV Ratio</div>
+					<div class="asset-value">@(TotalPropertyValue > 0 ? ((LoansTotal / TotalPropertyValue) * 100).ToString("N0") : "0")%</div>
+					<div class="asset-badge">LOAN TO VALUE</div>
+				</div>
+			</div>
+		</div>
+	</div> 
+
+	<!-- Sales Performance Review -->
+	 <div class="form-card">
+		<div class="d-flex justify-content-between align-items-center mb-1">
+			<div class="section-title">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SalesPerformaReview.svg" class="formicon" /> Sales Performance Review
+			</div>
+			<button class="btn-verified">
+				Values in @_selectedUnitName
+			</button>
+		</div>
+
+		<div class="financial-note-box">
+			<div class="financial-note-badge">
+				Only last 3 completed financial years are allowed
+			</div>
+		</div>
+
+		<div class="custom-tabs">
+			@foreach (var cat in _categories)
+			{
+				var catId = cat.Id;
+				var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
+				<div class="tab-btn @(catId == _selectedCategoryId ? "active" : "")"
+					 @onclick="() => SelectCategory(catId)" style="cursor:pointer;">
+					@cat.Name (@unitName / Value)
+				</div>
+			}
+		</div>
+
+		<div class="table-wrapper">
+			<div class="table-responsive">
+				<table class="spic-table">
+					<thead>
+						<tr>
+							<th rowspan="2" style="min-width: 180px;">Product Name / Category</th>
+							@for (int fi = 0; fi < 3; fi++)
+							{
+								var fyIdx = fi;
+								<th colspan="2" class="text-center border-start">
+									<select class="form-select form-select-sm text-center"
+											value="@GetSelectedFY(fyIdx)"
+											@onchange="(e) => SetSelectedFY(fyIdx, e)">
+										<option value="0">Select Year</option>
+										@foreach (var fy in _financialYears)
+										{
+											<option value="@fy.Id">@fy.Name</option>
+										}
+									</select>
+								</th>
+							}
+						</tr>
+						<tr>
+							@for (int fi = 0; fi < 3; fi++)
+							{
+								<th class="text-center text-muted fw-normal border-start">@_selectedUnitName</th>
+								<th class="text-center text-muted fw-normal">Lakhs</th>
+							}
+						</tr>
+					</thead>
+					<tbody>
+						@foreach (var row in _currentSalesPerfRows)
+						{
+							var r = row;
+							var product = _products.FirstOrDefault(p => p.Id == r.ProductId);
+							<tr>
+								<td class="fw-medium text-dark">@(product?.Name ?? "Unknown")</td>
+								@for (int fi = 0; fi < 3; fi++)
+								{
+									var fyIdx = fi;
+									<td class="border-start">
+										<input class="table-input" type="number" step="0.01"
+											   value="@GetPerfQty(r, fyIdx)"
+											   @onchange="(e) => SetPerfQty(r, fyIdx, e)" />
+									</td>
+									<td>
+										<input class="table-input" type="number" step="0.01"
+											   value="@GetPerfAmount(r, fyIdx)"
+											   @onchange="(e) => SetPerfAmount(r, fyIdx, e)" />
+									</td>
+								}
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<div class="row g-3">
+			@for (int fi = 0; fi < 3; fi++)
+			{
+				var fyIdx = fi;
+				var fyName = GetFYName(fyIdx);
+				<div class="col-md-3">
+					<div class="perf-card">
+						<div class="perf-year">@fyName</div>
+						<div class="perf-val">
+							@GetFYTotalQty(fyIdx).ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">@_selectedUnitName</span>
+							/ ₹ @GetFYTotalAmount(fyIdx).ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">Lakhs</span>
+						</div>
+					</div>
+				</div>
+			}
+			<div class="col-md-3">
+				<div class="perf-card green position-relative">
+					<div class="perf-year">Sales Plan (Current FY)</div>
+					<div class="perf-val">
+						@SalesPlanTotalQty.ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">@_selectedUnitName</span>
+						/ ₹ @SalesPlanTotalAmount.ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">Lakhs</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	@if (_dealer.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
+	{
+		<!-- Details of Securities Greenstar -->
+		<div class="form-card">
+			<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+				<div class="card-header-title mb-0">
+					<i class="bi bi-shield-check" style="color:#059669;"></i> Details of Securities — Greenstar
+				</div>
+			</div>
+			<div class="table-wrapper">
+				<div class="table-responsive">
+					<table class="spic-table">
+						<thead>
+							<tr>
+								<th style="width:25%;">Type</th>
+								<th style="width:25%;">Number</th>
+								<th style="width:25%;">Other Details</th>
+								<th style="width:25%;">Amount (₹) In Lakhs</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td class="fw-medium">Fixed Deposit with GFL</td>
+								<td><input type="text" class="form-control-custom w-100" placeholder="FD Number" @bind="_proposal.GreenstarFDNumber" /></td>
+								<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.GreenstarFDOtherDetails" /></td>
+								<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.GreenstarFDAmount" /></td>
+							</tr>
+							<tr>
+								<td class="fw-medium">BG in favour of GFL</td>
+								<td><input type="text" class="form-control-custom w-100" placeholder="BG Number" @bind="_proposal.GreenstarBGNumber" /></td>
+								<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.GreenstarBGOtherDetails" /></td>
+								<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.GreenstarBGAmount" /></td>
+							</tr>
+							<tr>
+								<td class="fw-medium">Collateral Security</td>
+								<td><input type="text" class="form-control-custom w-100" placeholder="Number" @bind="_proposal.GreenstarCollateralNumber" /></td>
+								<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.GreenstarCollateralOtherDetails" /></td>
+								<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.GreenstarCollateralAmount" /></td>
+							</tr>
+							<tr>
+								<td class="fw-medium">Trade Deposit As On Date</td>
+								<td><input type="text" class="form-control-custom w-100" placeholder="Number" @bind="_proposal.GreenstarTradeDepositNumber" /></td>
+								<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.GreenstarTradeDepositOtherDetails" /></td>
+								<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.GreenstarTradeDepositAmount" /></td>
+							</tr>
+						</tbody>
+						<tfoot>
+							<tr>
+								<td colspan="3"><strong>Total</strong></td>
+								<td><strong>₹ @((_proposal.GreenstarFDAmount + _proposal.GreenstarBGAmount + _proposal.GreenstarCollateralAmount + _proposal.GreenstarTradeDepositAmount).ToString("N2"))</strong></td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			</div>
+		</div>
+
+		<!-- Greenstar Valuation -->
+		<div class="form-card">
+			<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+				<div class="card-header-title mb-0">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/FiscalYear.svg" class="formicon" /> Greenstar Valuation
+				</div>
+			</div>
+			<div class="table-wrapper">
+				<div class="table-responsive">
+					<table class="spic-table">
+						<thead>
+							<tr>
+								<th rowspan="2" style="width:4%;">S.No</th>
+								<th rowspan="2">Critical Parameter</th>
+								<th rowspan="2" style="width:10%;">Measure</th>
+								<th rowspan="2" style="width:7%;">Weightage (%)</th>
+								<th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+								<th colspan="5" class="text-center">Norms / Marks</th>
+								<th colspan="2" class="text-center">Dealer Score</th>
+							</tr>
+							<tr>
+								<th class="text-center">1</th>
+								<th class="text-center">2</th>
+								<th class="text-center">3</th>
+								<th class="text-center">4</th>
+								<th class="text-center">5</th>
+								<th class="text-center" style="width:8%;">Value</th>
+								<th class="text-center" style="width:6%;">Marks</th>
+							</tr>
+						</thead>
+						<tbody>
+							<!-- 1. Total Fertilizer Sales Volume -->
+							<tr>
+								<td rowspan="2" class="text-center align-middle">1</td>
+								<td rowspan="2" class="align-middle">Total Fertilizer Sales Volume during last year</td>
+								<td rowspan="8" class="text-center align-middle text-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+								<td rowspan="2" class="text-center align-middle">10</td>
+								<td class="text-center">MT</td>
+								<td class="text-center">&gt;3000</td>
+								<td class="text-center">&gt;1500</td>
+								<td class="text-center">&gt;1000</td>
+								<td class="text-center">&gt;500</td>
+								<td class="text-center">&lt;500</td>
+								<td rowspan="2" class="align-middle">
+									<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[0]" @onchange="(e) => OnGreenstarValueChanged(0, e)" />
+								</td>
+								<td rowspan="2" class="text-center align-middle">
+									<div class="table-val-box">@GetGreenstarMark(0).ToString("N0")</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="text-center text-muted">Marks</td>
+								<td class="text-center">10</td>
+								<td class="text-center">8</td>
+								<td class="text-center">6</td>
+								<td class="text-center">4</td>
+								<td class="text-center">2</td>
+							</tr>
+							<!-- 2. Fertilizer Sales Volume with GFL -->
+							<tr>
+								<td rowspan="2" class="text-center align-middle">2</td>
+								<td rowspan="2" class="align-middle">Fertilizer Sales Volume with GFL during last year</td>
+								<td rowspan="2" class="text-center align-middle">10</td>
+								<td class="text-center">MT</td>
+								<td class="text-center">&gt;500</td>
+								<td class="text-center">&gt;350</td>
+								<td class="text-center">&gt;250</td>
+								<td class="text-center">&gt;150</td>
+								<td class="text-center">&gt;75</td>
+								<td rowspan="2" class="align-middle">
+									<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[1]" @onchange="(e) => OnGreenstarValueChanged(1, e)" />
+								</td>
+								<td rowspan="2" class="text-center align-middle">
+									<div class="table-val-box">@GetGreenstarMark(1).ToString("N0")</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="text-center text-muted">Marks</td>
+								<td class="text-center">10</td>
+								<td class="text-center">8</td>
+								<td class="text-center">6</td>
+								<td class="text-center">4</td>
+								<td class="text-center">2</td>
+							</tr>
+							<!-- 3. Total Fertilizer Sales Turnover -->
+							<tr>
+								<td rowspan="2" class="text-center align-middle">3</td>
+								<td rowspan="2" class="align-middle">Total Fertilizer Sales Turnover during last year</td>
+								<td rowspan="2" class="text-center align-middle">10</td>
+								<td class="text-center">Rs. Lakhs</td>
+								<td class="text-center">&gt;700</td>
+								<td class="text-center">&gt;350</td>
+								<td class="text-center">&gt;250</td>
+								<td class="text-center">&gt;125</td>
+								<td class="text-center">&lt;125</td>
+								<td rowspan="2" class="align-middle">
+									<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[2]" @onchange="(e) => OnGreenstarValueChanged(2, e)" />
+								</td>
+								<td rowspan="2" class="text-center align-middle">
+									<div class="table-val-box">@GetGreenstarMark(2).ToString("N0")</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="text-center text-muted">Marks</td>
+								<td class="text-center">10</td>
+								<td class="text-center">8</td>
+								<td class="text-center">6</td>
+								<td class="text-center">4</td>
+								<td class="text-center">2</td>
+							</tr>
+							<!-- 4. Fertilizer Sales Turnover with GFL -->
+							<tr>
+								<td rowspan="2" class="text-center align-middle">4</td>
+								<td rowspan="2" class="align-middle">Fertilizer Sales Turnover with GFL during last year</td>
+								<td rowspan="2" class="text-center align-middle">10</td>
+								<td class="text-center">Rs. Lakhs</td>
+								<td class="text-center">&gt;125</td>
+								<td class="text-center">&gt;80</td>
+								<td class="text-center">&gt;60</td>
+								<td class="text-center">&gt;35</td>
+								<td class="text-center">&lt;15</td>
+								<td rowspan="2" class="align-middle">
+									<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[3]" @onchange="(e) => OnGreenstarValueChanged(3, e)" />
+								</td>
+								<td rowspan="2" class="text-center align-middle">
+									<div class="table-val-box">@GetGreenstarMark(3).ToString("N0")</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="text-center text-muted">Marks</td>
+								<td class="text-center">10</td>
+								<td class="text-center">8</td>
+								<td class="text-center">6</td>
+								<td class="text-center">4</td>
+								<td class="text-center">2</td>
+							</tr>
+							<!-- 5. SP Turnover -->
+							<tr>
+								<td rowspan="2" class="text-center align-middle">5</td>
+								<td rowspan="2" class="align-middle">SP Turnover during last year</td>
+								<td rowspan="2" class="text-center align-middle text-muted">Specialty products involvement</td>
+								<td rowspan="2" class="text-center align-middle">10</td>
+								<td class="text-center">Rs. Lakhs</td>
+								<td class="text-center">&gt;100</td>
+								<td class="text-center">&gt;50</td>
+								<td class="text-center">&gt;25</td>
+								<td class="text-center">&gt;10</td>
+								<td class="text-center">&lt;10</td>
+								<td rowspan="2" class="align-middle">
+									<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[4]" @onchange="(e) => OnGreenstarValueChanged(4, e)" />
+								</td>
+								<td rowspan="2" class="text-center align-middle">
+									<div class="table-val-box">@GetGreenstarMark(4).ToString("N0")</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="text-center text-muted">Marks</td>
+								<td class="text-center">10</td>
+								<td class="text-center">8</td>
+								<td class="text-center">6</td>
+								<td class="text-center">4</td>
+								<td class="text-center">2</td>
+							</tr>
+							<!-- 6. Dealership tenure with GFL -->
+							<tr>
+								<td rowspan="2" class="text-center align-middle">6</td>
+								<td rowspan="2" class="align-middle">Dealership tenure with GFL</td>
+								<td rowspan="2" class="text-center align-middle text-muted">Loyalty to GFL</td>
+								<td rowspan="2" class="text-center align-middle">10</td>
+								<td class="text-center">Years</td>
+								<td class="text-center">&gt;10</td>
+								<td class="text-center">&gt;8</td>
+								<td class="text-center">&gt;6</td>
+								<td class="text-center">&gt;4</td>
+								<td class="text-center">&gt;1</td>
+								<td rowspan="2" class="align-middle">
+									<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[5]" @onchange="(e) => OnGreenstarValueChanged(5, e)" />
+								</td>
+								<td rowspan="2" class="text-center align-middle">
+									<div class="table-val-box">@GetGreenstarMark(5).ToString("N0")</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="text-center text-muted">Marks</td>
+								<td class="text-center">10</td>
+								<td class="text-center">8</td>
+								<td class="text-center">6</td>
+								<td class="text-center">4</td>
+								<td class="text-center">2</td>
+							</tr>
+							<!-- 7. Monthly Average Net Overdues -->
+							<tr>
+								<td rowspan="2" class="text-center align-middle">7</td>
+								<td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+								<td rowspan="2" class="text-center align-middle"></td>
+								<td rowspan="2" class="text-center align-middle">20</td>
+								<td class="text-center">Rs. Lakhs</td>
+								<td class="text-center">&lt;1</td>
+								<td class="text-center">&lt;5</td>
+								<td class="text-center">&lt;10</td>
+								<td class="text-center">&lt;20</td>
+								<td class="text-center">&lt;30</td>
+								<td rowspan="2" class="align-middle">
+									<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[6]" @onchange="(e) => OnGreenstarValueChanged(6, e)" />
+								</td>
+								<td rowspan="2" class="text-center align-middle">
+									<div class="table-val-box">@GetGreenstarMark(6).ToString("N0")</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="text-center text-muted">Marks</td>
+								<td class="text-center">20</td>
+								<td class="text-center">16</td>
+								<td class="text-center">12</td>
+								<td class="text-center">8</td>
+								<td class="text-center">4</td>
+							</tr>
+							<!-- 8. Value of dealer's property -->
+							<tr>
+								<td class="text-center align-middle">8</td>
+								<td class="align-middle">Value of dealer's property - Fixed Assets</td>
+								<td rowspan="3" class="text-center align-middle text-muted">Financial Soundness</td>
+								<td rowspan="3" class="text-center align-middle">10</td>
+								<td class="text-center">Rs. Lakhs</td>
+								<td></td>
+								<td></td>
+								<td></td>
+								<td></td>
+								<td></td>
+								<td class="align-middle">
+									<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[7]" @onchange="(e) => OnGreenstarValueChanged(7, e)" />
+								</td>
+								<td class="text-center align-middle text-muted">-</td>
+							</tr>
+							<!-- 9. Property Value as % -->
+							<tr>
+								<td rowspan="2" class="text-center align-middle">9</td>
+								<td rowspan="2" class="align-middle">Property Value as % of the Sales Turnover with GFL during last year (8 / (4+5) x 100)</td>
+								<td class="text-center">%</td>
+								<td class="text-center">&gt;50</td>
+								<td class="text-center">&gt;40</td>
+								<td class="text-center">&gt;30</td>
+								<td class="text-center">&gt;20</td>
+								<td class="text-center">&gt;10</td>
+								<td rowspan="2" class="align-middle">
+									<div class="table-val-box">@(_greenstarValueEntered[7] && _greenstarValueEntered[3] && _greenstarValueEntered[4] ? _greenstarValues[8].ToString("N2") : "0.00")</div>
+								</td>
+								<td rowspan="2" class="text-center align-middle">
+									<div class="table-val-box">@GetGreenstarMark(8).ToString("N0")</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="text-center text-muted">Marks</td>
+								<td class="text-center">10</td>
+								<td class="text-center">8</td>
+								<td class="text-center">6</td>
+								<td class="text-center">4</td>
+								<td class="text-center">2</td>
+							</tr>
+							<!-- 10. Available Security -->
+							<tr>
+								<td class="text-center align-middle">10</td>
+								<td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+								<td rowspan="3" class="text-center align-middle text-muted">Credit Security</td>
+								<td rowspan="3" class="text-center align-middle">10</td>
+								<td class="text-center">Rs. Lakhs</td>
+								<td></td>
+								<td></td>
+								<td></td>
+								<td></td>
+								<td></td>
+								<td class="align-middle">
+									<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[9]" @onchange="(e) => OnGreenstarValueChanged(9, e)" />
+								</td>
+								<td class="text-center align-middle text-muted">-</td>
+							</tr>
+							<!-- 11. Available Security as % -->
+							<tr>
+								<td rowspan="2" class="text-center align-middle">11</td>
+								<td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with GFL during last year (10 / (4+5) x 100)</td>
+								<td class="text-center">%</td>
+								<td class="text-center">&gt;10</td>
+								<td class="text-center">&gt;8</td>
+								<td class="text-center">&gt;6</td>
+								<td class="text-center">&gt;4</td>
+								<td class="text-center">&lt;4</td>
+								<td rowspan="2" class="align-middle">
+									<div class="table-val-box">@(_greenstarValueEntered[9] && _greenstarValueEntered[3] && _greenstarValueEntered[4] ? _greenstarValues[10].ToString("N2") : "0.00")</div>
+								</td>
+								<td rowspan="2" class="text-center align-middle">
+									<div class="table-val-box">@GetGreenstarMark(10).ToString("N0")</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="text-center text-muted">Marks</td>
+								<td class="text-center">10</td>
+								<td class="text-center">8</td>
+								<td class="text-center">6</td>
+								<td class="text-center">4</td>
+								<td class="text-center">2</td>
+							</tr>
+						</tbody>
+						<tfoot>
+							<tr>
+								<td colspan="11"><strong>Grand Total</strong></td>
+								<td class="text-center"><strong>@GreenstarTotalMark.ToString("N0") / 100</strong></td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			</div>
+		</div>
+
+		<!-- Greenstar Credit Limit Footer -->
+		<div class="credit-footer">
+			<div class="row align-items-center">
+				<div class="col-md-12">
+					<h4 class="mb-1 fw-bold" style="font-size: 14px;">
+						Greenstar — Recommended Credit Limit
+					</h4>
+					<p class="credit-desc mb-3">Score: @GreenstarTotalMark.ToString("N0")/100 (Grade @GetGradeFromScore(GreenstarScorePercent)). @* → Max @GreenstarCreditPercent% of previous year sales turnover with GFL (₹ @GreenstarSalesTurnover.ToString("N2") Lakhs). *@</p>
+				</div>
+				<div class="col-md-12">
+					<div class="row g-3">
+						<div class="col-3">
+							<div class="credit-box">
+								<div class="credit-box-label">Proposed Limit</div>
+								<div class="credit-box-val">₹ @GreenstarProposedLimit.ToString("N2")</div>
+							</div>
+						</div>
+						<div class="col-3">
+							<div class="credit-box">
+								<div class="credit-box-label">Additional Credit Limit</div>
+								<div class="mt-1">
+									<input type="number" class="form-control-custom w-100" step="0.01"
+										   @bind="_proposal.GreenstarAdditionalCreditLimit" />
+								</div>
+							</div>
+						</div>
+						<div class="col-3">
+							<div class="credit-box">
+								<div class="credit-box-label">Credit Multiplier</div>
+								<div class="credit-box-val">@GreenstarCreditMultiplier.ToString("N1")x</div>
+							</div>
+						</div>
+						<div class="col-3">
+							<div class="credit-box">
+								<div class="credit-box-label">Total Credit Limit</div>
+								<div class="credit-box-val">₹ @GreenstarTotalCreditLimit.ToString("N2")</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+</div>
+
+@code {
+	[SupplyParameterFromQuery(Name = "dealerId")]
+	public int? DealerId { get; set; }
+	public string? SelectedCompany { get; set; }
+
+	private DealerReg _dealer = new();
+	private List<DealerAssetBank> _bankAssets = new();
+	private List<DealerAssetLand> _landAssets = new();
+	private List<DealerAssetBuilding> _buildingAssets = new();
+	private List<DealerLoanLiabilities> _loanLiabilities = new();
+	private List<FinancialYear> _financialYears = new();
+	private List<Category> _categories = new();
+	private List<Unit> _units = new();
+	private List<Product> _products = new();
+	private List<SalesPlanningInDealerRegistration> _salesPlanData = new();
+
+	private DealerCreditLimitProposal _proposal = new();
+	private List<DealerCreditLimitSalesPerformance> _allSalesPerfData = new();
+	private List<DealerCreditLimitSalesPerformance> _currentSalesPerfRows = new();
+
+	private int _selectedCategoryId;
+	private string _selectedUnitName = "MT";
+	private bool _isSaving;
+	private string? _message;
+	private bool _isError;
+	private double[] _spicValues = new double[10];
+	private double[] _greenstarValues = new double[11];
+	private bool[] _spicValueEntered = new bool[10];
+	private bool[] _greenstarValueEntered = new bool[11];
+
+	// Asset totals
+	private decimal BankingTotal => _bankAssets.Sum(b => b.Value);
+	private decimal LandTotal => _landAssets.Sum(l => l.PropertyValue);
+	private decimal BuildingTotal => _buildingAssets.Sum(b => b.PropertyValue);
+	private decimal TotalPropertyValue => BankingTotal + LandTotal + BuildingTotal + _dealer.AssetValue;
+	private decimal LoansTotal => _loanLiabilities.Sum(l => l.LoanValue);
+
+	// Sales Plan totals (from previous SalesPlanning page)
+	private decimal SalesPlanTotalQty => _salesPlanData
+		.Where(s => s.CategoryId == _selectedCategoryId)
+		.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty +
+			r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
+
+	private decimal SalesPlanTotalAmount => _salesPlanData
+		.Where(s => s.CategoryId == _selectedCategoryId)
+		.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount +
+			r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
+
+	// Credit limit calculations — SPIC
+	private double SpicTotalMark => Enumerable.Range(0, 10).Where(i => _valuationParams[i].Weightage > 0).Sum(i => GetSpicMark(i));
+	private double SpicScorePercent => SpicTotalMark; // total is out of 100
+	private double SpicCreditPercent => GetCreditPercentFromScore(SpicScorePercent);
+	private decimal SpicSalesTurnover => (decimal)_spicValues[3]; // Urea Sales Turnover with SPIC (Rs. Lakhs)
+	private decimal SpicProposedLimit => SpicSalesTurnover * (decimal)(SpicCreditPercent / 100.0);
+	private decimal SpicTotalCreditLimit => SpicProposedLimit + _proposal.AdditionalCreditLimit;
+	private double SpicCreditMultiplier => SpicSalesTurnover > 0 ? (double)(SpicTotalCreditLimit / SpicSalesTurnover) : 0;
+
+	// Credit limit calculations — Greenstar
+	private double GreenstarTotalMark => Enumerable.Range(0, 11).Where(i => _greenstarValuationParams[i].Weightage > 0).Sum(i => GetGreenstarMark(i));
+	private double GreenstarScorePercent => GreenstarTotalMark; // total is out of 100
+	private double GreenstarCreditPercent => GetCreditPercentFromScore(GreenstarScorePercent);
+	private decimal GreenstarSalesTurnover => (decimal)(_greenstarValues[3] + _greenstarValues[4]); // Fertilizer + SP Turnover with GFL (Rs. Lakhs)
+	private decimal GreenstarProposedLimit => GreenstarSalesTurnover * (decimal)(GreenstarCreditPercent / 100.0);
+	private decimal GreenstarTotalCreditLimit => GreenstarProposedLimit + _proposal.GreenstarAdditionalCreditLimit;
+	private double GreenstarCreditMultiplier => GreenstarSalesTurnover > 0 ? (double)(GreenstarTotalCreditLimit / GreenstarSalesTurnover) : 0;
+
+	// ANNEX II: Norms for Credit Exposure / Limit to the Dealers
+	private static double GetCreditPercentFromScore(double scorePercent) => scorePercent switch
+	{
+		>= 75 => 25,
+		>= 60 => 20,
+		>= 45 => 15,
+		>= 30 => 10,
+		_ => 0 // Less than 30% — NIL (Cash / DD terms Only)
+	};
+
+	// Valuation parameters based on scoring norms
+	private static readonly ValuationParam[] _valuationParams =
+	[
+		new("Total Fertilizer Sales Volume during last year", 10, "MT", false),
+		new("Fertilizer Sales Volume with SPIC during last year", 10, "MT", false),
+		new("Total Fertilizer Sales Turnover during last year", 10, "Rs. Lakhs", false),
+		new("Fertilizer Sales Turnover with SPIC during last year", 20, "Rs. Lakhs", false),
+		new("Dealership tenure with SPIC", 10, "Years", false),
+		new("Monthly Average Net Overdues during last year", 20, "Rs. Lakhs", false),
+		new("Value of dealer's property - Fixed Assets", 0, "Rs. Lakhs", false),
+		new("Property Value as % of Sales Turnover with SPIC (7/4 x 100)", 10, "%", true),
+		new("Available Security (SD / FD / BG / Collateral)", 0, "Rs. Lakhs", false),
+		new("Available Security as % of Sales Turnover with SPIC (9/4 x 100)", 10, "%", true),
+	];
+
+	private static readonly ValuationParam[] _greenstarValuationParams =
+	[
+		new("Total Fertilizer Sales Volume during last year", 10, "MT", false),
+		new("Fertilizer Sales Volume with GFL during last year", 10, "MT", false),
+		new("Total Fertilizer Sales Turnover during last year", 10, "Rs. Lakhs", false),
+		new("Fertilizer Sales Turnover with GFL during last year", 10, "Rs. Lakhs", false),
+		new("SP Turnover during last year", 10, "Rs. Lakhs", false),
+		new("Dealership tenure with GFL", 10, "Years", false),
+		new("Monthly Average Net Overdues during last year", 20, "Rs. Lakhs", false),
+		new("Value of dealer's property - Fixed Assets", 0, "Rs. Lakhs", false),
+		new("Property Value as % of Sales Turnover with GFL (8/(4+5)x100)", 10, "%", true),
+		new("Available Security (SD / FD / BG / Collateral)", 0, "Rs. Lakhs", false),
+		new("Available Security as % of Sales Turnover with GFL (10/(4+5)x100)", 10, "%", true),
+	];
+
+	protected override async Task OnInitializedAsync()
+	{
+		if (Nav.Uri.Contains("company=SPIC", StringComparison.OrdinalIgnoreCase))
+		{
+			SelectedCompany = "SPIC";
+		}
+		else if (Nav.Uri.Contains("company=GreenStar", StringComparison.OrdinalIgnoreCase))
+		{
+			SelectedCompany = "GreenStar";
+		}
+		// Load all master data in parallel
+		var fyTask = SafeGetAsync<List<FinancialYear>>("api/FinancialYear");
+		var catTask = SafeGetAsync<List<Category>>("api/Category");
+		var unitTask = SafeGetAsync<List<Unit>>("api/Unit");
+		var prodTask = SafeGetAsync<List<Product>>("api/Product");
+
+		if (DealerId.HasValue && DealerId.Value > 0)
+		{
+			// Load dealer-specific data in parallel with master data
+			var dealerTask = SafeGetAsync<DealerReg>($"api/DealerRegistration/{DealerId}");
+			var bankTask = SafeGetAsync<List<DealerAssetBank>>("api/DealerAssetBank/all");
+			var landTask = SafeGetAsync<List<DealerAssetLand>>("api/DealerAssetLand/all");
+			var buildingTask = SafeGetAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all");
+			var loanTask = SafeGetAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities/all");
+			var salesPlanTask = SafeGetAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all");
+			var proposalTask = SafeGetAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all");
+
+			await Task.WhenAll(fyTask, catTask, unitTask, prodTask,
+				dealerTask, bankTask, landTask, buildingTask, loanTask, salesPlanTask, proposalTask);
+
+			_financialYears = fyTask.Result ?? new();
+			_categories = catTask.Result ?? new();
+			_units = unitTask.Result ?? new();
+			_products = prodTask.Result ?? new();
+
+			var dealerId = DealerId!.Value;
+			_dealer = dealerTask.Result ?? new();
+			_bankAssets = (bankTask.Result ?? new()).Where(a => a.DealerId == dealerId).ToList();
+			_landAssets = (landTask.Result ?? new()).Where(a => a.DealerId == dealerId).ToList();
+			_buildingAssets = (buildingTask.Result ?? new()).Where(a => a.DealerId == dealerId).ToList();
+			_loanLiabilities = (loanTask.Result ?? new()).Where(a => a.DealerId == dealerId).ToList();
+			_salesPlanData = (salesPlanTask.Result ?? new()).Where(s => s.DealerId == dealerId).ToList();
+
+			var proposals = proposalTask.Result ?? new();
+			var existing = proposals.FirstOrDefault(p => p.DealerId == dealerId);
+			if (existing != null)
+				_proposal = existing;
+
+			// LoadSalesPerformance depends on _proposal.Id
+			if (_proposal.Id > 0)
+			{
+				try
+				{
+					var allPerf = await Http.GetFromJsonAsync<List<DealerCreditLimitSalesPerformance>>("api/DealerCreditLimitSalesPerformance/all") ?? new();
+					_allSalesPerfData = allPerf.Where(s => s.CreditLimitId == _proposal.Id).ToList();
+				}
+				catch { }
+			}
+
+			InitValuesFromData();
+		}
+		else
+		{
+			await Task.WhenAll(fyTask, catTask, unitTask, prodTask);
+
+			_financialYears = fyTask.Result ?? new();
+			_categories = catTask.Result ?? new();
+			_units = unitTask.Result ?? new();
+			_products = prodTask.Result ?? new();
+		}
+
+		if (_categories.Count > 0)
+		{
+			_selectedCategoryId = _categories.First().Id;
+			UpdateSelectedUnit();
+		}
+
+		BuildSalesPerfRows();
+	}
+
+	private async Task<T?> SafeGetAsync<T>(string url)
+	{
+		try { return await Http.GetFromJsonAsync<T>(url); }
+		catch { return default; }
+	}
+
+	private void InitValuesFromData()
+	{
+		// All values start at 0 — marks show 0 until user enters a value
+		RecalculateSpicPercentages();
+		RecalculateGreenstarPercentages();
+	}
+
+	private void RecalculateSpicPercentages()
+	{
+		if (_spicValues[3] > 0)
+		{
+			_spicValues[7] = (_spicValues[6] / _spicValues[3]) * 100;
+			_spicValues[9] = (_spicValues[8] / _spicValues[3]) * 100;
+		}
+		else
+		{
+			_spicValues[7] = 0;
+			_spicValues[9] = 0;
+		}
+	}
+
+	private void RecalculateGreenstarPercentages()
+	{
+		var denominator = _greenstarValues[3] + _greenstarValues[4];
+		if (denominator > 0)
+		{
+			_greenstarValues[8] = (_greenstarValues[7] / denominator) * 100;
+			_greenstarValues[10] = (_greenstarValues[9] / denominator) * 100;
+		}
+		else
+		{
+			_greenstarValues[8] = 0;
+			_greenstarValues[10] = 0;
+		}
+	}
+
+	// --- Category Tab ---
+	private void SelectCategory(int categoryId)
+	{
+		_selectedCategoryId = categoryId;
+		UpdateSelectedUnit();
+		BuildSalesPerfRows();
+	}
+
+	private void UpdateSelectedUnit()
+	{
+		var cat = _categories.FirstOrDefault(c => c.Id == _selectedCategoryId);
+		if (cat != null)
+			_selectedUnitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+	}
+
+	private void BuildSalesPerfRows()
+	{
+		var categoryProducts = _products.Where(p => p.CategoryId == _selectedCategoryId).ToList();
+		_currentSalesPerfRows = new();
+
+		foreach (var product in categoryProducts)
+		{
+			var existing = _allSalesPerfData.FirstOrDefault(s => s.ProductId == product.Id && s.CategoryId == _selectedCategoryId);
+			if (existing != null)
+			{
+				_currentSalesPerfRows.Add(existing);
+			}
+			else
+			{
+				var newRow = new DealerCreditLimitSalesPerformance
+				{
+					CreditLimitId = _proposal.Id,
+					CategoryId = _selectedCategoryId,
+					ProductId = product.Id
+				};
+				_currentSalesPerfRows.Add(newRow);
+				_allSalesPerfData.Add(newRow);
+			}
+		}
+	}
+
+	// --- FY Selection ---
+	private int GetSelectedFY(int fyIdx) => fyIdx switch
+	{
+		0 => _proposal.FY1,
+		1 => _proposal.FY2,
+		2 => _proposal.FY3,
+		_ => 0
+	};
+
+	private void SetSelectedFY(int fyIdx, ChangeEventArgs e)
+	{
+		if (!int.TryParse(e.Value?.ToString(), out var val)) return;
+		switch (fyIdx)
+		{
+			case 0: _proposal.FY1 = val; break;
+			case 1: _proposal.FY2 = val; break;
+			case 2: _proposal.FY3 = val; break;
+		}
+	}
+
+	private string GetFYName(int fyIdx)
+	{
+		var fyId = GetSelectedFY(fyIdx);
+		return _financialYears.FirstOrDefault(f => f.Id == fyId)?.Name ?? $"FY {fyIdx + 1}";
+	}
+
+	// --- Sales Performance Helpers ---
+	private static decimal GetPerfQty(DealerCreditLimitSalesPerformance row, int fyIdx) => fyIdx switch
+	{
+		0 => row.FY1Qty,
+		1 => row.FY2Qty,
+		2 => row.FY3Qty,
+		_ => 0
+	};
+
+	private static decimal GetPerfAmount(DealerCreditLimitSalesPerformance row, int fyIdx) => fyIdx switch
+	{
+		0 => row.FY1Amount,
+		1 => row.FY2Amount,
+		2 => row.FY3Amount,
+		_ => 0
+	};
+
+	private static void SetPerfQty(DealerCreditLimitSalesPerformance row, int fyIdx, ChangeEventArgs e)
+	{
+		if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
+		switch (fyIdx)
+		{
+			case 0: row.FY1Qty = val; break;
+			case 1: row.FY2Qty = val; break;
+			case 2: row.FY3Qty = val; break;
+		}
+	}
+
+	private static void SetPerfAmount(DealerCreditLimitSalesPerformance row, int fyIdx, ChangeEventArgs e)
+	{
+		if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
+		switch (fyIdx)
+		{
+			case 0: row.FY1Amount = val; break;
+			case 1: row.FY2Amount = val; break;
+			case 2: row.FY3Amount = val; break;
+		}
+	}
+
+	private decimal GetFYTotalQty(int fyIdx) => _allSalesPerfData.Sum(r => fyIdx switch
+	{
+		0 => r.FY1Qty,
+		1 => r.FY2Qty,
+		2 => r.FY3Qty,
+		_ => 0
+	});
+
+	private decimal GetFYTotalAmount(int fyIdx) => _allSalesPerfData.Sum(r => fyIdx switch
+	{
+		0 => r.FY1Amount,
+		1 => r.FY2Amount,
+		2 => r.FY3Amount,
+		_ => 0
+	});
+
+	// --- Valuation ---
+	private void OnSpicValueChanged(int idx, ChangeEventArgs e)
+	{
+		if (double.TryParse(e.Value?.ToString(), out var val))
+		{
+			_spicValues[idx] = val;
+			_spicValueEntered[idx] = true;
+		}
+		RecalculateSpicPercentages();
+	}
+
+	private void OnGreenstarValueChanged(int idx, ChangeEventArgs e)
+	{
+		if (double.TryParse(e.Value?.ToString(), out var val))
+		{
+			_greenstarValues[idx] = val;
+			_greenstarValueEntered[idx] = true;
+		}
+		RecalculateGreenstarPercentages();
+	}
+
+	private static double CalculateMark(int idx, double v) => idx switch
+	{
+		0 => v > 3000 ? 10 : v > 1500 ? 8 : v > 1000 ? 6 : v > 500 ? 4 : 2,
+		1 => v > 500 ? 10 : v > 300 ? 8 : v > 200 ? 6 : v > 100 ? 4 : 2,
+		2 => v > 200 ? 10 : v > 100 ? 8 : v > 60 ? 6 : v > 30 ? 4 : 2,
+		3 => v > 30 ? 20 : v > 20 ? 16 : v > 15 ? 12 : v > 10 ? 8 : 4,
+		4 => v > 10 ? 10 : v > 8 ? 8 : v > 6 ? 6 : v > 4 ? 4 : 2,
+		5 => v < 1 ? 20 : v < 5 ? 16 : v < 10 ? 12 : v < 20 ? 8 : 4,
+		6 => 0,
+		7 => v > 50 ? 10 : v > 40 ? 8 : v > 30 ? 6 : v > 20 ? 4 : v > 10 ? 2 : 0,
+		8 => 0,
+		9 => v > 10 ? 10 : v > 8 ? 8 : v > 6 ? 6 : v > 4 ? 4 : 2,
+		_ => 0
+	};
+
+	private double GetSpicMark(int idx)
+	{
+		if (idx == 7 || idx == 9)
+		{
+			bool depEntered = idx == 7
+				? _spicValueEntered[6] && _spicValueEntered[3]
+				: _spicValueEntered[8] && _spicValueEntered[3];
+			return !depEntered ? 0 : CalculateMark(idx, _spicValues[idx]);
+		}
+		return !_spicValueEntered[idx] ? 0 : CalculateMark(idx, _spicValues[idx]);
+	}
+
+	private static double CalculateGreenstarMark(int idx, double v) => idx switch
+	{
+		0 => v > 3000 ? 10 : v > 1500 ? 8 : v > 1000 ? 6 : v > 500 ? 4 : 2,
+		1 => v > 500 ? 10 : v > 350 ? 8 : v > 250 ? 6 : v > 150 ? 4 : 2,
+		2 => v > 700 ? 10 : v > 350 ? 8 : v > 250 ? 6 : v > 125 ? 4 : 2,
+		3 => v > 125 ? 10 : v > 80 ? 8 : v > 60 ? 6 : v > 35 ? 4 : 2,
+		4 => v > 100 ? 10 : v > 50 ? 8 : v > 25 ? 6 : v > 10 ? 4 : 2,
+		5 => v > 10 ? 10 : v > 8 ? 8 : v > 6 ? 6 : v > 4 ? 4 : 2,
+		6 => v < 1 ? 20 : v < 5 ? 16 : v < 10 ? 12 : v < 20 ? 8 : 4,
+		7 => 0,
+		8 => v > 50 ? 10 : v > 40 ? 8 : v > 30 ? 6 : v > 20 ? 4 : v > 10 ? 2 : 0,
+		9 => 0,
+		10 => v > 10 ? 10 : v > 8 ? 8 : v > 6 ? 6 : v > 4 ? 4 : 2,
+		_ => 0
+	};
+
+	private double GetGreenstarMark(int idx)
+	{
+		if (idx == 8 || idx == 10)
+		{
+			bool depEntered = idx == 8
+				? _greenstarValueEntered[7] && _greenstarValueEntered[3] && _greenstarValueEntered[4]
+				: _greenstarValueEntered[9] && _greenstarValueEntered[3] && _greenstarValueEntered[4];
+			return !depEntered ? 0 : CalculateGreenstarMark(idx, _greenstarValues[idx]);
+		}
+		return !_greenstarValueEntered[idx] ? 0 : CalculateGreenstarMark(idx, _greenstarValues[idx]);
+	}
+
+	// --- Save & Navigate ---
+	private async Task HandleNext()
+	{
+		if (!DealerId.HasValue || DealerId.Value <= 0)
+		{
+			ShowMessage("Dealer ID is required.", true);
+			return;
+		}
+
+		_isSaving = true;
+		try
+		{
+			_proposal.DealerId = DealerId.Value;
+			_proposal.Q1Mark = GetSpicMark(0);
+			_proposal.Q2Mark = GetSpicMark(1);
+			_proposal.Q3Mark = GetSpicMark(2);
+			_proposal.Q4Mark = GetSpicMark(3);
+			_proposal.Q5Mark = GetSpicMark(4);
+			_proposal.Q6Mark = GetSpicMark(5);
+			_proposal.Q7Mark = GetSpicMark(6);
+			_proposal.Q8Mark = GetSpicMark(7);
+			_proposal.Q9Mark = GetSpicMark(8);
+			_proposal.Q10Mark = GetSpicMark(9);
+			_proposal.Q11Mark = SpicTotalMark;
+			_proposal.GQ1Mark = GetGreenstarMark(0);
+			_proposal.GQ2Mark = GetGreenstarMark(1);
+			_proposal.GQ3Mark = GetGreenstarMark(2);
+			_proposal.GQ4Mark = GetGreenstarMark(3);
+			_proposal.GQ5Mark = GetGreenstarMark(4);
+			_proposal.GQ6Mark = GetGreenstarMark(5);
+			_proposal.GQ7Mark = GetGreenstarMark(6);
+			_proposal.GQ8Mark = GetGreenstarMark(7);
+			_proposal.GQ9Mark = GetGreenstarMark(8);
+			_proposal.GQ10Mark = GetGreenstarMark(9);
+			_proposal.GQ11Mark = GetGreenstarMark(10);
+			_proposal.GQ12Mark = GreenstarTotalMark;
+
+			if (_proposal.Id > 0)
+			{
+				var response = await Http.PutAsJsonAsync($"api/DealerCreditLimitProposal/{_proposal.Id}", _proposal);
+				response.EnsureSuccessStatusCode();
+			}
+			else
+			{
+				var response = await Http.PostAsJsonAsync("api/DealerCreditLimitProposal", _proposal);
+				if (response.IsSuccessStatusCode)
+				{
+					var result = await response.Content.ReadFromJsonAsync<CreateResponse<DealerCreditLimitProposal>>();
+					if (result?.Data != null)
+						_proposal.Id = result.Data.Id;
+				}
+			}
+
+			foreach (var row in _allSalesPerfData)
+			{
+				row.CreditLimitId = _proposal.Id;
+				var hasData = row.FY1Qty != 0 || row.FY1Amount != 0 || row.FY2Qty != 0 || row.FY2Amount != 0 || row.FY3Qty != 0 || row.FY3Amount != 0;
+				if (row.Id == 0 && !hasData) continue;
+
+				if (row.Id > 0)
+				{
+					await Http.PutAsJsonAsync($"api/DealerCreditLimitSalesPerformance/{row.Id}", row);
+				}
+				else
+				{
+					var resp = await Http.PostAsJsonAsync("api/DealerCreditLimitSalesPerformance", row);
+					if (resp.IsSuccessStatusCode)
+					{
+						var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerCreditLimitSalesPerformance>>();
+						if (result?.Data != null)
+							row.Id = result.Data.Id;
+					}
+				}
+			}
+
+			FormStepData.MarkStepError(11, false);
+			Nav.NavigateTo($"/Enclosures?dealerId={DealerId}");
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to save: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private void HandleSkip()
+	{
+		Nav.NavigateTo($"/Enclosures?dealerId={DealerId}");
+	}
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	private static string GetGradeFromScore(double scorePercent) => scorePercent switch
+	{
+		>= 75 => "I",
+		>= 60 => "II",
+		>= 45 => "III",
+		>= 30 => "IV",
+		_ => "V (Cash/DD Only)"
+	};
+
+	private record ValuationParam(string Name, int Weightage, string Unit, bool IsCalculated);
+
+	private class CreateResponse<T>
+	{
+		public string? Message { get; set; }
+		public T? Data { get; set; }
+	}
+}

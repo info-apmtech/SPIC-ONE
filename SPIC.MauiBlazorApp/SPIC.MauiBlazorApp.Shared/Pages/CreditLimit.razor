@@ -5,6 +5,67 @@
 @using SPIC.MauiBlazorApp.Shared.FormFlow
 @inject HttpClient Http
 @inject NavigationManager Nav
+<style>
+	.table-wrapper {
+		width: 100%;
+		max-width: 100%;
+		overflow: hidden;
+	}
+
+	.table-responsive {
+		max-height: 420px; /* vertical inline scroller */
+		overflow: auto; /* both x and y scroll */
+		width: 100%;
+		border: 1px solid #E5E7EB;
+		border-radius: 12px;
+	}
+
+	/* Prevent table from squeezing too much */
+	.spic-table {
+		width: 100%;
+		min-width: 900px; /* horizontal scroll for wide tables */
+		border-collapse: separate;
+		border-spacing: 0;
+	}
+
+		/* Sticky header */
+		.spic-table thead th {
+			position: sticky;
+			top: 0;
+			z-index: 5;
+			background: #F9FAFB;
+		}
+
+		/* For tables with 2 header rows */
+		.spic-table thead tr:nth-child(2) th {
+			top: 42px; /* adjust if your first header row height differs */
+			z-index: 6;
+		}
+
+		/* Keep footer visible style clean, not sticky */
+		.spic-table tfoot td {
+			background: #F9FAFB;
+		}
+
+	/* Better scrollbar behavior on mobile */
+	.table-responsive::-webkit-scrollbar {
+		height: 8px;
+		width: 8px;
+	}
+
+	.table-responsive::-webkit-scrollbar-thumb {
+		background: #CBD5E1;
+		border-radius: 999px;
+	}
+	.spic-table tfoot td {
+	background: #F9FAFB;
+	border-top: 2px solid #E5E7EB;
+	font-weight: 700;
+	position: sticky;
+	bottom: 0;
+	z-index: 4;
+}
+</style>
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -226,6 +287,24 @@
 							</tr>
 						}
 					</tbody>
+					<tfoot>
+						<tr>
+							<td class="fw-bold text-end">Total</td>
+
+							@for (int fi = 0; fi < 3; fi++)
+							{
+								var fyIdx = fi;
+
+								<td class="border-start fw-bold text-center">
+									@GetFYTotalQtyByCategory(fyIdx).ToString("N2")
+								</td>
+
+								<td class="fw-bold text-center">
+									@GetFYTotalAmountByCategory(fyIdx).ToString("N2")
+								</td>
+							}
+						</tr>
+					</tfoot>
 				</table>
 			</div>
 		</div>
@@ -602,7 +681,7 @@
 			</div>
 		</div>
 	}
-	@if (_dealer.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
+	@* @if (_dealer.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
 	{
 		<!-- Details of Securities Greenstar -->
 		<div class="form-card">
@@ -935,7 +1014,7 @@
 					<h4 class="mb-1 fw-bold" style="font-size: 14px;">
 						Greenstar — Recommended Credit Limit
 					</h4>
-					<p class="credit-desc mb-3">Score: @GreenstarTotalMark.ToString("N0")/100 (Grade @GetGradeFromScore(GreenstarScorePercent)). @* → Max @GreenstarCreditPercent% of previous year sales turnover with GFL (₹ @GreenstarSalesTurnover.ToString("N2") Lakhs). *@</p>
+					<p class="credit-desc mb-3">Score: @GreenstarTotalMark.ToString("N0")/100 (Grade @GetGradeFromScore(GreenstarScorePercent)).</p>
 				</div>
 				<div class="col-md-12">
 					<div class="row g-3">
@@ -971,7 +1050,8 @@
 			</div>
 		</div>
 	}
-	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+ *@	
+<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
 @code {
@@ -1476,7 +1556,7 @@
 			}
 
 			FormStepData.MarkStepError(10, false);
-			Nav.NavigateTo($"/Enclosures?dealerId={DealerId}");
+			Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}");
 		}
 		catch (Exception ex)
 		{
@@ -1490,7 +1570,7 @@
 
 	private void HandleSkip()
 	{
-		Nav.NavigateTo($"/Enclosures?dealerId={DealerId}");
+		Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}");
 	}
 
 	private void ShowMessage(string message, bool isError)
@@ -1515,4 +1595,19 @@
 		public string? Message { get; set; }
 		public T? Data { get; set; }
 	}
+	private decimal GetFYTotalQtyByCategory(int fyIdx) => _currentSalesPerfRows.Sum(r => fyIdx switch
+{
+	0 => r.FY1Qty,
+	1 => r.FY2Qty,
+	2 => r.FY3Qty,
+	_ => 0
+});
+
+	private decimal GetFYTotalAmountByCategory(int fyIdx) => _currentSalesPerfRows.Sum(r => fyIdx switch
+	{
+		0 => r.FY1Amount,
+		1 => r.FY2Amount,
+		2 => r.FY3Amount,
+		_ => 0
+	});
 }

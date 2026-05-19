@@ -50,12 +50,13 @@
 			}
 		</div>
 
-		<!-- Table with Scroll -->
+		<!-- Table with X and Y Scroll -->
 		<div class="table-wrapper">
 			<div class="table-responsive">
 				<table class="spic-table">
 					<thead>
 						<tr>
+							<!-- FIRST REPEAT -->
 							<th>Product Name</th>
 							<th>Own Retail Qty (@_selectedUnitName)</th>
 							<th>TO (₹)in Lakhs</th>
@@ -64,23 +65,29 @@
 								<th>Sale to Dealer Qty (@_selectedUnitName)</th>
 								<th>TO (₹)in Lakhs</th>
 							}
-							<th>Total Qty (@_selectedUnitName)</th>
-							<th>Total TO (₹)in Lakhs</th>
+
+							<!-- SECOND REPEAT -->
+							<th>Product Name</th>
+							<th>Own Retail Qty (@_selectedUnitName)</th>
+							<th>TO (₹)in Lakhs</th>
+							@if (_hasWholesaleLicense)
+							{
+								<th>Sale to Dealer Qty (@_selectedUnitName)</th>
+								<th>TO (₹)in Lakhs</th>
+							}
+
+							<!-- TOTALS COMBINED -->
+							<th>Total</th>
 						</tr>
 					</thead>
 					<tbody>
 						@foreach (var row in _currentRows)
 						{
 							var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
-							var initials = GetInitials(product?.Name ?? "");
 							<tr>
+								<!-- FIRST REPEAT -->
 								<td>
-									<div class="product-cell">
-										<div class="product-icon">@initials</div>
-										<div>
-											<div class="product-title">@(product?.Name ?? "Unknown")</div>
-										</div>
-									</div>
+									<div class="product-title">@(product?.Name ?? "Unknown")</div>
 								</td>
 								<td>
 									<input class="table-input" type="number" step="0.01"
@@ -105,13 +112,45 @@
 											   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerAmount, (r, v) => r.SaleToDealerAmount = v)" />
 									</td>
 								}
-								<td class="text-value">@((row.OwnRetailsSaleQty + row.SaleToDealerQty).ToString("N2"))</td>
-								<td class="text-value">@((row.OwnRetailsSaleAmount + row.SaleToDealerAmount).ToString("N2"))</td>
+
+								<!-- SECOND REPEAT -->
+								<td>
+									<div class="product-title">@(product?.Name ?? "Unknown")</div>
+								</td>
+								<td>
+									<input class="table-input" type="number" step="0.01"
+										   value="@row.OwnRetailsSaleQty"
+										   @onchange="(e) => UpdateField(row, e, r => r.OwnRetailsSaleQty, (r, v) => r.OwnRetailsSaleQty = v)" />
+								</td>
+								<td>
+									<input class="table-input" type="number" step="0.01"
+										   value="@row.OwnRetailsSaleAmount"
+										   @onchange="(e) => UpdateField(row, e, r => r.OwnRetailsSaleAmount, (r, v) => r.OwnRetailsSaleAmount = v)" />
+								</td>
+								@if (_hasWholesaleLicense)
+								{
+									<td>
+										<input class="table-input" type="number" step="0.01"
+											   value="@row.SaleToDealerQty"
+											   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerQty, (r, v) => r.SaleToDealerQty = v)" />
+									</td>
+									<td>
+										<input class="table-input" type="number" step="0.01"
+											   value="@row.SaleToDealerAmount"
+											   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerAmount, (r, v) => r.SaleToDealerAmount = v)" />
+									</td>
+								}
+
+								<!-- TOTALS COMBINED -->
+								<td class="text-value" style="white-space: nowrap;">
+									@((row.OwnRetailsSaleQty + row.SaleToDealerQty).ToString("N2")) / @((row.OwnRetailsSaleAmount + row.SaleToDealerAmount).ToString("N2"))
+								</td>
 							</tr>
 						}
 					</tbody>
 					<tfoot>
 						<tr>
+							<!-- FIRST REPEAT -->
 							<td>Grand Total</td>
 							<td>@_currentRows.Sum(r => r.OwnRetailsSaleQty).ToString("N2")</td>
 							<td>@_currentRows.Sum(r => r.OwnRetailsSaleAmount).ToString("N2")</td>
@@ -120,8 +159,21 @@
 								<td>@_currentRows.Sum(r => r.SaleToDealerQty).ToString("N2")</td>
 								<td>@_currentRows.Sum(r => r.SaleToDealerAmount).ToString("N2")</td>
 							}
-							<td>@_currentRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty).ToString("N2")</td>
-							<td>@_currentRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount).ToString("N2")</td>
+
+							<!-- SECOND REPEAT -->
+							<td>Grand Total</td>
+							<td>@_currentRows.Sum(r => r.OwnRetailsSaleQty).ToString("N2")</td>
+							<td>@_currentRows.Sum(r => r.OwnRetailsSaleAmount).ToString("N2")</td>
+							@if (_hasWholesaleLicense)
+							{
+								<td>@_currentRows.Sum(r => r.SaleToDealerQty).ToString("N2")</td>
+								<td>@_currentRows.Sum(r => r.SaleToDealerAmount).ToString("N2")</td>
+							}
+
+							<!-- TOTALS COMBINED -->
+							<td>
+								@_currentRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty).ToString("N2") / @_currentRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount).ToString("N2")
+							</td>
 						</tr>
 					</tfoot>
 				</table>
@@ -199,14 +251,16 @@
 <style>
 	/* Scrollable Table Container */
 	.table-responsive {
-		max-height: 450px; /* Adjust height to control scrolling */
+		max-height: 450px; 
 		overflow-y: auto;
+		overflow-x: auto; 
 		border-radius: 8px;
 		border: 1px solid #e5e7eb;
 	}
 
 	.spic-table {
 		width: 100%;
+		min-width: 1500px; /* Forces horizontal scrolling for the double columns */
 		border-collapse: separate;
 		border-spacing: 0;
 		background: #fff;
@@ -223,13 +277,14 @@
 		font-weight: 600;
 		color: #64748b;
 		text-align: left;
+		white-space: nowrap; 
 		border-bottom: 1px solid #e5e7eb;
-		box-shadow: 0 1px 0 #e5e7eb; /* Helps hide scrolling content behind header */
+		box-shadow: 0 1px 0 #e5e7eb; 
 	}
 
 	/* Compact Spacing for Body Rows */
 	.spic-table tbody td {
-		padding: 8px 16px; /* Reduced vertical padding */
+		padding: 8px 16px;
 		vertical-align: middle;
 		border-bottom: 1px solid #f1f5f9;
 	}
@@ -242,12 +297,13 @@
 		font-weight: 700;
 		padding: 12px 16px;
 		color: #334155;
+		white-space: nowrap;
 		border-top: 1px solid #e5e7eb;
 		z-index: 2;
-		box-shadow: 0 -1px 0 #e5e7eb; /* Shadow pointing up */
+		box-shadow: 0 -1px 0 #e5e7eb; 
 	}
 
-	/* Compact Inputs styling (Matches your image) */
+	/* Compact Inputs styling */
 	.table-input {
 		width: 100%;
 		min-width: 110px;
@@ -268,31 +324,11 @@
 		box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
 	}
 
-	/* Product Cell Alignment */
-	.product-cell {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-	}
-
-	.product-icon {
-		width: 36px;
-		height: 36px;
-		border-radius: 50%;
-		background-color: #e6fcf0;
-		color: #10b981;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-weight: 700;
-		font-size: 13px;
-		flex-shrink: 0;
-	}
-
 	.product-title {
 		font-size: 14px;
 		font-weight: 600;
 		color: #334155;
+		white-space: nowrap; 
 	}
 
 	.text-value {
@@ -302,8 +338,8 @@
 
 	/* Custom Scrollbar for Webkit */
 	.table-responsive::-webkit-scrollbar {
-		width: 6px;
-		height: 6px;
+		width: 8px;
+		height: 8px; 
 	}
 	.table-responsive::-webkit-scrollbar-track {
 		background: #f1f5f9; 
@@ -521,15 +557,6 @@
 		{
 			_isSaving = false;
 		}
-	}
-
-	private string GetInitials(string name)
-	{
-		if (string.IsNullOrWhiteSpace(name)) return "?";
-		var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-		return parts.Length >= 2
-			? $"{parts[0][0]}{parts[1][0]}".ToUpper()
-			: name[..Math.Min(2, name.Length)].ToUpper();
 	}
 
 	private void ShowMessage(string message, bool isError)

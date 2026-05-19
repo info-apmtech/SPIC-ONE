@@ -1293,7 +1293,6 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("ValuationCertificateFilePath")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");

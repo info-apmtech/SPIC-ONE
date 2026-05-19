@@ -5,7 +5,76 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+<style>
+	.table-scroll-fixed {
+		max-height: 420px; /* fixed height */
+		overflow-y: auto; /* vertical scroller */
+		overflow-x: auto; /* horizontal scroller */
+		width: 100%;
+		border: 1px solid #E5E7EB;
+		border-radius: 12px;
+		background: #fff;
+		/* Firefox scrollbar */
+		scrollbar-width: thin;
+		scrollbar-color: #C7D4E5 #F3F6F9;
+	}
 
+		/* Chrome, Edge, Safari scrollbar */
+		.table-scroll-fixed::-webkit-scrollbar {
+			width: 10px;
+			height: 10px;
+		}
+
+		.table-scroll-fixed::-webkit-scrollbar-track {
+			background: #F3F6F9;
+			border-radius: 20px;
+		}
+
+		.table-scroll-fixed::-webkit-scrollbar-thumb {
+			background: #C7D4E5;
+			border-radius: 20px;
+			border: 2px solid #F3F6F9;
+		}
+
+			.table-scroll-fixed::-webkit-scrollbar-thumb:hover {
+				background: #AFC0D4;
+			}
+
+	/* Required for horizontal scroll */
+	.spic-table {
+		min-width: 1800px;
+		border-collapse: separate;
+		border-spacing: 0;
+	}
+
+		/* Sticky table header */
+		.spic-table thead th {
+			position: sticky;
+			top: 0;
+			background: #fff;
+			z-index: 5;
+		}
+
+		/* Second header row sticky offset */
+		.spic-table thead tr:nth-child(2) th {
+			top: 42px;
+			z-index: 6;
+		}
+
+	/* Sticky first column */
+	.sticky-first-col {
+		position: sticky;
+		left: 0;
+		min-width: 180px;
+		background: #fff;
+		z-index: 3;
+	}
+
+	/* First column header should stay above body cells */
+	.sticky-head-first {
+		z-index: 8 !important;
+	}
+</style>
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
 
@@ -42,16 +111,20 @@
 
 		<!-- Table -->
 		<div class="table-wrapper">
-			<div class="table-responsive">
+			<div class="table-scroll-fixed">
 				<table class="spic-table">
 					<thead>
 						<tr>
-							<th rowspan="2" style="min-width: 180px; position: sticky; left: 0; background: #fff; z-index: 2;">Product Name / Category</th>
+							<th rowspan="2" class="sticky-first-col sticky-head-first">
+								Product Name / Category
+							</th>
+
 							@foreach (var month in _months)
 							{
 								<th colspan="2" class="text-center border-start">@month</th>
 							}
 						</tr>
+
 						<tr>
 							@foreach (var month in _months)
 							{
@@ -60,20 +133,26 @@
 							}
 						</tr>
 					</thead>
+
 					<tbody>
 						@foreach (var row in _currentRows)
 						{
 							var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
 							<tr>
-								<td class="fw-medium text-dark" style="position: sticky; left: 0; background: #fff; z-index: 1;">@(product?.Name ?? "Unknown")</td>
+								<td class="fw-medium text-dark sticky-first-col">
+									@(product?.Name ?? "Unknown")
+								</td>
+
 								@for (int i = 0; i < _months.Length; i++)
 								{
 									var monthIndex = i;
+
 									<td class="border-start">
 										<input class="table-input" type="number" step="0.01"
 											   value="@GetQty(row, monthIndex)"
 											   @onchange="(e) => SetQty(row, monthIndex, e)" />
 									</td>
+
 									<td>
 										<input class="table-input" type="number" step="0.01"
 											   value="@GetAmount(row, monthIndex)"
