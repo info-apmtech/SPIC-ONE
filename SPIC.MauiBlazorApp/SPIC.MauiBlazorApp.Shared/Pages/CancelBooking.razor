@@ -1,0 +1,783 @@
+﻿@page "/CancelBooking"
+
+<style>
+    :root {
+        --cb-bg-body: #f4f6f8;
+        --cb-bg-card: #ffffff;
+        --cb-text-main: #1f2937;
+        --cb-text-muted: #6b7280;
+        --cb-border-light: #e5e7eb;
+        --cb-primary-blue: #3b82f6;
+        
+        /* Card Theme Colors */
+        --cb-header-bg-green: #eef5ec; 
+        --cb-header-text-green: #3f4e42;
+        --cb-bg-pink-alert: #fdf2f2;
+        --cb-text-red: #ef4444;
+    }
+
+    /* --- Page Header --- */
+    .cb-page-header-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    .cb-page-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--cb-text-main);
+        margin-bottom: 0.25rem;
+    }
+    .cb-page-subtitle {
+        font-size: 0.85rem;
+        color: var(--cb-text-muted);
+        margin: 0;
+    }
+
+    /* --- Buttons --- */
+    .cb-btn-outline-custom {
+        background-color: #ffffff;
+        border: 1px solid var(--cb-border-light);
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 8px 16px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: 0.2s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .cb-btn-outline-custom:hover { background-color: #f9fafb; color: #1f2937; }
+
+    /* --- Top Booking Summary Card --- */
+    .cb-top-booking-card {
+        background: var(--cb-bg-card);
+        border: 1px solid var(--cb-border-light);
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        display: flex;
+        gap: 1.5rem;
+        align-items: center;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .cb-top-room-img {
+        width: 130px;
+        height: 85px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid var(--cb-border-light);
+        flex-shrink: 0;
+    }
+    .cb-top-booking-details {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .cb-top-title-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+    .cb-hotel-name {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--cb-text-main);
+        margin: 0 0 4px 0;
+    }
+    .cb-booking-id {
+        font-size: 0.85rem;
+        color: var(--cb-text-muted);
+        margin: 0;
+    }
+    .cb-status-badge-confirmed {
+        background-color: #dcfce7;
+        color: #16a34a;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .cb-stats-row {
+        display: flex;
+        gap: 3rem;
+    }
+    .cb-stat-col .cb-stat-lbl {
+        font-size: 0.8rem;
+        color: var(--cb-text-muted);
+        margin-bottom: 4px;
+        font-weight: 500;
+    }
+    .cb-stat-col .cb-stat-val {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--cb-text-main);
+    }
+    .cb-stat-col .cb-stat-val.cb-blue-val {
+        color: var(--cb-primary-blue);
+    }
+
+    /* --- Alert Notice --- */
+    .cb-alert-notice {
+        background-color: var(--cb-bg-pink-alert);
+        border: 1px solid #fecaca;
+        color: var(--cb-text-red);
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 0.85rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .cb-alert-notice strong {
+        font-weight: 700;
+    }
+
+    /* --- Detailed Cards --- */
+    .cb-detail-card {
+        background: var(--cb-bg-card);
+        border: 1px solid var(--cb-border-light);
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        overflow: hidden; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .cb-detail-card-header {
+        background-color: var(--cb-header-bg-green);
+        padding: 14px 20px;
+        border-bottom: 1px solid #dce4d6;
+    }
+
+    .cb-detail-card-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--cb-header-text-green);
+        margin: 0;
+    }
+
+    .cb-detail-card-body {
+        padding: 20px;
+    }
+
+    /* --- Form Elements --- */
+    .cb-form-label {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--cb-text-main);
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    .cb-form-select-custom {
+        background-color: #f9fafb;
+        border: 1px solid var(--cb-border-light);
+        border-radius: 8px;
+        font-size: 0.85rem;
+        color: var(--cb-text-muted);
+        padding: 0.75rem 1rem;
+        width: 100%;
+        outline: none;
+        transition: 0.2s;
+    }
+    .cb-form-select-custom:focus {
+        border-color: var(--cb-primary-blue);
+    }
+
+    /* --- Refund Calculation --- */
+    .cb-calc-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        font-size: 0.85rem;
+    }
+    .cb-calc-row.cb-last {
+        margin-bottom: 0;
+    }
+    .cb-calc-lbl { color: var(--cb-text-muted); font-weight: 500; }
+    .cb-calc-val { font-weight: 700; color: var(--cb-text-main); }
+    .cb-calc-val.cb-text-red { color: var(--cb-text-red); }
+
+    .cb-calc-divider {
+        height: 1px;
+        background-color: var(--cb-border-light);
+        margin: 16px 0;
+    }
+
+    .cb-calc-total-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    .cb-calc-total-lbl { font-size: 0.95rem; font-weight: 700; color: var(--cb-text-main); }
+    .cb-calc-total-val { font-size: 1.15rem; font-weight: 700; color: var(--cb-primary-blue); }
+
+    /* Refund Method Boxes */
+    .cb-method-boxes {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 1.25rem;
+    }
+    .cb-method-box {
+        background-color: #f9fafb;
+        border: 1px solid var(--cb-border-light);
+        border-radius: 8px;
+        padding: 12px 16px;
+        flex: 1;
+    }
+    .cb-method-box-lbl {
+        font-size: 0.7rem;
+        color: var(--cb-text-muted);
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    .cb-method-box-val {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--cb-text-main);
+    }
+
+    /* Info Alert inside card */
+    .cb-alert-info-yellow {
+        background-color: #fefce8;
+        border: 1px solid #fef08a;
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 0.8rem;
+        color: #a16207;
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        line-height: 1.5;
+    }
+    .cb-alert-info-yellow i { font-size: 1.1rem; margin-top: -2px; color: #eab308; }
+
+    /* --- Key Value Pairs (Guest Info) --- */
+    .cb-kv-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+    .cb-kv-row:last-child { margin-bottom: 0; }
+    .cb-kv-label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--cb-text-muted);
+        flex-shrink: 0;
+    }
+    .cb-kv-value {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--cb-text-main);
+        text-align: right;
+        max-width: 60%;
+        line-height: 1.4;
+    }
+
+    /* --- Cancellation Policy --- */
+    .cb-cancellation-card {
+        background-color: var(--cb-bg-pink-alert);
+        border: 1px solid #fecaca;
+        border-radius: 12px;
+        padding: 20px;
+    }
+    .cb-cancellation-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--cb-text-main);
+        margin-bottom: 12px;
+    }
+    .cb-cancellation-list {
+        margin: 0;
+        padding-left: 16px;
+        color: #6b7280;
+        font-size: 0.85rem;
+        line-height: 1.6;
+    }
+    .cb-cancellation-list li { margin-bottom: 6px; }
+    .cb-cancellation-list li:last-child { margin-bottom: 0; }
+
+    /* --- Bottom Actions --- */
+    .cb-bottom-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 0.5rem;
+        padding-bottom: 2rem;
+    }
+    .cb-btn-outline-back {
+        background-color: #ffffff;
+        border: 1px solid var(--cb-border-light);
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .cb-btn-outline-back:hover { background-color: #f9fafb; }
+
+    .cb-btn-danger-continue {
+        background-color: #dc2626;
+        border: 1px solid #dc2626;
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .cb-btn-danger-continue:hover { background-color: #b91c1c; }
+
+    /* --- Popup Modals CSS --- */
+    .cb-modal-overlay {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(2px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1050;
+    }
+
+    .cb-modal-container {
+        background-color: #ffffff;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 500px;
+        padding: 32px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        text-align: center;
+        animation: cbScaleIn 0.3s ease-out;
+    }
+
+    @@keyframes cbScaleIn {
+        from { transform: scale(0.95); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+
+    /* Modal Icons */
+    .cb-modal-icon-wrapper {
+        margin: 0 auto 20px auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .cb-modal-icon-wrapper.confirm i { font-size: 3.5rem; color: #f59e0b; }
+    .cb-modal-icon-wrapper.success i { font-size: 3.5rem; color: #22c55e; }
+
+    /* Modal Text */
+    .cb-modal-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+    .cb-modal-title.red { color: #dc2626; }
+    .cb-modal-title.green { color: #16a34a; }
+    
+    .cb-modal-subtitle {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-bottom: 24px;
+        line-height: 1.5;
+    }
+
+    /* Modal Data Box */
+    .cb-modal-data-box {
+        background-color: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 24px;
+        text-align: left;
+    }
+    
+    .cb-m-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        font-size: 0.85rem;
+    }
+    .cb-m-row:last-child { margin-bottom: 0; }
+    .cb-m-lbl { color: #6b7280; font-weight: 500; }
+    .cb-m-val { font-weight: 600; color: #1f2937; }
+    .cb-m-val.red { color: #dc2626; }
+    .cb-m-val.green { color: #16a34a; }
+
+    .cb-status-pill-processing {
+        background-color: #e0e7ff;
+        color: #4f46e5;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    /* Modal Purple Alert */
+    .cb-modal-alert-purple {
+        background-color: #fdf4ff;
+        border: 1px solid #f5d0fe;
+        color: #a21caf;
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 24px;
+        text-align: left;
+        line-height: 1.5;
+    }
+
+    /* Modal Actions */
+    .cb-modal-actions {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+    }
+    .cb-btn-modal-outline {
+        background-color: #ffffff;
+        border: 1px solid #d1d5db;
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 20px;
+        border-radius: 6px;
+        transition: 0.2s;
+        flex: 1;
+    }
+    .cb-btn-modal-outline:hover { background-color: #f9fafb; }
+    
+    .cb-btn-modal-red {
+        background-color: #dc2626;
+        border: 1px solid #dc2626;
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 20px;
+        border-radius: 6px;
+        transition: 0.2s;
+        flex: 1;
+    }
+    .cb-btn-modal-red:hover { background-color: #b91c1c; }
+
+    .cb-btn-modal-blue {
+        background-color: #2563eb;
+        border: 1px solid #2563eb;
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 20px;
+        border-radius: 6px;
+        transition: 0.2s;
+        flex: 1;
+    }
+    .cb-btn-modal-blue:hover { background-color: #1d4ed8; }
+
+</style>
+
+<div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1200px; margin: auto;">
+    
+    <div class="cb-page-header-container">
+        <div>
+            <h1 class="cb-page-title">Cancel Booking</h1>
+            <p class="cb-page-subtitle">Please review your cancellation details carefully before proceeding</p>
+        </div>
+        <button class="cb-btn-outline-custom"><i class="bi bi-file-earmark-arrow-down"></i> Download Invoice</button>
+    </div>
+
+    <div class="cb-top-booking-card">
+        <img src="https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=300&q=80" alt="Room" class="cb-top-room-img">
+        <div class="cb-top-booking-details">
+            <div class="cb-top-title-row">
+                <div>
+                    <h2 class="cb-hotel-name">AC Deluxe Room — SPIC Guest House</h2>
+                    <p class="cb-booking-id">Booking ID: BK7A3K9XY</p>
+                </div>
+                <div class="cb-status-badge-confirmed">Confirmed</div>
+            </div>
+            <div class="cb-stats-row">
+                <div class="cb-stat-col">
+                    <div class="cb-stat-lbl">Check-in</div>
+                    <div class="cb-stat-val">May 26, 2026</div>
+                </div>
+                <div class="cb-stat-col">
+                    <div class="cb-stat-lbl">Check-out</div>
+                    <div class="cb-stat-val">May 29, 2026</div>
+                </div>
+                <div class="cb-stat-col">
+                    <div class="cb-stat-lbl">Total Amount</div>
+                    <div class="cb-stat-val cb-blue-val">₹3367.00</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="cb-alert-notice">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span><strong>Notice:</strong> Cancelling this booking may affect your refund based on the cancellation policy. Since check-in is more than 48 hours away, you qualify for a full refund minus processing charges.</span>
+    </div>
+
+    <div class="row g-4">
+        
+        <div class="col-lg-6">
+            
+            <div class="cb-detail-card">
+                <div class="cb-detail-card-header">
+                    <h3 class="cb-detail-card-title">Cancellation Reason</h3>
+                </div>
+                <div class="cb-detail-card-body">
+                    <label class="cb-form-label">Select reason for cancellation</label>
+                    <select class="cb-form-select-custom">
+                        <option value="" disabled selected>Choose a reason</option>
+                        <option value="change_plan">Change in travel plans</option>
+                        <option value="health">Health / Medical reasons</option>
+                        <option value="found_other">Found better accommodation</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="cb-detail-card">
+                <div class="cb-detail-card-header">
+                    <h3 class="cb-detail-card-title">Refund Calculation</h3>
+                </div>
+                <div class="cb-detail-card-body">
+                    
+                    <div class="cb-calc-row">
+                        <span class="cb-calc-lbl">Total Paid</span>
+                        <span class="cb-calc-val">₹3367</span>
+                    </div>
+                    <div class="cb-calc-row">
+                        <span class="cb-calc-lbl">Cancellation Charges (5%)</span>
+                        <span class="cb-calc-val cb-text-red">−₹630</span>
+                    </div>
+                    <div class="cb-calc-row cb-last">
+                        <span class="cb-calc-lbl">Tax Adjustment (GST)</span>
+                        <span class="cb-calc-val cb-text-red">−₹130</span>
+                    </div>
+
+                    <div class="cb-calc-divider"></div>
+
+                    <div class="cb-calc-total-row">
+                        <span class="cb-calc-total-lbl">Refund Amount</span>
+                        <span class="cb-calc-total-val">₹2967.00</span>
+                    </div>
+
+                    <div class="cb-method-boxes">
+                        <div class="cb-method-box">
+                            <div class="cb-method-box-lbl">Refund Method</div>
+                            <div class="cb-method-box-val">Original Payment Method (Credit Card)</div>
+                        </div>
+                        <div class="cb-method-box">
+                            <div class="cb-method-box-lbl">Estimated Refund Time</div>
+                            <div class="cb-method-box-val">5–7 Business Days</div>
+                        </div>
+                    </div>
+
+                    <div class="cb-alert-info-yellow">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <div>Refund will be credited to your original payment method automatically once the cancellation is processed.</div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+        <div class="col-lg-6">
+            
+            <div class="cb-detail-card">
+                <div class="cb-detail-card-header">
+                    <h3 class="cb-detail-card-title">Guest Information</h3>
+                </div>
+                <div class="cb-detail-card-body">
+                    <div class="cb-kv-row">
+                        <span class="cb-kv-label">Employee ID / Dealer Code</span>
+                        <span class="cb-kv-value">DL-1234</span>
+                    </div>
+                    <div class="cb-kv-row">
+                        <span class="cb-kv-label">Guest Name</span>
+                        <span class="cb-kv-value">Rajesh</span>
+                    </div>
+                    <div class="cb-kv-row">
+                        <span class="cb-kv-label">Company Name</span>
+                        <span class="cb-kv-value">SPIC Pvt. ltd.,</span>
+                    </div>
+                    <div class="cb-kv-row">
+                        <span class="cb-kv-label">Phone Number</span>
+                        <span class="cb-kv-value">9876543210</span>
+                    </div>
+                    <div class="cb-kv-row">
+                        <span class="cb-kv-label">Email ID</span>
+                        <span class="cb-kv-value">hi@gmail.com</span>
+                    </div>
+                    <div class="cb-kv-row">
+                        <span class="cb-kv-label">Number of Persons</span>
+                        <span class="cb-kv-value">2 persons</span>
+                    </div>
+                    <div class="cb-kv-row">
+                        <span class="cb-kv-label">Nationality</span>
+                        <span class="cb-kv-value">Indian</span>
+                    </div>
+                    <div class="cb-kv-row">
+                        <span class="cb-kv-label">Aadhaar / Passport Number</span>
+                        <span class="cb-kv-value">[Aadhaar/Passport Redacted]</span>
+                    </div>
+                    <div class="cb-kv-row">
+                        <span class="cb-kv-label">Address</span>
+                        <span class="cb-kv-value text-wrap">No.5, SPIC House, Guindy,<br/>Chennai-600022.</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cb-cancellation-card">
+                <h3 class="cb-cancellation-title">Cancellation Policy</h3>
+                <ul class="cb-cancellation-list">
+                    <li>Free cancellation up to 24 hours before check-in</li>
+                    <li>50% refund for cancellations within 24-48 hours</li>
+                    <li>No refund for cancellations within 24 hours of check-in</li>
+                </ul>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="cb-bottom-actions">
+        <button class="cb-btn-outline-back">Back</button>
+        <button class="cb-btn-danger-continue" @onclick="OpenConfirmPopup">Continue Cancellation</button>
+    </div>
+
+</div>
+
+@if (showConfirmPopup)
+{
+    <div class="cb-modal-overlay">
+        <div class="cb-modal-container">
+            
+            <div class="cb-modal-icon-wrapper confirm">
+                <i class="bi bi-question-circle-fill" style="color: #f59e0b;"></i>
+            </div>
+            
+            <h2 class="cb-modal-title red">Confirm Cancellation?</h2>
+            <p class="cb-modal-subtitle">Are you sure you want to cancel this booking? This action cannot be undone and your stay will be released.</p>
+
+            <div class="cb-modal-data-box">
+                <div class="cb-m-row">
+                    <span class="cb-m-lbl">Booking ID</span>
+                    <span class="cb-m-val">BK7A3K9XY</span>
+                </div>
+                <div class="cb-m-row">
+                    <span class="cb-m-lbl">Room Type</span>
+                    <span class="cb-m-val">AC Deluxe Room</span>
+                </div>
+                <div class="cb-m-row">
+                    <span class="cb-m-lbl">Check-in</span>
+                    <span class="cb-m-val">May 26, 2026</span>
+                </div>
+                <div class="cb-m-row">
+                    <span class="cb-m-lbl">Cancellation Charge</span>
+                    <span class="cb-m-val red">−₹630</span>
+                </div>
+                <div class="cb-m-row">
+                    <span class="cb-m-lbl">Refund Amount</span>
+                    <span class="cb-m-val green">₹2967.00</span>
+                </div>
+            </div>
+
+            <div class="cb-modal-actions">
+                <button class="cb-btn-modal-outline" @onclick="CloseConfirmPopup">Keep My Booking</button>
+                <button class="cb-btn-modal-red" @onclick="ConfirmAndCancelBooking">Cancel Booking</button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@if (showSuccessPopup)
+{
+    <div class="cb-modal-overlay">
+        <div class="cb-modal-container">
+            
+            <div class="cb-modal-icon-wrapper success">
+                <i class="bi bi-check-circle-fill"></i>
+            </div>
+            
+            <h2 class="cb-modal-title green">Booking Cancelled Successfully</h2>
+            <p class="cb-modal-subtitle">Your cancellation request has been completed. Refund will be processed within 5–7 business days to your original payment method.</p>
+
+            <div class="cb-modal-data-box">
+                <div class="cb-m-row">
+                    <span class="cb-m-lbl">Cancellation ID</span>
+                    <span class="cb-m-val">CAN-2025-0089</span>
+                </div>
+                <div class="cb-m-row">
+                    <span class="cb-m-lbl">Booking ID</span>
+                    <span class="cb-m-val">BK7A3K9XY</span>
+                </div>
+                <div class="cb-m-row">
+                    <span class="cb-m-lbl">Refund Amount</span>
+                    <span class="cb-m-val green">₹2967.00</span>
+                </div>
+                <div class="cb-m-row">
+                    <span class="cb-m-lbl">Refund Status</span>
+                    <span class="cb-m-val"><span class="cb-status-pill-processing">Processing</span></span>
+                </div>
+            </div>
+
+            <div class="cb-modal-alert-purple">
+                <i class="bi bi-envelope-paper"></i>
+                <div>Cancellation confirmation and refund details have been sent to <strong>hi@gmail.com</strong></div>
+            </div>
+
+            <div class="cb-modal-actions">
+                <button class="cb-btn-modal-outline">Download Receipt</button>
+                <button class="cb-btn-modal-outline">View Booking</button>
+                <button class="cb-btn-modal-blue" @onclick="CloseSuccessPopup">Go to My Bookings</button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    private bool showConfirmPopup = false;
+    private bool showSuccessPopup = false;
+
+    private void OpenConfirmPopup()
+    {
+        showConfirmPopup = true;
+    }
+
+    private void CloseConfirmPopup()
+    {
+        showConfirmPopup = false;
+    }
+
+    private void ConfirmAndCancelBooking()
+    {
+        // Proceed from confirm modal to success modal
+        showConfirmPopup = false;
+        showSuccessPopup = true;
+    }
+
+    private void CloseSuccessPopup()
+    {
+        // Close modal and redirect to bookings page logic goes here
+        showSuccessPopup = false;
+    }
+}

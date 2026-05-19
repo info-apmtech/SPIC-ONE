@@ -85,5 +85,6 @@ namespace Spic.Infrastructure.Data
         public DbSet<DealerApprovalHistory> DealerApprovalHistories { get; set; }
         public DbSet<EmployeeInformation> EmployeeInformation { get; set; }
         public DbSet<Employeelogin> Employeelogins { get; set; }
+        public DbSet<DealerCreditLimitSales> DealerCreditLimitSalesData { get; set; }
     }
 }

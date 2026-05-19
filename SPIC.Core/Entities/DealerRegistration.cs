@@ -430,12 +430,16 @@ namespace SPIC.Core.Entities
     {
         public int Id { get; set; }
         public int DealerId { get; set; }
-        //Existing Credit Limit
-        public decimal ExistingCreditLimitAmount { get; set; }
-        public DateTime ExistingCreditLimitFrom { get; set; }
-        public DateTime ExistingCreditLimitTo { get; set; }
+		//Existing Credit Limit For Spic
+		public decimal SpicExistingCreditLimitAmount { get; set; }
+		public DateTime SpicExistingCreditLimitFrom { get; set; }
+		public DateTime SpicExistingCreditLimitTo { get; set; }
+		//Existing Credit Limit For Greenstar
+		public decimal GSExistingCreditLimitAmount { get; set; }
+		public DateTime GSExistingCreditLimitFrom { get; set; }
+		public DateTime GSExistingCreditLimitTo { get; set; }
 
-        public int FY1 { get; set; }
+		public int FY1 { get; set; }
         public int FY2 { get; set; }
         public int FY3 { get; set; }
         public double Q1Mark { get; set; }
@@ -525,4 +529,21 @@ namespace SPIC.Core.Entities
         public string? DeedOfGuaranteeFilePath { get; set; }
 
     }
+	public class DealerCreditLimitSales
+	{
+		public int Id { get; set; }
+		//public int DealerId { get; set; }
+		public string State { get; set; }
+		//Dealer Code
+		public string CustomerNumber { get; set; }
+		//Dealer Name
+		public string CustomerName { get; set; }
+		//Product
+		public string SubGroup { get; set; }
+		//Categories
+		public string ProductGroup { get; set; }
+		public string Quantity { get; set; }
+		public string GrossAmount { get; set; }
+
+	}
 }
