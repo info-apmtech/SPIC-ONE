@@ -1,0 +1,429 @@
+﻿@page "/RefundStatus"
+
+<style>
+    :root {
+        --rs-bg-body: #f4f6f8;
+        --rs-bg-card: #ffffff;
+        --rs-text-main: #1f2937;
+        --rs-text-muted: #6b7280;
+        --rs-border-light: #e5e7eb;
+        --rs-primary-blue: #3b82f6;
+        
+        /* Specific Theme Colors */
+        --rs-header-bg-green: #eef5ec; 
+        --rs-header-text-green: #3f4e42;
+        --rs-text-red: #dc2626;
+        --rs-text-green: #16a34a;
+        --rs-alert-orange-bg: #fff7ed;
+        --rs-alert-orange-border: #ffedd5;
+        --rs-alert-orange-text: #c2410c;
+    }
+
+    /* --- Page Base --- */
+    .rs-page-container {
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        color: var(--rs-text-main);
+        max-width: 1200px;
+        margin: auto;
+    }
+
+    /* --- Page Header --- */
+    .rs-page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    .rs-page-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--rs-text-main);
+        margin-bottom: 0.25rem;
+    }
+    .rs-page-subtitle {
+        font-size: 0.85rem;
+        color: var(--rs-text-muted);
+        margin: 0;
+    }
+    .rs-text-red { color: var(--rs-text-red); font-weight: 600; }
+
+    /* --- Buttons --- */
+    .rs-btn-outline {
+        background-color: #ffffff;
+        border: 1px solid var(--rs-border-light);
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 8px 16px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: 0.2s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        cursor: pointer;
+    }
+    .rs-btn-outline:hover { background-color: #f9fafb; color: #1f2937; }
+
+    .rs-btn-solid-blue {
+        background-color: #2563eb;
+        border: 1px solid #2563eb;
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 8px 20px;
+        border-radius: 6px;
+        transition: 0.2s;
+        cursor: pointer;
+    }
+    .rs-btn-solid-blue:hover { background-color: #1d4ed8; }
+
+    /* --- Cards --- */
+    .rs-card {
+        background: var(--rs-bg-card);
+        border: 1px solid var(--rs-border-light);
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        overflow: hidden; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .rs-card-header {
+        background-color: var(--rs-header-bg-green);
+        padding: 14px 20px;
+        border-bottom: 1px solid #dce4d6;
+    }
+    .rs-card-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--rs-header-text-green);
+        margin: 0;
+    }
+    .rs-card-body {
+        padding: 20px;
+    }
+
+    /* --- Top Summary Section (Card 1) --- */
+    .rs-summary-top {
+        text-align: center;
+        padding-bottom: 1.25rem;
+        border-bottom: 1px solid var(--rs-border-light);
+        margin-bottom: 1.25rem;
+    }
+    .rs-summary-lbl {
+        font-size: 0.85rem;
+        color: var(--rs-text-muted);
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+    .rs-summary-amount {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: var(--rs-text-green);
+        margin-bottom: 8px;
+    }
+    .rs-summary-id {
+        font-size: 0.85rem;
+        color: var(--rs-text-main);
+        font-weight: 600;
+    }
+
+    /* --- Key Value Rows --- */
+    .rs-kv-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+    .rs-kv-row:last-child { margin-bottom: 0; }
+    .rs-kv-label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--rs-text-muted);
+        flex-shrink: 0;
+    }
+    .rs-kv-value {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--rs-text-main);
+        text-align: right;
+    }
+    .rs-kv-value.red { color: var(--rs-text-red); }
+    .rs-kv-value.blue { color: var(--rs-primary-blue); font-size: 1rem; }
+
+    .rs-divider {
+        height: 1px;
+        background-color: var(--rs-border-light);
+        margin: 16px 0;
+    }
+
+    /* --- Status Pill --- */
+    .rs-status-pill {
+        background-color: #e0e7ff; /* light indigo/purple */
+        color: #4f46e5;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    /* --- Timeline Tracker --- */
+    .rs-timeline {
+        position: relative;
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+    .rs-tl-item {
+        display: flex;
+        gap: 16px;
+        position: relative;
+        padding-bottom: 28px;
+    }
+    .rs-tl-item:last-child { padding-bottom: 0; }
+    
+    /* Connecting Lines */
+    .rs-tl-line {
+        position: absolute;
+        top: 32px;
+        bottom: 0;
+        left: 15px; /* Center of 32px icon */
+        width: 2px;
+        z-index: 1;
+    }
+    .rs-tl-line.green { background-color: #22c55e; }
+    .rs-tl-line.gray { background-color: #e5e7eb; }
+
+    /* Icons */
+    .rs-tl-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        font-weight: bold;
+        z-index: 2;
+        background-color: #ffffff;
+        flex-shrink: 0;
+    }
+    .rs-tl-icon.done {
+        border: 2px solid #22c55e;
+        color: #22c55e;
+    }
+    .rs-tl-icon.active {
+        border: 2px solid #6366f1; /* Purple */
+        color: #6366f1;
+        background-color: #e0e7ff;
+    }
+    .rs-tl-icon.pending {
+        background-color: #d1d5db; /* Solid gray */
+        border: 2px solid #d1d5db;
+    }
+
+    /* Timeline Content */
+    .rs-tl-content {
+        padding-top: 4px;
+    }
+    .rs-tl-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin: 0 0 4px 0;
+    }
+    .rs-tl-title.red { color: #dc2626; }
+    .rs-tl-title.green { color: #16a34a; }
+    .rs-tl-title.dark { color: #374151; }
+    
+    .rs-tl-date {
+        font-size: 0.8rem;
+        color: var(--rs-text-muted);
+        margin: 0 0 2px 0;
+    }
+    .rs-tl-desc {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        margin: 0;
+        line-height: 1.4;
+    }
+
+    /* --- Alert Box --- */
+    .rs-alert-orange {
+        background-color: var(--rs-alert-orange-bg);
+        border: 1px solid var(--rs-alert-orange-border);
+        color: var(--rs-alert-orange-text);
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-top: 24px;
+        line-height: 1.5;
+    }
+    .rs-alert-orange i { font-size: 1.1rem; margin-top: -2px; color: #ea580c; }
+
+    /* --- Bottom Actions --- */
+    .rs-bottom-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 1rem;
+        padding-bottom: 2rem;
+    }
+</style>
+
+<div class="container-fluid py-4 px-3 px-md-4 rs-page-container">
+    
+    <div class="rs-page-header">
+        <div>
+            <h1 class="rs-page-title">Refund Status</h1>
+            <p class="rs-page-subtitle">Track the progress of your refund for booking <span class="rs-text-red">CAN-2025-0089</span></p>
+        </div>
+        <button class="rs-btn-outline"><i class="bi bi-file-earmark-arrow-down"></i> Download Cancellation Receipt</button>
+    </div>
+
+    <div class="row g-4">
+        
+        <div class="col-lg-5">
+            
+            <div class="rs-card">
+                <div class="rs-card-body">
+                    
+                    <div class="rs-summary-top">
+                        <div class="rs-summary-lbl">Total Refund Amount</div>
+                        <div class="rs-summary-amount">₹2967</div>
+                        <div class="rs-summary-id">Cancellation ID: <span class="rs-text-red">CAN-2025-0089</span></div>
+                    </div>
+
+                    <div class="rs-kv-row">
+                        <span class="rs-kv-label">Refund Method</span>
+                        <span class="rs-kv-value">Original Payment Method (Credit Card)</span>
+                    </div>
+                    <div class="rs-kv-row">
+                        <span class="rs-kv-label">Expected Date</span>
+                        <span class="rs-kv-value">22 May 2026</span>
+                    </div>
+                    <div class="rs-kv-row">
+                        <span class="rs-kv-label">Transaction Ref.</span>
+                        <span class="rs-kv-value">TXN-AXBK-20250115-9842</span>
+                    </div>
+                    <div class="rs-kv-row">
+                        <span class="rs-kv-label">Cancellation Date</span>
+                        <span class="rs-kv-value">27 May 2026 at 10:42 AM</span>
+                    </div>
+                    <div class="rs-kv-row mt-3">
+                        <span class="rs-kv-label">Current Status</span>
+                        <span class="rs-status-pill">Bank Processing</span>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="rs-card">
+                <div class="rs-card-header">
+                    <h3 class="rs-card-title">Refund Breakdown</h3>
+                </div>
+                <div class="rs-card-body">
+                    <div class="rs-kv-row">
+                        <span class="rs-kv-label">Total Paid</span>
+                        <span class="rs-kv-value">₹3367</span>
+                    </div>
+                    <div class="rs-kv-row">
+                        <span class="rs-kv-label">Cancellation Charges (5%)</span>
+                        <span class="rs-kv-value red">−₹630</span>
+                    </div>
+                    <div class="rs-kv-row">
+                        <span class="rs-kv-label">Tax Adjustment (GST)</span>
+                        <span class="rs-kv-value red">−₹130</span>
+                    </div>
+
+                    <div class="rs-divider"></div>
+
+                    <div class="rs-kv-row">
+                        <span class="rs-kv-label" style="font-size: 0.95rem; font-weight: 700; color: #1f2937;">Refund Amount</span>
+                        <span class="rs-kv-value blue">₹2967.00</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="col-lg-7">
+            
+            <div class="rs-card h-100 mb-0">
+                <div class="rs-card-header">
+                    <h3 class="rs-card-title">Refund Tracking</h3>
+                </div>
+                <div class="rs-card-body">
+                    
+                    <div class="rs-timeline">
+                        
+                        <div class="rs-tl-item">
+                            <div class="rs-tl-line green"></div>
+                            <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
+                            <div class="rs-tl-content">
+                                <h4 class="rs-tl-title red">Cancellation Requested</h4>
+                                <p class="rs-tl-date">27 May 2026 at 10:42 AM</p>
+                                <p class="rs-tl-desc">Cancellation successfully recorded in system</p>
+                            </div>
+                        </div>
+
+                        <div class="rs-tl-item">
+                            <div class="rs-tl-line green"></div>
+                            <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
+                            <div class="rs-tl-content">
+                                <h4 class="rs-tl-title green">Refund Initiated</h4>
+                                <p class="rs-tl-date">27 May 2026 at 10:42 AM</p>
+                                <p class="rs-tl-desc">Refund of ₹2967 approved and initiated</p>
+                            </div>
+                        </div>
+
+                        <div class="rs-tl-item">
+                            <div class="rs-tl-line green"></div>
+                            <div class="rs-tl-icon active"><i class="bi bi-arrow-clockwise"></i></div>
+                            <div class="rs-tl-content">
+                                <h4 class="rs-tl-title dark">Bank Processing</h4>
+                                <p class="rs-tl-date">28 May 2026 (In Progress)</p>
+                                <p class="rs-tl-desc">Your bank (Axis Bank) is processing the refund to your credit card ending ****4721</p>
+                            </div>
+                        </div>
+
+                        <div class="rs-tl-item">
+                            <div class="rs-tl-icon pending"></div>
+                            <div class="rs-tl-content">
+                                <h4 class="rs-tl-title dark">Refunded</h4>
+                                <p class="rs-tl-date">Expected: 05 Jun 2026</p>
+                                <p class="rs-tl-desc">Amount will appear in your statement within 1–2 days after credit</p>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="rs-alert-orange">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <div>
+                            If the refund is not received by 22 Jan 2025, please contact support with reference:<br/>
+                            <strong>TXN-AXBK-20250115-9842</strong>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="rs-bottom-actions">
+        <button class="rs-btn-outline">Back</button>
+        <button class="rs-btn-outline">Share Refund Details</button>
+        <button class="rs-btn-solid-blue">Contact Support</button>
+    </div>
+
+</div>
+
+@code {
+
+}
