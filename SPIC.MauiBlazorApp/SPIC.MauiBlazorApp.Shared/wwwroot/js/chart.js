@@ -363,4 +363,191 @@
         }
         });
         }
-        };
+};
+
+window.loadRMDDashboardCharts = function () {
+    if (typeof Chart === 'undefined') return;
+
+    // ── 1. Analytics Validation Trend (Grouped Bar) ──
+    const analyticsCanvas = document.getElementById('rmdAnalyticsChart');
+    if (analyticsCanvas) {
+        if (window.rmdAnalyticsChartInstance) window.rmdAnalyticsChartInstance.destroy();
+        window.rmdAnalyticsChartInstance = new Chart(analyticsCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                datasets: [
+                    {
+                        label: 'Submitted',
+                        data: [55, 45, 50, 38, 40, 55, 38, 55],
+                        backgroundColor: '#3B82F6',
+                        borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+                        barPercentage: 0.7,
+                        categoryPercentage: 0.7
+                    },
+                    {
+                        label: 'Validated',
+                        data: [50, 40, 45, 28, 50, 50, 28, 50],
+                        backgroundColor: '#22C55E',
+                        borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+                        barPercentage: 0.7,
+                        categoryPercentage: 0.7
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#ffffff',
+                        titleColor: '#111827',
+                        titleFont: { size: 13, weight: 'bold' },
+                        bodyColor: '#4b5563',
+                        borderColor: '#e5e7eb',
+                        borderWidth: 1,
+                        padding: 12,
+                        usePointStyle: true,
+                        boxPadding: 6
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 70,
+                        border: { display: false },
+                        grid: { color: '#f3f4f6' },
+                        ticks: { color: '#9ca3af', font: { size: 10 }, stepSize: 10 }
+                    },
+                    x: {
+                        border: { display: false },
+                        grid: { display: false },
+                        ticks: { color: '#9ca3af', font: { size: 11 } }
+                    }
+                }
+            }
+        });
+    }
+
+    // ── 2. RM Approval Status (Concentric Rings) ──
+    const approvalCanvas = document.getElementById('rmdApprovalChart');
+    if (approvalCanvas) {
+        if (window.rmdApprovalChartInstance) window.rmdApprovalChartInstance.destroy();
+        const track = '#F1F5F9';
+        const total = 50;
+        window.rmdApprovalChartInstance = new Chart(approvalCanvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                datasets: [
+                    { data: [16, total - 16], backgroundColor: ['#10B981', track], borderWidth: 0, weight: 1 },  // Approved (outer)
+                    { data: [8, total - 8], backgroundColor: ['#F59E0B', track], borderWidth: 0, weight: 1 },  // Pending
+                    { data: [3, total - 3], backgroundColor: ['#EF4444', track], borderWidth: 0, weight: 1 },  // Rejected
+                    { data: [23, total - 23], backgroundColor: ['#9CA3AF', track], borderWidth: 0, weight: 1 }   // Yet to Send (inner)
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '50%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                }
+            }
+        });
+    }
+
+    // ── 3. RMD Validation Due Status (Donut) ──
+    const dueCanvas = document.getElementById('rmdDueChart');
+    if (dueCanvas) {
+        if (window.rmdDueChartInstance) window.rmdDueChartInstance.destroy();
+        window.rmdDueChartInstance = new Chart(dueCanvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Due Today', 'Due in 2 days', 'Over Due', 'Auto-Forward risk'],
+                datasets: [{
+                    data: [7, 4, 6, 3],
+                    backgroundColor: ['#FCA5A5', '#FCD34D', '#F87171', '#C4B5FD'],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#ffffff',
+                        titleColor: '#111827',
+                        bodyColor: '#4b5563',
+                        borderColor: '#e5e7eb',
+                        borderWidth: 1,
+                        padding: 10
+                    }
+                }
+            }
+        });
+    }
+
+    // ── 4. Budget Utilization (Horizontal Bars) ──
+    const budgetCanvas = document.getElementById('rmdBudgetChart');
+    if (budgetCanvas) {
+        if (window.rmdBudgetChartInstance) window.rmdBudgetChartInstance.destroy();
+        window.rmdBudgetChartInstance = new Chart(budgetCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['Chennai HQ', 'Coimbatore HQ', 'Madurai HQ', 'Trichy HQ', 'Salem HQ'],
+                datasets: [{
+                    data: [78, 16, 58, 42, 35],
+                    backgroundColor: ['#10B981', '#3B82F6', '#A78BFA', '#F59E0B', '#06B6D4'],
+                    borderRadius: 6,
+                    barPercentage: 0.55,
+                    categoryPercentage: 0.8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#ffffff',
+                        titleColor: '#111827',
+                        bodyColor: '#4b5563',
+                        borderColor: '#e5e7eb',
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: false,
+                        callbacks: {
+                            label: function (ctx) { return `Utilization: ${ctx.raw}%`; }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        max: 100,
+                        border: { display: false },
+                        grid: { color: '#f3f4f6' },
+                        ticks: {
+                            color: '#9ca3af',
+                            font: { size: 10 },
+                            stepSize: 20,
+                            callback: function (v) { return v + '%'; }
+                        }
+                    },
+                    y: {
+                        border: { display: false },
+                        grid: { display: false },
+                        ticks: { color: '#374151', font: { size: 12 } }
+                    }
+                }
+            }
+        });
+    }
+};
