@@ -520,7 +520,7 @@ namespace SPIC.Core.Entities
         public int FY2 { get; set; }
         public string FY2ITReturnFilePath { get; set; }
         public string? ValuationCertificateFilePath { get; set; }
-        public string RetailerListFilePath { get; set; }
+        public string? RetailerListFilePath { get; set; }
         public string? PartnershipDeadFilePath { get; set; }
         public string? BoardReasolutionFilePath { get; set; }
         public string? AffidavitFilePath { get; set; }
