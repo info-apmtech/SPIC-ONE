@@ -96,25 +96,42 @@ namespace SpicAPI.Controllers
             try
             {
                 // 1. SAFELY LOAD ALL LOOKUP TABLES (Grouped to prevent Duplicate Key Crashes)
-                var stateMap = await _db.States
+                // Load lookups into memory first so we can safely normalize strings
+                var stateMap = (await _db.States
                     .Where(s => !string.IsNullOrWhiteSpace(s.StateName))
-                    .GroupBy(s => s.StateName.Trim())
-                    .ToDictionaryAsync(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+                    .Select(s => new { s.Id, Name = s.StateName })
+                    .ToListAsync())
+                    .GroupBy(s => s.Name.Trim().ToUpperInvariant())
+                    .ToDictionary(g => g.Key, g => g.First().Id);
 
-                var dealerMap = await _db.DealerRegistrations
+                var dealerMap = (await _db.DealerRegistrations
                     .Where(d => !string.IsNullOrWhiteSpace(d.DealerCode))
-                    .GroupBy(d => d.DealerCode.Trim())
-                    .ToDictionaryAsync(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+                    .Select(d => new { d.Id, Code = d.DealerCode })
+                    .ToListAsync())
+                    .GroupBy(d => d.Code.Trim().ToUpperInvariant())
+                    .ToDictionary(g => g.Key, g => g.First().Id);
 
-                var productMap = await _db.Products
+                // Also build a map by dealer FirmName so uploads that include Dealer Name instead of DealerCode still map
+                var dealerNameMap = (await _db.DealerRegistrations
+                    .Where(d => !string.IsNullOrWhiteSpace(d.FirmName))
+                    .Select(d => new { d.Id, Name = d.FirmName })
+                    .ToListAsync())
+                    .GroupBy(d => d.Name.Trim().ToUpperInvariant())
+                    .ToDictionary(g => g.Key, g => g.First().Id);
+
+                var productMap = (await _db.Products
                     .Where(p => !string.IsNullOrWhiteSpace(p.Name))
-                    .GroupBy(p => p.Name.Trim())
-                    .ToDictionaryAsync(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+                    .Select(p => new { p.Id, Name = p.Name })
+                    .ToListAsync())
+                    .GroupBy(p => p.Name.Trim().ToUpperInvariant())
+                    .ToDictionary(g => g.Key, g => g.First().Id);
 
-                var categoryMap = await _db.Categories
+                var categoryMap = (await _db.Categories
                     .Where(c => !string.IsNullOrWhiteSpace(c.Name))
-                    .GroupBy(c => c.Name.Trim())
-                    .ToDictionaryAsync(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+                    .Select(c => new { c.Id, Name = c.Name })
+                    .ToListAsync())
+                    .GroupBy(c => c.Name.Trim().ToUpperInvariant())
+                    .ToDictionary(g => g.Key, g => g.First().Id);
 
                 var salesRecords = new List<DealerCreditLimitSales>();
 
@@ -129,24 +146,40 @@ namespace SpicAPI.Controllers
                     // 2. READ STRINGS DIRECTLY FROM EXCEL CELLS (7-Column Layout)
                     var stateStr = row.Cell(1).GetString()?.Trim() ?? "";
                     var dealerCodeStr = row.Cell(2).GetString()?.Trim() ?? "";
-                    // Cell(3) is Dealer Name, skipped because we map IDs using DealerCode
+                    // Cell(3) is Dealer Name — some uploads use Dealer Name instead of Dealer Code
+                    var dealerNameStr = row.Cell(3).GetString()?.Trim() ?? "";
                     var subGroupStr = row.Cell(4).GetString()?.Trim() ?? "";
                     var productGroupStr = row.Cell(5).GetString()?.Trim() ?? "";
                     var quantityStr = row.Cell(6).GetString()?.Trim() ?? "0";
                     var grossAmountStr = row.Cell(7).GetString()?.Trim() ?? "0";
 
+                    // Normalize lookup keys
+                    var stateKey = stateStr.ToUpperInvariant();
+                    var dealerCodeKey = dealerCodeStr.ToUpperInvariant();
+                    var dealerNameKey = dealerNameStr.ToUpperInvariant();
+                    var subGroupKey = subGroupStr.ToUpperInvariant();
+                    var productGroupKey = productGroupStr.ToUpperInvariant();
                     // 3. SECURELY MAP EXCEL STRINGS TO DATABASE IDs
                     var record = new DealerCreditLimitSales
                     {
-                        StateId = stateMap.TryGetValue(stateStr, out var sId) ? sId : 0,
+                        StateId = stateMap.TryGetValue(stateKey, out var sId) ? sId : 0,
+                        // Prefer mapping by DealerCode. If not found, attempt mapping by Dealer Name.
                         CustomerNumber = dealerCodeStr,
-                        CustomerId = dealerMap.TryGetValue(dealerCodeStr, out var cId) ? cId : 0,
-                        SubGroupId = productMap.TryGetValue(subGroupStr, out var sgId) ? sgId : 0,
-                        ProductGroupId = categoryMap.TryGetValue(productGroupStr, out var pgId) ? pgId : 0,
+                        CustomerId = dealerMap.TryGetValue(dealerCodeKey, out var cId) ? cId : (dealerNameMap.TryGetValue(dealerNameKey, out var cId2) ? cId2 : 0),
+                        SubGroupId = productMap.TryGetValue(subGroupKey, out var sgId) ? sgId : productMap.Where(kvp => kvp.Key.Contains(subGroupKey) || subGroupKey.Contains(kvp.Key)).Select(kvp => kvp.Value).FirstOrDefault(),
+                        ProductGroupId = categoryMap.TryGetValue(productGroupKey, out var pgId) ? pgId : categoryMap.Where(kvp => kvp.Key.Contains(productGroupKey) || productGroupKey.Contains(kvp.Key)).Select(kvp => kvp.Value).FirstOrDefault(),
 
                         Quantity = int.TryParse(quantityStr, out var qty) ? qty : 0,
                         GrossAmount = double.TryParse(grossAmountStr, out var gross) ? gross : 0
                     };
+
+                    // If DealerCode missing but we found an ID by name, populate CustomerNumber from DB
+                    if (record.CustomerId > 0 && string.IsNullOrWhiteSpace(record.CustomerNumber))
+                    {
+                        var dr = await _db.DealerRegistrations.FindAsync(record.CustomerId);
+                        if (dr != null && !string.IsNullOrWhiteSpace(dr.DealerCode))
+                            record.CustomerNumber = dr.DealerCode;
+                    }
 
                     // Only save row if a Dealer Code or ID exists
                     if (!string.IsNullOrWhiteSpace(record.CustomerNumber) || record.CustomerId > 0)
