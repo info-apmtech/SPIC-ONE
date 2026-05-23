@@ -533,17 +533,17 @@ namespace SPIC.Core.Entities
 	{
 		public int Id { get; set; }
 		//public int DealerId { get; set; }
-		public string State { get; set; }
+		public int StateId { get; set; }
 		//Dealer Code
 		public string CustomerNumber { get; set; }
 		//Dealer Name
-		public string CustomerName { get; set; }
+		public int CustomerId { get; set; }
 		//Product
-		public string SubGroup { get; set; }
+		public int SubGroupId { get; set; }
 		//Categories
-		public string ProductGroup { get; set; }
-		public string Quantity { get; set; }
-		public string GrossAmount { get; set; }
+		public int ProductGroupId { get; set; }
+		public int Quantity { get; set; }
+		public double GrossAmount { get; set; }
 
 	}
 }
