@@ -25,7 +25,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
 		public bool IsLoggedIn => !string.IsNullOrWhiteSpace(Token);
 
-		public AppRole UserRole { get; private set; }
+		public AppRole? UserRole { get; private set; }
 		public int StateId { get; private set; }
 		public int RegionId { get; private set; }
 		public int HQId { get; private set; }
@@ -47,7 +47,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
 		private void ParseClaims(string? token)
 		{
-			UserRole = AppRole.Admin;
+			UserRole = null;
 			StateId = 0;
 			RegionId = 0;
 			HQId = 0;
