@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260520065928_v2.3removeDealerCreditLimitSalesModel")]
+    partial class v23removeDealerCreditLimitSalesModel
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -700,41 +703,6 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("DealerCreditLimitProposals");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.DealerCreditLimitSales", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CustomerId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("CustomerNumber")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<double>("GrossAmount")
-                        .HasColumnType("double precision");
-
-                    b.Property<int>("ProductGroupId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("StateId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SubGroupId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("DealerCreditLimitSalesData");
-                });
-
             modelBuilder.Entity("SPIC.Core.Entities.DealerCreditLimitSalesPerformance", b =>
                 {
                     b.Property<int>("Id")
@@ -1329,6 +1297,7 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("RetailerListFilePath")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("SpecimanFilePath")
