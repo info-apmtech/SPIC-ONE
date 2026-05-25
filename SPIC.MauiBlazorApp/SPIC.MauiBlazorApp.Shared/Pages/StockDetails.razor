@@ -1,374 +1,169 @@
-﻿
-    @page "/StockDetails" 
-    <style>
-        :root {
-            --bg-body: #f4f7fa;
-            --bg-card: #ffffff;
-            --text-main: #1f2937;
-            --text-muted: #6b7280;
-            --border-color: #e5e7eb;
-            --primary-blue: #3b82f6;
-            
-            /* KPI Theme Colors */
-            --theme-purple: #a855f7;
-            --bg-purple-light: #faf5ff;
-            
-            --theme-green: #22c55e;
-            --bg-green-light: #f0fdf4;
-            
-            --theme-yellow: #eab308;
-            --bg-yellow-light: #fefce8;
-            
-            --theme-teal: #06b6d4;
-            --bg-teal-light: #ecfeff;
-        }
+﻿@page "/StockDetails"
 
-        
+<div class="container-fluid py-4 px-0">
+    <div class="sd-wrapper">
 
-        /* --- Page Header & Top Badges --- */
-        .page-title { font-size: 1.4rem; font-weight: 700; margin: 0; color: #111827; display: inline-block; }
-        .page-subtitle { font-size: 0.85rem; color: var(--text-muted); margin-top: 6px; }
-        
-        .top-badge {
-            background-color: #ffffff;
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: 4px 10px;
-            border-radius: 6px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        /* Buttons */
-        .btn-outline-custom {
-            background: #fff;
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            font-size: 0.8rem;
-            font-weight: 500;
-            padding: 6px 14px;
-            border-radius: 6px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.2s;
-        }
-        .btn-outline-custom:hover { background: #f9fafb; color: var(--text-main); }
-        
-        .btn-primary-custom {
-            background: var(--primary-blue);
-            border: 1px solid var(--primary-blue);
-            color: #fff;
-            font-size: 0.8rem;
-            font-weight: 500;
-            padding: 6px 16px;
-            border-radius: 6px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .btn-primary-custom:hover { background: #2563eb; color: #fff; }
+        <!-- Page Header -->
+        <div class="sd-page-header">
+            <div class="sd-title-block">
+                <div class="sd-title-row">
+                    <h1>Stock Details</h1>
+                    <div class="sd-badges">
+                        <span class="sd-badge"><i class="bi bi-calendar3"></i> Date as on: 07 Apr 2025</span>
+                        <span class="sd-badge"><i class="bi bi-calendar-event"></i> Month: April 2025</span>
+                    </div>
+                </div>
+                <p>Consolidated stock and sales updated daily</p>
+            </div>
+            <div class="sd-actions">
+                <button class="sd-btn sd-btn-outline"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
+                <button class="sd-btn sd-btn-outline"><i class="bi bi-file-earmark-spreadsheet" style="color:#16A34A"></i> Excel</button>
+                <button class="sd-btn sd-btn-outline"><i class="bi bi-file-earmark-pdf" style="color:#DC2626"></i> PDF</button>
+                <button class="sd-btn sd-btn-primary"><i class="bi bi-envelope"></i> Send Mail</button>
+            </div>
+        </div>
 
-        /* --- KPI Cards --- */
-        .kpi-card {
-            border-radius: 10px;
-            padding: 1.25rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center; /* Aligned center for this design */
-            position: relative;
-            overflow: hidden;
-            height: 100%;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-            border: 1px solid var(--border-color);
-            background: var(--bg-card);
-        }
-        
-        /* Borders */
-        .kpi-purple { border-left: 4px solid var(--theme-purple); }
-        .kpi-green { border-left: 4px solid var(--theme-green); }
-        .kpi-yellow { border-left: 4px solid var(--theme-yellow); }
-        .kpi-teal { border-left: 4px solid var(--theme-teal); }
+        <!-- KPI Cards -->
+        <div class="sd-kpi-grid">
 
-        .kpi-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem; }
-        .kpi-value { font-size: 1.6rem; font-weight: 700; color: #111827; line-height: 1.2; margin: 0; }
-
-        .kpi-icon-wrapper {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-            background: #ffffff;
-        }
-        .kpi-purple .kpi-icon-wrapper { color: var(--theme-purple); background: var(--bg-purple-light); }
-        .kpi-green .kpi-icon-wrapper { color: var(--theme-green); background: var(--bg-green-light); }
-        .kpi-yellow .kpi-icon-wrapper { color: var(--theme-yellow); background: var(--bg-yellow-light); }
-        .kpi-teal .kpi-icon-wrapper { color: var(--theme-teal); background: var(--bg-teal-light); }
-
-        /* --- Dashboard Main Card --- */
-        .dashboard-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-            padding: 1.25rem;
-            margin-bottom: 1.25rem;
-        }
-
-        /* --- Filters --- */
-        .filter-header { font-size: 0.9rem; font-weight: 600; color: var(--text-main); margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; }
-        .filter-label { font-size: 0.75rem; font-weight: 600; color: var(--text-main); margin-bottom: 6px; }
-        .custom-select {
-            background-color: #f9fafb;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            padding: 8px 12px;
-            width: 100%;
-        }
-        .custom-select:focus { border-color: var(--primary-blue); box-shadow: none; outline: none; }
-
-        /* --- Table Header & Search --- */
-        .table-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
-        .card-title { font-size: 1.05rem; font-weight: 600; color: var(--text-main); margin: 0; }
-        
-        .search-container { position: relative; width: 260px; }
-        .search-container i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 0.85rem; }
-        .search-input {
-            width: 100%;
-            padding: 8px 12px 8px 32px;
-            background-color: #f9fafb;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            font-size: 0.8rem;
-            outline: none;
-        }
-
-        /* --- Table Styling --- */
-        .table-custom { margin-bottom: 0; border-collapse: separate; border-spacing: 0; }
-        .table-custom th {
-            background-color: #f9fafb;
-            color: var(--text-muted);
-            font-size: 0.75rem;
-            font-weight: 700;
-            padding: 14px 12px;
-            border-bottom: 1px solid var(--border-color);
-            text-align: center;
-            vertical-align: middle;
-            white-space: nowrap;
-        }
-        .table-custom th span.fw-normal {
-            font-weight: 500;
-            color: #9ca3af;
-        }
-        
-        .table-custom td {
-            font-size: 0.8rem;
-            color: var(--text-main);
-            padding: 16px 12px;
-            vertical-align: middle;
-            border-bottom: 1px solid var(--border-color);
-            text-align: center;
-        }
-        
-        /* Align specific columns */
-        .table-custom th:nth-child(2),
-        .table-custom td:nth-child(2) {
-            text-align: left;
-        }
-        
-        /* Grand Total Row */
-        .grand-total-row td {
-            background-color: #f0fdf4; /* Light green background */
-            font-weight: 600;
-            color: var(--text-main);
-            border-bottom: none;
-        }
-
-        /* --- Pagination --- */
-        .pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
-        .items-per-page { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-muted); }
-        .page-item { 
-            width: 32px; height: 32px; 
-            display: flex; align-items: center; justify-content: center; 
-            border: 1px solid var(--border-color); 
-            background: #fff; border-radius: 6px; 
-            font-size: 0.8rem; color: var(--text-muted); 
-            cursor: pointer; text-decoration: none; 
-        }
-        .page-item.active { background: #f3f4f6; color: var(--text-main); font-weight: 600; }
-        .page-item.dots { border: none; background: transparent; cursor: default; }
-    </style>
-
-<div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1500px;">
-
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start mb-4 gap-3">
-        <div>
-            <div class="d-flex align-items-center gap-3">
-                <h1 class="page-title">Stock Details</h1>
-                <div class="d-flex gap-2">
-                    <span class="top-badge"><i class="bi bi-calendar3"></i> Date as on: 07 Apr 2025</span>
-                    <span class="top-badge"><i class="bi bi-calendar-event"></i> Month: April 2025</span>
+            <div class="sd-kpi-card sd-kpi-purple">
+                <div class="sd-kpi-info">
+                    <div class="sd-kpi-label">Total Stock</div>
+                    <div class="sd-kpi-value">43,092</div>
+                </div>
+                <div class="sd-kpi-icon">
+                    <i class="bi bi-bag-fill"></i>
                 </div>
             </div>
-            <p class="page-subtitle">Consolidated stock and sales updated daily</p>
+
+            <div class="sd-kpi-card sd-kpi-green">
+                <div class="sd-kpi-info">
+                    <div class="sd-kpi-label">Total Sales</div>
+                    <div class="sd-kpi-value">6,087</div>
+                </div>
+                <div class="sd-kpi-icon">
+                    <i class="bi bi-cart-check-fill"></i>
+                </div>
+            </div>
+
+            <div class="sd-kpi-card sd-kpi-yellow">
+                <div class="sd-kpi-info">
+                    <div class="sd-kpi-label">Closing Stock</div>
+                    <div class="sd-kpi-value">37,005</div>
+                </div>
+                <div class="sd-kpi-icon">
+                    <i class="bi bi-shield-lock-fill"></i>
+                </div>
+            </div>
+
+            <div class="sd-kpi-card sd-kpi-teal">
+                <div class="sd-kpi-info">
+                    <div class="sd-kpi-label">Sales %</div>
+                    <div class="sd-kpi-value">14%</div>
+                </div>
+                <div class="sd-kpi-icon">
+                    <i class="bi bi-bag-check-fill"></i>
+                </div>
+            </div>
+
         </div>
-        <div class="d-flex flex-wrap gap-2">
-            <button class="btn-outline-custom"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
-            <button class="btn-outline-custom"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
-            <button class="btn-outline-custom"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
-            <button class="btn-primary-custom"><i class="bi bi-envelope"></i> Send Mail</button>
+
+        <!-- Filter Card -->
+        <div class="sd-card">
+            <div class="sd-filters-header">
+                <span><i class="bi bi-filter-left"></i> Filters</span>
+                <i class="bi bi-chevron-down sd-toggle-icon"></i>
+            </div>
+            <div class="sd-filters-grid">
+                <div class="sd-form-group">
+                    <label>State</label>
+                    <select class="sd-control sd-select">
+                        <option value="" disabled selected hidden>All State</option>
+                    </select>
+                </div>
+            </div>
+            <div class="sd-filter-actions">
+                <button class="sd-btn sd-btn-ghost"><i class="bi bi-x-lg"></i> Clear All</button>
+                <button class="sd-btn sd-btn-primary"><i class="bi bi-funnel"></i> Apply Filters</button>
+            </div>
         </div>
+
+        <!-- Table Card -->
+        <div class="sd-card">
+            <div class="sd-table-head">
+                <h2 class="sd-table-title">Stock List</h2>
+                <div class="sd-search">
+                    <i class="bi bi-search"></i>
+                    <input type="text" placeholder="Search zones..." />
+                </div>
+            </div>
+
+            <div class="sd-table-wrap">
+                <table class="sd-table">
+                    <thead>
+                        <tr>
+                            <th class="sd-th-check"><input type="checkbox" /></th>
+                            <th>State</th>
+                            <th>Opening Stock <span class="sd-th-sub">(as on 1 Apr)</span></th>
+                            <th>Supplies <span class="sd-th-sub">(April)</span></th>
+                            <th>Total Stock</th>
+                            <th>Sales <span class="sd-th-sub">(1-6 Apr)</span></th>
+                            <th>Sales <span class="sd-th-sub">(7 Apr)</span></th>
+                            <th>Total Sales</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < 5; i++)
+                        {
+                            <tr>
+                                <td><input type="checkbox" /></td>
+                                <td class="sd-cell-left">Tamil Nadu</td>
+                                <td>16,338</td>
+                                <td>571</td>
+                                <td>22,055</td>
+                                <td>571</td>
+                                <td>639</td>
+                                <td>1,210</td>
+                            </tr>
+                        }
+                        <tr class="sd-grand-total">
+                            <td></td>
+                            <td class="sd-cell-left">Grand Total</td>
+                            <td>35,113</td>
+                            <td>7,978</td>
+                            <td>43,092</td>
+                            <td>43,092</td>
+                            <td>43,092</td>
+                            <td>43,092</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="sd-pagination">
+                <div class="sd-page-size">
+                    <span>Items Per Page</span>
+                    <select class="sd-control sd-select sd-page-select">
+                        <option>16</option>
+                        <option>25</option>
+                    </select>
+                </div>
+                <div class="sd-page-controls">
+                    <button class="sd-page-btn"><i class="bi bi-chevron-left"></i></button>
+                    <button class="sd-page-btn sd-page-active">1</button>
+                    <button class="sd-page-btn">2</button>
+                    <button class="sd-page-btn">3</button>
+                    <span class="sd-page-ellipsis">..</span>
+                    <button class="sd-page-btn">8</button>
+                    <button class="sd-page-btn">9</button>
+                    <button class="sd-page-btn">10</button>
+                    <button class="sd-page-btn"><i class="bi bi-chevron-right"></i></button>
+                </div>
+            </div>
+        </div>
+
     </div>
-     
-    <div class="sr-stats-grid">
-        <div class="sr-stat-card sr-card-green">
-            <div class="sr-stat-content">
-                <p class="kpi-label">Total Stock</p>
-                    <h2 class="kpi-value">43,092</h2>
-            </div>
-            <div class="sr-stat-icon-box sr-icon-green"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg></div>
-        </div>
-
-        <div class="sr-stat-card sr-card-blue">
-            <div class="sr-stat-content">
-                <p class="kpi-label">Total Sales</p>
-                    <h2 class="kpi-value">6,087</h2>
-              
-                
-            </div>
-            <div class="sr-stat-icon-box sr-icon-blue"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="10" rx="2"></rect><path d="M12 12v6"></path><path d="M16 15h.01"></path><path d="M8 15h.01"></path><path d="M20 19v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"></path><path d="M2 15h20"></path></svg></div>
-        </div>
-
-        <div class="sr-stat-card sr-card-orange">
-            <div class="sr-stat-content">
-               <p class="kpi-label">Closing Stock</p>
-                    <h2 class="kpi-value">37,005</h2>
-            </div>
-            <div class="sr-stat-icon-box sr-icon-orange"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M2 12h2"></path><path d="M20 12h2"></path></svg></div>
-        </div>
-
-        <div class="sr-stat-card sr-card-red">
-            <div class="sr-stat-content">
-               <p class="kpi-label">Sales %</p>
-                    <h2 class="kpi-value">14%</h2>
-            </div>
-            <div class="sr-stat-icon-box sr-icon-red"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="12" height="12" rx="2"></rect><path d="M17 9h4l2 4v4h-6"></path><circle cx="9" cy="18" r="2"></circle><circle cx="17" cy="18" r="2"></circle><path d="M1 10h4"></path><path d="M3 14h2"></path></svg></div>
-        </div>
-    </div>
-
-   
-
-    <div class="dashboard-card mb-4">
-        <div class="filter-header">
-            <span><i class="bi bi-funnel"></i> Filters</span>
-            <i class="bi bi-chevron-down text-muted" style="cursor: pointer;"></i>
-        </div>
-        <div class="row g-3">
-            <div class="col-9">
-                <label class="filter-label">State</label>
-                <select class="form-select custom-select"><option>All State</option></select>
-            </div>
-        </div>
-        <div class="d-flex justify-content-end mt-4 gap-2">
-            <button class="btn-outline-custom"><i class="bi bi-x"></i> Clear All</button>
-            <button class="btn-primary-custom"><i class="bi bi-funnel"></i> Apply Filters</button>
-        </div>
-    </div>
-
-   
-    <div class="sr-table-card">
-        <div class="sr-table-top">
-            <h3>Top Ranking Retailers List</h3>
-            <input type="text" class="sr-search-input" placeholder="Search zones...">
-        </div>
-
-        <div class="sr-table-wrapper">
-            <table class="sr-table">
-                <thead>
-                    
-                     <tr>
-                        <th style="width: 40px;"><input class="form-check-input" type="checkbox"></th>
-                        <th>State</th>
-                        <th>Opening Stock <br><span class="fw-normal">(as on 1 Apr)</span></th>
-                        <th>Supplies <br><span class="fw-normal">(April)</span></th>
-                        <th>Total Stock</th>
-                        <th>Sales <br><span class="fw-normal">(1-6 Apr)</span></th>
-                        <th>Sales <br><span class="fw-normal">(7 Apr)</span></th>
-                        <th>Total Sales</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><input class="form-check-input" type="checkbox"></td>
-                        <td>Tamil Nadu</td>
-                        <td>16,338</td>
-                        <td>571</td>
-                        <td>22,055</td>
-                        <td>571</td>
-                        <td>639</td>
-                        <td>1,210</td>
-                    </tr>
-                   <tr>
-                        <td><input class="form-check-input" type="checkbox"></td>
-                        <td>Tamil Nadu</td>
-                        <td>16,338</td>
-                        <td>571</td>
-                        <td>22,055</td>
-                        <td>571</td>
-                        <td>639</td>
-                        <td>1,210</td>
-                    </tr>
-                   <tr>
-                        <td><input class="form-check-input" type="checkbox"></td>
-                        <td>Tamil Nadu</td>
-                        <td>16,338</td>
-                        <td>571</td>
-                        <td>22,055</td>
-                        <td>571</td>
-                        <td>639</td>
-                        <td>1,210</td>
-                    </tr>
-                    <tr>
-                        <td><input class="form-check-input" type="checkbox"></td>
-                        <td>Tamil Nadu</td>
-                        <td>16,338</td>
-                        <td>571</td>
-                        <td>22,055</td>
-                        <td>571</td>
-                        <td>639</td>
-                        <td>1,210</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="sr-pagination">
-            <div class="sr-page-size">
-                <span>Items Per Page</span>
-                <select class="sr-form-select" style="padding: 6px 32px 6px 12px; width: 65px;"><option>16</option></select>
-            </div>
-            <div class="sr-page-controls">
-                <button class="sr-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <button class="sr-page-btn active">1</button>
-                <button class="sr-page-btn">2</button>
-                <button class="sr-page-btn">3</button>
-                <button class="sr-page-btn dots">..</button>
-                <button class="sr-page-btn">8</button>
-                <button class="sr-page-btn">9</button>
-                <button class="sr-page-btn">10</button>
-                <button class="sr-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-            </div>
-        </div>
-    </div>
-
 </div>
 
 @code {

@@ -1,483 +1,221 @@
-﻿@page "/ProductWiseStockAvailability" 
+﻿@page "/ProductWiseStockAvailability"
 
-    <style>
-        :root {
-            --bg-body: #f4f7fa;
-            --bg-card: #ffffff;
-            --text-main: #1f2937;
-            --text-muted: #6b7280;
-            --border-color: #e5e7eb;
-            --primary-blue: #3b82f6;
-            
-            /* KPI Theme Colors */
-            --theme-green: #22c55e;
-            --bg-green-light: #f0fdf4;
-            --text-green-dark: #16a34a;
-            
-            --theme-purple: #a855f7;
-            --bg-purple-light: #faf5ff;
-            --text-purple-dark: #9333ea;
-            
-            --theme-blue: #3b82f6;
-            --bg-blue-light: #eff6ff;
-            --text-blue-dark: #2563eb;
-            
-            --theme-lime: #84cc16;
-            --bg-lime-light: #f7fee7;
-            
-            --theme-red: #ef4444;
-            --bg-red-light: #fef2f2;
-            --text-red-dark: #dc2626;
+<div class="container-fluid py-4 px-0">
+    <div class="psa-wrapper">
 
-            /* Table Header Colors */
-            --th-green-bg: #ecfdf5;
-            --th-blue-bg: #eff6ff;
-            --th-pink-bg: #fdf4ff;
-        }
-
-        /* --- Page Header & Top Badges --- */
-        .page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.2rem; color: #111827; }
-        .page-subtitle { font-size: 0.85rem; color: var(--text-muted); }
-        
-        .top-badge {
-            background-color: #ffffff;
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: 4px 10px;
-            border-radius: 6px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        /* Buttons */
-        .btn-outline-custom {
-            background: #fff;
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            font-size: 0.8rem;
-            font-weight: 500;
-            padding: 6px 14px;
-            border-radius: 6px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.2s;
-        }
-        .btn-outline-custom:hover { background: #f9fafb; color: var(--text-main); }
-        
-        .btn-primary-custom {
-            background: var(--primary-blue);
-            border: 1px solid var(--primary-blue);
-            color: #fff;
-            font-size: 0.8rem;
-            font-weight: 500;
-            padding: 6px 16px;
-            border-radius: 6px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .btn-primary-custom:hover { background: #2563eb; color: #fff; }
-
-        /* --- KPI Cards --- */
-        .kpi-card {
-            border-radius: 10px;
-            padding: 1.25rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            position: relative;
-            overflow: hidden;
-            height: 100%;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-            border: 1px solid var(--border-color);
-            background: #ffffff;
-        }
-        
-        /* Left Borders */
-        .kpi-green { border-left: 4px solid var(--theme-green); }
-        .kpi-purple { border-left: 4px solid var(--theme-purple); }
-        .kpi-blue { border-left: 4px solid var(--theme-blue); }
-        .kpi-lime { border-left: 4px solid var(--theme-lime); }
-        .kpi-red { border-left: 4px solid var(--theme-red); }
-
-        .kpi-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem; }
-        .kpi-value { font-size: 1.5rem; font-weight: 700; color: #111827; line-height: 1.2; margin-bottom: 0.25rem; }
-        .kpi-trend { font-size: 0.75rem; font-weight: 600; }
-        
-        /* Specific Trend Text Colors */
-        .kpi-green .kpi-trend { color: var(--text-green-dark); }
-        .kpi-purple .kpi-trend { color: var(--text-purple-dark); }
-        .kpi-blue .kpi-trend { color: var(--text-blue-dark); }
-        .kpi-lime .kpi-trend { color: var(--text-red-dark); }
-        .kpi-red .kpi-trend { color: var(--text-red-dark); }
-
-        .kpi-icon-wrapper {
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-            background: #ffffff;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        }
-        .kpi-green .kpi-icon-wrapper { color: var(--theme-green); background: var(--bg-green-light); border: 1px solid #bbf7d0; }
-        .kpi-purple .kpi-icon-wrapper { color: var(--theme-purple); background: var(--bg-purple-light); border: 1px solid #e9d5ff; }
-        .kpi-blue .kpi-icon-wrapper { color: var(--theme-blue); background: var(--bg-blue-light); border: 1px solid #bfdbfe; }
-        .kpi-lime .kpi-icon-wrapper { color: var(--theme-lime); background: var(--bg-lime-light); border: 1px solid #d9f99d; }
-        .kpi-red .kpi-icon-wrapper { color: var(--theme-red); background: var(--bg-red-light); border: 1px solid #fecaca; }
-
-        /* --- Dashboard Main Card --- */
-        .dashboard-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-            padding: 1.25rem;
-            margin-bottom: 1.25rem;
-        }
-
-        /* --- Filters --- */
-        .filter-header { font-size: 0.9rem; font-weight: 600; color: var(--text-main); margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; }
-        .filter-label { font-size: 0.75rem; font-weight: 600; color: var(--text-main); margin-bottom: 6px; }
-        .custom-select, .custom-input {
-            background-color: #f9fafb;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            padding: 8px 12px;
-            width: 100%;
-        }
-        .custom-select:focus, .custom-input:focus { border-color: var(--primary-blue); box-shadow: none; outline: none; }
-
-        /* --- Table Header & Search --- */
-        .table-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
-        .card-title { font-size: 1.05rem; font-weight: 600; color: var(--text-main); margin: 0; }
-        
-        .search-container { position: relative; width: 260px; }
-        .search-container i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 0.85rem; }
-        .search-input {
-            width: 100%;
-            padding: 8px 12px 8px 32px;
-            background-color: #f9fafb;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            font-size: 0.8rem;
-            outline: none;
-        }
-
-        /* --- Table Styling (FIXED) --- */
-        .table-responsive {
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            overflow: hidden; /* Clips the table to ensure rounded corners */
-        }
-        
-        .table-custom { 
-            margin-bottom: 0; 
-            border-collapse: collapse; 
-            width: 100%; 
-        }
-        
-        .table-custom th {
-            font-size: 0.75rem;
-            font-weight: 700;
-            padding: 12px;
-            border-bottom: 1px solid var(--border-color);
-            text-align: center;
-            vertical-align: middle;
-        }
-        
-        /* Grouped Header Colors */
-        .th-group-green { background-color: var(--th-green-bg); color: #047857; }
-        .th-group-blue { background-color: var(--th-blue-bg); color: #1d4ed8; }
-        .th-group-pink { background-color: var(--th-pink-bg); }
-        .th-group-default { background-color: #f9fafb; color: var(--text-main); }
-        .th-bg-white { background-color: #ffffff !important; color: var(--text-muted); }
-        
-        .table-custom td {
-            font-size: 0.8rem;
-            color: var(--text-main);
-            padding: 14px 12px;
-            vertical-align: middle;
-            border-bottom: 1px solid var(--border-color);
-            text-align: center;
-        }
-        
-        /* Vertical Separators */
-        .border-right-custom {
-            border-right: 1px solid var(--border-color) !important;
-        }
-        
-        .table-custom tr:last-child td { border-bottom: none; }
-        
-        /* Grand Total Row */
-        .grand-total-row td {
-            background-color: var(--bg-green-light) !important;
-            font-weight: 700;
-            border-bottom: none;
-            color: var(--text-green-dark) !important;
-        }
-
-        /* --- Pagination --- */
-        .pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 1.25rem; }
-        .items-per-page { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-muted); }
-        .page-item { 
-            width: 32px; height: 32px; 
-            display: flex; align-items: center; justify-content: center; 
-            border: 1px solid var(--border-color); 
-            background: #fff; border-radius: 6px; 
-            font-size: 0.8rem; color: var(--text-muted); 
-            cursor: pointer; text-decoration: none; 
-        }
-        .page-item.active { background: #f3f4f6; color: var(--text-main); font-weight: 600; }
-        .page-item.dots { border: none; background: transparent; cursor: default; }
-    </style>
-
-<div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1600px;">
-
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start mb-4 gap-3">
-        <div>
-            <div class="d-flex align-items-center gap-3">
-                <h1 class="page-title">Product-wise Stock Availability</h1>
-               
+        <!-- Page Header -->
+        <div class="psa-page-header">
+            <div class="psa-title-block">
+                <h1>Product-wise Stock Availability</h1>
+                <p>State-wise product stock availability summary as on 01 May 2026</p>
             </div>
-            <p class="page-subtitle">Consolidated stock and sales updated daily</p>
-        </div>
-        <div class="d-flex flex-wrap gap-2">
-            <button class="btn-outline-custom"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
-            <button class="btn-outline-custom"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
-            <button class="btn-outline-custom"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
-            <button class="btn-primary-custom"><i class="bi bi-envelope"></i> Send Mail</button>
-        </div>
-    </div>
-
-    <!-- KPI Cards -->
-    <div class="lc-stats-grid">
-        
-        <!-- Total Stock -->
-        <div class="lc-stat-card lc-theme-green">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Total Stock</span>
-                    <span class="lc-stat-value">4,820</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                </div>
-            </div>
-            <div class="lc-stat-trend lc-text-green">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>12% vs last period</span>
+            <div class="psa-actions">
+                <button class="psa-btn psa-btn-outline"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
+                <button class="psa-btn psa-btn-outline"><i class="bi bi-file-earmark-spreadsheet" style="color:#16A34A"></i> Excel</button>
+                <button class="psa-btn psa-btn-outline"><i class="bi bi-file-earmark-pdf" style="color:#DC2626"></i> PDF</button>
+                <button class="psa-btn psa-btn-primary"><i class="bi bi-envelope"></i> Send Mail</button>
             </div>
         </div>
 
-        <!-- Under Review -->
-        <div class="lc-stat-card lc-theme-blue">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Under Review (MT)</span>
-                    <span class="lc-stat-value">4,820</span>
+        <!-- KPI Cards -->
+        <div class="psa-kpi-grid">
+
+            <div class="psa-kpi-card psa-kpi-green">
+                <div class="psa-kpi-content">
+                    <div class="psa-kpi-label">Total States</div>
+                    <div class="psa-kpi-value">28</div>
+                    <div class="psa-kpi-sub">Active states</div>
                 </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><circle cx="10" cy="13" r="2"></circle><line x1="11.4" y1="14.4" x2="13.4" y2="16.4"></line></svg>
+                <div class="psa-kpi-icon psa-icon-green">
+                    <i class="bi bi-tree-fill"></i>
                 </div>
             </div>
-            <div class="lc-stat-trend lc-text-green">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>3.5% vs last period</span>
+
+            <div class="psa-kpi-card psa-kpi-purple">
+                <div class="psa-kpi-content">
+                    <div class="psa-kpi-label">Total Products</div>
+                    <div class="psa-kpi-value">16</div>
+                    <div class="psa-kpi-sub">SKUs tracked</div>
+                </div>
+                <div class="psa-kpi-icon psa-icon-purple">
+                    <i class="bi bi-boxes"></i>
+                </div>
+            </div>
+
+            <div class="psa-kpi-card psa-kpi-blue">
+                <div class="psa-kpi-content">
+                    <div class="psa-kpi-label">Total Quantity (MT)</div>
+                    <div class="psa-kpi-value">1,82,798</div>
+                    <div class="psa-kpi-sub">Across all states</div>
+                </div>
+                <div class="psa-kpi-icon psa-icon-blue">
+                    <i class="bi bi-graph-up-arrow"></i>
+                </div>
+            </div>
+
+            <div class="psa-kpi-card psa-kpi-lime">
+                <div class="psa-kpi-content">
+                    <div class="psa-kpi-label">Highest Stock St...</div>
+                    <div class="psa-kpi-value psa-kpi-value-sm">Manipur</div>
+                    <div class="psa-kpi-sub">37,322 MT</div>
+                </div>
+                <div class="psa-kpi-icon psa-icon-lime">
+                    <i class="bi bi-buildings"></i>
+                </div>
+            </div>
+
+            <div class="psa-kpi-card psa-kpi-red">
+                <div class="psa-kpi-content">
+                    <div class="psa-kpi-label">Low Stock Alerts</div>
+                    <div class="psa-kpi-value">0</div>
+                    <div class="psa-kpi-sub">States below threshold</div>
+                </div>
+                <div class="psa-kpi-icon psa-icon-red">
+                    <i class="bi bi-tools"></i>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Filters Card -->
+        <div class="psa-card">
+            <div class="psa-filters-header">
+                <span><i class="bi bi-filter-left"></i> Filters</span>
+                <i class="bi bi-chevron-down psa-toggle-icon"></i>
+            </div>
+
+            <div class="psa-filters-grid">
+                <div class="psa-form-group">
+                    <label>Date Range</label>
+                    <div class="psa-input-with-icon">
+                        <input type="text" class="psa-control" placeholder="01 Apr 2025 - 28 Apr 2025" />
+                        <i class="bi bi-calendar3 psa-input-icon"></i>
+                    </div>
+                </div>
+                <div class="psa-form-group">
+                    <label>State</label>
+                    <select class="psa-control psa-select">
+                        <option value="" disabled selected hidden>All State</option>
+                    </select>
+                </div>
+                <div class="psa-form-group">
+                    <label>Region</label>
+                    <select class="psa-control psa-select">
+                        <option value="" disabled selected hidden>All Region</option>
+                    </select>
+                </div>
+                <div class="psa-form-group">
+                    <label>Head Quarters</label>
+                    <select class="psa-control psa-select">
+                        <option value="" disabled selected hidden>All Head Quarters</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="psa-filter-actions">
+                <button class="psa-btn psa-btn-ghost"><i class="bi bi-x-lg"></i> Clear All</button>
+                <button class="psa-btn psa-btn-primary"><i class="bi bi-funnel"></i> Apply Filters</button>
             </div>
         </div>
 
-        <!-- In Progress -->
-        <div class="lc-stat-card lc-theme-orange">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">In Progress (MT)</span>
-                    <span class="lc-stat-value">2,820</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+        <!-- Table Card -->
+        <div class="psa-card">
+            <div class="psa-table-head">
+                <h2 class="psa-table-title">Stock Availability List</h2>
+                <div class="psa-search">
+                    <i class="bi bi-search"></i>
+                    <input type="text" placeholder="Search zones..." />
                 </div>
             </div>
-            <div class="lc-stat-trend lc-text-green">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>1.2% vs last period</span>
-            </div>
-        </div>
 
-        <!-- Liquidated -->
-        <div class="lc-stat-card lc-theme-teal">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Liquidated (MT)</span>
-                    <span class="lc-stat-value">3,120</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 14l2 2 4-4"></path></svg>
-                </div>
+            <div class="psa-table-wrap">
+                <table class="psa-table">
+                    <thead>
+                        <tr class="psa-thead-group">
+                            <th rowspan="2" class="psa-th-state">State</th>
+                            <th colspan="3" class="psa-th-group-green">Normal Products</th>
+                            <th colspan="3" class="psa-th-group-blue">Imported Products</th>
+                            <th colspan="1" class="psa-th-group-pink"></th>
+                        </tr>
+                        <tr>
+                            <th>Urea 45kg</th>
+                            <th>Urea 50kg</th>
+                            <th class="psa-cell-divider">DAP</th>
+                            <th>Imp Urea 45</th>
+                            <th>Imp DAP</th>
+                            <th class="psa-cell-divider">Imp 10-26-26</th>
+                            <th>FOM</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="psa-state-cell">Tamil Nadu</td>
+                            <td>3,254</td>
+                            <td>4,785</td>
+                            <td class="psa-cell-divider">1,033</td>
+                            <td>362</td>
+                            <td>311</td>
+                            <td class="psa-cell-divider">-</td>
+                            <td>124</td>
+                        </tr>
+                        <tr>
+                            <td class="psa-state-cell">Karnataka</td>
+                            <td>3,254</td>
+                            <td>4,785</td>
+                            <td class="psa-cell-divider">-</td>
+                            <td>362</td>
+                            <td>311</td>
+                            <td class="psa-cell-divider">-</td>
+                            <td>124</td>
+                        </tr>
+                        <tr>
+                            <td class="psa-state-cell">Kerala</td>
+                            <td>3,254</td>
+                            <td>4,785</td>
+                            <td class="psa-cell-divider">1,033</td>
+                            <td>362</td>
+                            <td>-</td>
+                            <td class="psa-cell-divider">-</td>
+                            <td>124</td>
+                        </tr>
+                        <tr class="psa-grand-total">
+                            <td class="psa-state-cell">Grand Total</td>
+                            <td>10,254</td>
+                            <td>12,785</td>
+                            <td class="psa-cell-divider">2,033</td>
+                            <td>10,062</td>
+                            <td>622</td>
+                            <td class="psa-cell-divider">-</td>
+                            <td>324</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
-            <div class="lc-stat-trend lc-text-green">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>7.2% vs last period</span>
-            </div>
-        </div>
 
-        <!-- Pending Ack -->
-        <div class="lc-stat-card lc-theme-red">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Pending Ack</span>
-                    <span class="lc-stat-value">1,020</span>
+            <!-- Pagination -->
+            <div class="psa-pagination">
+                <div class="psa-page-size">
+                    <span>Items Per Page</span>
+                    <select class="psa-control psa-select psa-page-select">
+                        <option>16</option>
+                        <option>25</option>
+                    </select>
                 </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22V12"></path><circle cx="12" cy="12" r="3" fill="#dc2626"></circle></svg>
+                <div class="psa-page-controls">
+                    <button class="psa-page-btn"><i class="bi bi-chevron-left"></i></button>
+                    <button class="psa-page-btn psa-page-active">1</button>
+                    <button class="psa-page-btn">2</button>
+                    <button class="psa-page-btn">3</button>
+                    <span class="psa-page-ellipsis">..</span>
+                    <button class="psa-page-btn">8</button>
+                    <button class="psa-page-btn">9</button>
+                    <button class="psa-page-btn">10</button>
+                    <button class="psa-page-btn"><i class="bi bi-chevron-right"></i></button>
                 </div>
-            </div>
-            <div class="lc-stat-trend lc-text-red">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"></polyline><polyline points="16 17 22 17 22 11"></polyline></svg>
-                <span>6.10% vs last period</span>
             </div>
         </div>
 
     </div>
-
-    <!-- Filters -->
-    <div class="dashboard-cards mb-4">
-        <div class="filter-header">
-            <span><i class="bi bi-funnel"></i> Filters</span>
-            <i class="bi bi-chevron-down text-muted" style="cursor: pointer;"></i>
-        </div>
-        <div class="row g-3">
-            <div class="col-md-3">
-                <label class="filter-label">State</label>
-                <select class="form-select custom-select"><option>All State</option></select>
-            </div>
-            <div class="col-md-3">
-                <label class="filter-label">Region</label>
-                <select class="form-select custom-select"><option>All Region</option></select>
-            </div>
-            <div class="col-md-3">
-                <label class="filter-label">Head Quarters</label>
-                <select class="form-select custom-select"><option>All Head Quarters</option></select>
-            </div>
-            <div class="col-md-3">
-                <label class="filter-label">District</label>
-                <select class="form-select custom-select"><option>All District</option></select>
-            </div>
-        </div>
-        <div class="d-flex justify-content-end mt-4 gap-2">
-            <button class="btn-outline-custom"><i class="bi bi-x"></i> Clear All</button>
-            <button class="btn-primary-custom"><i class="bi bi-funnel"></i> Apply Filters</button>
-        </div>
-    </div>
-
-    <!-- Table Section -->
-    <div class="dashboard-card pb-3">
-        <div class="table-header-row">
-            <h3 class="card-title mb-0">Stock Availability List</h3>
-            <div class="search-container">
-             
-                <input type="text" class="search-input" placeholder="Search zones...">
-            </div>
-        </div>
-        
-        <div class="table-responsive">
-            <table class="table table-borderless custom-table">
-                <thead>
-                    <tr>
-                        <th rowspan="2" class="th-group-default border-right-custom" style="width: 15%;">State</th>
-                        <th colspan="3" class="th-group-green border-right-custom">Normal Products</th>
-                        <th colspan="3" class="th-group-blue border-right-custom">Imported Products</th>
-                        <th colspan="1" class="th-group-pink"></th>
-                    </tr>
-                    <tr>
-                        <th class="th-bg-white">Urea 45kg</th>
-                        <th class="th-bg-white">Urea 50kg</th>
-                        <th class="th-bg-white border-right-custom">DAP</th>
-                        
-                        <th class="th-bg-white">Imp Urea 45</th>
-                        <th class="th-bg-white">Imp DAP</th>
-                        <th class="th-bg-white border-right-custom">Imp 10-26-26</th>
-                        
-                        <th class="th-bg-white">FOM</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-start fw-medium border-right-custom">Tamil Nadu</td>
-                        <td>3,254</td>
-                        <td>4,785</td>
-                        <td class="border-right-custom">1,033</td>
-                        <td>362</td>
-                        <td>311</td>
-                        <td class="border-right-custom">-</td>
-                        <td>124</td>
-                    </tr>
-                    <tr>
-                        <td class="text-start fw-medium border-right-custom">Karnataka</td>
-                        <td>3,254</td>
-                        <td>4,785</td>
-                        <td class="border-right-custom">-</td>
-                        <td>362</td>
-                        <td>311</td>
-                        <td class="border-right-custom">-</td>
-                        <td>124</td>
-                    </tr>
-                    <tr>
-                        <td class="text-start fw-medium border-right-custom">Kerala</td>
-                        <td>3,254</td>
-                        <td>4,785</td>
-                        <td class="border-right-custom">1,033</td>
-                        <td>362</td>
-                        <td>-</td>
-                        <td class="border-right-custom">-</td>
-                        <td>124</td>
-                    </tr>
-                    
-                    <tr class="grand-total-row">
-                        <td class="text-start border-right-custom">Grand Total</td>
-                        <td>10,254</td>
-                        <td>12,785</td>
-                        <td class="border-right-custom">2,033</td>
-                        <td>10,062</td>
-                        <td>622</td>
-                        <td class="border-right-custom">-</td>
-                        <td>324</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Pagination -->
-        <div class="pagination-container">
-            <div class="items-per-page">
-                Items Per Page 
-                <select class="form-select form-select-sm" style="width: 70px; background-color: #fff;">
-                    <option>16</option>
-                    <option>25</option>
-                </select>
-            </div>
-            <div class="d-flex gap-1">
-                <a class="page-item"><i class="bi bi-chevron-left"></i></a>
-                <a class="page-item active">1</a>
-                <a class="page-item">2</a>
-                <a class="page-item">3</a>
-                <span class="page-item dots">..</span>
-                <a class="page-item">8</a>
-                <a class="page-item">9</a>
-                <a class="page-item">10</a>
-                <a class="page-item"><i class="bi bi-chevron-right"></i></a>
-            </div>
-        </div>
-    </div>
-
 </div>
 
 @code {
