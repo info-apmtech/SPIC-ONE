@@ -8,15 +8,59 @@ namespace SpicAPI.Controllers
 {
 
     [Route("api/[controller]")]
-    public class DealerRegistrationController : GenericCrudController<DealerRegistration>
+   public class DealerRegistrationController : GenericCrudController<DealerRegistration>
 	{
 		private readonly IGenericRepository<DealerApprovalHistory>? _historyRepo;
+		private readonly IGenericRepository<DealerExperience>? _expRepo;
+		private readonly IGenericRepository<AnnualSaleDataLastFYofDealerRegistration>? _annualRepo;
+		private readonly IGenericRepository<DealerWarehouseFacilities>? _whRepo;
+		private readonly IGenericRepository<DealerRailFacilities>? _railRepo;
+		private readonly IGenericRepository<DealerPortFacilities>? _portRepo;
+		private readonly IGenericRepository<DealerMarketDetail>? _marketRepo;
+		private readonly IGenericRepository<DealerCompaniesOperatingInArea>? _compRepo;
+		private readonly IGenericRepository<DealerOwnershipInfo>? _ownerRepo;
+		private readonly IGenericRepository<SalesPlanningInDealerRegistration>? _salesPlanRepo;
+		private readonly IGenericRepository<DealerAssetBank>? _bankRepo;
+		private readonly IGenericRepository<DealerAssetLand>? _landRepo;
+		private readonly IGenericRepository<DealerAssetBuilding>? _buildingRepo;
+		private readonly IGenericRepository<DealerCreditLimitProposal>? _creditRepo;
+		private readonly IGenericRepository<DealerRegistrationDocuments>? _docsRepo;
 
-		// Single constructor: historyRepo is optional so existing DI registrations (without historyRepo)
-		// continue to work. If historyRepo is registered it will be injected automatically.
-		public DealerRegistrationController(IGenericRepository<DealerRegistration> repo, IGenericRepository<DealerApprovalHistory>? historyRepo = null) : base(repo)
+		// Single constructor: optional repositories are injected when registered. Defaults to null to avoid breaking DI.
+		public DealerRegistrationController(
+			IGenericRepository<DealerRegistration> repo,
+			IGenericRepository<DealerApprovalHistory>? historyRepo = null,
+			IGenericRepository<DealerExperience>? expRepo = null,
+			IGenericRepository<AnnualSaleDataLastFYofDealerRegistration>? annualRepo = null,
+			IGenericRepository<DealerWarehouseFacilities>? whRepo = null,
+			IGenericRepository<DealerRailFacilities>? railRepo = null,
+			IGenericRepository<DealerPortFacilities>? portRepo = null,
+			IGenericRepository<DealerMarketDetail>? marketRepo = null,
+			IGenericRepository<DealerCompaniesOperatingInArea>? compRepo = null,
+			IGenericRepository<DealerOwnershipInfo>? ownerRepo = null,
+			IGenericRepository<SalesPlanningInDealerRegistration>? salesPlanRepo = null,
+			IGenericRepository<DealerAssetBank>? bankRepo = null,
+			IGenericRepository<DealerAssetLand>? landRepo = null,
+			IGenericRepository<DealerAssetBuilding>? buildingRepo = null,
+			IGenericRepository<DealerCreditLimitProposal>? creditRepo = null,
+			IGenericRepository<DealerRegistrationDocuments>? docsRepo = null
+			) : base(repo)
 		{
 			_historyRepo = historyRepo;
+			_expRepo = expRepo;
+			_annualRepo = annualRepo;
+			_whRepo = whRepo;
+			_railRepo = railRepo;
+			_portRepo = portRepo;
+			_marketRepo = marketRepo;
+			_compRepo = compRepo;
+			_ownerRepo = ownerRepo;
+			_salesPlanRepo = salesPlanRepo;
+			_bankRepo = bankRepo;
+			_landRepo = landRepo;
+			_buildingRepo = buildingRepo;
+			_creditRepo = creditRepo;
+			_docsRepo = docsRepo;
 		}
 
 		[HttpGet("all")]
@@ -42,6 +86,77 @@ namespace SpicAPI.Controllers
 			else
 				query = query.Where(x => x.CreatedBy == userId);
 			return Ok(await query.ToListAsync());
+		}
+
+		/// <summary>
+		/// Returns a per-step completion summary for the given dealer.
+		/// This consolidates multiple client calls into a single API.
+		/// The response is an array of objects with StepNo (1-based) and IsComplete boolean.
+		/// </summary>
+		[HttpGet("{dealerId}/step-completion-summary")]
+		public async Task<IActionResult> GetStepCompletionSummary(int dealerId)
+		{
+			// For each step we check whether related data exists. Reuse ExistsAsync when available.
+			var result = new List<object>();
+
+			// Step 1: Dealer basic info (DealerRegistration exists and has PinCode)
+			var dealer = await _repo.GetByIdAsync(dealerId);
+			bool step1 = dealer != null && !string.IsNullOrWhiteSpace(dealer.PinCode);
+			result.Add(new { StepNo = 1, IsComplete = step1 });
+
+			// Step 2: DealerExperience
+			bool step2 = _expRepo != null && await _expRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			result.Add(new { StepNo = 2, IsComplete = step2 });
+
+			// Step 3: AnnualSaleDataLastFYofDealerRegistration
+			bool step3 = _annualRepo != null && await _annualRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			result.Add(new { StepNo = 3, IsComplete = step3 });
+
+			// Step 4: Warehouse facilities
+			bool step4 = _whRepo != null && await _whRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			result.Add(new { StepNo = 4, IsComplete = step4 });
+
+			// Step 5: Rail facilities
+			bool step5 = _railRepo != null && await _railRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			result.Add(new { StepNo = 5, IsComplete = step5 });
+
+			// Step 6: Port facilities
+			bool step6 = _portRepo != null && await _portRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			result.Add(new { StepNo = 6, IsComplete = step6 });
+
+			// Step 7: Market detail
+			bool step7 = _marketRepo != null && await _marketRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			result.Add(new { StepNo = 7, IsComplete = step7 });
+
+			// Step 8: Companies operating in area
+			bool step8 = _compRepo != null && await _compRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			result.Add(new { StepNo = 8, IsComplete = step8 });
+
+			// Step 9: Ownership info
+			bool step9 = _ownerRepo != null && await _ownerRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			result.Add(new { StepNo = 9, IsComplete = step9 });
+
+			// Step 10: Sales planning
+			bool step10 = _salesPlanRepo != null && await _salesPlanRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			result.Add(new { StepNo = 10, IsComplete = step10 });
+
+			// Step 11: Assets (bank/land/building)
+			bool bank = _bankRepo != null && await _bankRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			bool land = _landRepo != null && await _landRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			bool building = _buildingRepo != null && await _buildingRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			bool step11 = bank || land || building;
+			result.Add(new { StepNo = 11, IsComplete = step11 });
+
+			// Step 12: Credit limit proposal / sales performance
+			bool credit = _creditRepo != null && await _creditRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			bool step12 = credit; // Sales performance could be checked similarly if required
+			result.Add(new { StepNo = 12, IsComplete = step12 });
+
+			// Step 13: Documents
+			bool step13 = _docsRepo != null && await _docsRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+			result.Add(new { StepNo = 13, IsComplete = step13 });
+
+			return Ok(result);
 		}
 
 		[HttpPost("{id}/send-back")]

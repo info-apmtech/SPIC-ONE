@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
+using System.Security.Claims;
 using System.Text.RegularExpressions;
 
 namespace SpicAPI.Controllers
@@ -104,6 +105,7 @@ namespace SpicAPI.Controllers
             }
 
             var now = DateTime.UtcNow;
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             int inserted = 0;
             int updated  = 0;
 
@@ -175,7 +177,7 @@ namespace SpicAPI.Controllers
                             if (changed)
                             {
                                 existingDealer.UpdatedAt = now;
-                                existingDealer.UpdatedBy = "bulk-import";
+                                existingDealer.UpdatedBy = userId;
                                 // Fill state if missing on the existing record
                                 if (existingDealer.StateId == 0 && stateId > 0)
                                 { existingDealer.StateId = stateId; existingDealer.DealerStateId = stateId; }
@@ -196,9 +198,9 @@ namespace SpicAPI.Controllers
                                 Status                = DealerStatus.Active,
                                 CreatedAt             = now,
                                 UpdatedAt             = now,
-                                UpdatedBy             = "bulk-import",
-                                CreatedBy             = "bulk-import",
-                                UserTableId           = string.Empty,
+                                UpdatedBy             = userId,
+                                CreatedBy             = userId,
+                                UserTableId           = userId,
                                 ShopNoORRoomNoOrBlockNo = string.Empty,
                                 Village               = string.Empty,
                                 PinCode               = string.Empty,
