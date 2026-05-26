@@ -542,6 +542,8 @@ namespace SPIC.Core.Entities
 		public int SubGroupId { get; set; }
 		//Categories
 		public int ProductGroupId { get; set; }
+        //Financial year 
+		public int FinancialYearId { get; set; }
 		public int Quantity { get; set; }
 		public double GrossAmount { get; set; }
 

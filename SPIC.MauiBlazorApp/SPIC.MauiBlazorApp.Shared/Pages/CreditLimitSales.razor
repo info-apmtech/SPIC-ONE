@@ -217,7 +217,18 @@
                     <button type="button" class="btn-close" @onclick="() => _showUploadModal = false"></button>
                 </div>
                 <div class="modal-body">
-                    <InputFile OnChange="OnBulkFileSelected" accept=".xlsx,.xls" />
+                   <div class="mb-3">
+    <label class="form-label-custom">Financial Year</label>
+    <select class="form-control-custom w-100" @bind="_bulkUploadFinancialYearId">
+        <option value="0">Select Financial Year</option>
+        @foreach (var fy in _financialYears)
+        {
+            <option value="@fy.Id">@fy.Name</option>
+        }
+    </select>
+</div>
+
+<InputFile OnChange="OnBulkFileSelected" accept=".xlsx,.xls" />
                     <div class="upload-result" style="margin-top: 12px;">
                         @if (_isUploading)
                         {
@@ -346,6 +357,13 @@
     // Search & filter
     private string _searchText = "";
     private string? _currentUserId;
+    private int _bulkUploadFinancialYearId = 0;
+private List<FinancialYearDto> _financialYears = new();
+public class FinancialYearDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
 
     protected override async Task OnInitializedAsync()
     {
@@ -373,6 +391,7 @@
             _categoriesList = await Http.GetFromJsonAsync<List<LookupDto>>("api/Category/all") ?? new();
             _productsList = await Http.GetFromJsonAsync<List<LookupDto>>("api/Product/all") ?? new();
             _dealersAll = await Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/all") ?? new(); 
+            _financialYears = await Http.GetFromJsonAsync<List<FinancialYearDto>>("api/FinancialYear/all") ?? new();
         }
         catch (Exception ex)
         {
@@ -586,47 +605,65 @@
     private string GetDealerName(int id) =>
         id == 0 ? "N/A" : _dealersAll.FirstOrDefault(d => d.Id == id)?.FirmName ?? id.ToString();
 
-    private async Task OnBulkFileSelected(InputFileChangeEventArgs e)
+private async Task OnBulkFileSelected(InputFileChangeEventArgs e)
+{
+    var file = e.File;
+    if (file == null)
+        return;
+
+    if (_bulkUploadFinancialYearId <= 0)
     {
-        var file = e.File;
-        if (file == null) return;
-
-        using var content = new MultipartFormDataContent();
-        var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
-        var streamContent = new StreamContent(stream);
-        streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
-        content.Add(streamContent, "file", file.Name);
-
-        _isUploading = true;
-        _uploadResult = string.Empty;
         _uploadSuccess = false;
-        try
-        {
-            var response = await Http.PostAsync("api/creditlimitsales/bulk-upload", content);
-            var bodyText = await response.Content.ReadAsStringAsync();
+        _uploadResult = "Please select financial year before uploading.";
+        return;
+    }
 
-            if (response.IsSuccessStatusCode)
-            {
-                _uploadSuccess = true;
-                _uploadResult = "Upload completed successfully. All rows inserted.";
-                await LoadData();
-            }
-            else
-            {
-                _uploadSuccess = false;
-                _uploadResult = $"Upload failed: {bodyText}";
-            }
+    using var content = new MultipartFormDataContent();
+
+    // Increase size for large Excel files
+    var stream = file.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
+
+    var streamContent = new StreamContent(stream);
+    streamContent.Headers.ContentType =
+        new System.Net.Http.Headers.MediaTypeHeaderValue(
+            file.ContentType ?? "application/octet-stream");
+
+    content.Add(streamContent, "file", file.Name);
+
+    _isUploading = true;
+    _uploadResult = string.Empty;
+    _uploadSuccess = false;
+
+    try
+    {
+        var response = await Http.PostAsync(
+            $"api/creditlimitsales/bulk-upload?financialYearId={_bulkUploadFinancialYearId}",
+            content);
+
+        var bodyText = await response.Content.ReadAsStringAsync();
+
+        if (response.IsSuccessStatusCode)
+        {
+            _uploadSuccess = true;
+            _uploadResult = bodyText;
+            await LoadData();
         }
-        catch (Exception ex)
+        else
         {
             _uploadSuccess = false;
-            _uploadResult = $"Upload error: {ex.Message}";
-        }
-        finally
-        {
-            _isUploading = false;
+            _uploadResult = $"Upload failed: {bodyText}";
         }
     }
+    catch (Exception ex)
+    {
+        _uploadSuccess = false;
+        _uploadResult = $"Upload error: {ex.Message}";
+    }
+    finally
+    {
+        _isUploading = false;
+    }
+}
 
     private string? GetUserIdFromToken(string token)
     {
