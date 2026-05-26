@@ -1,5 +1,6 @@
 ﻿@inject NavigationManager NavManager
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
+@implements IDisposable
 
 <div class="brand">SPIC</div>
 
@@ -153,6 +154,17 @@
     protected override void OnInitialized()
     {
         isSettingsOpen = IsSettingsSectionActive();
+        loginState.OnChange += HandleLoginStateChanged;
+    }
+
+    private void HandleLoginStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        loginState.OnChange -= HandleLoginStateChanged;
     }
 
     private void ToggleSettingsMenu()
