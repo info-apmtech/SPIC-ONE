@@ -124,7 +124,7 @@
 	<div class="form-card">
 		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
 			<div class="card-header-title mb-0">
-				<i class="bi bi-credit-card-2-front" style="color:#2563EB;"></i> Existing Credit Limit
+				<i class="bi bi-credit-card-2-front" style="color:#2563EB;"></i> Existing Credit Limit - Spic
 			</div>
 		</div>
 		<div class="row g-3">
@@ -227,7 +227,7 @@
 				var catId = cat.Id;
 				var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
 				<div class="tab-btn @(catId == _selectedCategoryId ? "active" : "")"
-					 @onclick="() => SelectCategory(catId)" style="cursor:pointer;">
+					 @onclick="async () => await SelectCategory(catId)" style="cursor:pointer;">
 					@cat.Name (@unitName / Value)
 				</div>
 			}
@@ -240,20 +240,18 @@
 						<tr>
 							<th rowspan="2" style="min-width: 180px;">Product Name / Category</th>
 							@for (int fi = 0; fi < 3; fi++)
-							{
-								var fyIdx = fi;
-								<th colspan="2" class="text-center border-start">
-									<select class="form-select form-select-sm text-center"
-											value="@GetSelectedFY(fyIdx)"
-											@onchange="(e) => SetSelectedFY(fyIdx, e)">
-										<option value="0">Select Year</option>
-										@foreach (var fy in _financialYears)
-										{
-											<option value="@fy.Id">@fy.Name</option>
-										}
-									</select>
-								</th>
-							}
+{
+	var fyIdx = fi;
+	<th colspan="2" class="text-center border-start">
+		<select class="form-select form-select-sm text-center"
+				value="@GetSelectedFY(fyIdx)"
+				disabled>
+			<option value="@GetSelectedFY(fyIdx)">
+				@GetFYName(fyIdx)
+			</option>
+		</select>
+	</th>
+}
 						</tr>
 						<tr>
 							@for (int fi = 0; fi < 3; fi++)
@@ -263,30 +261,35 @@
 							}
 						</tr>
 					</thead>
-					<tbody>
-						@foreach (var row in _currentSalesPerfRows)
-						{
-							var r = row;
-							var product = _products.FirstOrDefault(p => p.Id == r.ProductId);
-							<tr>
-								<td class="fw-medium text-dark">@(product?.Name ?? "Unknown")</td>
-								@for (int fi = 0; fi < 3; fi++)
-								{
-									var fyIdx = fi;
-									<td class="border-start">
-										<input class="table-input" type="number" step="0.01"
-											   value="@GetPerfQty(r, fyIdx)"
-											   @onchange="(e) => SetPerfQty(r, fyIdx, e)" />
-									</td>
-									<td>
-										<input class="table-input" type="number" step="0.01"
-											   value="@GetPerfAmount(r, fyIdx)"
-											   @onchange="(e) => SetPerfAmount(r, fyIdx, e)" />
-									</td>
-								}
-							</tr>
-						}
-					</tbody>
+				<tbody>
+	@foreach (var row in _salesPerfViewRows)
+	{
+		<tr>
+			<td class="fw-medium text-dark">@row.ProductName</td>
+
+			<td class="border-start">
+				<input class="table-input" type="number" step="0.01" value="@row.FY1Qty" readonly />
+			</td>
+			<td>
+				<input class="table-input" type="number" step="0.01" value="@row.FY1Amount" readonly />
+			</td>
+
+			<td class="border-start">
+				<input class="table-input" type="number" step="0.01" value="@row.FY2Qty" readonly />
+			</td>
+			<td>
+				<input class="table-input" type="number" step="0.01" value="@row.FY2Amount" readonly />
+			</td>
+
+			<td class="border-start">
+				<input class="table-input" type="number" step="0.01" value="@row.FY3Qty" readonly />
+			</td>
+			<td>
+				<input class="table-input" type="number" step="0.01" value="@row.FY3Amount" readonly />
+			</td>
+		</tr>
+	}
+</tbody>
 					<tfoot>
 						<tr>
 							<td class="fw-bold text-end">Total</td>
@@ -1071,8 +1074,23 @@
 	private List<SalesPlanningInDealerRegistration> _salesPlanData = new();
 
 	private DealerCreditLimitProposal _proposal = new();
-	private List<DealerCreditLimitSalesPerformance> _allSalesPerfData = new();
-	private List<DealerCreditLimitSalesPerformance> _currentSalesPerfRows = new();
+
+private List<DealerCreditLimitSales> _creditLimitSalesData = new();
+private List<SalesPerfViewRow> _salesPerfViewRows = new();
+private class SalesPerfViewRow
+{
+	public int ProductId { get; set; }
+	public string ProductName { get; set; } = "";
+
+	public decimal FY1Qty { get; set; }
+	public decimal FY1Amount { get; set; }
+
+	public decimal FY2Qty { get; set; }
+	public decimal FY2Amount { get; set; }
+
+	public decimal FY3Qty { get; set; }
+	public decimal FY3Amount { get; set; }
+}
 
 	private int _selectedCategoryId;
 	private string _selectedUnitName = "MT";
@@ -1161,84 +1179,94 @@
 	];
 
 	protected override async Task OnInitializedAsync()
+{
+	if (Nav.Uri.Contains("company=SPIC", StringComparison.OrdinalIgnoreCase))
 	{
-		if (Nav.Uri.Contains("company=SPIC", StringComparison.OrdinalIgnoreCase))
-		{
-			SelectedCompany = "SPIC";
-		}
-		else if (Nav.Uri.Contains("company=GreenStar", StringComparison.OrdinalIgnoreCase))
-		{
-			SelectedCompany = "GreenStar";
-		}
-		// Load all master data in parallel
-		var fyTask = SafeGetAsync<List<FinancialYear>>("api/FinancialYear");
-		var catTask = SafeGetAsync<List<Category>>("api/Category");
-		var unitTask = SafeGetAsync<List<Unit>>("api/Unit");
-		var prodTask = SafeGetAsync<List<Product>>("api/Product");
-
-		if (DealerId.HasValue && DealerId.Value > 0)
-		{
-			// Load dealer-specific data in parallel with master data
-			var dealerTask = SafeGetAsync<DealerReg>($"api/DealerRegistration/{DealerId}");
-			var bankTask = SafeGetAsync<List<DealerAssetBank>>("api/DealerAssetBank/all");
-			var landTask = SafeGetAsync<List<DealerAssetLand>>("api/DealerAssetLand/all");
-			var buildingTask = SafeGetAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all");
-			var loanTask = SafeGetAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities/all");
-			var salesPlanTask = SafeGetAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all");
-			var proposalTask = SafeGetAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all");
-
-			await Task.WhenAll(fyTask, catTask, unitTask, prodTask,
-				dealerTask, bankTask, landTask, buildingTask, loanTask, salesPlanTask, proposalTask);
-
-			_financialYears = fyTask.Result ?? new();
-			_categories = catTask.Result ?? new();
-			_units = unitTask.Result ?? new();
-			_products = prodTask.Result ?? new();
-
-			var dealerId = DealerId!.Value;
-			_dealer = dealerTask.Result ?? new();
-			_bankAssets = (bankTask.Result ?? new()).Where(a => a.DealerId == dealerId).ToList();
-			_landAssets = (landTask.Result ?? new()).Where(a => a.DealerId == dealerId).ToList();
-			_buildingAssets = (buildingTask.Result ?? new()).Where(a => a.DealerId == dealerId).ToList();
-			_loanLiabilities = (loanTask.Result ?? new()).Where(a => a.DealerId == dealerId).ToList();
-			_salesPlanData = (salesPlanTask.Result ?? new()).Where(s => s.DealerId == dealerId).ToList();
-
-			var proposals = proposalTask.Result ?? new();
-			var existing = proposals.FirstOrDefault(p => p.DealerId == dealerId);
-			if (existing != null)
-				_proposal = existing;
-
-			// LoadSalesPerformance depends on _proposal.Id
-			if (_proposal.Id > 0)
-			{
-				try
-				{
-					var allPerf = await Http.GetFromJsonAsync<List<DealerCreditLimitSalesPerformance>>("api/DealerCreditLimitSalesPerformance/all") ?? new();
-					_allSalesPerfData = allPerf.Where(s => s.CreditLimitId == _proposal.Id).ToList();
-				}
-				catch { }
-			}
-
-			InitValuesFromData();
-		}
-		else
-		{
-			await Task.WhenAll(fyTask, catTask, unitTask, prodTask);
-
-			_financialYears = fyTask.Result ?? new();
-			_categories = catTask.Result ?? new();
-			_units = unitTask.Result ?? new();
-			_products = prodTask.Result ?? new();
-		}
-
-		if (_categories.Count > 0)
-		{
-			_selectedCategoryId = _categories.First().Id;
-			UpdateSelectedUnit();
-		}
-
-		BuildSalesPerfRows();
+		SelectedCompany = "SPIC";
 	}
+	else if (Nav.Uri.Contains("company=GreenStar", StringComparison.OrdinalIgnoreCase))
+	{
+		SelectedCompany = "GreenStar";
+	}
+
+	var fyTask = SafeGetAsync<List<FinancialYear>>("api/FinancialYear");
+	var catTask = SafeGetAsync<List<Category>>("api/Category");
+	var unitTask = SafeGetAsync<List<Unit>>("api/Unit");
+	var prodTask = SafeGetAsync<List<Product>>("api/Product");
+
+	if (DealerId.HasValue && DealerId.Value > 0)
+	{
+		var dealerTask = SafeGetAsync<DealerReg>($"api/DealerRegistration/{DealerId}");
+		var bankTask = SafeGetAsync<List<DealerAssetBank>>("api/DealerAssetBank/all");
+		var landTask = SafeGetAsync<List<DealerAssetLand>>("api/DealerAssetLand/all");
+		var buildingTask = SafeGetAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all");
+		var loanTask = SafeGetAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities/all");
+		var salesPlanTask = SafeGetAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all");
+		var proposalTask = SafeGetAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all");
+
+		await Task.WhenAll(
+			fyTask, catTask, unitTask, prodTask,
+			dealerTask, bankTask, landTask, buildingTask,
+			loanTask, salesPlanTask, proposalTask
+		);
+
+		_financialYears = fyTask.Result ?? new();
+		_categories = catTask.Result ?? new();
+		_units = unitTask.Result ?? new();
+		_products = prodTask.Result ?? new();
+
+		var dealerId = DealerId.Value;
+
+		_dealer = dealerTask.Result ?? new();
+
+		_bankAssets = (bankTask.Result ?? new())
+			.Where(a => a.DealerId == dealerId)
+			.ToList();
+
+		_landAssets = (landTask.Result ?? new())
+			.Where(a => a.DealerId == dealerId)
+			.ToList();
+
+		_buildingAssets = (buildingTask.Result ?? new())
+			.Where(a => a.DealerId == dealerId)
+			.ToList();
+
+		_loanLiabilities = (loanTask.Result ?? new())
+			.Where(a => a.DealerId == dealerId)
+			.ToList();
+
+		_salesPlanData = (salesPlanTask.Result ?? new())
+			.Where(s => s.DealerId == dealerId)
+			.ToList();
+
+		var proposals = proposalTask.Result ?? new();
+
+		var existing = proposals.FirstOrDefault(p => p.DealerId == dealerId);
+
+		if (existing != null)
+			_proposal = existing;
+
+		InitValuesFromData();
+	}
+	else
+	{
+		await Task.WhenAll(fyTask, catTask, unitTask, prodTask);
+
+		_financialYears = fyTask.Result ?? new();
+		_categories = catTask.Result ?? new();
+		_units = unitTask.Result ?? new();
+		_products = prodTask.Result ?? new();
+	}
+
+	if (_categories.Count > 0)
+	{
+		_selectedCategoryId = _categories.First().Id;
+		UpdateSelectedUnit();
+	}
+
+	SetFixedFinancialYears();
+await LoadCreditLimitSalesData();
+}
 
 	private async Task<T?> SafeGetAsync<T>(string url)
 	{
@@ -1283,13 +1311,67 @@
 	}
 
 	// --- Category Tab ---
-	private void SelectCategory(int categoryId)
+private async Task SelectCategory(int categoryId)
+{
+	_selectedCategoryId = categoryId;
+	UpdateSelectedUnit();
+	await LoadCreditLimitSalesData();
+}
+private async Task LoadCreditLimitSalesData()
+{
+	if (_dealer.Id <= 0 || _selectedCategoryId <= 0)
 	{
-		_selectedCategoryId = categoryId;
-		UpdateSelectedUnit();
+		_creditLimitSalesData = new();
 		BuildSalesPerfRows();
+		return;
 	}
 
+	var fyIds = new[]
+	{
+		_proposal.FY1,
+		_proposal.FY2,
+		_proposal.FY3
+	}
+	.Where(x => x > 0)
+	.Distinct()
+	.ToList();
+
+	if (fyIds.Count == 0)
+	{
+		_creditLimitSalesData = new();
+		BuildSalesPerfRows();
+		return;
+	}
+
+	var fyQuery = string.Join(",", fyIds);
+
+	var url =
+		$"api/creditlimitsales/by-filter" +
+		$"?customerId={_dealer.Id}" +
+		$"&categoryId={_selectedCategoryId}" +
+		$"&financialYearIds={fyQuery}";
+
+	_creditLimitSalesData =
+		await SafeGetAsync<List<DealerCreditLimitSales>>(url) ?? new();
+
+	BuildSalesPerfRows();
+}
+private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financialYearId)
+{
+	if (financialYearId <= 0)
+		return null;
+
+	return _creditLimitSalesData.FirstOrDefault(x =>
+		x.CustomerId == _dealer.Id &&
+		x.ProductGroupId == _selectedCategoryId &&
+		x.SubGroupId == productId &&
+		x.FinancialYearId == financialYearId);
+}
+
+private static decimal ConvertToLakhs(double grossAmount)
+{
+	return (decimal)grossAmount / 100000;
+}
 	private void UpdateSelectedUnit()
 	{
 		var cat = _categories.FirstOrDefault(c => c.Id == _selectedCategoryId);
@@ -1298,50 +1380,78 @@
 	}
 
 	private void BuildSalesPerfRows()
-	{
-		var categoryProducts = _products.Where(p => p.CategoryId == _selectedCategoryId).ToList();
-		_currentSalesPerfRows = new();
+{
+	_salesPerfViewRows = new();
 
-		foreach (var product in categoryProducts)
+	var categoryProducts = _products
+		.Where(p => p.CategoryId == _selectedCategoryId)
+		.ToList();
+
+	foreach (var product in categoryProducts)
+	{
+		var row = new SalesPerfViewRow
 		{
-			var existing = _allSalesPerfData.FirstOrDefault(s => s.ProductId == product.Id && s.CategoryId == _selectedCategoryId);
-			if (existing != null)
-			{
-				_currentSalesPerfRows.Add(existing);
-			}
-			else
-			{
-				var newRow = new DealerCreditLimitSalesPerformance
-				{
-					CreditLimitId = _proposal.Id,
-					CategoryId = _selectedCategoryId,
-					ProductId = product.Id
-				};
-				_currentSalesPerfRows.Add(newRow);
-				_allSalesPerfData.Add(newRow);
-			}
+			ProductId = product.Id,
+			ProductName = product.Name
+		};
+
+		var fy1Data = GetCreditLimitSales(product.Id, _proposal.FY1);
+		var fy2Data = GetCreditLimitSales(product.Id, _proposal.FY2);
+		var fy3Data = GetCreditLimitSales(product.Id, _proposal.FY3);
+
+		if (fy1Data != null)
+		{
+			row.FY1Qty = fy1Data.Quantity;
+			row.FY1Amount = ConvertToLakhs(fy1Data.GrossAmount);
 		}
+
+		if (fy2Data != null)
+		{
+			row.FY2Qty = fy2Data.Quantity;
+			row.FY2Amount = ConvertToLakhs(fy2Data.GrossAmount);
+		}
+
+		if (fy3Data != null)
+		{
+			row.FY3Qty = fy3Data.Quantity;
+			row.FY3Amount = ConvertToLakhs(fy3Data.GrossAmount);
+		}
+
+		_salesPerfViewRows.Add(row);
 	}
+}
 
 	// --- FY Selection ---
-	private int GetSelectedFY(int fyIdx) => fyIdx switch
-	{
-		0 => _proposal.FY1,
-		1 => _proposal.FY2,
-		2 => _proposal.FY3,
-		_ => 0
-	};
+private int GetSelectedFY(int fyIdx) => fyIdx switch
+{
+	0 => _proposal.FY1,
+	1 => _proposal.FY2,
+	2 => _proposal.FY3,
+	_ => 0
+};
 
-	private void SetSelectedFY(int fyIdx, ChangeEventArgs e)
-	{
-		if (!int.TryParse(e.Value?.ToString(), out var val)) return;
-		switch (fyIdx)
-		{
-			case 0: _proposal.FY1 = val; break;
-			case 1: _proposal.FY2 = val; break;
-			case 2: _proposal.FY3 = val; break;
-		}
-	}
+// 	private async Task SetSelectedFY(int fyIdx, ChangeEventArgs e)
+// {
+// 	if (!int.TryParse(e.Value?.ToString(), out var val))
+// 		return;
+
+// 	switch (fyIdx)
+// 	{
+// 		case 0:
+// 			_proposal.FY1 = val;
+// 			break;
+
+// 		case 1:
+// 			_proposal.FY2 = val;
+// 			break;
+
+// 		case 2:
+// 			_proposal.FY3 = val;
+// 			break;
+// 	}
+
+// 	await LoadCreditLimitSalesData();
+// }
 
 	private string GetFYName(int fyIdx)
 	{
@@ -1350,59 +1460,63 @@
 	}
 
 	// --- Sales Performance Helpers ---
-	private static decimal GetPerfQty(DealerCreditLimitSalesPerformance row, int fyIdx) => fyIdx switch
-	{
-		0 => row.FY1Qty,
-		1 => row.FY2Qty,
-		2 => row.FY3Qty,
-		_ => 0
-	};
+	// private static decimal GetPerfQty(DealerCreditLimitSalesPerformance row, int fyIdx) => fyIdx switch
+	// {
+	// 	0 => row.FY1Qty,
+	// 	1 => row.FY2Qty,
+	// 	2 => row.FY3Qty,
+	// 	_ => 0
+	// };
 
-	private static decimal GetPerfAmount(DealerCreditLimitSalesPerformance row, int fyIdx) => fyIdx switch
-	{
-		0 => row.FY1Amount,
-		1 => row.FY2Amount,
-		2 => row.FY3Amount,
-		_ => 0
-	};
+	// private static decimal GetPerfAmount(DealerCreditLimitSalesPerformance row, int fyIdx) => fyIdx switch
+	// {
+	// 	0 => row.FY1Amount,
+	// 	1 => row.FY2Amount,
+	// 	2 => row.FY3Amount,
+	// 	_ => 0
+	// };
 
-	private static void SetPerfQty(DealerCreditLimitSalesPerformance row, int fyIdx, ChangeEventArgs e)
-	{
-		if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
-		switch (fyIdx)
-		{
-			case 0: row.FY1Qty = val; break;
-			case 1: row.FY2Qty = val; break;
-			case 2: row.FY3Qty = val; break;
-		}
-	}
+	// private static void SetPerfQty(DealerCreditLimitSalesPerformance row, int fyIdx, ChangeEventArgs e)
+	// {
+	// 	if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
+	// 	switch (fyIdx)
+	// 	{
+	// 		case 0: row.FY1Qty = val; break;
+	// 		case 1: row.FY2Qty = val; break;
+	// 		case 2: row.FY3Qty = val; break;
+	// 	}
+	// }
 
-	private static void SetPerfAmount(DealerCreditLimitSalesPerformance row, int fyIdx, ChangeEventArgs e)
-	{
-		if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
-		switch (fyIdx)
-		{
-			case 0: row.FY1Amount = val; break;
-			case 1: row.FY2Amount = val; break;
-			case 2: row.FY3Amount = val; break;
-		}
-	}
+	// private static void SetPerfAmount(DealerCreditLimitSalesPerformance row, int fyIdx, ChangeEventArgs e)
+	// {
+	// 	if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
+	// 	switch (fyIdx)
+	// 	{
+	// 		case 0: row.FY1Amount = val; break;
+	// 		case 1: row.FY2Amount = val; break;
+	// 		case 2: row.FY3Amount = val; break;
+	// 	}
+	// }
 
-	private decimal GetFYTotalQty(int fyIdx) => _allSalesPerfData.Sum(r => fyIdx switch
-	{
-		0 => r.FY1Qty,
-		1 => r.FY2Qty,
-		2 => r.FY3Qty,
-		_ => 0
-	});
+	private decimal GetFYTotalQtyByCategory(int fyIdx) => _salesPerfViewRows.Sum(r => fyIdx switch
+{
+	0 => r.FY1Qty,
+	1 => r.FY2Qty,
+	2 => r.FY3Qty,
+	_ => 0
+});
 
-	private decimal GetFYTotalAmount(int fyIdx) => _allSalesPerfData.Sum(r => fyIdx switch
-	{
-		0 => r.FY1Amount,
-		1 => r.FY2Amount,
-		2 => r.FY3Amount,
-		_ => 0
-	});
+private decimal GetFYTotalAmountByCategory(int fyIdx) => _salesPerfViewRows.Sum(r => fyIdx switch
+{
+	0 => r.FY1Amount,
+	1 => r.FY2Amount,
+	2 => r.FY3Amount,
+	_ => 0
+});
+
+private decimal GetFYTotalQty(int fyIdx) => GetFYTotalQtyByCategory(fyIdx);
+
+private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx);
 
 	// --- Valuation ---
 	private void OnSpicValueChanged(int idx, ChangeEventArgs e)
@@ -1533,27 +1647,27 @@
 				}
 			}
 
-			foreach (var row in _allSalesPerfData)
-			{
-				row.CreditLimitId = _proposal.Id;
-				var hasData = row.FY1Qty != 0 || row.FY1Amount != 0 || row.FY2Qty != 0 || row.FY2Amount != 0 || row.FY3Qty != 0 || row.FY3Amount != 0;
-				if (row.Id == 0 && !hasData) continue;
+			// foreach (var row in _allSalesPerfData)
+			// {
+			// 	row.CreditLimitId = _proposal.Id;
+			// 	var hasData = row.FY1Qty != 0 || row.FY1Amount != 0 || row.FY2Qty != 0 || row.FY2Amount != 0 || row.FY3Qty != 0 || row.FY3Amount != 0;
+			// 	if (row.Id == 0 && !hasData) continue;
 
-				if (row.Id > 0)
-				{
-					await Http.PutAsJsonAsync($"api/DealerCreditLimitSalesPerformance/{row.Id}", row);
-				}
-				else
-				{
-					var resp = await Http.PostAsJsonAsync("api/DealerCreditLimitSalesPerformance", row);
-					if (resp.IsSuccessStatusCode)
-					{
-						var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerCreditLimitSalesPerformance>>();
-						if (result?.Data != null)
-							row.Id = result.Data.Id;
-					}
-				}
-			}
+			// 	if (row.Id > 0)
+			// 	{
+			// 		await Http.PutAsJsonAsync($"api/DealerCreditLimitSalesPerformance/{row.Id}", row);
+			// 	}
+			// 	else
+			// 	{
+			// 		var resp = await Http.PostAsJsonAsync("api/DealerCreditLimitSalesPerformance", row);
+			// 		if (resp.IsSuccessStatusCode)
+			// 		{
+			// 			var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerCreditLimitSalesPerformance>>();
+			// 			if (result?.Data != null)
+			// 				row.Id = result.Data.Id;
+			// 		}
+			// 	}
+			// }
 
 			FormStepData.MarkStepError(10, false);
 			Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}");
@@ -1595,19 +1709,31 @@
 		public string? Message { get; set; }
 		public T? Data { get; set; }
 	}
-	private decimal GetFYTotalQtyByCategory(int fyIdx) => _currentSalesPerfRows.Sum(r => fyIdx switch
-{
-	0 => r.FY1Qty,
-	1 => r.FY2Qty,
-	2 => r.FY3Qty,
-	_ => 0
-});
+// 	private decimal GetFYTotalQtyByCategory(int fyIdx) => _currentSalesPerfRows.Sum(r => fyIdx switch
+// {
+// 	0 => r.FY1Qty,
+// 	1 => r.FY2Qty,
+// 	2 => r.FY3Qty,
+// 	_ => 0
+// });
 
-	private decimal GetFYTotalAmountByCategory(int fyIdx) => _currentSalesPerfRows.Sum(r => fyIdx switch
-	{
-		0 => r.FY1Amount,
-		1 => r.FY2Amount,
-		2 => r.FY3Amount,
-		_ => 0
-	});
+// 	private decimal GetFYTotalAmountByCategory(int fyIdx) => _currentSalesPerfRows.Sum(r => fyIdx switch
+// 	{
+// 		0 => r.FY1Amount,
+// 		1 => r.FY2Amount,
+// 		2 => r.FY3Amount,
+// 		_ => 0
+// 	});
+private void SetFixedFinancialYears()
+{
+	var selectedYears = _financialYears
+		.OrderByDescending(f => f.Id)
+		.Take(3)
+		.OrderBy(f => f.Id)
+		.ToList();
+
+	_proposal.FY1 = selectedYears.Count > 0 ? selectedYears[0].Id : 0;
+	_proposal.FY2 = selectedYears.Count > 1 ? selectedYears[1].Id : 0;
+	_proposal.FY3 = selectedYears.Count > 2 ? selectedYears[2].Id : 0;
+}
 }
