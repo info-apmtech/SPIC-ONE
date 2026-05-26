@@ -325,18 +325,27 @@
 				<div class="asset-detail"><div class="asset-lbl">Value (₹)</div><div class="asset-val">₹ @item.PropertyValue.ToString("N0")</div></div>
 				<div class="asset-detail">
 					<div class="asset-lbl">Documents</div>
-					<div class="asset-val d-flex align-items-center flex-wrap gap-1">
+					<div class="asset-val d-flex align-items-center flex-wrap gap-2">
 						@if (!string.IsNullOrEmpty(item.UploadedECDocumentPath))
 						{
-							<a href="@GetFileUrl(item.UploadedECDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success me-1"><i class="bi bi-eye"></i> EC</span></a>
+							<span class="doc-chip">
+								<a href="@GetFileUrl(item.UploadedECDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> EC</span></a>
+								<i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveLandECFile(item)"></i>
+							</span>
 						}
 						@if (!string.IsNullOrEmpty(item.UploadedLandDocumentPath))
 						{
-							<a href="@GetFileUrl(item.UploadedLandDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success me-1"> <i class="bi bi-eye"></i> Property</span></a>
+							<span class="doc-chip">
+								<a href="@GetFileUrl(item.UploadedLandDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> Property</span></a>
+								<i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveLandPropertyDocFile(item)"></i>
+							</span>
 						}
 						@if (!string.IsNullOrEmpty(item.UploadedValuationCertificatePath))
 						{
-							<a href="@GetFileUrl(item.UploadedValuationCertificatePath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> Valuation</span></a>
+							<span class="doc-chip">
+								<a href="@GetFileUrl(item.UploadedValuationCertificatePath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> Valuation</span></a>
+								<i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveLandValuationFile(item)"></i>
+							</span>
 						}
 					</div>
 				</div>
@@ -357,18 +366,27 @@
 				<div class="asset-detail"><div class="asset-lbl">Size (Sq Ft)</div><div class="asset-val">@item.LandSize</div></div>
 				<div class="asset-detail">
 					<div class="asset-lbl">Documents</div>
-					<div class="asset-val d-flex align-items-center flex-wrap gap-1">
+					<div class="asset-val d-flex align-items-center flex-wrap gap-2">
 						@if (!string.IsNullOrEmpty(item.UploadedECDocumentPath))
 						{
-							<a href="@GetFileUrl(item.UploadedECDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success me-1"><i class="bi bi-eye"></i> EC</span></a>
+							<span class="doc-chip">
+								<a href="@GetFileUrl(item.UploadedECDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> EC</span></a>
+								<i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveBuildingECFile(item)"></i>
+							</span>
 						}
 						@if (!string.IsNullOrEmpty(item.UploadedBuildingDocumentPath))
 						{
-							<a href="@GetFileUrl(item.UploadedBuildingDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success me-1"> <i class="bi bi-eye"></i> Property</span></a>
+							<span class="doc-chip">
+								<a href="@GetFileUrl(item.UploadedBuildingDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> Property</span></a>
+								<i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveBuildingPropertyDocFile(item)"></i>
+							</span>
 						}
 						@if (!string.IsNullOrEmpty(item.UploadedValuationCertificatePath))
 						{
-							<a href="@GetFileUrl(item.UploadedValuationCertificatePath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> Valuation</span></a>
+							<span class="doc-chip">
+								<a href="@GetFileUrl(item.UploadedValuationCertificatePath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> Valuation</span></a>
+								<i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveBuildingValuationFile(item)"></i>
+							</span>
 						}
 					</div>
 				</div>
@@ -379,7 +397,26 @@
 			</div>
 		}
 	</div>
+	<style>
+			.doc-chip {
+				display: inline-flex;
+				align-items: center;
+				gap: 4px;
+			}
 
+			.doc-remove-x {
+				cursor: pointer;
+				font-size: 0.95rem;
+				line-height: 1;
+				opacity: 0.85;
+				transition: opacity 0.15s, transform 0.15s;
+			}
+
+				.doc-remove-x:hover {
+					opacity: 1;
+					transform: scale(1.1);
+				}
+	</style>
 	<!-- Movable Section -->
 	<div class="main-section">
 		<div class="section-header border-0 mb-0 pb-0">
@@ -571,6 +608,29 @@
 	</div>
 }
 
+@if (_showDocDeleteModal)
+{
+	<div class="del-modal-backdrop" @onclick="CancelDocDelete">
+		<div class="del-modal" @onclick:stopPropagation="true">
+			<div class="del-modal-icon">
+				<i class="bi bi-exclamation-triangle-fill"></i>
+			</div>
+			<h3 class="del-modal-title">Delete @_docDeleteDisplayName?</h3>
+			<p class="del-modal-body">
+				You are about to delete <strong>@_docDeleteFileName</strong>
+			</p>
+			<p class="del-modal-warning">This action cannot be undone.</p>
+			<div class="del-modal-actions">
+				<button type="button" class="del-btn del-btn-cancel" @onclick="CancelDocDelete">
+					Cancel
+				</button>
+				<button type="button" class="del-btn del-btn-delete" @onclick="ConfirmDocDelete">
+					<i class="bi bi-trash3-fill"></i> Delete
+				</button>
+			</div>
+		</div>
+	</div>
+}
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int? DealerId { get; set; }
@@ -1042,6 +1102,132 @@
 			ShowMessage($"Upload error: {ex.Message}", true);
 		}
 		return null;
+	}
+	// ── Document delete confirmation modal state (separate from row-delete modal) ──
+	private bool _showDocDeleteModal = false;
+	private string _docDeleteDisplayName = "";
+	private string _docDeleteFileName = "";
+	private Func<Task>? _docDeleteAction;
+
+	private void OpenDocDeleteModal(string displayName, string filePath, Func<Task> onConfirm)
+	{
+		if (string.IsNullOrEmpty(filePath)) return;
+		_docDeleteDisplayName = displayName;
+		_docDeleteFileName = GetFileName(filePath);
+		_docDeleteAction = onConfirm;
+		_showDocDeleteModal = true;
+	}
+
+	private void CancelDocDelete()
+	{
+		_showDocDeleteModal = false;
+		_docDeleteAction = null;
+		_docDeleteDisplayName = "";
+		_docDeleteFileName = "";
+	}
+
+	private async Task ConfirmDocDelete()
+	{
+		try
+		{
+			if (_docDeleteAction != null)
+				await _docDeleteAction.Invoke();
+			ShowMessage($"{_docDeleteDisplayName} deleted successfully", false);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to delete: {ex.Message}", true);
+		}
+		finally
+		{
+			CancelDocDelete();
+		}
+	}
+
+	private async Task DeleteFileFromServer(string filePath)
+	{
+		if (string.IsNullOrEmpty(filePath) || !filePath.Contains("/")) return;
+		try
+		{
+			await Http.DeleteAsync($"api/DealerFile/delete?filePath={Uri.EscapeDataString(filePath)}");
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Failed to delete file from server: {ex.Message}");
+		}
+	}
+	// ── Land asset documents ──
+	private void RemoveLandECFile(DealerAssetLand land)
+	{
+		var l = land;
+		OpenDocDeleteModal($"EC Document ({l.LandName})", l.UploadedECDocumentPath ?? "", async () =>
+		{
+			var path = l.UploadedECDocumentPath!;
+			l.UploadedECDocumentPath = null;
+			await Http.PutAsJsonAsync($"api/DealerAssetLand/{l.Id}", l);
+			await DeleteFileFromServer(path);
+		});
+	}
+
+	private void RemoveLandPropertyDocFile(DealerAssetLand land)
+	{
+		var l = land;
+		OpenDocDeleteModal($"Property Document ({l.LandName})", l.UploadedLandDocumentPath ?? "", async () =>
+		{
+			var path = l.UploadedLandDocumentPath!;
+			l.UploadedLandDocumentPath = null;
+			await Http.PutAsJsonAsync($"api/DealerAssetLand/{l.Id}", l);
+			await DeleteFileFromServer(path);
+		});
+	}
+
+	private void RemoveLandValuationFile(DealerAssetLand land)
+	{
+		var l = land;
+		OpenDocDeleteModal($"Valuation Certificate ({l.LandName})", l.UploadedValuationCertificatePath ?? "", async () =>
+		{
+			var path = l.UploadedValuationCertificatePath!;
+			l.UploadedValuationCertificatePath = null;
+			await Http.PutAsJsonAsync($"api/DealerAssetLand/{l.Id}", l);
+			await DeleteFileFromServer(path);
+		});
+	}
+
+	// ── Building asset documents ──
+	private void RemoveBuildingECFile(DealerAssetBuilding building)
+	{
+		var b = building;
+		OpenDocDeleteModal($"EC Document ({b.BuildingName})", b.UploadedECDocumentPath ?? "", async () =>
+		{
+			var path = b.UploadedECDocumentPath!;
+			b.UploadedECDocumentPath = null;
+			await Http.PutAsJsonAsync($"api/DealerAssetBuilding/{b.Id}", b);
+			await DeleteFileFromServer(path);
+		});
+	}
+
+	private void RemoveBuildingPropertyDocFile(DealerAssetBuilding building)
+	{
+		var b = building;
+		OpenDocDeleteModal($"Property Document ({b.BuildingName})", b.UploadedBuildingDocumentPath ?? "", async () =>
+		{
+			var path = b.UploadedBuildingDocumentPath!;
+			b.UploadedBuildingDocumentPath = null;
+			await Http.PutAsJsonAsync($"api/DealerAssetBuilding/{b.Id}", b);
+			await DeleteFileFromServer(path);
+		});
+	}
+
+	private void RemoveBuildingValuationFile(DealerAssetBuilding building)
+	{
+		var b = building;
+		OpenDocDeleteModal($"Valuation Certificate ({b.BuildingName})", b.UploadedValuationCertificatePath ?? "", async () =>
+		{
+			var path = b.UploadedValuationCertificatePath!;
+			b.UploadedValuationCertificatePath = null;
+			await Http.PutAsJsonAsync($"api/DealerAssetBuilding/{b.Id}", b);
+			await DeleteFileFromServer(path);
+		});
 	}
 
 	private string GetFileName(string? path)

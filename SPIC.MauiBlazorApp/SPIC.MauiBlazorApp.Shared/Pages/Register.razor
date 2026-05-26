@@ -829,6 +829,29 @@
     </form>
     <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
+@if (_showDeleteModal)
+{
+    <div class="del-modal-backdrop" @onclick="CancelDelete">
+        <div class="del-modal" @onclick:stopPropagation="true">
+            <div class="del-modal-icon">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+            </div>
+            <h3 class="del-modal-title">Delete @_deleteDisplayName?</h3>
+            <p class="del-modal-body">
+                You are about to delete <strong>@_deleteFileNameDisplay</strong>
+            </p>
+            <p class="del-modal-warning">This action cannot be undone.</p>
+            <div class="del-modal-actions">
+                <button type="button" class="del-btn del-btn-cancel" @onclick="CancelDelete">
+                    Cancel
+                </button>
+                <button type="button" class="del-btn del-btn-delete" @onclick="ConfirmDelete">
+                    <i class="bi bi-trash3-fill"></i> Delete
+                </button>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     [SupplyParameterFromQuery(Name = "dealerId")]
@@ -851,6 +874,13 @@
     private IBrowserFile? _aadhaarFile;
     private IBrowserFile? _wholesaleFile;
     private IBrowserFile? _retailFile;
+
+    // ── Delete confirmation modal state ──
+    private bool _showDeleteModal = false;
+    private string _deleteDocType = "";          
+    private string _deleteDisplayName = "";      
+    private string _deleteFileNameDisplay = "";  
+    private string _deleteFilePathToDelete = ""; 
 
     // Location fields
     private bool _isGettingLocation;
@@ -1492,9 +1522,8 @@
 
     private void RemoveGstFile()
     {
-        _gstFile = null;
-        _model.GSTFilePath = null;
-        _errors.Remove("GSTFile");
+        if (string.IsNullOrEmpty(_model.GSTFilePath)) return;
+        OpenDeleteModal("GST", "GST Certificate", _model.GSTFilePath);
     }
 
     async Task HandlePanUpload(InputFileChangeEventArgs e)
@@ -1523,9 +1552,8 @@
 
     private void RemovePanFile()
     {
-        _panFile = null;
-        _model.PANFilePath = null;
-        _errors.Remove("PANFile");
+        if (string.IsNullOrEmpty(_model.PANFilePath)) return;
+        OpenDeleteModal("PAN", "PAN Card", _model.PANFilePath);
     }
 
     async Task HandleAadhaarUpload(InputFileChangeEventArgs e)
@@ -1554,9 +1582,8 @@
 
     private void RemoveAadhaarFile()
     {
-        _aadhaarFile = null;
-        _model.AadhaarFilePath = null;
-        _errors.Remove("AadhaarFile");
+        if (string.IsNullOrEmpty(_model.AadhaarFilePath)) return;
+        OpenDeleteModal("Aadhaar", "Aadhaar Card", _model.AadhaarFilePath);
     }
 
     async Task HandleWholesaleFileUpload(InputFileChangeEventArgs e)
@@ -1573,9 +1600,8 @@
 
     private void RemoveWholesaleFile()
     {
-        _wholesaleFile = null;
-        _model.WholesaleLicenseFilePath = null;
-        _errors.Remove("WholesaleFile");
+        if (string.IsNullOrEmpty(_model.WholesaleLicenseFilePath)) return;
+        OpenDeleteModal("WholesaleLicense", "Wholesale License", _model.WholesaleLicenseFilePath);
     }
 
     async Task HandleRetailFileUpload(InputFileChangeEventArgs e)
@@ -1592,9 +1618,8 @@
 
     private void RemoveRetailFile()
     {
-        _retailFile = null;
-        _model.RetailLicenseFilePath = null;
-        _errors.Remove("RetailFile");
+        if (string.IsNullOrEmpty(_model.RetailLicenseFilePath)) return;
+        OpenDeleteModal("RetailLicense", "Retail License", _model.RetailLicenseFilePath);
     }
 
     private async Task<string?> UploadFileToServer(int dealerId, string docType, IBrowserFile file)
@@ -1616,6 +1641,87 @@
         return null;
     }
 
+    private void OpenDeleteModal(string docType, string displayName, string filePath)
+    {
+        _deleteDocType = docType;
+        _deleteDisplayName = displayName;
+        _deleteFilePathToDelete = filePath;
+        // Extract just the filename for display (handle both "name.pdf" and "DealerRegistration/123/file.pdf")
+        _deleteFileNameDisplay = filePath.Contains("/")
+            ? filePath.Substring(filePath.LastIndexOf('/') + 1)
+            : filePath;
+        _showDeleteModal = true;
+    }
+    private void CancelDelete()
+    {
+        _showDeleteModal = false;
+        _deleteDocType = "";
+        _deleteDisplayName = "";
+        _deleteFileNameDisplay = "";
+        _deleteFilePathToDelete = "";
+    }
+
+    private async Task ConfirmDelete()
+    {
+        try
+        {
+            // Only call the server delete API if the file is actually on the server
+            // (i.e. the path is a server-relative path, not just a temporary filename)
+            bool isServerFile = !string.IsNullOrEmpty(_deleteFilePathToDelete)
+                                && _deleteFilePathToDelete.Contains("/");
+
+            if (isServerFile)
+            {
+                await Http.DeleteAsync($"api/DealerFile/delete?filePath={Uri.EscapeDataString(_deleteFilePathToDelete)}");
+            }
+
+            // Clear the local state based on which doc type was deleted
+            switch (_deleteDocType)
+            {
+                case "GST":
+                    _gstFile = null;
+                    _model.GSTFilePath = null;
+                    _errors.Remove("GSTFile");
+                    break;
+                case "PAN":
+                    _panFile = null;
+                    _model.PANFilePath = null;
+                    _errors.Remove("PANFile");
+                    break;
+                case "Aadhaar":
+                    _aadhaarFile = null;
+                    _model.AadhaarFilePath = null;
+                    _errors.Remove("AadhaarFile");
+                    break;
+                case "WholesaleLicense":
+                    _wholesaleFile = null;
+                    _model.WholesaleLicenseFilePath = null;
+                    _errors.Remove("WholesaleFile");
+                    break;
+                case "RetailLicense":
+                    _retailFile = null;
+                    _model.RetailLicenseFilePath = null;
+                    _errors.Remove("RetailFile");
+                    break;
+            }
+
+            // Persist the cleared filepath to the dealer record (only if dealer is already saved)
+            if (_model.Id > 0)
+            {
+                await Http.PutAsJsonAsync($"api/DealerRegistration/{_model.Id}", _model);
+            }
+
+            ShowMessage($"{_deleteDisplayName} deleted successfully", false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to delete file: {ex.Message}", true);
+        }
+        finally
+        {
+            CancelDelete();
+        }
+    }
     private void ShowMessage(string message, bool isError)
     {
         _message = message;
