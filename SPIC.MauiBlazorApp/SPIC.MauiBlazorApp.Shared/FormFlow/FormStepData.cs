@@ -13,14 +13,20 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 		{
 			var step = Steps.FirstOrDefault(x => x.StepNo == stepNo);
 			if (step != null)
+			{
 				step.HasError = hasError;
+				step.IsEvaluated = true;
+			}
 			OnStateChanged?.Invoke();
 		}
 
 		public static void ClearAllErrors()
 		{
 			foreach (var step in Steps)
+			{
 				step.HasError = false;
+				step.IsEvaluated = false;
+			}
 			OnStateChanged?.Invoke();
 		}
 		public static List<FormStepModel> Steps = new()

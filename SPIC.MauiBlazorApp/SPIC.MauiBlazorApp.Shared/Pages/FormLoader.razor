@@ -1,6 +1,8 @@
-﻿@using SPIC.MauiBlazorApp.Shared.FormFlow
+﻿@using System.Net.Http.Json
+@using SPIC.MauiBlazorApp.Shared.FormFlow
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject HttpClient Http
 
 @if (CurrentStep is not null)
 {
@@ -30,7 +32,7 @@
 			@for (int idx = 0; idx < steps.Count; idx++)
 			{
 				var step = steps[idx];
-				<div class="progress-segment @(idx <= currentIndex ? "active" : "") @(step.HasError ? "error" : "")"
+				<div class="progress-segment @GetStepClass(idx, step)"
 					 title="@step.Title"
 					 @onclick="() => NavigateToStep(step)">
 				</div>
@@ -54,11 +56,45 @@
 		}
 	}
 
-	protected override void OnInitialized()
+	private string GetStepClass(int idx, FormStepModel step)
+	{
+		if (idx == CurrentIndex) return "current";
+		if (step.HasError) return "error";
+		if (step.IsEvaluated) return "active";
+		return "";
+	}
+
+	protected override async Task OnInitializedAsync()
 	{
 		SetCurrentStep();
 		Nav.LocationChanged += HandleLocationChanged;
 		FormStepData.OnStateChanged += HandleStateChanged;
+		await EvaluateFromQuery();
+	}
+
+	private async Task EvaluateFromQuery()
+	{
+		var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+		var qIndex = baseRelative.IndexOf('?');
+		if (qIndex < 0)
+		{
+			FormStepData.ClearAllErrors();
+			return;
+		}
+		var queryString = baseRelative[(qIndex + 1)..];
+		var parts = queryString.Split('&')
+			.Select(p => p.Split('=', 2))
+			.Where(p => p.Length == 2)
+			.ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
+		if (parts.TryGetValue("dealerId", out var idStr) && int.TryParse(idStr, out var id) && id > 0)
+		{
+			FormStepData.ClearAllErrors();
+			await FormStepChecker.EvaluateStepsAsync(Http, id);
+		}
+		else
+		{
+			FormStepData.ClearAllErrors();
+		}
 	}
 
 	private void HandleStateChanged()
