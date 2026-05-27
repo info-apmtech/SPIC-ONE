@@ -12,6 +12,7 @@
 	<div class="mb-4">
 		<div class="d-flex justify-content-between align-items-center">
 			<div class="step-text">Step @(currentIndex + 1) of @TotalSteps</div>
+
 			@if (currentIndex + 1 == TotalSteps)
 			{
 				<span class="status-badge">
@@ -32,6 +33,7 @@
 			@for (int idx = 0; idx < steps.Count; idx++)
 			{
 				var step = steps[idx];
+
 				<div class="progress-segment @GetStepClass(idx, step)"
 					 title="@step.Title"
 					 @onclick="() => NavigateToStep(step)">
@@ -43,53 +45,122 @@
 
 @code {
 	private FormStepModel? CurrentStep;
-    private List<FormStepModel> StepsList => FormStepData.Steps ?? new List<FormStepModel>();
+
+	private List<FormStepModel> _visibleSteps = new();
+
+	private List<FormStepModel> StepsList =>
+		_visibleSteps.Count > 0
+			? _visibleSteps
+			: FormStepData.Steps ?? new List<FormStepModel>();
+
 	private int TotalSteps => StepsList.Count;
 
 	private int CurrentIndex
 	{
 		get
 		{
-			if (CurrentStep == null) return 0;
-			var idx = StepsList.FindIndex(s => s.Route.Equals(CurrentStep.Route, StringComparison.OrdinalIgnoreCase));
+			if (CurrentStep == null)
+				return 0;
+
+			var idx = StepsList.FindIndex(s =>
+				s.Route.Equals(CurrentStep.Route, StringComparison.OrdinalIgnoreCase));
+
 			return idx >= 0 ? idx : 0;
 		}
-	}
-
-	private string GetStepClass(int idx, FormStepModel step)
-	{
-		if (idx == CurrentIndex) return "current";
-		if (step.HasError) return "error";
-		if (step.IsEvaluated) return "active";
-		return "";
 	}
 
 	protected override async Task OnInitializedAsync()
 	{
 		SetCurrentStep();
+
 		Nav.LocationChanged += HandleLocationChanged;
 		FormStepData.OnStateChanged += HandleStateChanged;
+
+		await LoadVisibleSteps();
 		await EvaluateFromQuery();
 	}
 
-	private async Task EvaluateFromQuery()
+	private async Task LoadVisibleSteps()
+	{
+		var dealerId = GetDealerIdFromQuery();
+
+		if (dealerId <= 0)
+		{
+			_visibleSteps = FormStepData.Steps;
+			return;
+		}
+
+		var hasGreenStar = await HasGreenStarCompany(dealerId);
+
+		_visibleSteps = hasGreenStar
+			? FormStepData.Steps
+			: FormStepData.Steps
+				.Where(x => !x.Route.Equals("/CreditLimitForGreenStar", StringComparison.OrdinalIgnoreCase))
+				.ToList();
+
+		SetCurrentStep();
+	}
+
+	private async Task<bool> HasGreenStarCompany(int dealerId)
+	{
+		try
+		{
+			return await Http.GetFromJsonAsync<bool>(
+				$"api/DealerCompaniesOperatingInArea/dealer/{dealerId}/has-greenstar");
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private int GetDealerIdFromQuery()
 	{
 		var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
 		var qIndex = baseRelative.IndexOf('?');
+
 		if (qIndex < 0)
-		{
-			FormStepData.ClearAllErrors();
-			return;
-		}
+			return 0;
+
 		var queryString = baseRelative[(qIndex + 1)..];
+
 		var parts = queryString.Split('&')
 			.Select(p => p.Split('=', 2))
 			.Where(p => p.Length == 2)
 			.ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
-		if (parts.TryGetValue("dealerId", out var idStr) && int.TryParse(idStr, out var id) && id > 0)
+
+		if (parts.TryGetValue("dealerId", out var idStr) &&
+			int.TryParse(idStr, out var id) &&
+			id > 0)
+		{
+			return id;
+		}
+
+		return 0;
+	}
+
+	private string GetStepClass(int idx, FormStepModel step)
+	{
+		if (idx == CurrentIndex)
+			return "current";
+
+		if (step.HasError)
+			return "error";
+
+		if (step.IsEvaluated)
+			return "active";
+
+		return "";
+	}
+
+	private async Task EvaluateFromQuery()
+	{
+		var dealerId = GetDealerIdFromQuery();
+
+		if (dealerId > 0)
 		{
 			FormStepData.ClearAllErrors();
-			await FormStepChecker.EvaluateStepsAsync(Http, id);
+			await FormStepChecker.EvaluateStepsAsync(Http, dealerId);
 		}
 		else
 		{
@@ -102,15 +173,22 @@
 		InvokeAsync(StateHasChanged);
 	}
 
-	private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+	private async void HandleLocationChanged(
+		object? sender,
+		Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
 	{
 		SetCurrentStep();
-		InvokeAsync(StateHasChanged);
+
+		await LoadVisibleSteps();
+		await EvaluateFromQuery();
+
+		await InvokeAsync(StateHasChanged);
 	}
 
 	private void SetCurrentStep()
 	{
 		var relativePath = "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+
 		CurrentStep = FormStepData.GetStepByRoute(relativePath);
 	}
 
@@ -119,9 +197,11 @@
 		if (step is not null)
 		{
 			Loading.Show();
+
 			var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
 			var qIndex = baseRelative.IndexOf('?');
 			var queryString = qIndex >= 0 ? baseRelative[qIndex..] : string.Empty;
+
 			Nav.NavigateTo(step.Route + queryString);
 		}
 	}

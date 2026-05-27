@@ -261,10 +261,34 @@ namespace SpicAPI.Controllers
     [Route("api/[controller]")]
     public class DealerMarketDetailController(IGenericRepository<DealerMarketDetail> repo) : GenericCrudController<DealerMarketDetail>(repo);
 
-    [Route("api/[controller]")]
-    public class DealerCompaniesOperatingInAreaController(IGenericRepository<DealerCompaniesOperatingInArea> repo) : GenericCrudController<DealerCompaniesOperatingInArea>(repo);
+	[Route("api/[controller]")]
+	public class DealerCompaniesOperatingInAreaController
+		: GenericCrudController<DealerCompaniesOperatingInArea>
+	{
+		private readonly IGenericRepository<DealerCompaniesOperatingInArea> _repo;
 
-    [Route("api/[controller]")]
+		public DealerCompaniesOperatingInAreaController(
+			IGenericRepository<DealerCompaniesOperatingInArea> repo) : base(repo)
+		{
+			_repo = repo;
+		}
+
+		[HttpGet("dealer/{dealerId}/has-greenstar")]
+		public async Task<IActionResult> HasGreenStar(int dealerId)
+		{
+			if (dealerId <= 0)
+				return BadRequest(false);
+
+			var hasGreenStar = await _repo.ExistsAsync(x =>
+				EF.Property<int>(x, "DealerId") == dealerId &&
+				EF.Property<string>(x, "CompaniesOperating") != null &&
+				EF.Property<string>(x, "CompaniesOperating").ToUpper() == "GREEN STAR");
+
+			return Ok(hasGreenStar);
+		}
+	}
+
+	[Route("api/[controller]")]
     public class DealerOwnershipInfoController(IGenericRepository<DealerOwnershipInfo> repo) : GenericCrudController<DealerOwnershipInfo>(repo);
 
     [Route("api/[controller]")]

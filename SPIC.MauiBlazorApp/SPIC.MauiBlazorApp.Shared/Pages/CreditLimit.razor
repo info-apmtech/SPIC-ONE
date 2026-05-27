@@ -1670,7 +1670,17 @@ private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx)
 			// }
 
 			FormStepData.MarkStepError(10, false);
-			Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}");
+			//Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}");
+		var hasGreenStar = await HasGreenStarCompany();
+
+if (hasGreenStar)
+{
+    Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}");
+}
+else
+{
+    Nav.NavigateTo($"/Enclosures?dealerId={DealerId}");
+}
 		}
 		catch (Exception ex)
 		{
@@ -1682,10 +1692,14 @@ private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx)
 		}
 	}
 
-	private void HandleSkip()
-	{
-		Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}");
-	}
+	private async Task HandleSkip()
+{
+	var hasGreenStar = await HasGreenStarCompany();
+
+	var nextRoute = FormStepData.GetNextRoute("/CreditLimit", hasGreenStar);
+
+	Nav.NavigateTo($"{nextRoute}?dealerId={DealerId}");
+}
 
 	private void ShowMessage(string message, bool isError)
 	{
@@ -1735,5 +1749,20 @@ private void SetFixedFinancialYears()
 	_proposal.FY1 = selectedYears.Count > 0 ? selectedYears[0].Id : 0;
 	_proposal.FY2 = selectedYears.Count > 1 ? selectedYears[1].Id : 0;
 	_proposal.FY3 = selectedYears.Count > 2 ? selectedYears[2].Id : 0;
+}
+private async Task<bool> HasGreenStarCompany()
+{
+    if (!DealerId.HasValue || DealerId.Value <= 0)
+        return false;
+
+    try
+    {
+        return await Http.GetFromJsonAsync<bool>(
+            $"api/DealerCompaniesOperatingInArea/dealer/{DealerId.Value}/has-greenstar");
+    }
+    catch
+    {
+        return false;
+    }
 }
 }
