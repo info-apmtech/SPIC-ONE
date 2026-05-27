@@ -7,783 +7,736 @@
 @inject LoadingService Loading
 
 <div class="container-fluid py-4 px-0">
-	<FormLoader />
+    <FormLoader />
 
-	@if (!string.IsNullOrEmpty(_message))
-	{
-		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
-			@_message
-			<button type="button" class="btn-close" @onclick='() => _message = null'></button>
-		</div>
-	}
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+            @_message
+            <button type="button" class="btn-close" @onclick='() => _message = null'></button>
+        </div>
+    }
 
-	<div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-		<h3 class="fw-bold m-0 company-title">Market Details</h3>
-	</div>
+    <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <h3 class="fw-bold m-0 company-title">Market Details</h3>
+    </div>
 
-	<div class="form-card">
-		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
-			<div class="card-header-title mb-0">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WarehouseHeader.svg"
-					 class="formicon" />
-				Blocks / Villages
-			</div>
+    <div class="form-card">
+        <div class="md-card-header d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+            <div class="card-header-title mb-0">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WarehouseHeader.svg"
+                     class="formicon" />
+                Blocks / Villages
+            </div>
 
-			<button class="btn-verified">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Verifiedicon.svg"
-					 class="verifyicon" />
-				Active Entry
-			</button>
-		</div>
+            <button class="btn-verified">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Verifiedicon.svg"
+                     class="verifyicon" />
+                Active Entry
+            </button>
+        </div>
 
-		<div class="row g-3 mb-4">
-			<div class="@(_hasWholesaleLicense ? "col-md-3" : "col-md-4")">
-				<label class="form-label-custom">Name of Block/ Village</label>
-				<input type="text"
-					   class="form-control-custom w-100"
-					   placeholder="Enter The Area Name"
-					   @bind="_formBlockName" />
-			</div>
+        <div class="row g-3 mb-4">
+            <div class="@(_hasWholesaleLicense ? "col-12 col-sm-6 col-md-3" : "col-12 col-sm-6 col-md-4")">
+                <label class="form-label-custom">Name of Block/ Village</label>
+                <input type="text"
+                       class="form-control-custom w-100"
+                       placeholder="Enter The Area Name"
+                       @bind="_formBlockName" />
+            </div>
 
-			<div class="@(_hasWholesaleLicense ? "col-md-3" : "col-md-4")">
-				<label class="form-label-custom">Major Crops</label>
+            <div class="@(_hasWholesaleLicense ? "col-12 col-sm-6 col-md-3" : "col-12 col-sm-6 col-md-4")">
+                <label class="form-label-custom">Major Crops</label>
 
-				<div class="crop-multiselect" style="position: relative;">
-					<div class="crop-select-box" @onclick="ToggleCropDropdown">
-        
-						<div class="selected-crops-container">
-							@if (_formCropIds.Count == 0)
-							{
-								<span class="crop-placeholder">Select Major Crops</span>
-							}
-							else
-							{
-								@foreach (var cropId in _formCropIds)
-								{
-									var crop = _crops.FirstOrDefault(c => c.Id == cropId);
-									if (crop != null)
-									{
-										<span class="crop-tag">
-											@crop.Name
-											<i class="bi bi-x crop-tag-remove"
-											   @onclick="() => RemoveSingleCrop(crop.Id)"
-											   @onclick:stopPropagation="true"></i>
-										</span>
-									}
-								}
-							}
-						</div>
+                <div class="crop-multiselect">
+                    <div class="crop-select-box" @onclick="ToggleCropDropdown">
+                        <div class="selected-crops-container">
+                            @if (_formCropIds.Count == 0)
+                            {
+                                <span class="crop-placeholder">Select Major Crops</span>
+                            }
+                            else
+                            {
+                                @foreach (var cropId in _formCropIds)
+                                {
+                                    var crop = _crops.FirstOrDefault(c => c.Id == cropId);
+                                    if (crop != null)
+                                    {
+                                        <span class="crop-tag">
+                                            @crop.Name
+                                            <i class="bi bi-x crop-tag-remove"
+                                               @onclick="() => RemoveSingleCrop(crop.Id)"
+                                               @onclick:stopPropagation="true"></i>
+                                        </span>
+                                    }
+                                }
+                            }
+                        </div>
 
-						<div class="d-flex align-items-center gap-2 ms-2">
-							@if (_formCropIds.Count > 0)
-							{
-								<i class="bi bi-x-circle-fill clear-icon"
-								   title="Clear all selections"
-								   @onclick="ClearCropSelection"
-								   @onclick:stopPropagation="true"></i>
-							}
-							<i class="bi @(_isCropDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") text-muted"></i>
-						</div>
-					</div>
+                        <div class="d-flex align-items-center gap-2 ms-2 crop-select-actions">
+                            @if (_formCropIds.Count > 0)
+                            {
+                                <i class="bi bi-x-circle-fill clear-icon"
+                                   title="Clear all selections"
+                                   @onclick="ClearCropSelection"
+                                   @onclick:stopPropagation="true"></i>
+                            }
+                            <i class="bi @(_isCropDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") text-muted"></i>
+                        </div>
+                    </div>
 
-					@if (_isCropDropdownOpen)
-					{
-						<div class="dropdown-overlay" @onclick="CloseCropDropdown"></div>
+                    @if (_isCropDropdownOpen)
+                    {
+                        <div class="dropdown-overlay" @onclick="CloseCropDropdown"></div>
 
-						<div class="crop-dropdown" @onclick:stopPropagation="true">
-							<div class="crop-search-container">
-								<i class="bi bi-search crop-search-icon"></i>
-								<input type="text"
-									   class="crop-search-input"
-									   placeholder="Search crops..."
-									   @bind="_cropSearchQuery"
-									   @bind:event="oninput" />
-							</div>
+                        <div class="crop-dropdown" @onclick:stopPropagation="true">
+                            <div class="crop-search-container">
+                                <i class="bi bi-search crop-search-icon"></i>
+                                <input type="text"
+                                       class="crop-search-input"
+                                       placeholder="Search crops..."
+                                       @bind="_cropSearchQuery"
+                                       @bind:event="oninput" />
+                            </div>
 
-							<div class="crop-options-list">
-								@if (_isCropLoading)
-								{
-									<div class="crop-option text-muted">
-										Loading crops...
-									</div>
-								}
-								else if (!FilteredCrops.Any())
-								{
-									<div class="crop-option text-muted">
-										No crops found
-									</div>
-								}
-								else
-								{
-									@foreach (var crop in FilteredCrops)
-									{
-										var isSelected = _formCropIds.Contains(crop.Id);
-										<div class="crop-option @(isSelected ? "selected-crop" : "")"
-											 @onclick="() => ToggleCropSelection(crop.Id)">
-											<span>@crop.Name</span>
-										</div>
-									}
-								}
-							</div>
-						</div>
-					}
-				</div>
-			</div>
+                            <div class="crop-options-list">
+                                @if (_isCropLoading)
+                                {
+                                    <div class="crop-option text-muted">
+                                        Loading crops...
+                                    </div>
+                                }
+                                else if (!FilteredCrops.Any())
+                                {
+                                    <div class="crop-option text-muted">
+                                        No crops found
+                                    </div>
+                                }
+                                else
+                                {
+                                    @foreach (var crop in FilteredCrops)
+                                    {
+                                        var isSelected = _formCropIds.Contains(crop.Id);
+                                        <div class="crop-option @(isSelected ? "selected-crop" : "")"
+                                             @onclick="() => ToggleCropSelection(crop.Id)">
+                                            <span>@crop.Name</span>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
 
-			@if (_hasWholesaleLicense)
-			{
-				<div class="col-md-3">
-					<label class="form-label-custom">No of Dealer</label>
-					<input type="number"
-						   class="form-control-custom w-100"
-						   placeholder="Enter No of Dealer"
-						   @bind="_formNoOfDealer" />
-				</div>
-			}
+            @if (_hasWholesaleLicense)
+            {
+                <div class="col-12 col-sm-6 col-md-3">
+                    <label class="form-label-custom">No of Dealer</label>
+                    <input type="number"
+                           class="form-control-custom w-100"
+                           placeholder="Enter No of Dealer"
+                           @bind="_formNoOfDealer" />
+                </div>
+            }
 
-			<div class="@(_hasWholesaleLicense ? "col-md-3" : "col-md-4")">
-				<label class="form-label-custom">No of Farmer</label>
-				<input type="number"
-					   class="form-control-custom w-100"
-					   placeholder="Enter No of Farmer"
-					   @bind="_formNoOfFarmer" />
-			</div>
-		</div>
+            <div class="@(_hasWholesaleLicense ? "col-12 col-sm-6 col-md-3" : "col-12 col-sm-6 col-md-4")">
+                <label class="form-label-custom">No of Farmer</label>
+                <input type="number"
+                       class="form-control-custom w-100"
+                       placeholder="Enter No of Farmer"
+                       @bind="_formNoOfFarmer" />
+            </div>
+        </div>
 
-		<div class="row g-3 align-items-end">
-			<div class="col-md-6">
-				<label class="form-label-custom">Season From & To Month</label>
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-6">
+                <label class="form-label-custom">Season From & To Month</label>
 
-				<div class="row g-2">
-					<div class="col-6">
-						<select class="form-select-custom w-100" @bind="_formFromMonth">
-							<option value="">From Month</option>
-							@foreach (var m in _monthValues)
-							{
-								<option value="@m">@m</option>
-							}
-						</select>
-					</div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <select class="form-select-custom w-100" @bind="_formFromMonth">
+                            <option value="">From Month</option>
+                            @foreach (var m in _monthValues)
+                            {
+                                <option value="@m">@m</option>
+                            }
+                        </select>
+                    </div>
 
-					<div class="col-6">
-						<select class="form-select-custom w-100" @bind="_formToMonth">
-							<option value="">To Month</option>
-							@foreach (var m in _monthValues)
-							{
-								<option value="@m">@m</option>
-							}
-						</select>
-					</div>
-				</div>
-			</div>
+                    <div class="col-6">
+                        <select class="form-select-custom w-100" @bind="_formToMonth">
+                            <option value="">To Month</option>
+                            @foreach (var m in _monthValues)
+                            {
+                                <option value="@m">@m</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
 
-			<div class="col-md-6">
-				<label class="form-label-custom">Irrigation Type</label>
+            <div class="col-12 col-md-6">
+                <label class="form-label-custom">Irrigation Type</label>
 
-				<div class="d-flex justify-content-between align-items-center">
-					<div class="irrigation-toggles">
-						<label class="toggle-btn @(_formIsCanal ? "active" : "")">
-							<input type="checkbox" @bind="_formIsCanal" />
-							<i class="bi @(_formIsCanal ? "bi-check-square-fill" : "bi-square")"></i>
-							CANAL
-						</label>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="irrigation-toggles">
+                        <label class="toggle-btn @(_formIsCanal ? "active" : "")">
+                            <input type="checkbox" @bind="_formIsCanal" />
+                            <i class="bi @(_formIsCanal ? "bi-check-square-fill" : "bi-square")"></i>
+                            CANAL
+                        </label>
 
-						<label class="toggle-btn @(_formIsTank ? "active" : "")">
-							<input type="checkbox" @bind="_formIsTank" />
-							<i class="bi @(_formIsTank ? "bi-check-square-fill" : "bi-square")"></i>
-							TANK
-						</label>
+                        <label class="toggle-btn @(_formIsTank ? "active" : "")">
+                            <input type="checkbox" @bind="_formIsTank" />
+                            <i class="bi @(_formIsTank ? "bi-check-square-fill" : "bi-square")"></i>
+                            TANK
+                        </label>
 
-						<label class="toggle-btn @(_formIsWell ? "active" : "")">
-							<input type="checkbox" @bind="_formIsWell" />
-							<i class="bi @(_formIsWell ? "bi-check-square-fill" : "bi-square")"></i>
-							WELL
-						</label>
-					</div>
-				</div>
-			</div>
+                        <label class="toggle-btn @(_formIsWell ? "active" : "")">
+                            <input type="checkbox" @bind="_formIsWell" />
+                            <i class="bi @(_formIsWell ? "bi-check-square-fill" : "bi-square")"></i>
+                            WELL
+                        </label>
+                    </div>
+                </div>
+            </div>
 
-			<div class="d-flex justify-content-end mt-3">
-				<button class="btn btn-add"
-						@onclick="AddOrUpdateBlock"
-						disabled="@IsAddButtonDisabled">
-					<i class="bi bi-plus-lg"></i>
-					@(_editingId > 0 ? "Update" : "Add") Blocks/ Villages
-				</button>
-			</div>
-		</div>
-	</div>
+            <div class="d-flex justify-content-end mt-3 add-block-btn-wrap">
+                <button class="btn btn-add add-block-btn"
+                        @onclick="AddOrUpdateBlock"
+                        disabled="@IsAddButtonDisabled">
+                    <i class="bi bi-plus-lg"></i>
+                    @(_editingId > 0 ? "Update" : "Add") Blocks/ Villages
+                </button>
+            </div>
+        </div>
+    </div>
 
-	<div class="form-card">
-		<div class="d-flex justify-content-between align-items-center mb-4">
-			<div class="card-header-title mb-0">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Active .svg"
-					 class="formicon" />
-				Added Market Details
-			</div>
-		</div>
+    <div class="form-card">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            <div class="card-header-title mb-0">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Active .svg"
+                     class="formicon" />
+                Added Market Details
+            </div>
+        </div>
 
-		<div class="row g-4">
-			@{
-				var blockIndex = 0;
-			}
+        <div class="row g-4">
+            @{
+                var blockIndex = 0;
+            }
 
-			@foreach (var block in _savedBlocks)
-			{
-				blockIndex++;
-				var idx = blockIndex;
-				var theme = idx % 2 == 1 ? "theme-yellow" : "theme-green";
-				var cropName = GetCropName(block.MajorCrops);
-				var irrigationList = GetIrrigationText(block);
-				var seasonText = $"{block.SeasonFromMonth} - {block.SeasonToMonth}";
+            @foreach (var block in _savedBlocks)
+            {
+                blockIndex++;
+                var idx = blockIndex;
+                var theme = idx % 2 == 1 ? "theme-yellow" : "theme-green";
+                var cropName = GetCropName(block.MajorCrops);
+                var irrigationList = GetIrrigationText(block);
+                var seasonText = $"{block.SeasonFromMonth} - {block.SeasonToMonth}";
 
-				<div class="col-md-6">
-					<div class="block-card @theme">
-						<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CropBg.svg"
-							 class="block-card-bg"
-							 alt="bg" />
+                <div class="col-12 col-lg-6">
+                    <div class="block-card @theme">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CropBg.svg"
+                             class="block-card-bg"
+                             alt="bg" />
 
-						<div class="block-card-header">
-							<h3 class="block-title">
-								<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BlockImage.svg"
-									 alt="BlockImage"
-									 class="formicon" />
-								@block.NameOfBlock
-							</h3>
+                        <div class="block-card-header">
+                            <h3 class="block-title">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BlockImage.svg"
+                                     alt="BlockImage"
+                                     class="formicon" />
+                                @block.NameOfBlock
+                            </h3>
 
-							<div class="action-icons">
-								<i class="bi bi-pencil-square icon-edit"
-								   style="cursor:pointer"
-								   @onclick="() => EditBlock(block)"></i>
+                            <div class="action-icons">
+                                <i class="bi bi-pencil-square icon-edit"
+                                   @onclick="() => EditBlock(block)"></i>
 
-								<i class="bi bi-trash icon-delete"
-								   style="cursor:pointer"
-								   @onclick="() => ConfirmDelete(block)"></i>
-							</div>
-						</div>
+                                <i class="bi bi-trash icon-delete"
+                                   @onclick="() => ConfirmDelete(block)"></i>
+                            </div>
+                        </div>
 
-						<div class="info-pill-container mb-3">
-							<div class="info-pill">
-								<div class="pill-label">Crops</div>
-								<div class="pill-value">@cropName</div>
-							</div>
+                        <div class="info-pill-container mb-3">
+                            <div class="info-pill">
+                                <div class="pill-label">Crops</div>
+                                <div class="pill-value">@cropName</div>
+                            </div>
 
-							<div class="info-pill">
-								<div class="pill-label">Irrigation</div>
-								<div class="pill-value">@irrigationList</div>
-							</div>
+                            <div class="info-pill">
+                                <div class="pill-label">Irrigation</div>
+                                <div class="pill-value">@irrigationList</div>
+                            </div>
 
-							<div class="info-pill">
-								<div class="pill-label">Season</div>
-								<div class="pill-value">@seasonText</div>
-							</div>
-						</div>
+                            <div class="info-pill">
+                                <div class="pill-label">Season</div>
+                                <div class="pill-value">@seasonText</div>
+                            </div>
+                        </div>
 
-						<div class="info-pill-container">
-							@if (_hasWholesaleLicense)
-							{
-								<div class="info-pill">
-									<div class="pill-label">No of Dealer</div>
-									<div class="pill-value">@block.NoOfDealer</div>
-								</div>
-							}
+                        <div class="info-pill-container">
+                            @if (_hasWholesaleLicense)
+                            {
+                                <div class="info-pill">
+                                    <div class="pill-label">No of Dealer</div>
+                                    <div class="pill-value">@block.NoOfDealer</div>
+                                </div>
+                            }
 
-							<div class="info-pill">
-								<div class="pill-label">No of Farmer</div>
-								<div class="pill-value">@block.NoOfFarmer</div>
-							</div>
-						</div>
-					</div>
-				</div>
-			}
+                            <div class="info-pill">
+                                <div class="pill-label">No of Farmer</div>
+                                <div class="pill-value">@block.NoOfFarmer</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
 
-			@if (_savedBlocks.Count == 0)
-			{
-				<div class="col-12 text-center text-muted py-4">
-					<i class="bi bi-inbox fs-1"></i>
-					<p class="mt-2">No regional blocks added yet.</p>
-				</div>
-			}
-		</div>
-	</div>
+            @if (_savedBlocks.Count == 0)
+            {
+                <div class="col-12 text-center text-muted py-4">
+                    <i class="bi bi-inbox fs-1"></i>
+                    <p class="mt-2">No regional blocks added yet.</p>
+                </div>
+            }
+        </div>
+    </div>
 
-	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+    <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
 @if (_showDeleteConfirm)
 {
-	<div class="modal-backdrop fade show"></div>
+    <div class="modal-backdrop fade show"></div>
 
-	<div class="modal fade show d-block" tabindex="-1" role="dialog">
-		<div class="modal-dialog modal-dialog-centered" role="document">
-			<div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
-				<div class="modal-body text-center p-4">
-					<div class="mb-3">
-						<i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 3rem;"></i>
-					</div>
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content md-delete-modal-content">
+                <div class="modal-body text-center p-4">
+                    <div class="mb-3">
+                        <i class="bi bi-exclamation-triangle-fill text-danger md-delete-icon"></i>
+                    </div>
 
-					<h5 class="fw-bold mb-2">Delete Block / Village?</h5>
+                    <h5 class="fw-bold mb-2">Delete Block / Village?</h5>
 
-					<p class="text-muted mb-1">
-						You are about to delete <strong>@(_blockToDelete?.NameOfBlock ?? "this block / village")</strong>
-					</p>
+                    <p class="text-muted mb-1">
+                        You are about to delete <strong>@(_blockToDelete?.NameOfBlock ?? "this block / village")</strong>
+                    </p>
 
-					<p class="text-danger small mb-4">This action cannot be undone.</p>
+                    <p class="text-danger small mb-4">This action cannot be undone.</p>
 
-					<div class="d-flex justify-content-center gap-3">
-						<button class="btn btn-outline-secondary rounded-pill px-4"
-								@onclick="CancelDelete"
-								disabled="@_isDeleting">
-							Cancel
-						</button>
+                    <div class="d-flex justify-content-center gap-3 md-delete-actions">
+                        <button class="btn btn-outline-secondary rounded-pill px-4"
+                                @onclick="CancelDelete"
+                                disabled="@_isDeleting">
+                            Cancel
+                        </button>
 
-						<button class="btn btn-danger rounded-pill px-4"
-								@onclick="ExecuteDelete"
-								disabled="@_isDeleting">
-							@if (_isDeleting)
-							{
-								<span class="spinner-border spinner-border-sm me-1"></span>
-								<span>Deleting...</span>
-							}
-							else
-							{
-								<i class="bi bi-trash me-1"></i>
-								<span>Delete</span>
-							}
-						</button>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
+                        <button class="btn btn-danger rounded-pill px-4"
+                                @onclick="ExecuteDelete"
+                                disabled="@_isDeleting">
+                            @if (_isDeleting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                <span>Deleting...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-trash me-1"></i>
+                                <span>Delete</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 }
 
-
 @code {
-	[SupplyParameterFromQuery(Name = "dealerId")]
-	public int? DealerId { get; set; }
-
-	private List<Crop> _crops = new();
-	private string[] _monthValues = Enum.GetNames<Months>();
-
-	private List<DealerMarketDetail> _savedBlocks = new();
-
-	private string _formBlockName = "";
-	private List<int> _formCropIds = new();
-	private string _cropSearchQuery = "";
-
-	private int _formNoOfDealer;
-	private int _formNoOfFarmer;
-	private string _formFromMonth = "";
-	private string _formToMonth = "";
-	private bool _formIsCanal;
-	private bool _formIsTank;
-	private bool _formIsWell;
-	private int _editingId;
-
-	private bool _isCropDropdownOpen;
-	private bool _isCropLoading;
-
-	private bool _showDeleteConfirm;
-	private bool _isDeleting;
-	private DealerMarketDetail? _blockToDelete;
-
-	private bool _isSaving;
-	private string? _message;
-	private bool _isError;
-	private bool _hasWholesaleLicense;
-
-	private bool IsAddButtonDisabled =>
-		string.IsNullOrWhiteSpace(_formBlockName)
-		|| _formCropIds.Count == 0
-		|| _isSaving;
-
-	private IEnumerable<Crop> FilteredCrops =>
-		string.IsNullOrWhiteSpace(_cropSearchQuery)
-			? _crops
-			: _crops.Where(c => c.Name.Contains(_cropSearchQuery, StringComparison.OrdinalIgnoreCase));
-
-	protected override async Task OnInitializedAsync()
-	{
-		Loading.Show();
-
-		try
-		{
-			await LoadDealerInfo();
-			await LoadCrops();
-			await LoadSavedBlocks();
-		}
-		finally
-		{
-			Loading.Hide();
-		}
-	}
-
-	private void CloseCropDropdown()
-	{
-		_isCropDropdownOpen = false;
-		_cropSearchQuery = ""; 
-	}
-
-	private async Task LoadCrops()
-	{
-		_isCropLoading = true;
-
-		try
-		{
-			_crops = await Http.GetFromJsonAsync<List<Crop>>("api/Crop") ?? new();
-
-			_crops = _crops
-				.OrderBy(c => c.Name)
-				.ToList();
-		}
-		catch (Exception ex)
-		{
-			_crops = new();
-			ShowMessage($"Failed to load crops: {ex.Message}", true);
-		}
-		finally
-		{
-			_isCropLoading = false;
-		}
-	}
-
-	private async Task LoadSavedBlocks()
-	{
-		if (!DealerId.HasValue || DealerId.Value <= 0)
-			return;
-
-		try
-		{
-			var all = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new();
-			_savedBlocks = all.Where(b => b.DealerId == DealerId.Value).ToList();
-		}
-		catch (Exception ex)
-		{
-			ShowMessage($"Failed to load market details: {ex.Message}", true);
-		}
-	}
-
-	private void ToggleCropDropdown()
-	{
-		_isCropDropdownOpen = !_isCropDropdownOpen;
-		
-		if (!_isCropDropdownOpen)
-		{
-			_cropSearchQuery = "";
-		}
-	}
-
-	private void ToggleCropSelection(int cropId)
-	{
-		if (_formCropIds.Contains(cropId))
-		{
-			_formCropIds.Remove(cropId);
-		}
-		else
-		{
-			_formCropIds.Add(cropId);
-		}
-	}
-
-	private void RemoveSingleCrop(int cropId)
-	{
-		if (_formCropIds.Contains(cropId))
-		{
-			_formCropIds.Remove(cropId);
-		}
-	}
-
-	private void ClearCropSelection()
-	{
-		_formCropIds.Clear();
-	}
-
-	private async Task AddOrUpdateBlock()
-	{
-		if (string.IsNullOrWhiteSpace(_formBlockName) || _formCropIds.Count == 0 || !DealerId.HasValue)
-			return;
-
-		_isSaving = true;
-
-		try
-		{
-			var fromMonth = Enum.TryParse<Months>(_formFromMonth, out var from)
-				? from
-				: Months.January;
-
-			var toMonth = Enum.TryParse<Months>(_formToMonth, out var to)
-				? to
-				: Months.January;
-
-			if (_editingId > 0)
-			{
-				var cropId = _formCropIds.First();
-
-				var entry = new DealerMarketDetail
-				{
-					Id = _editingId,
-					DealerId = DealerId.Value,
-					NameOfBlock = _formBlockName.Trim(),
-					MajorCrops = cropId,
-					NoOfDealer = _formNoOfDealer,
-					NoOfFarmer = _formNoOfFarmer,
-					SeasonFromMonth = fromMonth,
-					SeasonToMonth = toMonth,
-					IsCanal = _formIsCanal,
-					IsTank = _formIsTank,
-					IsWell = _formIsWell
-				};
-
-				var response = await Http.PutAsJsonAsync($"api/DealerMarketDetail/{_editingId}", entry);
-
-				if (!response.IsSuccessStatusCode)
-				{
-					ShowMessage("Failed to update block / village.", true);
-					return;
-				}
-
-				var existing = _savedBlocks.FirstOrDefault(b => b.Id == _editingId);
-
-				if (existing != null)
-				{
-					existing.NameOfBlock = entry.NameOfBlock;
-					existing.MajorCrops = entry.MajorCrops;
-					existing.NoOfDealer = entry.NoOfDealer;
-					existing.NoOfFarmer = entry.NoOfFarmer;
-					existing.SeasonFromMonth = entry.SeasonFromMonth;
-					existing.SeasonToMonth = entry.SeasonToMonth;
-					existing.IsCanal = entry.IsCanal;
-					existing.IsTank = entry.IsTank;
-					existing.IsWell = entry.IsWell;
-				}
-
-				ShowMessage("Block / Village updated successfully.", false);
-			}
-			else
-			{
-				var addedCount = 0;
-
-				foreach (var cropId in _formCropIds.Distinct())
-				{
-					var entry = new DealerMarketDetail
-					{
-						Id = 0,
-						DealerId = DealerId.Value,
-						NameOfBlock = _formBlockName.Trim(),
-						MajorCrops = cropId,
-						NoOfDealer = _formNoOfDealer,
-						NoOfFarmer = _formNoOfFarmer,
-						SeasonFromMonth = fromMonth,
-						SeasonToMonth = toMonth,
-						IsCanal = _formIsCanal,
-						IsTank = _formIsTank,
-						IsWell = _formIsWell
-					};
-
-					var response = await Http.PostAsJsonAsync("api/DealerMarketDetail", entry);
-
-					if (response.IsSuccessStatusCode)
-					{
-						var result = await response.Content.ReadFromJsonAsync<CreateResponse>();
-
-						if (result?.Data != null)
-						{
-							_savedBlocks.Add(result.Data);
-						}
-
-						addedCount++;
-					}
-				}
-
-				if (addedCount == 0)
-				{
-					ShowMessage("Failed to add block / village details.", true);
-					return;
-				}
-
-				ShowMessage($"{addedCount} crop detail(s) added successfully.", false);
-			}
-
-			ResetForm();
-		}
-		catch (Exception ex)
-		{
-			ShowMessage($"Failed to save: {ex.Message}", true);
-		}
-		finally
-		{
-			_isSaving = false;
-		}
-	}
-
-	private void EditBlock(DealerMarketDetail block)
-	{
-		_formBlockName = block.NameOfBlock;
-
-		_formCropIds.Clear();
-
-		if (block.MajorCrops > 0)
-		{
-			_formCropIds.Add(block.MajorCrops);
-		}
-
-		_formNoOfDealer = block.NoOfDealer;
-		_formNoOfFarmer = block.NoOfFarmer;
-		_formFromMonth = block.SeasonFromMonth.ToString();
-		_formToMonth = block.SeasonToMonth.ToString();
-		_formIsCanal = block.IsCanal;
-		_formIsTank = block.IsTank;
-		_formIsWell = block.IsWell;
-		_editingId = block.Id;
-		_isCropDropdownOpen = false;
-		_cropSearchQuery = "";
-	}
-
-	private void ConfirmDelete(DealerMarketDetail block)
-	{
-		_blockToDelete = block;
-		_showDeleteConfirm = true;
-	}
-
-	private void CancelDelete()
-	{
-		_showDeleteConfirm = false;
-		_blockToDelete = null;
-	}
-
-	private async Task ExecuteDelete()
-	{
-		if (_blockToDelete == null)
-			return;
-
-		_isDeleting = true;
-
-		try
-		{
-			var response = await Http.DeleteAsync($"api/DealerMarketDetail/{_blockToDelete.Id}");
-
-			if (response.IsSuccessStatusCode)
-			{
-				_savedBlocks.Remove(_blockToDelete);
-				ShowMessage("Block / Village deleted successfully.", false);
-			}
-			else
-			{
-				ShowMessage("Failed to delete block / village.", true);
-			}
-		}
-		catch (Exception ex)
-		{
-			ShowMessage($"Failed to delete: {ex.Message}", true);
-		}
-		finally
-		{
-			_isDeleting = false;
-			_showDeleteConfirm = false;
-			_blockToDelete = null;
-		}
-	}
-
-	private void ResetForm()
-	{
-		_formBlockName = "";
-		_formCropIds.Clear();
-		_formNoOfDealer = 0;
-		_formNoOfFarmer = 0;
-		_formFromMonth = "";
-		_formToMonth = "";
-		_formIsCanal = false;
-		_formIsTank = false;
-		_formIsWell = false;
-		_editingId = 0;
-		_isCropDropdownOpen = false;
-		_cropSearchQuery = "";
-	}
-
-	private string GetCropName(int cropId)
-	{
-		return _crops.FirstOrDefault(c => c.Id == cropId)?.Name ?? "—";
-	}
-
-	private string GetIrrigationText(DealerMarketDetail block)
-	{
-		var types = new List<string>();
-
-		if (block.IsCanal)
-			types.Add("Canal");
-
-		if (block.IsTank)
-			types.Add("Tank");
-
-		if (block.IsWell)
-			types.Add("Well");
-
-		return types.Count > 0 ? string.Join(", ", types) : "—";
-	}
-
-	private async Task HandleNext()
-	{
-		if (!DealerId.HasValue || DealerId.Value <= 0)
-		{
-			ShowMessage("Dealer ID is required.", true);
-			return;
-		}
-
-		_isSaving = true;
-
-		try
-		{
-			var hasError = _savedBlocks.Count == 0;
-			FormStepData.MarkStepError(5, hasError);
-
-			Loading.Show();
-			Nav.NavigateTo($"/Companies?dealerId={DealerId}");
-		}
-		catch (Exception ex)
-		{
-			Loading.Hide();
-			ShowMessage($"Failed: {ex.Message}", true);
-		}
-		finally
-		{
-			_isSaving = false;
-		}
-	}
-
-	private void ShowMessage(string message, bool isError)
-	{
-		_message = message;
-		_isError = isError;
-	}
-
-	private async Task LoadDealerInfo()
-	{
-		if (!DealerId.HasValue || DealerId.Value <= 0)
-			return;
-
-		try
-		{
-			var dealer = await Http.GetFromJsonAsync<DealerBasicInfo>($"api/DealerRegistration/{DealerId.Value}");
-
-			if (dealer != null)
-			{
-				_hasWholesaleLicense = !string.IsNullOrWhiteSpace(dealer.WholeSaleFertilizerLicenseNumber);
-			}
-		}
-		catch
-		{
-		}
-	}
-
-	private class CreateResponse
-	{
-		public string? Message { get; set; }
-		public DealerMarketDetail? Data { get; set; }
-	}
-
-	private class DealerBasicInfo
-	{
-		public string? WholeSaleFertilizerLicenseNumber { get; set; }
-	}
+    [SupplyParameterFromQuery(Name = "dealerId")]
+    public int? DealerId { get; set; }
+
+    private List<Crop> _crops = new();
+    private string[] _monthValues = Enum.GetNames<Months>();
+
+    private List<DealerMarketDetail> _savedBlocks = new();
+
+    private string _formBlockName = "";
+    private List<int> _formCropIds = new();
+    private string _cropSearchQuery = "";
+
+    private int _formNoOfDealer;
+    private int _formNoOfFarmer;
+    private string _formFromMonth = "";
+    private string _formToMonth = "";
+    private bool _formIsCanal;
+    private bool _formIsTank;
+    private bool _formIsWell;
+    private int _editingId;
+
+    private bool _isCropDropdownOpen;
+    private bool _isCropLoading;
+
+    private bool _showDeleteConfirm;
+    private bool _isDeleting;
+    private DealerMarketDetail? _blockToDelete;
+
+    private bool _isSaving;
+    private string? _message;
+    private bool _isError;
+    private bool _hasWholesaleLicense;
+
+    private bool IsAddButtonDisabled =>
+        string.IsNullOrWhiteSpace(_formBlockName)
+        || _formCropIds.Count == 0
+        || _isSaving;
+
+    private IEnumerable<Crop> FilteredCrops =>
+        string.IsNullOrWhiteSpace(_cropSearchQuery)
+            ? _crops
+            : _crops.Where(c => c.Name.Contains(_cropSearchQuery, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        Loading.Show();
+
+        try
+        {
+            await LoadDealerInfo();
+            await LoadCrops();
+            await LoadSavedBlocks();
+        }
+        finally
+        {
+            Loading.Hide();
+        }
+    }
+
+    private void CloseCropDropdown()
+    {
+        _isCropDropdownOpen = false;
+        _cropSearchQuery = "";
+    }
+
+    private async Task LoadCrops()
+    {
+        _isCropLoading = true;
+
+        try
+        {
+            _crops = await Http.GetFromJsonAsync<List<Crop>>("api/Crop") ?? new();
+            _crops = _crops.OrderBy(c => c.Name).ToList();
+        }
+        catch (Exception ex)
+        {
+            _crops = new();
+            ShowMessage($"Failed to load crops: {ex.Message}", true);
+        }
+        finally
+        {
+            _isCropLoading = false;
+        }
+    }
+
+    private async Task LoadSavedBlocks()
+    {
+        if (!DealerId.HasValue || DealerId.Value <= 0)
+            return;
+
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new();
+            _savedBlocks = all.Where(b => b.DealerId == DealerId.Value).ToList();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load market details: {ex.Message}", true);
+        }
+    }
+
+    private void ToggleCropDropdown()
+    {
+        _isCropDropdownOpen = !_isCropDropdownOpen;
+
+        if (!_isCropDropdownOpen)
+        {
+            _cropSearchQuery = "";
+        }
+    }
+
+    private void ToggleCropSelection(int cropId)
+    {
+        if (_formCropIds.Contains(cropId))
+            _formCropIds.Remove(cropId);
+        else
+            _formCropIds.Add(cropId);
+    }
+
+    private void RemoveSingleCrop(int cropId)
+    {
+        if (_formCropIds.Contains(cropId))
+            _formCropIds.Remove(cropId);
+    }
+
+    private void ClearCropSelection() => _formCropIds.Clear();
+
+    private async Task AddOrUpdateBlock()
+    {
+        if (string.IsNullOrWhiteSpace(_formBlockName) || _formCropIds.Count == 0 || !DealerId.HasValue)
+            return;
+
+        _isSaving = true;
+
+        try
+        {
+            var fromMonth = Enum.TryParse<Months>(_formFromMonth, out var from) ? from : Months.January;
+            var toMonth = Enum.TryParse<Months>(_formToMonth, out var to) ? to : Months.January;
+
+            if (_editingId > 0)
+            {
+                var cropId = _formCropIds.First();
+
+                var entry = new DealerMarketDetail
+                {
+                    Id = _editingId,
+                    DealerId = DealerId.Value,
+                    NameOfBlock = _formBlockName.Trim(),
+                    MajorCrops = cropId,
+                    NoOfDealer = _formNoOfDealer,
+                    NoOfFarmer = _formNoOfFarmer,
+                    SeasonFromMonth = fromMonth,
+                    SeasonToMonth = toMonth,
+                    IsCanal = _formIsCanal,
+                    IsTank = _formIsTank,
+                    IsWell = _formIsWell
+                };
+
+                var response = await Http.PutAsJsonAsync($"api/DealerMarketDetail/{_editingId}", entry);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    ShowMessage("Failed to update block / village.", true);
+                    return;
+                }
+
+                var existing = _savedBlocks.FirstOrDefault(b => b.Id == _editingId);
+
+                if (existing != null)
+                {
+                    existing.NameOfBlock = entry.NameOfBlock;
+                    existing.MajorCrops = entry.MajorCrops;
+                    existing.NoOfDealer = entry.NoOfDealer;
+                    existing.NoOfFarmer = entry.NoOfFarmer;
+                    existing.SeasonFromMonth = entry.SeasonFromMonth;
+                    existing.SeasonToMonth = entry.SeasonToMonth;
+                    existing.IsCanal = entry.IsCanal;
+                    existing.IsTank = entry.IsTank;
+                    existing.IsWell = entry.IsWell;
+                }
+
+                ShowMessage("Block / Village updated successfully.", false);
+            }
+            else
+            {
+                var addedCount = 0;
+
+                foreach (var cropId in _formCropIds.Distinct())
+                {
+                    var entry = new DealerMarketDetail
+                    {
+                        Id = 0,
+                        DealerId = DealerId.Value,
+                        NameOfBlock = _formBlockName.Trim(),
+                        MajorCrops = cropId,
+                        NoOfDealer = _formNoOfDealer,
+                        NoOfFarmer = _formNoOfFarmer,
+                        SeasonFromMonth = fromMonth,
+                        SeasonToMonth = toMonth,
+                        IsCanal = _formIsCanal,
+                        IsTank = _formIsTank,
+                        IsWell = _formIsWell
+                    };
+
+                    var response = await Http.PostAsJsonAsync("api/DealerMarketDetail", entry);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var result = await response.Content.ReadFromJsonAsync<CreateResponse>();
+                        if (result?.Data != null)
+                            _savedBlocks.Add(result.Data);
+
+                        addedCount++;
+                    }
+                }
+
+                if (addedCount == 0)
+                {
+                    ShowMessage("Failed to add block / village details.", true);
+                    return;
+                }
+
+                ShowMessage($"{addedCount} crop detail(s) added successfully.", false);
+            }
+
+            ResetForm();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to save: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void EditBlock(DealerMarketDetail block)
+    {
+        _formBlockName = block.NameOfBlock;
+        _formCropIds.Clear();
+        if (block.MajorCrops > 0) _formCropIds.Add(block.MajorCrops);
+        _formNoOfDealer = block.NoOfDealer;
+        _formNoOfFarmer = block.NoOfFarmer;
+        _formFromMonth = block.SeasonFromMonth.ToString();
+        _formToMonth = block.SeasonToMonth.ToString();
+        _formIsCanal = block.IsCanal;
+        _formIsTank = block.IsTank;
+        _formIsWell = block.IsWell;
+        _editingId = block.Id;
+        _isCropDropdownOpen = false;
+        _cropSearchQuery = "";
+    }
+
+    private void ConfirmDelete(DealerMarketDetail block)
+    {
+        _blockToDelete = block;
+        _showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        _showDeleteConfirm = false;
+        _blockToDelete = null;
+    }
+
+    private async Task ExecuteDelete()
+    {
+        if (_blockToDelete == null) return;
+
+        _isDeleting = true;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/DealerMarketDetail/{_blockToDelete.Id}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                _savedBlocks.Remove(_blockToDelete);
+                ShowMessage("Block / Village deleted successfully.", false);
+            }
+            else
+            {
+                ShowMessage("Failed to delete block / village.", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to delete: {ex.Message}", true);
+        }
+        finally
+        {
+            _isDeleting = false;
+            _showDeleteConfirm = false;
+            _blockToDelete = null;
+        }
+    }
+
+    private void ResetForm()
+    {
+        _formBlockName = "";
+        _formCropIds.Clear();
+        _formNoOfDealer = 0;
+        _formNoOfFarmer = 0;
+        _formFromMonth = "";
+        _formToMonth = "";
+        _formIsCanal = false;
+        _formIsTank = false;
+        _formIsWell = false;
+        _editingId = 0;
+        _isCropDropdownOpen = false;
+        _cropSearchQuery = "";
+    }
+
+    private string GetCropName(int cropId) =>
+        _crops.FirstOrDefault(c => c.Id == cropId)?.Name ?? "—";
+
+    private string GetIrrigationText(DealerMarketDetail block)
+    {
+        var types = new List<string>();
+        if (block.IsCanal) types.Add("Canal");
+        if (block.IsTank) types.Add("Tank");
+        if (block.IsWell) types.Add("Well");
+        return types.Count > 0 ? string.Join(", ", types) : "—";
+    }
+
+    private async Task HandleNext()
+    {
+        if (!DealerId.HasValue || DealerId.Value <= 0)
+        {
+            ShowMessage("Dealer ID is required.", true);
+            return;
+        }
+
+        _isSaving = true;
+
+        try
+        {
+            var hasError = _savedBlocks.Count == 0;
+            FormStepData.MarkStepError(5, hasError);
+            Loading.Show();
+            Nav.NavigateTo($"/Companies?dealerId={DealerId}");
+        }
+        catch (Exception ex)
+        {
+            Loading.Hide();
+            ShowMessage($"Failed: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+    private async Task LoadDealerInfo()
+    {
+        if (!DealerId.HasValue || DealerId.Value <= 0) return;
+
+        try
+        {
+            var dealer = await Http.GetFromJsonAsync<DealerBasicInfo>($"api/DealerRegistration/{DealerId.Value}");
+            if (dealer != null)
+                _hasWholesaleLicense = !string.IsNullOrWhiteSpace(dealer.WholeSaleFertilizerLicenseNumber);
+        }
+        catch { }
+    }
+
+    private class CreateResponse
+    {
+        public string? Message { get; set; }
+        public DealerMarketDetail? Data { get; set; }
+    }
+
+    private class DealerBasicInfo
+    {
+        public string? WholeSaleFertilizerLicenseNumber { get; set; }
+    }
 }
