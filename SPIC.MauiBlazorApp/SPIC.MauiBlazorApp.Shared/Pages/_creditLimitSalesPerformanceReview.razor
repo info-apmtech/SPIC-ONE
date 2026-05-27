@@ -1,0 +1,243 @@
+﻿@using SPIC.Core.Entities
+
+<div class="form-card">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+        <div class="section-title">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SalesPerformaReview.svg"
+                 class="formicon" />
+            Sales Performance Review
+        </div>
+
+        <button class="btn-verified">
+            Values in @SelectedUnitName
+        </button>
+    </div>
+
+    <div class="financial-note-box">
+        <div class="financial-note-badge">
+            Only last 3 completed financial years are allowed
+        </div>
+    </div>
+
+    <div class="custom-tabs">
+        @foreach (var cat in Categories)
+        {
+            var catId = cat.Id;
+            var unitName = Units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
+
+            <div class="tab-btn @(catId == SelectedCategoryId ? "active" : "")"
+                 @onclick="async () => await OnCategoryChanged.InvokeAsync(catId)"
+                 style="cursor:pointer;">
+                @cat.Name (@unitName / Value)
+            </div>
+        }
+    </div>
+
+    <div class="table-wrapper">
+        <div class="table-responsive">
+            <table class="spic-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" style="min-width: 180px;">
+                            Product Name / Category
+                        </th>
+
+                        @for (int fi = 0; fi < 3; fi++)
+                        {
+                            var fyIdx = fi;
+
+                            <th colspan="2" class="text-center border-start">
+                                <select class="form-select form-select-sm text-center"
+                                        value="@GetSelectedFY(fyIdx)"
+                                        disabled>
+                                    <option value="@GetSelectedFY(fyIdx)">
+                                        @GetFYName(fyIdx)
+                                    </option>
+                                </select>
+                            </th>
+                        }
+                    </tr>
+
+                    <tr>
+                        @for (int fi = 0; fi < 3; fi++)
+                        {
+                            <th class="text-center text-muted fw-normal border-start">
+                                @SelectedUnitName
+                            </th>
+                            <th class="text-center text-muted fw-normal">
+                                Lakhs
+                            </th>
+                        }
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @foreach (var row in SalesPerfRows)
+                    {
+                        <tr>
+                            <td class="fw-medium text-dark">@row.ProductName</td>
+
+                            <td class="border-start">
+                                <input class="table-input"
+                                       type="number"
+                                       step="0.01"
+                                       value="@row.FY1Qty"
+                                       readonly />
+                            </td>
+                            <td>
+                                <input class="table-input"
+                                       type="number"
+                                       step="0.01"
+                                       value="@row.FY1Amount"
+                                       readonly />
+                            </td>
+
+                            <td class="border-start">
+                                <input class="table-input"
+                                       type="number"
+                                       step="0.01"
+                                       value="@row.FY2Qty"
+                                       readonly />
+                            </td>
+                            <td>
+                                <input class="table-input"
+                                       type="number"
+                                       step="0.01"
+                                       value="@row.FY2Amount"
+                                       readonly />
+                            </td>
+
+                            <td class="border-start">
+                                <input class="table-input"
+                                       type="number"
+                                       step="0.01"
+                                       value="@row.FY3Qty"
+                                       readonly />
+                            </td>
+                            <td>
+                                <input class="table-input"
+                                       type="number"
+                                       step="0.01"
+                                       value="@row.FY3Amount"
+                                       readonly />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+
+                <tfoot>
+                    <tr>
+                        <td class="fw-bold text-end">Total</td>
+
+                        @for (int fi = 0; fi < 3; fi++)
+                        {
+                            var fyIdx = fi;
+
+                            <td class="border-start fw-bold text-center">
+                                @GetFYTotalQtyByCategory(fyIdx).ToString("N2")
+                            </td>
+
+                            <td class="fw-bold text-center">
+                                @GetFYTotalAmountByCategory(fyIdx).ToString("N2")
+                            </td>
+                        }
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        @for (int fi = 0; fi < 3; fi++)
+        {
+            var fyIdx = fi;
+            var fyName = GetFYName(fyIdx);
+
+            <div class="col-md-3">
+                <div class="perf-card">
+                    <div class="perf-year">@fyName</div>
+                    <div class="perf-val">
+                        @GetFYTotalQty(fyIdx).ToString("N2")
+                        <span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">
+                            @SelectedUnitName
+                        </span>
+                        / ₹ @GetFYTotalAmount(fyIdx).ToString("N2")
+                        <span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">
+                            Lakhs
+                        </span>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="col-md-3">
+            <div class="perf-card green position-relative">
+                <div class="perf-year">Sales Plan (Current FY)</div>
+                <div class="perf-val">
+                    @SalesPlanTotalQty.ToString("N2")
+                    <span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">
+                        @SelectedUnitName
+                    </span>
+                    / ₹ @SalesPlanTotalAmount.ToString("N2")
+                    <span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">
+                        Lakhs
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<Category> Categories { get; set; } = new();
+    [Parameter] public List<Unit> Units { get; set; } = new();
+    [Parameter] public List<FinancialYear> FinancialYears { get; set; } = new();
+
+    [Parameter] public List<SalesPerfViewRow> SalesPerfRows { get; set; } = new();
+
+    [Parameter] public int SelectedCategoryId { get; set; }
+    [Parameter] public string SelectedUnitName { get; set; } = "MT";
+
+    [Parameter] public int FY1 { get; set; }
+    [Parameter] public int FY2 { get; set; }
+    [Parameter] public int FY3 { get; set; }
+
+    [Parameter] public decimal SalesPlanTotalQty { get; set; }
+    [Parameter] public decimal SalesPlanTotalAmount { get; set; }
+
+    [Parameter] public EventCallback<int> OnCategoryChanged { get; set; }
+
+    private int GetSelectedFY(int fyIdx) => fyIdx switch
+    {
+        0 => FY1,
+        1 => FY2,
+        2 => FY3,
+        _ => 0
+    };
+
+    private string GetFYName(int fyIdx)
+    {
+        var fyId = GetSelectedFY(fyIdx);
+        return FinancialYears.FirstOrDefault(f => f.Id == fyId)?.Name ?? $"FY {fyIdx + 1}";
+    }
+
+    private decimal GetFYTotalQtyByCategory(int fyIdx) => SalesPerfRows.Sum(r => fyIdx switch
+    {
+        0 => r.FY1Qty,
+        1 => r.FY2Qty,
+        2 => r.FY3Qty,
+        _ => 0
+    });
+
+    private decimal GetFYTotalAmountByCategory(int fyIdx) => SalesPerfRows.Sum(r => fyIdx switch
+    {
+        0 => r.FY1Amount,
+        1 => r.FY2Amount,
+        2 => r.FY3Amount,
+        _ => 0
+    });
+
+    private decimal GetFYTotalQty(int fyIdx) => GetFYTotalQtyByCategory(fyIdx);
+
+    private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx);
+}

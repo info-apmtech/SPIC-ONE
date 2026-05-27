@@ -76,48 +76,8 @@
 			<button type="button" class="btn-close" @onclick='() => _message = null'></button>
 		</div>
 	}
-
-	@* <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-		<h3 class="fw-bold m-0 company-title">Credit Limit Proposal</h3>
-		<button class="btn btn-outline-secondary" @onclick="HandleSkip">
-			<i class="bi bi-skip-forward"></i> Skip Credit Limit
-		</button>
-	</div> *@
-
 	<!-- Dealer Summary -->
-	<div class="form-card">
-		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
-			<div class="card-header-title mb-0">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/DealerSummary.svg" class="formicon" /> Dealer Summary
-			</div>
-		</div>
-		<div class="row g-3">
-			<div class="col-md-3">
-				<div class="info-box">
-					<div class="info-label">Firm Name</div>
-					<div class="info-value">@(_dealer.FirmName ?? "-")</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="info-box">
-					<div class="info-label">Total Fixed Assets <span class="text-muted" style="font-size:0.75rem;">(Land + Building)</span></div>
-					<div class="info-value">₹ @((LandTotal + BuildingTotal).ToString("N0"))</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="info-box">
-					<div class="info-label">Godown Capacity</div>
-					<div class="info-value">@((_dealer.OwnGodownCapacity + _dealer.RentGodownCapacity).ToString("N0")) MT</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="info-box">
-					<div class="info-label">Experience</div>
-					<div class="info-value">@_dealer.YearsofExperiance years (in SPIC @_dealer.DateOfAppointment.ToString("dd/MM/yyyy"))</div>
-				</div>
-			</div>
-		</div>
-	</div> 
+		<_Creditlimitdealersummary_Card Dealer="_dealer" LandTotal="LandTotal" BuildingTotal="BuildingTotal" />
 
 	<!-- Existing Credit Limit -->
 	 <div class="form-card">
@@ -146,176 +106,22 @@
 	</div> 
 
 	<!-- Property Assets (Collateral) -->
-	 <div class="form-card">
-		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
-			<div class="card-header-title mb-0">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/PropertyAssets.svg" class="formicon" /> Property Assets (Collateral)
-			</div>
-		</div>
-		<div class="row g-3 mb-4">
-			<div class="col-md-3">
-				<div class="asset-box blue">
-					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Bank.svg" class="verifyicon mb-1 mr-1" /> Banking</div>
-					<div class="asset-value">₹ @BankingTotal.ToString("N0")</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="asset-box gray">
-					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/land.svg" class="verifyicon" /> Land</div>
-					<div class="asset-value">₹ @LandTotal.ToString("N0")</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="asset-box pink">
-					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Building.svg" class="verifyicon mb-1 mr-1" /> Building</div>
-					<div class="asset-value">₹ @BuildingTotal.ToString("N0")</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="asset-box orange">
-					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Movable.svg" class="verifyicon" /> Movable</div>
-					<div class="asset-value">₹ @_dealer.AssetValue.ToString("N0")</div>
-				</div>
-			</div>
-		</div>
-		<div class="row g-3 mb-4">
-			<div class="col-md-4">
-				<div class="asset-box blue">
-					<div class="asset-title">Total Valuation</div>
-					<div class="asset-value">₹ @TotalPropertyValue.ToString("N0")</div>
-					<div class="asset-badge">TOTAL ASSETS</div>
-				</div>
-			</div>
-			<div class="col-md-4">
-				<div class="asset-box pink">
-					<div class="asset-title">Net Valuation</div>
-					<div class="asset-value">₹ @((TotalPropertyValue - LoansTotal).ToString("N0"))</div>
-					<div class="asset-badge">AFTER LIABILITIES</div>
-				</div>
-			</div>
-			<div class="col-md-4">
-				<div class="asset-box gray">
-					<div class="asset-title">LTV Ratio</div>
-					<div class="asset-value">@(TotalPropertyValue > 0 ? ((LoansTotal / TotalPropertyValue) * 100).ToString("N0") : "0")%</div>
-					<div class="asset-badge">LOAN TO VALUE</div>
-				</div>
-			</div>
-		</div>
-	</div> 
+	<_CreditLimitPropertyAsset Dealer="_dealer" BankingTotal="BankingTotal" LandTotal="LandTotal" BuildingTotal="BuildingTotal" TotalPropertyValue="TotalPropertyValue" LoansTotal="LoansTotal" />
 
 	<!-- Sales Performance Review -->
-	 <div class="form-card">
-		<div class="d-flex justify-content-between align-items-center mb-1">
-			<div class="section-title">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SalesPerformaReview.svg" class="formicon" /> Sales Performance Review
-			</div>
-			<button class="btn-verified">
-				Values in @_selectedUnitName
-			</button>
-		</div>
-
-		<div class="financial-note-box">
-			<div class="financial-note-badge">
-				Only last 3 completed financial years are allowed
-			</div>
-		</div>
-
-		<div class="custom-tabs">
-			@foreach (var cat in _categories)
-			{
-				var catId = cat.Id;
-				var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
-				<div class="tab-btn @(catId == _selectedCategoryId ? "active" : "")"
-					 @onclick="() => SelectCategory(catId)" style="cursor:pointer;">
-					@cat.Name (@unitName / Value)
-				</div>
-			}
-		</div>
-
-		<div class="table-wrapper">
-			<div class="table-responsive">
-				<table class="spic-table">
-					<thead>
-						<tr>
-							<th rowspan="2" style="min-width: 180px;">Product Name / Category</th>
-							@for (int fi = 0; fi < 3; fi++)
-							{
-								var fyIdx = fi;
-								<th colspan="2" class="text-center border-start">
-									<select class="form-select form-select-sm text-center"
-											value="@GetSelectedFY(fyIdx)"
-											@onchange="(e) => SetSelectedFY(fyIdx, e)">
-										<option value="0">Select Year</option>
-										@foreach (var fy in _financialYears)
-										{
-											<option value="@fy.Id">@fy.Name</option>
-										}
-									</select>
-								</th>
-							}
-						</tr>
-						<tr>
-							@for (int fi = 0; fi < 3; fi++)
-							{
-								<th class="text-center text-muted fw-normal border-start">@_selectedUnitName</th>
-								<th class="text-center text-muted fw-normal">Lakhs</th>
-							}
-						</tr>
-					</thead>
-					<tbody>
-						@foreach (var row in _currentSalesPerfRows)
-						{
-							var r = row;
-							var product = _products.FirstOrDefault(p => p.Id == r.ProductId);
-							<tr>
-								<td class="fw-medium text-dark">@(product?.Name ?? "Unknown")</td>
-								@for (int fi = 0; fi < 3; fi++)
-								{
-									var fyIdx = fi;
-									<td class="border-start">
-										<input class="table-input" type="number" step="0.01"
-											   value="@GetPerfQty(r, fyIdx)"
-											   @onchange="(e) => SetPerfQty(r, fyIdx, e)" />
-									</td>
-									<td>
-										<input class="table-input" type="number" step="0.01"
-											   value="@GetPerfAmount(r, fyIdx)"
-											   @onchange="(e) => SetPerfAmount(r, fyIdx, e)" />
-									</td>
-								}
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
-		</div>
-
-		<div class="row g-3">
-			@for (int fi = 0; fi < 3; fi++)
-			{
-				var fyIdx = fi;
-				var fyName = GetFYName(fyIdx);
-				<div class="col-md-3">
-					<div class="perf-card">
-						<div class="perf-year">@fyName</div>
-						<div class="perf-val">
-							@GetFYTotalQty(fyIdx).ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">@_selectedUnitName</span>
-							/ ₹ @GetFYTotalAmount(fyIdx).ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">Lakhs</span>
-						</div>
-					</div>
-				</div>
-			}
-			<div class="col-md-3">
-				<div class="perf-card green position-relative">
-					<div class="perf-year">Sales Plan (Current FY)</div>
-					<div class="perf-val">
-						@SalesPlanTotalQty.ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">@_selectedUnitName</span>
-						/ ₹ @SalesPlanTotalAmount.ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">Lakhs</span>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
+<_creditLimitSalesPerformanceReview
+    Categories="_categories"
+    Units="_units"
+    FinancialYears="_financialYears"
+    SalesPerfRows="_salesPerfViewRows"
+    SelectedCategoryId="_selectedCategoryId"
+    SelectedUnitName="_selectedUnitName"
+    FY1="_proposal.FY1"
+    FY2="_proposal.FY2"
+    FY3="_proposal.FY3"
+    SalesPlanTotalQty="SalesPlanTotalQty"
+    SalesPlanTotalAmount="SalesPlanTotalAmount"
+    OnCategoryChanged="SelectCategory" />
 	@if (_dealer.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
 	{
 		<!-- Details of Securities Greenstar -->
@@ -749,8 +555,8 @@
 	private List<SalesPlanningInDealerRegistration> _salesPlanData = new();
 
 	private DealerCreditLimitProposal _proposal = new();
-	private List<DealerCreditLimitSalesPerformance> _allSalesPerfData = new();
-	private List<DealerCreditLimitSalesPerformance> _currentSalesPerfRows = new();
+	private List<DealerCreditLimitSales> _creditLimitSalesData = new();
+private List<SalesPerfViewRow> _salesPerfViewRows = new();
 
 	private int _selectedCategoryId;
 	private string _selectedUnitName = "MT";
@@ -887,16 +693,6 @@
 				_proposal = existing;
 
 			// LoadSalesPerformance depends on _proposal.Id
-			if (_proposal.Id > 0)
-			{
-				try
-				{
-					var allPerf = await Http.GetFromJsonAsync<List<DealerCreditLimitSalesPerformance>>("api/DealerCreditLimitSalesPerformance/all") ?? new();
-					_allSalesPerfData = allPerf.Where(s => s.CreditLimitId == _proposal.Id).ToList();
-				}
-				catch { }
-			}
-
 			InitValuesFromData();
 		}
 		else
@@ -914,8 +710,8 @@
 			_selectedCategoryId = _categories.First().Id;
 			UpdateSelectedUnit();
 		}
-
-		BuildSalesPerfRows();
+			SetFixedFinancialYears();
+await LoadCreditLimitSalesData();BuildSalesPerfRows();
 	}
 
 	private async Task<T?> SafeGetAsync<T>(string url)
@@ -961,13 +757,67 @@
 	}
 
 	// --- Category Tab ---
-	private void SelectCategory(int categoryId)
+private async Task SelectCategory(int categoryId)
+{
+	_selectedCategoryId = categoryId;
+	UpdateSelectedUnit();
+	await LoadCreditLimitSalesData();
+}
+private async Task LoadCreditLimitSalesData()
+{
+	if (_dealer.Id <= 0 || _selectedCategoryId <= 0)
 	{
-		_selectedCategoryId = categoryId;
-		UpdateSelectedUnit();
+		_creditLimitSalesData = new();
 		BuildSalesPerfRows();
+		return;
 	}
 
+	var fyIds = new[]
+	{
+		_proposal.FY1,
+		_proposal.FY2,
+		_proposal.FY3
+	}
+	.Where(x => x > 0)
+	.Distinct()
+	.ToList();
+
+	if (fyIds.Count == 0)
+	{
+		_creditLimitSalesData = new();
+		BuildSalesPerfRows();
+		return;
+	}
+
+	var fyQuery = string.Join(",", fyIds);
+
+	var url =
+		$"api/creditlimitsales/by-filter" +
+		$"?customerId={_dealer.Id}" +
+		$"&categoryId={_selectedCategoryId}" +
+		$"&financialYearIds={fyQuery}";
+
+	_creditLimitSalesData =
+		await SafeGetAsync<List<DealerCreditLimitSales>>(url) ?? new();
+
+	BuildSalesPerfRows();
+}
+private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financialYearId)
+{
+	if (financialYearId <= 0)
+		return null;
+
+	return _creditLimitSalesData.FirstOrDefault(x =>
+		x.CustomerId == _dealer.Id &&
+		x.ProductGroupId == _selectedCategoryId &&
+		x.SubGroupId == productId &&
+		x.FinancialYearId == financialYearId);
+}
+
+private static decimal ConvertToLakhs(double grossAmount)
+{
+	return (decimal)grossAmount / 100000;
+}
 	private void UpdateSelectedUnit()
 	{
 		var cat = _categories.FirstOrDefault(c => c.Id == _selectedCategoryId);
@@ -976,30 +826,46 @@
 	}
 
 	private void BuildSalesPerfRows()
-	{
-		var categoryProducts = _products.Where(p => p.CategoryId == _selectedCategoryId).ToList();
-		_currentSalesPerfRows = new();
+{
+	_salesPerfViewRows = new();
 
-		foreach (var product in categoryProducts)
+	var categoryProducts = _products
+		.Where(p => p.CategoryId == _selectedCategoryId)
+		.ToList();
+
+	foreach (var product in categoryProducts)
+	{
+		var row = new SalesPerfViewRow
 		{
-			var existing = _allSalesPerfData.FirstOrDefault(s => s.ProductId == product.Id && s.CategoryId == _selectedCategoryId);
-			if (existing != null)
-			{
-				_currentSalesPerfRows.Add(existing);
-			}
-			else
-			{
-				var newRow = new DealerCreditLimitSalesPerformance
-				{
-					CreditLimitId = _proposal.Id,
-					CategoryId = _selectedCategoryId,
-					ProductId = product.Id
-				};
-				_currentSalesPerfRows.Add(newRow);
-				_allSalesPerfData.Add(newRow);
-			}
+			ProductId = product.Id,
+			ProductName = product.Name
+		};
+
+		var fy1Data = GetCreditLimitSales(product.Id, _proposal.FY1);
+		var fy2Data = GetCreditLimitSales(product.Id, _proposal.FY2);
+		var fy3Data = GetCreditLimitSales(product.Id, _proposal.FY3);
+
+		if (fy1Data != null)
+		{
+			row.FY1Qty = fy1Data.Quantity;
+			row.FY1Amount = ConvertToLakhs(fy1Data.GrossAmount);
 		}
+
+		if (fy2Data != null)
+		{
+			row.FY2Qty = fy2Data.Quantity;
+			row.FY2Amount = ConvertToLakhs(fy2Data.GrossAmount);
+		}
+
+		if (fy3Data != null)
+		{
+			row.FY3Qty = fy3Data.Quantity;
+			row.FY3Amount = ConvertToLakhs(fy3Data.GrossAmount);
+		}
+
+		_salesPerfViewRows.Add(row);
 	}
+}
 
 	// --- FY Selection ---
 	private int GetSelectedFY(int fyIdx) => fyIdx switch
@@ -1028,59 +894,63 @@
 	}
 
 	// --- Sales Performance Helpers ---
-	private static decimal GetPerfQty(DealerCreditLimitSalesPerformance row, int fyIdx) => fyIdx switch
-	{
-		0 => row.FY1Qty,
-		1 => row.FY2Qty,
-		2 => row.FY3Qty,
-		_ => 0
-	};
+	// private static decimal GetPerfQty(DealerCreditLimitSalesPerformance row, int fyIdx) => fyIdx switch
+	// {
+	// 	0 => row.FY1Qty,
+	// 	1 => row.FY2Qty,
+	// 	2 => row.FY3Qty,
+	// 	_ => 0
+	// };
 
-	private static decimal GetPerfAmount(DealerCreditLimitSalesPerformance row, int fyIdx) => fyIdx switch
-	{
-		0 => row.FY1Amount,
-		1 => row.FY2Amount,
-		2 => row.FY3Amount,
-		_ => 0
-	};
+	// private static decimal GetPerfAmount(DealerCreditLimitSalesPerformance row, int fyIdx) => fyIdx switch
+	// {
+	// 	0 => row.FY1Amount,
+	// 	1 => row.FY2Amount,
+	// 	2 => row.FY3Amount,
+	// 	_ => 0
+	// };
 
-	private static void SetPerfQty(DealerCreditLimitSalesPerformance row, int fyIdx, ChangeEventArgs e)
-	{
-		if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
-		switch (fyIdx)
-		{
-			case 0: row.FY1Qty = val; break;
-			case 1: row.FY2Qty = val; break;
-			case 2: row.FY3Qty = val; break;
-		}
-	}
+	// private static void SetPerfQty(DealerCreditLimitSalesPerformance row, int fyIdx, ChangeEventArgs e)
+	// {
+	// 	if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
+	// 	switch (fyIdx)
+	// 	{
+	// 		case 0: row.FY1Qty = val; break;
+	// 		case 1: row.FY2Qty = val; break;
+	// 		case 2: row.FY3Qty = val; break;
+	// 	}
+	// }
 
-	private static void SetPerfAmount(DealerCreditLimitSalesPerformance row, int fyIdx, ChangeEventArgs e)
-	{
-		if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
-		switch (fyIdx)
-		{
-			case 0: row.FY1Amount = val; break;
-			case 1: row.FY2Amount = val; break;
-			case 2: row.FY3Amount = val; break;
-		}
-	}
+	// private static void SetPerfAmount(DealerCreditLimitSalesPerformance row, int fyIdx, ChangeEventArgs e)
+	// {
+	// 	if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
+	// 	switch (fyIdx)
+	// 	{
+	// 		case 0: row.FY1Amount = val; break;
+	// 		case 1: row.FY2Amount = val; break;
+	// 		case 2: row.FY3Amount = val; break;
+	// 	}
+	// }
 
-	private decimal GetFYTotalQty(int fyIdx) => _allSalesPerfData.Sum(r => fyIdx switch
-	{
-		0 => r.FY1Qty,
-		1 => r.FY2Qty,
-		2 => r.FY3Qty,
-		_ => 0
-	});
+	private decimal GetFYTotalQtyByCategory(int fyIdx) => _salesPerfViewRows.Sum(r => fyIdx switch
+{
+	0 => r.FY1Qty,
+	1 => r.FY2Qty,
+	2 => r.FY3Qty,
+	_ => 0
+});
 
-	private decimal GetFYTotalAmount(int fyIdx) => _allSalesPerfData.Sum(r => fyIdx switch
-	{
-		0 => r.FY1Amount,
-		1 => r.FY2Amount,
-		2 => r.FY3Amount,
-		_ => 0
-	});
+private decimal GetFYTotalAmountByCategory(int fyIdx) => _salesPerfViewRows.Sum(r => fyIdx switch
+{
+	0 => r.FY1Amount,
+	1 => r.FY2Amount,
+	2 => r.FY3Amount,
+	_ => 0
+});
+
+private decimal GetFYTotalQty(int fyIdx) => GetFYTotalQtyByCategory(fyIdx);
+
+private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx);
 
 	// --- Valuation ---
 	private void OnSpicValueChanged(int idx, ChangeEventArgs e)
@@ -1211,27 +1081,27 @@
 				}
 			}
 
-			foreach (var row in _allSalesPerfData)
-			{
-				row.CreditLimitId = _proposal.Id;
-				var hasData = row.FY1Qty != 0 || row.FY1Amount != 0 || row.FY2Qty != 0 || row.FY2Amount != 0 || row.FY3Qty != 0 || row.FY3Amount != 0;
-				if (row.Id == 0 && !hasData) continue;
+			// foreach (var row in _allSalesPerfData)
+			// {
+			// 	row.CreditLimitId = _proposal.Id;
+			// 	var hasData = row.FY1Qty != 0 || row.FY1Amount != 0 || row.FY2Qty != 0 || row.FY2Amount != 0 || row.FY3Qty != 0 || row.FY3Amount != 0;
+			// 	if (row.Id == 0 && !hasData) continue;
 
-				if (row.Id > 0)
-				{
-					await Http.PutAsJsonAsync($"api/DealerCreditLimitSalesPerformance/{row.Id}", row);
-				}
-				else
-				{
-					var resp = await Http.PostAsJsonAsync("api/DealerCreditLimitSalesPerformance", row);
-					if (resp.IsSuccessStatusCode)
-					{
-						var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerCreditLimitSalesPerformance>>();
-						if (result?.Data != null)
-							row.Id = result.Data.Id;
-					}
-				}
-			}
+			// 	if (row.Id > 0)
+			// 	{
+			// 		await Http.PutAsJsonAsync($"api/DealerCreditLimitSalesPerformance/{row.Id}", row);
+			// 	}
+			// 	else
+			// 	{
+			// 		var resp = await Http.PostAsJsonAsync("api/DealerCreditLimitSalesPerformance", row);
+			// 		if (resp.IsSuccessStatusCode)
+			// 		{
+			// 			var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerCreditLimitSalesPerformance>>();
+			// 			if (result?.Data != null)
+			// 				row.Id = result.Data.Id;
+			// 		}
+			// 	}
+			// }
 
 			FormStepData.MarkStepError(11, false);
 			Nav.NavigateTo($"/Enclosures?dealerId={DealerId}");
@@ -1273,4 +1143,31 @@
 		public string? Message { get; set; }
 		public T? Data { get; set; }
 	}
+	private void SetFixedFinancialYears()
+{
+	var selectedYears = _financialYears
+		.OrderByDescending(f => f.Id)
+		.Take(3)
+		.OrderBy(f => f.Id)
+		.ToList();
+
+	_proposal.FY1 = selectedYears.Count > 0 ? selectedYears[0].Id : 0;
+	_proposal.FY2 = selectedYears.Count > 1 ? selectedYears[1].Id : 0;
+	_proposal.FY3 = selectedYears.Count > 2 ? selectedYears[2].Id : 0;
+}
+private async Task<bool> HasGreenStarCompany()
+{
+    if (!DealerId.HasValue || DealerId.Value <= 0)
+        return false;
+
+    try
+    {
+        return await Http.GetFromJsonAsync<bool>(
+            $"api/DealerCompaniesOperatingInArea/dealer/{DealerId.Value}/has-greenstar");
+    }
+    catch
+    {
+        return false;
+    }
+}
 }

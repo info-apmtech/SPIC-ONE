@@ -77,49 +77,8 @@
 			<button type="button" class="btn-close" @onclick='() => _message = null'></button>
 		</div>
 	}
-
-	@* <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-		<h3 class="fw-bold m-0 company-title">Credit Limit Proposal</h3>
-		<button class="btn btn-outline-secondary" @onclick="HandleSkip">
-			<i class="bi bi-skip-forward"></i> Skip Credit Limit
-		</button>
-	</div> *@
-
 	<!-- Dealer Summary -->
-	<div class="form-card">
-		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
-			<div class="card-header-title mb-0">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/DealerSummary.svg" class="formicon" /> Dealer Summary
-			</div>
-		</div>
-		<div class="row g-3">
-			<div class="col-md-3">
-				<div class="info-box">
-					<div class="info-label">Firm Name</div>
-					<div class="info-value">@(_dealer.FirmName ?? "-")</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="info-box">
-					<div class="info-label">Total Fixed Assets <span class="text-muted" style="font-size:0.75rem;">(Land + Building)</span></div>
-						<div class="info-value">₹ @((LandTotal + BuildingTotal).ToString("N0"))</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="info-box">
-					<div class="info-label">Godown Capacity</div>
-					<div class="info-value">@((_dealer.OwnGodownCapacity + _dealer.RentGodownCapacity).ToString("N0")) MT</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="info-box">
-					<div class="info-label">Experience</div>
-					<div class="info-value">@_dealer.YearsofExperiance years (in SPIC @_dealer.DateOfAppointment.ToString("dd/MM/yyyy"))</div>
-				</div>
-			</div>
-		</div>
-	</div>
-
+	<_Creditlimitdealersummary_Card Dealer="_dealer" LandTotal="LandTotal" BuildingTotal="BuildingTotal" />
 	<!-- Existing Credit Limit -->
 	<div class="form-card">
 		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
@@ -145,199 +104,22 @@
 			</div>
 		</div>
 	</div>
-
 	<!-- Property Assets (Collateral) -->
-	<div class="form-card">
-		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
-			<div class="card-header-title mb-0">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/PropertyAssets.svg" class="formicon" /> Property Assets (Collateral)
-			</div>
-		</div>
-		<div class="row g-3 mb-4">
-			<div class="col-md-3">
-				<div class="asset-box blue">
-					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Bank.svg" class="verifyicon mb-1 mr-1" /> Banking</div>
-					<div class="asset-value">₹ @BankingTotal.ToString("N0")</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="asset-box gray">
-					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/land.svg" class="verifyicon" /> Land</div>
-					<div class="asset-value">₹ @LandTotal.ToString("N0")</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="asset-box pink">
-					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Building.svg" class="verifyicon mb-1 mr-1" /> Building</div>
-					<div class="asset-value">₹ @BuildingTotal.ToString("N0")</div>
-				</div>
-			</div>
-			<div class="col-md-3">
-				<div class="asset-box orange">
-					<div class="asset-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Movable.svg" class="verifyicon" /> Movable</div>
-					<div class="asset-value">₹ @_dealer.AssetValue.ToString("N0")</div>
-				</div>
-			</div>
-		</div>
-		<div class="row g-3 mb-4">
-			<div class="col-md-4">
-				<div class="asset-box blue">
-					<div class="asset-title">Total Valuation</div>
-					<div class="asset-value">₹ @TotalPropertyValue.ToString("N0")</div>
-					<div class="asset-badge">TOTAL ASSETS</div>
-				</div>
-			</div>
-			<div class="col-md-4">
-				<div class="asset-box pink">
-					<div class="asset-title">Net Valuation</div>
-					<div class="asset-value">₹ @((TotalPropertyValue - LoansTotal).ToString("N0"))</div>
-					<div class="asset-badge">AFTER LIABILITIES</div>
-				</div>
-			</div>
-			<div class="col-md-4">
-				<div class="asset-box gray">
-					<div class="asset-title">LTV Ratio</div>
-					<div class="asset-value">@(TotalPropertyValue > 0 ? ((LoansTotal / TotalPropertyValue) * 100).ToString("N0") : "0")%</div>
-					<div class="asset-badge">LOAN TO VALUE</div>
-				</div>
-			</div>
-		</div>
-	</div>
-
+	<_CreditLimitPropertyAsset Dealer="_dealer" BankingTotal="BankingTotal" LandTotal="LandTotal" BuildingTotal="BuildingTotal" TotalPropertyValue="TotalPropertyValue" LoansTotal="LoansTotal" />
 	<!-- Sales Performance Review -->
-	<div class="form-card">
-		<div class="d-flex justify-content-between align-items-center mb-1">
-			<div class="section-title">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SalesPerformaReview.svg" class="formicon" /> Sales Performance Review
-			</div>
-			<button class="btn-verified">
-				Values in @_selectedUnitName
-			</button>
-		</div>
-
-		<div class="financial-note-box">
-			<div class="financial-note-badge">
-				Only last 3 completed financial years are allowed
-			</div>
-		</div>
-
-		<div class="custom-tabs">
-			@foreach (var cat in _categories)
-			{
-				var catId = cat.Id;
-				var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
-				<div class="tab-btn @(catId == _selectedCategoryId ? "active" : "")"
-					 @onclick="async () => await SelectCategory(catId)" style="cursor:pointer;">
-					@cat.Name (@unitName / Value)
-				</div>
-			}
-		</div>
-
-		<div class="table-wrapper">
-			<div class="table-responsive">
-				<table class="spic-table">
-					<thead>
-						<tr>
-							<th rowspan="2" style="min-width: 180px;">Product Name / Category</th>
-							@for (int fi = 0; fi < 3; fi++)
-{
-	var fyIdx = fi;
-	<th colspan="2" class="text-center border-start">
-		<select class="form-select form-select-sm text-center"
-				value="@GetSelectedFY(fyIdx)"
-				disabled>
-			<option value="@GetSelectedFY(fyIdx)">
-				@GetFYName(fyIdx)
-			</option>
-		</select>
-	</th>
-}
-						</tr>
-						<tr>
-							@for (int fi = 0; fi < 3; fi++)
-							{
-								<th class="text-center text-muted fw-normal border-start">@_selectedUnitName</th>
-								<th class="text-center text-muted fw-normal">Lakhs</th>
-							}
-						</tr>
-					</thead>
-				<tbody>
-	@foreach (var row in _salesPerfViewRows)
-	{
-		<tr>
-			<td class="fw-medium text-dark">@row.ProductName</td>
-
-			<td class="border-start">
-				<input class="table-input" type="number" step="0.01" value="@row.FY1Qty" readonly />
-			</td>
-			<td>
-				<input class="table-input" type="number" step="0.01" value="@row.FY1Amount" readonly />
-			</td>
-
-			<td class="border-start">
-				<input class="table-input" type="number" step="0.01" value="@row.FY2Qty" readonly />
-			</td>
-			<td>
-				<input class="table-input" type="number" step="0.01" value="@row.FY2Amount" readonly />
-			</td>
-
-			<td class="border-start">
-				<input class="table-input" type="number" step="0.01" value="@row.FY3Qty" readonly />
-			</td>
-			<td>
-				<input class="table-input" type="number" step="0.01" value="@row.FY3Amount" readonly />
-			</td>
-		</tr>
-	}
-</tbody>
-					<tfoot>
-						<tr>
-							<td class="fw-bold text-end">Total</td>
-
-							@for (int fi = 0; fi < 3; fi++)
-							{
-								var fyIdx = fi;
-
-								<td class="border-start fw-bold text-center">
-									@GetFYTotalQtyByCategory(fyIdx).ToString("N2")
-								</td>
-
-								<td class="fw-bold text-center">
-									@GetFYTotalAmountByCategory(fyIdx).ToString("N2")
-								</td>
-							}
-						</tr>
-					</tfoot>
-				</table>
-			</div>
-		</div>
-
-		<div class="row g-3">
-			@for (int fi = 0; fi < 3; fi++)
-			{
-				var fyIdx = fi;
-				var fyName = GetFYName(fyIdx);
-				<div class="col-md-3">
-					<div class="perf-card">
-						<div class="perf-year">@fyName</div>
-						<div class="perf-val">
-							@GetFYTotalQty(fyIdx).ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">@_selectedUnitName</span>
-							/ ₹ @GetFYTotalAmount(fyIdx).ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">Lakhs</span>
-						</div>
-					</div>
-				</div>
-			}
-			<div class="col-md-3">
-				<div class="perf-card green position-relative">
-					<div class="perf-year">Sales Plan (Current FY)</div>
-					<div class="perf-val">
-						@SalesPlanTotalQty.ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">@_selectedUnitName</span>
-						/ ₹ @SalesPlanTotalAmount.ToString("N2") <span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">Lakhs</span>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
+	<_creditLimitSalesPerformanceReview
+    Categories="_categories"
+    Units="_units"
+    FinancialYears="_financialYears"
+    SalesPerfRows="_salesPerfViewRows"
+    SelectedCategoryId="_selectedCategoryId"
+    SelectedUnitName="_selectedUnitName"
+    FY1="_proposal.FY1"
+    FY2="_proposal.FY2"
+    FY3="_proposal.FY3"
+    SalesPlanTotalQty="SalesPlanTotalQty"
+    SalesPlanTotalAmount="SalesPlanTotalAmount"
+    OnCategoryChanged="SelectCategory" />
 	@if (_dealer.InSpic && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
 	{
 		<!-- Details of Securities SPIC -->
@@ -1077,20 +859,20 @@
 
 private List<DealerCreditLimitSales> _creditLimitSalesData = new();
 private List<SalesPerfViewRow> _salesPerfViewRows = new();
-private class SalesPerfViewRow
-{
-	public int ProductId { get; set; }
-	public string ProductName { get; set; } = "";
+// private class SalesPerfViewRow
+// {
+// 	public int ProductId { get; set; }
+// 	public string ProductName { get; set; } = "";
 
-	public decimal FY1Qty { get; set; }
-	public decimal FY1Amount { get; set; }
+// 	public decimal FY1Qty { get; set; }
+// 	public decimal FY1Amount { get; set; }
 
-	public decimal FY2Qty { get; set; }
-	public decimal FY2Amount { get; set; }
+// 	public decimal FY2Qty { get; set; }
+// 	public decimal FY2Amount { get; set; }
 
-	public decimal FY3Qty { get; set; }
-	public decimal FY3Amount { get; set; }
-}
+// 	public decimal FY3Qty { get; set; }
+// 	public decimal FY3Amount { get; set; }
+// }
 
 	private int _selectedCategoryId;
 	private string _selectedUnitName = "MT";
@@ -1452,7 +1234,16 @@ private int GetSelectedFY(int fyIdx) => fyIdx switch
 
 // 	await LoadCreditLimitSalesData();
 // }
-
+private void SetSelectedFY(int fyIdx, ChangeEventArgs e)
+	{
+		if (!int.TryParse(e.Value?.ToString(), out var val)) return;
+		switch (fyIdx)
+		{
+			case 0: _proposal.FY1 = val; break;
+			case 1: _proposal.FY2 = val; break;
+			case 2: _proposal.FY3 = val; break;
+		}
+	}
 	private string GetFYName(int fyIdx)
 	{
 		var fyId = GetSelectedFY(fyIdx);
