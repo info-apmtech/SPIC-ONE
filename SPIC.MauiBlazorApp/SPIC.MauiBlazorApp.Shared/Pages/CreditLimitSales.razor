@@ -113,72 +113,50 @@
         </div>
     </div>
 
-    <div class="card-box">
-        <div class="d-flex justify-content-between align-items-center mb-3 toolbar-flex flex-wrap gap-2">
-            <h6 class="card-title-custom mb-0">Existing Credit Limit Sales</h6>
+<SpicDataTable Items="_filteredItems"
+               IsLoading="_isLoading"
+               Title="Existing Credit Limit Sales"
+               FileName="CreditLimitSales"
+               ExportColumns="GetExportColumns()">
 
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <div class="search-wrap">
-                    <i class="bi bi-search"></i>
-                    <input type="text" class="toolbar-input" placeholder="Search code/name..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
-                </div>
-            </div>
-        </div>
-
-        @if (_isLoading)
-        {
-            <div class="text-center py-5">
-                <div class="spinner-border"></div>
-            </div>
-        }
-        else if (_filteredItems.Count == 0)
-        {
-            <div class="alert alert-info">No records found.</div>
-        }
-        else
-        {
-            <div class="table-responsive">
-                <table class="table table-custom">
-                    <thead>
-                        <tr>
-                            <th>S:No</th>
-                            <th>State</th>
-                            <th>Dealer Code</th>
-                            <th>Dealer Name</th>
-                            <th>SubGroup</th>
-                            <th>Product Group</th>
-                            <th>Quantity</th>
-                            <th>Gross Amount</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                        @foreach (var item in _filteredItems)
-                        {
-                            <tr>
-                                <td>@(_allItems.IndexOf(item) + 1)</td>
-                                <td>@GetStateName(item.StateId)</td>
-                                <td>@item.CustomerNumber</td>
-                                <td>@GetDealerName(item.CustomerId)</td>
-                                <td>@GetProductName(item.SubGroupId)</td>
-                                <td>@GetCategoryName(item.ProductGroupId)</td>
-                                <td>@item.Quantity</td>
-                                <td>@item.GrossAmount</td>
-                                <td>
-                                    <div class="action-icons">
-                                        <i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
-                                        <i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
+<FilterControls>
+    <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input type="text"
+               placeholder="Search code/name..."
+               @bind="_searchText"
+               @bind:event="oninput"
+               @bind:after="ApplyFilter" />
     </div>
+</FilterControls>
 
+    <TableHeader>
+        <th>State</th>
+        <th>Dealer Code</th>
+        <th>Dealer Name</th>
+        <th>SubGroup</th>
+        <th>Product Group</th>
+        <th>Quantity</th>
+        <th>Gross Amount</th>
+        <th>Action</th>
+    </TableHeader>
+
+    <TableRow Context="item">
+        <td>@GetStateName(item.StateId)</td>
+        <td>@item.CustomerNumber</td>
+        <td>@GetDealerName(item.CustomerId)</td>
+        <td>@GetProductName(item.SubGroupId)</td>
+        <td>@GetCategoryName(item.ProductGroupId)</td>
+        <td>@item.Quantity</td>
+        <td>@item.GrossAmount.ToString("F2")</td>
+        <td>
+            <div class="action-icons">
+                <i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+                <i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+            </div>
+        </td>
+    </TableRow>
+</SpicDataTable>
 </div>
 
 @if (_showDeleteConfirm)
@@ -272,14 +250,14 @@
     .metric-val { font-size: 32px; font-weight: 700; color: #1f2937; }
     .bg-blue-light { background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); }
     .bg-mint-light { background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); }
-    .search-wrap { position: relative; }
-    .search-wrap i { position: absolute; top: 50%; left: 11px; transform: translateY(-50%); color: #9ca3af; font-size: 13px; }
-    .toolbar-input { background-color: #f9fafb; border: 1px solid #e5e7eb; font-size: 13px; padding: 7px 12px 7px 32px; border-radius: 6px; color: #6b7280; }
+    /* .search-wrap { position: relative; }
+    .search-wrap i { position: absolute; top: 50%; left: 11px; transform: translateY(-50%); color: #9ca3af; font-size: 13px; } */
+    /* .toolbar-input { background-color: #f9fafb; border: 1px solid #e5e7eb; font-size: 13px; padding: 7px 12px 7px 32px; border-radius: 6px; color: #6b7280; } */
     .status-select { background-color: #fff; border: 1px solid #e5e7eb; font-size: 13px; padding: 7px 12px; border-radius: 6px; color: #374151; }
-    .table-custom { font-size: 13px; margin-bottom: 0; }
+    /* .table-custom { font-size: 13px; margin-bottom: 0; }
     .table-custom thead th { background: #f3f4f6; color: #374151; font-weight: 600; padding: 12px 14px; border-bottom: none; font-size: 13px; }
     .table-custom tbody td { padding: 16px 14px; color: #4b5563; border-bottom: 1px solid #f1f1f4; vertical-align: middle; }
-    .table-custom tbody tr:last-child td { border-bottom: none; }
+    .table-custom tbody tr:last-child td { border-bottom: none; } */
     .action-icons { display: flex; gap: 8px; }
     .icon-del { cursor: pointer; font-size: 16px; color: #ef4444; }
     .icon-edit { cursor: pointer; font-size: 16px; color: #3b82f6; }
@@ -307,11 +285,11 @@
     .btn-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #6b7280; }
     .modal-body { padding: 20px; }
     .modal-footer { border-top: 1px solid #eef0f3; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px; }
-    .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+/*     .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
     .btn-secondary { background: #f3f4f6; color: #374151; }
     .btn-danger { background: #ef4444; color: white; }
     .btn-danger:hover:not(:disabled) { background: #dc2626; }
-    .btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-danger:disabled { opacity: 0.6; cursor: not-allowed; } */
     .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
     .alert-success { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
     .alert-danger { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
@@ -664,7 +642,20 @@ private async Task OnBulkFileSelected(InputFileChangeEventArgs e)
         _isUploading = false;
     }
 }
-
+private List<ExportColumn<CreditLimitSalesForm>> GetExportColumns()
+{
+    return new List<ExportColumn<CreditLimitSalesForm>>
+    {
+        new ExportColumn<CreditLimitSalesForm> { Header = "S:No",          ValueSelector = item => (_filteredItems.IndexOf(item) + 1).ToString() },
+        new ExportColumn<CreditLimitSalesForm> { Header = "State",         ValueSelector = item => GetStateName(item.StateId) },
+        new ExportColumn<CreditLimitSalesForm> { Header = "Dealer Code",   ValueSelector = item => item.CustomerNumber ?? "" },
+        new ExportColumn<CreditLimitSalesForm> { Header = "Dealer Name",   ValueSelector = item => GetDealerName(item.CustomerId) },
+        new ExportColumn<CreditLimitSalesForm> { Header = "SubGroup",      ValueSelector = item => GetProductName(item.SubGroupId) },
+        new ExportColumn<CreditLimitSalesForm> { Header = "Product Group", ValueSelector = item => GetCategoryName(item.ProductGroupId) },
+        new ExportColumn<CreditLimitSalesForm> { Header = "Quantity",      ValueSelector = item => item.Quantity.ToString() },
+        new ExportColumn<CreditLimitSalesForm> { Header = "Gross Amount",  ValueSelector = item => item.GrossAmount.ToString("F2") }
+    };
+}
     private string? GetUserIdFromToken(string token)
     {
         try
