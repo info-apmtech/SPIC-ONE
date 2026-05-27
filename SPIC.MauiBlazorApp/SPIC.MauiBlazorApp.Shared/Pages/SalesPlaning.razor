@@ -5,468 +5,393 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
-<style>
-	.table-scroll-fixed {
-		max-height: 420px; /* fixed height */
-		overflow-y: auto; /* vertical scroller */
-		overflow-x: auto; /* horizontal scroller */
-		width: 100%;
-		border: 1px solid #E5E7EB;
-		border-radius: 12px;
-		background: #fff;
-		/* Firefox scrollbar */
-		scrollbar-width: thin;
-		scrollbar-color: #C7D4E5 #F3F6F9;
-	}
 
-		/* Chrome, Edge, Safari scrollbar */
-		.table-scroll-fixed::-webkit-scrollbar {
-			width: 10px;
-			height: 10px;
-		}
-
-		.table-scroll-fixed::-webkit-scrollbar-track {
-			background: #F3F6F9;
-			border-radius: 20px;
-		}
-
-		.table-scroll-fixed::-webkit-scrollbar-thumb {
-			background: #C7D4E5;
-			border-radius: 20px;
-			border: 2px solid #F3F6F9;
-		}
-
-			.table-scroll-fixed::-webkit-scrollbar-thumb:hover {
-				background: #AFC0D4;
-			}
-
-	/* Required for horizontal scroll */
-	.spic-table {
-		min-width: 1800px;
-		border-collapse: separate;
-		border-spacing: 0;
-	}
-
-		/* Sticky table header */
-		.spic-table thead th {
-			position: sticky;
-			top: 0;
-			background: #fff;
-			z-index: 5;
-		}
-
-		/* Second header row sticky offset */
-		.spic-table thead tr:nth-child(2) th {
-			top: 42px;
-			z-index: 6;
-		}
-
-	/* Sticky first column */
-	.sticky-first-col {
-		position: sticky;
-		left: 0;
-		min-width: 180px;
-		background: #fff;
-		z-index: 3;
-	}
-
-	/* First column header should stay above body cells */
-	.sticky-head-first {
-		z-index: 8 !important;
-	}
-</style>
 <div class="container-fluid py-4 px-0">
-	<FormLoader />
+    <FormLoader />
 
-	@if (!string.IsNullOrEmpty(_message))
-	{
-		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
-			@_message
-			<button type="button" class="btn-close" @onclick='() => _message = null'></button>
-		</div>
-	}
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+            @_message
+            <button type="button" class="btn-close" @onclick='() => _message = null'></button>
+        </div>
+    }
 
-	<div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-		<h3 class="fw-bold m-0 company-title">Sales Planning & Forecast</h3>
-	</div>
-	<div class="main-card">
+    <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <h3 class="fw-bold m-0 company-title">Sales Planning & Forecast</h3>
+    </div>
 
-		<div class="section-title mb-3">
-			<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/businessIcon1.svg" style="width: 24px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
-			Business Plan
-		</div>
+    <div class="main-card sp-main-card">
 
-		<!-- Dynamic Category Tabs -->
-		<div class="custom-tabs">
-			@foreach (var cat in _categories)
-			{
-				var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
-				<div class="tab-btn @(cat.Id == _selectedCategoryId ? "active" : "")"
-					 @onclick="() => SelectCategory(cat.Id)"
-					 style="cursor:pointer;">
-					@cat.Name (@unitName/Value)
-				</div>
-			}
-		</div>
+        <div class="section-title mb-3">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/businessIcon1.svg" class="sp-section-icon" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+            Business Plan
+        </div>
 
-		<!-- Table -->
-		<div class="table-wrapper">
-			<div class="table-scroll-fixed">
-				<table class="spic-table">
-					<thead>
-						<tr>
-							<th rowspan="2" class="sticky-first-col sticky-head-first">
-								Product Name / Category
-							</th>
+        <!-- Dynamic Category Tabs -->
+        <div class="custom-tabs sp-custom-tabs">
+            @foreach (var cat in _categories)
+            {
+                var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
+                <div class="tab-btn @(cat.Id == _selectedCategoryId ? "active" : "")"
+                     @onclick="() => SelectCategory(cat.Id)">
+                    @cat.Name (@unitName/Value)
+                </div>
+            }
+        </div>
 
-							@foreach (var month in _months)
-							{
-								<th colspan="2" class="text-center border-start">@month</th>
-							}
-						</tr>
+        <!-- Table -->
+        <div class="table-wrapper sp-table-wrapper">
+            <div class="table-scroll-fixed">
+                <table class="spic-table sp-spic-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="sticky-first-col sticky-head-first">
+                                Product Name / Category
+                            </th>
 
-						<tr>
-							@foreach (var month in _months)
-							{
-								<th class="text-center text-muted fw-normal border-start">@_selectedUnitName</th>
-								<th class="text-center text-muted fw-normal">Lakhs</th>
-							}
-						</tr>
-					</thead>
+                            @foreach (var month in _months)
+                            {
+                                <th colspan="2" class="text-center border-start">@month</th>
+                            }
+                        </tr>
 
-					<tbody>
-						@foreach (var row in _currentRows)
-						{
-							var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
-							<tr>
-								<td class="fw-medium text-dark sticky-first-col">
-									@(product?.Name ?? "Unknown")
-								</td>
+                        <tr>
+                            @foreach (var month in _months)
+                            {
+                                <th class="text-center text-muted fw-normal border-start sub-th">@_selectedUnitName</th>
+                                <th class="text-center text-muted fw-normal sub-th">Lakhs</th>
+                            }
+                        </tr>
+                    </thead>
 
-								@for (int i = 0; i < _months.Length; i++)
-								{
-									var monthIndex = i;
+                    <tbody>
+                        @foreach (var row in _currentRows)
+                        {
+                            var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+                            <tr>
+                                <td class="fw-medium text-dark sticky-first-col">
+                                    @(product?.Name ?? "Unknown")
+                                </td>
 
-									<td class="border-start">
-										<input class="table-input" type="number" step="0.01"
-											   value="@GetQty(row, monthIndex)"
-											   @onchange="(e) => SetQty(row, monthIndex, e)" />
-									</td>
+                                @for (int i = 0; i < _months.Length; i++)
+                                {
+                                    var monthIndex = i;
 
-									<td>
-										<input class="table-input" type="number" step="0.01"
-											   value="@GetAmount(row, monthIndex)"
-											   @onchange="(e) => SetAmount(row, monthIndex, e)" />
-									</td>
-								}
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
-		</div>
+                                    <td class="border-start">
+                                        <input class="table-input sp-table-input" type="number" step="0.01"
+                                               value="@GetQty(row, monthIndex)"
+                                               @onchange="(e) => SetQty(row, monthIndex, e)" />
+                                    </td>
 
-		<!-- Summary Cards — Per Category -->
-		<div class="row g-3 mt-2">
-			@foreach (var cat in _categories)
-			{
-				var catUnit = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
-				var catRows = _allSalesData.Where(r => r.CategoryId == cat.Id).ToList();
-				var catVolume = catRows.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
-				var catValue = catRows.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
-				<div class="col-md-4">
-					<div style="background: linear-gradient(135deg, #f8fafc 0%, #fff 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
-						<div style="font-weight: 600; font-size: 0.85rem; color: #334155; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-							<span style="width: 8px; height: 8px; border-radius: 50%; background: @(cat.Id == _selectedCategoryId ? "#2563eb" : "#94a3b8"); display: inline-block;"></span>
-							@cat.Name
-							<span style="background: #f1f5f9; color: #64748b; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; font-weight: 500;">@catUnit</span>
-						</div>
-						<div style="display: flex; justify-content: space-between; align-items: flex-end;">
-							<div>
-								<div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Volume</div>
-								<div style="font-size: 1.25rem; font-weight: 700; color: #1e293b;">@catVolume.ToString("N2") <span style="font-size: 0.75rem; font-weight: 500; color: #64748b;">@catUnit</span></div>
-							</div>
-							<div style="width: 1px; height: 36px; background: #e2e8f0;"></div>
-							<div style="text-align: right;">
-								<div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Value</div>
-								<div style="font-size: 1.25rem; font-weight: 700; color: #2563eb;">₹@catValue.ToString("N2") <span style="font-size: 0.75rem; font-weight: 500; color: #64748b;">Lakhs</span></div>
-							</div>
-						</div>
-					</div>
-				</div>
-			}
-		</div>
+                                    <td>
+                                        <input class="table-input sp-table-input" type="number" step="0.01"
+                                               value="@GetAmount(row, monthIndex)"
+                                               @onchange="(e) => SetAmount(row, monthIndex, e)" />
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-	</div>
-	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+        <!-- Summary Cards — Per Category -->
+        <div class="row g-3 mt-2">
+            @foreach (var cat in _categories)
+            {
+                var catUnit = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+                var catRows = _allSalesData.Where(r => r.CategoryId == cat.Id).ToList();
+                var catVolume = catRows.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
+                var catValue = catRows.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="sp-summary-card">
+                        <div class="sp-summary-header">
+                            <span class="sp-summary-dot @(cat.Id == _selectedCategoryId ? "sp-dot-active" : "")"></span>
+                            <span class="sp-summary-name">@cat.Name</span>
+                            <span class="sp-summary-unit-pill">@catUnit</span>
+                        </div>
+                        <div class="sp-summary-body">
+                            <div class="sp-summary-block">
+                                <div class="sp-summary-label">Volume</div>
+                                <div class="sp-summary-value">
+                                    @catVolume.ToString("N2") <span class="sp-summary-suffix">@catUnit</span>
+                                </div>
+                            </div>
+                            <div class="sp-summary-divider"></div>
+                            <div class="sp-summary-block sp-summary-block-right">
+                                <div class="sp-summary-label">Value</div>
+                                <div class="sp-summary-value sp-summary-value-blue">
+                                    ₹@catValue.ToString("N2") <span class="sp-summary-suffix">Lakhs</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+    </div>
+    <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
 @code {
-	[SupplyParameterFromQuery(Name = "dealerId")]
-	public int? DealerId { get; set; }
+    [SupplyParameterFromQuery(Name = "dealerId")]
+    public int? DealerId { get; set; }
 
-	private List<Category> _categories = new();
-	private List<Unit> _units = new();
-	private List<Product> _products = new();
-	private List<SalesPlanningInDealerRegistration> _allSalesData = new();
-	private List<SalesPlanningInDealerRegistration> _currentRows = new();
+    private List<Category> _categories = new();
+    private List<Unit> _units = new();
+    private List<Product> _products = new();
+    private List<SalesPlanningInDealerRegistration> _allSalesData = new();
+    private List<SalesPlanningInDealerRegistration> _currentRows = new();
 
-	private int _selectedCategoryId;
-	private string _selectedUnitName = "MT";
-	private bool _isSaving;
-	private string? _message;
-	private bool _isError;
+    private int _selectedCategoryId;
+    private string _selectedUnitName = "MT";
+    private bool _isSaving;
+    private string? _message;
+    private bool _isError;
 
-	private static readonly string[] _months =
-		["April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February", "March"];
+    private static readonly string[] _months =
+        ["April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February", "March"];
 
-	protected override async Task OnInitializedAsync()
-	{
-		Loading.Show();
-		try
-		{
-			await LoadCategories();
-			await LoadUnits();
-			await LoadProducts();
+    protected override async Task OnInitializedAsync()
+    {
+        Loading.Show();
+        try
+        {
+            await LoadCategories();
+            await LoadUnits();
+            await LoadProducts();
 
-			if (_categories.Count > 0)
-			{
-				_selectedCategoryId = _categories.First().Id;
-				UpdateSelectedUnit();
-			}
+            if (_categories.Count > 0)
+            {
+                _selectedCategoryId = _categories.First().Id;
+                UpdateSelectedUnit();
+            }
 
-			if (DealerId.HasValue && DealerId.Value > 0)
-				await LoadSalesData();
+            if (DealerId.HasValue && DealerId.Value > 0)
+                await LoadSalesData();
 
-			BuildCurrentRows();
-		}
-		finally
-		{
-			Loading.Hide();
-		}
-	}
+            BuildCurrentRows();
+        }
+        finally
+        {
+            Loading.Hide();
+        }
+    }
 
-	private async Task LoadCategories()
-	{
-		try { _categories = await Http.GetFromJsonAsync<List<Category>>("api/Category") ?? new(); }
-		catch (Exception ex) { ShowMessage($"Failed to load categories: {ex.Message}", true); }
-	}
+    private async Task LoadCategories()
+    {
+        try { _categories = await Http.GetFromJsonAsync<List<Category>>("api/Category") ?? new(); }
+        catch (Exception ex) { ShowMessage($"Failed to load categories: {ex.Message}", true); }
+    }
 
-	private async Task LoadUnits()
-	{
-		try { _units = await Http.GetFromJsonAsync<List<Unit>>("api/Unit") ?? new(); }
-		catch (Exception ex) { ShowMessage($"Failed to load units: {ex.Message}", true); }
-	}
+    private async Task LoadUnits()
+    {
+        try { _units = await Http.GetFromJsonAsync<List<Unit>>("api/Unit") ?? new(); }
+        catch (Exception ex) { ShowMessage($"Failed to load units: {ex.Message}", true); }
+    }
 
-	private async Task LoadProducts()
-	{
-		try { _products = await Http.GetFromJsonAsync<List<Product>>("api/Product") ?? new(); }
-		catch (Exception ex) { ShowMessage($"Failed to load products: {ex.Message}", true); }
-	}
+    private async Task LoadProducts()
+    {
+        try { _products = await Http.GetFromJsonAsync<List<Product>>("api/Product") ?? new(); }
+        catch (Exception ex) { ShowMessage($"Failed to load products: {ex.Message}", true); }
+    }
 
-	private async Task LoadSalesData()
-	{
-		try
-		{
-			var all = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new();
-			_allSalesData = all.Where(s => s.DealerId == DealerId!.Value).ToList();
-		}
-		catch (Exception ex) { ShowMessage($"Failed to load sales data: {ex.Message}", true); }
-	}
+    private async Task LoadSalesData()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new();
+            _allSalesData = all.Where(s => s.DealerId == DealerId!.Value).ToList();
+        }
+        catch (Exception ex) { ShowMessage($"Failed to load sales data: {ex.Message}", true); }
+    }
 
-	private void SelectCategory(int categoryId)
-	{
-		_selectedCategoryId = categoryId;
-		UpdateSelectedUnit();
-		BuildCurrentRows();
-	}
+    private void SelectCategory(int categoryId)
+    {
+        _selectedCategoryId = categoryId;
+        UpdateSelectedUnit();
+        BuildCurrentRows();
+    }
 
-	private void UpdateSelectedUnit()
-	{
-		var cat = _categories.FirstOrDefault(c => c.Id == _selectedCategoryId);
-		if (cat != null)
-			_selectedUnitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
-	}
+    private void UpdateSelectedUnit()
+    {
+        var cat = _categories.FirstOrDefault(c => c.Id == _selectedCategoryId);
+        if (cat != null)
+            _selectedUnitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+    }
 
-	private void BuildCurrentRows()
-	{
-		var categoryProducts = _products.Where(p => p.CategoryId == _selectedCategoryId).ToList();
-		_currentRows = new();
+    private void BuildCurrentRows()
+    {
+        var categoryProducts = _products.Where(p => p.CategoryId == _selectedCategoryId).ToList();
+        _currentRows = new();
 
-		foreach (var product in categoryProducts)
-		{
-			var existing = _allSalesData.FirstOrDefault(s => s.ProductId == product.Id && s.CategoryId == _selectedCategoryId);
-			if (existing != null)
-			{
-				_currentRows.Add(existing);
-			}
-			else
-			{
-				var newRow = new SalesPlanningInDealerRegistration
-				{
-					DealerId = DealerId ?? 0,
-					CategoryId = _selectedCategoryId,
-					ProductId = product.Id
-				};
-				_currentRows.Add(newRow);
-				_allSalesData.Add(newRow);
-			}
-		}
-	}
+        foreach (var product in categoryProducts)
+        {
+            var existing = _allSalesData.FirstOrDefault(s => s.ProductId == product.Id && s.CategoryId == _selectedCategoryId);
+            if (existing != null)
+            {
+                _currentRows.Add(existing);
+            }
+            else
+            {
+                var newRow = new SalesPlanningInDealerRegistration
+                {
+                    DealerId = DealerId ?? 0,
+                    CategoryId = _selectedCategoryId,
+                    ProductId = product.Id
+                };
+                _currentRows.Add(newRow);
+                _allSalesData.Add(newRow);
+            }
+        }
+    }
 
-	private static decimal GetQty(SalesPlanningInDealerRegistration row, int m) => m switch
-	{
-		0 => row.AprilQty,
-		1 => row.MayQty,
-		2 => row.JuneQty,
-		3 => row.JulyQty,
-		4 => row.AugustQty,
-		5 => row.SeptemberQty,
-		6 => row.OctoberQty,
-		7 => row.NovemberQty,
-		8 => row.DecemberQty,
-		9 => row.JanuaryQty,
-		10 => row.FebruaryQty,
-		11 => row.MarchQty,
-		_ => 0
-	};
+    private static decimal GetQty(SalesPlanningInDealerRegistration row, int m) => m switch
+    {
+        0 => row.AprilQty,
+        1 => row.MayQty,
+        2 => row.JuneQty,
+        3 => row.JulyQty,
+        4 => row.AugustQty,
+        5 => row.SeptemberQty,
+        6 => row.OctoberQty,
+        7 => row.NovemberQty,
+        8 => row.DecemberQty,
+        9 => row.JanuaryQty,
+        10 => row.FebruaryQty,
+        11 => row.MarchQty,
+        _ => 0
+    };
 
-	private static decimal GetAmount(SalesPlanningInDealerRegistration row, int m) => m switch
-	{
-		0 => row.AprilAmount,
-		1 => row.MayAmount,
-		2 => row.JuneAmount,
-		3 => row.JulyAmount,
-		4 => row.AugustAmount,
-		5 => row.SeptemberAmount,
-		6 => row.OctoberAmount,
-		7 => row.NovemberAmount,
-		8 => row.DecemberAmount,
-		9 => row.JanuaryAmount,
-		10 => row.FebruaryAmount,
-		11 => row.MarchAmount,
-		_ => 0
-	};
+    private static decimal GetAmount(SalesPlanningInDealerRegistration row, int m) => m switch
+    {
+        0 => row.AprilAmount,
+        1 => row.MayAmount,
+        2 => row.JuneAmount,
+        3 => row.JulyAmount,
+        4 => row.AugustAmount,
+        5 => row.SeptemberAmount,
+        6 => row.OctoberAmount,
+        7 => row.NovemberAmount,
+        8 => row.DecemberAmount,
+        9 => row.JanuaryAmount,
+        10 => row.FebruaryAmount,
+        11 => row.MarchAmount,
+        _ => 0
+    };
 
-	private static void SetQty(SalesPlanningInDealerRegistration row, int m, ChangeEventArgs e)
-	{
-		if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
-		switch (m)
-		{
-			case 0: row.AprilQty = val; break;
-			case 1: row.MayQty = val; break;
-			case 2: row.JuneQty = val; break;
-			case 3: row.JulyQty = val; break;
-			case 4: row.AugustQty = val; break;
-			case 5: row.SeptemberQty = val; break;
-			case 6: row.OctoberQty = val; break;
-			case 7: row.NovemberQty = val; break;
-			case 8: row.DecemberQty = val; break;
-			case 9: row.JanuaryQty = val; break;
-			case 10: row.FebruaryQty = val; break;
-			case 11: row.MarchQty = val; break;
-		}
-	}
+    private static void SetQty(SalesPlanningInDealerRegistration row, int m, ChangeEventArgs e)
+    {
+        if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
+        switch (m)
+        {
+            case 0: row.AprilQty = val; break;
+            case 1: row.MayQty = val; break;
+            case 2: row.JuneQty = val; break;
+            case 3: row.JulyQty = val; break;
+            case 4: row.AugustQty = val; break;
+            case 5: row.SeptemberQty = val; break;
+            case 6: row.OctoberQty = val; break;
+            case 7: row.NovemberQty = val; break;
+            case 8: row.DecemberQty = val; break;
+            case 9: row.JanuaryQty = val; break;
+            case 10: row.FebruaryQty = val; break;
+            case 11: row.MarchQty = val; break;
+        }
+    }
 
-	private static void SetAmount(SalesPlanningInDealerRegistration row, int m, ChangeEventArgs e)
-	{
-		if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
-		switch (m)
-		{
-			case 0: row.AprilAmount = val; break;
-			case 1: row.MayAmount = val; break;
-			case 2: row.JuneAmount = val; break;
-			case 3: row.JulyAmount = val; break;
-			case 4: row.AugustAmount = val; break;
-			case 5: row.SeptemberAmount = val; break;
-			case 6: row.OctoberAmount = val; break;
-			case 7: row.NovemberAmount = val; break;
-			case 8: row.DecemberAmount = val; break;
-			case 9: row.JanuaryAmount = val; break;
-			case 10: row.FebruaryAmount = val; break;
-			case 11: row.MarchAmount = val; break;
-		}
-	}
+    private static void SetAmount(SalesPlanningInDealerRegistration row, int m, ChangeEventArgs e)
+    {
+        if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
+        switch (m)
+        {
+            case 0: row.AprilAmount = val; break;
+            case 1: row.MayAmount = val; break;
+            case 2: row.JuneAmount = val; break;
+            case 3: row.JulyAmount = val; break;
+            case 4: row.AugustAmount = val; break;
+            case 5: row.SeptemberAmount = val; break;
+            case 6: row.OctoberAmount = val; break;
+            case 7: row.NovemberAmount = val; break;
+            case 8: row.DecemberAmount = val; break;
+            case 9: row.JanuaryAmount = val; break;
+            case 10: row.FebruaryAmount = val; break;
+            case 11: row.MarchAmount = val; break;
+        }
+    }
 
-	private decimal TotalVolume() => _currentRows.Sum(r =>
-		r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty +
-		r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty +
-		r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
+    private async Task HandleNext()
+    {
+        if (!DealerId.HasValue || DealerId.Value <= 0)
+        {
+            ShowMessage("Dealer ID is required.", true);
+            return;
+        }
 
-	private decimal TotalForecastValue() => _currentRows.Sum(r =>
-		r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount +
-		r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount +
-		r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
+        _isSaving = true;
+        try
+        {
+            foreach (var row in _allSalesData)
+            {
+                var hasData = GetRowTotalQty(row) != 0 || GetRowTotalAmount(row) != 0;
+                if (row.Id == 0 && !hasData)
+                    continue;
 
-	private async Task HandleNext()
-	{
-		if (!DealerId.HasValue || DealerId.Value <= 0)
-		{
-			ShowMessage("Dealer ID is required.", true);
-			return;
-		}
+                row.DealerId = DealerId.Value;
 
-		_isSaving = true;
-		try
-		{
-			foreach (var row in _allSalesData)
-			{
-				var hasData = GetRowTotalQty(row) != 0 || GetRowTotalAmount(row) != 0;
-				if (row.Id == 0 && !hasData)
-					continue;
+                if (row.Id > 0)
+                {
+                    await Http.PutAsJsonAsync($"api/SalesPlanning/{row.Id}", row);
+                }
+                else
+                {
+                    var response = await Http.PostAsJsonAsync("api/SalesPlanning", row);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var result = await response.Content.ReadFromJsonAsync<CreateResponse>();
+                        if (result?.Data != null)
+                            row.Id = result.Data.Id;
+                    }
+                }
+            }
+            var hasError = _allSalesData.All(r => GetRowTotalQty(r) == 0 && GetRowTotalAmount(r) == 0);
+            FormStepData.MarkStepError(8, hasError);
+            Loading.Show();
+            Nav.NavigateTo($"/Investment?dealerId={DealerId}");
+        }
+        catch (Exception ex)
+        {
+            Loading.Hide();
+            ShowMessage($"Failed to save: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
 
-				row.DealerId = DealerId.Value;
+    private static decimal GetRowTotalQty(SalesPlanningInDealerRegistration r) =>
+        r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty +
+        r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty +
+        r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty;
 
-				if (row.Id > 0)
-				{
-					await Http.PutAsJsonAsync($"api/SalesPlanning/{row.Id}", row);
-				}
-				else
-				{
-					var response = await Http.PostAsJsonAsync("api/SalesPlanning", row);
-					if (response.IsSuccessStatusCode)
-					{
-						var result = await response.Content.ReadFromJsonAsync<CreateResponse>();
-						if (result?.Data != null)
-							row.Id = result.Data.Id;
-					}
-				}
-			}
-			var hasError = _allSalesData.All(r => GetRowTotalQty(r) == 0 && GetRowTotalAmount(r) == 0);
-			FormStepData.MarkStepError(8, hasError);
-			Loading.Show();
-			Nav.NavigateTo($"/Investment?dealerId={DealerId}");
-		}
-		catch (Exception ex)
-		{
-			Loading.Hide();
-			ShowMessage($"Failed to save: {ex.Message}", true);
-		}
-		finally
-		{
-			_isSaving = false;
-		}
-	}
+    private static decimal GetRowTotalAmount(SalesPlanningInDealerRegistration r) =>
+        r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount +
+        r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount +
+        r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount;
 
-	private static decimal GetRowTotalQty(SalesPlanningInDealerRegistration r) =>
-		r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty +
-		r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty +
-		r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty;
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
 
-	private static decimal GetRowTotalAmount(SalesPlanningInDealerRegistration r) =>
-		r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount +
-		r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount +
-		r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount;
-
-	private void ShowMessage(string message, bool isError)
-	{
-		_message = message;
-		_isError = isError;
-	}
-
-	private class CreateResponse
-	{
-		public string? Message { get; set; }
-		public SalesPlanningInDealerRegistration? Data { get; set; }
-	}
+    private class CreateResponse
+    {
+        public string? Message { get; set; }
+        public SalesPlanningInDealerRegistration? Data { get; set; }
+    }
 }
