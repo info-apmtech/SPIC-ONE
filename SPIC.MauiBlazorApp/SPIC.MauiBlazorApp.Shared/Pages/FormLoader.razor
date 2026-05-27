@@ -46,12 +46,9 @@
 @code {
 	private FormStepModel? CurrentStep;
 
-	private List<FormStepModel> _visibleSteps = new();
+	private List<FormStepModel> _visibleSteps = FormStepData.GetVisibleSteps(false);
 
-	private List<FormStepModel> StepsList =>
-		_visibleSteps.Count > 0
-			? _visibleSteps
-			: FormStepData.Steps ?? new List<FormStepModel>();
+	private List<FormStepModel> StepsList => _visibleSteps;
 
 	private int TotalSteps => StepsList.Count;
 
@@ -86,17 +83,16 @@
 
 		if (dealerId <= 0)
 		{
-			_visibleSteps = FormStepData.Steps;
+			// Create mode / no dealerId yet
+			// Default should be 12 steps, no GreenStar page
+			_visibleSteps = FormStepData.GetVisibleSteps(false);
+			SetCurrentStep();
 			return;
 		}
 
 		var hasGreenStar = await HasGreenStarCompany(dealerId);
 
-		_visibleSteps = hasGreenStar
-			? FormStepData.Steps
-			: FormStepData.Steps
-				.Where(x => !x.Route.Equals("/CreditLimitForGreenStar", StringComparison.OrdinalIgnoreCase))
-				.ToList();
+		_visibleSteps = FormStepData.GetVisibleSteps(hasGreenStar);
 
 		SetCurrentStep();
 	}
@@ -157,14 +153,11 @@
 	{
 		var dealerId = GetDealerIdFromQuery();
 
+		FormStepData.ClearAllErrors();
+
 		if (dealerId > 0)
 		{
-			FormStepData.ClearAllErrors();
 			await FormStepChecker.EvaluateStepsAsync(Http, dealerId);
-		}
-		else
-		{
-			FormStepData.ClearAllErrors();
 		}
 	}
 
