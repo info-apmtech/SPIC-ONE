@@ -54,6 +54,7 @@
                             {
                                 <th colspan="2" class="text-center border-start">@month</th>
                             }
+                            <th colspan="2" class="text-center border-start">Total</th>
                         </tr>
 
                         <tr>
@@ -62,6 +63,8 @@
                                 <th class="text-center text-muted fw-normal border-start sub-th">@_selectedUnitName</th>
                                 <th class="text-center text-muted fw-normal sub-th">Lakhs</th>
                             }
+                            <th class="text-center text-muted fw-normal border-start sub-th">@_selectedUnitName</th>
+                            <th class="text-center text-muted fw-normal sub-th">Lakhs</th>
                         </tr>
                     </thead>
 
@@ -90,9 +93,36 @@
                                                @onchange="(e) => SetAmount(row, monthIndex, e)" />
                                     </td>
                                 }
+                                <td class="border-start text-center fw-medium">
+                                    @GetRowTotalQty(row).ToString("N2") @_selectedUnitName
+                                </td>
+                                <td class="text-center fw-medium">
+                                    ₹ @GetRowTotalAmount(row).ToString("N2") Lakhs
+                                </td>
                             </tr>
                         }
                     </tbody>
+                    <tfoot>
+                        <tr>
+                            <td class="fw-medium text-dark sticky-first-col">Monthly Total</td>
+                            @for (int i = 0; i < _months.Length; i++)
+                            {
+                                var monthIndex = i;
+                                <td class="text-center fw-medium border-start bg-light">
+                                    @GetMonthTotalQty(monthIndex).ToString("N2")
+                                </td>
+                                <td class="text-center fw-medium bg-light">
+                                    @GetMonthTotalAmount(monthIndex).ToString("N2")
+                                </td>
+                            }
+                            <td class="text-center fw-medium border-start bg-light">
+                                @GetGrandTotalQty().ToString("N2")
+                            </td>
+                            <td class="text-center fw-medium bg-light">
+                                @GetGrandTotalAmount().ToString("N2")
+                            </td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
@@ -132,6 +162,95 @@
             }
         </div>
 
+        <!-- Bottom Summary Cards -->
+        <div class="row g-3 mt-4">
+            <!-- Card 1: Fertilizer Products Summary -->
+            <div class="col-12 col-lg-6">
+                <div class="total-value-card">
+                    <div class="total-value-card-bgimg">
+                        <h5 class="card-title mb-3">Fertilizer Products Summary</h5>
+
+                        <!-- Urea Product Total -->
+                        <div class="category-summary-card mb-3">
+                            <div class="summary-header">
+                                <span class="summary-label">Urea Products</span>
+                            </div>
+                            <div class="summary-content">
+                                @{
+                                    var ureaTotals = GetFertilizerUreaTotals();
+                                }
+                                <div class="summary-block">
+                                    <span class="summary-value">@ureaTotals.Qty.ToString("N2") MT</span>
+                                </div>
+                                <div class="summary-divider"></div>
+                                <div class="summary-block">
+                                    <span class="summary-value">₹ @ureaTotals.Amount.ToString("N2") Lakhs</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Other Fertilizer Products Total -->
+                        <div class="category-summary-card">
+                            <div class="summary-header">
+                                <span class="summary-label">Other Fertilizer Products</span>
+                            </div>
+                            <div class="summary-content">
+                                @{
+                                    var otherFertTotals = GetFertilizerOtherProductTotals();
+                                }
+                                <div class="summary-block">
+                                    <span class="summary-value">@otherFertTotals.Qty.ToString("N2") MT</span>
+                                </div>
+                                <div class="summary-divider"></div>
+                                <div class="summary-block">
+                                    <span class="summary-value">₹ @otherFertTotals.Amount.ToString("N2") Lakhs</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Speciality Products Summary -->
+            <div class="col-12 col-lg-6">
+                <div class="total-value-card">
+                    <div class="total-value-card-bgimg">
+                        <h5 class="card-title mb-3">Speciality Products Summary</h5>
+
+                        @{
+                            var specialityTotals = GetSpecialityTotalsByUnit();
+                        }
+
+                        <div class="category-summary-card">
+                            <div class="summary-content">
+                                @if (specialityTotals.ContainsKey("GR") && specialityTotals["GR"].Qty > 0)
+                                {
+                                    <div class="summary-block mb-2">
+                                        <span class="summary-label">GR:</span>
+                                        <span class="summary-value">@specialityTotals["GR"].Qty.ToString("N2") GR</span>
+                                    </div>
+                                }
+
+                                @if (specialityTotals.ContainsKey("LTR") && specialityTotals["LTR"].Qty > 0)
+                                {
+                                    <div class="summary-block mb-2">
+                                        <span class="summary-label">LTR:</span>
+                                        <span class="summary-value">@specialityTotals["LTR"].Qty.ToString("N2") LTR</span>
+                                    </div>
+                                }
+
+                                <div class="summary-divider my-2"></div>
+
+                                <div class="summary-block">
+                                    <span class="summary-label">Total Amount:</span>
+                                    <span class="summary-value">₹ @GetSpecialityTotalAmount().ToString("N2") Lakhs</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
@@ -382,6 +501,164 @@
         r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount +
         r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount +
         r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount;
+
+    private decimal GetMonthTotalQty(int monthIndex)
+    {
+        return _currentRows.Sum(r => monthIndex switch
+        {
+            0 => r.AprilQty,
+            1 => r.MayQty,
+            2 => r.JuneQty,
+            3 => r.JulyQty,
+            4 => r.AugustQty,
+            5 => r.SeptemberQty,
+            6 => r.OctoberQty,
+            7 => r.NovemberQty,
+            8 => r.DecemberQty,
+            9 => r.JanuaryQty,
+            10 => r.FebruaryQty,
+            11 => r.MarchQty,
+            _ => 0
+        });
+    }
+
+    private decimal GetMonthTotalAmount(int monthIndex)
+    {
+        return _currentRows.Sum(r => monthIndex switch
+        {
+            0 => r.AprilAmount,
+            1 => r.MayAmount,
+            2 => r.JuneAmount,
+            3 => r.JulyAmount,
+            4 => r.AugustAmount,
+            5 => r.SeptemberAmount,
+            6 => r.OctoberAmount,
+            7 => r.NovemberAmount,
+            8 => r.DecemberAmount,
+            9 => r.JanuaryAmount,
+            10 => r.FebruaryAmount,
+            11 => r.MarchAmount,
+            _ => 0
+        });
+    }
+
+    private decimal GetGrandTotalQty()
+    {
+        return _currentRows.Sum(r => GetRowTotalQty(r));
+    }
+
+    private decimal GetGrandTotalAmount()
+    {
+        return _currentRows.Sum(r => GetRowTotalAmount(r));
+    }
+
+    private bool IsUreaProduct(Product product)
+    {
+        return product?.Name != null && product.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsFertilizerCategory(Category category)
+    {
+        return category?.Name != null && category.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsOtherFertilizerProduct(Product product)
+    {
+        var cat = _categories.FirstOrDefault(c => c.Id == product.CategoryId);
+        return IsFertilizerCategory(cat) && !IsUreaProduct(product);
+    }
+
+    private bool IsSpecialityCategory(Category category)
+    {
+        if (category?.Name == null) return false;
+        var name = category.Name.ToLower();
+        return name.Contains("specialty") || name.Contains("speciality") || name.Contains("sp");
+    }
+
+    private bool IsSpecialityProduct(Product product)
+    {
+        var cat = _categories.FirstOrDefault(c => c.Id == product.CategoryId);
+        return IsSpecialityCategory(cat);
+    }
+
+    private (decimal Qty, decimal Amount) GetFertilizerUreaTotals()
+    {
+        decimal totalQty = 0;
+        decimal totalAmount = 0;
+
+        foreach (var row in _allSalesData)
+        {
+            var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+            if (product != null && IsUreaProduct(product))
+            {
+                totalQty += GetRowTotalQty(row);
+                totalAmount += GetRowTotalAmount(row);
+            }
+        }
+
+        return (totalQty, totalAmount);
+    }
+
+    private (decimal Qty, decimal Amount) GetFertilizerOtherProductTotals()
+    {
+        decimal totalQty = 0;
+        decimal totalAmount = 0;
+
+        foreach (var row in _allSalesData)
+        {
+            var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+            if (product != null && IsOtherFertilizerProduct(product))
+            {
+                totalQty += GetRowTotalQty(row);
+                totalAmount += GetRowTotalAmount(row);
+            }
+        }
+
+        return (totalQty, totalAmount);
+    }
+
+    private Dictionary<string, (decimal Qty, decimal Amount)> GetSpecialityTotalsByUnit()
+    {
+        var result = new Dictionary<string, (decimal Qty, decimal Amount)>();
+
+        foreach (var row in _allSalesData)
+        {
+            var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+            if (product != null && IsSpecialityProduct(product))
+            {
+                var cat = _categories.FirstOrDefault(c => c.Id == product.CategoryId);
+                var unit = _units.FirstOrDefault(u => u.Id == cat?.UnitId);
+                var unitName = unit?.Name ?? "MT";
+
+                if (!result.ContainsKey(unitName))
+                {
+                    result[unitName] = (0, 0);
+                }
+
+                var currentQty = result[unitName].Qty + GetRowTotalQty(row);
+                var currentAmount = result[unitName].Amount + GetRowTotalAmount(row);
+                result[unitName] = (currentQty, currentAmount);
+            }
+        }
+
+        return result;
+    }
+
+    private decimal GetSpecialityTotalAmount()
+    {
+        decimal totalAmount = 0;
+
+        foreach (var row in _allSalesData)
+        {
+            var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+            if (product != null && IsSpecialityProduct(product))
+            {
+                totalAmount += GetRowTotalAmount(row);
+            }
+        }
+
+        return totalAmount;
+    }
 
     private void ShowMessage(string message, bool isError)
     {

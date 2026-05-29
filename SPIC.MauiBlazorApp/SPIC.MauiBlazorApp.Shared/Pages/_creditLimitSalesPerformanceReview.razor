@@ -19,8 +19,44 @@
         </div>
     </div>
 
+    @* Prepare category list and displayed rows based on Company *@
+    @{ 
+        var fertilizerCats = Categories.Where(c => c.Name != null && c.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase)).ToList();
+        var fertilizerCatIds = fertilizerCats.Select(c => c.Id).ToHashSet();
+
+        var renderCategories = (Company != null && Company.Equals("SPIC", StringComparison.OrdinalIgnoreCase))
+            ? fertilizerCats
+            : Categories;
+
+        // Determine displayed rows based on company rules
+        var displayedRows = SalesPerfRows ?? new List<SalesPerfViewRow>();
+
+        if (!string.IsNullOrEmpty(Company) && Company.Equals("SPIC", StringComparison.OrdinalIgnoreCase))
+        {
+            // SPIC: show only fertilizer category tabs; when showing rows, further limit to Urea products
+            if (SelectedCategoryId > 0 && fertilizerCatIds.Contains(SelectedCategoryId))
+            {
+                displayedRows = displayedRows.Where(r => !string.IsNullOrEmpty(r.ProductName) && r.ProductName.Contains("Urea", StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+            else
+            {
+                // If no fertilizer category selected (or selected category is not fertilizer), hide rows
+                displayedRows = new List<SalesPerfViewRow>();
+            }
+        }
+        else if (!string.IsNullOrEmpty(Company) && Company.Equals("GreenStar", StringComparison.OrdinalIgnoreCase))
+        {
+            // GreenStar: show all categories; but in fertilizer category exclude Urea products
+            if (SelectedCategoryId > 0 && fertilizerCatIds.Contains(SelectedCategoryId))
+            {
+                displayedRows = displayedRows.Where(r => string.IsNullOrEmpty(r.ProductName) || !r.ProductName.Contains("Urea", StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+            // else leave displayedRows as-is for other categories
+        }
+    }
+
     <div class="custom-tabs">
-        @foreach (var cat in Categories)
+        @foreach (var cat in renderCategories)
         {
             var catId = cat.Id;
             var unitName = Units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
@@ -62,7 +98,7 @@
                         @for (int fi = 0; fi < 3; fi++)
                         {
                             <th class="text-center text-muted fw-normal border-start">
-                                @SelectedUnitName
+                                @(!string.IsNullOrEmpty(SelectedUnitName) ? SelectedUnitName : "MT")
                             </th>
                             <th class="text-center text-muted fw-normal">
                                 Lakhs
@@ -72,7 +108,7 @@
                 </thead>
 
                 <tbody>
-                    @foreach (var row in SalesPerfRows)
+                    @foreach (var row in displayedRows)
                     {
                         <tr>
                             <td class="fw-medium text-dark">@row.ProductName</td>
@@ -134,11 +170,11 @@
                             var fyIdx = fi;
 
                             <td class="border-start fw-bold text-center">
-                                @GetFYTotalQtyByCategory(fyIdx).ToString("N2")
+                                @displayedRows.Sum(r => fyIdx == 0 ? r.FY1Qty : fyIdx == 1 ? r.FY2Qty : r.FY3Qty).ToString("N2")
                             </td>
 
                             <td class="fw-bold text-center">
-                                @GetFYTotalAmountByCategory(fyIdx).ToString("N2")
+                                @displayedRows.Sum(r => fyIdx == 0 ? r.FY1Amount : fyIdx == 1 ? r.FY2Amount : r.FY3Amount).ToString("N2")
                             </td>
                         }
                     </tr>
@@ -148,6 +184,7 @@
     </div>
 
     <div class="row g-3">
+
         @for (int fi = 0; fi < 3; fi++)
         {
             var fyIdx = fi;
@@ -157,11 +194,11 @@
                 <div class="perf-card">
                     <div class="perf-year">@fyName</div>
                     <div class="perf-val">
-                        @GetFYTotalQty(fyIdx).ToString("N2")
+                        @displayedRows.Sum(r => fyIdx == 0 ? r.FY1Qty : fyIdx == 1 ? r.FY2Qty : r.FY3Qty).ToString("N2")
                         <span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">
-                            @SelectedUnitName
+                            @(!string.IsNullOrEmpty(SelectedUnitName) ? SelectedUnitName : "MT")
                         </span>
-                        / ₹ @GetFYTotalAmount(fyIdx).ToString("N2")
+                        / ₹ @displayedRows.Sum(r => fyIdx == 0 ? r.FY1Amount : fyIdx == 1 ? r.FY2Amount : r.FY3Amount).ToString("N2")
                         <span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">
                             Lakhs
                         </span>
@@ -172,11 +209,11 @@
 
         <div class="col-md-3">
             <div class="perf-card green position-relative">
-                <div class="perf-year">Sales Plan (Current FY)</div>
+                <div class="perf-year">@(!string.IsNullOrEmpty(SalesPlanCardTitle) ? SalesPlanCardTitle : "Sales Plan (Current FY)")</div>
                 <div class="perf-val">
                     @SalesPlanTotalQty.ToString("N2")
                     <span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">
-                        @SelectedUnitName
+                        @(!string.IsNullOrEmpty(SelectedUnitName) ? SelectedUnitName : "MT")
                     </span>
                     / ₹ @SalesPlanTotalAmount.ToString("N2")
                     <span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">
@@ -197,6 +234,7 @@
 
     [Parameter] public int SelectedCategoryId { get; set; }
     [Parameter] public string SelectedUnitName { get; set; } = "MT";
+    [Parameter] public string Company { get; set; } = "";
 
     [Parameter] public int FY1 { get; set; }
     [Parameter] public int FY2 { get; set; }
@@ -204,6 +242,7 @@
 
     [Parameter] public decimal SalesPlanTotalQty { get; set; }
     [Parameter] public decimal SalesPlanTotalAmount { get; set; }
+    [Parameter] public string SalesPlanCardTitle { get; set; } = "Sales Plan (Current FY)";
 
     [Parameter] public EventCallback<int> OnCategoryChanged { get; set; }
 
@@ -220,24 +259,4 @@
         var fyId = GetSelectedFY(fyIdx);
         return FinancialYears.FirstOrDefault(f => f.Id == fyId)?.Name ?? $"FY {fyIdx + 1}";
     }
-
-    private decimal GetFYTotalQtyByCategory(int fyIdx) => SalesPerfRows.Sum(r => fyIdx switch
-    {
-        0 => r.FY1Qty,
-        1 => r.FY2Qty,
-        2 => r.FY3Qty,
-        _ => 0
-    });
-
-    private decimal GetFYTotalAmountByCategory(int fyIdx) => SalesPerfRows.Sum(r => fyIdx switch
-    {
-        0 => r.FY1Amount,
-        1 => r.FY2Amount,
-        2 => r.FY3Amount,
-        _ => 0
-    });
-
-    private decimal GetFYTotalQty(int fyIdx) => GetFYTotalQtyByCategory(fyIdx);
-
-    private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx);
 }
