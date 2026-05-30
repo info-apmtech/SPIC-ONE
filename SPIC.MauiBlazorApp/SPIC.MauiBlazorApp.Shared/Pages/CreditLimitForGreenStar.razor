@@ -112,19 +112,21 @@
 
 		<!-- Sales Performance Review -->
 		<_creditLimitSalesPerformanceReview
-		Categories="_categories"
-		Units="_units"
-		FinancialYears="_financialYears"
-		SalesPerfRows="_salesPerfViewRows"
-		SelectedCategoryId="_selectedCategoryId"
-		SelectedUnitName="_selectedUnitName"
-		FY1="_proposal.FY1"
-		FY2="_proposal.FY2"
-		FY3="_proposal.FY3"
-		SalesPlanTotalQty="SalesPlanTotalQty"
-		SalesPlanTotalAmount="SalesPlanTotalAmount"
-		Company="GreenStar"
-		OnCategoryChanged="SelectCategory" />
+    Categories="_categories"
+    Units="_units"
+    FinancialYears="_financialYears"
+    SalesPerfRows="_salesPerfViewRows"
+    SelectedCategoryId="_selectedCategoryId"
+    SelectedUnitName="@_selectedUnitName"
+    FY1="_proposal.FY1"
+    FY2="_proposal.FY2"
+    FY3="_proposal.FY3"
+    SalesPlanTotalQty="@SalesPlanTotalQty"
+    SalesPlanTotalAmount="@SalesPlanTotalAmount"
+    SalesPlanCardTitle="GreenStar Sales Plan (Current FY)"
+    SalesPlanUnitName="MT"
+    Company="GreenStar"
+    OnCategoryChanged="SelectCategory" />
 		@if (_dealer.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
 		{
 			<!-- Details of Securities Greenstar -->
@@ -561,6 +563,8 @@
 	private DealerCreditLimitProposal _proposal = new();
 	private List<DealerCreditLimitSales> _creditLimitSalesData = new();
 private List<SalesPerfViewRow> _salesPerfViewRows = new();
+private List<AnnualSaleDataLastFYofDealerRegistration> _annualSalesData = new();
+private List<DealerCreditLimitSales> _greenstarDefaultSalesData = new();
 
 	private int _selectedCategoryId;
 	private string _selectedUnitName = "MT";
@@ -581,15 +585,42 @@ private List<SalesPerfViewRow> _salesPerfViewRows = new();
 	private decimal LoansTotal => _loanLiabilities.Sum(l => l.LoanValue);
 
 	// Sales Plan totals (from previous SalesPlanning page)
-	private decimal SalesPlanTotalQty => _salesPlanData
-		.Where(s => s.CategoryId == _selectedCategoryId)
-		.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty +
-			r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
+	private IEnumerable<SalesPlanningInDealerRegistration> GreenStarSalesPlanRows =>
+    _salesPlanData.Where(row =>
+        IsFertilizerSalesPlanRow(row) &&
+        !IsUreaSalesPlanRow(row));
 
-	private decimal SalesPlanTotalAmount => _salesPlanData
-		.Where(s => s.CategoryId == _selectedCategoryId)
-		.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount +
-			r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
+private decimal SalesPlanTotalQty =>
+    GreenStarSalesPlanRows.Sum(GetSalesPlanRowTotalQty);
+
+private decimal SalesPlanTotalAmount =>
+    GreenStarSalesPlanRows.Sum(GetSalesPlanRowTotalAmount);
+
+private static decimal GetSalesPlanRowTotalQty(SalesPlanningInDealerRegistration r) =>
+    r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty +
+    r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty +
+    r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty;
+
+private static decimal GetSalesPlanRowTotalAmount(SalesPlanningInDealerRegistration r) =>
+    r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount +
+    r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount +
+    r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount;
+
+private bool IsFertilizerSalesPlanRow(SalesPlanningInDealerRegistration row)
+{
+    var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+
+    return category?.Name != null &&
+           category.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
+}
+
+private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
+{
+    var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+
+    return product?.Name != null &&
+           product.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+}
 
 	// Credit limit calculations — SPIC
 	private double SpicTotalMark => Enumerable.Range(0, 10).Where(i => _valuationParams[i].Weightage > 0).Sum(i => GetSpicMark(i));
@@ -733,10 +764,10 @@ private List<SalesPerfViewRow> _salesPerfViewRows = new();
 	}
 
 	if (_categories.Count > 0)
-	{
-		_selectedCategoryId = _categories.First().Id;
-		UpdateSelectedUnit();
-	}
+{
+    _selectedCategoryId = GetDefaultGreenstarCategoryId();
+    UpdateSelectedUnit();
+}
 
 	SetFixedFinancialYears();
 	await LoadCreditLimitSalesData();
@@ -747,7 +778,14 @@ private List<SalesPerfViewRow> _salesPerfViewRows = new();
 		await LoadGreenstarValuationDefaultValues();
 	}
 }
+private int GetDefaultGreenstarCategoryId()
+{
+    var fertilizerCategory = _categories.FirstOrDefault(c =>
+        !string.IsNullOrWhiteSpace(c.Name) &&
+        c.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase));
 
+    return fertilizerCategory?.Id ?? _categories.FirstOrDefault()?.Id ?? 0;
+}
 	private async Task<T?> SafeGetAsync<T>(string url)
 	{
 		try { return await Http.GetFromJsonAsync<T>(url); }
@@ -1069,36 +1107,57 @@ private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx)
 	}
 
 	// --- Helper Methods for Product Identification ---
-	private bool IsUreaProduct(Product product)
-	{
-		return product?.Name != null && product.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
-	}
+	private bool IsUreaProduct(Product? product)
+{
+    return product?.Name != null &&
+           product.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+}
 
-	private bool IsFertilizerCategory(Category category)
-	{
-		return category?.Name != null && category.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
-	}
+private bool IsFertilizerCategory(Category? category)
+{
+    return category?.Name != null &&
+           category.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
+}
+private bool IsSpecialityCategory(Category? category)
+{
+    return category?.Name != null &&
+           (
+               category.Name.Contains("Speciality", StringComparison.OrdinalIgnoreCase) ||
+               category.Name.Contains("Specialty", StringComparison.OrdinalIgnoreCase)
+           );
+}
 
-	private bool IsSpecialityProduct(Product product)
-	{
-		if (product?.Name == null) return false;
-		var name = product.Name.ToLower();
-		return name.Contains("specialty") || name.Contains("speciality") || name.Contains("sp");
-	}
+private bool IsOtherFertilizerProduct(Product? product)
+{
+    if (product == null)
+        return false;
 
-	private List<Product> GetOtherFertilizerProducts()
-	{
-		return _products
-			.Where(p => p.CategoryId == GetFertilizerCategoryId() && !IsUreaProduct(p))
-			.ToList();
-	}
+    var category = _categories.FirstOrDefault(c => c.Id == product.CategoryId);
 
-	private List<Product> GetSpecialityProducts()
-	{
-		return _products
-			.Where(p => IsSpecialityProduct(p))
-			.ToList();
-	}
+    return IsFertilizerCategory(category) && !IsUreaProduct(product);
+}
+	private bool IsSpecialityProduct(Product? product)
+{
+    if (product == null)
+        return false;
+
+    var category = _categories.FirstOrDefault(c => c.Id == product.CategoryId);
+
+    return IsSpecialityCategory(category);
+}
+
+private List<Product> GetOtherFertilizerProducts()
+{
+    return _products
+        .Where(IsOtherFertilizerProduct)
+        .ToList();
+}
+private List<Product> GetSpecialityProducts()
+{
+    return _products
+        .Where(IsSpecialityProduct)
+        .ToList();
+}
 
 	private int GetFertilizerCategoryId()
 	{
@@ -1108,245 +1167,171 @@ private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx)
 	}
 
 	// --- Helper Methods for AnnualSales Data ---
-	private async Task<List<dynamic>> LoadAnnualSalesDataAsync()
-	{
-		if (!DealerId.HasValue || DealerId.Value <= 0)
-			return new();
+	private async Task LoadAnnualSalesDataAsync()
+{
+    if (!DealerId.HasValue || DealerId.Value <= 0)
+    {
+        _annualSalesData = new();
+        return;
+    }
 
-		try
-		{
-			return await Http.GetFromJsonAsync<List<dynamic>>($"api/AnnualSaleDataLastFY/all") ?? new();
-		}
-		catch
-		{
-			return new();
-		}
-	}
+    var allAnnualSales =
+        await SafeGetAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all")
+        ?? new();
 
-	private decimal CalculateOtherFertilizerAnnualQty(List<dynamic> annualSalesData)
-	{
-		var otherFertProducts = GetOtherFertilizerProducts();
-		if (otherFertProducts.Count == 0) return 0;
+    _annualSalesData = allAnnualSales
+        .Where(x => x.DealerId == DealerId.Value)
+        .ToList();
+}
+private bool IsOtherFertilizerAnnualRow(AnnualSaleDataLastFYofDealerRegistration row)
+{
+    var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+    return IsOtherFertilizerProduct(product);
+}
+	private decimal CalculateOtherFertilizerAnnualQty()
+{
+    return _annualSalesData
+        .Where(IsOtherFertilizerAnnualRow)
+        .Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
+}
 
-		decimal totalQty = 0;
-		try
-		{
-			foreach (var product in otherFertProducts)
-			{
-				var record = annualSalesData
-					.FirstOrDefault(a => a.GetType().GetProperty("ProductId")?.GetValue(a)?.ToString() == product.Id.ToString()
-						&& a.GetType().GetProperty("DealerId")?.GetValue(a)?.ToString() == DealerId.ToString());
-
-				if (record != null)
-				{
-					var ownRetailQty = (decimal?)record.GetType().GetProperty("OwnRetailsSaleQty")?.GetValue(record) ?? 0;
-					var dealerQty = (decimal?)record.GetType().GetProperty("SaleToDealerQty")?.GetValue(record) ?? 0;
-					totalQty += ownRetailQty + dealerQty;
-				}
-			}
-		}
-		catch
-		{
-			// If JSON deserialization fails, return 0
-		}
-
-		return totalQty;
-	}
-
-	private decimal CalculateOtherFertilizerAnnualTurnover(List<dynamic> annualSalesData)
-	{
-		var otherFertProducts = GetOtherFertilizerProducts();
-		if (otherFertProducts.Count == 0) return 0;
-
-		decimal totalTurnover = 0;
-		try
-		{
-			foreach (var product in otherFertProducts)
-			{
-				var record = annualSalesData
-					.FirstOrDefault(a => a.GetType().GetProperty("ProductId")?.GetValue(a)?.ToString() == product.Id.ToString()
-						&& a.GetType().GetProperty("DealerId")?.GetValue(a)?.ToString() == DealerId.ToString());
-
-				if (record != null)
-				{
-					var ownRetailAmount = (decimal?)record.GetType().GetProperty("OwnRetailsSaleAmount")?.GetValue(record) ?? 0;
-					var dealerAmount = (decimal?)record.GetType().GetProperty("SaleToDealerAmount")?.GetValue(record) ?? 0;
-					totalTurnover += ownRetailAmount + dealerAmount;
-				}
-			}
-		}
-		catch
-		{
-			// If JSON deserialization fails, return 0
-		}
-
-		// Convert to Lakhs
-		return ConvertToLakhs((double)totalTurnover);
-	}
+	private decimal CalculateOtherFertilizerAnnualTurnover()
+{
+    return _annualSalesData
+        .Where(IsOtherFertilizerAnnualRow)
+        .Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+}
 
 	// --- Helper Methods for Sales Performance Data ---
-	private decimal CalculateOtherFertilizerSalesQty()
-	{
-		var otherFertProducts = GetOtherFertilizerProducts();
-		if (otherFertProducts.Count == 0) return 0;
+	private bool IsOtherFertilizerCreditLimitSalesRow(DealerCreditLimitSales row)
+{
+    var product = _products.FirstOrDefault(p => p.Id == row.SubGroupId);
+    return IsOtherFertilizerProduct(product);
+}
 
-		decimal totalQty = 0;
-		foreach (var product in otherFertProducts)
-		{
-			var fyIds = new[] { _proposal.FY1, _proposal.FY2, _proposal.FY3 }
-				.Where(x => x > 0)
-				.ToList();
+private bool IsSpecialityCreditLimitSalesRow(DealerCreditLimitSales row)
+{
+    var product = _products.FirstOrDefault(p => p.Id == row.SubGroupId);
+    return IsSpecialityProduct(product);
+}
 
-			foreach (var fyId in fyIds)
-			{
-				var salesData = GetCreditLimitSales(product.Id, fyId);
-				if (salesData != null)
-				{
-					totalQty += salesData.Quantity;
-				}
-			}
-		}
+private decimal CalculateOtherFertilizerSalesQty()
+{
+    return _greenstarDefaultSalesData
+        .Where(IsOtherFertilizerCreditLimitSalesRow)
+        .Sum(r => r.Quantity);
+}
 
-		return totalQty;
-	}
+private decimal CalculateOtherFertilizerSalesTurnover()
+{
+    var grossAmount = _greenstarDefaultSalesData
+        .Where(IsOtherFertilizerCreditLimitSalesRow)
+        .Sum(r => r.GrossAmount);
 
-	private decimal CalculateOtherFertilizerSalesTurnover()
-	{
-		var otherFertProducts = GetOtherFertilizerProducts();
-		if (otherFertProducts.Count == 0) return 0;
+    return ConvertToLakhs(grossAmount);
+}
 
-		double totalAmount = 0;
-		foreach (var product in otherFertProducts)
-		{
-			var fyIds = new[] { _proposal.FY1, _proposal.FY2, _proposal.FY3 }
-				.Where(x => x > 0)
-				.ToList();
+private decimal CalculateSpecialitySalesTurnover()
+{
+    var grossAmount = _greenstarDefaultSalesData
+        .Where(IsSpecialityCreditLimitSalesRow)
+        .Sum(r => r.GrossAmount);
 
-			foreach (var fyId in fyIds)
-			{
-				var salesData = GetCreditLimitSales(product.Id, fyId);
-				if (salesData != null)
-				{
-					totalAmount += salesData.GrossAmount;
-				}
-			}
-		}
-
-		return ConvertToLakhs(totalAmount);
-	}
-
-	private decimal CalculateSpecialitySalesTurnover()
-	{
-		var specialProducts = GetSpecialityProducts();
-		if (specialProducts.Count == 0) return 0;
-
-		double totalAmount = 0;
-		foreach (var product in specialProducts)
-		{
-			var fyIds = new[] { _proposal.FY1, _proposal.FY2, _proposal.FY3 }
-				.Where(x => x > 0)
-				.ToList();
-
-			foreach (var fyId in fyIds)
-			{
-				var salesData = GetCreditLimitSales(product.Id, fyId);
-				if (salesData != null)
-				{
-					totalAmount += salesData.GrossAmount;
-				}
-			}
-		}
-
-		return ConvertToLakhs(totalAmount);
-	}
+    return ConvertToLakhs(grossAmount);
+}
 
 	// --- Main Method to Load All GreenStar Valuation Default Values ---
 	private async Task LoadGreenstarValuationDefaultValues()
-	{
-		try
-		{
-			// Load AnnualSales data
-			var annualSalesData = await LoadAnnualSalesDataAsync();
+{
+    try
+    {
+        await LoadAnnualSalesDataAsync();
+        await LoadGreenstarDefaultSalesPerformanceData();
 
-			// Row 1: Total Other Fertilizer Sales Qty from AnnualSales
-			var otherFertAnnualQty = CalculateOtherFertilizerAnnualQty(annualSalesData);
-			if (otherFertAnnualQty > 0 && _greenstarValues[0] == 0)
-			{
-				_greenstarValues[0] = (double)otherFertAnnualQty;
-				_greenstarValueEntered[0] = true;
-			}
+        // Row 1: AnnualSales Other Fertilizer Qty
+        var otherFertAnnualQty = CalculateOtherFertilizerAnnualQty();
+        if (otherFertAnnualQty > 0 && !_greenstarValueEntered[0])
+        {
+            _greenstarValues[0] = (double)otherFertAnnualQty;
+            _greenstarValueEntered[0] = true;
+        }
 
-			// Row 2: Total Other Fertilizer Sales Qty from SalesPerformance
-			var otherFertSalesQty = CalculateOtherFertilizerSalesQty();
-			if (otherFertSalesQty > 0 && _greenstarValues[1] == 0)
-			{
-				_greenstarValues[1] = (double)otherFertSalesQty;
-				_greenstarValueEntered[1] = true;
-			}
+        // Row 2: SalesPerformance Other Fertilizer Qty
+        var otherFertSalesQty = CalculateOtherFertilizerSalesQty();
+        if (otherFertSalesQty > 0 && !_greenstarValueEntered[1])
+        {
+            _greenstarValues[1] = (double)otherFertSalesQty;
+            _greenstarValueEntered[1] = true;
+        }
 
-			// Row 3: Total Other Fertilizer Sales Turnover from AnnualSales (in Lakhs)
-			var otherFertAnnualTurnover = CalculateOtherFertilizerAnnualTurnover(annualSalesData);
-			if (otherFertAnnualTurnover > 0 && _greenstarValues[2] == 0)
-			{
-				_greenstarValues[2] = (double)otherFertAnnualTurnover;
-				_greenstarValueEntered[2] = true;
-			}
+        // Row 3: AnnualSales Other Fertilizer Turnover in Lakhs
+        var otherFertAnnualTurnover = CalculateOtherFertilizerAnnualTurnover();
+        if (otherFertAnnualTurnover > 0 && !_greenstarValueEntered[2])
+        {
+            _greenstarValues[2] = (double)otherFertAnnualTurnover;
+            _greenstarValueEntered[2] = true;
+        }
 
-			// Row 4: Total Other Fertilizer Sales Turnover from SalesPerformance (in Lakhs)
-			var otherFertSalesTurnover = CalculateOtherFertilizerSalesTurnover();
-			if (otherFertSalesTurnover > 0 && _greenstarValues[3] == 0)
-			{
-				_greenstarValues[3] = (double)otherFertSalesTurnover;
-				_greenstarValueEntered[3] = true;
-			}
+        // Row 4: SalesPerformance Other Fertilizer Turnover in Lakhs
+        var otherFertSalesTurnover = CalculateOtherFertilizerSalesTurnover();
+        if (otherFertSalesTurnover > 0 && !_greenstarValueEntered[3])
+        {
+            _greenstarValues[3] = (double)otherFertSalesTurnover;
+            _greenstarValueEntered[3] = true;
+        }
 
-			// Row 5: Speciality Products Turnover from SalesPerformance (in Lakhs)
-			var specialityTurnover = CalculateSpecialitySalesTurnover();
-			if (specialityTurnover > 0 && _greenstarValues[4] == 0)
-			{
-				_greenstarValues[4] = (double)specialityTurnover;
-				_greenstarValueEntered[4] = true;
-			}
+        // Row 5: SalesPerformance Speciality Products Turnover in Lakhs
+        var specialityTurnover = CalculateSpecialitySalesTurnover();
+        if (specialityTurnover > 0 && !_greenstarValueEntered[4])
+        {
+            _greenstarValues[4] = (double)specialityTurnover;
+            _greenstarValueEntered[4] = true;
+        }
 
-			// Row 6: Dealership tenure from DealerRegistration
-			if (_dealer?.YearsofExperiance > 0 && _greenstarValues[5] == 0)
-			{
-				_greenstarValues[5] = _dealer.YearsofExperiance;
-				_greenstarValueEntered[5] = true;
-			}
+        // Row 6: Dealer experience
+        if (_dealer?.YearsofExperiance > 0 && !_greenstarValueEntered[5])
+        {
+            _greenstarValues[5] = _dealer.YearsofExperiance;
+            _greenstarValueEntered[5] = true;
+        }
 
-			// Row 7: Monthly Average Net Overdues - Do NOT auto-feed
-			// User enters this manually
+        // Row 7: Manual only
+        // Do not auto-feed _greenstarValues[6]
 
-			// Row 8: Fixed Assets Value (LandTotal + BuildingTotal)
-			var totalFixedAssets = (double)(LandTotal + BuildingTotal);
-			if (totalFixedAssets > 0 && _greenstarValues[7] == 0)
-			{
-				_greenstarValues[7] = totalFixedAssets;
-				_greenstarValueEntered[7] = true;
-			}
+        // Row 8: Fixed Assets = LandTotal + BuildingTotal
+        var fixedAssets = LandTotal + BuildingTotal;
+        if (fixedAssets > 0 && !_greenstarValueEntered[7])
+        {
+            _greenstarValues[7] = (double)fixedAssets;
+            _greenstarValueEntered[7] = true;
+        }
 
-			// Row 9: Property Value as % - Automatic calculation, do NOT set directly
+        // Row 9: Auto calculation only
+        // Do not directly set _greenstarValues[8]
 
-			// Row 10: GreenStar Securities Total
-			var securityTotal = _proposal.GreenstarFDAmount + _proposal.GreenstarBGAmount 
-				+ _proposal.GreenstarCollateralAmount + _proposal.GreenstarTradeDepositAmount;
-			if (securityTotal > 0 && _greenstarValues[9] == 0)
-			{
-				_greenstarValues[9] = (double)securityTotal;
-				_greenstarValueEntered[9] = true;
-			}
+        // Row 10: GreenStar Securities total
+        var securityTotal =
+            _proposal.GreenstarFDAmount +
+            _proposal.GreenstarBGAmount +
+            _proposal.GreenstarCollateralAmount +
+            _proposal.GreenstarTradeDepositAmount;
 
-			// Row 11: Available Security as % - Automatic calculation, do NOT set directly
+        if (securityTotal > 0 && !_greenstarValueEntered[9])
+        {
+            _greenstarValues[9] = (double)securityTotal;
+            _greenstarValueEntered[9] = true;
+        }
 
-			// Recalculate percentages for rows 9 and 11
-			RecalculateGreenstarPercentages();
-		}
-		catch (Exception ex)
-		{
-			System.Diagnostics.Debug.WriteLine($"Error loading GreenStar valuation defaults: {ex.Message}");
-		}
-	}
+        // Row 11: Auto calculation only
+        // Do not directly set _greenstarValues[10]
+
+        RecalculateGreenstarPercentages();
+    }
+    catch (Exception ex)
+    {
+        System.Diagnostics.Debug.WriteLine($"Error loading GreenStar valuation defaults: {ex.Message}");
+    }
+}
 
 	// --- Save & Navigate ---
 	private async Task HandleNext()
@@ -1488,6 +1473,47 @@ private async Task<bool> HasGreenStarCompany()
     catch
     {
         return false;
+    }
+}
+private async Task LoadGreenstarDefaultSalesPerformanceData()
+{
+    _greenstarDefaultSalesData = new();
+
+    if (_dealer.Id <= 0)
+        return;
+
+    var fyIds = new[]
+    {
+        _proposal.FY1,
+        _proposal.FY2,
+        _proposal.FY3
+    }
+    .Where(x => x > 0)
+    .Distinct()
+    .ToList();
+
+    if (fyIds.Count == 0)
+        return;
+
+    var categoryIds = _categories
+        .Where(c => IsFertilizerCategory(c) || IsSpecialityCategory(c))
+        .Select(c => c.Id)
+        .Distinct()
+        .ToList();
+
+    var fyQuery = string.Join(",", fyIds);
+
+    foreach (var categoryId in categoryIds)
+    {
+        var url =
+            $"api/creditlimitsales/by-filter" +
+            $"?customerId={_dealer.Id}" +
+            $"&categoryId={categoryId}" +
+            $"&financialYearIds={fyQuery}";
+
+        var rows = await SafeGetAsync<List<DealerCreditLimitSales>>(url) ?? new();
+
+        _greenstarDefaultSalesData.AddRange(rows);
     }
 }
 }

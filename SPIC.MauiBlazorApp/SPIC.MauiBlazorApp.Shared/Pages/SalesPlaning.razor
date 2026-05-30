@@ -76,6 +76,21 @@
     .sp-spic-table tfoot .sticky-first-col {
         font-size: 14px !important;
     }
+    .sp-summary-inline-value {
+    font-size: 17px;
+    font-weight: 700;
+    color: #2563eb;
+    line-height: 1.3;
+    margin-top: 8px;
+    white-space: nowrap;
+}
+
+@@media (max-width: 576px) {
+    .sp-summary-inline-value {
+        font-size: 16px;
+        white-space: normal;
+    }
+}
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
@@ -242,7 +257,7 @@
             @{
                 var ureaTotals = GetFertilizerUreaTotals();
                 var otherFertTotals = GetFertilizerOtherProductTotals();
-                var specialityTotalAmount = GetSpecialityTotalAmount();
+                var specialityTotals = GetSpecialityTotals();
             }
 
             <!-- Fertilizer Products Summary -->
@@ -259,16 +274,10 @@
                     <div class="sp-bottom-grid-compact mt-3">
                         <!-- Urea Products -->
                         <div class="sp-bottom-item-compact">
-                            <div class="sp-summary-label">Urea Products</div>
+                            <div class="sp-summary-label">Urea</div>
 
-                            <div class="sp-summary-value">
-                                @ureaTotals.Qty.ToString("N2")
-                                <span class="sp-summary-suffix">MT</span>
-                            </div>
-
-                            <div class="sp-summary-value sp-summary-value-blue mt-1">
-                                ₹@ureaTotals.Amount.ToString("N2")
-                                <span class="sp-summary-suffix">Lakhs</span>
+                            <div class="sp-summary-inline-value">
+                                @ureaTotals.Qty.ToString("N2") MT / ₹@ureaTotals.Amount.ToString("N2") Lakhs
                             </div>
                         </div>
 
@@ -276,14 +285,8 @@
                         <div class="sp-bottom-item-compact sp-bottom-item-compact-right">
                             <div class="sp-summary-label">Other Fertilizer Products</div>
 
-                            <div class="sp-summary-value">
-                                @otherFertTotals.Qty.ToString("N2")
-                                <span class="sp-summary-suffix">MT</span>
-                            </div>
-
-                            <div class="sp-summary-value sp-summary-value-blue mt-1">
-                                ₹@otherFertTotals.Amount.ToString("N2")
-                                <span class="sp-summary-suffix">Lakhs</span>
+                            <div class="sp-summary-inline-value">
+                                @otherFertTotals.Qty.ToString("N2") MT / ₹@otherFertTotals.Amount.ToString("N2") Lakhs
                             </div>
                         </div>
                     </div>
@@ -303,10 +306,10 @@
 
                     <div class="sp-speciality-compact">
                         <div>
-                            <div class="sp-summary-label">Total Amount</div>
-                            <div class="sp-summary-value sp-summary-value-blue">
-                                ₹@specialityTotalAmount.ToString("N2")
-                                <span class="sp-summary-suffix">Lakhs</span>
+                            <div class="sp-summary-label">Total Specialty Products</div>
+
+                            <div class="sp-summary-inline-value">
+                                @specialityTotals.Qty.ToString("N2") MT / ₹@specialityTotals.Amount.ToString("N2") Lakhs
                             </div>
                         </div>
                     </div>
@@ -733,7 +736,17 @@
                 r.MarchAmount
             );
     }
+    private (decimal Qty, decimal Amount) GetSpecialityTotals()
+{
+    var specialityRows = _allSalesData
+        .Where(IsSpecialityRow)
+        .ToList();
 
+    var totalQty = specialityRows.Sum(GetRowTotalQty);
+    var totalAmount = specialityRows.Sum(GetRowTotalAmount);
+
+    return (totalQty, totalAmount);
+}
     private void ShowMessage(string message, bool isError)
     {
         _message = message;

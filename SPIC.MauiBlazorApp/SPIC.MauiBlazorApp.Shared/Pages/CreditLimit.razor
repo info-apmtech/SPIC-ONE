@@ -113,12 +113,14 @@
     FinancialYears="_financialYears"
     SalesPerfRows="_salesPerfViewRows"
     SelectedCategoryId="_selectedCategoryId"
-    SelectedUnitName="_selectedUnitName"
+    SelectedUnitName="@_selectedUnitName"
     FY1="_proposal.FY1"
     FY2="_proposal.FY2"
     FY3="_proposal.FY3"
-    SalesPlanTotalQty="SalesPlanTotalQty"
-    SalesPlanTotalAmount="SalesPlanTotalAmount"
+    SalesPlanTotalQty="@SalesPlanTotalQty"
+    SalesPlanTotalAmount="@SalesPlanTotalAmount"
+    SalesPlanCardTitle="SPIC Sales Plan (Current FY)"
+    SalesPlanUnitName="MT"
     Company="SPIC"
     OnCategoryChanged="SelectCategory" />
 	@if (_dealer.InSpic && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
@@ -490,6 +492,7 @@
 	private DealerCreditLimitProposal _proposal = new();
 	private List<DealerCreditLimitSales> _creditLimitSalesData = new();
 	private List<SalesPerfViewRow> _salesPerfViewRows = new();
+	private List<AnnualSaleDataLastFYofDealerRegistration> _annualSalesData = new();
 
 	private int _selectedCategoryId;
 	private string _selectedUnitName = "MT";
@@ -507,15 +510,42 @@
 	private decimal LoansTotal => _loanLiabilities.Sum(l => l.LoanValue);
 
 	// Sales Plan totals
-	private decimal SalesPlanTotalQty => _salesPlanData
-		.Where(s => s.CategoryId == _selectedCategoryId)
-		.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty +
-			r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
+	private IEnumerable<SalesPlanningInDealerRegistration> SpicSalesPlanRows =>
+    _salesPlanData.Where(row =>
+        IsFertilizerSalesPlanRow(row) &&
+        IsUreaSalesPlanRow(row));
 
-	private decimal SalesPlanTotalAmount => _salesPlanData
-		.Where(s => s.CategoryId == _selectedCategoryId)
-		.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount +
-			r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
+private decimal SalesPlanTotalQty =>
+    SpicSalesPlanRows.Sum(GetSalesPlanRowTotalQty);
+
+private decimal SalesPlanTotalAmount =>
+    SpicSalesPlanRows.Sum(GetSalesPlanRowTotalAmount);
+
+private static decimal GetSalesPlanRowTotalQty(SalesPlanningInDealerRegistration r) =>
+    r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty +
+    r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty +
+    r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty;
+
+private static decimal GetSalesPlanRowTotalAmount(SalesPlanningInDealerRegistration r) =>
+    r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount +
+    r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount +
+    r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount;
+
+private bool IsFertilizerSalesPlanRow(SalesPlanningInDealerRegistration row)
+{
+    var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+
+    return category?.Name != null &&
+           category.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
+}
+
+private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
+{
+    var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+
+    return product?.Name != null &&
+           product.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+}
 
 	// Credit limit calculations — SPIC
 	private double SpicTotalMark => Enumerable.Range(0, 10).Where(i => _valuationParams[i].Weightage > 0).Sum(i => GetSpicMark(i));
@@ -623,13 +653,18 @@
 		}
 
 		if (_categories.Count > 0)
-		{
-			_selectedCategoryId = _categories.First().Id;
-			UpdateSelectedUnit();
-		}
+{
+    _selectedCategoryId = GetDefaultCategoryIdForCompany();
+    UpdateSelectedUnit();
+}
 
-		SetFixedFinancialYears();
-		await LoadCreditLimitSalesData();
+SetFixedFinancialYears();
+await LoadCreditLimitSalesData();
+
+if (DealerId.HasValue && DealerId.Value > 0)
+{
+    await LoadSpicValuationDefaultValues();
+}
 	}
 
 	private async Task<T?> SafeGetAsync<T>(string url)
@@ -637,7 +672,21 @@
 		try { return await Http.GetFromJsonAsync<T>(url); }
 		catch { return default; }
 	}
+	private int GetDefaultCategoryIdForCompany()
+{
+    if (!string.IsNullOrEmpty(SelectedCompany) &&
+        SelectedCompany.Equals("SPIC", StringComparison.OrdinalIgnoreCase))
+    {
+        var fertilizerCategory = _categories.FirstOrDefault(c =>
+            !string.IsNullOrWhiteSpace(c.Name) &&
+            c.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase));
 
+        if (fertilizerCategory != null)
+            return fertilizerCategory.Id;
+    }
+
+    return _categories.FirstOrDefault()?.Id ?? 0;
+}
 	private void InitValuesFromData()
 	{
 		RecalculateSpicPercentages();
@@ -816,14 +865,20 @@
 	private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx);
 
 	private void OnSpicValueChanged(int idx, ChangeEventArgs e)
-	{
-		if (double.TryParse(e.Value?.ToString(), out var val))
-		{
-			_spicValues[idx] = val;
-			_spicValueEntered[idx] = true;
-		}
-		RecalculateSpicPercentages();
-	}
+{
+    if (double.TryParse(e.Value?.ToString(), out var val))
+    {
+        _spicValues[idx] = val;
+        _spicValueEntered[idx] = true;
+    }
+    else if (string.IsNullOrWhiteSpace(e.Value?.ToString()))
+    {
+        _spicValues[idx] = 0;
+        _spicValueEntered[idx] = false;
+    }
+
+    RecalculateSpicPercentages();
+}
 
 	private static double CalculateMark(int idx, double v) => idx switch
 	{
@@ -945,4 +1000,155 @@
 		_proposal.FY2 = selectedYears.Count > 1 ? selectedYears[1].Id : 0;
 		_proposal.FY3 = selectedYears.Count > 2 ? selectedYears[2].Id : 0;
 	}
+	private bool IsUreaProduct(Product? product)
+{
+    return product?.Name != null &&
+           product.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+}
+
+private bool IsFertilizerCategory(Category? category)
+{
+    return category?.Name != null &&
+           category.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
+}
+
+private bool IsUreaAnnualSalesRow(AnnualSaleDataLastFYofDealerRegistration row)
+{
+    var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+    var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+
+    return IsFertilizerCategory(category) && IsUreaProduct(product);
+}
+
+private bool IsUreaCreditLimitSalesRow(DealerCreditLimitSales row)
+{
+    var product = _products.FirstOrDefault(p => p.Id == row.SubGroupId);
+    var category = _categories.FirstOrDefault(c => c.Id == row.ProductGroupId);
+
+    return IsFertilizerCategory(category) && IsUreaProduct(product);
+}
+private async Task LoadAnnualSalesData()
+{
+    if (!DealerId.HasValue || DealerId.Value <= 0)
+    {
+        _annualSalesData = new();
+        return;
+    }
+
+    var allAnnualSales =
+        await SafeGetAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all")
+        ?? new();
+
+    _annualSalesData = allAnnualSales
+        .Where(x => x.DealerId == DealerId.Value)
+        .ToList();
+}
+
+private decimal GetAnnualSalesUreaQty()
+{
+    return _annualSalesData
+        .Where(IsUreaAnnualSalesRow)
+        .Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
+}
+
+private decimal GetAnnualSalesUreaTurnover()
+{
+    return _annualSalesData
+        .Where(IsUreaAnnualSalesRow)
+        .Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+}
+private decimal GetSalesPerformanceUreaQty()
+{
+    return _creditLimitSalesData
+        .Where(IsUreaCreditLimitSalesRow)
+        .Sum(r => r.Quantity);
+}
+
+private decimal GetSalesPerformanceUreaTurnover()
+{
+    var grossAmount = _creditLimitSalesData
+        .Where(IsUreaCreditLimitSalesRow)
+        .Sum(r => r.GrossAmount);
+
+    return ConvertToLakhs(grossAmount);
+}
+private async Task LoadSpicValuationDefaultValues()
+{
+    if (!DealerId.HasValue || DealerId.Value <= 0)
+        return;
+
+    await LoadAnnualSalesData();
+
+    // Row 1: AnnualSales Urea Qty
+    var annualUreaQty = GetAnnualSalesUreaQty();
+    if (annualUreaQty > 0 && !_spicValueEntered[0])
+    {
+        _spicValues[0] = (double)annualUreaQty;
+        _spicValueEntered[0] = true;
+    }
+
+    // Row 2: Sales Performance Urea Qty
+    var salesPerformanceUreaQty = GetSalesPerformanceUreaQty();
+    if (salesPerformanceUreaQty > 0 && !_spicValueEntered[1])
+    {
+        _spicValues[1] = (double)salesPerformanceUreaQty;
+        _spicValueEntered[1] = true;
+    }
+
+    // Row 3: AnnualSales Urea Turnover in Lakhs
+    var annualUreaTurnover = GetAnnualSalesUreaTurnover();
+    if (annualUreaTurnover > 0 && !_spicValueEntered[2])
+    {
+        _spicValues[2] = (double)annualUreaTurnover;
+        _spicValueEntered[2] = true;
+    }
+
+    // Row 4: Sales Performance Urea Turnover in Lakhs
+    var salesPerformanceUreaTurnover = GetSalesPerformanceUreaTurnover();
+    if (salesPerformanceUreaTurnover > 0 && !_spicValueEntered[3])
+    {
+        _spicValues[3] = (double)salesPerformanceUreaTurnover;
+        _spicValueEntered[3] = true;
+    }
+
+    // Row 5: SPIC dealership experience
+    if (_dealer?.YearsofExperiance > 0 && !_spicValueEntered[4])
+    {
+        _spicValues[4] = _dealer.YearsofExperiance;
+        _spicValueEntered[4] = true;
+    }
+
+    // Row 6: Manual only
+    // Do not auto-feed _spicValues[5]
+
+    // Row 7: Fixed Assets = LandTotal + BuildingTotal
+    var fixedAssets = LandTotal + BuildingTotal;
+    if (fixedAssets > 0 && !_spicValueEntered[6])
+    {
+        _spicValues[6] = (double)fixedAssets;
+        _spicValueEntered[6] = true;
+    }
+
+    // Row 8: Auto calculation only
+    // Do not directly set _spicValues[7]
+
+    // Row 9: SPIC Securities total
+    var spicSecurityTotal =
+        _proposal.SpicFDAmount +
+        _proposal.SpicBGAmount +
+        _proposal.SpicCollateralAmount +
+        _proposal.SpicTradeDepositAmount;
+
+    if (spicSecurityTotal > 0 && !_spicValueEntered[8])
+    {
+        _spicValues[8] = (double)spicSecurityTotal;
+        _spicValueEntered[8] = true;
+    }
+
+    // Row 10: Auto calculation only
+    // Do not directly set _spicValues[9]
+
+    RecalculateSpicPercentages();
+}
+
 }
