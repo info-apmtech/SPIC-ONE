@@ -83,17 +83,17 @@ namespace SpicAPI.Controllers
             //    This avoids a full-table scan while still returning tracked EF entities for updates.
             var matchingDealers = await _db.DealerRegistrations
                 .Where(d =>
-                    (d.SPICCode    != null && allNumericCodes.Contains(d.SPICCode)) ||
+                    (d.SPICCode != null && allNumericCodes.Contains(d.SPICCode)) ||
                     (d.GreenStarCode != null && allNumericCodes.Contains(d.GreenStarCode)) ||
-                    (d.TnCode      != null && allNumericCodes.Contains(d.TnCode)))
+                    (d.TnCode != null && allNumericCodes.Contains(d.TnCode)))
                 .ToListAsync();
 
             var dealerByNumeric = new Dictionary<string, DealerRegistration>(StringComparer.OrdinalIgnoreCase);
             foreach (var d in matchingDealers)
             {
-                if (!string.IsNullOrEmpty(d.SPICCode))      dealerByNumeric.TryAdd(d.SPICCode,      d);
+                if (!string.IsNullOrEmpty(d.SPICCode)) dealerByNumeric.TryAdd(d.SPICCode, d);
                 if (!string.IsNullOrEmpty(d.GreenStarCode)) dealerByNumeric.TryAdd(d.GreenStarCode, d);
-                if (!string.IsNullOrEmpty(d.TnCode))        dealerByNumeric.TryAdd(d.TnCode,        d);
+                if (!string.IsNullOrEmpty(d.TnCode)) dealerByNumeric.TryAdd(d.TnCode, d);
             }
 
             var groupedErrors = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -107,7 +107,7 @@ namespace SpicAPI.Controllers
             var now = DateTime.UtcNow;
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             int inserted = 0;
-            int updated  = 0;
+            int updated = 0;
 
             // In-batch new-entity tracking: numericCode → pending DealerRegistration (not yet saved)
             var batchNew = new Dictionary<string, DealerRegistration>(StringComparer.OrdinalIgnoreCase);
@@ -119,9 +119,9 @@ namespace SpicAPI.Controllers
                 {
                     try
                     {
-                        var customer     = GetCell(row, "customer");
+                        var customer = GetCell(row, "customer");
                         var customerName = GetCell(row, "customername");
-                        var stateName    = GetCell(row, "state");
+                        var stateName = GetCell(row, "state");
 
                         if (string.IsNullOrEmpty(customer))
                         {
@@ -189,41 +189,41 @@ namespace SpicAPI.Controllers
                             // INSERT: create new dealer record
                             var dealer = new DealerRegistration
                             {
-                                FirmName              = customerName,
-                                StateId               = stateId,
-                                DealerStateId         = stateId,
-                                InSpic                = prefix == 'Z',
-                                InGreenStar           = prefix == 'N',
-                                IsDealer              = true,
-                                Status                = DealerStatus.Active,
-                                CreatedAt             = now,
-                                UpdatedAt             = now,
-                                UpdatedBy             = userId,
-                                CreatedBy             = userId,
-                                UserTableId           = userId,
+                                FirmName = customerName,
+                                StateId = stateId,
+                                DealerStateId = stateId,
+                                InSpic = prefix == 'Z',
+                                InGreenStar = prefix == 'N',
+                                IsDealer = true,
+                                Status = DealerStatus.Active,
+                                CreatedAt = now,
+                                UpdatedAt = now,
+                                UpdatedBy = userId,
+                                CreatedBy = userId,
+                                UserTableId = string.Empty,
                                 ShopNoORRoomNoOrBlockNo = string.Empty,
-                                Village               = string.Empty,
-                                PinCode               = string.Empty,
+                                Village = string.Empty,
+                                PinCode = string.Empty,
                                 OfficialContactNumber = string.Empty,
-                                WhatsAppNumber        = string.Empty,
-                                AccountHolderName     = string.Empty,
-                                AccountNumber         = string.Empty,
-                                Branch                = string.Empty,
-                                IFSC                  = string.Empty,
+                                WhatsAppNumber = string.Empty,
+                                AccountHolderName = string.Empty,
+                                AccountNumber = string.Empty,
+                                Branch = string.Empty,
+                                IFSC = string.Empty,
                             };
 
                             switch (prefix)
                             {
                                 case 'Z':
-                                    dealer.SPICCode   = customer;
+                                    dealer.SPICCode = customer;
                                     dealer.DealerCode = numericCode;
                                     break;
                                 case 'N':
                                     dealer.GreenStarCode = customer;
-                                    dealer.DealerCode    = numericCode;
+                                    dealer.DealerCode = numericCode;
                                     break;
                                 case 'D':
-                                    dealer.TnCode     = customer;
+                                    dealer.TnCode = customer;
                                     dealer.DealerCode = numericCode;
                                     break;
                                 default:
