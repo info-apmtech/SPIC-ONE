@@ -2,6 +2,7 @@
 @using System.Net.Http.Headers
 @inject HttpClient Http
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject SPIC.MauiBlazorApp.Shared.Services.AppSearchState SearchState
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -26,11 +27,20 @@
 		<div class="topbar">
 			<div class="search-box">
 				<i class="bi bi-search"></i>
-				<input type="text" class="form-control" placeholder="Search something here">
+				<input type="text" class="form-control"
+					   placeholder="Search something here"
+					   value="@SearchState.Query"
+					   @oninput="OnGlobalSearchInput"
+					   @onkeydown="HandleSearchKeyDown" />
+				@if (SearchState.HasQuery)
+				{
+					<i class="bi bi-x-circle-fill global-search-clear"
+					   title="Clear search"
+					   @onclick="() => SearchState.Clear()"></i>
+				}
 			</div>
 
 			<div class="top-actions">
-				@* <button class="icon-btn"><i class="bi bi-bell"></i></button> *@
 				<button class="icon-btn"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationBell.svg" alt="Notification" class="iconimg" /></button>
 				<div class="profile">
 					<button class="btn btn-link nav-link p-0" @onclick="Logout">
@@ -158,7 +168,26 @@
 		</nav>
 	</div>
 </div>
+<style>
+	.search-box {
+		position: relative;
+	}
 
+	.global-search-clear {
+		position: absolute;
+		right: 12px;
+		top: 50%;
+		transform: translateY(-50%);
+		color: #9CA3AF;
+		cursor: pointer;
+		font-size: 0.95rem;
+		transition: color 0.15s;
+	}
+
+		.global-search-clear:hover {
+			color: #EF4444;
+		}
+</style>
 @code {
 	private bool _isReady;
 	private bool isSettingsOpen = false;
@@ -180,7 +209,10 @@
 			_isReady = true;
 		}
 	}
-
+	private void OnGlobalSearchInput(ChangeEventArgs e)
+	{
+		SearchState.Query = e.Value?.ToString() ?? "";
+	}
 	private void ToggleSettingsMenu()
 	{
 		isSettingsOpen = !isSettingsOpen;
@@ -230,6 +262,19 @@
 			{
 				Navigation.NavigateTo("/login");
 			}
+		}
+	}
+
+	private async Task HandleSearchKeyDown(KeyboardEventArgs e)
+	{
+		// If the user hits Enter, tell JS to click the highlighted link
+		if (e.Key == "Enter")
+		{
+			try
+			{
+				await JS.InvokeVoidAsync("navSearch.clickMatch");
+			}
+			catch { }
 		}
 	}
 }

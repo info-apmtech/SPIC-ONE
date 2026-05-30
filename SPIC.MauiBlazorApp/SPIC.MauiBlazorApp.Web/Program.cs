@@ -19,6 +19,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
 builder.Services.AddScoped<LoginState>();
 builder.Services.AddScoped<LoadingService>();
+builder.Services.AddScoped<AppSearchState>();
 
 // ADD THIS
 builder.Services.AddSingleton(new PlatformService
