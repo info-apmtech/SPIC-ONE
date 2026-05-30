@@ -217,68 +217,78 @@
 				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
 					 class="total-card-bg"
 					 alt="Urea" />
-				<div class="total-value-title">Urea Product - By Category</div>
-				<div style="padding: 15px 0;">
-					@{
-						var ureaProduct = _products.FirstOrDefault(p => p.Name != null && p.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase));
-						if (ureaProduct != null)
-						{
-							<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
-								@foreach (var cat in _categories)
-								{
-									var ureaData = _allSalesData.FirstOrDefault(s => s.ProductId == ureaProduct.Id && s.CategoryId == cat.Id);
-									if (ureaData != null)
-									{
-										var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
-										var totalQty = ureaData.OwnRetailsSaleQty + ureaData.SaleToDealerQty;
-										var totalAmt = ureaData.OwnRetailsSaleAmount + ureaData.SaleToDealerAmount;
-										<div style="border-left: 3px solid #059669; padding-left: 10px;">
-											<div style="font-weight: 600; color: #374151; font-size: 12px;">@cat.Name</div>
-											<div style="color: #059669; font-weight: 700; font-size: 14px;">₹ @totalAmt.ToString("N0") Lakhs</div>
-											<div style="color: #6B7280; font-size: 12px;">@totalQty.ToString("N2") @unitName</div>
-										</div>
-									}
-								}
-							</div>
-						}
-						else
-						{
-							<p style="color: #6B7280; margin: 0;">No Urea data available</p>
-						}
+
+				<div class="total-value-title">Urea - Fertilizer</div>
+
+				@{
+					var ureaProduct = _products.FirstOrDefault(p =>
+						p.Name != null &&
+						p.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase));
+
+					decimal ureaTotalQty = 0;
+					decimal ureaTotalAmt = 0;
+
+					if (ureaProduct != null)
+					{
+						var ureaRows = _allSalesData
+							.Where(s => s.ProductId == ureaProduct.Id)
+							.ToList();
+
+						ureaTotalQty = ureaRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
+						ureaTotalAmt = ureaRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
 					}
+				}
+
+				<div class="category-summary-meta mt-3">
+					@ureaTotalQty.ToString("N2") MT / ₹ @ureaTotalAmt.ToString("N2") Lakhs
 				</div>
 			</div>
 		</div>
+
 		<!-- Card 2: All Other Products Total -->
 		<div class="col-12 col-md-4">
 			<div class="total-value-card total-value-card-bgimg">
 				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
 					 class="total-card-bg"
 					 alt="Other Products" />
+
 				<div class="total-value-title">Other Products - Total</div>
+
 				@{
-					var ureaProd = _products.FirstOrDefault(p => p.Name != null && p.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase));
-					var otherProducts = _allSalesData.Where(s => ureaProd == null || s.ProductId != ureaProd.Id).ToList();
+					var ureaProd = _products.FirstOrDefault(p =>
+						p.Name != null &&
+						p.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase));
+
+					var otherProducts = _allSalesData
+						.Where(s => ureaProd == null || s.ProductId != ureaProd.Id)
+						.ToList();
+
 					var otherTotalQty = otherProducts.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
 					var otherTotalAmt = otherProducts.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
 				}
-				<div class="total-value-amount category-summary-amount">
-					₹ @otherTotalAmt.ToString("N0") <span class="total-value-unit">Lakhs</span>
-				</div>
-				<div class="category-summary-meta">
-					@otherTotalQty.ToString("N2") MT
+
+				<div class="category-summary-meta mt-3">
+					@otherTotalQty.ToString("N2") MT / ₹ @otherTotalAmt.ToString("N2") Lakhs
 				</div>
 			</div>
 		</div>
+
+		<!-- Card 3: Grand Total -->
 		<div class="col-12 col-md-4">
 			<div class="total-value-card total-value-card-bgimg">
 				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
 					 class="total-card-bg"
 					 alt="GrowthForecast" />
+
 				<div class="total-value-title">Grand Total</div>
-				<div class="total-value-amount">
-					₹ @_allSalesData.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount).ToString("N0")
-					<span class="total-value-unit">Per Year</span>
+
+				@{
+					var grandTotalQty = _allSalesData.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
+					var grandTotalAmt = _allSalesData.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+				}
+
+				<div class="category-summary-meta mt-3">
+					@grandTotalQty.ToString("N2") MT / ₹ @grandTotalAmt.ToString("N2") Lakhs
 				</div>
 			</div>
 		</div>

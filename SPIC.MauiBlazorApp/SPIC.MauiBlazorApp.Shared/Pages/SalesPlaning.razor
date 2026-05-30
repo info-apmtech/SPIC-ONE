@@ -44,6 +44,38 @@
             padding-top: 14px;
         }
     }
+    /* Sales planning table total font fix */
+    .sp-spic-table .sp-row-total-cell,
+    .sp-spic-table .sp-footer-total-cell {
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        line-height: 1.35;
+        color: #1f2937;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    .sp-spic-table .sp-row-total-main {
+        font-size: 14px;
+        font-weight: 700;
+    }
+
+    .sp-spic-table .sp-row-total-unit {
+        font-size: 12px;
+        font-weight: 600;
+        color: #475569;
+        margin-left: 2px;
+    }
+
+    .sp-spic-table tfoot td {
+        font-size: 13px !important;
+        font-weight: 700 !important;
+        padding: 12px 10px !important;
+    }
+
+    .sp-spic-table tfoot .sticky-first-col {
+        font-size: 14px !important;
+    }
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
@@ -132,11 +164,14 @@
                                                @onchange="(e) => SetAmount(row, monthIndex, e)" />
                                     </td>
                                 }
-                                <td class="border-start text-center fw-medium">
-                                    @GetRowTotalQty(row).ToString("N2") @_selectedUnitName
+                                <td class="border-start text-center sp-row-total-cell">
+                                    <span class="sp-row-total-main">@GetRowTotalQty(row).ToString("N2")</span>
+                                    <span class="sp-row-total-unit">@_selectedUnitName</span>
                                 </td>
-                                <td class="text-center fw-medium">
-                                    ₹ @GetRowTotalAmount(row).ToString("N2") Lakhs
+
+                                <td class="text-center sp-row-total-cell">
+                                    <span class="sp-row-total-main">₹ @GetRowTotalAmount(row).ToString("N2")</span>
+                                    <span class="sp-row-total-unit">Lakhs</span>
                                 </td>
                             </tr>
                         }
@@ -147,17 +182,17 @@
                             @for (int i = 0; i < _months.Length; i++)
                             {
                                 var monthIndex = i;
-                                <td class="text-center fw-medium border-start bg-light">
+                                <td class="text-center border-start bg-light sp-footer-total-cell">
                                     @GetMonthTotalQty(monthIndex).ToString("N2")
                                 </td>
-                                <td class="text-center fw-medium bg-light">
+                                <td class="text-center bg-light sp-footer-total-cell">
                                     @GetMonthTotalAmount(monthIndex).ToString("N2")
                                 </td>
                             }
-                            <td class="text-center fw-medium border-start bg-light">
+                            <td class="text-center border-start bg-light sp-footer-total-cell">
                                 @GetGrandTotalQty().ToString("N2")
                             </td>
-                            <td class="text-center fw-medium bg-light">
+                            <td class="text-center bg-light sp-footer-total-cell">
                                 @GetGrandTotalAmount().ToString("N2")
                             </td>
                         </tr>
@@ -596,18 +631,25 @@
         return IsFertilizerCategory(cat) && !IsUreaProduct(product);
     }
 
-    private bool IsSpecialityCategory(Category category)
+    private bool IsSpecialityCategory(Category? category)
     {
-        if (category?.Name == null) return false;
-        var name = category.Name.ToLower();
-        return name.Contains("specialty") || name.Contains("speciality") || name.Contains("sp");
+        if (string.IsNullOrWhiteSpace(category?.Name))
+            return false;
+
+        return category.Name.Contains("Specialty", StringComparison.OrdinalIgnoreCase)
+            || category.Name.Contains("Speciality", StringComparison.OrdinalIgnoreCase);
+    }
+    private bool IsSpecialityRow(SalesPlanningInDealerRegistration row)
+    {
+        var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+        return IsSpecialityCategory(category);
     }
 
-    private bool IsSpecialityProduct(Product product)
-    {
-        var cat = _categories.FirstOrDefault(c => c.Id == product.CategoryId);
-        return IsSpecialityCategory(cat);
-    }
+    // private bool IsSpecialityProduct(Product product)
+    // {
+    //     var cat = _categories.FirstOrDefault(c => c.Id == product.CategoryId);
+    //     return IsSpecialityCategory(cat);
+    // }
 
     private (decimal Qty, decimal Amount) GetFertilizerUreaTotals()
     {
@@ -651,22 +693,22 @@
 
         foreach (var row in _allSalesData)
         {
-            var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
-            if (product != null && IsSpecialityProduct(product))
+            if (!IsSpecialityRow(row))
+                continue;
+
+            var cat = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+            var unit = _units.FirstOrDefault(u => u.Id == cat?.UnitId);
+            var unitName = unit?.Name ?? "MT";
+
+            if (!result.ContainsKey(unitName))
             {
-                var cat = _categories.FirstOrDefault(c => c.Id == product.CategoryId);
-                var unit = _units.FirstOrDefault(u => u.Id == cat?.UnitId);
-                var unitName = unit?.Name ?? "MT";
-
-                if (!result.ContainsKey(unitName))
-                {
-                    result[unitName] = (0, 0);
-                }
-
-                var currentQty = result[unitName].Qty + GetRowTotalQty(row);
-                var currentAmount = result[unitName].Amount + GetRowTotalAmount(row);
-                result[unitName] = (currentQty, currentAmount);
+                result[unitName] = (0, 0);
             }
+
+            var currentQty = result[unitName].Qty + GetRowTotalQty(row);
+            var currentAmount = result[unitName].Amount + GetRowTotalAmount(row);
+
+            result[unitName] = (currentQty, currentAmount);
         }
 
         return result;
@@ -674,18 +716,22 @@
 
     private decimal GetSpecialityTotalAmount()
     {
-        decimal totalAmount = 0;
-
-        foreach (var row in _allSalesData)
-        {
-            var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
-            if (product != null && IsSpecialityProduct(product))
-            {
-                totalAmount += GetRowTotalAmount(row);
-            }
-        }
-
-        return totalAmount;
+        return _allSalesData
+            .Where(IsSpecialityRow)
+            .Sum(r =>
+                r.AprilAmount +
+                r.MayAmount +
+                r.JuneAmount +
+                r.JulyAmount +
+                r.AugustAmount +
+                r.SeptemberAmount +
+                r.OctoberAmount +
+                r.NovemberAmount +
+                r.DecemberAmount +
+                r.JanuaryAmount +
+                r.FebruaryAmount +
+                r.MarchAmount
+            );
     }
 
     private void ShowMessage(string message, bool isError)
