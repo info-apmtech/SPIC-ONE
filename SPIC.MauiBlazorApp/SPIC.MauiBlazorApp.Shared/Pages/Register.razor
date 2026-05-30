@@ -1279,7 +1279,7 @@
                 _ => 0
             };
 
-            _model.UserTableId = LoginState.UserId ?? "";
+            // _model.UserTableId = LoginState.UserId ?? "";
             _model.FirmName ??= "";
             _model.ShopNoORRoomNoOrBlockNo ??= "";
             _model.Village ??= "";
@@ -1303,7 +1303,7 @@
 
             if (_isEditMode)
             {
-                response = await Http.PutAsJsonAsync($"api/DealerRegistration/{_model.Id}", _model);
+                response = await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{_model.Id}", _model);
             }
             else
             {
@@ -1315,6 +1315,8 @@
             if (response.IsSuccessStatusCode)
             {
                 int dealerId = _model.Id;
+                
+                //  Capture the newly generated UserTableId from the server's response!
                 if (!_isEditMode)
                 {
                     var result = await response.Content.ReadFromJsonAsync<CreateResponse>();
@@ -1322,6 +1324,16 @@
                     {
                         dealerId = result.Data.Id;
                         _model.Id = dealerId;
+                        _model.UserTableId = result.Data.UserTableId; 
+                    }
+                }
+                else
+                {
+                    // For Edit mode, grab the updated model from the server
+                    var result = await response.Content.ReadFromJsonAsync<DealerFormModel>();
+                    if (result != null)
+                    {
+                        _model.UserTableId = result.UserTableId; 
                     }
                 }
 
@@ -1356,7 +1368,8 @@
 
                     if (filesUpdated)
                     {
-                        await Http.PutAsJsonAsync($"api/DealerRegistration/{dealerId}", _model);
+                        //  Use the correct custom route for the second file-save PUT request!
+                        await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{dealerId}", _model);
                     }
                 }
 

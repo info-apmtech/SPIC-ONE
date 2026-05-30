@@ -10,8 +10,7 @@
 <div class="main-card">
     <div class="section-header">
         <h3 class="section-title">@Title</h3>
-        
-        <!-- Inject custom filters (Search box, Status dropdown) here -->
+
         @if (FilterControls != null)
         {
             <div class="table-controls">
@@ -20,7 +19,7 @@
         }
     </div>
 
-    <!-- Export Buttons -->
+    <!-- Export Buttons (unchanged layout) -->
     <div class="export-buttons mb-3 d-flex gap-2">
         <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportCopy"><i class="bi bi-front"></i> Copy</button>
         <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportCsv"><i class="bi bi-filetype-csv"></i> CSV</button>
@@ -49,7 +48,16 @@
                     else if (!PagedItems.Any())
                     {
                         <tr>
-                            <td colspan="100%" class="text-center text-muted">No data found.</td>
+                            <td colspan="100%" class="text-center text-muted">
+                                @if (!string.IsNullOrEmpty(SearchText))
+                                {
+                                    <span>No results found for "<strong>@SearchText</strong>".</span>
+                                }
+                                else
+                                {
+                                    <span>No data found.</span>
+                                }
+                            </td>
                         </tr>
                     }
                     else
@@ -104,26 +112,53 @@
     [Parameter] public string Title { get; set; } = "Existing Records";
     [Parameter] public string FileName { get; set; } = "Export";
     [Parameter] public bool IsLoading { get; set; }
-    
+
     // Data & Columns
     [Parameter] public IEnumerable<TItem> Items { get; set; } = Enumerable.Empty<TItem>();
     [Parameter] public List<ExportColumn<TItem>> ExportColumns { get; set; } = new();
-    
+
     // UI Templates
     [Parameter] public RenderFragment? FilterControls { get; set; }
     [Parameter] public RenderFragment? TableHeader { get; set; }
     [Parameter] public RenderFragment<TItem>? TableRow { get; set; }
 
+    // Universal Search — parent binds its existing search textbox to this
+    [Parameter] public string SearchText { get; set; } = "";
+
     // Pagination State
     public int CurrentPage { get; set; } = 1;
     public int PageSize { get; set; } = 16;
-    
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Items.Count() / (double)PageSize));
-    private IEnumerable<TItem> PagedItems => Items.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
+
+    /// <summary>
+    /// Filters Items by the current SearchText across every ExportColumn (except S:No).
+    /// This gives universal multi-column search without any UI inside the component.
+    /// </summary>
+    private IEnumerable<TItem> SearchedItems
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchText) || ExportColumns == null || ExportColumns.Count == 0)
+                return Items;
+
+            var query = SearchText.Trim();
+
+            return Items.Where(item =>
+                ExportColumns
+                    .Where(c => !string.Equals(c.Header, "S:No", StringComparison.OrdinalIgnoreCase))
+                    .Any(c =>
+                    {
+                        var val = c.ValueSelector?.Invoke(item) ?? "";
+                        return val.Contains(query, StringComparison.OrdinalIgnoreCase);
+                    }));
+        }
+    }
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(SearchedItems.Count() / (double)PageSize));
+    private IEnumerable<TItem> PagedItems => SearchedItems.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
 
     protected override void OnParametersSet()
     {
-        // If the user searches/filters and the total items shrink, ensure we don't sit on an empty page
+        // If parent filter/search shrinks the dataset, jump back to page 1
         if (CurrentPage > TotalPages && TotalPages > 0) CurrentPage = 1;
     }
 
@@ -153,7 +188,7 @@
     }
 
     // ==========================================
-    // EXPORT LOGIC
+    // EXPORT LOGIC — exports respect current search filter
     // ==========================================
     private async Task DownloadFile(string dataUri, string fileName)
     {
@@ -163,33 +198,35 @@
 
     private async Task ExportCopy()
     {
-        if (!Items.Any()) return;
+        var data = SearchedItems.ToList();
+        if (!data.Any()) return;
         var sb = new StringBuilder();
         sb.AppendLine(string.Join("\t", ExportColumns.Select(c => c.Header)));
-        foreach (var item in Items) sb.AppendLine(string.Join("\t", ExportColumns.Select(c => c.ValueSelector(item))));
+        foreach (var item in data) sb.AppendLine(string.Join("\t", ExportColumns.Select(c => c.ValueSelector(item))));
         await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", sb.ToString());
         await JSRuntime.InvokeVoidAsync("alert", "Table data copied to clipboard!");
     }
 
     private async Task ExportCsv()
     {
-        if (!Items.Any()) return;
+        var data = SearchedItems.ToList();
+        if (!data.Any()) return;
         var sb = new StringBuilder();
         sb.AppendLine(string.Join(",", ExportColumns.Select(c => $"\"{c.Header.Replace("\"", "\"\"")}\"")));
-        foreach (var item in Items) sb.AppendLine(string.Join(",", ExportColumns.Select(c => $"\"{c.ValueSelector(item)?.Replace("\"", "\"\"")}\"")));
+        foreach (var item in data) sb.AppendLine(string.Join(",", ExportColumns.Select(c => $"\"{c.ValueSelector(item)?.Replace("\"", "\"\"")}\"")));
         var bytes = Encoding.UTF8.GetBytes(sb.ToString());
         await DownloadFile($"data:text/csv;base64,{Convert.ToBase64String(bytes)}", $"{FileName}_{DateTime.Now:yyyyMMdd}.csv");
     }
 
     private async Task ExportExcel()
     {
-        if (!Items.Any()) return;
+        var data = SearchedItems.ToList();
+        if (!data.Any()) return;
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add(FileName.Length > 31 ? FileName.Substring(0, 31) : FileName);
         for (int c = 0; c < ExportColumns.Count; c++) worksheet.Cell(1, c + 1).Value = ExportColumns[c].Header;
-        var itemList = Items.ToList();
-        for (int r = 0; r < itemList.Count; r++)
-            for (int c = 0; c < ExportColumns.Count; c++) worksheet.Cell(r + 2, c + 1).Value = ExportColumns[c].ValueSelector(itemList[r]);
+        for (int r = 0; r < data.Count; r++)
+            for (int c = 0; c < ExportColumns.Count; c++) worksheet.Cell(r + 2, c + 1).Value = ExportColumns[c].ValueSelector(data[r]);
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         await DownloadFile($"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{Convert.ToBase64String(stream.ToArray())}", $"{FileName}_{DateTime.Now:yyyyMMdd}.xlsx");
@@ -197,7 +234,8 @@
 
     private async Task ExportPdf()
     {
-        if (!Items.Any()) return;
+        var data = SearchedItems.ToList();
+        if (!data.Any()) return;
         QuestPDF.Settings.License = LicenseType.Community;
         var pdfBytes = Document.Create(container =>
         {
@@ -210,7 +248,7 @@
                 {
                     table.ColumnsDefinition(colDef => { foreach (var _ in ExportColumns) colDef.RelativeColumn(); });
                     table.Header(header => { foreach (var col in ExportColumns) header.Cell().BorderBottom(1).PaddingBottom(5).Text(col.Header).Bold(); });
-                    foreach (var item in Items) foreach (var col in ExportColumns) table.Cell().PaddingVertical(2).Text(col.ValueSelector(item));
+                    foreach (var item in data) foreach (var col in ExportColumns) table.Cell().PaddingVertical(2).Text(col.ValueSelector(item));
                 });
             });
         }).GeneratePdf();
@@ -219,12 +257,13 @@
 
     private async Task ExportPrint()
     {
-        if (!Items.Any()) return;
+        var data = SearchedItems.ToList();
+        if (!data.Any()) return;
         var sb = new StringBuilder();
         sb.Append("<table><thead><tr>");
         foreach (var col in ExportColumns) sb.Append($"<th>{col.Header}</th>");
         sb.Append("</tr></thead><tbody>");
-        foreach (var item in Items)
+        foreach (var item in data)
         {
             sb.Append("<tr>");
             foreach (var col in ExportColumns) sb.Append($"<td>{col.ValueSelector(item)}</td>");

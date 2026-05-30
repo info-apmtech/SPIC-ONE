@@ -117,7 +117,8 @@
                IsLoading="_isLoading"
                Title="Existing Credit Limit Sales"
                FileName="CreditLimitSales"
-               ExportColumns="GetExportColumns()">
+               ExportColumns="GetExportColumns()"
+               SearchText="@_searchText">
 
 <FilterControls>
     <div class="search-box">
@@ -126,7 +127,7 @@
                placeholder="Search code/name..."
                @bind="_searchText"
                @bind:event="oninput"
-               @bind:after="ApplyFilter" />
+               @bind:after="StateHasChanged" />
     </div>
 </FilterControls>
 
@@ -395,15 +396,12 @@ public class FinancialYearDto
         }
     }
 
-    private void ApplyFilter()
-    {
-        _filteredItems = _allItems
-            .Where(x => string.IsNullOrEmpty(_searchText)
-                || x.CustomerNumber?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) == true
-                || GetDealerName(x.CustomerId).Contains(_searchText, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(x => x.Id)
-            .ToList();
-    }
+private void ApplyFilter()
+{
+    _filteredItems = _allItems
+        .OrderByDescending(x => x.Id)
+        .ToList();
+}
 
     // Triggers when either the Dealer Code or Dealer Name dropdown is selected
     private void OnDealerChanged()

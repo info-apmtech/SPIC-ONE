@@ -22,6 +22,7 @@ namespace SPIC.MauiBlazorApp
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddScoped<LoginState>();
             builder.Services.AddScoped<LoadingService>();
+            builder.Services.AddScoped<AppSearchState>();
 
             // ADD THIS
             builder.Services.AddSingleton(new PlatformService
