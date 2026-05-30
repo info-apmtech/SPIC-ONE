@@ -80,12 +80,14 @@
 				   IsLoading="_isLoading"
 				   Title="Existing Relationships"
 				   FileName="Relationships"
-				   ExportColumns="GetExportColumns()">
+				   ExportColumns="GetExportColumns()"
+				   SearchText="@_searchText">
 
 		<FilterControls>
 			<div class="search-box">
 				<i class="bi bi-search"></i>
-				<input type="text" placeholder="Search relationships..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
+				<input type="text" placeholder="Search relationships..."
+					   @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
 			</div>
 			<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
 				<option value="All">All Status</option>
@@ -224,8 +226,6 @@
 	private void ApplyFilter()
 	{
 		_filteredItems = _allItems
-			.Where(x => string.IsNullOrEmpty(_searchText)
-				|| x.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
 			.Where(x => _statusFilter switch
 			{
 				"Active" => x.IsActive,

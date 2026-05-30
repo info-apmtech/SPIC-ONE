@@ -180,23 +180,25 @@
 					</div>
 				</div>
 
-				<SpicDataTable Items="_filteredItems"
-							   IsLoading="_isLoading"
-							   Title="@($"Existing {ActiveTab}")"
-							   FileName="@ActiveTab"
-							   ExportColumns="GetExportColumns()">
+	<SpicDataTable Items="_filteredItems"
+				   IsLoading="_isLoading"
+				   Title="@($"Existing {ActiveTab}")"
+				   FileName="@ActiveTab"
+				   ExportColumns="GetExportColumns()"
+				   SearchText="@_searchText">
 				   
-					<FilterControls>
-						<div class="search-box">
-							<i class="bi bi-search"></i>
-							<input type="text" placeholder="Search @ActiveTab.ToLower()..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
-							</div>
-							<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
-								<option value="All">All Status</option>
-								<option value="Active">Active</option>
-								<option value="Inactive">Inactive</option>
-							</select>
-						</FilterControls>
+		<FilterControls>
+			<div class="search-box">
+				<i class="bi bi-search"></i>
+				<input type="text" placeholder="Search @ActiveTab.ToLower()..."
+					   @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+			</div>
+			<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+				<option value="All">All Status</option>
+				<option value="Active">Active</option>
+				<option value="Inactive">Inactive</option>
+			</select>
+		</FilterControls>
 
 						<TableHeader>
 							<th>@ActiveTab Name</th>
@@ -456,8 +458,6 @@
 	private void ApplyFilter()
 	{
 		_filteredItems = CurrentAllItems
-			.Where(x => string.IsNullOrEmpty(_searchText)
-				|| x.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
 			.Where(x => _statusFilter switch
 			{
 				"Active" => x.IsActive,
