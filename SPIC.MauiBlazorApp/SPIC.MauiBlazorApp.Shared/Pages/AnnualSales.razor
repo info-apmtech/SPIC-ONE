@@ -252,19 +252,11 @@
 					 class="total-card-bg"
 					 alt="Other Products" />
 
-				<div class="total-value-title">Other Products - Total</div>
+				<div class="total-value-title">Other Products(Fertilizer) - Total</div>
 
 				@{
-					var ureaProd = _products.FirstOrDefault(p =>
-						p.Name != null &&
-						p.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase));
-
-					var otherProducts = _allSalesData
-						.Where(s => ureaProd == null || s.ProductId != ureaProd.Id)
-						.ToList();
-
-					var otherTotalQty = otherProducts.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
-					var otherTotalAmt = otherProducts.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+					var otherTotalQty = GetOtherFertilizerTotalQty();
+					var otherTotalAmt = GetOtherFertilizerTotalAmount();
 				}
 
 				<div class="category-summary-meta mt-3">
@@ -537,5 +529,38 @@
 	private class DealerBasicInfo
 	{
 		public string? WholeSaleFertilizerLicenseNumber { get; set; }
+	}
+	private bool IsUreaProduct(Product? product)
+	{
+		return product?.Name != null &&
+			   product.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private bool IsFertilizerCategory(Category? category)
+	{
+		return category?.Name != null &&
+			   category.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private bool IsOtherFertilizerRow(AnnualSaleDataLastFYofDealerRegistration row)
+	{
+		var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+		var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+
+		return IsFertilizerCategory(category) && !IsUreaProduct(product);
+	}
+
+	private decimal GetOtherFertilizerTotalQty()
+	{
+		return _allSalesData
+			.Where(IsOtherFertilizerRow)
+			.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
+	}
+
+	private decimal GetOtherFertilizerTotalAmount()
+	{
+		return _allSalesData
+			.Where(IsOtherFertilizerRow)
+			.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
 	}
 }
