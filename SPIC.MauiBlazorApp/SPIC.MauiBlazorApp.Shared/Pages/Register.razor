@@ -96,13 +96,16 @@
                             </div>
                             <div class="col-12 col-sm-6">
                                 <label class="form-label-custom">Region</label>
-                                <select class="form-select-custom w-100 @(_errors.ContainsKey("Region") ? "is-invalid" : "")" @bind="_basicInfoRegionId" @bind:after="OnBasicInfoRegionChanged">
-                                    <option value="0">-- Select Region --</option>
-                                    @foreach (var region in _filteredRegions)
-                                    {
-                                        <option value="@region.Id">@region.RegionName</option>
-                                    }
-                                </select>
+                               <select class="form-select-custom w-100 @(_errors.ContainsKey("Region") ? "is-invalid" : "")"
+        @bind="_basicInfoRegionId"
+        @bind:after="OnBasicInfoRegionChanged"
+        disabled="@_isRegionLocked">
+    <option value="0">-- Select Region --</option>
+    @foreach (var region in _filteredRegions)
+    {
+        <option value="@region.Id">@region.RegionName</option>
+    }
+</select>
                                 @if (_errors.ContainsKey("Region"))
                                 {
                                     <div class="field-error">@_errors["Region"]</div>
@@ -110,13 +113,16 @@
                             </div>
                             <div class="col-12 col-sm-6">
                                 <label class="form-label-custom">HQ</label>
-                                <select class="form-select-custom w-100 @(_errors.ContainsKey("HQ") ? "is-invalid" : "")" @bind="_basicInfoHqId" @bind:after='() => ValidateFieldOnChange("HQ", _basicInfoHqId > 0)'>
-                                    <option value="0">-- Select HQ --</option>
-                                    @foreach (var hq in _filteredHeadquarters)
-                                    {
-                                        <option value="@hq.Id">@hq.HeadquarterName</option>
-                                    }
-                                </select>
+                               <select class="form-select-custom w-100 @(_errors.ContainsKey("HQ") ? "is-invalid" : "")"
+        @bind="_basicInfoHqId"
+        @bind:after='() => ValidateFieldOnChange("HQ", _basicInfoHqId > 0)'
+        disabled="@_isHqLocked">
+    <option value="0">-- Select HQ --</option>
+    @foreach (var hq in _filteredHeadquarters)
+    {
+        <option value="@hq.Id">@hq.HeadquarterName</option>
+    }
+</select>
                                 @if (_errors.ContainsKey("HQ"))
                                 {
                                     <div class="field-error">@_errors["HQ"]</div>
@@ -404,13 +410,13 @@
                     </div>
                     <div class="col-12 col-sm-6 col-md-3">
                         <label class="form-label-custom">District</label>
-                        <select class="form-select-custom w-100 @(_errors.ContainsKey("DistrictId") ? "is-invalid" : "")" @bind="_model.DistrictId" @bind:after='() => ValidateFieldOnChange("DistrictId", _model.DistrictId > 0)'>
-                            <option value="0">-- Select District --</option>
-                            @foreach (var district in _DistrictAll)
-                            {
-                                <option value="@district.Id">@district.DistrictName</option>
-                            }
-                        </select>
+                      <select class="form-select-custom w-100" @bind="_model.DistrictId">
+    <option value="0">-- Select District --</option>
+    @foreach (var district in _DistrictAll.Where(d => d.StateId == _model.DealerStateId))
+    {
+        <option value="@district.Id">@district.DistrictName</option>
+    }
+</select>
                         @if (_errors.ContainsKey("DistrictId"))
                         {
                             <div class="field-error">@_errors["DistrictId"]</div>
@@ -419,13 +425,15 @@
 
                     <div class="col-12 col-sm-6 col-md-3">
                         <label class="form-label-custom">State</label>
-                        <select class="form-select-custom w-100 @(_errors.ContainsKey("DealerStateId") ? "is-invalid" : "")" @bind="_model.DealerStateId" @bind:after='() => ValidateFieldOnChange("DealerStateId", _model.DealerStateId > 0)'>
-                            <option value="0">-- Select State --</option>
-                            @foreach (var state in _statesAll)
-                            {
-                                <option value="@state.Id">@state.StateName</option>
-                            }
-                        </select>
+                       <select class="form-select-custom w-100"
+        @bind="_model.DealerStateId"
+        @bind:after="OnDealerStateChanged">
+    <option value="0">-- Select State --</option>
+    @foreach (var state in _statesAll)
+    {
+        <option value="@state.Id">@state.StateName</option>
+    }
+</select>
                         @if (_errors.ContainsKey("DealerStateId"))
                         {
                             <div class="field-error">@_errors["DealerStateId"]</div>
@@ -855,6 +863,8 @@
     private bool isSpic = true;
     private bool isGreenStar = true;
     private bool _isStateLocked;
+    private bool _isRegionLocked;
+private bool _isHqLocked;
 
     private IBrowserFile? _gstFile;
     private IBrowserFile? _panFile;
@@ -954,13 +964,13 @@
     _model = dealer;
     _isEditMode = true;
 
-    selected           = _model.IsDealer ? "Dealer" : "Department";
-    isSpic             = _model.InSpic;
-    isGreenStar        = _model.InGreenStar;
-    _basicInfoStateId  = _model.StateId;
-    _basicInfoRegionId = _model.Region;
-    _basicInfoHqId     = _model.HQ;
-    _parentDealerId    = _model.ParentDealer;
+   selected           = _model.IsDealer ? "Dealer" : "Department";
+//isSpic             = _model.InSpic;
+// isGreenStar     = _model.InGreenStar;
+_basicInfoStateId  = _model.StateId;
+_basicInfoRegionId = _model.Region;
+_basicInfoHqId     = _model.HQ;
+_parentDealerId    = _model.ParentDealer;
 
     status = _model.Status switch
     {
@@ -973,7 +983,7 @@
     _filteredRegions       = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
     _filteredHeadquarters  = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
     _filteredDealers       = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
-
+    ApplyLockedEmployeeLocation();
     if (_model.Latitude.HasValue && _model.Longitude.HasValue)
     {
         await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
@@ -1026,20 +1036,9 @@ private async Task LoadData()
     void SelectStatus(string value) => status = value;
 
     private void ApplyEmployeeLocationDefaults()
-    {
-        _isStateLocked = !LoginState.IsAdmin;
-        if (_isStateLocked && LoginState.StateId > 0)
-        {
-            _basicInfoStateId = LoginState.StateId;
-            OnBasicInfoStateChanged();
-
-            if (LoginState.IsRegionRole && LoginState.RegionId > 0)
-            {
-                _basicInfoRegionId = LoginState.RegionId;
-                OnBasicInfoRegionChanged();
-            }
-        }
-    }
+{
+    ApplyLockedEmployeeLocation();
+}
 
     void ToggleSpic() => isSpic = !isSpic;
     void ToggleGreenStar() => isGreenStar = !isGreenStar;
@@ -1218,13 +1217,31 @@ private async Task LoadData()
             _isEditMode = false;
         }
     }
-    else
-    {
-        _model = new();
-        _isEditMode = false;
-    }
+ else
+{
+    _model = new();
+    _isEditMode = false;
+
+    // Restore logged-in user's State / Region / HQ for New Entry
+    ApplyLockedEmployeeLocation();
+}
 }
 
+private void OnDealerStateChanged()
+{
+    // If a district was selected but it doesn't belong to the new state, reset it
+    if (_model.DistrictId > 0)
+    {
+        var districtBelongsToState = _DistrictAll.Any(d =>
+            d.Id == _model.DistrictId &&
+            d.StateId == _model.DealerStateId);
+
+        if (!districtBelongsToState)
+        {
+            _model.DistrictId = 0;
+        }
+    }
+}
     private void ResetForm()
     {
         _model = new();
@@ -1946,4 +1963,40 @@ private async Task LoadData()
     {
         public string FilePath { get; set; } = "";
     }
+    private void ApplyLockedEmployeeLocation()
+{
+    if (LoginState.IsAdmin)
+        return;
+
+    if (LoginState.StateId > 0)
+    {
+        _basicInfoStateId = LoginState.StateId;
+
+        _filteredRegions = _regionsAll
+            .Where(r => r.StateId == _basicInfoStateId)
+            .ToList();
+
+        _filteredDealers = _dealersAll
+            .Where(d => d.StateId == _basicInfoStateId)
+            .ToList();
+    }
+
+    if (LoginState.RegionId > 0)
+    {
+        _basicInfoRegionId = LoginState.RegionId;
+
+        _filteredHeadquarters = _headquartersAll
+            .Where(h => h.RegionId == _basicInfoRegionId)
+            .ToList();
+    }
+
+    if (LoginState.HQId > 0)
+    {
+        _basicInfoHqId = LoginState.HQId;
+    }
+
+    _isStateLocked = LoginState.StateId > 0;
+    _isRegionLocked = LoginState.RegionId > 0;
+    _isHqLocked = LoginState.HQId > 0;
+}
 }

@@ -231,7 +231,7 @@
                     <label class="custom-label">District</label>
                     <select class="form-select-custom w-100" @bind="_buildingForm.DistrictId">
                         <option value="0">Select District</option>
-                        @foreach (var d in _districts)
+                        @foreach (var d in _districts.Where(d => d.StateId == _buildingForm.StateId))
                         {
                             <option value="@d.Id">@d.DistrictName</option>
                         }
@@ -239,7 +239,7 @@
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
                     <label class="custom-label">State</label>
-                    <select class="form-select-custom w-100" @bind="_buildingForm.StateId">
+                    <select class="form-select-custom w-100" @bind="_buildingForm.StateId" @bind:after="OnBuildingStateChanged">
                         <option value="0">Select State</option>
                         @foreach (var s in _states)
                         {
@@ -1240,7 +1240,14 @@
         var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
         return $"{baseUrl}/api/DealerFile/view/{path}";
     }
-
+    private void OnBuildingStateChanged()
+    {
+        if (_buildingForm.DistrictId > 0 &&
+            !_districts.Any(d => d.Id == _buildingForm.DistrictId && d.StateId == _buildingForm.StateId))
+        {
+            _buildingForm.DistrictId = 0;
+        }
+    }
     private class CreateResponse<T>
     {
         public string? Message { get; set; }
@@ -1250,6 +1257,7 @@
     private class LocationItemDto
     {
         public int Id { get; set; }
+        public int StateId { get; set; }  // <-- Add this
         public string StateName { get; set; } = "";
         public string DistrictName { get; set; } = "";
     }
