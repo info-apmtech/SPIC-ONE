@@ -253,7 +253,7 @@ namespace SpicAPI.Controllers
 					}
 
 					var quantity = int.TryParse(quantityStr, out var qty) ? qty : 0;
-					var grossAmount = double.TryParse(grossAmountStr, out var gross) ? gross : 0;
+					var grossAmount = decimal.TryParse(grossAmountStr, out var gross) ? gross : 0;
 
 					if (string.IsNullOrWhiteSpace(dealerCodeStr) &&
 						dealerCodeByIdMap.TryGetValue(customerId, out var dealerCodeFromDb))

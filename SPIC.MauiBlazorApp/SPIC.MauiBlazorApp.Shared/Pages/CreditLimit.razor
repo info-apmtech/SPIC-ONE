@@ -713,45 +713,35 @@ if (DealerId.HasValue && DealerId.Value > 0)
 		await LoadCreditLimitSalesData();
 	}
 
-	private async Task LoadCreditLimitSalesData()
-	{
-		if (_dealer.Id <= 0 || _selectedCategoryId <= 0)
-		{
-			_creditLimitSalesData = new();
-			BuildSalesPerfRows();
-			return;
-		}
+private async Task LoadCreditLimitSalesData()
+{
+    if (_dealer.Id <= 0 || _selectedCategoryId <= 0)
+    {
+        _creditLimitSalesData = new();
+        BuildSalesPerfRows();
+        return;
+    }
 
-		var fyIds = new[]
-		{
-			_proposal.FY1,
-			_proposal.FY2,
-			_proposal.FY3
-		}
-		.Where(x => x > 0)
-		.Distinct()
-		.ToList();
+    var fyIds = GetCompletedFYIds();
 
-		if (fyIds.Count == 0)
-		{
-			_creditLimitSalesData = new();
-			BuildSalesPerfRows();
-			return;
-		}
+    if (fyIds.Count == 0)
+    {
+        _creditLimitSalesData = new();
+        BuildSalesPerfRows();
+        return;
+    }
 
-		var fyQuery = string.Join(",", fyIds);
+    var fyQuery = string.Join(",", fyIds);
 
-		var url =
-			$"api/creditlimitsales/by-filter" +
-			$"?customerId={_dealer.Id}" +
-			$"&categoryId={_selectedCategoryId}" +
-			$"&financialYearIds={fyQuery}";
+    var url = $"api/creditlimitsales/by-filter" +
+              $"?customerId={_dealer.Id}" +
+              $"&categoryId={_selectedCategoryId}" +
+              $"&financialYearIds={fyQuery}";
 
-		_creditLimitSalesData =
-			await SafeGetAsync<List<DealerCreditLimitSales>>(url) ?? new();
+    _creditLimitSalesData = await SafeGetAsync<List<DealerCreditLimitSales>>(url) ?? new();
 
-		BuildSalesPerfRows();
-	}
+    BuildSalesPerfRows();
+}
 
 	private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financialYearId)
 	{
@@ -765,7 +755,7 @@ if (DealerId.HasValue && DealerId.Value > 0)
 			x.FinancialYearId == financialYearId);
 	}
 
-	private static decimal ConvertToLakhs(double grossAmount)
+	private static decimal ConvertToLakhs(decimal grossAmount)
 	{
 		return (decimal)grossAmount / 100000;
 	}
@@ -1150,5 +1140,13 @@ private async Task LoadSpicValuationDefaultValues()
 
     RecalculateSpicPercentages();
 }
-
+private List<int> GetCompletedFYIds()
+{
+    return _financialYears
+        .Where(fy => fy.EndDate <= DateTime.Today) // only completed FYs
+        .OrderBy(fy => fy.Id)
+        .Select(fy => fy.Id)
+        .TakeLast(3) // last 3 completed FYs
+        .ToList();
+}
 }

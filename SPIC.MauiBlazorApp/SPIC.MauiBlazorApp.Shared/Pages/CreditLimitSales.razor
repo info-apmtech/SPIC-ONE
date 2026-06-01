@@ -36,7 +36,16 @@
                     }
                 </select>
             </div>
-
+            <div class="col-md-3">
+    <label class="form-label-custom">Financial Year</label>
+    <select class="form-control-custom w-100" @bind="_form.FinancialYearId">
+        <option value="0">Select Financial Year</option>
+        @foreach (var fy in _financialYears)
+        {
+            <option value="@fy.Id">@fy.Name</option>
+        }
+    </select>
+</div>
             <div class="col-md-3">
                 <label class="form-label-custom">Dealer Code</label>
                 <select class="form-control-custom w-100" @bind="_form.CustomerId" @bind:after="OnDealerChanged">
@@ -133,6 +142,7 @@
 
     <TableHeader>
         <th>State</th>
+        <th>Financial Year</th>
         <th>Dealer Code</th>
         <th>Dealer Name</th>
         <th>SubGroup</th>
@@ -144,6 +154,7 @@
 
     <TableRow Context="item">
         <td>@GetStateName(item.StateId)</td>
+        <td>@GetFinancialYearName(item.FinancialYearId)</td>
         <td>@item.CustomerNumber</td>
         <td>@GetDealerName(item.CustomerId)</td>
         <td>@GetProductName(item.SubGroupId)</td>
@@ -193,7 +204,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Bulk Upload - Credit Limit Sales</h5>
-                    <button type="button" class="btn-close" @onclick="() => _showUploadModal = false"></button>
+                    <button type="button" class="btn-close" @onclick="() => _showUploadModal = false">X</button>
                 </div>
                 <div class="modal-body">
                    <div class="mb-3">
@@ -419,39 +430,41 @@ private void ApplyFilter()
 
     private async Task HandleSave()
     {
-        if (_form.StateId == 0 || string.IsNullOrWhiteSpace(_form.CustomerNumber) ||
-            _form.CustomerId == 0 || _form.SubGroupId == 0 || _form.ProductGroupId == 0)
-        {
-            ShowMessage("All required fields must be filled.", true);
-            return;
-        }
+      if (_form.FinancialYearId == 0 || _form.StateId == 0 || string.IsNullOrWhiteSpace(_form.CustomerNumber) ||
+    _form.CustomerId == 0 || _form.SubGroupId == 0 || _form.ProductGroupId == 0)
+{
+    ShowMessage("All required fields must be filled.", true);
+    return;
+}
 
         try
         {
             _isSaving = true;
 
-            object payload = _isEditing
-                ? new
-                {
-                    Id = _form.Id,
-                    _form.StateId,
-                    _form.CustomerNumber,
-                    _form.CustomerId,
-                    _form.SubGroupId,
-                    _form.ProductGroupId,
-                    _form.Quantity,
-                    _form.GrossAmount
-                }
-                : new
-                {
-                    _form.StateId,
-                    _form.CustomerNumber,
-                    _form.CustomerId,
-                    _form.SubGroupId,
-                    _form.ProductGroupId,
-                    _form.Quantity,
-                    _form.GrossAmount
-                };
+           object payload = _isEditing
+    ? new
+    {
+        Id = _form.Id,
+        _form.FinancialYearId,
+        _form.StateId,
+        _form.CustomerNumber,
+        _form.CustomerId,
+        _form.SubGroupId,
+        _form.ProductGroupId,
+        _form.Quantity,
+        _form.GrossAmount
+    }
+    : new
+    {
+        _form.FinancialYearId,
+        _form.StateId,
+        _form.CustomerNumber,
+        _form.CustomerId,
+        _form.SubGroupId,
+        _form.ProductGroupId,
+        _form.Quantity,
+        _form.GrossAmount
+    };
 
             HttpResponseMessage response;
             if (_isEditing && _form.Id > 0)
@@ -494,17 +507,18 @@ private void ApplyFilter()
     {
         _isEditing = true;
 
-        _form = new CreditLimitSalesForm
-        {
-            Id = item.Id,
-            StateId = item.StateId,
-            CustomerNumber = item.CustomerNumber,
-            CustomerId = item.CustomerId,
-            SubGroupId = item.SubGroupId,
-            ProductGroupId = item.ProductGroupId,
-            Quantity = item.Quantity,
-            GrossAmount = item.GrossAmount
-        };
+      _form = new CreditLimitSalesForm
+{
+    Id = item.Id,
+    FinancialYearId = item.FinancialYearId,
+    StateId = item.StateId,
+    CustomerNumber = item.CustomerNumber,
+    CustomerId = item.CustomerId,
+    SubGroupId = item.SubGroupId,
+    ProductGroupId = item.ProductGroupId,
+    Quantity = item.Quantity,
+    GrossAmount = item.GrossAmount
+};
 
         try
         {
@@ -680,7 +694,8 @@ private List<ExportColumn<CreditLimitSalesForm>> GetExportColumns()
         catch { }
         return null;
     }
-
+    private string GetFinancialYearName(int id) =>
+    id == 0 ? "N/A" : _financialYears.FirstOrDefault(f => f.Id == id)?.Name ?? id.ToString();
     public class CreditLimitSalesForm
     {
         public int Id { get; set; }
@@ -691,6 +706,7 @@ private List<ExportColumn<CreditLimitSalesForm>> GetExportColumns()
         public int ProductGroupId { get; set; } = 0;
         public int Quantity { get; set; } = 0;
         public double GrossAmount { get; set; } = 0.0;
+         public int FinancialYearId { get; set; } = 0;
     }
 
     public class StateDto
