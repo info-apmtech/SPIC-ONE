@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
+using static System.Net.WebRequestMethods;
 namespace SpicAPI.Controllers
 {
 
@@ -63,7 +65,6 @@ namespace SpicAPI.Controllers
             _creditRepo = creditRepo;
             _docsRepo = docsRepo;
         }
-
         [HttpGet("all")]
         public override async Task<IActionResult> GetAllWithInactive()
         {
@@ -87,6 +88,35 @@ namespace SpicAPI.Controllers
             else
                 query = query.Where(x => x.CreatedBy == userId);
             return Ok(await query.ToListAsync());
+        }
+        [HttpGet("lookup")]
+        public async Task<IActionResult> GetLookup()
+        {
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var regionClaim = User.FindFirst("RegionId")?.Value;
+            var stateClaim = User.FindFirst("StateId")?.Value;
+            var hqClaim = User.FindFirst("HQId")?.Value;
+
+            var query = _repo.GetAllWithInactive();
+
+            if (role != "Admin" && role != "CorporateAdmin")
+            {
+                if (role == "RM" && int.TryParse(regionClaim, out var regionId))
+                    query = query.Where(x => x.Region == regionId);
+                else if (role == "SM" && int.TryParse(stateClaim, out var stateId))
+                    query = query.Where(x => x.StateId == stateId);
+                else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId))
+                    query = query.Where(x => x.HQ == hqId);
+                else
+                    query = query.Where(x => x.CreatedBy == userId);
+            }
+
+            var lookup = await query
+                .Select(x => new { x.Id, x.DealerCode, x.FirmName, x.StateId })
+                .ToListAsync();
+
+            return Ok(lookup);
         }
 
         /// <summary>

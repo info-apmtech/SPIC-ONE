@@ -362,7 +362,14 @@
 
                             <div class="col-12 col-sm-6">
                                 <label class="form-label-custom">Pincode</label>
-                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("PinCode") ? "is-invalid" : "")" @bind="_model.PinCode" @bind:after="OnPincodeChanged" placeholder="Enter Pincode" maxlength="6">
+<input type="text"
+       class="form-control-custom w-100 @(_errors.ContainsKey("PinCode") ? "is-invalid" : "")"
+       @bind="_model.PinCode"
+       @bind:event="oninput"
+       @bind:after="OnPincodeChanged"
+       placeholder="Enter Pincode"
+       maxlength="6"
+       inputmode="numeric">
                                 @if (_isPincodeLookup)
                                 {
                                     <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
@@ -890,25 +897,42 @@
     private string? _pincodeMessage;
     private bool _pincodeSuccess;
 
-    protected override async Task OnInitializedAsync()
+   protected override async Task OnInitializedAsync()
+{
+    _objRef = DotNetObjectReference.Create(this);
+    Loading.Show();
+    try
     {
-        _objRef = DotNetObjectReference.Create(this);
-        Loading.Show();
-        try
+        // If editing, start the dealer fetch concurrently with the lookups
+        Task<DealerFormModel?>? dealerTask = null;
+        if (DealerIdFromQuery.HasValue && DealerIdFromQuery.Value > 0)
         {
-            await LoadData();
-            ApplyEmployeeLocationDefaults();
-            if (DealerIdFromQuery.HasValue && DealerIdFromQuery.Value > 0)
+            _dealerCodeId = DealerIdFromQuery.Value;
+            dealerTask = Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
+        }
+
+        await LoadData();
+        ApplyEmployeeLocationDefaults();
+
+        if (dealerTask != null)
+        {
+            try
             {
-                _dealerCodeId = DealerIdFromQuery.Value;
-                await OnDealerCodeChanged();
+                var dealer = await dealerTask;
+                await ApplyDealerToForm(dealer);
+            }
+            catch (Exception ex)
+            {
+                ShowMessage($"Failed to load dealer: {ex.Message}", true);
+                _isEditMode = false;
             }
         }
-        finally
-        {
-            Loading.Hide();
-        }
     }
+    finally
+    {
+        Loading.Hide();
+    }
+}
 
     public void Dispose() => _objRef?.Dispose();
 
@@ -923,7 +947,38 @@
             }
         }
     }
+    private async Task ApplyDealerToForm(DealerFormModel? dealer)
+{
+    if (dealer == null) return;
 
+    _model = dealer;
+    _isEditMode = true;
+
+    selected           = _model.IsDealer ? "Dealer" : "Department";
+    isSpic             = _model.InSpic;
+    isGreenStar        = _model.InGreenStar;
+    _basicInfoStateId  = _model.StateId;
+    _basicInfoRegionId = _model.Region;
+    _basicInfoHqId     = _model.HQ;
+    _parentDealerId    = _model.ParentDealer;
+
+    status = _model.Status switch
+    {
+        0 => "Active",
+        1 => "Inactive",
+        2 => "Terminated",
+        _ => "Active"
+    };
+
+    _filteredRegions       = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
+    _filteredHeadquarters  = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
+    _filteredDealers       = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
+
+    if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+    {
+        await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+    }
+}
     private async Task TriggerMapUpdate(double lat, double lng)
     {
         try { await JS.InvokeVoidAsync("updateLeafletMap", "leafletMap", lat, lng); }
@@ -941,22 +996,31 @@
         StateHasChanged();
     }
 
-    private async Task LoadData()
+private async Task LoadData()
+{
+    try
     {
-        try
-        {
-            _statesAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
-            _DistrictAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/District/all") ?? new();
-            _regionsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all") ?? new();
-            _headquartersAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all") ?? new();
-            _banksAll = await Http.GetFromJsonAsync<List<BankItemDto>>("api/Bank/all") ?? new();
-            _dealersAll = await Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/all") ?? new();
-        }
-        catch (Exception ex)
-        {
-            ShowMessage($"Failed to load data: {ex.Message}", true);
-        }
+        // Fire all six lookup calls concurrently instead of one-after-another
+        var statesTask    = Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all");
+        var districtsTask = Http.GetFromJsonAsync<List<LocationItemDto>>("api/District/all");
+        var regionsTask   = Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all");
+        var hqTask        = Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all");
+        var banksTask     = Http.GetFromJsonAsync<List<BankItemDto>>("api/Bank/all");
+        var dealersTask = Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/lookup");
+        await Task.WhenAll(statesTask, districtsTask, regionsTask, hqTask, banksTask, dealersTask);
+
+        _statesAll        = statesTask.Result    ?? new();
+        _DistrictAll      = districtsTask.Result ?? new();
+        _regionsAll       = regionsTask.Result   ?? new();
+        _headquartersAll  = hqTask.Result        ?? new();
+        _banksAll         = banksTask.Result     ?? new();
+        _dealersAll       = dealersTask.Result   ?? new();
     }
+    catch (Exception ex)
+    {
+        ShowMessage($"Failed to load data: {ex.Message}", true);
+    }
+}
 
     void Select(string type) => selected = type;
     void SelectStatus(string value) => status = value;
@@ -1054,112 +1118,112 @@
             _errors.Remove("FertilizerLicense");
     }
 
-    private async Task OnPincodeChanged()
+ private async Task OnPincodeChanged()
+{
+    _pincodeMessage = null;
+    _pincodeSuccess = false;
+    _errors.Remove("PinCode");
+
+    // Strip non-digit characters
+    if (!string.IsNullOrEmpty(_model.PinCode))
     {
-        _pincodeMessage = null;
-        _pincodeSuccess = false;
-        _errors.Remove("PinCode");
-
-        if (string.IsNullOrWhiteSpace(_model.PinCode) || _model.PinCode.Length != 6 || !_model.PinCode.All(char.IsDigit))
-            return;
-
-        _isPincodeLookup = true;
-        StateHasChanged();
-
-        try
-        {
-            var results = await Http.GetFromJsonAsync<List<PincodeApiResponse>>($"https://api.postalpincode.in/pincode/{_model.PinCode}");
-            var result = results?.FirstOrDefault();
-
-            if (result?.Status == "Success" && result.PostOffice?.Count > 0)
-            {
-                var postOffice = result.PostOffice[0];
-
-                var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
-                var matchedDistrict = _DistrictAll.FirstOrDefault(d =>
-                    d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
-                if (matchedDistrict != null) _model.DistrictId = matchedDistrict.Id;
-
-                var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
-                var matchedState = _statesAll.FirstOrDefault(s =>
-                    s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
-                if (matchedState != null) _model.DealerStateId = matchedState.Id;
-
-                if (!string.IsNullOrWhiteSpace(postOffice.Block)) _model.Block = postOffice.Block;
-                if (!string.IsNullOrWhiteSpace(postOffice.Division)) _model.Taluk = postOffice.Division;
-                if (!string.IsNullOrWhiteSpace(postOffice.Name)) _model.Village = postOffice.Name;
-
-                _pincodeSuccess = true;
-                _pincodeMessage = $"Auto-filled: {postOffice.District}, {postOffice.State}, {postOffice.Block}";
-            }
-            else
-            {
-                _pincodeMessage = "No data found for this pincode";
-            }
-        }
-        catch
-        {
-            _pincodeMessage = "Could not look up pincode. Please select manually.";
-        }
-        finally
-        {
-            _isPincodeLookup = false;
-        }
+        var digitsOnly = new string(_model.PinCode.Where(char.IsDigit).ToArray());
+        if (digitsOnly != _model.PinCode)
+            _model.PinCode = digitsOnly;
     }
 
-    private async Task OnDealerCodeChanged()
+    if (string.IsNullOrWhiteSpace(_model.PinCode) || _model.PinCode.Length != 6)
+        return;
+
+    _isPincodeLookup = true;
+    StateHasChanged();
+
+    try
     {
-        _errors.Clear();
-        _message = null;
+        // Call our own backend — no SSL/CORS/auth issues, no DefaultRequestHeaders juggling
+        using var response = await Http.GetAsync($"api/PincodeLookup/{_model.PinCode}");
 
-        if (_dealerCodeId > 0)
+        if (!response.IsSuccessStatusCode)
         {
-            try
-            {
-                var dealer = await Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
-                if (dealer != null)
-                {
-                    _model = dealer;
-                    _isEditMode = true;
-
-                    selected = _model.IsDealer ? "Dealer" : "Department";
-                    isSpic = _model.InSpic;
-                    isGreenStar = _model.InGreenStar;
-                    _basicInfoStateId = _model.StateId;
-                    _basicInfoRegionId = _model.Region;
-                    _basicInfoHqId = _model.HQ;
-                    _parentDealerId = _model.ParentDealer;
-
-                    status = _model.Status switch
-                    {
-                        0 => "Active",
-                        1 => "Inactive",
-                        2 => "Terminated",
-                        _ => "Active"
-                    };
-
-                    _filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
-                    _filteredHeadquarters = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
-                    _filteredDealers = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
-
-                    if (_model.Latitude.HasValue && _model.Longitude.HasValue)
-                    {
-                        await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                ShowMessage($"Failed to load dealer: {ex.Message}", true);
-                _isEditMode = false;
-            }
+            var body = await response.Content.ReadAsStringAsync();
+            _pincodeMessage = $"Lookup failed (HTTP {(int)response.StatusCode}): {body}";
+            return;
         }
-        else
+
+        var results = await response.Content.ReadFromJsonAsync<List<PincodeApiResponse>>();
+        var result = results?.FirstOrDefault();
+
+        if (result == null
+            || !string.Equals(result.Status, "Success", StringComparison.OrdinalIgnoreCase)
+            || result.PostOffice == null
+            || result.PostOffice.Count == 0)
         {
-            _model = new();
+            _pincodeMessage = $"No data found for pincode {_model.PinCode}";
+            return;
+        }
+
+        var postOffice = result.PostOffice[0];
+
+        var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
+        var matchedDistrict = _DistrictAll.FirstOrDefault(d =>
+            d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+        if (matchedDistrict != null) _model.DistrictId = matchedDistrict.Id;
+
+        var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
+        var matchedState = _statesAll.FirstOrDefault(s =>
+            s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
+        if (matchedState != null) _model.DealerStateId = matchedState.Id;
+
+        if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+            _model.Block = postOffice.Block;
+        if (!string.IsNullOrWhiteSpace(postOffice.Division)) _model.Taluk = postOffice.Division;
+        if (!string.IsNullOrWhiteSpace(postOffice.Name))     _model.Village = postOffice.Name;
+
+        _pincodeSuccess = true;
+        _pincodeMessage = $"Auto-filled: {postOffice.District}, {postOffice.State}";
+    }
+    catch (HttpRequestException httpEx)
+    {
+        _pincodeMessage = $"Network error: {httpEx.Message}";
+    }
+    catch (TaskCanceledException)
+    {
+        _pincodeMessage = "Lookup timed out — try again.";
+    }
+    catch (Exception ex)
+    {
+        _pincodeMessage = $"{ex.GetType().Name}: {ex.Message}";
+    }
+    finally
+    {
+        _isPincodeLookup = false;
+    }
+}
+
+    private async Task OnDealerCodeChanged()
+{
+    _errors.Clear();
+    _message = null;
+
+    if (_dealerCodeId > 0)
+    {
+        try
+        {
+            var dealer = await Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
+            await ApplyDealerToForm(dealer);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load dealer: {ex.Message}", true);
             _isEditMode = false;
         }
     }
+    else
+    {
+        _model = new();
+        _isEditMode = false;
+    }
+}
 
     private void ResetForm()
     {

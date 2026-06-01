@@ -202,18 +202,24 @@
         </div>
         <div class="row g-3 mb-3">
            
-            <div class="col-md-4">
-                <label class="custom-label">Pin Code</label>
-                <input type="text" class="custom-input" placeholder="Enter Pin Code" @bind="_partnerForm.PinCode" @bind:after="OnPincodeChanged" maxlength="6" oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
-                @if (_isPincodeLookup)
-                {
-                    <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
-                }
-                @if (!string.IsNullOrEmpty(_pincodeMessage))
-                {
-                    <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">@_pincodeMessage</div>
-                }
-            </div>
+           <div class="col-md-4">
+    <label class="custom-label">Pin Code</label>
+    <input type="text" class="custom-input"
+           placeholder="Enter Pin Code"
+           @bind="_partnerForm.PinCode"
+           @bind:event="oninput"
+           @bind:after="OnPincodeChanged"
+           maxlength="6"
+           inputmode="numeric" />
+    @if (_isPincodeLookup)
+    {
+        <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
+    }
+    @if (!string.IsNullOrEmpty(_pincodeMessage))
+    {
+        <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">@_pincodeMessage</div>
+    }
+</div>
 				<div class="col-md-4">
 					<label class="custom-label">Village</label>
 					<input type="text" class="custom-input" placeholder="Enter Village" @bind="_partnerForm.Village" />
@@ -1384,66 +1390,86 @@
 	}
 
 	private async Task OnPincodeChanged()
-	{
-		_pincodeMessage = null;
-		_pincodeSuccess = false;
+{
+    _pincodeMessage = null;
+    _pincodeSuccess = false;
 
-		if (string.IsNullOrWhiteSpace(_partnerForm.PinCode) || _partnerForm.PinCode.Length != 6 || !_partnerForm.PinCode.All(char.IsDigit))
-			return;
+    // Strip non-digit characters
+    if (!string.IsNullOrEmpty(_partnerForm.PinCode))
+    {
+        var digitsOnly = new string(_partnerForm.PinCode.Where(char.IsDigit).ToArray());
+        if (digitsOnly != _partnerForm.PinCode)
+            _partnerForm.PinCode = digitsOnly;
+    }
 
-		_isPincodeLookup = true;
-		StateHasChanged();
+    if (string.IsNullOrWhiteSpace(_partnerForm.PinCode) || _partnerForm.PinCode.Length != 6)
+        return;
 
-		try
-		{
-			var results = await Http.GetFromJsonAsync<List<PincodeApiResponse>>($"https://api.postalpincode.in/pincode/{_partnerForm.PinCode}");
-			var result = results?.FirstOrDefault();
+    _isPincodeLookup = true;
+    StateHasChanged();
 
-			if (result?.Status == "Success" && result.PostOffice?.Count > 0)
-			{
-				var postOffice = result.PostOffice[0];
+    try
+    {
+        using var response = await Http.GetAsync($"api/PincodeLookup/{_partnerForm.PinCode}");
 
-				var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
-				var matchedDistrict = _districtsAll.FirstOrDefault(d =>
-					d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
-				if (matchedDistrict != null)
-					_partnerForm.DistrictId = matchedDistrict.Id;
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            _pincodeMessage = $"Lookup failed (HTTP {(int)response.StatusCode}): {body}";
+            return;
+        }
 
-				var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
-				var matchedState = _statesAll.FirstOrDefault(s =>
-					s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
-				if (matchedState != null)
-					_partnerForm.StateId = matchedState.Id;
+        var results = await response.Content.ReadFromJsonAsync<List<PincodeApiResponse>>();
+        var result = results?.FirstOrDefault();
 
-				if (!string.IsNullOrWhiteSpace(postOffice.Block))
-					_partnerForm.Block = postOffice.Block;
+        if (result == null
+            || !string.Equals(result.Status, "Success", StringComparison.OrdinalIgnoreCase)
+            || result.PostOffice == null
+            || result.PostOffice.Count == 0)
+        {
+            _pincodeMessage = $"No data found for pincode {_partnerForm.PinCode}";
+            return;
+        }
 
-				if (!string.IsNullOrWhiteSpace(postOffice.Division))
-					_partnerForm.Taluk = postOffice.Division;
+        var postOffice = result.PostOffice[0];
 
-				if (!string.IsNullOrWhiteSpace(postOffice.Name))
-					_partnerForm.Village = postOffice.Name;
+        var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
+        var matchedDistrict = _districtsAll.FirstOrDefault(d =>
+            d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+        if (matchedDistrict != null)
+            _partnerForm.DistrictId = matchedDistrict.Id;
 
-				// if (!string.IsNullOrWhiteSpace(postOffice.Region))
-				// 	_partnerForm.Street = postOffice.Region;
+        var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
+        var matchedState = _statesAll.FirstOrDefault(s =>
+            s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
+        if (matchedState != null)
+            _partnerForm.StateId = matchedState.Id;
 
-				_pincodeSuccess = true;
-				_pincodeMessage = $"Auto-filled: {postOffice.District}, {postOffice.State}, {postOffice.Block}";
-			}
-			else
-			{
-				_pincodeMessage = "No data found for this pincode";
-			}
-		}
-		catch
-		{
-			_pincodeMessage = "Could not look up pincode. Please fill manually.";
-		}
-		finally
-		{
-			_isPincodeLookup = false;
-		}
-	}
+        if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+            _partnerForm.Block = postOffice.Block;
+        if (!string.IsNullOrWhiteSpace(postOffice.Division)) _partnerForm.Taluk = postOffice.Division;
+        if (!string.IsNullOrWhiteSpace(postOffice.Name)) _partnerForm.Village = postOffice.Name;
+
+        _pincodeSuccess = true;
+        _pincodeMessage = $"Auto-filled: {postOffice.District}, {postOffice.State}";
+    }
+    catch (HttpRequestException httpEx)
+    {
+        _pincodeMessage = $"Network error: {httpEx.Message}";
+    }
+    catch (TaskCanceledException)
+    {
+        _pincodeMessage = "Lookup timed out — try again.";
+    }
+    catch (Exception ex)
+    {
+        _pincodeMessage = $"{ex.GetType().Name}: {ex.Message}";
+    }
+    finally
+    {
+        _isPincodeLookup = false;
+    }
+}
 
 	private void ShowMessage(string message, bool isError)
 	{

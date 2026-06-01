@@ -193,18 +193,24 @@
                     <label class="custom-label">Sub Village</label>
                     <input type="text" class="custom-input" placeholder="Enter Sub Village" @bind="_buildingForm.SubVillage" />
                 </div>
-                <div class="col-12 col-sm-6 col-md-4">
-                    <label class="custom-label">Pin Code</label>
-                    <input type="text" class="custom-input" placeholder="Enter Pincode" maxlength="6" @bind="_buildingForm.PinCode" @bind:after="OnBuildingPincodeChanged" />
-                    @if (_isBuildingPincodeLookup)
-                    {
-                        <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
-                    }
-                    @if (!string.IsNullOrEmpty(_buildingPincodeMessage))
-                    {
-                        <div class="small @(_buildingPincodeSuccess ? "text-success" : "text-warning") mt-1">@_buildingPincodeMessage</div>
-                    }
-                </div>
+               <div class="col-12 col-sm-6 col-md-4">
+    <label class="custom-label">Pin Code</label>
+    <input type="text" class="custom-input"
+           placeholder="Enter Pincode"
+           maxlength="6"
+           inputmode="numeric"
+           @bind="_buildingForm.PinCode"
+           @bind:event="oninput"
+           @bind:after="OnBuildingPincodeChanged" />
+    @if (_isBuildingPincodeLookup)
+    {
+        <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
+    }
+    @if (!string.IsNullOrEmpty(_buildingPincodeMessage))
+    {
+        <div class="small @(_buildingPincodeSuccess ? "text-success" : "text-warning") mt-1">@_buildingPincodeMessage</div>
+    }
+</div>
             </div>
             <div class="row g-3 mb-3">
                 <div class="col-12 col-sm-6 col-md-4">
@@ -953,59 +959,87 @@
         _isError = isError;
     }
 
-    private async Task OnBuildingPincodeChanged()
+  private async Task OnBuildingPincodeChanged()
+{
+    _buildingPincodeMessage = null;
+    _buildingPincodeSuccess = false;
+
+    // Strip non-digit characters
+    if (!string.IsNullOrEmpty(_buildingForm.PinCode))
     {
-        _buildingPincodeMessage = null;
-        _buildingPincodeSuccess = false;
-
-        if (string.IsNullOrWhiteSpace(_buildingForm.PinCode) || _buildingForm.PinCode.Length != 6 || !_buildingForm.PinCode.All(char.IsDigit))
-            return;
-
-        _isBuildingPincodeLookup = true;
-        StateHasChanged();
-
-        try
-        {
-            var results = await Http.GetFromJsonAsync<List<PincodeApiResponse>>($"https://api.postalpincode.in/pincode/{_buildingForm.PinCode}");
-            var result = results?.FirstOrDefault();
-
-            if (result?.Status == "Success" && result.PostOffice?.Count > 0)
-            {
-                var po = result.PostOffice[0];
-
-                var apiDistrict = po.District?.Trim().Replace(" ", "") ?? "";
-                var matchedDistrict = _districts.FirstOrDefault(d =>
-                    d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
-                if (matchedDistrict != null)
-                    _buildingForm.DistrictId = matchedDistrict.Id;
-
-                var apiState = po.State?.Trim().Replace(" ", "") ?? "";
-                var matchedState = _states.FirstOrDefault(s =>
-                    s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
-                if (matchedState != null)
-                    _buildingForm.StateId = matchedState.Id;
-
-                if (!string.IsNullOrWhiteSpace(po.Block)) _buildingForm.Block = po.Block;
-                if (!string.IsNullOrWhiteSpace(po.Division)) _buildingForm.Taluk = po.Division;
-                if (!string.IsNullOrWhiteSpace(po.Name)) _buildingForm.Village = po.Name;
-
-                _buildingPincodeSuccess = true;
-                _buildingPincodeMessage = $"Auto-filled: {po.District}, {po.State}, {po.Block}";
-            }
-            else
-            {
-                _buildingPincodeMessage = "No data found for this pincode";
-            }
-        }
-        catch
-        {
-            _buildingPincodeMessage = "Could not look up pincode. Please fill manually.";
-        }
-        finally
-        {
-            _isBuildingPincodeLookup = false;
-        }
+        var digitsOnly = new string(_buildingForm.PinCode.Where(char.IsDigit).ToArray());
+        if (digitsOnly != _buildingForm.PinCode)
+            _buildingForm.PinCode = digitsOnly;
     }
+
+    if (string.IsNullOrWhiteSpace(_buildingForm.PinCode) || _buildingForm.PinCode.Length != 6)
+        return;
+
+    _isBuildingPincodeLookup = true;
+    StateHasChanged();
+
+    try
+    {
+        using var response = await Http.GetAsync($"api/PincodeLookup/{_buildingForm.PinCode}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            _buildingPincodeMessage = $"Lookup failed (HTTP {(int)response.StatusCode}): {body}";
+            return;
+        }
+
+        var results = await response.Content.ReadFromJsonAsync<List<PincodeApiResponse>>();
+        var result = results?.FirstOrDefault();
+
+        if (result == null
+            || !string.Equals(result.Status, "Success", StringComparison.OrdinalIgnoreCase)
+            || result.PostOffice == null
+            || result.PostOffice.Count == 0)
+        {
+            _buildingPincodeMessage = $"No data found for pincode {_buildingForm.PinCode}";
+            return;
+        }
+
+        var po = result.PostOffice[0];
+
+        var apiDistrict = po.District?.Trim().Replace(" ", "") ?? "";
+        var matchedDistrict = _districts.FirstOrDefault(d =>
+            d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+        if (matchedDistrict != null)
+            _buildingForm.DistrictId = matchedDistrict.Id;
+
+        var apiState = po.State?.Trim().Replace(" ", "") ?? "";
+        var matchedState = _states.FirstOrDefault(s =>
+            s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
+        if (matchedState != null)
+            _buildingForm.StateId = matchedState.Id;
+
+        if (!string.IsNullOrWhiteSpace(po.Block) && po.Block != "NA")
+            _buildingForm.Block = po.Block;
+        if (!string.IsNullOrWhiteSpace(po.Division)) _buildingForm.Taluk = po.Division;
+        if (!string.IsNullOrWhiteSpace(po.Name)) _buildingForm.Village = po.Name;
+
+        _buildingPincodeSuccess = true;
+        _buildingPincodeMessage = $"Auto-filled: {po.District}, {po.State}";
+    }
+    catch (HttpRequestException httpEx)
+    {
+        _buildingPincodeMessage = $"Network error: {httpEx.Message}";
+    }
+    catch (TaskCanceledException)
+    {
+        _buildingPincodeMessage = "Lookup timed out — try again.";
+    }
+    catch (Exception ex)
+    {
+        _buildingPincodeMessage = $"{ex.GetType().Name}: {ex.Message}";
+    }
+    finally
+    {
+        _isBuildingPincodeLookup = false;
+    }
+}
 
     private async Task OnLandECSelected(InputFileChangeEventArgs e)
     {
