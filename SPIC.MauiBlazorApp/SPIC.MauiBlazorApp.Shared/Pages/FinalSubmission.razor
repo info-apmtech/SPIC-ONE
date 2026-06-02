@@ -5,6 +5,7 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject LoadingService Loading
 
 <div class="container-fluid py-4 px-0">
 
@@ -572,6 +573,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        Loading.Show();
+        try
+        {
         await Task.WhenAll(
             LoadDealer(),
             LoadExperiences(),
@@ -592,6 +596,11 @@
         CalculateStepStatus();
         BuildEnclosureItems();
         CalculateProgress();
+        }
+        finally
+        {
+            Loading.Hide();
+        }
     }
 
     private async Task LoadDealer()

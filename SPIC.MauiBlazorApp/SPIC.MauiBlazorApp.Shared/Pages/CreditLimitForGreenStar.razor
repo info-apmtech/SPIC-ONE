@@ -5,6 +5,7 @@
 @using SPIC.MauiBlazorApp.Shared.FormFlow
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject LoadingService Loading
 <style>
 	.table-wrapper {
 		width: 100%;
@@ -691,7 +692,9 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 	}
 
 	_isCheckingGreenStar = false;
-
+		Loading.Show();
+		try
+		{
 	SelectedCompany = "GreenStar";
 
 	var fyTask = SafeGetAsync<List<FinancialYear>>("api/FinancialYear");
@@ -777,6 +780,11 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 	{
 		await LoadGreenstarValuationDefaultValues();
 	}
+		}
+		finally
+		{
+			Loading.Hide();
+		}
 }
 private int GetDefaultGreenstarCategoryId()
 {
