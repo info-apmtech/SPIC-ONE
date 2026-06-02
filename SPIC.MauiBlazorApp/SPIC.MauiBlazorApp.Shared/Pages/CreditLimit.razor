@@ -71,7 +71,7 @@
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
-
+	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 	@if (!string.IsNullOrEmpty(_message))
 	{
 		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
@@ -511,12 +511,17 @@
 		</div>
 	}
 
+	</fieldset>
 	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int? DealerId { get; set; }
+	[SupplyParameterFromQuery(Name = "mode")]
+	public string? Mode { get; set; }
+
+	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 	public string? SelectedCompany { get; set; }
 
 	private DealerReg _dealer = new();
@@ -950,6 +955,12 @@
 
 	private async Task HandleNext()
 	{
+		if (IsViewOnly)
+		{
+			Loading.Show();
+			Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}&mode=view");
+			return;
+		}
 		if (!DealerId.HasValue || DealerId.Value <= 0)
 		{
 			ShowMessage("Dealer ID is required.", true);

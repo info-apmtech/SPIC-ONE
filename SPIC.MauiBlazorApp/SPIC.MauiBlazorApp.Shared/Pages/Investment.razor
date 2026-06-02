@@ -7,9 +7,22 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+<style>
+    fieldset:disabled .doc-remove-x {
+        display: none !important;
+    }
 
+    fieldset:disabled .edit {
+        display: none !important;
+    }
+
+    fieldset:disabled .delete {
+        display: none !important;
+    }
+</style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
+                	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 
     @if (!string.IsNullOrEmpty(_message))
     {
@@ -570,7 +583,7 @@
             </div>
         </div>
     </div>
-
+    </fieldset>
     <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
@@ -621,7 +634,10 @@
 @code {
     [SupplyParameterFromQuery(Name = "dealerId")]
     public int? DealerId { get; set; }
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
 
+    private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
     private DealerReg _dealer = new();
     private List<Bank> _banks = new();
     private List<DealerAssetBank> _bankAssets = new();
@@ -929,6 +945,12 @@
 
     private async Task HandleNext()
     {
+        if (IsViewOnly)
+        {
+            Loading.Show();
+            Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}&mode=view");
+            return;
+        }
         if (!DealerId.HasValue || DealerId.Value <= 0)
         {
             ShowMessage("Dealer ID is required.", true);
