@@ -8,9 +8,19 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+<style>
+	fieldset:disabled .icon-delete {
+		display: none !important;
+	}
 
+	fieldset:disabled .icon-edit {
+		display: none !important;
+	}
+</style>
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
+	            	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
+
 	<div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
 		<h3 class="fw-bold m-0 company-title">Proprietor Details</h3>
 	</div>
@@ -532,6 +542,7 @@
 		</div>
 	}
 
+	</fieldset>
 	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
@@ -750,7 +761,10 @@
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int DealerId { get; set; }
+	[SupplyParameterFromQuery(Name = "mode")]
+	public string? Mode { get; set; }
 
+	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 	// Entity type selection
 	private EntityType? _selectedEntityType;
 	private readonly List<(EntityType Value, string Label)> _entityTypes =
@@ -1281,6 +1295,12 @@
 	// --- Navigate Next ---
 	private async Task HandleNext()
 	{
+		if (IsViewOnly)
+		{
+			Loading.Show();
+			Nav.NavigateTo($"/SalesPlaning?dealerId={DealerId}&mode=view");
+			return;
+		}
 		if (_selectedEntityType == null)
 		{
 			FormStepData.MarkStepError(7, true);

@@ -6,10 +6,15 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject LoadingService Loading
-
+<style>
+    fieldset:disabled .fs-edit-icon {
+        display: none !important;
+    }
+</style>
 <div class="container-fluid py-4 px-0">
 
     <FormLoader />
+    	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 
     @if (!string.IsNullOrEmpty(_message))
     {
@@ -488,13 +493,17 @@
         </div>
     }
 
+    </fieldset>
     <CommanFooter OnNextClick="HandleSubmit" IsNextDisabled="@_isSubmitting" />
 </div>
 
 @code {
     [SupplyParameterFromQuery(Name = "dealerId")]
     public int DealerId { get; set; }
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
 
+    private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
     private DealerReg _dealer = new();
     private DealerRegistrationDocuments? _docs;
     private List<DealerOwnershipInfo> _partners = new();

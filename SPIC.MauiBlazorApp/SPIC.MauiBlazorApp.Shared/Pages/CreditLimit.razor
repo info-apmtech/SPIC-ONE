@@ -71,7 +71,7 @@
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
-
+	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 	@if (!string.IsNullOrEmpty(_message))
 	{
 		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
@@ -511,12 +511,17 @@
 		</div>
 	}
 
+	</fieldset>
 	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int? DealerId { get; set; }
+	[SupplyParameterFromQuery(Name = "mode")]
+	public string? Mode { get; set; }
+
+	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 	public string? SelectedCompany { get; set; }
 
 	private DealerReg _dealer = new();
@@ -541,7 +546,9 @@
 	private string? _message;
 	private bool _isError;
 	private double[] _spicValues = new double[10];
+	private double[] _greenstarValues = new double[11];
 	private bool[] _spicValueEntered = new bool[10];
+	private bool[] _greenstarValueEntered = new bool[11];
 
 	// Asset totals
 	private decimal BankingTotal => _bankAssets.Sum(b => b.Value);
@@ -762,35 +769,35 @@
 		await LoadCreditLimitSalesData();
 	}
 
-	private async Task LoadCreditLimitSalesData()
-	{
-		if (_dealer.Id <= 0 || _selectedCategoryId <= 0)
+		private async Task LoadCreditLimitSalesData()
 		{
-			_creditLimitSalesData = new();
+			if (_dealer.Id <= 0 || _selectedCategoryId <= 0)
+			{
+				_creditLimitSalesData = new();
+				BuildSalesPerfRows();
+				return;
+			}
+
+			var fyIds = GetCompletedFYIds();
+
+			if (fyIds.Count == 0)
+			{
+				_creditLimitSalesData = new();
+				BuildSalesPerfRows();
+				return;
+			}
+
+			var fyQuery = string.Join(",", fyIds);
+
+			var url = $"api/creditlimitsales/by-filter" +
+					  $"?customerId={_dealer.Id}" +
+					  $"&categoryId={_selectedCategoryId}" +
+					  $"&financialYearIds={fyQuery}";
+
+			_creditLimitSalesData = await SafeGetAsync<List<DealerCreditLimitSales>>(url) ?? new();
+
 			BuildSalesPerfRows();
-			return;
 		}
-
-		var fyIds = GetCompletedFYIds();
-
-		if (fyIds.Count == 0)
-		{
-			_creditLimitSalesData = new();
-			BuildSalesPerfRows();
-			return;
-		}
-
-		var fyQuery = string.Join(",", fyIds);
-
-		var url = $"api/creditlimitsales/by-filter" +
-				  $"?customerId={_dealer.Id}" +
-				  $"&categoryId={_selectedCategoryId}" +
-				  $"&financialYearIds={fyQuery}";
-
-		_creditLimitSalesData = await SafeGetAsync<List<DealerCreditLimitSales>>(url) ?? new();
-
-		BuildSalesPerfRows();
-	}
 
 	private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financialYearId)
 	{
@@ -948,6 +955,12 @@
 
 	private async Task HandleNext()
 	{
+		if (IsViewOnly)
+		{
+			Loading.Show();
+			Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}&mode=view");
+			return;
+		}
 		if (!DealerId.HasValue || DealerId.Value <= 0)
 		{
 			ShowMessage("Dealer ID is required.", true);
@@ -1029,15 +1042,17 @@
 
 	private void SetFixedFinancialYears()
 	{
-		var selectedYears = _financialYears
-			.OrderByDescending(f => f.Id)
+		// Only completed financial years (EndDate in the past)
+		var completedYears = _financialYears
+			.Where(fy => fy.EndDate <= DateTime.Today)
+			.OrderByDescending(fy => fy.EndDate)
 			.Take(3)
-			.OrderBy(f => f.Id)
+			.OrderBy(fy => fy.EndDate)  // oldest → newest left to right
 			.ToList();
 
-		_proposal.FY1 = selectedYears.Count > 0 ? selectedYears[0].Id : 0;
-		_proposal.FY2 = selectedYears.Count > 1 ? selectedYears[1].Id : 0;
-		_proposal.FY3 = selectedYears.Count > 2 ? selectedYears[2].Id : 0;
+		_proposal.FY1 = completedYears.Count > 0 ? completedYears[0].Id : 0;
+		_proposal.FY2 = completedYears.Count > 1 ? completedYears[1].Id : 0;
+		_proposal.FY3 = completedYears.Count > 2 ? completedYears[2].Id : 0;
 	}
 	private bool IsUreaProduct(Product? product)
 	{
@@ -1193,10 +1208,10 @@
 	private List<int> GetCompletedFYIds()
 	{
 		return _financialYears
-			.Where(fy => fy.EndDate <= DateTime.Today) // only completed FYs
-			.OrderBy(fy => fy.Id)
+			.Where(fy => fy.EndDate <= DateTime.Today)
+			.OrderByDescending(fy => fy.EndDate)
+			.Take(3)
 			.Select(fy => fy.Id)
-			.TakeLast(3) // last 3 completed FYs
 			.ToList();
 	}
 }

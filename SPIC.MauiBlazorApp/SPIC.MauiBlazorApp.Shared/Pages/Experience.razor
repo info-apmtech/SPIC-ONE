@@ -7,9 +7,14 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
-
+<style>
+	fieldset:disabled .action-link {
+		display: none !important;
+	}
+</style>
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
+	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 
 	@if (!string.IsNullOrEmpty(_message))
 	{
@@ -218,12 +223,17 @@
 		</div>
 	}
 
+	</fieldset>
 	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int? DealerId { get; set; }
+	[SupplyParameterFromQuery(Name = "mode")]
+	public string? Mode { get; set; }
+
+	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 
 	private List<DealerExperience> _experiences = new();
 	private List<Competitor> _companyAll = new();
@@ -422,6 +432,12 @@
 
 	private async Task HandleNext()
 	{
+		if (IsViewOnly)
+		{
+			Loading.Show();
+			Nav.NavigateTo($"/AnnualSales?dealerId={DealerId}&mode=view");
+			return;
+		}
 		await SaveYearsOfExperience();
 		var hasError = _yearsOfExperience <= 0 || _experiences.Count == 0;
 		FormStepData.MarkStepError(2, hasError);

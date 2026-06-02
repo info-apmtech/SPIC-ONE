@@ -8,11 +8,21 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject LoadingService Loading
+<style>
+	fieldset:disabled .bi-x-circle-fill {
+		display: none !important;
+	}
+
+	fieldset:disabled .bi-arrow-repeat {
+		display: none !important;
+	}
+
+</style>
 
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
-
+	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 	@if (!string.IsNullOrEmpty(_message))
 	{
 		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
@@ -1620,7 +1630,7 @@
 		</div>
 	</div>
 
-
+	</fieldset>
 	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 @if (_showDeleteModal)
@@ -1650,7 +1660,10 @@
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int DealerId { get; set; }
+	[SupplyParameterFromQuery(Name = "mode")]
+	public string? Mode { get; set; }
 
+	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 	private DealerReg _dealer = new();
 	private DealerRegistrationDocuments _docs = new();
 	private List<DealerOwnershipInfo> _partners = new();
@@ -2839,6 +2852,12 @@
 	// --- Save & Navigate ---
 	private async Task HandleNext()
 	{
+		if (IsViewOnly)
+		{
+			Loading.Show();
+			Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}&mode=view");
+			return;
+		}
 		_isSaving = true;
 		_message = null;
 

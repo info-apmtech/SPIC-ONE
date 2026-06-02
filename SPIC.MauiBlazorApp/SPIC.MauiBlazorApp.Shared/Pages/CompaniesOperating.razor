@@ -6,10 +6,20 @@
 @inject NavigationManager Nav
 @inject LoadingService Loading
 
+<style>
+    .companies-view-only .logo-card,
+    .companies-view-only .selectable-card {
+        pointer-events: none;
+        cursor: default;
+    }
+</style>
+
 <div class="companies-operating-wrapper">
     <div class="container-fluid">
 
         <FormLoader />
+
+        
 
         @if (!string.IsNullOrEmpty(_message))
         {
@@ -23,7 +33,7 @@
             <h3 class="fw-bold m-0 company-title">Companies Operating In Your Place <span>(Please Mark)</span></h3>
         </div>
 
-        <div class="companies-operating-grid mb-5">
+        <div class="companies-operating-grid mb-5 @(IsViewOnly ? "companies-view-only" : "")">
 
             <div class="span-2-rows">
                 <div class="logo-card spic @(isSpic ? "active" : "")"
@@ -67,6 +77,11 @@
 @code {
     [SupplyParameterFromQuery(Name = "dealerId")]
     public int? DealerId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
+    private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 
     private bool isSpic;
     private bool isGreenStar;
@@ -131,11 +146,21 @@
         }
     }
 
-    private void ToggleSpic() => isSpic = !isSpic;
-    private void ToggleGreenStar() => isGreenStar = !isGreenStar;
+    private void ToggleSpic()
+    {
+        if (IsViewOnly) return;
+        isSpic = !isSpic;
+    }
+
+    private void ToggleGreenStar()
+    {
+        if (IsViewOnly) return;
+        isGreenStar = !isGreenStar;
+    }
 
     private void ToggleCompany(string name)
     {
+        if (IsViewOnly) return;
         if (!_selectedNames.Remove(name))
             _selectedNames.Add(name);
     }
@@ -145,6 +170,13 @@
         if (!DealerId.HasValue || DealerId.Value <= 0)
         {
             ShowMessage("Dealer ID is required.", true);
+            return;
+        }
+
+        if (IsViewOnly)
+        {
+            Loading.Show();
+            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}&mode=view");
             return;
         }
 
