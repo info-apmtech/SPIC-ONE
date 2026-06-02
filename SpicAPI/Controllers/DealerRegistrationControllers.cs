@@ -72,9 +72,9 @@ namespace SpicAPI.Controllers
 
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var regionClaim = User.FindFirst("RegionId")?.Value;
-            var stateClaim = User.FindFirst("StateId")?.Value;
-            var hqClaim = User.FindFirst("HQId")?.Value;
+            var regionClaim = User.FindFirst("spic:region_id")?.Value;
+            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+            var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
             // Admin / CorporateAdmin → full data
             if (role == "Admin" || role == "CorporateAdmin")
@@ -83,8 +83,8 @@ namespace SpicAPI.Controllers
                 query = query.Where(x => x.Region == regionId);
             else if ((role == "SM") && int.TryParse(stateClaim, out var stateId))
                 query = query.Where(x => x.StateId == stateId);
-            else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId))
-                query = query.Where(x => x.HQ == hqId);
+            else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(stateClaim, out var moStateId))
+                query = query.Where(x => x.StateId == moStateId);
             else
                 query = query.Where(x => x.CreatedBy == userId);
             return Ok(await query.ToListAsync());
@@ -94,9 +94,9 @@ namespace SpicAPI.Controllers
         {
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var regionClaim = User.FindFirst("RegionId")?.Value;
-            var stateClaim = User.FindFirst("StateId")?.Value;
-            var hqClaim = User.FindFirst("HQId")?.Value;
+            var regionClaim = User.FindFirst("spic:region_id")?.Value;
+            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+            var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
             var query = _repo.GetAllWithInactive();
 
@@ -106,8 +106,8 @@ namespace SpicAPI.Controllers
                     query = query.Where(x => x.Region == regionId);
                 else if (role == "SM" && int.TryParse(stateClaim, out var stateId))
                     query = query.Where(x => x.StateId == stateId);
-                else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId))
-                    query = query.Where(x => x.HQ == hqId);
+                else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(stateClaim, out var moStateId))
+                    query = query.Where(x => x.StateId == moStateId);
                 else
                     query = query.Where(x => x.CreatedBy == userId);
             }
