@@ -7,6 +7,8 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject LoadingService Loading
+
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -1644,6 +1646,7 @@
 		</div>
 	</div>
 }
+
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int DealerId { get; set; }
@@ -1724,8 +1727,16 @@
 
 	protected override async Task OnInitializedAsync()
 	{
+		Loading.Show();
+		try
+		{
 		await Task.WhenAll(LoadDealer(), LoadPartners(), LoadFinancialYears(), LoadDocuments(), LoadLandAssets(), LoadBuildingAssets());
 		CalculateProgress();
+		}
+		finally
+		{
+			Loading.Hide();
+		}
 	}
 
 	private async Task LoadDealer()
