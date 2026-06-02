@@ -624,13 +624,13 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 }
 
 	// Credit limit calculations — SPIC
-	private double SpicTotalMark => Enumerable.Range(0, 10).Where(i => _valuationParams[i].Weightage > 0).Sum(i => GetSpicMark(i));
-	private double SpicScorePercent => SpicTotalMark; // total is out of 100
-	private double SpicCreditPercent => GetCreditPercentFromScore(SpicScorePercent);
-	private decimal SpicSalesTurnover => (decimal)_spicValues[3]; // Urea Sales Turnover with SPIC (Rs. Lakhs)
-	private decimal SpicProposedLimit => SpicSalesTurnover * (decimal)(SpicCreditPercent / 100.0);
-	private decimal SpicTotalCreditLimit => SpicProposedLimit + _proposal.AdditionalCreditLimit;
-	private double SpicCreditMultiplier => SpicSalesTurnover > 0 ? (double)(SpicTotalCreditLimit / SpicSalesTurnover) : 0;
+	//private double SpicTotalMark => Enumerable.Range(0, 10).Where(i => _valuationParams[i].Weightage > 0).Sum(i => GetSpicMark(i));
+	//private double SpicScorePercent => SpicTotalMark; // total is out of 100
+	//private double SpicCreditPercent => GetCreditPercentFromScore(SpicScorePercent);
+	//private decimal SpicSalesTurnover => (decimal)_spicValues[3]; // Urea Sales Turnover with SPIC (Rs. Lakhs)
+	//private decimal SpicProposedLimit => SpicSalesTurnover * (decimal)(SpicCreditPercent / 100.0);
+	//private decimal SpicTotalCreditLimit => SpicProposedLimit + _proposal.AdditionalCreditLimit;
+	//private double SpicCreditMultiplier => SpicSalesTurnover > 0 ? (double)(SpicTotalCreditLimit / SpicSalesTurnover) : 0;
 
 	// Credit limit calculations — Greenstar
 	private double GreenstarTotalMark => Enumerable.Range(0, 11).Where(i => _greenstarValuationParams[i].Weightage > 0).Sum(i => GetGreenstarMark(i));
@@ -652,19 +652,19 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 	};
 
 	// Valuation parameters based on scoring norms
-	private static readonly ValuationParam[] _valuationParams =
-	[
-		new("Total Fertilizer Sales Volume during last year", 10, "MT", false),
-		new("Fertilizer Sales Volume with SPIC during last year", 10, "MT", false),
-		new("Total Fertilizer Sales Turnover during last year", 10, "Rs. Lakhs", false),
-		new("Fertilizer Sales Turnover with SPIC during last year", 20, "Rs. Lakhs", false),
-		new("Dealership tenure with SPIC", 10, "Years", false),
-		new("Monthly Average Net Overdues during last year", 20, "Rs. Lakhs", false),
-		new("Value of dealer's property - Fixed Assets", 0, "Rs. Lakhs", false),
-		new("Property Value as % of Sales Turnover with SPIC (7/4 x 100)", 10, "%", true),
-		new("Available Security (SD / FD / BG / Collateral)", 0, "Rs. Lakhs", false),
-		new("Available Security as % of Sales Turnover with SPIC (9/4 x 100)", 10, "%", true),
-	];
+	// private static readonly ValuationParam[] _valuationParams =
+	// [
+	// 	new("Total Fertilizer Sales Volume during last year", 10, "MT", false),
+	// 	new("Fertilizer Sales Volume with SPIC during last year", 10, "MT", false),
+	// 	new("Total Fertilizer Sales Turnover during last year", 10, "Rs. Lakhs", false),
+	// 	new("Fertilizer Sales Turnover with SPIC during last year", 20, "Rs. Lakhs", false),
+	// 	new("Dealership tenure with SPIC", 10, "Years", false),
+	// 	new("Monthly Average Net Overdues during last year", 20, "Rs. Lakhs", false),
+	// 	new("Value of dealer's property - Fixed Assets", 0, "Rs. Lakhs", false),
+	// 	new("Property Value as % of Sales Turnover with SPIC (7/4 x 100)", 10, "%", true),
+	// 	new("Available Security (SD / FD / BG / Collateral)", 0, "Rs. Lakhs", false),
+	// 	new("Available Security as % of Sales Turnover with SPIC (9/4 x 100)", 10, "%", true),
+	// ];
 
 	private static readonly ValuationParam[] _greenstarValuationParams =
 	[
@@ -786,6 +786,7 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 			Loading.Hide();
 		}
 }
+	
 private int GetDefaultGreenstarCategoryId()
 {
     var fertilizerCategory = _categories.FirstOrDefault(c =>
@@ -803,23 +804,23 @@ private int GetDefaultGreenstarCategoryId()
 	private void InitValuesFromData()
 	{
 		// All values start at 0 — marks show 0 until user enters a value
-		RecalculateSpicPercentages();
+		//RecalculateSpicPercentages();
 		RecalculateGreenstarPercentages();
 	}
 
-	private void RecalculateSpicPercentages()
-	{
-		if (_spicValues[3] > 0)
-		{
-			_spicValues[7] = (_spicValues[6] / _spicValues[3]) * 100;
-			_spicValues[9] = (_spicValues[8] / _spicValues[3]) * 100;
-		}
-		else
-		{
-			_spicValues[7] = 0;
-			_spicValues[9] = 0;
-		}
-	}
+	// private void RecalculateSpicPercentages()
+	// {
+	// 	if (_spicValues[3] > 0)
+	// 	{
+	// 		_spicValues[7] = (_spicValues[6] / _spicValues[3]) * 100;
+	// 		_spicValues[9] = (_spicValues[8] / _spicValues[3]) * 100;
+	// 	}
+	// 	else
+	// 	{
+	// 		_spicValues[7] = 0;
+	// 		_spicValues[9] = 0;
+	// 	}
+	// }
 
 	private void RecalculateGreenstarPercentages()
 	{
@@ -844,44 +845,34 @@ private async Task SelectCategory(int categoryId)
 	await LoadCreditLimitSalesData();
 }
 private async Task LoadCreditLimitSalesData()
-{
-	if (_dealer.Id <= 0 || _selectedCategoryId <= 0)
 	{
-		_creditLimitSalesData = new();
+		if (_dealer.Id <= 0 || _selectedCategoryId <= 0)
+		{
+			_creditLimitSalesData = new();
+			BuildSalesPerfRows();
+			return;
+		}
+
+		var fyIds = GetCompletedFYIds();
+
+		if (fyIds.Count == 0)
+		{
+			_creditLimitSalesData = new();
+			BuildSalesPerfRows();
+			return;
+		}
+
+		var fyQuery = string.Join(",", fyIds);
+
+		var url = $"api/creditlimitsales/by-filter" +
+				  $"?customerId={_dealer.Id}" +
+				  $"&categoryId={_selectedCategoryId}" +
+				  $"&financialYearIds={fyQuery}";
+
+		_creditLimitSalesData = await SafeGetAsync<List<DealerCreditLimitSales>>(url) ?? new();
+
 		BuildSalesPerfRows();
-		return;
 	}
-
-	var fyIds = new[]
-	{
-		_proposal.FY1,
-		_proposal.FY2,
-		_proposal.FY3
-	}
-	.Where(x => x > 0)
-	.Distinct()
-	.ToList();
-
-	if (fyIds.Count == 0)
-	{
-		_creditLimitSalesData = new();
-		BuildSalesPerfRows();
-		return;
-	}
-
-	var fyQuery = string.Join(",", fyIds);
-
-	var url =
-		$"api/creditlimitsales/by-filter" +
-		$"?customerId={_dealer.Id}" +
-		$"&categoryId={_selectedCategoryId}" +
-		$"&financialYearIds={fyQuery}";
-
-	_creditLimitSalesData =
-		await SafeGetAsync<List<DealerCreditLimitSales>>(url) ?? new();
-
-	BuildSalesPerfRows();
-}
 private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financialYearId)
 {
 	if (financialYearId <= 0)
@@ -1033,15 +1024,15 @@ private decimal GetFYTotalQty(int fyIdx) => GetFYTotalQtyByCategory(fyIdx);
 private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx);
 
 	// --- Valuation ---
-	private void OnSpicValueChanged(int idx, ChangeEventArgs e)
-	{
-		if (double.TryParse(e.Value?.ToString(), out var val))
-		{
-			_spicValues[idx] = val;
-			_spicValueEntered[idx] = true;
-		}
-		RecalculateSpicPercentages();
-	}
+	// private void OnSpicValueChanged(int idx, ChangeEventArgs e)
+	// {
+	// 	if (double.TryParse(e.Value?.ToString(), out var val))
+	// 	{
+	// 		_spicValues[idx] = val;
+	// 		_spicValueEntered[idx] = true;
+	// 	}
+	// 	RecalculateSpicPercentages();
+	// }
 
 	private void OnGreenstarValueChanged(int idx, ChangeEventArgs e)
 	{
@@ -1059,32 +1050,32 @@ private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx)
 		RecalculateGreenstarPercentages();
 	}
 
-	private static double CalculateMark(int idx, double v) => idx switch
-	{
-		0 => v > 3000 ? 10 : v > 1500 ? 8 : v > 1000 ? 6 : v > 500 ? 4 : 2,
-		1 => v > 500 ? 10 : v > 300 ? 8 : v > 200 ? 6 : v > 100 ? 4 : 2,
-		2 => v > 200 ? 10 : v > 100 ? 8 : v > 60 ? 6 : v > 30 ? 4 : 2,
-		3 => v > 30 ? 20 : v > 20 ? 16 : v > 15 ? 12 : v > 10 ? 8 : 4,
-		4 => v > 10 ? 10 : v > 8 ? 8 : v > 6 ? 6 : v > 4 ? 4 : 2,
-		5 => v < 1 ? 20 : v < 5 ? 16 : v < 10 ? 12 : v < 20 ? 8 : 4,
-		6 => 0,
-		7 => v > 50 ? 10 : v > 40 ? 8 : v > 30 ? 6 : v > 20 ? 4 : v > 10 ? 2 : 0,
-		8 => 0,
-		9 => v > 10 ? 10 : v > 8 ? 8 : v > 6 ? 6 : v > 4 ? 4 : 2,
-		_ => 0
-	};
+	// private static double CalculateMark(int idx, double v) => idx switch
+	// {
+	// 	0 => v > 3000 ? 10 : v > 1500 ? 8 : v > 1000 ? 6 : v > 500 ? 4 : 2,
+	// 	1 => v > 500 ? 10 : v > 300 ? 8 : v > 200 ? 6 : v > 100 ? 4 : 2,
+	// 	2 => v > 200 ? 10 : v > 100 ? 8 : v > 60 ? 6 : v > 30 ? 4 : 2,
+	// 	3 => v > 30 ? 20 : v > 20 ? 16 : v > 15 ? 12 : v > 10 ? 8 : 4,
+	// 	4 => v > 10 ? 10 : v > 8 ? 8 : v > 6 ? 6 : v > 4 ? 4 : 2,
+	// 	5 => v < 1 ? 20 : v < 5 ? 16 : v < 10 ? 12 : v < 20 ? 8 : 4,
+	// 	6 => 0,
+	// 	7 => v > 50 ? 10 : v > 40 ? 8 : v > 30 ? 6 : v > 20 ? 4 : v > 10 ? 2 : 0,
+	// 	8 => 0,
+	// 	9 => v > 10 ? 10 : v > 8 ? 8 : v > 6 ? 6 : v > 4 ? 4 : 2,
+	// 	_ => 0
+	// };
 
-	private double GetSpicMark(int idx)
-	{
-		if (idx == 7 || idx == 9)
-		{
-			bool depEntered = idx == 7
-				? _spicValueEntered[6] && _spicValueEntered[3]
-				: _spicValueEntered[8] && _spicValueEntered[3];
-			return !depEntered ? 0 : CalculateMark(idx, _spicValues[idx]);
-		}
-		return !_spicValueEntered[idx] ? 0 : CalculateMark(idx, _spicValues[idx]);
-	}
+	// private double GetSpicMark(int idx)
+	// {
+	// 	if (idx == 7 || idx == 9)
+	// 	{
+	// 		bool depEntered = idx == 7
+	// 			? _spicValueEntered[6] && _spicValueEntered[3]
+	// 			: _spicValueEntered[8] && _spicValueEntered[3];
+	// 		return !depEntered ? 0 : CalculateMark(idx, _spicValues[idx]);
+	// 	}
+	// 	return !_spicValueEntered[idx] ? 0 : CalculateMark(idx, _spicValues[idx]);
+	// }
 
 	private static double CalculateGreenstarMark(int idx, double v) => idx switch
 	{
@@ -1354,17 +1345,17 @@ private decimal CalculateSpecialitySalesTurnover()
 		try
 		{
 			_proposal.DealerId = DealerId.Value;
-			_proposal.Q1Mark = GetSpicMark(0);
-			_proposal.Q2Mark = GetSpicMark(1);
-			_proposal.Q3Mark = GetSpicMark(2);
-			_proposal.Q4Mark = GetSpicMark(3);
-			_proposal.Q5Mark = GetSpicMark(4);
-			_proposal.Q6Mark = GetSpicMark(5);
-			_proposal.Q7Mark = GetSpicMark(6);
-			_proposal.Q8Mark = GetSpicMark(7);
-			_proposal.Q9Mark = GetSpicMark(8);
-			_proposal.Q10Mark = GetSpicMark(9);
-			_proposal.Q11Mark = SpicTotalMark;
+			// _proposal.Q1Mark = GetSpicMark(0);
+			// _proposal.Q2Mark = GetSpicMark(1);
+			// _proposal.Q3Mark = GetSpicMark(2);
+			// _proposal.Q4Mark = GetSpicMark(3);
+			// _proposal.Q5Mark = GetSpicMark(4);
+			// _proposal.Q6Mark = GetSpicMark(5);
+			// _proposal.Q7Mark = GetSpicMark(6);
+			// _proposal.Q8Mark = GetSpicMark(7);
+			// _proposal.Q9Mark = GetSpicMark(8);
+			// _proposal.Q10Mark = GetSpicMark(9);
+			// _proposal.Q11Mark = SpicTotalMark;
 			_proposal.GQ1Mark = GetGreenstarMark(0);
 			_proposal.GQ2Mark = GetGreenstarMark(1);
 			_proposal.GQ3Mark = GetGreenstarMark(2);
@@ -1457,17 +1448,19 @@ private decimal CalculateSpecialitySalesTurnover()
 		public T? Data { get; set; }
 	}
 	private void SetFixedFinancialYears()
-{
-	var selectedYears = _financialYears
-		.OrderByDescending(f => f.Id)
-		.Take(3)
-		.OrderBy(f => f.Id)
-		.ToList();
+	{
+		// Only completed financial years (EndDate in the past)
+		var completedYears = _financialYears
+			.Where(fy => fy.EndDate <= DateTime.Today)
+			.OrderByDescending(fy => fy.EndDate)
+			.Take(3)
+			.OrderBy(fy => fy.EndDate)  // oldest → newest left to right
+			.ToList();
 
-	_proposal.FY1 = selectedYears.Count > 0 ? selectedYears[0].Id : 0;
-	_proposal.FY2 = selectedYears.Count > 1 ? selectedYears[1].Id : 0;
-	_proposal.FY3 = selectedYears.Count > 2 ? selectedYears[2].Id : 0;
-}
+		_proposal.FY1 = completedYears.Count > 0 ? completedYears[0].Id : 0;
+		_proposal.FY2 = completedYears.Count > 1 ? completedYears[1].Id : 0;
+		_proposal.FY3 = completedYears.Count > 2 ? completedYears[2].Id : 0;
+	}
 private async Task<bool> HasGreenStarCompany()
 {
     if (!DealerId.HasValue || DealerId.Value <= 0)
@@ -1524,4 +1517,13 @@ private async Task LoadGreenstarDefaultSalesPerformanceData()
         _greenstarDefaultSalesData.AddRange(rows);
     }
 }
+private List<int> GetCompletedFYIds()
+	{
+		return _financialYears
+			.Where(fy => fy.EndDate <= DateTime.Today)
+			.OrderByDescending(fy => fy.EndDate)
+			.Take(3)
+			.Select(fy => fy.Id)
+			.ToList();
+	}
 }
