@@ -92,7 +92,7 @@
 
             <div class="col-md-3">
                 <label class="form-label-custom">Quantity</label>
-                <input type="number" class="form-control-custom w-100" placeholder="Enter Quantity"
+                <input type="number" class="form-control-custom w-100" placeholder="Enter Quantity"step="0.01"
                        @bind="_form.Quantity" />
             </div>
 
@@ -203,43 +203,78 @@
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Bulk Upload - Credit Limit Sales</h5>
-                    <button type="button" class="btn-close" @onclick="() => _showUploadModal = false">X</button>
+                    <h5 class="modal-title">Bulk Upload — Credit Limit Sales</h5>
+                    <button type="button" class="btn-close"
+                            @onclick="CloseUploadModal">✕</button>
                 </div>
                 <div class="modal-body">
-                   <div class="mb-3">
-    <label class="form-label-custom">Financial Year</label>
-    <select class="form-control-custom w-100" @bind="_bulkUploadFinancialYearId">
-        <option value="0">Select Financial Year</option>
-        @foreach (var fy in _financialYears)
-        {
-            <option value="@fy.Id">@fy.Name</option>
-        }
-    </select>
-</div>
 
-<InputFile OnChange="OnBulkFileSelected" accept=".xlsx,.xls" />
-                    <div class="upload-result" style="margin-top: 12px;">
+                    <div class="mb-3">
+                        <label class="form-label-custom">Financial Year</label>
+                        <select class="form-control-custom w-100"
+                                @bind="_bulkUploadFinancialYearId">
+                            <option value="0">Select Financial Year</option>
+                            @foreach (var fy in _financialYears)
+                            {
+                                <option value="@fy.Id">@fy.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    @* Key forces re-render (resets chosen file) after upload *@
+                    <InputFile key="@_uploadFileKey"
+                               OnChange="OnBulkFileSelected"
+                               accept=".xlsx,.xls" />
+
+                    <div style="margin-top: 14px;">
+
                         @if (_isUploading)
                         {
-                            <div class="d-flex align-items-center gap-2 text-muted">
+                            <div class="d-flex align-items-center gap-2"
+                                 style="color:#6b7280; font-size:13px;">
                                 <span class="spinner-border spinner-border-sm"></span>
                                 <span>Uploading, please wait...</span>
                             </div>
                         }
                         else if (!string.IsNullOrEmpty(_uploadResult))
                         {
-                            <div class="alert @(_uploadSuccess ? "alert-success" : "alert-danger") mb-2 py-2">
+                            <div class="alert @(_uploadSuccess ? "alert-success" : "alert-danger")
+                                         mb-2 py-2"
+                                 style="font-size:13px;">
                                 @_uploadResult
                             </div>
+
+                            @* Show skipped row details if any *@
+                            @if (_uploadSuccess && _uploadErrorRows.Any())
+                            {
+                                <details style="margin-top:6px;">
+                                    <summary style="font-size:12px; color:#6b7280; cursor:pointer;">
+                                        View @_uploadErrorRows.Count skipped row(s)
+                                    </summary>
+                                    <div style="max-height:160px; overflow-y:auto;
+                                                margin-top:6px; font-size:12px;
+                                                color:#991b1b; background:#fff5f5;
+                                                border:1px solid #fecaca;
+                                                border-radius:6px; padding:8px 10px;">
+                                        @foreach (var err in _uploadErrorRows)
+                                        {
+                                            <div style="margin-bottom:3px;">• @err</div>
+                                        }
+                                    </div>
+                                </details>
+                            }
                         }
                     </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary"
+                            @onclick="CloseUploadModal">Close</button>
                 </div>
             </div>
         </div>
     </div>
 }
-
 <style>
     .page-title { font-weight: 700; color: #1f2937; margin-bottom: 18px; font-size: 20px; }
     .main-card { background: #fff; border-radius: 10px; padding: 22px 25px; box-shadow: 0 2px 5px rgba(0,0,0,0.04); margin-bottom: 22px; border: 1px solid #eef0f3; }
@@ -343,6 +378,9 @@
     private bool _isUploading = false;
     private string _uploadResult = string.Empty;
     private bool _uploadSuccess = false;
+    // Add these alongside the other upload fields
+private List<string> _uploadErrorRows = new();
+private int _uploadFileKey = 0;  // incrementing this key forces InputFile to reset
 
     // Search & filter
     private string _searchText = "";
@@ -598,31 +636,27 @@ private void ApplyFilter()
 private async Task OnBulkFileSelected(InputFileChangeEventArgs e)
 {
     var file = e.File;
-    if (file == null)
-        return;
+    if (file == null) return;
 
     if (_bulkUploadFinancialYearId <= 0)
     {
         _uploadSuccess = false;
-        _uploadResult = "Please select financial year before uploading.";
+        _uploadResult  = "Please select a financial year before uploading.";
         return;
     }
 
-    using var content = new MultipartFormDataContent();
-
-    // Increase size for large Excel files
-    var stream = file.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
-
-    var streamContent = new StreamContent(stream);
+    using var content     = new MultipartFormDataContent();
+    var stream            = file.OpenReadStream(maxAllowedSize: 200 * 1024 * 1024);
+    var streamContent     = new StreamContent(stream);
     streamContent.Headers.ContentType =
         new System.Net.Http.Headers.MediaTypeHeaderValue(
             file.ContentType ?? "application/octet-stream");
-
     content.Add(streamContent, "file", file.Name);
 
-    _isUploading = true;
-    _uploadResult = string.Empty;
+    _isUploading  = true;
+    _uploadResult = "";
     _uploadSuccess = false;
+    StateHasChanged();
 
     try
     {
@@ -635,23 +669,68 @@ private async Task OnBulkFileSelected(InputFileChangeEventArgs e)
         if (response.IsSuccessStatusCode)
         {
             _uploadSuccess = true;
-            _uploadResult = bodyText;
+
+            // Parse JSON and build a friendly message
+            try
+            {
+                using var doc  = JsonDocument.Parse(bodyText);
+                var root       = doc.RootElement;
+                var inserted   = root.TryGetProperty("insertedRows",  out var ins)  ? ins.GetInt32()  : 0;
+                var skipped    = root.TryGetProperty("skippedRows",   out var skip) ? skip.GetInt32() : 0;
+                var errorList  = root.TryGetProperty("invalidRows",   out var errs)
+                    ? errs.EnumerateArray().Select(x => x.GetString() ?? "").ToList()
+                    : new List<string>();
+
+                // Build friendly message
+                var sb = new System.Text.StringBuilder();
+                sb.Append($"✓ {inserted:N0} rows uploaded successfully.");
+                if (skipped > 0)
+                    sb.Append($" {skipped:N0} rows skipped.");
+
+                _uploadResult    = sb.ToString();
+                _uploadErrorRows = errorList; // store for display below
+            }
+            catch
+            {
+                _uploadResult    = "Upload completed successfully.";
+                _uploadErrorRows = new();
+            }
+
+            // Reset file input + financial year
+            _bulkUploadFinancialYearId = 0;
+            _uploadFileKey++;           // forces InputFile to re-render (clears chosen file)
+
             await LoadData();
         }
         else
         {
-            _uploadSuccess = false;
-            _uploadResult = $"Upload failed: {bodyText}";
+            _uploadSuccess   = false;
+            _uploadErrorRows = new();
+
+            try
+            {
+                using var doc = JsonDocument.Parse(bodyText);
+                var root      = doc.RootElement;
+                _uploadResult = root.TryGetProperty("message", out var msg)
+                    ? msg.GetString() ?? "Upload failed."
+                    : "Upload failed.";
+            }
+            catch
+            {
+                _uploadResult = "Upload failed. Please try again.";
+            }
         }
     }
     catch (Exception ex)
     {
-        _uploadSuccess = false;
-        _uploadResult = $"Upload error: {ex.Message}";
+        _uploadSuccess   = false;
+        _uploadResult    = $"Upload error: {ex.Message}";
+        _uploadErrorRows = new();
     }
     finally
     {
         _isUploading = false;
+        StateHasChanged();
     }
 }
 private List<ExportColumn<CreditLimitSalesForm>> GetExportColumns()
@@ -664,7 +743,7 @@ private List<ExportColumn<CreditLimitSalesForm>> GetExportColumns()
         new ExportColumn<CreditLimitSalesForm> { Header = "Dealer Name",   ValueSelector = item => GetDealerName(item.CustomerId) },
         new ExportColumn<CreditLimitSalesForm> { Header = "SubGroup",      ValueSelector = item => GetProductName(item.SubGroupId) },
         new ExportColumn<CreditLimitSalesForm> { Header = "Product Group", ValueSelector = item => GetCategoryName(item.ProductGroupId) },
-        new ExportColumn<CreditLimitSalesForm> { Header = "Quantity",      ValueSelector = item => item.Quantity.ToString() },
+        new ExportColumn<CreditLimitSalesForm> { Header = "Quantity",      ValueSelector = item => item.Quantity.ToString("F2") },
         new ExportColumn<CreditLimitSalesForm> { Header = "Gross Amount",  ValueSelector = item => item.GrossAmount.ToString("F2") }
     };
 }
@@ -704,8 +783,8 @@ private List<ExportColumn<CreditLimitSalesForm>> GetExportColumns()
         public int CustomerId { get; set; } = 0;
         public int SubGroupId { get; set; } = 0;
         public int ProductGroupId { get; set; } = 0;
-        public int Quantity { get; set; } = 0;
-        public double GrossAmount { get; set; } = 0.0;
+        public decimal Quantity { get; set; } = 0;
+        public decimal GrossAmount { get; set; } = 0;
          public int FinancialYearId { get; set; } = 0;
     }
 
@@ -729,4 +808,13 @@ private List<ExportColumn<CreditLimitSalesForm>> GetExportColumns()
         public string FirmName { get; set; } = "";
         public int StateId { get; set; }
     }
+    private void CloseUploadModal()
+{
+    _showUploadModal           = false;
+    _uploadResult              = "";
+    _uploadErrorRows           = new();
+    _uploadSuccess             = false;
+    _bulkUploadFinancialYearId = 0;
+    _uploadFileKey++;           // reset file chooser for next time
+}
 }
