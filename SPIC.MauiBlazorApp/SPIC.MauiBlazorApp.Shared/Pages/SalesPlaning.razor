@@ -98,6 +98,7 @@
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
+    	            	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 
     @if (!string.IsNullOrEmpty(_message))
     {
@@ -322,13 +323,17 @@
 
         </div>
     </div>
+    </fieldset>
     <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
 @code {
     [SupplyParameterFromQuery(Name = "dealerId")]
     public int? DealerId { get; set; }
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
 
+    private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
     private List<Category> _categories = new();
     private List<Unit> _units = new();
     private List<Product> _products = new();
@@ -514,6 +519,12 @@
 
     private async Task HandleNext()
     {
+        if (IsViewOnly)
+        {
+            Loading.Show();
+            Nav.NavigateTo($"/Investment?dealerId={DealerId}&mode=view");
+            return;
+        }
         if (!DealerId.HasValue || DealerId.Value <= 0)
         {
             ShowMessage("Dealer ID is required.", true);

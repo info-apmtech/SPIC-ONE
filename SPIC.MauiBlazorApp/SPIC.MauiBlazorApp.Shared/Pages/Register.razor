@@ -9,9 +9,17 @@
 @inject IJSRuntime JS
 @inject LoadingService Loading
 @inject LoginState LoginState
-
+<style>
+    fieldset:disabled .file-remove-x {
+        display: none !important;
+    }
+</style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
+   
+
+    <fieldset disabled="@IsViewOnly" style="@(IsViewOnly ? "border:0;padding:0;margin:0;" : "border:0;padding:0;margin:0;")">
+
 
     <h5 class="fw-bold mb-4 reg-page-heading">Dealer Registration</h5>
 
@@ -822,6 +830,8 @@
         }
 
     </form>
+    </fieldset>
+
     <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
@@ -852,6 +862,10 @@
 @code {
     [SupplyParameterFromQuery(Name = "dealerId")]
     public int? DealerIdFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
+    private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 
     private DealerFormModel _model = new();
     private bool _isEditMode;
@@ -1484,6 +1498,13 @@ private void OnDealerStateChanged()
 
     private async Task HandleNext()
     {
+        if (IsViewOnly)
+        {
+            Loading.Show();
+            Nav.NavigateTo($"/Experience?dealerId={_model.Id}&mode=view");
+            return;
+        }
+
         var saved = await SaveDealer();
         if (saved)
         {
