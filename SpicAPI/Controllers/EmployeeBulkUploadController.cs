@@ -1,4 +1,5 @@
 using ClosedXML.Excel;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,7 @@ using static SPIC.Core.Entities.EmployeeRegistration;
 
 namespace SpicAPI.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class EmployeeBulkUploadController : ControllerBase
@@ -168,8 +170,8 @@ namespace SpicAPI.Controllers
                         }
 
                         int stateId = 0, regionId = 0, hqId = 0;
-                        var currentUser = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
-                                          ?? User?.Identity?.Name 
+                        var currentUser = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                                          ?? User?.Identity?.Name
                                           ?? "Unknown";
 
                         // 1. Resolve State (Strictly required to exist)
@@ -322,8 +324,20 @@ namespace SpicAPI.Controllers
 
                         if (!string.IsNullOrWhiteSpace(employeeId) && existingEmployees.TryGetValue(employeeId, out var existingEmp))
                         {
-                            // REUSE existing employee record
+                            // REUSE existing employee record — update missing fields to match the incoming Excel row
                             emp = existingEmp;
+                            var changed = false;
+                            if (string.IsNullOrWhiteSpace(emp.Name) && !string.IsNullOrWhiteSpace(empName)) { emp.Name = empName; changed = true; }
+                            if (string.IsNullOrWhiteSpace(emp.PersonalPhoneNumber) && !string.IsNullOrWhiteSpace(phone)) { emp.PersonalPhoneNumber = phone; changed = true; }
+                            if (string.IsNullOrWhiteSpace(emp.OfficialPhoneNumber) && !string.IsNullOrWhiteSpace(phone)) { emp.OfficialPhoneNumber = phone; changed = true; }
+                            if (string.IsNullOrWhiteSpace(emp.Email) && !string.IsNullOrWhiteSpace(email)) { emp.Email = email; changed = true; }
+                            if (changed)
+                            {
+                                emp.UpdatedAt = now;
+                                emp.UpdatedBy = currentUser;
+                                _db.EmployeeInformation.Update(emp);
+                                await _db.SaveChangesAsync();
+                            }
                         }
                         else
                         {
