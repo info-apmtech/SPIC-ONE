@@ -250,7 +250,7 @@
 	</div>
 	<div class="row g-4">
 		<!-- Card 1: Urea Product - By Category -->
-		<div class="col-12 col-md-4">
+		<div class="col-12 col-md-3">
 			<div class="total-value-card total-value-card-bgimg">
 				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
 					 class="total-card-bg"
@@ -284,13 +284,13 @@
 		</div>
 
 		<!-- Card 2: All Other Products Total -->
-		<div class="col-12 col-md-4">
+		<div class="col-12 col-md-3">
 			<div class="total-value-card total-value-card-bgimg">
 				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
 					 class="total-card-bg"
 					 alt="Other Products" />
 
-				<div class="total-value-title">Other Products(Fertilizer) - Total</div>
+				<div class="total-value-title">Other Products - Fertilizer</div>
 
 				@{
 					var otherTotalQty = GetOtherFertilizerTotalQty();
@@ -302,9 +302,26 @@
 				</div>
 			</div>
 		</div>
-
+			<!-- Card: Combined Total of Specialty Products (Amount only) -->
+			<div class="col-12 col-md-3">
+				<div class="total-value-card total-value-card-bgimg">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+						 class="total-card-bg"
+						 alt="Specialty Products Total" />
+					<div class="total-value-title">Specialty Products Total</div>
+					@{
+						// Calculate combined total amount of Specialty Products MT and Ltr
+						var combinedAmt = _allSalesData
+							.Where(r => r.CategoryId == SpecialtyMTCategoryId || r.CategoryId == SpecialtyLtrCategoryId)
+							.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+					}
+					<div class="category-summary-meta mt-3">
+						₹ @combinedAmt.ToString("N2") Lakhs
+					</div>
+				</div>
+			</div>
 		<!-- Card 3: Grand Total -->
-		<div class="col-12 col-md-4">
+		<div class="col-12 col-md-3">
 			<div class="total-value-card total-value-card-bgimg">
 				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
 					 class="total-card-bg"
@@ -367,6 +384,8 @@
 	private string? _message;
 	private bool _isError;
 	private bool _hasWholesaleLicense;
+	private int SpecialtyMTCategoryId => _categories.FirstOrDefault(c => c.Name.Contains("Specialty Products - MT"))?.Id ?? 0;
+	private int SpecialtyLtrCategoryId => _categories.FirstOrDefault(c => c.Name.Contains("Specialty Products - Ltr"))?.Id ?? 0;
 
 	protected override async Task OnInitializedAsync()
 	{
