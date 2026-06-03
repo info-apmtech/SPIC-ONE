@@ -43,7 +43,7 @@ namespace SpicAPI.Controllers
 			.Replace("FERTLIZER", "FERTILIZER")
 			.Replace("FETILIZER", "FERTILIZER");
 
-		
+
 
 		[HttpPost]
 		public async Task<IActionResult> Create([FromBody] DealerCreditLimitSales model)
@@ -98,12 +98,12 @@ namespace SpicAPI.Controllers
 			return BadRequest("Status toggling is not supported for this entity.");
 		}
 
-		
+
 
 		[HttpPost("bulk-upload")]
 		public async Task<IActionResult> BulkUpload(
-			IFormFile file,
-			[FromQuery] int financialYearId)
+	IFormFile file,
+	[FromQuery] int financialYearId)
 		{
 			if (financialYearId <= 0)
 				return BadRequest(new { Success = false, Message = "Financial Year is required." });
@@ -123,21 +123,52 @@ namespace SpicAPI.Controllers
 				if (!financialYearExists)
 					return BadRequest(new { Success = false, Message = "Invalid Financial Year selected." });
 
-				
-				var dealerByCode = (await _db.DealerRegistrations
+				// ── 1. Load dealers and index by ALL code columns ──────────────────
+				var dealerRawList = await _db.DealerRegistrations
 					.Where(d => !string.IsNullOrWhiteSpace(d.DealerCode))
-					.Select(d => new { d.Id, d.StateId, Code = d.DealerCode, d.FirmName })
-					.ToListAsync())
-					.GroupBy(d => d.Code.Trim().ToUpperInvariant())
-					.ToDictionary(g => g.Key, g => g.First());
+					.Select(d => new
+					{
+						d.Id,
+						d.StateId,
+						Code = d.DealerCode,
+						SpicCode = d.SPICCode,
+						GreenStarCode = d.GreenStarCode,
+						TnCode = d.TnCode,
+						d.FirmName
+					})
+					.ToListAsync();
 
-				var dealerByName = (await _db.DealerRegistrations
-					.Where(d => !string.IsNullOrWhiteSpace(d.FirmName))
-					.Select(d => new { d.Id, d.StateId, Code = d.DealerCode, d.FirmName })
-					.ToListAsync())
+				// Dictionary keyed by every possible code variant → dealer
+				var dealerByCode = new Dictionary<string, dynamic>(StringComparer.OrdinalIgnoreCase);
+
+				foreach (var d in dealerRawList)
+				{
+					void TryAdd(string? raw)
+					{
+						if (string.IsNullOrWhiteSpace(raw)) return;
+						var key = raw.Trim().ToUpperInvariant();
+						if (!dealerByCode.ContainsKey(key)) dealerByCode[key] = d;
+
+						// Also index the numeric-only part (strip leading letter prefix)
+						if (key.Length > 1 && char.IsLetter(key[0]))
+						{
+							var numeric = key.Substring(1);
+							if (!dealerByCode.ContainsKey(numeric)) dealerByCode[numeric] = d;
+						}
+					}
+
+					TryAdd(d.Code);           // raw numeric e.g. 45541541
+					TryAdd(d.SpicCode);       // D-prefix   e.g. D45541541
+					TryAdd(d.GreenStarCode);  // Z-prefix   e.g. Z45541541
+					TryAdd(d.TnCode);         // T-prefix   e.g. T45541541
+				}
+
+				// Firm-name lookup (unchanged)
+				var dealerByName = dealerRawList
 					.GroupBy(d => d.FirmName.Trim().ToUpperInvariant())
-					.ToDictionary(g => g.Key, g => g.First());
+					.ToDictionary(g => g.Key, g => (dynamic)g.First());
 
+				// ── 2. Load product / category / state maps (unchanged) ────────────
 				var productMap = (await _db.Products
 					.Where(p => !string.IsNullOrWhiteSpace(p.Name))
 					.Select(p => new { p.Id, p.CategoryId, p.Name })
@@ -159,6 +190,7 @@ namespace SpicAPI.Controllers
 					.GroupBy(s => s.Name.Trim().ToUpperInvariant())
 					.ToDictionary(g => g.Key, g => g.First().Id);
 
+				// ── 3. Open workbook ───────────────────────────────────────────────
 				using var stream = file.OpenReadStream();
 				using var workbook = new XLWorkbook(stream);
 				var worksheet = workbook.Worksheets.FirstOrDefault();
@@ -166,6 +198,7 @@ namespace SpicAPI.Controllers
 				if (worksheet == null)
 					return BadRequest(new { Success = false, Message = "Excel worksheet not found." });
 
+				// Read headers from row 2
 				var headerRow = worksheet.Row(2);
 				var headers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
@@ -184,7 +217,7 @@ namespace SpicAPI.Controllers
 				}
 
 				int colState = ColIndex("State", "StateName", "State Name");
-				int colDealerCode = ColIndex("Customer Number", "CustomerNumber", "Dealer Code", "DealerCode", "Code");
+				int colDealerCode = ColIndex("Customer Number", "CustomerNumber", "Dealer Code", "DealerCode", "Code", "SPICCode", "GreenStarCode", "TnCode");
 				int colDealerName = ColIndex("Customer Name", "CustomerName", "Dealer Name", "DealerName", "Firm Name", "FirmName");
 				int colSubGroup = ColIndex("Sub Group", "SubGroup", "Product SubGroup", "ProductSubGroup", "Product", "ProductName");
 				int colCategory = ColIndex("Product Group", "ProductGroup", "Category", "CategoryName");
@@ -215,12 +248,12 @@ namespace SpicAPI.Controllers
 								  $"Columns found: {string.Join(", ", headers.Keys)}"
 					});
 
-				//  Process rows 
+				// ── 4. Process data rows (start from row 3) ────────────────────────
 				var salesRecords = new List<DealerCreditLimitSales>();
 				var invalidRows = new List<string>();
-				int rowNumber = 1;
+				int rowNumber = 2;
 
-				foreach (var row in worksheet.RowsUsed().Skip(2)) 
+				foreach (var row in worksheet.RowsUsed().Skip(2))
 				{
 					rowNumber++;
 
@@ -235,6 +268,7 @@ namespace SpicAPI.Controllers
 					var quantityRaw = Cell(colQuantity);
 					var amountRaw = Cell(colGrossAmount);
 
+					// Skip completely empty rows
 					if (string.IsNullOrWhiteSpace(dealerCodeRaw) &&
 						string.IsNullOrWhiteSpace(dealerNameRaw) &&
 						string.IsNullOrWhiteSpace(subGroupRaw))
@@ -242,39 +276,29 @@ namespace SpicAPI.Controllers
 
 					var rowErrors = new List<string>();
 
+					// ── 4a. Resolve dealer ─────────────────────────────────────────
 					dynamic? dealer = null;
 
-					var codeKey = dealerCodeRaw.Trim().ToUpperInvariant();
-					var numericKey = (codeKey.Length > 1 && char.IsLetter(codeKey[0]))
-										? codeKey.Substring(1)
-										: codeKey;
-
+					// Try by code first (covers D/Z/T/N prefix and raw numeric)
 					if (!string.IsNullOrWhiteSpace(dealerCodeRaw))
 					{
-						
-						if (dealerByCode.TryGetValue(codeKey, out var d1))
-							dealer = d1;
-						
-						else if (dealerByCode.TryGetValue(numericKey, out var d2))
-							dealer = d2;
-						
-						else
+						var codeKey = dealerCodeRaw.Trim().ToUpperInvariant();
+						if (!dealerByCode.TryGetValue(codeKey, out dealer))
 						{
-							var stripped = numericKey.TrimStart('0');
-							var fuzzy = dealerByCode.Keys
-								.FirstOrDefault(k => k.TrimStart('0') == stripped);
-							if (fuzzy != null)
-								dealer = dealerByCode[fuzzy];
+							// Strip prefix and try numeric only
+							if (codeKey.Length > 1 && char.IsLetter(codeKey[0]))
+								dealerByCode.TryGetValue(codeKey.Substring(1), out dealer);
 						}
 					}
 
+					// Fallback: exact firm name
 					if (dealer == null && !string.IsNullOrWhiteSpace(dealerNameRaw))
 					{
 						var nameKey = dealerNameRaw.Trim().ToUpperInvariant();
-						if (dealerByName.TryGetValue(nameKey, out var d3))
-							dealer = d3;
+						dealerByName.TryGetValue(nameKey, out dealer);
 					}
 
+					// Fallback: partial firm name
 					if (dealer == null && !string.IsNullOrWhiteSpace(dealerNameRaw))
 					{
 						var nameKey = dealerNameRaw.Trim().ToUpperInvariant();
@@ -294,24 +318,31 @@ namespace SpicAPI.Controllers
 
 					int customerId = dealer.Id;
 					int stateId = dealer.StateId;
-					string dealerCode = dealer.Code ?? numericKey;
 
+					// Save the exact code from Excel (e.g. Z47420510) as CustomerNumber
+					// so the saved value matches what was uploaded
+					string dealerCode = !string.IsNullOrWhiteSpace(dealerCodeRaw)
+						? dealerCodeRaw.Trim()
+						: (string)dealer.Code;
+
+					// Resolve state from Excel column if dealer has no state
 					if (stateId <= 0 && !string.IsNullOrWhiteSpace(stateRaw))
-						stateMap.TryGetValue(stateRaw.ToUpperInvariant(), out stateId);
+						stateMap.TryGetValue(stateRaw.Trim().ToUpperInvariant(), out stateId);
 
 					if (stateId <= 0)
 					{
-						invalidRows.Add($"Row {rowNumber}: State could not be resolved for dealer '{dealerCode}'.");
+						invalidRows.Add(
+							$"Row {rowNumber}: State could not be resolved for dealer '{dealerCode}'.");
 						continue;
 					}
 
-					
+					// ── 4b. Resolve SubGroup (Product) ─────────────────────────────
 					int subGroupId = 0;
 					int productGroupId = 0;
 
 					if (!string.IsNullOrWhiteSpace(subGroupRaw))
 					{
-						var normSub = Norm(subGroupRaw); 
+						var normSub = Norm(subGroupRaw);
 
 						if (productMap.TryGetValue(normSub, out var prod))
 						{
@@ -320,10 +351,8 @@ namespace SpicAPI.Controllers
 						}
 						else
 						{
-							
 							var startMatch = productMap.Keys
-								.FirstOrDefault(k =>
-									k.StartsWith(normSub) || normSub.StartsWith(k));
+								.FirstOrDefault(k => k.StartsWith(normSub) || normSub.StartsWith(k));
 
 							if (startMatch != null)
 							{
@@ -332,10 +361,8 @@ namespace SpicAPI.Controllers
 							}
 							else
 							{
-								// Try 3: contains match (last resort)
 								var containsMatch = productMap.Keys
-									.FirstOrDefault(k =>
-										k.Contains(normSub) || normSub.Contains(k));
+									.FirstOrDefault(k => k.Contains(normSub) || normSub.Contains(k));
 
 								if (containsMatch != null)
 								{
@@ -354,22 +381,19 @@ namespace SpicAPI.Controllers
 						rowErrors.Add("Product SubGroup is empty");
 					}
 
-					//  3. Category resolution (only if product didn't set it) 
+					// ── 4c. Resolve Category (only if product didn't set it) ───────
 					if (productGroupId <= 0 && !string.IsNullOrWhiteSpace(categoryRaw))
 					{
-						var normCat = Norm(categoryRaw); //  correct variable
+						var normCat = Norm(categoryRaw);
 
-						// Try 1: normalized exact match
 						if (categoryMap.TryGetValue(normCat, out int catId))
 						{
 							productGroupId = catId;
 						}
 						else
 						{
-							// Try 2: starts with
 							var startMatch = categoryMap.Keys
-								.FirstOrDefault(k =>
-									k.StartsWith(normCat) || normCat.StartsWith(k));
+								.FirstOrDefault(k => k.StartsWith(normCat) || normCat.StartsWith(k));
 
 							if (startMatch != null)
 							{
@@ -377,10 +401,8 @@ namespace SpicAPI.Controllers
 							}
 							else
 							{
-								// Try 3: contains
 								var containsMatch = categoryMap.Keys
-									.FirstOrDefault(k =>
-										k.Contains(normCat) || normCat.Contains(k));
+									.FirstOrDefault(k => k.Contains(normCat) || normCat.Contains(k));
 
 								if (containsMatch != null)
 									productGroupId = categoryMap[containsMatch];
@@ -390,7 +412,7 @@ namespace SpicAPI.Controllers
 						}
 					}
 
-					//  4. Parse numbers 
+					// ── 4d. Parse numbers ──────────────────────────────────────────
 					if (!decimal.TryParse(quantityRaw,
 							NumberStyles.Any, CultureInfo.InvariantCulture,
 							out decimal quantity))
@@ -407,6 +429,7 @@ namespace SpicAPI.Controllers
 						grossAmount = 0;
 					}
 
+					// ── 4e. Skip row if any errors ─────────────────────────────────
 					if (rowErrors.Any())
 					{
 						invalidRows.Add($"Row {rowNumber}: {string.Join("; ", rowErrors)}.");
@@ -426,6 +449,7 @@ namespace SpicAPI.Controllers
 					});
 				}
 
+				// ── 5. Validate we have something to insert ────────────────────────
 				if (salesRecords.Count == 0)
 					return BadRequest(new
 					{
@@ -434,11 +458,13 @@ namespace SpicAPI.Controllers
 						InvalidRows = invalidRows.Take(50).ToList()
 					});
 
+				// ── 6. Replace existing rows for this financial year ───────────────
 				var oldRows = _db.DealerCreditLimitSalesData
 					.Where(x => x.FinancialYearId == financialYearId);
 				_db.DealerCreditLimitSalesData.RemoveRange(oldRows);
 				await _db.SaveChangesAsync();
 
+				// ── 7. Batch insert ────────────────────────────────────────────────
 				const int batchSize = 5000;
 				for (int i = 0; i < salesRecords.Count; i += batchSize)
 				{
@@ -448,6 +474,7 @@ namespace SpicAPI.Controllers
 					_db.ChangeTracker.Clear();
 				}
 
+				// ── 8. Return summary ──────────────────────────────────────────────
 				var summary = new StringBuilder();
 				summary.Append($"Upload completed. {salesRecords.Count} rows inserted");
 				if (invalidRows.Count > 0)
