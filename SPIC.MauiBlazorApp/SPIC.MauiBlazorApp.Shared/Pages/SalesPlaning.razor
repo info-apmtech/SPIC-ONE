@@ -18,6 +18,7 @@
 
     .sp-bottom-item-compact {
         padding-top: 6px;
+        min-width: 0; 
     }
 
     .sp-bottom-item-compact-right {
@@ -28,6 +29,7 @@
 
     .sp-speciality-compact {
         padding-top: 18px;
+        min-width: 0;
     }
 
     @@media (max-width: 576px) {
@@ -76,253 +78,310 @@
     .sp-spic-table tfoot .sticky-first-col {
         font-size: 14px !important;
     }
+
     .sp-summary-inline-value {
-    font-size: 17px;
-    font-weight: 700;
-    color: #2563eb;
-    line-height: 1.3;
-    margin-top: 8px;
-    white-space: nowrap;
-}
-  /* Darken the summary label text */
+        font-size: 17px;
+        font-weight: 700;
+        color: #2563eb;
+        line-height: 1.3;
+        margin-top: 8px;
+        white-space: nowrap;
+    }
+
+    /* Darken the summary label text */
     .sp-summary-label {
-        color: #1f2937; /* dark gray / nearly black */
-        font-weight: 600; /* optional: make it slightly bolder */
+        color: #1f2937;
+        font-weight: 600;
     }
-@@media (max-width: 576px) {
-    .sp-summary-inline-value {
-        font-size: 16px;
-        white-space: normal;
+
+    @@media (max-width: 1399.98px) {
+        .sp-bottom-grid-compact {
+            gap: 16px;
+        }
+
+        .sp-bottom-item-compact-right {
+            padding-left: 16px;
+        }
+
+        .sp-summary-inline-value {
+            font-size: 15px;
+        }
     }
-}
+
+    @@media (max-width: 1199.98px) {
+        .sp-bottom-grid-compact {
+            gap: 12px;
+        }
+
+        .sp-bottom-item-compact-right {
+            padding-left: 12px;
+        }
+
+        .sp-summary-inline-value {
+            font-size: 13px;
+            white-space: normal;
+            word-break: break-word;
+        }
+    }
+
+   
+    @@media (max-width: 991.98px) {
+        .sp-bottom-grid-compact {
+            gap: 22px;
+        }
+
+        .sp-bottom-item-compact-right {
+            padding-left: 22px;
+        }
+
+        .sp-summary-inline-value {
+            font-size: 16px;
+            white-space: nowrap;
+        }
+    }
+
+    @@media (max-width: 767.98px) {
+        .sp-summary-inline-value {
+            font-size: 15px;
+            white-space: normal;
+            word-break: break-word;
+        }
+    }
+
+    @@media (max-width: 575.98px) {
+        .sp-summary-inline-value {
+            font-size: 15px;
+            white-space: normal;
+        }
+    }
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
-    	            	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
+    <fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 
-    @if (!string.IsNullOrEmpty(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
-            @_message
-            <button type="button" class="btn-close" @onclick='() => _message = null'></button>
-        </div>
-    }
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+                @_message
+                <button type="button" class="btn-close" @onclick='() => _message = null'></button>
+            </div>
+        }
 
-    <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-        <h3 class="fw-bold m-0 company-title">Sales Planning & Forecast</h3>
-    </div>
-
-    <div class="main-card sp-main-card">
-
-        <div class="section-title mb-3">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/businessIcon1.svg" class="sp-section-icon" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
-            Business Plan
+        <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <h3 class="fw-bold m-0 company-title">Sales Planning & Forecast</h3>
         </div>
 
-        <!-- Dynamic Category Tabs -->
-        <div class="custom-tabs sp-custom-tabs">
-            @foreach (var cat in _categories)
-            {
-                var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
-                <div class="tab-btn @(cat.Id == _selectedCategoryId ? "active" : "")"
-                     @onclick="() => SelectCategory(cat.Id)">
-                    @cat.Name (@unitName/Value)
-                </div>
-            }
-        </div>
+        <div class="main-card sp-main-card">
 
-        <!-- Table -->
-        <div class="table-wrapper sp-table-wrapper">
-            <div class="table-scroll-fixed">
-                <table class="spic-table sp-spic-table">
-                    <thead>
-                        <tr>
-                            <th rowspan="2" class="sticky-first-col sticky-head-first">
-                                Product Name / Category
-                            </th>
+            <div class="section-title mb-3">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/businessIcon1.svg" class="sp-section-icon" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                Business Plan
+            </div>
 
-                            @foreach (var month in _months)
-                            {
-                                <th colspan="2" class="text-center border-start">@month</th>
-                            }
-                            <th colspan="2" class="text-center border-start">Total</th>
-                        </tr>
+            <!-- Dynamic Category Tabs -->
+            <div class="custom-tabs sp-custom-tabs">
+                @foreach (var cat in _categories)
+                {
+                    var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
+                    <div class="tab-btn @(cat.Id == _selectedCategoryId ? "active" : "")"
+                         @onclick="() => SelectCategory(cat.Id)">
+                        @cat.Name (@unitName/Value)
+                    </div>
+                }
+            </div>
 
-                        <tr>
-                            @foreach (var month in _months)
-                            {
+            <!-- Table -->
+            <div class="table-wrapper sp-table-wrapper">
+                <div class="table-scroll-fixed">
+                    <table class="spic-table sp-spic-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" class="sticky-first-col sticky-head-first">
+                                    Product Name / Category
+                                </th>
+
+                                @foreach (var month in _months)
+                                {
+                                    <th colspan="2" class="text-center border-start">@month</th>
+                                }
+                                <th colspan="2" class="text-center border-start">Total</th>
+                            </tr>
+
+                            <tr>
+                                @foreach (var month in _months)
+                                {
+                                    <th class="text-center text-muted fw-normal border-start sub-th">@_selectedUnitName</th>
+                                    <th class="text-center text-muted fw-normal sub-th">Lakhs</th>
+                                }
                                 <th class="text-center text-muted fw-normal border-start sub-th">@_selectedUnitName</th>
                                 <th class="text-center text-muted fw-normal sub-th">Lakhs</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @foreach (var row in _currentRows)
+                            {
+                                var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+                                <tr>
+                                    <td class="fw-medium text-dark sticky-first-col">
+                                        @(product?.Name ?? "Unknown")
+                                    </td>
+
+                                    @for (int i = 0; i < _months.Length; i++)
+                                    {
+                                        var monthIndex = i;
+
+                                        <td class="border-start">
+                                            <input class="table-input sp-table-input" type="number" step="0.01"
+                                                   value="@GetQty(row, monthIndex)"
+                                                   @onchange="(e) => SetQty(row, monthIndex, e)" />
+                                        </td>
+
+                                        <td>
+                                            <input class="table-input sp-table-input" type="number" step="0.01"
+                                                   value="@GetAmount(row, monthIndex)"
+                                                   @onchange="(e) => SetAmount(row, monthIndex, e)" />
+                                        </td>
+                                    }
+                                    <td class="border-start text-center sp-row-total-cell">
+                                        <span class="sp-row-total-main">@GetRowTotalQty(row).ToString("N2")</span>
+                                        <span class="sp-row-total-unit">@_selectedUnitName</span>
+                                    </td>
+
+                                    <td class="text-center sp-row-total-cell">
+                                        <span class="sp-row-total-main">₹ @GetRowTotalAmount(row).ToString("N2")</span>
+                                        <span class="sp-row-total-unit">Lakhs</span>
+                                    </td>
+                                </tr>
                             }
-                            <th class="text-center text-muted fw-normal border-start sub-th">@_selectedUnitName</th>
-                            <th class="text-center text-muted fw-normal sub-th">Lakhs</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                        @foreach (var row in _currentRows)
-                        {
-                            var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+                        </tbody>
+                        <tfoot>
                             <tr>
-                                <td class="fw-medium text-dark sticky-first-col">
-                                    @(product?.Name ?? "Unknown")
-                                </td>
-
+                                <td class="fw-medium text-dark sticky-first-col">Monthly Total</td>
                                 @for (int i = 0; i < _months.Length; i++)
                                 {
                                     var monthIndex = i;
-
-                                    <td class="border-start">
-                                        <input class="table-input sp-table-input" type="number" step="0.01"
-                                               value="@GetQty(row, monthIndex)"
-                                               @onchange="(e) => SetQty(row, monthIndex, e)" />
+                                    <td class="text-center border-start bg-light sp-footer-total-cell">
+                                        @GetMonthTotalQty(monthIndex).ToString("N2")
                                     </td>
-
-                                    <td>
-                                        <input class="table-input sp-table-input" type="number" step="0.01"
-                                               value="@GetAmount(row, monthIndex)"
-                                               @onchange="(e) => SetAmount(row, monthIndex, e)" />
+                                    <td class="text-center bg-light sp-footer-total-cell">
+                                        @GetMonthTotalAmount(monthIndex).ToString("N2")
                                     </td>
                                 }
-                                <td class="border-start text-center sp-row-total-cell">
-                                    <span class="sp-row-total-main">@GetRowTotalQty(row).ToString("N2")</span>
-                                    <span class="sp-row-total-unit">@_selectedUnitName</span>
-                                </td>
-
-                                <td class="text-center sp-row-total-cell">
-                                    <span class="sp-row-total-main">₹ @GetRowTotalAmount(row).ToString("N2")</span>
-                                    <span class="sp-row-total-unit">Lakhs</span>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td class="fw-medium text-dark sticky-first-col">Monthly Total</td>
-                            @for (int i = 0; i < _months.Length; i++)
-                            {
-                                var monthIndex = i;
                                 <td class="text-center border-start bg-light sp-footer-total-cell">
-                                    @GetMonthTotalQty(monthIndex).ToString("N2")
+                                    @GetGrandTotalQty().ToString("N2")
                                 </td>
                                 <td class="text-center bg-light sp-footer-total-cell">
-                                    @GetMonthTotalAmount(monthIndex).ToString("N2")
+                                    @GetGrandTotalAmount().ToString("N2")
                                 </td>
-                            }
-                            <td class="text-center border-start bg-light sp-footer-total-cell">
-                                @GetGrandTotalQty().ToString("N2")
-                            </td>
-                            <td class="text-center bg-light sp-footer-total-cell">
-                                @GetGrandTotalAmount().ToString("N2")
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
             </div>
-        </div>
 
-        <!-- Summary Cards — Per Category -->
-        <div class="row g-3 mt-1">
-            @foreach (var cat in _categories)
-            {
-                var catUnit = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
-                var catRows = _allSalesData.Where(r => r.CategoryId == cat.Id).ToList();
-                var catVolume = catRows.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
-                var catValue = catRows.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
-                <div class="col-12 col-sm-6 col-lg-4">
-                    <div class="sp-summary-card">
+            <!-- Summary Cards — Per Category -->
+            <div class="row g-3 mt-1">
+                @foreach (var cat in _categories)
+                {
+                    var catUnit = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+                    var catRows = _allSalesData.Where(r => r.CategoryId == cat.Id).ToList();
+                    var catVolume = catRows.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
+                    var catValue = catRows.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
+                    <div class="col-12 col-sm-6 col-lg-4">
+                        <div class="sp-summary-card">
+                            <div class="sp-summary-header">
+                                <span class="sp-summary-dot @(cat.Id == _selectedCategoryId ? "sp-dot-active" : "")"></span>
+                                <span class="sp-summary-name">@cat.Name</span>
+                                <span class="sp-summary-unit-pill">@catUnit</span>
+                            </div>
+                            <div class="sp-summary-body">
+                                <div class="sp-summary-block">
+                                    <div class="sp-summary-label">Volume</div>
+                                    <div class="sp-summary-value">
+                                        @catVolume.ToString("N2") <span class="sp-summary-suffix">@catUnit</span>
+                                    </div>
+                                </div>
+                                <div class="sp-summary-divider"></div>
+                                <div class="sp-summary-block sp-summary-block-right">
+                                    <div class="sp-summary-label">Value</div>
+                                    <div class="sp-summary-value sp-summary-value-blue">
+                                        ₹@catValue.ToString("N2") <span class="sp-summary-suffix">Lakhs</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Bottom Summary Cards -->
+            <div class="row g-3 mt-1">
+
+                @{
+                    var ureaTotals = GetFertilizerUreaTotals();
+                    var otherFertTotals = GetFertilizerOtherProductTotals();
+                    var specialityTotals = GetSpecialityTotals();
+                }
+
+                <!-- Fertilizer Products Summary -->
+                <div class="col-12 col-lg-6">
+                    <div class="sp-summary-card sp-bottom-summary-card-compact">
                         <div class="sp-summary-header">
-                            <span class="sp-summary-dot @(cat.Id == _selectedCategoryId ? "sp-dot-active" : "")"></span>
-                            <span class="sp-summary-name">@cat.Name</span>
-                            <span class="sp-summary-unit-pill">@catUnit</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="sp-summary-dot"></span>
+                                <span class="sp-summary-name">Fertilizer Products Summary</span>
+                            </div>
+                            <span class="sp-summary-unit-pill">MT</span>
                         </div>
-                        <div class="sp-summary-body">
-                            <div class="sp-summary-block">
-                                <div class="sp-summary-label">Volume</div>
-                                <div class="sp-summary-value">
-                                    @catVolume.ToString("N2") <span class="sp-summary-suffix">@catUnit</span>
+
+                        <div class="sp-bottom-grid-compact mt-3">
+                            <!-- Urea Products -->
+                            <div class="sp-bottom-item-compact">
+                                <div class="sp-summary-label">Urea</div>
+
+                                <div class="sp-summary-inline-value">
+                                    @ureaTotals.Qty.ToString("N2") MT / ₹@ureaTotals.Amount.ToString("N2") Lakhs
                                 </div>
                             </div>
-                            <div class="sp-summary-divider"></div>
-                            <div class="sp-summary-block sp-summary-block-right">
-                                <div class="sp-summary-label">Value</div>
-                                <div class="sp-summary-value sp-summary-value-blue">
-                                    ₹@catValue.ToString("N2") <span class="sp-summary-suffix">Lakhs</span>
+
+                            <!-- Other Fertilizer Products -->
+                            <div class="sp-bottom-item-compact sp-bottom-item-compact-right">
+                                <div class="sp-summary-label">Other Fertilizer Products</div>
+
+                                <div class="sp-summary-inline-value">
+                                    @otherFertTotals.Qty.ToString("N2") MT / ₹@otherFertTotals.Amount.ToString("N2") Lakhs
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            }
-        </div>
 
-        <!-- Bottom Summary Cards -->
-        <div class="row g-3 mt-1">
-
-            @{
-                var ureaTotals = GetFertilizerUreaTotals();
-                var otherFertTotals = GetFertilizerOtherProductTotals();
-                var specialityTotals = GetSpecialityTotals();
-            }
-
-            <!-- Fertilizer Products Summary -->
-            <div class="col-12 col-lg-6">
-                <div class="sp-summary-card sp-bottom-summary-card-compact">
-                    <div class="sp-summary-header">
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="sp-summary-dot"></span>
-                            <span class="sp-summary-name">Fertilizer Products Summary</span>
-                        </div>
-                        <span class="sp-summary-unit-pill">MT</span>
-                    </div>
-
-                    <div class="sp-bottom-grid-compact mt-3">
-                        <!-- Urea Products -->
-                        <div class="sp-bottom-item-compact">
-                            <div class="sp-summary-label">Urea</div>
-
-                            <div class="sp-summary-inline-value">
-                                @ureaTotals.Qty.ToString("N2") MT / ₹@ureaTotals.Amount.ToString("N2") Lakhs
+                <!-- Speciality Products Summary -->
+                <div class="col-12 col-lg-6">
+                    <div class="sp-summary-card sp-bottom-summary-card-compact">
+                        <div class="sp-summary-header">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="sp-summary-dot"></span>
+                                <span class="sp-summary-name">Speciality Products Summary</span>
                             </div>
+                            <span class="sp-summary-unit-pill">Lakhs</span>
                         </div>
 
-                        <!-- Other Fertilizer Products -->
-                        <div class="sp-bottom-item-compact sp-bottom-item-compact-right">
-                            <div class="sp-summary-label">Other Fertilizer Products</div>
+                        <div class="sp-speciality-compact">
+                            <div>
+                                <div class="sp-summary-label">Total Specialty Products</div>
 
-                            <div class="sp-summary-inline-value">
-                                @otherFertTotals.Qty.ToString("N2") MT / ₹@otherFertTotals.Amount.ToString("N2") Lakhs
+                                <div class="sp-summary-inline-value">
+                                    @specialityTotals.Qty.ToString("N2") MT / ₹@specialityTotals.Amount.ToString("N2") Lakhs
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
+
             </div>
-
-            <!-- Speciality Products Summary -->
-            <div class="col-12 col-lg-6">
-                <div class="sp-summary-card sp-bottom-summary-card-compact">
-                    <div class="sp-summary-header">
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="sp-summary-dot"></span>
-                            <span class="sp-summary-name">Speciality Products Summary</span>
-                        </div>
-                        <span class="sp-summary-unit-pill">Lakhs</span>
-                    </div>
-
-                    <div class="sp-speciality-compact">
-                        <div>
-                            <div class="sp-summary-label">Total Specialty Products</div>
-
-                            <div class="sp-summary-inline-value">
-                                @specialityTotals.Qty.ToString("N2") MT / ₹@specialityTotals.Amount.ToString("N2") Lakhs
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
         </div>
-    </div>
     </fieldset>
     <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
@@ -663,12 +722,6 @@
         return IsSpecialityCategory(category);
     }
 
-    // private bool IsSpecialityProduct(Product product)
-    // {
-    //     var cat = _categories.FirstOrDefault(c => c.Id == product.CategoryId);
-    //     return IsSpecialityCategory(cat);
-    // }
-
     private (decimal Qty, decimal Amount) GetFertilizerUreaTotals()
     {
         decimal totalQty = 0;
@@ -752,16 +805,16 @@
             );
     }
     private (decimal Qty, decimal Amount) GetSpecialityTotals()
-{
-    var specialityRows = _allSalesData
-        .Where(IsSpecialityRow)
-        .ToList();
+    {
+        var specialityRows = _allSalesData
+            .Where(IsSpecialityRow)
+            .ToList();
 
-    var totalQty = specialityRows.Sum(GetRowTotalQty);
-    var totalAmount = specialityRows.Sum(GetRowTotalAmount);
+        var totalQty = specialityRows.Sum(GetRowTotalQty);
+        var totalAmount = specialityRows.Sum(GetRowTotalAmount);
 
-    return (totalQty, totalAmount);
-}
+        return (totalQty, totalAmount);
+    }
     private void ShowMessage(string message, bool isError)
     {
         _message = message;
