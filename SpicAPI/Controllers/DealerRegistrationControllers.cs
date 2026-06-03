@@ -127,11 +127,11 @@ namespace SpicAPI.Controllers
         [HttpGet("{dealerId}/step-completion-summary")]
         public async Task<IActionResult> GetStepCompletionSummary(int dealerId)
         {
-            // For each step we check whether related data exists. Reuse ExistsAsync when available.
             var result = new List<object>();
 
-            // Step 1: Dealer basic info (DealerRegistration exists and has PinCode)
             var dealer = await _repo.GetByIdAsync(dealerId);
+
+            // Step 1: Dealer basic info (DealerRegistration exists and has PinCode)
             bool step1 = dealer != null && !string.IsNullOrWhiteSpace(dealer.PinCode);
             result.Add(new { StepNo = 1, IsComplete = step1 });
 
@@ -143,48 +143,51 @@ namespace SpicAPI.Controllers
             bool step3 = _annualRepo != null && await _annualRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             result.Add(new { StepNo = 3, IsComplete = step3 });
 
-            // Step 4: Warehouse facilities
-            bool step4 = _whRepo != null && await _whRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            // Step 4: Warehouse facilities (warehouse + rail + port combined)
+            bool wh = _whRepo != null && await _whRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            bool rail = _railRepo != null && await _railRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            bool port = _portRepo != null && await _portRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            bool step4 = wh || rail || port;
             result.Add(new { StepNo = 4, IsComplete = step4 });
 
-            // Step 5: Rail facilities
-            bool step5 = _railRepo != null && await _railRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            // Step 5: Market detail
+            bool step5 = _marketRepo != null && await _marketRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             result.Add(new { StepNo = 5, IsComplete = step5 });
 
-            // Step 6: Port facilities
-            bool step6 = _portRepo != null && await _portRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            // Step 6: Companies operating in area
+            bool step6 = _compRepo != null && await _compRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             result.Add(new { StepNo = 6, IsComplete = step6 });
 
-            // Step 7: Market detail
-            bool step7 = _marketRepo != null && await _marketRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            // Step 7: Ownership info
+            bool step7 = _ownerRepo != null && await _ownerRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             result.Add(new { StepNo = 7, IsComplete = step7 });
 
-            // Step 8: Companies operating in area
-            bool step8 = _compRepo != null && await _compRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            // Step 8: Sales planning
+            bool step8 = _salesPlanRepo != null && await _salesPlanRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             result.Add(new { StepNo = 8, IsComplete = step8 });
 
-            // Step 9: Ownership info
-            bool step9 = _ownerRepo != null && await _ownerRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
-            result.Add(new { StepNo = 9, IsComplete = step9 });
-
-            // Step 10: Sales planning
-            bool step10 = _salesPlanRepo != null && await _salesPlanRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
-            result.Add(new { StepNo = 10, IsComplete = step10 });
-
-            // Step 11: Assets (bank/land/building)
+            // Step 9: Assets (bank/land/building)
             bool bank = _bankRepo != null && await _bankRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             bool land = _landRepo != null && await _landRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             bool building = _buildingRepo != null && await _buildingRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
-            bool step11 = bank || land || building;
+            bool step9 = bank || land || building;
+            result.Add(new { StepNo = 9, IsComplete = step9 });
+
+            // Step 10: Credit limit proposal
+            bool credit = _creditRepo != null && await _creditRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            bool step10 = credit;
+            result.Add(new { StepNo = 10, IsComplete = step10 });
+
+            // Step 11: Credit limit for GreenStar (same check as step 10)
+            bool step11 = credit;
             result.Add(new { StepNo = 11, IsComplete = step11 });
 
-            // Step 12: Credit limit proposal / sales performance
-            bool credit = _creditRepo != null && await _creditRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
-            bool step12 = credit; // Sales performance could be checked similarly if required
+            // Step 12: Documents
+            bool step12 = _docsRepo != null && await _docsRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             result.Add(new { StepNo = 12, IsComplete = step12 });
 
-            // Step 13: Documents
-            bool step13 = _docsRepo != null && await _docsRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            // Step 13: Final submission (dealer record exists)
+            bool step13 = dealer != null;
             result.Add(new { StepNo = 13, IsComplete = step13 });
 
             return Ok(result);
