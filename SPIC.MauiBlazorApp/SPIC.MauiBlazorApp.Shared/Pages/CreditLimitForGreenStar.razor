@@ -1321,21 +1321,30 @@ private void ComputeSpecialtyCardTotals()
     foreach (var row in _greenstarDefaultSalesData.Where(r => r.FinancialYearId == fyId))
     {
         var category = _categories.FirstOrDefault(c => c.Id == row.ProductGroupId);
-        if (category?.Name == null || !IsSpecialityCategory(category))
+        if (category == null || !IsSpecialityCategory(category))
             continue;
 
+        // Classify by the category's UNIT, not its name.
+        // "Gr."/"MT" categories use the MT unit; "Liq."/"Ltr" categories use the Ltr unit.
+        var unitName = _units.FirstOrDefault(u => u.Id == category.UnitId)?.Name ?? "";
         var amountLakhs = ConvertToLakhs(row.GrossAmount);
 
-        if (category.Name.Contains("MT", StringComparison.OrdinalIgnoreCase))
+        var isLiquid =
+            unitName.Contains("Ltr", StringComparison.OrdinalIgnoreCase) ||
+            unitName.Contains("Liq", StringComparison.OrdinalIgnoreCase) ||
+            unitName.Contains("Litre", StringComparison.OrdinalIgnoreCase) ||
+            unitName.Contains("Liter", StringComparison.OrdinalIgnoreCase);
+
+        if (isLiquid)
         {
-            SpecialtyMtQty += row.Quantity;
-            SpecialtyMtAmount += amountLakhs;
-        }
-        else if (category.Name.Contains("Ltr", StringComparison.OrdinalIgnoreCase)
-              || category.Name.Contains("Liq", StringComparison.OrdinalIgnoreCase))
-        {
-            SpecialtyLtrQty += row.Quantity;
+            SpecialtyLtrQty    += row.Quantity;
             SpecialtyLtrAmount += amountLakhs;
+        }
+        else
+        {
+            // everything non-liquid (MT / granule) goes to the MT card
+            SpecialtyMtQty    += row.Quantity;
+            SpecialtyMtAmount += amountLakhs;
         }
     }
 }
