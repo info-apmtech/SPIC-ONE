@@ -699,13 +699,19 @@
         _stepStatus[7] = _salesPlans.Count > 0;
         _stepStatus[8] = _assetBanks.Count > 0 || _assetLands.Count > 0 || _assetBuildings.Count > 0;
         _stepStatus[9] = _creditLimit != null;
-        _stepStatus[10] = _docs != null &&
-            !string.IsNullOrEmpty(_docs.SpecimanFilePath) &&
+        var enclosureStepComplete = _docs != null &&
             !string.IsNullOrEmpty(_docs.BankGauranteeFilePath) &&
             !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath) &&
             !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath) &&
             (_hasRetailLicense || !string.IsNullOrEmpty(_docs.RetailerListFilePath)) &&
             _docMissingCount == 0;
+
+        if (_dealer.InSpic)
+            enclosureStepComplete = enclosureStepComplete && !string.IsNullOrEmpty(_docs.SpecimanFilePath);
+        if (_dealer.InGreenStar)
+            enclosureStepComplete = enclosureStepComplete && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath);
+
+        _stepStatus[10] = enclosureStepComplete;
     }
 
     private void BuildEnclosureItems()
@@ -715,11 +721,13 @@
             new("GST Certificate", !string.IsNullOrEmpty(_dealer.GSTFilePath)),
             new("PAN Copy", !string.IsNullOrEmpty(_dealer.PANFilePath)),
             new("Aadhaar Copy", !string.IsNullOrEmpty(_dealer.AadhaarFilePath)),
-            new("SPIC Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.SpecimanFilePath)),
             new("Bank Guarantee Certificate", _docs != null && !string.IsNullOrEmpty(_docs.BankGauranteeFilePath)),
             new("IT Returns (FY1)", _docs != null && !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath)),
             new("IT Returns (FY2)", _docs != null && !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath)),
         };
+
+        if (_dealer.InSpic)
+            _enclosureItems.Add(new("SPIC Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.SpecimanFilePath)));
 
         if (_docs != null && !string.IsNullOrEmpty(_docs.AffidavitFilePath))
             _enclosureItems.Add(new("Affidavit", true));
@@ -730,8 +738,8 @@
         if (_docs != null && !string.IsNullOrEmpty(_docs.RetailerListFilePath))
             _enclosureItems.Add(new("Retailer List", true));
 
-        if (_docs != null && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath))
-            _enclosureItems.Add(new("Greenstar Specimen Signature", true));
+        if (_dealer.InGreenStar)
+            _enclosureItems.Add(new("Greenstar Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath)));
 
         if (_hasWholesaleLicense)
             _enclosureItems.Add(new("Wholesale Fertilizers License", !string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath)));
