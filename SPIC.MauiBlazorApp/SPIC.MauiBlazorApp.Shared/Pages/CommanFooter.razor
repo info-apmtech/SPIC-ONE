@@ -1,5 +1,6 @@
 ﻿@using System.Net.Http.Json
 @using SPIC.MauiBlazorApp.Shared.FormFlow
+@using SPIC.Core.Entities
 @inject NavigationManager Nav
 @inject LoadingService Loading
 @inject HttpClient Http
@@ -113,7 +114,15 @@
 
         if (dealerId > 0)
         {
-            _hasGreenStar = await HasGreenStarCompany(dealerId);
+            try
+            {
+                var dealer = await Http.GetFromJsonAsync<DealerRegistration>($"api/DealerRegistration/{dealerId}");
+                _hasGreenStar = dealer?.InGreenStar ?? false;
+            }
+            catch
+            {
+                _hasGreenStar = false;
+            }
         }
         else
         {

@@ -14,8 +14,10 @@
 	}
 
 	.table-responsive {
-		max-height: 420px; /* vertical inline scroller */
-		overflow: auto; /* both x and y scroll */
+		max-height: 500px; /* vertical inline scroller */
+		/* Keep vertical scrolling but prevent horizontal scrolling */
+		overflow-y: auto;
+		overflow-x: hidden;
 		width: 100%;
 		border: 1px solid #E5E7EB;
 		border-radius: 12px;
@@ -24,10 +26,19 @@
 	/* Prevent table from squeezing too much */
 	.spic-table {
 		width: 100%;
-		min-width: 900px; /* horizontal scroll for wide tables */
+		min-width: 0; /* allow table to shrink to container width */
+		/* Use fixed layout so columns respect provided widths and avoid forcing horizontal scroll */
+		table-layout: fixed;
 		border-collapse: separate;
 		border-spacing: 0;
 	}
+
+		/* Allow table cells to wrap long content instead of expanding horizontally */
+		.spic-table th,
+		.spic-table td {
+			white-space: normal;
+			word-break: break-word;
+		}
 
 		/* Sticky header */
 		.spic-table thead th {
@@ -48,6 +59,25 @@
 			background: #F9FAFB;
 		}
 
+		/* Tweak font-sizes for better density and legibility */
+		.spic-table th {
+			font-size: 13px;
+			padding: 10px 8px;
+		}
+
+		.spic-table td {
+			font-size: 13px;
+			padding: 12px 8px;
+		}
+
+	/* Controls that show calculated values */
+	.table-val-box {
+		font-size: 14px;
+		padding: 8px 10px;
+		border-radius: 8px;
+		background: #F3F4F6;
+	}
+
 	/* Better scrollbar behavior on mobile */
 	.table-responsive::-webkit-scrollbar {
 		height: 8px;
@@ -58,14 +88,26 @@
 		background: #CBD5E1;
 		border-radius: 999px;
 	}
+
 	.spic-table tfoot td {
-	background: #F9FAFB;
-	border-top: 2px solid #E5E7EB;
-	font-weight: 700;
-	position: sticky;
-	bottom: 0;
-	z-index: 4;
-}
+		background: #F9FAFB;
+		border-top: 2px solid #E5E7EB;
+		font-weight: 700;
+		position: sticky;
+		bottom: 0;
+		z-index: 4;
+	}
+
+		/* Make the Grand Total cell wider and more prominent */
+		.spic-table tfoot td:last-child {
+			width: 100px; /* increased width as requested */
+			text-align: center;
+		}
+
+			.spic-table tfoot td:last-child strong {
+				font-size: 16px;
+				color: #0f172a;
+			}
 </style>
 @if (!_isCheckingGreenStar)
 {
@@ -688,28 +730,36 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 
 	protected override async Task OnInitializedAsync()
 {
-	var hasGreenStar = await HasGreenStarCompany();
+    // Show page only when a valid dealer is provided and the dealer has InGreenStar == true
+	_isCheckingGreenStar = true;
 
-	if (!hasGreenStar)
+	if (!DealerId.HasValue || DealerId.Value <= 0)
 	{
 		Nav.NavigateTo($"/Enclosures?dealerId={DealerId}", replace: true);
 		return;
 	}
 
-	_isCheckingGreenStar = false;
-		Loading.Show();
-		try
-		{
-	SelectedCompany = "GreenStar";
-
-	var fyTask = SafeGetAsync<List<FinancialYear>>("api/FinancialYear");
-	var catTask = SafeGetAsync<List<Category>>("api/Category");
-	var unitTask = SafeGetAsync<List<Unit>>("api/Unit");
-	var prodTask = SafeGetAsync<List<Product>>("api/Product");
-
-	if (DealerId.HasValue && DealerId.Value > 0)
+	Loading.Show();
+	try
 	{
-		var dealerTask = SafeGetAsync<DealerReg>($"api/DealerRegistration/{DealerId}");
+		// Fetch dealer first and verify InGreenStar flag
+		_dealer = await SafeGetAsync<DealerReg>($"api/DealerRegistration/{DealerId.Value}") ?? new DealerReg();
+
+		if (!_dealer.InGreenStar)
+		{
+			Nav.NavigateTo($"/Enclosures?dealerId={DealerId}", replace: true);
+			return;
+		}
+
+		_isCheckingGreenStar = false;
+		SelectedCompany = "GreenStar";
+
+		var fyTask = SafeGetAsync<List<FinancialYear>>("api/FinancialYear");
+		var catTask = SafeGetAsync<List<Category>>("api/Category");
+		var unitTask = SafeGetAsync<List<Unit>>("api/Unit");
+		var prodTask = SafeGetAsync<List<Product>>("api/Product");
+
+		// Dealer already fetched above; fetch other related collections in parallel
 		var bankTask = SafeGetAsync<List<DealerAssetBank>>("api/DealerAssetBank/all");
 		var landTask = SafeGetAsync<List<DealerAssetLand>>("api/DealerAssetLand/all");
 		var buildingTask = SafeGetAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all");
@@ -719,7 +769,7 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 
 		await Task.WhenAll(
 			fyTask, catTask, unitTask, prodTask,
-			dealerTask, bankTask, landTask, buildingTask,
+			bankTask, landTask, buildingTask,
 			loanTask, salesPlanTask, proposalTask
 		);
 
@@ -729,8 +779,6 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 		_products = prodTask.Result ?? new();
 
 		var dealerId = DealerId.Value;
-
-		_dealer = dealerTask.Result ?? new();
 
 		_bankAssets = (bankTask.Result ?? new())
 			.Where(a => a.DealerId == dealerId)
@@ -760,36 +808,26 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 			_proposal = existing;
 
 		InitValuesFromData();
-	}
-	else
-	{
-		await Task.WhenAll(fyTask, catTask, unitTask, prodTask);
 
-		_financialYears = fyTask.Result ?? new();
-		_categories = catTask.Result ?? new();
-		_units = unitTask.Result ?? new();
-		_products = prodTask.Result ?? new();
-	}
-
-	if (_categories.Count > 0)
-{
-    _selectedCategoryId = GetDefaultGreenstarCategoryId();
-    UpdateSelectedUnit();
-}
-
-	SetFixedFinancialYears();
-	await LoadCreditLimitSalesData();
-
-	// Load GreenStar Valuation default values after all data is loaded
-	if (DealerId.HasValue && DealerId.Value > 0)
-	{
-		await LoadGreenstarValuationDefaultValues();
-	}
-		}
-		finally
+		if (_categories.Count > 0)
 		{
-			Loading.Hide();
+			_selectedCategoryId = GetDefaultGreenstarCategoryId();
+			UpdateSelectedUnit();
 		}
+
+		SetFixedFinancialYears();
+		await LoadCreditLimitSalesData();
+
+		// Load GreenStar Valuation default values after all data is loaded
+		if (DealerId.HasValue && DealerId.Value > 0)
+		{
+			await LoadGreenstarValuationDefaultValues();
+		}
+	}
+	finally
+	{
+		Loading.Hide();
+	}
 }
 	
 private int GetDefaultGreenstarCategoryId()

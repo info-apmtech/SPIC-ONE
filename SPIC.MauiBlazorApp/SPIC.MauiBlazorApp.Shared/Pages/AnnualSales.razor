@@ -310,9 +310,9 @@
 						 alt="Specialty Products Total" />
 					<div class="total-value-title">Specialty Products Total</div>
 					@{
-						// Calculate combined total amount of Specialty Products MT and Ltr
+						var specialtyIds = SpecialtyCategoryIds;
 						var combinedAmt = _allSalesData
-							.Where(r => r.CategoryId == SpecialtyMTCategoryId || r.CategoryId == SpecialtyLtrCategoryId)
+							.Where(r => specialtyIds.Contains(r.CategoryId))
 							.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
 					}
 					<div class="category-summary-meta mt-3">
@@ -384,8 +384,12 @@
 	private string? _message;
 	private bool _isError;
 	private bool _hasWholesaleLicense;
-	private int SpecialtyMTCategoryId => _categories.FirstOrDefault(c => c.Name.Contains("Specialty Products - MT"))?.Id ?? 0;
-	private int SpecialtyLtrCategoryId => _categories.FirstOrDefault(c => c.Name.Contains("Specialty Products - Ltr"))?.Id ?? 0;
+	// Replace both SpecialtyMTCategoryId and SpecialtyLtrCategoryId with one helper set:
+	private HashSet<int> SpecialtyCategoryIds => _categories
+		.Where(c => c.Name != null &&
+			   c.Name.Contains("Specialty", StringComparison.OrdinalIgnoreCase))
+		.Select(c => c.Id)
+		.ToHashSet();
 
 	protected override async Task OnInitializedAsync()
 	{
