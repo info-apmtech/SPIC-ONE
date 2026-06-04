@@ -12,8 +12,17 @@
 		max-width: 100%;
 		overflow: hidden;
 	}
-
+	
 	.table-responsive {
+		/*max-height: 500px; /* vertical inline scroller */
+		/* Keep vertical scrolling but prevent horizontal scrolling */
+		overflow-y: auto;
+		overflow-x: hidden;
+		width: 100%;
+		border: 1px solid #E5E7EB;
+		border-radius: 12px;
+	}
+	.table-responsive-for-review {
 		max-height: 500px; /* vertical inline scroller */
 		/* Keep vertical scrolling but prevent horizontal scrolling */
 		overflow-y: auto;
@@ -112,8 +121,8 @@
 @if (!_isCheckingGreenStar)
 {
 	<div class="container-fluid py-4 px-0">
-		<FormLoader />
-		<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
+        <FormLoader />
+		<fieldset style="border:0;padding:0;margin:0;">
 		@if (!string.IsNullOrEmpty(_message))
 		{
 			<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
@@ -169,6 +178,10 @@
     SalesPlanCardTitle="GreenStar Sales Plan (Current FY)"
     SalesPlanUnitName="MT"
     Company="GreenStar"
+    SpecialtyMtQty="@SpecialtyMtQty"
+    SpecialtyMtAmount="@SpecialtyMtAmount"
+    SpecialtyLtrQty="@SpecialtyLtrQty"
+    SpecialtyLtrAmount="@SpecialtyLtrAmount"
     OnCategoryChanged="SelectCategory" />
 		@if (_dealer.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
 		{
@@ -271,7 +284,7 @@
 									<td class="text-center">&gt;500</td>
 									<td class="text-center">&lt;500</td>
 									<td rowspan="2" class="align-middle">
-										<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[0]" @onchange="(e) => OnGreenstarValueChanged(0, e)" />
+                                        <input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[0]" @onchange="(e) => OnGreenstarValueChanged(0, e)" disabled="@IsGreenstarInputDisabled(0)" />
 									</td>
 									<td rowspan="2" class="text-center align-middle">
 										<div class="table-val-box">@GetGreenstarMark(0).ToString("N0")</div>
@@ -297,7 +310,7 @@
 									<td class="text-center">&gt;150</td>
 									<td class="text-center">&gt;75</td>
 									<td rowspan="2" class="align-middle">
-										<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[1]" @onchange="(e) => OnGreenstarValueChanged(1, e)" />
+                                        <input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[1]" @onchange="(e) => OnGreenstarValueChanged(1, e)" disabled="@IsGreenstarInputDisabled(1)" />
 									</td>
 									<td rowspan="2" class="text-center align-middle">
 										<div class="table-val-box">@GetGreenstarMark(1).ToString("N0")</div>
@@ -323,7 +336,7 @@
 									<td class="text-center">&gt;125</td>
 									<td class="text-center">&lt;125</td>
 									<td rowspan="2" class="align-middle">
-										<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[2]" @onchange="(e) => OnGreenstarValueChanged(2, e)" />
+                                        <input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[2]" @onchange="(e) => OnGreenstarValueChanged(2, e)" disabled="@IsGreenstarInputDisabled(2)" />
 									</td>
 									<td rowspan="2" class="text-center align-middle">
 										<div class="table-val-box">@GetGreenstarMark(2).ToString("N0")</div>
@@ -349,7 +362,7 @@
 									<td class="text-center">&gt;35</td>
 									<td class="text-center">&lt;15</td>
 									<td rowspan="2" class="align-middle">
-										<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[3]" @onchange="(e) => OnGreenstarValueChanged(3, e)" />
+                                        <input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[3]" @onchange="(e) => OnGreenstarValueChanged(3, e)" disabled="@IsGreenstarInputDisabled(3)" />
 									</td>
 									<td rowspan="2" class="text-center align-middle">
 										<div class="table-val-box">@GetGreenstarMark(3).ToString("N0")</div>
@@ -376,7 +389,7 @@
 									<td class="text-center">&gt;10</td>
 									<td class="text-center">&lt;10</td>
 									<td rowspan="2" class="align-middle">
-										<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[4]" @onchange="(e) => OnGreenstarValueChanged(4, e)" />
+                                        <input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[4]" @onchange="(e) => OnGreenstarValueChanged(4, e)" disabled="@IsGreenstarInputDisabled(4)" />
 									</td>
 									<td rowspan="2" class="text-center align-middle">
 										<div class="table-val-box">@GetGreenstarMark(4).ToString("N0")</div>
@@ -403,7 +416,7 @@
 									<td class="text-center">&gt;4</td>
 									<td class="text-center">&gt;1</td>
 									<td rowspan="2" class="align-middle">
-										<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[5]" @onchange="(e) => OnGreenstarValueChanged(5, e)" />
+                                        <input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[5]" @onchange="(e) => OnGreenstarValueChanged(5, e)" disabled="@IsGreenstarInputDisabled(5)" />
 									</td>
 									<td rowspan="2" class="text-center align-middle">
 										<div class="table-val-box">@GetGreenstarMark(5).ToString("N0")</div>
@@ -430,7 +443,7 @@
 									<td class="text-center">&lt;20</td>
 									<td class="text-center">&lt;30</td>
 									<td rowspan="2" class="align-middle">
-										<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[6]" @onchange="(e) => OnGreenstarValueChanged(6, e)" />
+                                        <input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[6]" @onchange="(e) => OnGreenstarValueChanged(6, e)" />
 									</td>
 									<td rowspan="2" class="text-center align-middle">
 										<div class="table-val-box">@GetGreenstarMark(6).ToString("N0")</div>
@@ -457,7 +470,7 @@
 									<td></td>
 									<td></td>
 									<td class="align-middle">
-										<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[7]" @onchange="(e) => OnGreenstarValueChanged(7, e)" />
+                                        <input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[7]" @onchange="(e) => OnGreenstarValueChanged(7, e)" disabled="@IsGreenstarInputDisabled(7)" />
 									</td>
 									<td class="text-center align-middle text-muted">-</td>
 								</tr>
@@ -499,7 +512,7 @@
 									<td></td>
 									<td></td>
 									<td class="align-middle">
-										<input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[9]" @onchange="(e) => OnGreenstarValueChanged(9, e)" />
+                                        <input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[9]" @onchange="(e) => OnGreenstarValueChanged(9, e)" disabled="@IsGreenstarInputDisabled(9)" />
 									</td>
 									<td class="text-center align-middle text-muted">-</td>
 								</tr>
@@ -631,6 +644,11 @@ private List<DealerCreditLimitSales> _greenstarDefaultSalesData = new();
 	private decimal BuildingTotal => _buildingAssets.Sum(b => b.PropertyValue);
 	private decimal TotalPropertyValue => BankingTotal + LandTotal + BuildingTotal + _dealer.AssetValue;
 	private decimal LoansTotal => _loanLiabilities.Sum(l => l.LoanValue);
+	// Fixed specialty-product totals for the latest FY (do NOT change on tab switch)
+private decimal SpecialtyMtQty;
+private decimal SpecialtyMtAmount;
+private decimal SpecialtyLtrQty;
+private decimal SpecialtyLtrAmount;
 
 	// Sales Plan totals (from previous SalesPlanning page)
 	private IEnumerable<SalesPlanningInDealerRegistration> GreenStarSalesPlanRows =>
@@ -666,8 +684,8 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 {
     var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
 
-    return product?.Name != null &&
-           product.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+    return !string.IsNullOrWhiteSpace(product?.Name) &&
+           product.Name.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase);
 }
 
 	// Credit limit calculations — SPIC
@@ -1148,11 +1166,19 @@ private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx)
 		return !_greenstarValueEntered[idx] ? 0 : CalculateGreenstarMark(idx, _greenstarValues[idx]);
 	}
 
+	// Controls whether a Greenstar valuation input is disabled.
+	// Make row 7 (index 6) editable unless the page is in view-only mode.
+	private bool IsGreenstarInputDisabled(int idx)
+	{
+		if (IsViewOnly) return true;
+		return idx != 6;
+	}
+
 	// --- Helper Methods for Product Identification ---
 	private bool IsUreaProduct(Product? product)
 {
-    return product?.Name != null &&
-           product.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+    return !string.IsNullOrWhiteSpace(product?.Name) &&
+           product.Name.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase);
 }
 
 private bool IsFertilizerCategory(Category? category)
@@ -1257,20 +1283,23 @@ private bool IsSpecialityCreditLimitSalesRow(DealerCreditLimitSales row)
     return IsSpecialityProduct(product);
 }
 
-private decimal CalculateOtherFertilizerSalesQty()
+private decimal CalculateOtherFertilizerSalesQty(int? financialYearId = null)
 {
-    return _greenstarDefaultSalesData
-        .Where(IsOtherFertilizerCreditLimitSalesRow)
-        .Sum(r => r.Quantity);
+	var query = _greenstarDefaultSalesData.Where(IsOtherFertilizerCreditLimitSalesRow);
+	if (financialYearId.HasValue && financialYearId.Value > 0)
+		query = query.Where(r => r.FinancialYearId == financialYearId.Value);
+
+	return query.Sum(r => r.Quantity);
 }
 
-private decimal CalculateOtherFertilizerSalesTurnover()
+private decimal CalculateOtherFertilizerSalesTurnover(int? financialYearId = null)
 {
-    var grossAmount = _greenstarDefaultSalesData
-        .Where(IsOtherFertilizerCreditLimitSalesRow)
-        .Sum(r => r.GrossAmount);
+	var query = _greenstarDefaultSalesData.Where(IsOtherFertilizerCreditLimitSalesRow);
+	if (financialYearId.HasValue && financialYearId.Value > 0)
+		query = query.Where(r => r.FinancialYearId == financialYearId.Value);
 
-    return ConvertToLakhs(grossAmount);
+	var grossAmount = query.Sum(r => r.GrossAmount);
+	return ConvertToLakhs(grossAmount);
 }
 
 private decimal CalculateSpecialitySalesTurnover()
@@ -1281,7 +1310,35 @@ private decimal CalculateSpecialitySalesTurnover()
 
     return ConvertToLakhs(grossAmount);
 }
+private void ComputeSpecialtyCardTotals()
+{
+    SpecialtyMtQty = SpecialtyMtAmount = SpecialtyLtrQty = SpecialtyLtrAmount = 0;
 
+    var fyId = _proposal.FY3;   // latest completed FY (e.g. 2025-2026)
+    if (fyId <= 0)
+        return;
+
+    foreach (var row in _greenstarDefaultSalesData.Where(r => r.FinancialYearId == fyId))
+    {
+        var category = _categories.FirstOrDefault(c => c.Id == row.ProductGroupId);
+        if (category?.Name == null || !IsSpecialityCategory(category))
+            continue;
+
+        var amountLakhs = ConvertToLakhs(row.GrossAmount);
+
+        if (category.Name.Contains("MT", StringComparison.OrdinalIgnoreCase))
+        {
+            SpecialtyMtQty += row.Quantity;
+            SpecialtyMtAmount += amountLakhs;
+        }
+        else if (category.Name.Contains("Ltr", StringComparison.OrdinalIgnoreCase)
+              || category.Name.Contains("Liq", StringComparison.OrdinalIgnoreCase))
+        {
+            SpecialtyLtrQty += row.Quantity;
+            SpecialtyLtrAmount += amountLakhs;
+        }
+    }
+}
 	// --- Main Method to Load All GreenStar Valuation Default Values ---
 	private async Task LoadGreenstarValuationDefaultValues()
 {
@@ -1289,9 +1346,10 @@ private decimal CalculateSpecialitySalesTurnover()
     {
         await LoadAnnualSalesDataAsync();
         await LoadGreenstarDefaultSalesPerformanceData();
+		ComputeSpecialtyCardTotals();
 
-        // Row 1: AnnualSales Other Fertilizer Qty
-        var otherFertAnnualQty = CalculateOtherFertilizerAnnualQty();
+        // Row 1: AnnualSales Other Fertilizer Qty (use selected FY3 by default)
+		var otherFertAnnualQty = CalculateOtherFertilizerAnnualQty();
         if (otherFertAnnualQty > 0 && !_greenstarValueEntered[0])
         {
             _greenstarValues[0] = (double)otherFertAnnualQty;
@@ -1299,7 +1357,9 @@ private decimal CalculateSpecialitySalesTurnover()
         }
 
         // Row 2: SalesPerformance Other Fertilizer Qty
-        var otherFertSalesQty = CalculateOtherFertilizerSalesQty();
+        // Use FY3 (right-most FY) to match UI column selection — change to FY1/FY2 if needed
+		var fyForDefaults = _proposal.FY3 > 0 ? _proposal.FY3 : GetCompletedFYIds().FirstOrDefault();
+		var otherFertSalesQty = CalculateOtherFertilizerSalesQty(fyForDefaults);
         if (otherFertSalesQty > 0 && !_greenstarValueEntered[1])
         {
             _greenstarValues[1] = (double)otherFertSalesQty;
@@ -1314,29 +1374,32 @@ private decimal CalculateSpecialitySalesTurnover()
             _greenstarValueEntered[2] = true;
         }
 
-        // Row 4: SalesPerformance Other Fertilizer Turnover in Lakhs
-        var otherFertSalesTurnover = CalculateOtherFertilizerSalesTurnover();
+        // Row 4: SalesPerformance Other Fertilizer Turnover in Lakhs (use same FY as row 2)
+		var otherFertSalesTurnover = CalculateOtherFertilizerSalesTurnover(fyForDefaults);
         if (otherFertSalesTurnover > 0 && !_greenstarValueEntered[3])
         {
             _greenstarValues[3] = (double)otherFertSalesTurnover;
             _greenstarValueEntered[3] = true;
         }
 
-        // Row 5: SalesPerformance Speciality Products Turnover in Lakhs
-        var specialityTurnover = CalculateSpecialitySalesTurnover();
-        if (specialityTurnover > 0 && !_greenstarValueEntered[4])
-        {
-            _greenstarValues[4] = (double)specialityTurnover;
-            _greenstarValueEntered[4] = true;
-        }
+       // Row 5: Total Specialty Product Turnover in Lakhs
+// Load total Specialty Product amount from latest completed FY into 5th row
+var totalSpecialtyProductTurnover = SpecialtyMtAmount + SpecialtyLtrAmount;
 
-        // Row 6: Dealer experience
-        if (_dealer?.YearsofExperiance > 0 && !_greenstarValueEntered[5])
-        {
-            _greenstarValues[5] = _dealer.YearsofExperiance;
-            _greenstarValueEntered[5] = true;
-        }
+if (totalSpecialtyProductTurnover > 0 && !_greenstarValueEntered[4])
+{
+    _greenstarValues[4] = (double)totalSpecialtyProductTurnover;
+    _greenstarValueEntered[4] = true;
+}
 
+     // Row 6: Dealership tenure with GFL - year.month format
+var dealerTenure = GetDealerTenureYearMonthValue();
+
+if (dealerTenure > 0 && !_greenstarValueEntered[5])
+{
+    _greenstarValues[5] = dealerTenure;
+    _greenstarValueEntered[5] = true;
+}
         // Row 7: Manual only
         // Do not auto-feed _greenstarValues[6]
 
@@ -1575,4 +1638,32 @@ private List<int> GetCompletedFYIds()
 			.Select(fy => fy.Id)
 			.ToList();
 	}
+	private double GetDealerTenureYearMonthValue()
+{
+    if (_dealer.DateOfAppointment == default || _dealer.DateOfAppointment > DateTime.Now)
+        return 0;
+
+    var today = DateTime.Now;
+    var appointmentDate = _dealer.DateOfAppointment;
+
+    var years = today.Year - appointmentDate.Year;
+    var months = today.Month - appointmentDate.Month;
+    var days = today.Day - appointmentDate.Day;
+
+    if (days < 0)
+    {
+        months--;
+    }
+
+    if (months < 0)
+    {
+        years--;
+        months += 12;
+    }
+
+    if (years < 0)
+        return 0;
+
+    return double.Parse($"{years}.{months}");
+}
 }

@@ -2,11 +2,16 @@
 
 <div class="form-card">
 	<div class="d-flex justify-content-between align-items-center mb-1">
-		<div class="section-title">
-			<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SalesPerformaReview.svg"
-				 class="formicon" />
-			Sales Performance Review
-		</div>
+    @{
+		var headerTitle = !string.IsNullOrWhiteSpace(Company)
+			? $"{Company} Sales Performance Review"
+			: "Sales Performance Review";
+	}
+	<div class="section-title">
+		<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SalesPerformaReview.svg"
+			 class="formicon" />
+		@headerTitle
+	</div>
 
 		<button class="btn-verified">
 			Values in @SelectedUnitName
@@ -32,27 +37,33 @@
 		var displayedRows = SalesPerfRows ?? new List<SalesPerfViewRow>();
 
 		if (!string.IsNullOrEmpty(Company) && Company.Equals("SPIC", StringComparison.OrdinalIgnoreCase))
-		{
-			// SPIC: show only fertilizer category tabs; when showing rows, further limit to Urea products
-			if (SelectedCategoryId > 0 && fertilizerCatIds.Contains(SelectedCategoryId))
-			{
-				displayedRows = displayedRows.Where(r => !string.IsNullOrEmpty(r.ProductName) && r.ProductName.Contains("Urea", StringComparison.OrdinalIgnoreCase)).ToList();
-			}
-			else
-			{
-				// If no fertilizer category selected (or selected category is not fertilizer), hide rows
-				displayedRows = new List<SalesPerfViewRow>();
-			}
-		}
-		else if (!string.IsNullOrEmpty(Company) && Company.Equals("GreenStar", StringComparison.OrdinalIgnoreCase))
-		{
-			// GreenStar: show all categories; but in fertilizer category exclude Urea products
-			if (SelectedCategoryId > 0 && fertilizerCatIds.Contains(SelectedCategoryId))
-			{
-				displayedRows = displayedRows.Where(r => string.IsNullOrEmpty(r.ProductName) || !r.ProductName.Contains("Urea", StringComparison.OrdinalIgnoreCase)).ToList();
-			}
-			// else leave displayedRows as-is for other categories
-		}
+{
+    // SPIC: show only exact Urea product
+    // This removes Technical Grade Urea only for SPIC
+    if (SelectedCategoryId > 0 && fertilizerCatIds.Contains(SelectedCategoryId))
+    {
+        displayedRows = displayedRows
+            .Where(r => !string.IsNullOrWhiteSpace(r.ProductName) &&
+                        r.ProductName.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+    else
+    {
+        displayedRows = new List<SalesPerfViewRow>();
+    }
+}
+else if (!string.IsNullOrEmpty(Company) && Company.Equals("GreenStar", StringComparison.OrdinalIgnoreCase))
+{
+    // GreenStar: keep Technical Grade Urea / other non-Urea products
+    // Only exclude exact Urea
+    if (SelectedCategoryId > 0 && fertilizerCatIds.Contains(SelectedCategoryId))
+    {
+        displayedRows = displayedRows
+            .Where(r => string.IsNullOrWhiteSpace(r.ProductName) ||
+                        !r.ProductName.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+}
 	}
 
 	<div class="custom-tabs">
@@ -70,7 +81,7 @@
 	</div>
 
 	<div class="table-wrapper">
-		<div class="table-responsive">
+		<div class="table-responsive-for-review">
 			<table class="spic-table">
 				<thead>
 					<tr>
@@ -236,30 +247,12 @@
 	{
 		var selectedUnit = !string.IsNullOrEmpty(SelectedUnitName) ? SelectedUnitName : "MT";
 
-		var grRows = displayedRows
-			.Where(r => !string.IsNullOrEmpty(r.ProductName)
-				&& (
-					r.ProductName.Contains("Gr", StringComparison.OrdinalIgnoreCase)
-					|| r.ProductName.Contains("Granule", StringComparison.OrdinalIgnoreCase)
-					|| r.ProductName.Contains("Granules", StringComparison.OrdinalIgnoreCase)
-				))
-			.ToList();
+		// Fixed, latest-FY specialty totals — independent of selected category tab
+		var grQty = SpecialtyMtQty;
+		var grAmount = SpecialtyMtAmount;
+		var liqQty = SpecialtyLtrQty;
+		var liqAmount = SpecialtyLtrAmount;
 
-		var liqRows = displayedRows
-			.Where(r => !string.IsNullOrEmpty(r.ProductName)
-				&& (
-					r.ProductName.Contains("Liq", StringComparison.OrdinalIgnoreCase)
-					|| r.ProductName.Contains("Liquid", StringComparison.OrdinalIgnoreCase)
-				))
-			.ToList();
-
-		var grQty = grRows.Sum(r => r.FY1Qty + r.FY2Qty + r.FY3Qty);
-		var grAmount = grRows.Sum(r => r.FY1Amount + r.FY2Amount + r.FY3Amount);
-
-		var liqQty = liqRows.Sum(r => r.FY1Qty + r.FY2Qty + r.FY3Qty);
-		var liqAmount = liqRows.Sum(r => r.FY1Amount + r.FY2Amount + r.FY3Amount);
-
-		var totalSpecialityQty = grQty + liqQty;
 		var totalSpecialityAmount = grAmount + liqAmount;
 
 		<div class="row g-3 mt-3">
@@ -268,13 +261,9 @@
 					<div class="perf-year">Specialty Products MT</div>
 					<div class="perf-val">
 						@grQty.ToString("N2")
-						<span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">
-							@selectedUnit
-						</span>
+						<span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">@selectedUnit</span>
 						/ ₹@grAmount.ToString("N2")
-						<span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">
-							Lakhs
-						</span>
+						<span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">Lakhs</span>
 					</div>
 				</div>
 			</div>
@@ -284,13 +273,9 @@
 					<div class="perf-year">Specialty Products Ltr</div>
 					<div class="perf-val">
 						@liqQty.ToString("N2")
-						<span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">
-							@selectedUnit
-						</span>
+						<span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">@selectedUnit</span>
 						/ ₹@liqAmount.ToString("N2")
-						<span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">
-							Lakhs
-						</span>
+						<span style="font-size:0.75rem; font-weight:normal; color:#6B7280;">Lakhs</span>
 					</div>
 				</div>
 			</div>
@@ -299,14 +284,8 @@
 				<div class="perf-card green">
 					<div class="perf-year">Total Specialty Product</div>
 					<div class="perf-val">
-						@totalSpecialityQty.ToString("N2")
-						<span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">
-							@selectedUnit
-						</span>
-						/ ₹@totalSpecialityAmount.ToString("N2")
-						<span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">
-							Lakhs
-						</span>
+						₹@totalSpecialityAmount.ToString("N2")
+						<span style="font-size:0.75rem; font-weight:normal; color:#A7F3D0;">Lakhs</span>
 					</div>
 				</div>
 			</div>
@@ -333,6 +312,10 @@
 	[Parameter] public decimal SalesPlanTotalAmount { get; set; }
 	[Parameter] public string SalesPlanCardTitle { get; set; } = "Sales Plan (Current FY)";
 	[Parameter] public string SalesPlanUnitName { get; set; } = "";
+	[Parameter] public decimal SpecialtyMtQty { get; set; }
+	[Parameter] public decimal SpecialtyMtAmount { get; set; }
+	[Parameter] public decimal SpecialtyLtrQty { get; set; }
+	[Parameter] public decimal SpecialtyLtrAmount { get; set; }
 
 	[Parameter] public EventCallback<int> OnCategoryChanged { get; set; }
 
