@@ -444,12 +444,12 @@
     protected override async Task OnInitializedAsync()
     {
         Loading.Show();
-
         try
         {
-            await LoadDealerInfo();
-            await LoadCrops();
-            await LoadSavedBlocks();
+            await Task.WhenAll(
+                LoadDealerInfo(),
+                LoadCrops(),
+                LoadSavedBlocks());
         }
         finally
         {
@@ -490,8 +490,8 @@
 
         try
         {
-            var all = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new();
-            _savedBlocks = all.Where(b => b.DealerId == DealerId.Value).ToList();
+            _savedBlocks = await Http.GetFromJsonAsync<List<DealerMarketDetail>>(
+                $"api/DealerMarketDetail/byDealer/{DealerId.Value}") ?? new();
         }
         catch (Exception ex)
         {

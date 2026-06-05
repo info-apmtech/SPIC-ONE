@@ -253,12 +253,13 @@
 		Loading.Show();
 		try
 		{
-			await LoadCompanies();
+			var tasks = new List<Task> { LoadCompanies() };
 			if (DealerId.HasValue && DealerId.Value > 0)
 			{
-				await LoadExperiences();
-				await LoadDealerYearsOfExperience();
+				tasks.Add(LoadExperiences());
+				tasks.Add(LoadDealerYearsOfExperience());
 			}
+			await Task.WhenAll(tasks);
 		}
 		finally
 		{
@@ -282,8 +283,8 @@
 	{
 		try
 		{
-			var all = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience/all") ?? new();
-			_experiences = all.Where(e => e.DealerId == DealerId!.Value).ToList();
+			_experiences = await Http.GetFromJsonAsync<List<DealerExperience>>(
+				$"api/DealerExperience/byDealer/{DealerId!.Value}") ?? new();
 		}
 		catch (Exception ex)
 		{

@@ -520,33 +520,40 @@
 	private bool _showPortDropdown = false;
 
 	protected override async Task OnInitializedAsync()
-	{
-		Loading.Show();
-		try
-		{
-			await LoadLookups();
-			await LoadDealerLocation();
-			await LoadSavedFacilities();
-		}
-		finally
-		{
-			Loading.Hide();
-		}
-	}
+{
+    Loading.Show();
+    try
+    {
+        await Task.WhenAll(
+            LoadLookups(),
+            LoadDealerLocation(),
+            LoadSavedFacilities());
+    }
+    finally
+    {
+        Loading.Hide();
+    }
+}
 
 	private async Task LoadLookups()
-	{
-		try
-		{
-			_warehouses = await Http.GetFromJsonAsync<List<WarehouseEntity>>("api/Warehouse") ?? new();
-			_rackPoints = await Http.GetFromJsonAsync<List<RackPoint>>("api/RackPoint") ?? new();
-			_ports = await Http.GetFromJsonAsync<List<Port>>("api/Port") ?? new();
-		}
-		catch (Exception ex)
-		{
-			ShowMessage($"Failed to load facilities: {ex.Message}", true);
-		}
-	}
+{
+    try
+    {
+        var whTask   = Http.GetFromJsonAsync<List<WarehouseEntity>>("api/Warehouse");
+        var rackTask = Http.GetFromJsonAsync<List<RackPoint>>("api/RackPoint");
+        var portTask = Http.GetFromJsonAsync<List<Port>>("api/Port");
+
+        await Task.WhenAll(whTask, rackTask, portTask);
+
+        _warehouses = whTask.Result   ?? new();
+        _rackPoints = rackTask.Result ?? new();
+        _ports      = portTask.Result ?? new();
+    }
+    catch (Exception ex)
+    {
+        ShowMessage($"Failed to load facilities: {ex.Message}", true);
+    }
+}
 
 	private async Task LoadDealerLocation()
 	{
@@ -572,26 +579,28 @@
 	}
 
 	private async Task LoadSavedFacilities()
-	{
-		if (!DealerId.HasValue || DealerId.Value <= 0) return;
-		try
-		{
-			var allWh = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new();
-			_savedWarehouses = allWh.Where(w => w.DealerId == DealerId.Value).ToList();
+{
+    if (!DealerId.HasValue || DealerId.Value <= 0) return;
+    try
+    {
+        var whTask   = Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>($"api/DealerWarehouseFacilities/byDealer/{DealerId.Value}");
+        var railTask = Http.GetFromJsonAsync<List<DealerRailFacilities>>($"api/DealerRailFacilities/byDealer/{DealerId.Value}");
+        var portTask = Http.GetFromJsonAsync<List<DealerPortFacilities>>($"api/DealerPortFacilities/byDealer/{DealerId.Value}");
 
-			var allRail = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities/all") ?? new();
-			_savedRails = allRail.Where(r => r.DealerId == DealerId.Value).ToList();
+        await Task.WhenAll(whTask, railTask, portTask);
 
-			var allPort = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities/all") ?? new();
-			_savedPorts = allPort.Where(p => p.DealerId == DealerId.Value).ToList();
-		}
-		catch (Exception ex)
-		{
-			ShowMessage($"Failed to load saved facilities: {ex.Message}", true);
-		}
-		var hasErrorAfterLoad = _savedWarehouses.Count < 1 || _savedRails.Count < 1 || _savedPorts.Count < 1;
-		FormStepData.MarkStepError(4, hasErrorAfterLoad);
-	}
+        _savedWarehouses = whTask.Result   ?? new();
+        _savedRails      = railTask.Result ?? new();
+        _savedPorts      = portTask.Result ?? new();
+    }
+    catch (Exception ex)
+    {
+        ShowMessage($"Failed to load saved facilities: {ex.Message}", true);
+    }
+
+    var hasErrorAfterLoad = _savedWarehouses.Count < 1 || _savedRails.Count < 1 || _savedPorts.Count < 1;
+    FormStepData.MarkStepError(4, hasErrorAfterLoad);
+}
 
 	// ── Google Maps URL → lat/lng extraction ──
 	private (double lat, double lng)? ParseGoogleUrl(string? url)

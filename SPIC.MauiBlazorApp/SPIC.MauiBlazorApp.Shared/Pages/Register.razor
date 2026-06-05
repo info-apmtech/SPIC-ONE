@@ -9,6 +9,7 @@
 @inject IJSRuntime JS
 @inject LoadingService Loading
 @inject LoginState LoginState
+@inject LookupCacheService LookupCache
 <style>
     fieldset:disabled .file-remove-x {
         display: none !important;
@@ -1024,21 +1025,17 @@ private async Task LoadData()
 { 
     try
     {
-        // Fire all six lookup calls concurrently instead of one-after-another
-        var statesTask    = Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all");
-        var districtsTask = Http.GetFromJsonAsync<List<LocationItemDto>>("api/District/all");
-        var regionsTask   = Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all");
-        var hqTask        = Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all");
-        var banksTask     = Http.GetFromJsonAsync<List<BankItemDto>>("api/Bank/all");
+        var cacheTask   = LookupCache.EnsureLoadedAsync();
         var dealersTask = Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/lookup");
-        await Task.WhenAll(statesTask, districtsTask, regionsTask, hqTask, banksTask, dealersTask);
 
-        _statesAll        = statesTask.Result    ?? new();
-        _DistrictAll      = districtsTask.Result ?? new();
-        _regionsAll       = regionsTask.Result   ?? new();
-        _headquartersAll  = hqTask.Result        ?? new();
-        _banksAll         = banksTask.Result     ?? new();
-        _dealersAll       = dealersTask.Result   ?? new();
+        await Task.WhenAll(cacheTask, dealersTask);
+
+        _statesAll       = LookupCache.States;
+        _DistrictAll     = LookupCache.Districts;
+        _regionsAll      = LookupCache.Regions;
+        _headquartersAll = LookupCache.Headquarters;
+        _banksAll        = LookupCache.Banks;
+        _dealersAll      = dealersTask.Result ?? new();
     }
     catch (Exception ex)
     {
@@ -1435,40 +1432,31 @@ private void OnDealerStateChanged()
                 }
 
                 bool filesUpdated = false;
-                if (dealerId > 0)
-                {
-                    if (_gstFile != null)
-                    {
-                        var path = await UploadFileToServer(dealerId, "GST", _gstFile);
-                        if (path != null) { _model.GSTFilePath = path; filesUpdated = true; }
-                    }
-                    if (_panFile != null)
-                    {
-                        var path = await UploadFileToServer(dealerId, "PAN", _panFile);
-                        if (path != null) { _model.PANFilePath = path; filesUpdated = true; }
-                    }
-                    if (_aadhaarFile != null)
-                    {
-                        var path = await UploadFileToServer(dealerId, "Aadhaar", _aadhaarFile);
-                        if (path != null) { _model.AadhaarFilePath = path; filesUpdated = true; }
-                    }
-                    if (_wholesaleFile != null)
-                    {
-                        var path = await UploadFileToServer(dealerId, "WholesaleLicense", _wholesaleFile);
-                        if (path != null) { _model.WholesaleLicenseFilePath = path; filesUpdated = true; }
-                    }
-                    if (_retailFile != null)
-                    {
-                        var path = await UploadFileToServer(dealerId, "RetailLicense", _retailFile);
-                        if (path != null) { _model.RetailLicenseFilePath = path; filesUpdated = true; }
-                    }
+               if (dealerId > 0)
+{
+    var uploads = new List<Task>();
 
-                    if (filesUpdated)
-                    {
-                        //  Use the correct custom route for the second file-save PUT request!
-                        await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{dealerId}", _model);
-                    }
-                }
+    if (_gstFile != null)
+        uploads.Add(UploadFileToServer(dealerId, "GST", _gstFile)
+            .ContinueWith(t => { if (t.Result != null) { _model.GSTFilePath = t.Result; filesUpdated = true; } }));
+    if (_panFile != null)
+        uploads.Add(UploadFileToServer(dealerId, "PAN", _panFile)
+            .ContinueWith(t => { if (t.Result != null) { _model.PANFilePath = t.Result; filesUpdated = true; } }));
+    if (_aadhaarFile != null)
+        uploads.Add(UploadFileToServer(dealerId, "Aadhaar", _aadhaarFile)
+            .ContinueWith(t => { if (t.Result != null) { _model.AadhaarFilePath = t.Result; filesUpdated = true; } }));
+    if (_wholesaleFile != null)
+        uploads.Add(UploadFileToServer(dealerId, "WholesaleLicense", _wholesaleFile)
+            .ContinueWith(t => { if (t.Result != null) { _model.WholesaleLicenseFilePath = t.Result; filesUpdated = true; } }));
+    if (_retailFile != null)
+        uploads.Add(UploadFileToServer(dealerId, "RetailLicense", _retailFile)
+            .ContinueWith(t => { if (t.Result != null) { _model.RetailLicenseFilePath = t.Result; filesUpdated = true; } }));
+
+    await Task.WhenAll(uploads);
+
+    if (filesUpdated)
+        await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{dealerId}", _model);
+}
 
                 _gstFile = null;
                 _panFile = null;
@@ -1477,7 +1465,7 @@ private void OnDealerStateChanged()
                 _retailFile = null;
 
                 ShowMessage(_isEditMode ? "Dealer updated successfully!" : "Dealer registered successfully!", false);
-                await LoadData();
+                //await LoadData();
                 success = true;
             }
             else
@@ -1938,22 +1926,7 @@ private void OnDealerStateChanged()
         public DateTime? TradeDepositDate { get; set; }
     }
 
-    public class LocationItemDto
-    {
-        public int Id { get; set; }
-        public string StateName { get; set; } = "";
-        public string DistrictName { get; set; } = "";
-        public string RegionName { get; set; } = "";
-        public string HeadquarterName { get; set; } = "";
-        public int StateId { get; set; }
-        public int RegionId { get; set; }
-    }
-
-    public class BankItemDto
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = "";
-    }
+    
 
     public class DealerItemDto
     {
