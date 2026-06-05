@@ -538,6 +538,7 @@
     private bool _isSoleProprietor => _dealer.EntityType == EntityType.soleProprietor;
     private bool _hasWholesaleLicense => !string.IsNullOrEmpty(_dealer.WholeSaleFertilizerLicenseNumber);
     private bool _hasRetailLicense => !string.IsNullOrEmpty(_dealer.RetailFertilizerLicenseNumber);
+    private bool _isRetailerListRequired => !_hasRetailLicense || _hasWholesaleLicense;
 
     private bool _showPartnershipDeed
     {
@@ -703,7 +704,7 @@
             !string.IsNullOrEmpty(_docs.BankGauranteeFilePath) &&
             !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath) &&
             !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath) &&
-            (_hasRetailLicense || !string.IsNullOrEmpty(_docs.RetailerListFilePath)) &&
+            (!_isRetailerListRequired || !string.IsNullOrEmpty(_docs.RetailerListFilePath)) &&
             _docMissingCount == 0;
 
         if (_dealer.InSpic)
@@ -735,8 +736,8 @@
         if (_docs != null && !string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath))
             _enclosureItems.Add(new("Deed of Guarantee", true));
 
-        if (_docs != null && !string.IsNullOrEmpty(_docs.RetailerListFilePath))
-            _enclosureItems.Add(new("Retailer List", true));
+        if (_isRetailerListRequired)
+            _enclosureItems.Add(new("List of Retailers with Complete Details", _docs != null && !string.IsNullOrEmpty(_docs.RetailerListFilePath)));
 
         if (_dealer.InGreenStar)
             _enclosureItems.Add(new("Greenstar Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath)));
