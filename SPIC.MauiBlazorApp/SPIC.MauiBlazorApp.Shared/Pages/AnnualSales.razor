@@ -259,9 +259,7 @@
 				<div class="total-value-title">Urea - Fertilizer</div>
 
 				@{
-					var ureaProduct = _products.FirstOrDefault(p =>
-						p.Name != null &&
-						p.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase));
+						var ureaProduct = _products.FirstOrDefault(p => IsUreaProduct(p));
 
 					decimal ureaTotalQty = 0;
 					decimal ureaTotalAmt = 0;
@@ -396,20 +394,25 @@
 		Loading.Show();
 		try
 		{
-			await LoadCategories();
-			await LoadUnits();
-			await LoadProducts();
+			var tasks = new List<Task>
+		{
+			LoadCategories(),
+			LoadUnits(),
+			LoadProducts()
+		};
+
+			if (DealerId.HasValue && DealerId.Value > 0)
+			{
+				tasks.Add(LoadDealerInfo());
+				tasks.Add(LoadSalesData());
+			}
+
+			await Task.WhenAll(tasks);
 
 			if (_categories.Count > 0)
 			{
 				_selectedCategoryId = _categories.First().Id;
 				UpdateSelectedUnit();
-			}
-
-			if (DealerId.HasValue && DealerId.Value > 0)
-			{
-				await LoadDealerInfo();
-				await LoadSalesData();
 			}
 
 			BuildCurrentRows();
@@ -471,8 +474,8 @@
 	{
 		try
 		{
-			var all = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all") ?? new();
-			_allSalesData = all.Where(s => s.DealerId == DealerId!.Value).ToList();
+			_allSalesData = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>(
+				$"api/AnnualSaleDataLastFY/byDealer/{DealerId!.Value}") ?? new();
 		}
 		catch (Exception ex)
 		{
@@ -604,7 +607,7 @@
 	private bool IsUreaProduct(Product? product)
 	{
 		return product?.Name != null &&
-			   product.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+			   product.Name.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase);
 	}
 
 	private bool IsFertilizerCategory(Category? category)

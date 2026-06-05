@@ -772,60 +772,43 @@ private bool IsUreaSalesPlanRow(SalesPlanningInDealerRegistration row)
 		_isCheckingGreenStar = false;
 		SelectedCompany = "GreenStar";
 
-		var fyTask = SafeGetAsync<List<FinancialYear>>("api/FinancialYear");
-		var catTask = SafeGetAsync<List<Category>>("api/Category");
-		var unitTask = SafeGetAsync<List<Unit>>("api/Unit");
-		var prodTask = SafeGetAsync<List<Product>>("api/Product");
+		var fyTask   = SafeGetAsync<List<FinancialYear>>("api/FinancialYear");
+var catTask  = SafeGetAsync<List<Category>>("api/Category");
+var unitTask = SafeGetAsync<List<Unit>>("api/Unit");
+var prodTask = SafeGetAsync<List<Product>>("api/Product");
 
-		// Dealer already fetched above; fetch other related collections in parallel
-		var bankTask = SafeGetAsync<List<DealerAssetBank>>("api/DealerAssetBank/all");
-		var landTask = SafeGetAsync<List<DealerAssetLand>>("api/DealerAssetLand/all");
-		var buildingTask = SafeGetAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all");
-		var loanTask = SafeGetAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities/all");
-		var salesPlanTask = SafeGetAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all");
-		var proposalTask = SafeGetAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all");
+var bankTask      = SafeGetAsync<List<DealerAssetBank>>($"api/DealerAssetBank/byDealer/{DealerId}");
+var landTask      = SafeGetAsync<List<DealerAssetLand>>($"api/DealerAssetLand/byDealer/{DealerId}");
+var buildingTask  = SafeGetAsync<List<DealerAssetBuilding>>($"api/DealerAssetBuilding/byDealer/{DealerId}");
+var loanTask      = SafeGetAsync<List<DealerLoanLiabilities>>($"api/DealerLoanLiabilities/byDealer/{DealerId}");
+var salesPlanTask = SafeGetAsync<List<SalesPlanningInDealerRegistration>>($"api/SalesPlanning/byDealer/{DealerId}");
+var proposalTask  = SafeGetAsync<List<DealerCreditLimitProposal>>($"api/DealerCreditLimitProposal/byDealer/{DealerId}");
+var annualTask    = SafeGetAsync<List<AnnualSaleDataLastFYofDealerRegistration>>($"api/AnnualSaleDataLastFY/byDealer/{DealerId}");
 
-		await Task.WhenAll(
-			fyTask, catTask, unitTask, prodTask,
-			bankTask, landTask, buildingTask,
-			loanTask, salesPlanTask, proposalTask
-		);
+await Task.WhenAll(
+    fyTask, catTask, unitTask, prodTask,
+    bankTask, landTask, buildingTask,
+    loanTask, salesPlanTask, proposalTask, annualTask
+);
 
-		_financialYears = fyTask.Result ?? new();
-		_categories = catTask.Result ?? new();
-		_units = unitTask.Result ?? new();
-		_products = prodTask.Result ?? new();
+_financialYears = fyTask.Result ?? new();
+_categories     = catTask.Result ?? new();
+_units          = unitTask.Result ?? new();
+_products       = prodTask.Result ?? new();
 
-		var dealerId = DealerId.Value;
+_bankAssets      = bankTask.Result ?? new();      // server filtered — no .Where
+_landAssets      = landTask.Result ?? new();
+_buildingAssets  = buildingTask.Result ?? new();
+_loanLiabilities = loanTask.Result ?? new();
+_salesPlanData   = salesPlanTask.Result ?? new();
+_annualSalesData = annualTask.Result ?? new();    // hoisted out of the tail
 
-		_bankAssets = (bankTask.Result ?? new())
-			.Where(a => a.DealerId == dealerId)
-			.ToList();
+var proposals = proposalTask.Result ?? new();
+var existing  = proposals.FirstOrDefault(p => p.DealerId == DealerId.Value);
+if (existing != null)
+    _proposal = existing;
 
-		_landAssets = (landTask.Result ?? new())
-			.Where(a => a.DealerId == dealerId)
-			.ToList();
-
-		_buildingAssets = (buildingTask.Result ?? new())
-			.Where(a => a.DealerId == dealerId)
-			.ToList();
-
-		_loanLiabilities = (loanTask.Result ?? new())
-			.Where(a => a.DealerId == dealerId)
-			.ToList();
-
-		_salesPlanData = (salesPlanTask.Result ?? new())
-			.Where(s => s.DealerId == dealerId)
-			.ToList();
-
-		var proposals = proposalTask.Result ?? new();
-
-		var existing = proposals.FirstOrDefault(p => p.DealerId == dealerId);
-
-		if (existing != null)
-			_proposal = existing;
-
-		InitValuesFromData();
+InitValuesFromData();
 
 		if (_categories.Count > 0)
 		{
@@ -1353,7 +1336,7 @@ private void ComputeSpecialtyCardTotals()
 {
     try
     {
-        await LoadAnnualSalesDataAsync();
+        //await LoadAnnualSalesDataAsync();
         await LoadGreenstarDefaultSalesPerformanceData();
 		ComputeSpecialtyCardTotals();
 
@@ -1625,18 +1608,18 @@ private async Task LoadGreenstarDefaultSalesPerformanceData()
 
     var fyQuery = string.Join(",", fyIds);
 
-    foreach (var categoryId in categoryIds)
-    {
-        var url =
-            $"api/creditlimitsales/by-filter" +
-            $"?customerId={_dealer.Id}" +
-            $"&categoryId={categoryId}" +
-            $"&financialYearIds={fyQuery}";
+    var tasks = categoryIds.Select(categoryId =>
+{
+    var url = $"api/creditlimitsales/by-filter?customerId={_dealer.Id}" +
+              $"&categoryId={categoryId}&financialYearIds={fyQuery}";
+    return SafeGetAsync<List<DealerCreditLimitSales>>(url);
+});
 
-        var rows = await SafeGetAsync<List<DealerCreditLimitSales>>(url) ?? new();
-
-        _greenstarDefaultSalesData.AddRange(rows);
-    }
+var results = await Task.WhenAll(tasks);
+_greenstarDefaultSalesData = results
+    .Where(r => r != null)
+    .SelectMany(r => r!)
+    .ToList();
 }
 private List<int> GetCompletedFYIds()
 	{

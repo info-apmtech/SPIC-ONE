@@ -674,18 +674,18 @@
         Loading.Show();
         try
         {
-            await Task.WhenAll(LoadBanks(), LoadStates(), LoadDistricts());
+            var tasks = new List<Task> { LoadBanks(), LoadStates(), LoadDistricts() };
 
             if (DealerId.HasValue && DealerId.Value > 0)
             {
-                await Task.WhenAll(
-                    LoadDealer(),
-                    LoadBankAssets(),
-                    LoadLandAssets(),
-                    LoadBuildingAssets(),
-                    LoadLoanLiabilities()
-                );
+                tasks.Add(LoadDealer());
+                tasks.Add(LoadBankAssets());
+                tasks.Add(LoadLandAssets());
+                tasks.Add(LoadBuildingAssets());
+                tasks.Add(LoadLoanLiabilities());
             }
+
+            await Task.WhenAll(tasks);
         }
         finally
         {
@@ -721,8 +721,8 @@
     {
         try
         {
-            var all = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new();
-            _bankAssets = all.Where(a => a.DealerId == DealerId!.Value).ToList();
+            _bankAssets = await Http.GetFromJsonAsync<List<DealerAssetBank>>(
+                $"api/DealerAssetBank/byDealer/{DealerId!.Value}") ?? new();
         }
         catch (Exception ex) { ShowMessage($"Failed to load bank assets: {ex.Message}", true); }
     }
@@ -731,8 +731,8 @@
     {
         try
         {
-            var all = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand/all") ?? new();
-            _landAssets = all.Where(a => a.DealerId == DealerId!.Value).ToList();
+            _landAssets = await Http.GetFromJsonAsync<List<DealerAssetLand>>(
+                $"api/DealerAssetLand/byDealer/{DealerId!.Value}") ?? new();
         }
         catch (Exception ex) { ShowMessage($"Failed to load land assets: {ex.Message}", true); }
     }
@@ -741,8 +741,8 @@
     {
         try
         {
-            var all = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all") ?? new();
-            _buildingAssets = all.Where(a => a.DealerId == DealerId!.Value).ToList();
+            _buildingAssets = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>(
+                $"api/DealerAssetBuilding/byDealer/{DealerId!.Value}") ?? new();
         }
         catch (Exception ex) { ShowMessage($"Failed to load building assets: {ex.Message}", true); }
     }
@@ -751,8 +751,8 @@
     {
         try
         {
-            var all = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities/all") ?? new();
-            _loanLiabilities = all.Where(a => a.DealerId == DealerId!.Value).ToList();
+            _loanLiabilities = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>(
+                $"api/DealerLoanLiabilities/byDealer/{DealerId!.Value}") ?? new();
         }
         catch (Exception ex) { ShowMessage($"Failed to load loans: {ex.Message}", true); }
     }

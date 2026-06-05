@@ -875,18 +875,22 @@
 	{
 		try
 		{
-			var all = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all") ?? new();
-			_savedPartners = all.Where(p => p.DealerId == DealerId).ToList();
+			var partnersTask = Http.GetFromJsonAsync<List<DealerOwnershipInfo>>($"api/DealerOwnershipInfo/byDealer/{DealerId}");
+			var familyTask = Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails/all");
+			var occTask = Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation/all");
 
-			var allFamily = await Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails/all") ?? new();
-			var allOcc = await Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation/all") ?? new();
+			await Task.WhenAll(partnersTask, familyTask, occTask);
+
+			_savedPartners = partnersTask.Result ?? new();
+			var allFamily = familyTask.Result   ?? new();
+			var allOcc = occTask.Result       ?? new();
 
 			_savedFamilyMap.Clear();
 			_savedOccupationMap.Clear();
 
 			foreach (var p in _savedPartners)
 			{
-				_savedFamilyMap[p.Id] = allFamily.Where(f => f.OwnershipPartnerId == p.Id).ToList();
+				_savedFamilyMap[p.Id]     = allFamily.Where(f => f.OwnershipPartnerId == p.Id).ToList();
 				_savedOccupationMap[p.Id] = allOcc.Where(o => o.OwnershipPartnerId == p.Id).ToList();
 			}
 		}
