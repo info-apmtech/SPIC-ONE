@@ -103,7 +103,16 @@ builder.Services.AddSwaggerGen(c =>
         };
     });
 });
-
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.SetIsOriginAllowed(origin => true)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+});
 var app = builder.Build();
 
 //if (app.Environment.IsDevelopment())
@@ -113,7 +122,7 @@ app.UseSwaggerUI();
 //}
 
 app.UseHttpsRedirection();
-
+app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 // Test root endpoint
