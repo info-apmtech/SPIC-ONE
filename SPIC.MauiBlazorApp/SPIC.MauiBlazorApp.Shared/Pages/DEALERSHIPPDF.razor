@@ -497,6 +497,8 @@
                       }
                       .print-ui-layer { display: none !important; }
                       .page-wrapper { padding: 0 !important; }
+                      .enclosure-action-col { display: none !important; }
+
                       
                       /* 1. FORCE TITLE AND DOCUMENT TO STAY ON THE SAME PAGE */
                      .document-view-container {
@@ -700,7 +702,7 @@
                 @if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
                 {
                     <div class="logo">
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/spiclogo.png" alt="SPIC" style="height: 55px; object-fit: contain;" />
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/spiclogo.png" alt="SPIC" style="object-fit: contain;" />
                     </div>
                 }
                 else if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
@@ -787,7 +789,7 @@
                         </div>
                         <div class="inline-field">
                             <label>Business Type:</label>
-                            <div class="inline-val">@(_model.BusinessEntityType ?? "-")</div>
+                            <div class="inline-val">@GetEntityTypeName(_model.EntityType)</div>
                         </div>
                         <div class="inline-field">
                             <label>Date of Appointment:</label>
@@ -1093,96 +1095,68 @@
                 </div>
 
 <div class="dpdf-section">
-     <div class="dpdf-section-title mb-2">
-         <div class="dpdf-section-icon">🏭</div>   <div class="dpdf-section-text">Nearest Facility </div>
-     </div>
+    <div class="dpdf-section-title mb-2">
+        <div class="dpdf-section-icon">🏭</div>   <div class="dpdf-section-text">Nearest Facility</div>
+    </div>
 
-     @if ((_savedWarehouses != null && _savedWarehouses.Any()) ||
-          (_savedRails != null && _savedRails.Any()) ||
-          (_savedPorts != null && _savedPorts.Any()))
-     {
-         @if (_savedWarehouses != null && _savedWarehouses.Any())
-         {
-             <div class="sub-card" style="padding: 8px 12px; margin-bottom: 6px;">
-                 <div class="sub-card-header d-flex justify-content-center align-items-center mb-2">
-                     <span class="badge badge-warehouse" style="background-color: #d1fae5; color: #065f46; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">
-                         WAREHOUSE
-                     </span>
-                 </div>
-                 
-                 @foreach (var wh in _savedWarehouses)
-                 {
-                     var whName = _warehousesAll.FirstOrDefault(w => w.Id == wh.WarehouseId)?.Name ?? "Warehouse";
-                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px dashed #e5e7eb;">
-                         <div style="font-weight: 600; color: #374151; font-size: 11px; flex: 1.5;">
-                             <i class="bi bi-geo-alt me-1" style="color: #059669;"></i>@whName
-                         </div>
-                         <div style="font-size: 11px; color: var(--label-color); flex: 1;">
-                             Distance: <span style="color: var(--primary-green); font-weight: 500;">@wh.Distance.ToString("N1") KM</span>
-                         </div>
-                         <div style="font-size: 11px; color: var(--label-color); flex: 1.2; text-align: right;">
-                             Freight: <span style="color: var(--primary-green); font-weight: 500;">₹ @wh.Freight.ToString("N2") / ton / KM</span>
-                         </div>
-                     </div>
-                 }
-             </div>
-         }
+    @{
+        var facilities = new List<(string Name, double Distance, double Freight, string IconColor)>();
 
-         @if (_savedRails != null && _savedRails.Any())
-         {
-             <div class="sub-card" style="padding: 8px 12px; margin-bottom: 6px;">
-                 <div class="sub-card-header d-flex justify-content-center align-items-center mb-2">
-                     <span class="badge badge-rail" style="background-color: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">RAIL HEAD</span>
-                 </div>
-                 
-                 @foreach (var rail in _savedRails)
-                 {
-                     var railName = _rackPointsAll.FirstOrDefault(r => r.Id == rail.RailFacilitiesId)?.Name ?? "Rail Head";
-                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px dashed #e5e7eb;">
-                         <div style="font-weight: 600; color: #374151; font-size: 11px; flex: 1.5;">
-                             <i class="bi bi-geo-alt me-1" style="color: #2563eb;"></i>@railName
-                         </div>
-                         <div style="font-size: 11px; color: var(--label-color); flex: 1;">
-                             Distance: <span style="color: var(--primary-green); font-weight: 500;">@rail.Distance.ToString("N1") KM</span>
-                         </div>
-                         <div style="font-size: 11px; color: var(--label-color); flex: 1.2; text-align: right;">
-                             Freight: <span style="color: var(--primary-green); font-weight: 500;">₹ @rail.Freight.ToString("N2") / ton / KM</span>
-                         </div>
-                     </div>
-                 }
-             </div>
-         }
+        if (_savedWarehouses != null)
+        {
+            foreach (var wh in _savedWarehouses)
+            {
+                var whName = _warehousesAll.FirstOrDefault(w => w.Id == wh.WarehouseId)?.Name ?? "Warehouse";
+                facilities.Add((whName, wh.Distance, wh.Freight, "#059669"));
+            }
+        }
+        if (_savedRails != null)
+        {
+            foreach (var rail in _savedRails)
+            {
+                var railName = _rackPointsAll.FirstOrDefault(r => r.Id == rail.RailFacilitiesId)?.Name ?? "Rail Head";
+                facilities.Add((railName, rail.Distance, rail.Freight, "#2563eb"));
+            }
+        }
+        if (_savedPorts != null)
+        {
+            foreach (var port in _savedPorts)
+            {
+                var portName = _portsAll.FirstOrDefault(p => p.Id == port.PortId)?.Name ?? "Port";
+                facilities.Add((portName, port.Distance, port.Freight, "#db2777"));
+            }
+        }
+    }
 
-         @if (_savedPorts != null && _savedPorts.Any())
-         {
-             <div class="sub-card" style="padding: 8px 12px; margin-bottom: 6px;">
-                 <div class="sub-card-header d-flex justify-content-center align-items-center mb-2">
-                     <span class="badge badge-port" style="background-color: #fce7f3; color: #9d174d; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px;">PORT</span>
-                 </div>
-                 
-                 @foreach (var port in _savedPorts)
-                 {
-                     var portName = _portsAll.FirstOrDefault(p => p.Id == port.PortId)?.Name ?? "Port";
-                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px dashed #e5e7eb;">
-                         <div style="font-weight: 600; color: #374151; font-size: 11px; flex: 1.5;">
-                             <i class="bi bi-geo-alt me-1" style="color: #db2777;"></i>@portName
-                         </div>
-                         <div style="font-size: 11px; color: var(--label-color); flex: 1;">
-                             Distance: <span style="color: var(--primary-green); font-weight: 500;">@port.Distance.ToString("N1") KM</span>
-                         </div>
-                         <div style="font-size: 11px; color: var(--label-color); flex: 1.2; text-align: right;">
-                             Freight: <span style="color: var(--primary-green); font-weight: 500;">₹ @port.Freight.ToString("N2") / ton / KM</span>
-                         </div>
-                     </div>
-                 }
-             </div>
-         }
-     }
-     else
-     {
-         <div class="value" style="padding: 10px; text-align: center; color: var(--label-color);">No Facility Proximity Data Available</div>
-     }
- </div> 
+    @if (facilities.Any())
+    {
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: var(--pdf-font-size);">
+            <thead>
+                <tr style="background-color: var(--card-bg);">
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Facility</th>
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600;">Distance (KM)</th>
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600;">Freight (₹ / ton / KM)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in facilities)
+                {
+                    <tr>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); font-weight: 600; color: #1F2937;">
+                            <i class="bi bi-geo-alt me-1" style="color: @f.IconColor;"></i>@f.Name
+                        </td>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; text-align: center;">@f.Distance.ToString("N1")</td>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; text-align: center;">₹ @f.Freight.ToString("N2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <div class="value" style="padding: 10px; text-align: center; color: var(--label-color);">No Facility Proximity Data Available</div>
+    }
+</div>
 <div class="dpdf-section">
      <div class="dpdf-section-title mb-2">
          <div class="dpdf-section-icon">🌍</div>   <div class="dpdf-section-text">Market Coverage & Service Areas</div>
@@ -1369,144 +1343,181 @@ else
     </div>
 }
 
-                <div class="dpdf-section">
-                    <div class="dpdf-section-title mb-2">
-                        <div class="dpdf-section-icon">🏢</div>  <div class="dpdf-section-text">Other Occupation / Agencies</div>
-                    </div>
-
-                    @if (_occupationsAll != null && _occupationsAll.Any())
-                    {
-                        @foreach (var occ in _occupationsAll)
-                        {
-                            <div class="sub-card">
-                                <div class="grid-2">
-                                    <div class="field">
-                                        <label>Company Name</label>
-                                        <div class="value">@(occ.NameofCompany ?? "-")</div>
-                                    </div>
-                                    <div class="grid-1 mt-15">
-                                        <div class="field">
-                                            <label>Sector</label>
-                                            <div class="value">@GetSectorName(occ.SectorId)</div>
-                                        </div>
-                                    </div>
-                                    <div class="field">
-                                        <label>Amount(₹) Lakhs</label>
-                                        <div class="value">₹ @occ.AnnualTurnover</div>
-                                    </div>
-                                </div>
-                            </div>
-                        }
-                    }
-                    else
-                    {
-                        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Company Details Available</div>
-                    }
-                </div>
-
 <div class="dpdf-section">
-                    <div class="dpdf-section-title mb-2">
-                        <div class="dpdf-section-icon">📈</div>
-                        <div class="dpdf-section-text">Sales Planning & Forecast</div>
-                    </div>
+    <div class="dpdf-section-title mb-2">
+        <div class="dpdf-section-icon">🏢</div>
+        <div class="dpdf-section-text">Other Occupation / Agencies</div>
+    </div>
 
-                    @if (_salesPlanningAll != null && _salesPlanningAll.Any() && _categoriesAll != null)
-                    {
-                        int catIndex = 1;
-                        @foreach (var cat in _categoriesAll)
+    @if (_occupationsAll != null && _occupationsAll.Any())
+    {
+        <table class="sales-table">
+            <thead>
+                <tr>
+                    <th>Company Name</th>
+                    <th>Sector</th>
+                    <th class="table-th-center">Amount (₹ Lakhs)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var occ in _occupationsAll)
+                {
+                    <tr>
+                        <td>@(occ.NameofCompany ?? "-")</td>
+                        <td>@GetSectorName(occ.SectorId)</td>
+                        <td class="table-th-center">₹ @occ.AnnualTurnover</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Company Details Available</div>
+    }
+</div>
+<div class="dpdf-section">
+    <div class="dpdf-section-title mb-2">
+        <div class="dpdf-section-icon">📈</div>
+        <div class="dpdf-section-text">Sales Planning & Forecast</div>
+    </div>
+
+    @if (_salesPlanningAll != null && _salesPlanningAll.Any() && _categoriesAll != null)
+    {
+        int catIndex = 1;
+        @foreach (var cat in _categoriesAll)
+        {
+            var catSales = _salesPlanningAll.Where(s => s.CategoryId == cat.Id).ToList();
+            if (!catSales.Any()) continue;
+
+            var catUnit = _unitsAll.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+
+            var catTotalVolume = catSales.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
+            var catTotalValue = catSales.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
+
+            var aprilQtyTotal = catSales.Sum(r => r.AprilQty);
+            var mayQtyTotal = catSales.Sum(r => r.MayQty);
+            var juneQtyTotal = catSales.Sum(r => r.JuneQty);
+            var julyQtyTotal = catSales.Sum(r => r.JulyQty);
+            var augustQtyTotal = catSales.Sum(r => r.AugustQty);
+            var septemberQtyTotal = catSales.Sum(r => r.SeptemberQty);
+
+            var aprilAmountTotal = catSales.Sum(r => r.AprilAmount);
+            var mayAmountTotal = catSales.Sum(r => r.MayAmount);
+            var juneAmountTotal = catSales.Sum(r => r.JuneAmount);
+            var julyAmountTotal = catSales.Sum(r => r.JulyAmount);
+            var augustAmountTotal = catSales.Sum(r => r.AugustAmount);
+            var septemberAmountTotal = catSales.Sum(r => r.SeptemberAmount);
+
+            var octoberQtyTotal = catSales.Sum(r => r.OctoberQty);
+            var novemberQtyTotal = catSales.Sum(r => r.NovemberQty);
+            var decemberQtyTotal = catSales.Sum(r => r.DecemberQty);
+            var januaryQtyTotal = catSales.Sum(r => r.JanuaryQty);
+            var februaryQtyTotal = catSales.Sum(r => r.FebruaryQty);
+            var marchQtyTotal = catSales.Sum(r => r.MarchQty);
+
+            var octoberAmountTotal = catSales.Sum(r => r.OctoberAmount);
+            var novemberAmountTotal = catSales.Sum(r => r.NovemberAmount);
+            var decemberAmountTotal = catSales.Sum(r => r.DecemberAmount);
+            var januaryAmountTotal = catSales.Sum(r => r.JanuaryAmount);
+            var februaryAmountTotal = catSales.Sum(r => r.FebruaryAmount);
+            var marchAmountTotal = catSales.Sum(r => r.MarchAmount);
+
+            <div class="sub-card">
+                <h3 class="sub-card-title">@catIndex. @cat.Name Sales Forecast (@catUnit / Value)</h3>
+
+                <table class="sales-table table-th-center mb-15">
+                    <thead>
+                        <tr>
+                            <th>PRODUCT</th>
+                            <th>APR</th><th>MAY</th><th>JUN</th><th>JUL</th><th>AUG</th><th>SEP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sale in catSales)
                         {
-                            var catSales = _salesPlanningAll.Where(s => s.CategoryId == cat.Id).ToList();
-                            if (!catSales.Any()) continue;
-
-                            var catUnit = _unitsAll.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
-
-                            var catTotalVolume = catSales.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
-                            var catTotalValue = catSales.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
-
-                            <div class="sub-card">
-                                <h3 class="sub-card-title">@catIndex. @cat.Name Sales Forecast (@catUnit / Value)</h3>
-
-                                <div class="table-responsive">
-                                    <table class="sales-table table-th-center mb-15">
-                                        <thead>
-                                            <tr>
-                                                <th style="text-align: left; background-color: #f8fafc; border-right: 1px solid var(--border-color);">MONTH</th>
-                                                @{
-                                                    var productIdsInCat = catSales.Select(s => s.ProductId).Distinct().ToList();
-                                                }
-                                                @foreach (var pId in productIdsInCat)
-                                                {
-                                                    var product = _productsAll.FirstOrDefault(p => p.Id == pId);
-                                                    <th style="text-align: center; background-color: #f8fafc;">@(product?.Name ?? "Unknown")</th>
-                                                }
-                                                <th style="text-align: center; background-color: #e2e8f0; color: var(--primary-dark); border-left: 1px solid var(--border-color);">TOTAL</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @{
-                                                var monthsList = new[] { "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar" };
-                                            }
-                                            
-                                            @foreach (var m in monthsList)
-                                            {
-                                                <tr>
-                                                    <td style="border-right: 1px solid var(--border-color); background-color: #fcfcfc;"><strong>@m.ToUpper()</strong></td>
-                                                    
-                                                    @foreach (var pId in productIdsInCat)
-                                                    {
-                                                        var sale = catSales.FirstOrDefault(s => s.ProductId == pId);
-                                                        var qty = GetQtyForMonth(sale, m);
-                                                        var amt = GetAmountForMonth(sale, m);
-                                                        <td style="text-align: center;">
-                                                            <span class="stacked-val">@qty.ToString("N0") @catUnit</span>
-                                                            <span class="stacked-val-alt">₹ @amt.ToString("N0")</span>
-                                                        </td>
-                                                    }
-                                                    
-                                                    @{
-                                                        var rowTotalQty = catSales.Sum(s => GetQtyForMonth(s, m));
-                                                        var rowTotalAmt = catSales.Sum(s => GetAmountForMonth(s, m));
-                                                    }
-                                                    <td style="text-align: center; background-color: #f8fafc; border-left: 1px solid var(--border-color);">
-                                                        <span class="stacked-val">@rowTotalQty.ToString("N0") @catUnit</span>
-                                                        <span class="stacked-val-alt">₹ @rowTotalAmt.ToString("N0")</span>
-                                                    </td>
-                                                </tr>
-                                            }
-
-                                            <tr class="total-row" style="background-color: var(--card-bg); border-top: 2px solid var(--border-color);">
-                                                <td style="border-right: 1px solid var(--border-color);"><strong>GRAND TOTAL</strong></td>
-                                                @foreach (var pId in productIdsInCat)
-                                                {
-                                                    var sale = catSales.FirstOrDefault(s => s.ProductId == pId);
-                                                    var totalProdQty = GetTotalQty(sale);
-                                                    var totalProdAmt = GetTotalAmount(sale);
-                                                    <td style="text-align: center;">
-                                                        <span class="stacked-val" style="color: var(--primary-green);">@totalProdQty.ToString("N0") @catUnit</span>
-                                                        <span class="stacked-val-alt" style="color: var(--primary-green);">₹ @totalProdAmt.ToString("N0")</span>
-                                                    </td>
-                                                }
-                                                <td style="text-align: center; background-color: #e2e8f0; border-left: 1px solid var(--border-color);">
-                                                    <span class="stacked-val" style="color: var(--primary-green);">@catTotalVolume.ToString("N0") @catUnit</span>
-                                                    <span class="stacked-val-alt" style="color: var(--primary-green);">₹ @catTotalValue.ToString("N0")</span>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-
-                            catIndex++;
+                            var product = _productsAll.FirstOrDefault(p => p.Id == sale.ProductId);
+                            <tr>
+                                <td>@(product?.Name ?? "Unknown")</td>
+                                <td><span class="stacked-val">@sale.AprilQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.AprilAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.MayQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.MayAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.JuneQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.JuneAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.JulyQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.JulyAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.AugustQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.AugustAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.SeptemberQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.SeptemberAmount.ToString("N0")</span></td>
+                            </tr>
                         }
-                    }
-                    else
-                    {
-                        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">
-                            No Sales Planning Data Available
-                        </div>
-                    }
-                </div>
 
+                        <tr class="total-row">
+                            <td><strong>TOTAL</strong></td>
+                            <td><span class="stacked-val">@aprilQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@aprilAmountTotal.ToString("N0")</span></td>
+                            <td><span class="stacked-val">@mayQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@mayAmountTotal.ToString("N0")</span></td>
+                            <td><span class="stacked-val">@juneQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@juneAmountTotal.ToString("N0")</span></td>
+                            <td><span class="stacked-val">@julyQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@julyAmountTotal.ToString("N0")</span></td>
+                            <td><span class="stacked-val">@augustQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@augustAmountTotal.ToString("N0")</span></td>
+                            <td><span class="stacked-val">@septemberQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@septemberAmountTotal.ToString("N0")</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <table class="sales-table table-th-center">
+                    <thead>
+                        <tr>
+                            <th>PRODUCT</th>
+                            <th>OCT</th><th>NOV</th><th>DEC</th><th>JAN</th><th>FEB</th><th>MAR</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sale in catSales)
+                        {
+                            var product = _productsAll.FirstOrDefault(p => p.Id == sale.ProductId);
+                            <tr>
+                                <td>@(product?.Name ?? "Unknown")</td>
+                                <td><span class="stacked-val">@sale.OctoberQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.OctoberAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.NovemberQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.NovemberAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.DecemberQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.DecemberAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.JanuaryQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.JanuaryAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.FebruaryQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.FebruaryAmount.ToString("N0")</span></td>
+                                <td><span class="stacked-val">@sale.MarchQty.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@sale.MarchAmount.ToString("N0")</span></td>
+                            </tr>
+                        }
+
+                        <tr class="total-row">
+                            <td><strong>TOTAL</strong></td>
+                            <td><span class="stacked-val">@octoberQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@octoberAmountTotal.ToString("N0")</span></td>
+                            <td><span class="stacked-val">@novemberQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@novemberAmountTotal.ToString("N0")</span></td>
+                            <td><span class="stacked-val">@decemberQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@decemberAmountTotal.ToString("N0")</span></td>
+                            <td><span class="stacked-val">@januaryQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@januaryAmountTotal.ToString("N0")</span></td>
+                            <td><span class="stacked-val">@februaryQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@februaryAmountTotal.ToString("N0")</span></td>
+                            <td><span class="stacked-val">@marchQtyTotal.ToString("N0") @catUnit / ₹</span><span class="stacked-val-alt">@marchAmountTotal.ToString("N0")</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="totals-wrapper">
+                    <div class="totals-box d-flex flex-wrap align-items-center" style="gap: 2rem; background-color: #F9FAFB; padding: 12px 16px; border-radius: 6px; border: 1px solid #E5E7EB;">
+                        <div class="total-col d-flex align-items-center" style="gap: 8px;">
+                            <span class="total-label" style="color: #6B7280; font-weight: 500;">Grand Total Volume:</span>
+                            <span class="total-val" style="color: #1F2937; font-weight: 700;">@catTotalVolume.ToString("N0") @catUnit</span>
+                        </div>
+                        <div class="total-col d-flex align-items-center" style="gap: 8px;">
+                            <span class="total-label" style="color: #6B7280; font-weight: 500;">Grand Total Forecast Value:</span>
+                            <span class="total-val" style="color: #059669; font-weight: 700;">₹ @catTotalValue.ToString("N0")</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            catIndex++;
+        }
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">
+            No Sales Planning Data Available
+        </div>
+    }
+</div>
                    <div class="dpdf-section">
            <div class="dpdf-section-title mb-2">
                <div class="dpdf-section-icon">📑</div>  
@@ -1723,228 +1734,6 @@ else
                         <div class="inline-field">
                             <label>LTV Ratio:</label>
                             <div class="inline-val">@(GetTotalAssets() > 0 ? ((GetTotalLoans() / GetTotalAssets()) * 100).ToString("N2") : "0.00")%</div>
-                        </div>
-                    </div>
-                </div>
-
-
-                @if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
-                {
-                    <div class="dpdf-section">
-                        <div class="dpdf-section-title mb-2">
-                            <div class="dpdf-section-icon">📈</div>  <div class="dpdf-section-text">Spic Specimen Signature</div>
-                        </div>
-                        <div class="grid-2 mb-15">
-                            <div class="field">
-                                <label style="color: #059669; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Uploaded Documents</label>
-                                <ul class="uploaded-docs-list">
-                                    @if (!string.IsNullOrEmpty(_docs?.SpecimanFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Specimen Signature</li> }
-                                </ul>
-                            </div>
-                            <div class="field">
-                                <label style="color: #D97706; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Pending Documents</label>
-                                <ul class="uploaded-docs-list">
-                                    @if (string.IsNullOrEmpty(_docs?.SpecimanFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Specimen Signature</li> }
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                }
-                
-                @if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
-                {
-                    <div class="dpdf-section">
-                        <div class="dpdf-section-title mb-2">
-                            <div class="dpdf-section-icon">📈</div>  <div class="dpdf-section-text"> Greenstar Specimen Signature</div>
-                        </div>
-                        <div class="grid-2 mb-15">
-                            <div class="field">
-                                <label style="color: #059669; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Uploaded Documents</label>
-                                <ul class="uploaded-docs-list">
-                                    @if (!string.IsNullOrEmpty(_docs?.GreenstarSpecimanFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Specimen Signature</li> }
-                                </ul>
-                            </div>
-                            <div class="field">
-                                <label style="color: #D97706; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Pending Documents</label>
-                                <ul class="uploaded-docs-list">
-                                    @if (string.IsNullOrEmpty(_docs?.GreenstarSpecimanFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Specimen Signature</li> }
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                }
-
-                <div class="dpdf-section">
-                    <div class="mb-4 pb-3">
-                        <div class="dpdf-section-title mb-2">
-                            <div class="dpdf-section-icon"> <i class="bi bi-file-earmark-text"></i></div>  <div class="dpdf-section-text" style="font-weight: bold; color: #1F2937;">Documents already added in previous steps</div>
-                        </div>
-                        <div class="grid-2">
-                            <div class="field">
-                                <label style="color: #059669; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Uploaded Documents</label>
-                                <ul class="uploaded-docs-list">
-                                    @if (!string.IsNullOrEmpty(_model?.GSTFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> GST Certificate</li> }
-                                    @if (!string.IsNullOrEmpty(_model?.PANFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> PAN</li> }
-                                    @if (!string.IsNullOrEmpty(_model?.AadhaarFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Aadhaar</li> }
-                                    @if (_hasWholesaleLicense && !string.IsNullOrEmpty(_model?.WholesaleLicenseFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Wholesale Fertilizers License</li> }
-                                    @if (_hasRetailLicense && !string.IsNullOrEmpty(_model?.RetailLicenseFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Retail Fertilizers License</li> }
-                                </ul>
-                            </div>
-                            <div class="field">
-                                <label style="color: #D97706; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Pending Documents</label>
-                                <ul class="uploaded-docs-list">
-                                    @if (string.IsNullOrEmpty(_model?.GSTFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> GST Certificate</li> }
-                                    @if (string.IsNullOrEmpty(_model?.PANFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> PAN</li> }
-                                    @if (string.IsNullOrEmpty(_model?.AadhaarFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Aadhaar</li> }
-                                    @if (_hasWholesaleLicense && string.IsNullOrEmpty(_model?.WholesaleLicenseFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Wholesale Fertilizers License</li> }
-                                    @if (_hasRetailLicense && string.IsNullOrEmpty(_model?.RetailLicenseFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Retail Fertilizers License</li> }
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="dpdf-section">
-                    <div class="dpdf-section-title mb-2">
-                        <div class="dpdf-section-icon"> <i class="bi bi-file-earmark-text"></i></div>  <div class="dpdf-section-text" style="font-weight: bold; color: #1F2937;">Partner / Proprietor Documents</div>
-                    </div>
-
-                    @if (_savedPartners != null && _savedPartners.Any())
-                    {
-                        @foreach (var partner in _savedPartners)
-                        {
-                            <div class="dpdf-mb">
-                                <h5 class="dpdf-mb" style="font-weight:600; color:#1F2937; border-left: 4px solid #FACC15; padding-left: 10px;">
-                                    <i class="bi bi-person-badge text-success me-1"></i> @partner.Name
-                                </h5>
-                                <div class="grid-2">
-                                    <div class="field">
-                                        <label style="color: #059669; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Uploaded Documents</label>
-                                        <ul class="uploaded-docs-list">
-                                            @if (!string.IsNullOrEmpty(partner.ProprietorImagePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Photo</li> }
-                                            @if (!_isSoleProprietor && !string.IsNullOrEmpty(partner.AadhaarFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Aadhaar</li> }
-                                            @if (!string.IsNullOrEmpty(partner.PANFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> PAN</li> }
-                                        </ul>
-                                    </div>
-                                    <div class="field">
-                                        <label style="color: #D97706; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Pending Documents</label>
-                                        <ul class="uploaded-docs-list">
-                                            @if (string.IsNullOrEmpty(partner.ProprietorImagePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Photo</li> }
-                                            @if (!_isSoleProprietor && string.IsNullOrEmpty(partner.AadhaarFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Aadhaar</li> }
-                                            @if (string.IsNullOrEmpty(partner.PANFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> PAN</li> }
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        }
-                    }
-                    else
-                    {
-                        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Partner Documents Available</div>
-                    }
-                </div>
-
-                @if (_landAssets.Count > 0 || _buildingAssets.Count > 0)
-                {
-                    <div class="dpdf-section">
-                        <div class="dpdf-section-title mb-2">
-                            <div class="dpdf-section-icon"> <i class="bi bi-file-earmark-text"></i></div>  <div class="dpdf-section-text" style="font-weight: bold; color: #1F2937;">Property Documents (Land & Building)</div>
-                        </div>
-
-                        @foreach (var land in _landAssets)
-                        {
-                            <div class="dpdf-mb">
-                                <h5 class="dpdf-mb" style="font-weight:600; color:#1F2937; border-left: 4px solid #FACC15; padding-left: 10px;">
-                                    <i class="bi bi-geo-alt text-success me-1"></i> Land: @land.LandName <small class="text-muted" style="font-weight: normal;">— Survey No: @land.SurvayNumber</small>
-                                </h5>
-
-                                <div class="grid-2">
-                                    <div class="field">
-                                        <label style="color: #059669; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Uploaded Documents</label>
-                                        <ul class="uploaded-docs-list">
-                                            @if (!string.IsNullOrEmpty(land.UploadedECDocumentPath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Encumbrance Certificate</li> }
-                                            @if (!string.IsNullOrEmpty(land.UploadedLandDocumentPath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Property Document</li> }
-                                            @if (!string.IsNullOrEmpty(land.UploadedValuationCertificatePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Valuation Certificate</li> }
-                                        </ul>
-                                    </div>
-                                    <div class="field">
-                                        <label style="color: #D97706; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Pending Documents</label>
-                                        <ul class="uploaded-docs-list">
-                                            @if (string.IsNullOrEmpty(land.UploadedECDocumentPath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Encumbrance Certificate</li> }
-                                            @if (string.IsNullOrEmpty(land.UploadedLandDocumentPath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Property Document</li> }
-                                            @if (string.IsNullOrEmpty(land.UploadedValuationCertificatePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Valuation Certificate</li> }
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        }
-
-                        @foreach (var bldg in _buildingAssets)
-                        {
-                            <div class="dpdf-mb">
-                                <h5 class="dpdf-mb" style="font-weight:600; color:#1F2937; border-left: 4px solid #FACC15; padding-left: 10px;">
-                                    <i class="bi bi-building text-danger me-1"></i> Building: @bldg.BuildingName <small class="text-muted" style="font-weight: normal;">— Survey No: @bldg.SurveyNumber</small>
-                                </h5>
-
-                                <div class="grid-2">
-                                    <div class="field">
-                                        <label style="color: #059669; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Uploaded Documents</label>
-                                        <ul class="uploaded-docs-list">
-                                            @if (!string.IsNullOrEmpty(bldg.UploadedECDocumentPath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Encumbrance Certificate</li> }
-                                            @if (!string.IsNullOrEmpty(bldg.UploadedBuildingDocumentPath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Property Document</li> }
-                                            @if (!string.IsNullOrEmpty(bldg.UploadedValuationCertificatePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Valuation Certificate</li> }
-                                        </ul>
-                                    </div>
-                                    <div class="field">
-                                        <label style="color: #D97706; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Pending Documents</label>
-                                        <ul class="uploaded-docs-list">
-                                            @if (string.IsNullOrEmpty(bldg.UploadedECDocumentPath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Encumbrance Certificate</li> }
-                                            @if (string.IsNullOrEmpty(bldg.UploadedBuildingDocumentPath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Property Document</li> }
-                                            @if (string.IsNullOrEmpty(bldg.UploadedValuationCertificatePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Valuation Certificate</li> }
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                }
-
-                <div class="dpdf-section">
-                    <div class="mb-4 pb-3">
-                        <div class="dpdf-section-title mb-2">
-                            <div class="dpdf-section-icon"> <i class="bi bi-file-earmark-text"></i></div>  <div class="dpdf-section-text" style="font-weight: bold; color: #1F2937;">Additional Documents</div>
-                        </div>
-                        <div class="grid-2">
-                            <div class="field">
-                                <label style="color: #059669; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Uploaded Documents</label>
-                                <ul class="uploaded-docs-list">
-                                    @if (!string.IsNullOrEmpty(_docs?.FY1ITReturnFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> IT Returns for Last Year</li> }
-                                    @if (!string.IsNullOrEmpty(_docs?.FY2ITReturnFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> IT Returns for Last 2nd Year</li> }
-                                    @if (!string.IsNullOrEmpty(_docs?.ValuationCertificateFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Valuation Certificate</li> }
-                                    @if (!string.IsNullOrEmpty(_docs?.RetailerListFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> List of Retailers</li> }
-                                    @if (_showPartnershipDeed && !string.IsNullOrEmpty(_docs?.PartnershipDeadFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Partnership Deed</li> }
-                                    @if (_showBoardResolution && !string.IsNullOrEmpty(_docs?.BoardReasolutionFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Board Resolution</li> }
-                                    @if (!string.IsNullOrEmpty(_docs?.BankGauranteeFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Bank Guarantee Certificate</li> }
-                                    @if (!string.IsNullOrEmpty(_docs?.AffidavitFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Affidavit</li> }
-                                    @if (!string.IsNullOrEmpty(_docs?.DeedOfGuaranteeFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Deed of Guarantee</li> }
-                                    @if (_showAuthorizationLetter && !string.IsNullOrEmpty(_docs?.AuthorizationLetterFilePath)) { <li><i class="bi bi-check-circle-fill text-success me-2"></i> Authorization Letter</li> }
-                                </ul>
-                            </div>
-                            <div class="field">
-                                <label style="color: #D97706; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">Pending Documents</label>
-                                <ul class="uploaded-docs-list">
-                                    @if (string.IsNullOrEmpty(_docs?.FY1ITReturnFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> IT Returns for Last Year</li> }
-                                    @if (string.IsNullOrEmpty(_docs?.FY2ITReturnFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> IT Returns for Last 2nd Year</li> }
-                                    @if (string.IsNullOrEmpty(_docs?.ValuationCertificateFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Valuation Certificate</li> }
-                                    @if (string.IsNullOrEmpty(_docs?.RetailerListFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> List of Retailers</li> }
-                                    @if (_showPartnershipDeed && string.IsNullOrEmpty(_docs?.PartnershipDeadFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Partnership Deed</li> }
-                                    @if (_showBoardResolution && string.IsNullOrEmpty(_docs?.BoardReasolutionFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Board Resolution</li> }
-                                    @if (string.IsNullOrEmpty(_docs?.BankGauranteeFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Bank Guarantee Certificate</li> }
-                                    @if (string.IsNullOrEmpty(_docs?.AffidavitFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Affidavit</li> }
-                                    @if (string.IsNullOrEmpty(_docs?.DeedOfGuaranteeFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Deed of Guarantee</li> }
-                                    @if (_showAuthorizationLetter && string.IsNullOrEmpty(_docs?.AuthorizationLetterFilePath)) { <li><i class="bi bi-x-circle-fill text-warning me-2"></i> Authorization Letter</li> }
-                                </ul>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -2653,9 +2442,115 @@ else
                     <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Scoring Data Available</div>
                 }
 
-
-
 <div class="dpdf-section">
+    <div class="dpdf-section-title mb-2">
+        <div class="dpdf-section-icon"><i class="bi bi-file-earmark-text"></i></div>
+        <div class="dpdf-section-text">Enclosures</div>
+    </div>
+
+    @{
+        var enclosures = new List<(string Label, string Path)>();
+        void Add(string label, string? path)
+        {
+            if (!string.IsNullOrWhiteSpace(path)) enclosures.Add((label, path!));
+        }
+
+        // Specimen signatures (company-gated)
+        if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
+            Add("SPIC Specimen Signature", _docs?.SpecimanFilePath);
+        if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
+            Add("Greenstar Specimen Signature", _docs?.GreenstarSpecimanFilePath);
+
+        // Core dealer documents
+        Add("GST Certificate", _model?.GSTFilePath);
+        Add("PAN", _model?.PANFilePath);
+        Add("Aadhaar", _model?.AadhaarFilePath);
+        if (_hasWholesaleLicense) Add("Wholesale Fertilizers License", _model?.WholesaleLicenseFilePath);
+        if (_hasRetailLicense) Add("Retail Fertilizers License", _model?.RetailLicenseFilePath);
+
+        // Partner / proprietor documents
+        if (_savedPartners != null)
+        {
+            foreach (var p in _savedPartners)
+            {
+                Add($"{p.Name} - Photo", p.ProprietorImagePath);
+                Add($"{p.Name} - PAN", p.PANFilePath);
+                if (!_isSoleProprietor) Add($"{p.Name} - Aadhaar", p.AadhaarFilePath);
+            }
+        }
+
+        // Property documents
+        if (_landAssets != null)
+        {
+            foreach (var l in _landAssets)
+            {
+                Add($"Land: {l.LandName} - Encumbrance Certificate", l.UploadedECDocumentPath);
+                Add($"Land: {l.LandName} - Property Document", l.UploadedLandDocumentPath);
+                Add($"Land: {l.LandName} - Valuation Certificate", l.UploadedValuationCertificatePath);
+            }
+        }
+        if (_buildingAssets != null)
+        {
+            foreach (var b in _buildingAssets)
+            {
+                Add($"Building: {b.BuildingName} - Encumbrance Certificate", b.UploadedECDocumentPath);
+                Add($"Building: {b.BuildingName} - Property Document", b.UploadedBuildingDocumentPath);
+                Add($"Building: {b.BuildingName} - Valuation Certificate", b.UploadedValuationCertificatePath);
+            }
+        }
+
+        // Additional documents
+        Add("IT Returns for Last Year", _docs?.FY1ITReturnFilePath);
+        Add("IT Returns for Last 2nd Year", _docs?.FY2ITReturnFilePath);
+        Add("Valuation Certificate", _docs?.ValuationCertificateFilePath);
+        Add("List of Retailers", _docs?.RetailerListFilePath);
+        if (_showPartnershipDeed) Add("Partnership Deed", _docs?.PartnershipDeadFilePath);
+        if (_showBoardResolution) Add("Board Resolution", _docs?.BoardReasolutionFilePath);
+        Add("Bank Guarantee Certificate", _docs?.BankGauranteeFilePath);
+        Add("Affidavit", _docs?.AffidavitFilePath);
+        Add("Deed of Guarantee", _docs?.DeedOfGuaranteeFilePath);
+        if (_showAuthorizationLetter) Add("Authorization Letter", _docs?.AuthorizationLetterFilePath);
+    }
+
+@if (enclosures.Any())
+    {
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: var(--pdf-font-size);">
+            <thead>
+                <tr style="background-color: var(--card-bg);">
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Document</th>
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">File Name</th>
+                    <th class="enclosure-action-col" style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600; width: 110px;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var e in enclosures)
+                {
+                    var url = GetFileUrl(e.Path);
+                    var fileName = GetFileName(e.Path);
+                    var icon = GetFileKindIcon(e.Path);
+                    var viewLabel = GetFileKindLabel(e.Path);
+
+                    <tr>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); font-weight: 600; color: #1F2937;">
+                            <i class="bi bi-check-circle-fill text-success" style="margin-right: 6px;"></i>@e.Label
+                        </td>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; word-break: break-word;">@fileName</td>
+                        <td class="enclosure-action-col" style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center;">
+                            <a class="view-file-btn" href="@url" target="_blank" rel="noopener noreferrer">
+                                <i class="bi @icon"></i> @viewLabel
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Documents Uploaded</div>
+    }</div>
+
+    <div class="dpdf-section">
                     <div class="dpdf-section-title mb-2">
                         <div class="dpdf-section-icon">✅</div>  <div class="dpdf-section-text">Recommended Credit Limit</div>
                     </div>
@@ -2690,6 +2585,8 @@ else
                         <div class="value" style="padding: 10px; text-align: center; color: var(--label-color);">No Credit Limit Data Available</div>
                     }
                 </div>
+
+    
                 <div class="section mt-5" style="page-break-before: always;">
                     <div class="dpdf-section-title mb-4">
                         <div class="dpdf-section-icon">📑</div>  <div class="dpdf-section-text">Attached Documents</div>
@@ -2828,10 +2725,15 @@ else
                     await page.render(renderContext).promise;
                 }
             } catch(err) {
+                // Log for debugging, but don't show anything on the page —
+                // hide the entire document block (title + body) on failure.
                 console.error('Error rendering PDF from URL:', url, err);
-                target.innerHTML = `<div style="padding:20px; color:#dc2626; text-align:center; font-weight: bold;">
-                    Failed to load PDF. Check browser console for details (F12).
-                </div>`;
+                const container = target.closest('.document-view-container');
+                if (container) {
+                    container.style.display = 'none';
+                } else {
+                    target.innerHTML = '';
+                }
             }
         }
     };
@@ -2846,7 +2748,8 @@ else
         }
         catch (e) { /* ignore */ }
     };
-</script></body>
+</script>
+</body>
 
 </html>
 
