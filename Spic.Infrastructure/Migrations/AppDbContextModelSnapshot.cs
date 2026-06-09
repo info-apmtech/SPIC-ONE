@@ -334,6 +334,9 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("AvpCreditLimit")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("DealerId")
                         .HasColumnType("integer");
 
@@ -344,9 +347,15 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("RmCreditLimit")
+                        .HasColumnType("numeric");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<decimal?>("SmCreditLimit")
+                        .HasColumnType("numeric");
 
                     b.HasKey("Id");
 

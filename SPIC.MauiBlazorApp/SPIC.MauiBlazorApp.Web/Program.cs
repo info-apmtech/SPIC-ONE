@@ -20,6 +20,7 @@ builder.Services.AddSingleton<IFormFactor, FormFactor>();
 builder.Services.AddScoped<LoginState>();
 builder.Services.AddScoped<LoadingService>();
 builder.Services.AddScoped<AppSearchState>();
+builder.Services.AddScoped<LookupCacheService>();
 
 // ADD THIS
 builder.Services.AddSingleton(new PlatformService
@@ -34,7 +35,7 @@ builder.Services.AddScoped(sp =>
     return new HttpClient
     {
         BaseAddress = new Uri(baseUrl),
-        Timeout = TimeSpan.FromMinutes(30)
+        Timeout = TimeSpan.FromMinutes(60)
     };
 });
 

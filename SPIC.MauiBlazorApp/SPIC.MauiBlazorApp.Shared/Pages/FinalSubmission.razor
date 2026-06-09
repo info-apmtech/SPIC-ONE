@@ -63,6 +63,7 @@
         }
     </div>
 
+@*
     <!-- Section Completion Status -->
     <div class="fs-main-card">
         <h3 class="fs-section-title">Section Completion Status</h3>
@@ -415,31 +416,56 @@
                 </div>
             </div>
 
-            <!-- 11. Enclosures (Step 11) — spanning full width -->
-            <div class="fs-ticket-card fs-span-3 @(_stepStatus[10] ? "fs-theme-green fs-bg-tint-green" : "fs-theme-orange fs-bg-tint-orange") mt-3">
-                <div class="fs-ticket-header border-bottom pb-3 mb-3" style="border-color:@(_stepStatus[10] ? "#D1FAE5" : "#FED7AA")!important;">
-                    <div class="fs-ticket-title-wrap">
-                        <div class="fs-ticket-icon bg-white border"><i class="bi bi-paperclip"></i></div>
-                        <h4 class="fs-ticket-title">Enclosures</h4>
-                    </div>
-                    <a href="/Enclosures?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
-                </div>
+        </div>
+    </div>
+*@
 
-                <div class="fs-enclosure-header">
-                    <div>Documents Uploaded: <strong>@_docUploadedCount of @_docTotalCount Required Documents</strong></div>
-                    <div>Missing Documents: <strong>@(_docMissingCount == 0 ? "None" : $"{_docMissingCount} document(s)")</strong></div>
-                </div>
-
-                <div class="fs-enclosure-grid">
-                    @foreach (var doc in _enclosureItems)
-                    {
-                        <div class="fs-enclosure-pill" style="@(doc.Uploaded ? "" : "color:#D97706; border-color:#FED7AA;")">
-                            <i class="bi @(doc.Uploaded ? "bi-check-circle" : "bi-x-circle")"></i> @doc.Name
+    <!-- Section Completion Status -->
+    <div class="fs-main-card">
+        <h3 class="fs-section-title">Section Completion Status</h3>
+        <p class="fs-section-subtitle">Review all sections before final submission</p>
+        <div class="fs-completion-grid" style="gap:8px;">
+            @foreach (var s in _finalSubmissionSections)
+            {
+                var done = s.IsComplete();
+                <div class="fs-ticket-card @(done ? "fs-bg-tint-green" : "fs-bg-tint-orange")" style="padding:0.5rem 0.75rem;gap:0;">
+                    <div class="fs-ticket-header">
+                        <div class="fs-ticket-title-wrap @(done ? "fs-theme-green" : "fs-theme-orange")" style="gap:6px;">
+                            <div class="fs-ticket-icon" style="width:1.5rem;height:1.5rem;min-width:1.5rem;"><i class="@s.Icon" style="font-size:0.8rem;"></i></div>
+                            <h4 class="fs-ticket-title" style="font-size:0.8rem;font-weight:600;margin:0;line-height:1.3;">@s.Name</h4>
                         </div>
-                    }
+                        <div class="d-flex align-items-center gap-1">
+                            <i class="bi @(done ? "bi-check-circle-fill text-success" : "bi-exclamation-circle-fill text-warning")" style="font-size:0.75rem;"></i>
+                            <a href="@s.Route?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square" style="color:#6B7280;font-size:0.7rem;"></i></a>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            }
+        </div>
+    </div>
 
+    <!-- Enclosures Card -->
+    <div class="fs-ticket-card fs-span-3 @(_stepStatus[10] ? "fs-theme-green fs-bg-tint-green" : "fs-theme-orange fs-bg-tint-orange") mt-3">
+        <div class="fs-ticket-header border-bottom pb-3 mb-3" style="border-color:@(_stepStatus[10] ? "#D1FAE5" : "#FED7AA")!important;">
+            <div class="fs-ticket-title-wrap">
+                <div class="fs-ticket-icon bg-white border"><i class="bi bi-paperclip"></i></div>
+                <h4 class="fs-ticket-title">Enclosures</h4>
+            </div>
+            <a href="/Enclosures?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+        </div>
+
+        <div class="fs-enclosure-header">
+            <div>Documents Uploaded: <strong>@_docUploadedCount of @_docTotalCount Required Documents</strong></div>
+            <div>Missing Documents: <strong>@(_docMissingCount == 0 ? "None" : $"{_docMissingCount} document(s)")</strong></div>
+        </div>
+
+        <div class="fs-enclosure-grid">
+            @foreach (var doc in _enclosureItems)
+            {
+                <div class="fs-enclosure-pill" style="@(doc.Uploaded ? "" : "color:#D97706; border-color:#FED7AA;")">
+                    <i class="bi @(doc.Uploaded ? "bi-check-circle" : "bi-x-circle")"></i> @doc.Name
+                </div>
+            }
         </div>
     </div>
 
@@ -521,6 +547,21 @@
     private DealerCreditLimitProposal? _creditLimit;
 
     private bool[] _stepStatus = new bool[11];
+    private List<SectionItem> _finalSubmissionSections => new()
+    {
+        new SectionItem("Dealer Registration", "/Register", "bi bi-person-plus", () => _stepStatus[0]),
+        new SectionItem("Experience", "/Experience", "bi bi-award", () => _stepStatus[1]),
+        new SectionItem("Annual Sales", "/AnnualSales", "bi bi-graph-up-arrow", () => _stepStatus[2]),
+        new SectionItem("Warehouse Details", "/Warehouse", "bi bi-box-seam", () => _stepStatus[3]),
+        new SectionItem("Market Details", "/MarketDetails", "bi bi-geo-alt", () => _stepStatus[4]),
+        new SectionItem("Companies Operating", "/Companies", "bi bi-building", () => _stepStatus[5]),
+        new SectionItem("Proprietor Details", "/Proprietor", "bi bi-people", () => _stepStatus[6]),
+        new SectionItem("Sales Planning", "/SalesPlaning", "bi bi-calendar2-check", () => _stepStatus[7]),
+        new SectionItem("Investment", "/Investment", "bi bi-currency-dollar", () => _stepStatus[8]),
+        new SectionItem("Credit Limit \u2014 SPIC", "/CreditLimit", "bi bi-credit-card", () => _stepStatus[9]),
+        new SectionItem("Credit Limit \u2014 GreenStar", "/CreditLimitForGreenStar", "bi bi-star", () => !_dealer.InGreenStar || _creditLimit != null),
+        new SectionItem("Final Submission", "/FinalSubmission", "bi bi-check2-all", () => _stepStatus.All(s => s)),
+    };
     private List<EnclosureItem> _enclosureItems = new();
     private int _docUploadedCount;
     private int _docTotalCount;
@@ -538,6 +579,7 @@
     private bool _isSoleProprietor => _dealer.EntityType == EntityType.soleProprietor;
     private bool _hasWholesaleLicense => !string.IsNullOrEmpty(_dealer.WholeSaleFertilizerLicenseNumber);
     private bool _hasRetailLicense => !string.IsNullOrEmpty(_dealer.RetailFertilizerLicenseNumber);
+    private bool _isRetailerListRequired => !_hasRetailLicense || _hasWholesaleLicense;
 
     private bool _showPartnershipDeed
     {
@@ -699,13 +741,19 @@
         _stepStatus[7] = _salesPlans.Count > 0;
         _stepStatus[8] = _assetBanks.Count > 0 || _assetLands.Count > 0 || _assetBuildings.Count > 0;
         _stepStatus[9] = _creditLimit != null;
-        _stepStatus[10] = _docs != null &&
-            !string.IsNullOrEmpty(_docs.SpecimanFilePath) &&
+        var enclosureStepComplete = _docs != null &&
             !string.IsNullOrEmpty(_docs.BankGauranteeFilePath) &&
             !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath) &&
             !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath) &&
-            (_hasRetailLicense || !string.IsNullOrEmpty(_docs.RetailerListFilePath)) &&
+            (!_isRetailerListRequired || !string.IsNullOrEmpty(_docs.RetailerListFilePath)) &&
             _docMissingCount == 0;
+
+        if (_dealer.InSpic)
+            enclosureStepComplete = enclosureStepComplete && !string.IsNullOrEmpty(_docs.SpecimanFilePath);
+        if (_dealer.InGreenStar)
+            enclosureStepComplete = enclosureStepComplete && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath);
+
+        _stepStatus[10] = enclosureStepComplete;
     }
 
     private void BuildEnclosureItems()
@@ -715,11 +763,13 @@
             new("GST Certificate", !string.IsNullOrEmpty(_dealer.GSTFilePath)),
             new("PAN Copy", !string.IsNullOrEmpty(_dealer.PANFilePath)),
             new("Aadhaar Copy", !string.IsNullOrEmpty(_dealer.AadhaarFilePath)),
-            new("SPIC Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.SpecimanFilePath)),
             new("Bank Guarantee Certificate", _docs != null && !string.IsNullOrEmpty(_docs.BankGauranteeFilePath)),
             new("IT Returns (FY1)", _docs != null && !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath)),
             new("IT Returns (FY2)", _docs != null && !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath)),
         };
+
+        if (_dealer.InSpic)
+            _enclosureItems.Add(new("SPIC Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.SpecimanFilePath)));
 
         if (_docs != null && !string.IsNullOrEmpty(_docs.AffidavitFilePath))
             _enclosureItems.Add(new("Affidavit", true));
@@ -727,11 +777,11 @@
         if (_docs != null && !string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath))
             _enclosureItems.Add(new("Deed of Guarantee", true));
 
-        if (_docs != null && !string.IsNullOrEmpty(_docs.RetailerListFilePath))
-            _enclosureItems.Add(new("Retailer List", true));
+        if (_isRetailerListRequired)
+            _enclosureItems.Add(new("List of Retailers with Complete Details", _docs != null && !string.IsNullOrEmpty(_docs.RetailerListFilePath)));
 
-        if (_docs != null && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath))
-            _enclosureItems.Add(new("Greenstar Specimen Signature", true));
+        if (_dealer.InGreenStar)
+            _enclosureItems.Add(new("Greenstar Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath)));
 
         if (_hasWholesaleLicense)
             _enclosureItems.Add(new("Wholesale Fertilizers License", !string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath)));
@@ -834,4 +884,6 @@
     }
 
     private record EnclosureItem(string Name, bool Uploaded);
+
+    private record SectionItem(string Name, string Route, string Icon, Func<bool> IsComplete);
 }

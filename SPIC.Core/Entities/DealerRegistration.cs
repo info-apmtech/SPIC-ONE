@@ -170,6 +170,9 @@ namespace SPIC.Core.Entities
         public DateTime ApprovedAt { get; set; }
         public string Remarks { get; set; }
         public bool IsApproved { get; set; }
+        public decimal? RmCreditLimit { get; set; }
+        public decimal? SmCreditLimit { get; set; }
+        public decimal? AvpCreditLimit { get; set; }
     }
     public enum EntityType
     {

@@ -373,7 +373,7 @@
                                 <div class="sp-summary-label">Total Specialty Products</div>
 
                                 <div class="sp-summary-inline-value">
-                                    @specialityTotals.Qty.ToString("N2") MT / ₹@specialityTotals.Amount.ToString("N2") Lakhs
+                                    @* @specialityTotals.Qty.ToString("N2") MT / *@ ₹@specialityTotals.Amount.ToString("N2") Lakhs
                                 </div>
                             </div>
                         </div>
@@ -413,18 +413,17 @@
         Loading.Show();
         try
         {
-            await LoadCategories();
-            await LoadUnits();
-            await LoadProducts();
+            var tasks = new List<Task> { LoadCategories(), LoadUnits(), LoadProducts() };
+            if (DealerId.HasValue && DealerId.Value > 0)
+                tasks.Add(LoadSalesData());
+
+            await Task.WhenAll(tasks);
 
             if (_categories.Count > 0)
             {
                 _selectedCategoryId = _categories.First().Id;
                 UpdateSelectedUnit();
             }
-
-            if (DealerId.HasValue && DealerId.Value > 0)
-                await LoadSalesData();
 
             BuildCurrentRows();
         }
@@ -456,8 +455,8 @@
     {
         try
         {
-            var all = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new();
-            _allSalesData = all.Where(s => s.DealerId == DealerId!.Value).ToList();
+            _allSalesData = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>(
+                $"api/SalesPlanning/byDealer/{DealerId!.Value}") ?? new();
         }
         catch (Exception ex) { ShowMessage($"Failed to load sales data: {ex.Message}", true); }
     }

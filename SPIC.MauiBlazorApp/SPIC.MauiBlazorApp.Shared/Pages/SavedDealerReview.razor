@@ -382,10 +382,25 @@
     private string ConfirmRemarks { get; set; } = "";
     private bool _isApproving = false;
     private bool _showSuccessNotification = false;
+    private decimal? _rmCreditLimit;
+    private decimal? _smCreditLimit;
+    private decimal? _avpCreditLimit;
+    private decimal? _previousRmCreditLimit;
+    private decimal? _previousSmCreditLimit;
 
     private void ShowConfirmProceedPopup()
     {
         ConfirmRemarks = ""; 
+        _rmCreditLimit = null;
+        _smCreditLimit = null;
+        _avpCreditLimit = null;
+
+        var rmApproval = _approvalHistory?.FirstOrDefault(h => h.RmCreditLimit.HasValue && h.IsApproved);
+        _previousRmCreditLimit = rmApproval?.RmCreditLimit;
+
+        var smApproval = _approvalHistory?.FirstOrDefault(h => h.SmCreditLimit.HasValue && h.IsApproved);
+        _previousSmCreditLimit = smApproval?.SmCreditLimit;
+
         IsConfirmProceedPopupVisible = true;
         StateHasChanged();
     }
@@ -451,7 +466,10 @@
                     Role = role,
                     ApprovedAt = DateTime.Now,
                     Remarks = string.IsNullOrWhiteSpace(ConfirmRemarks) ? "" : ConfirmRemarks,
-                    IsApproved = true
+                    IsApproved = true,
+                    RmCreditLimit = _rmCreditLimit,
+                    SmCreditLimit = _smCreditLimit,
+                    AvpCreditLimit = _avpCreditLimit
                 };
                 try { await Http.PostAsJsonAsync("api/DealerApprovalHistory", history); } catch { }
 
@@ -943,34 +961,40 @@
         <style>
             .cp-wrapper * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
             .cp-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.4); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 1055; }
-            .cp-modal-content { background-color: #ffffff; width: 100%; max-width: 850px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); display: flex; flex-direction: column; }
-            .cp-modal-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 24px 32px 16px; }
-            .cp-modal-title { font-size: 1.5rem; font-weight: 700; color: #374151; margin-bottom: 8px; }
-            .cp-modal-subtitle { font-size: 0.95rem; color: #6b7280; }
-            .cp-btn-close { background: transparent; border: none; color: #4b5563; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s; }
-            .cp-btn-close:hover { color: #111827; }
-            .cp-modal-body { padding: 0 32px; }
-            .cp-section-title { font-size: 1.05rem; font-weight: 600; color: #374151; margin-bottom: 16px; }
-            .cp-optional-text { font-weight: 400; color: #6b7280; font-size: 0.95rem; }
-            .cp-summary-section { margin-top: 12px; margin-bottom: 28px; }
-            .cp-summary-grid { display: grid; grid-template-columns: 1fr 1fr; row-gap: 16px; column-gap: 32px; }
-            .cp-summary-item { display: flex; font-size: 0.95rem; }
-            .cp-summary-label { color: #6b7280; flex: 0 0 180px; }
-            .cp-summary-value { color: #1f2937; font-weight: 500; }
-            .cp-remarks-section { margin-bottom: 24px; }
-            .cp-remarks-input { width: 100%; min-height: 100px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px; resize: vertical; font-size: 0.95rem; color: #374151; outline: none; transition: border-color 0.2s; }
+            .cp-modal-content { background-color: #ffffff; width: 100%; max-width: 720px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); display: flex; flex-direction: column; }
+            .cp-modal-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 28px 10px; }
+            .cp-modal-title { font-size: 1.2rem; font-weight: 700; color: #1f2937; margin-bottom: 4px; }
+            .cp-modal-subtitle { font-size: 0.85rem; color: #6b7280; }
+            .cp-btn-close { background: transparent; border: none; color: #9ca3af; cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; transition: color 0.2s; border-radius: 6px; }
+            .cp-btn-close:hover { color: #374151; background: #f3f4f6; }
+            .cp-modal-body { padding: 0 28px; }
+            .cp-section-title { font-size: 0.85rem; font-weight: 600; color: #374151; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.4px; }
+            .cp-optional-text { font-weight: 400; color: #9ca3af; font-size: 0.8rem; text-transform: none; letter-spacing: 0; }
+            .cp-summary-section { margin-bottom: 16px; }
+            .cp-summary-grid { display: grid; grid-template-columns: 1fr 1fr; row-gap: 6px; column-gap: 20px; background: #f9fafb; border-radius: 8px; padding: 12px 16px; }
+            .cp-summary-item { display: flex; font-size: 0.82rem; }
+            .cp-summary-label { color: #6b7280; flex: 0 0 130px; }
+            .cp-summary-value { color: #1f2937; font-weight: 600; }
+            .cp-credit-section { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+            .cp-credit-field { flex: 1; min-width: 180px; }
+            .cp-credit-field label { display: block; font-size: 0.75rem; font-weight: 600; color: #374151; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+            .cp-credit-field input, .cp-credit-field .cp-credit-readonly { width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.85rem; color: #374151; outline: none; transition: border-color 0.2s; height: 36px; }
+            .cp-credit-field input:focus { border-color: #115e59; box-shadow: 0 0 0 2px rgba(17, 94, 89, 0.1); }
+            .cp-credit-field .cp-credit-readonly { background: #f3f4f6; color: #4b5563; font-weight: 600; display: flex; align-items: center; }
+            .cp-remarks-section { margin-bottom: 12px; }
+            .cp-remarks-input { width: 100%; min-height: 56px; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 6px; resize: vertical; font-size: 0.85rem; color: #374151; outline: none; transition: border-color 0.2s; }
             .cp-remarks-input:focus { border-color: #d1d5db; }
-            .cp-info-alert { background-color: #eff6ff; border-radius: 8px; padding: 16px 20px; display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
-            .cp-alert-icon { width: 32px; height: 32px; background-color: #dbeafe; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-            .cp-alert-text { color: #6b7280; font-size: 0.95rem; margin: 0; line-height: 1.5; }
-            .cp-modal-footer { display: flex; justify-content: flex-end; gap: 16px; padding: 20px 32px 32px; }
-            .cp-btn { display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 6px; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+            .cp-info-alert { background-color: #f0f9ff; border: 1px solid #e0f2fe; border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+            .cp-alert-icon { width: 28px; height: 28px; background-color: #dbeafe; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+            .cp-alert-text { color: #6b7280; font-size: 0.8rem; margin: 0; line-height: 1.4; }
+            .cp-modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 12px 28px 18px; }
+            .cp-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
             .cp-btn-cancel { background-color: #ffffff; border: 1px solid #d1d5db; color: #4b5563; }
             .cp-btn-cancel:hover { background-color: #f9fafb; color: #1f2937; }
             .cp-btn-confirm { background-color: #115e59; border: 1px solid #115e59; color: #ffffff; }
             .cp-btn-confirm:hover { background-color: #0f514e; }
             .cp-btn-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
-            @@media (max-width: 768px) { .cp-summary-grid { grid-template-columns: 1fr; } .cp-summary-label { flex: 0 0 150px; } .cp-modal-header, .cp-modal-body, .cp-modal-footer { padding-left: 20px; padding-right: 20px; } }
+            @@media (max-width: 768px) { .cp-summary-grid { grid-template-columns: 1fr; row-gap: 4px; padding: 10px 14px; } .cp-summary-label { flex: 0 0 110px; } .cp-modal-header, .cp-modal-body, .cp-modal-footer { padding-left: 16px; padding-right: 16px; } .cp-credit-field { min-width: 100%; } }
         </style>
 
         <div class="cp-wrapper">
@@ -996,24 +1020,24 @@
                             <h2 class="cp-section-title">Application Summary</h2>
                             <div class="cp-summary-grid">
                                 <div class="cp-summary-item">
-                                    <span class="cp-summary-label">Application Ref No</span>
-                                    <span class="cp-summary-value">: @(_dealer?.DealerCode ?? $"DL-{_dealer?.Id}")</span>
+                                    <span class="cp-summary-label">Ref No</span>
+                                    <span class="cp-summary-value">@(_dealer?.DealerCode ?? $"DL-{_dealer?.Id}")</span>
                                 </div>
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Dealer Name</span>
-                                    <span class="cp-summary-value">: @(_dealer?.FirmName ?? "-")</span>
+                                    <span class="cp-summary-value">@(_dealer?.FirmName ?? "-")</span>
                                 </div>
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Proposed Credit Limit</span>
-                                    <span class="cp-summary-value">: ₹ @(_dealer?.CashCreditLimit.ToString("N2") ?? "0.00")</span>
+                                    <span class="cp-summary-value">₹ @(_dealer?.CashCreditLimit.ToString("N2") ?? "0.00")</span>
                                 </div>
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Current Stage</span>
-                                    <span class="cp-summary-value">: @GetCurrentStageTarget()</span>
+                                    <span class="cp-summary-value">@GetCurrentStageTarget()</span>
                                 </div>
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Next Stage</span>
-                                    <span class="cp-summary-value">: @GetNextStageTarget()</span>
+                                    <span class="cp-summary-value">@GetNextStageTarget()</span>
                                 </div>
                             </div>
                         </section>
@@ -1022,6 +1046,55 @@
                             <h2 class="cp-section-title">Remarks <span class="cp-optional-text">(optional)</span></h2>
                             <textarea class="cp-remarks-input" @bind="ConfirmRemarks" placeholder="Enter Remarks Optional"></textarea>
                         </section>
+
+                        @if (LoginState.IsRMGroup)
+                        {
+                            <section class="cp-credit-section">
+                                <div class="cp-credit-field">
+                                    <label>RM Credit Limit</label>
+                                    <input type="number" step="0.01" @bind="_rmCreditLimit" placeholder="Enter RM Credit Limit" />
+                                </div>
+                            </section>
+                        }
+                        @if (LoginState.IsSMGroup)
+                        {
+                            <section class="cp-credit-section">
+                                @if (_previousRmCreditLimit.HasValue)
+                                {
+                                    <div class="cp-credit-field">
+                                        <label>RM Credit Limit (Approved)</label>
+                                        <div class="cp-credit-readonly">₹ @_previousRmCreditLimit.Value.ToString("N2")</div>
+                                    </div>
+                                }
+                                <div class="cp-credit-field">
+                                    <label>SM Credit Limit</label>
+                                    <input type="number" step="0.01" @bind="_smCreditLimit" placeholder="Enter SM Credit Limit" />
+                                </div>
+                            </section>
+                        }
+                        @if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
+                        {
+                            <section class="cp-credit-section">
+                                @if (_previousRmCreditLimit.HasValue)
+                                {
+                                    <div class="cp-credit-field">
+                                        <label>RM Credit Limit (Approved)</label>
+                                        <div class="cp-credit-readonly">₹ @_previousRmCreditLimit.Value.ToString("N2")</div>
+                                    </div>
+                                }
+                                @if (_previousSmCreditLimit.HasValue)
+                                {
+                                    <div class="cp-credit-field">
+                                        <label>SM Credit Limit (Approved)</label>
+                                        <div class="cp-credit-readonly">₹ @_previousSmCreditLimit.Value.ToString("N2")</div>
+                                    </div>
+                                }
+                                <div class="cp-credit-field">
+                                    <label>AVP Credit Limit</label>
+                                    <input type="number" step="0.01" @bind="_avpCreditLimit" placeholder="Enter AVP Credit Limit" />
+                                </div>
+                            </section>
+                        }
 
                         <div class="cp-info-alert">
                             <div class="cp-alert-icon">
@@ -1253,6 +1326,20 @@
                             <span>Stage</span>
                             <strong>@(action.Role != null ? $"{action.Role} Review" : "-")</strong>
                         </div>
+                        @{
+                            var creditLimitLabel = "";
+                            var creditLimitValue = "";
+                            if (action.RmCreditLimit.HasValue) { creditLimitLabel = "RM Credit Limit"; creditLimitValue = action.RmCreditLimit.Value.ToString("N2"); }
+                            else if (action.SmCreditLimit.HasValue) { creditLimitLabel = "SM Credit Limit"; creditLimitValue = action.SmCreditLimit.Value.ToString("N2"); }
+                            else if (action.AvpCreditLimit.HasValue) { creditLimitLabel = "AVP Credit Limit"; creditLimitValue = action.AvpCreditLimit.Value.ToString("N2"); }
+                            if (!string.IsNullOrEmpty(creditLimitLabel))
+                            {
+                                <div class="info-row">
+                                    <span>@creditLimitLabel</span>
+                                    <strong>₹ @creditLimitValue</strong>
+                                </div>
+                            }
+                        }
                     </div>
                 </div>
 

@@ -236,7 +236,7 @@
                                 <div class="d-flex flex-wrap justify-content-end gap-2 card-action-row">
                                     @if (IsDealerComplete(dealer.Id))
                                     {
-                                        if (dealer.RMApproved == false && LoginState.IsHQCreatorRole)
+                                        if (dealer.RMApproved == false && (LoginState.IsHQCreatorRole || LoginState.IsAdmin))
                                         {
                                             <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
                                                 <i class="bi bi-pencil-square me-1"></i> Edit
@@ -249,14 +249,14 @@
                                             </button>
                                         }
                                     }
-                                    else if (LoginState.IsHQCreatorRole)
-                                    {
-                                        if (approvalStatus != "Approved" && !approvalStatus.StartsWith("Rejected"))
-                                        {
-                                            <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
-                                                <i class="bi bi-pencil-square me-1"></i> Edit
-                                            </button>
-                                        }
+                            else if (LoginState.IsHQCreatorRole || LoginState.IsAdmin)
+                            {
+                                if (approvalStatus != "Approved" && !approvalStatus.StartsWith("Rejected"))
+                                {
+                                    <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
+                                        <i class="bi bi-pencil-square me-1"></i> Edit
+                                    </button>
+                                }
                                     }
                                     <button class="btn-view" @onclick="() => ViewDealer(dealer.Id)"><i class="bi bi-eye"></i></button>
                                     @if (dealer.InSpic)
@@ -476,59 +476,79 @@
     private List<DealerCreditLimitProposal> _allCreditProposals = new();
     private List<DealerCreditLimitSalesPerformance> _allCreditSales = new();
     private List<DealerRegistrationDocuments> _allDocuments = new();
-
-    private async Task LoadData()
+    private async Task<List<TItem>> SafeGet<TItem>(string url)
+{
+    try { return await Http.GetFromJsonAsync<List<TItem>>(url) ?? new(); }
+    catch { return new(); }
+}
+   private async Task LoadData()
+{
+    _isLoading = true;
+    try
     {
-        _isLoading = true;
-        try
-        {
-            try
-            {
-                _allDealers = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/submitted") ?? new();
-            }
-            catch
-            {
-                _allDealers = new();
-            }
+        // Kick off every request at once (no awaits yet)
+        var dealersTask   = SafeGet<DealerDto>("api/DealerRegistration/submitted");
+        var regionsTask   = SafeGet<RegionDto>("api/Region/all");
+        var hqTask        = SafeGet<HeadquarterDto>("api/Headquarter/all");
+        var expTask       = SafeGet<DealerExperience>("api/DealerExperience");
+        var annualTask    = SafeGet<AnnualSaleDataLastFYofDealerRegistration>("api/AnnualSaleDataLastFYofDealerRegistration");
+        var whTask        = SafeGet<DealerWarehouseFacilities>("api/DealerWarehouseFacilities");
+        var railTask      = SafeGet<DealerRailFacilities>("api/DealerRailFacilities");
+        var portTask      = SafeGet<DealerPortFacilities>("api/DealerPortFacilities");
+        var marketTask    = SafeGet<DealerMarketDetail>("api/DealerMarketDetail");
+        var compTask      = SafeGet<DealerCompaniesOperatingInArea>("api/DealerCompaniesOperatingInArea");
+        var ownerTask     = SafeGet<DealerOwnershipInfo>("api/DealerOwnershipInfo");
+        var partnerTask   = SafeGet<PartnerFamilyDetails>("api/PartnerFamilyDetails");
+        var occTask       = SafeGet<PartnerOccupation>("api/PartnerOccupation");
+        var salesPlanTask = SafeGet<SalesPlanningInDealerRegistration>("api/SalesPlanning");
+        var bankTask      = SafeGet<DealerAssetBank>("api/DealerAssetBank");
+        var landTask      = SafeGet<DealerAssetLand>("api/DealerAssetLand");
+        var buildingTask  = SafeGet<DealerAssetBuilding>("api/DealerAssetBuilding");
+        var loanTask      = SafeGet<DealerLoanLiabilities>("api/DealerLoanLiabilities");
+        var creditTask    = SafeGet<DealerCreditLimitProposal>("api/DealerCreditLimitProposal");
+        var creditSalesTask = SafeGet<DealerCreditLimitSalesPerformance>("api/DealerCreditLimitSalesPerformance");
+        var docsTask      = SafeGet<DealerRegistrationDocuments>("api/DealerRegistrationDocuments");
 
-            try
-            {
-                var lookupTasks = new Task[] {
-                    Task.Run(async () => _regionsAll = await Http.GetFromJsonAsync<List<RegionDto>>("api/Region/all") ?? new()),
-                    Task.Run(async () => _headquartersAll = await Http.GetFromJsonAsync<List<HeadquarterDto>>("api/Headquarter/all") ?? new())
-                };
-                await Task.WhenAll(lookupTasks);
-            }
-            catch { }
+        // Wait for all of them in parallel
+        await Task.WhenAll(
+            dealersTask, regionsTask, hqTask, expTask, annualTask, whTask, railTask,
+            portTask, marketTask, compTask, ownerTask, partnerTask, occTask,
+            salesPlanTask, bankTask, landTask, buildingTask, loanTask,
+            creditTask, creditSalesTask, docsTask);
 
-            try { _allExperiences = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience") ?? new(); } catch { _allExperiences = new(); }
-            try { _allAnnualSales = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFYofDealerRegistration") ?? new(); } catch { _allAnnualSales = new(); }
-            try { _allWarehouses = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities") ?? new(); } catch { _allWarehouses = new(); }
-            try { _allRails = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities") ?? new(); } catch { _allRails = new(); }
-            try { _allPorts = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities") ?? new(); } catch { _allPorts = new(); }
-            try { _allMarketDetails = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail") ?? new(); } catch { _allMarketDetails = new(); }
-            try { _allCompaniesOperating = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea") ?? new(); } catch { _allCompaniesOperating = new(); }
-            try { _allOwnerships = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo") ?? new(); } catch { _allOwnerships = new(); }
-            try { _allPartners = await Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails") ?? new(); } catch { _allPartners = new(); }
-            try { _allOccupations = await Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation") ?? new(); } catch { _allOccupations = new(); }
-            try { _allSalesPlanning = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning") ?? new(); } catch { _allSalesPlanning = new(); }
-            try { _allAssetBanks = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank") ?? new(); } catch { _allAssetBanks = new(); }
-            try { _allAssetLands = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand") ?? new(); } catch { _allAssetLands = new(); }
-            try { _allAssetBuildings = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding") ?? new(); } catch { _allAssetBuildings = new(); }
-            try { _allLoans = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities") ?? new(); } catch { _allLoans = new(); }
-            try { _allCreditProposals = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal") ?? new(); } catch { _allCreditProposals = new(); }
-            try { _allCreditSales = await Http.GetFromJsonAsync<List<DealerCreditLimitSalesPerformance>>("api/DealerCreditLimitSalesPerformance") ?? new(); } catch { _allCreditSales = new(); }
-            try { _allDocuments = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments") ?? new(); } catch { _allDocuments = new(); }
-            BuildCompletionSet();
-            ApplyRoleFilter();
-            ApplyFilters();
-        }
-        catch { }
-        finally
-        {
-            _isLoading = false;
-        }
+        // Assign results (identical to before)
+        _allDealers          = await dealersTask;
+        _regionsAll          = await regionsTask;
+        _headquartersAll     = await hqTask;
+        _allExperiences      = await expTask;
+        _allAnnualSales      = await annualTask;
+        _allWarehouses       = await whTask;
+        _allRails            = await railTask;
+        _allPorts            = await portTask;
+        _allMarketDetails    = await marketTask;
+        _allCompaniesOperating = await compTask;
+        _allOwnerships       = await ownerTask;
+        _allPartners         = await partnerTask;
+        _allOccupations      = await occTask;
+        _allSalesPlanning    = await salesPlanTask;
+        _allAssetBanks       = await bankTask;
+        _allAssetLands       = await landTask;
+        _allAssetBuildings   = await buildingTask;
+        _allLoans            = await loanTask;
+        _allCreditProposals  = await creditTask;
+        _allCreditSales      = await creditSalesTask;
+        _allDocuments        = await docsTask;
+
+        BuildCompletionSet();
+        ApplyRoleFilter();
+        ApplyFilters();
     }
+    catch { }
+    finally
+    {
+        _isLoading = false;
+    }
+}
 
     private void ApplyRoleFilter()
     {

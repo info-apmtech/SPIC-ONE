@@ -99,8 +99,9 @@
         Loading.Show();
         try
         {
-            await LoadCompetitors();
-            await LoadSavedSelections();
+            await Task.WhenAll(
+                LoadCompetitors(),
+                LoadSavedSelections());
         }
         finally
         {
@@ -125,8 +126,8 @@
         if (!DealerId.HasValue || DealerId.Value <= 0) return;
         try
         {
-            var all = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new();
-            _savedEntries = all.Where(e => e.DealerId == DealerId.Value).ToList();
+            _savedEntries = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>(
+                $"api/DealerCompaniesOperatingInArea/byDealer/{DealerId.Value}") ?? new();
 
             var savedNames = _savedEntries
                 .Where(e => !string.IsNullOrEmpty(e.CompaniesOperating))
