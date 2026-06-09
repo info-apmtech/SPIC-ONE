@@ -1237,117 +1237,109 @@
     
                 </div>
 
-                @* ===================== PROPRIETOR / PARTNER DETAILS ===================== *@
+@* ===================== PROPRIETOR / PARTNER DETAILS ===================== *@
 @if (_savedPartners != null && _savedPartners.Any())
 {
-    @foreach (var partner in _savedPartners)
-    {
-        <div class="dpdf-section">
-            <div class="dpdf-section-title mb-2">
-                <div class="dpdf-section-icon">👤</div>
-                <div class="dpdf-section-text">Proprietor Details</div>
+    <div class="dpdf-section">
+        <div class="dpdf-section-title mb-2">
+            <div class="dpdf-section-icon">👤</div>
+            <div class="dpdf-section-text">Proprietor / Partner Details</div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_model.BusinessEntityType))
+        {
+            <div class="inline-field" style="margin-bottom: 8px;">
+                <label>Business Entity Type</label>
+                <div class="inline-val">@_model.BusinessEntityType</div>
             </div>
+        }
 
-            <div class="proprietor-wrap">
-                <div class="prop-fields">
-                    <div class="grid-2" style="row-gap: 12px;">
-                        <div class="inline-field">
-                            <label>Business Entity Type</label>
-                            <div class="inline-val">@(_model.BusinessEntityType ?? "-")</div>
-                        </div>
-                        <div class="inline-field">
-                            <label>Name</label>
-                            <div class="inline-val">@(partner.Name ?? "-")</div>
-                        </div>
-                        <div class="inline-field">
-                            <label>Father Name</label>
-                            <div class="inline-val">@(partner.FatherName ?? "-")</div>
-                        </div>
-                        <div class="inline-field">
-                            <label>Aadhaar No</label>
-                            <div class="inline-val">@(partner.AadhaarNumber ?? "-")</div>
-                        </div>
-                        <div class="inline-field">
-                            <label>PAN No</label>
-                            <div class="inline-val">@(partner.PANNumber ?? "-")</div>
-                        </div>
-                        <div class="inline-field">
-                            <label>Phone No</label>
-                            <div class="inline-val">@(partner.PhoneNumber ?? "-")</div>
-                        </div>
-                        <div class="inline-field">
-                            <label>Email ID</label>
-                            <div class="inline-val">@(partner.Email ?? "-")</div>
-                        </div>
-                    </div>
-                </div>
-
-               @*  @if (!string.IsNullOrWhiteSpace(partner.ProprietorImagePath))
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: var(--pdf-font-size);">
+            <thead>
+                <tr style="background-color: var(--card-bg);">
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Name</th>
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Father Name</th>
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Aadhaar No</th>
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">PAN No</th>
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Phone No</th>
+                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Email ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var partner in _savedPartners)
                 {
-                    <div class="prop-photo-box">
-                        <img src="@GetFileUrl(partner.ProprietorImagePath)"
-                             alt="Proprietor Photo"
-                             onerror="this.style.display='none';" />
-                    </div>
-                } *@
-            </div>
+                    <tr>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); font-weight: 600; color: #1F2937;">@(partner.Name ?? "-")</td>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.FatherName ?? "-")</td>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.AadhaarNumber ?? "-")</td>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.PANNumber ?? "-")</td>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.PhoneNumber ?? "-")</td>
+                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; word-break: break-word;">@(partner.Email ?? "-")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @* ===================== FAMILY MEMBERS (consolidated) ===================== *@
+    <div class="dpdf-section">
+        <div class="dpdf-section-title mb-2">
+            <div class="dpdf-section-icon">👨‍👩‍👧‍👦</div>
+            <div class="dpdf-section-text">Family Members</div>
         </div>
 
-        @* ===================== FAMILY MEMBERS ===================== *@
-        <div class="dpdf-section">
-            <div class="dpdf-section-title mb-2">
-                <div class="dpdf-section-icon">👨‍👩‍👧‍👦</div>
-                <div class="dpdf-section-text">Family Members of @(partner.Name ?? "Proprietor")</div>
-            </div>
+        @{
+            var allFamily = _savedPartners
+                .SelectMany(p => (_familyAll ?? new()).Where(f => f.OwnershipPartnerId == p.Id)
+                    .Select(f => new { Partner = p.Name, Member = f }))
+                .ToList();
+        }
 
-            @{
-                var partnerFamilyMembers = _familyAll?.Where(f => f.OwnershipPartnerId == partner.Id).ToList();
-            }
-
-            @if (partnerFamilyMembers != null && partnerFamilyMembers.Any())
-            {
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: var(--pdf-font-size);">
-                    <thead>
-                        <tr style="background-color: var(--card-bg);">
-                            <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Name</th>
-                            <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600;">D.O.B</th>
-                            <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600;">Age</th>
-                            <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Occupation</th>
-                            <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Relationship</th>
+        @if (allFamily.Any())
+        {
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: var(--pdf-font-size);">
+                <thead>
+                    <tr style="background-color: var(--card-bg);">
+                        <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Proprietor</th>
+                        <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Name</th>
+                        <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600;">D.O.B</th>
+                        <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600;">Age</th>
+                        <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Occupation</th>
+                        <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Relationship</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in allFamily)
+                    {
+                        var fm = row.Member;
+                        <tr>
+                            <td style="padding: 6px 10px; border: 1px solid var(--border-color); font-weight: 600; color: #1F2937;">@(row.Partner ?? "-")</td>
+                            <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(fm.FamilyMemberName ?? "-")</td>
+                            <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; text-align: center;">@fm.DateOfBirth.ToString("dd/MM/yyyy")</td>
+                            <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; text-align: center;">@fm.Age Years</td>
+                            <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(fm.Occupation ?? "-")</td>
+                            <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@GetRelationshipName(fm.RelationshipId)</td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var fm in partnerFamilyMembers)
-                        {
-                            <tr>
-                                <td style="padding: 6px 10px; border: 1px solid var(--border-color); font-weight: 600; color: #1F2937;">@(fm.FamilyMemberName ?? "-")</td>
-                                <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; text-align: center;">@fm.DateOfBirth.ToString("dd/MM/yyyy")</td>
-                                <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; text-align: center;">@fm.Age Years</td>
-                                <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(fm.Occupation ?? "-")</td>
-                                <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@GetRelationshipName(fm.RelationshipId)</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            }
-            else
-            {
-                <div class="value" style="padding: 10px; text-align: center; color: var(--label-color);">No Family Details Available</div>
-            }
-        </div>
-    }
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <div class="value" style="padding: 10px; text-align: center; color: var(--label-color);">No Family Details Available</div>
+        }
+    </div>
 }
 else
 {
     <div class="dpdf-section">
         <div class="dpdf-section-title mb-2">
             <div class="dpdf-section-icon">👤</div>
-            <div class="dpdf-section-text">Proprietor Details</div>
+            <div class="dpdf-section-text">Proprietor / Partner Details</div>
         </div>
         <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Proprietor Details Available</div>
     </div>
 }
-
 <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
         <div class="dpdf-section-icon">🏢</div>
@@ -2604,21 +2596,19 @@ else
                                 <div class="inline-val">₹ @_proposal.ExistingCreditLimitAmount.ToString("N2")</div>
                             </div>
             
-                            @if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
-                            {
-                                <div class="inline-field">
-                                    <label>SPIC Additional Credit Limit:</label>
-                                    <div class="inline-val">₹ @_proposal.AdditionalCreditLimit.ToString("N2")</div>
-                                </div>
-                            }
 
-                            @if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
-                            {
-                                <div class="inline-field">
-                                    <label>Greenstar Additional Credit Limit:</label>
-                                    <div class="inline-val">₹ @_proposal.GreenstarAdditionalCreditLimit.ToString("N2")</div>
-                                </div>
-                            }
+<div class="inline-field">
+    <label>RM Credit Limit:</label>
+    <div class="inline-val">₹ @GetApprovalLimit(h => h.RmCreditLimit).ToString("N2")</div>
+</div>
+<div class="inline-field">
+    <label>SM Credit Limit:</label>
+    <div class="inline-val">₹ @GetApprovalLimit(h => h.SmCreditLimit).ToString("N2")</div>
+</div>
+<div class="inline-field">
+    <label>AVP Credit Limit:</label>
+    <div class="inline-val">₹ @GetApprovalLimit(h => h.AvpCreditLimit).ToString("N2")</div>
+</div>
                         </div>
                     }
                     else
@@ -2841,7 +2831,9 @@ else
     private List<DealerPortFacilities> _savedPorts = new();
     private List<DealerCompaniesOperatingInArea> _companiesOperatingAll = new();
     private List<FinancialYear> _financialYears = new();
-private List<DealerCreditLimitSales> _creditLimitSales = new();
+    private List<DealerCreditLimitSales> _creditLimitSales = new();
+    private List<DealerApprovalHistory> _approvalHistories = new();
+
     private string? _errorMessage;
     private string? _creditSalesError;
 
@@ -2949,6 +2941,13 @@ private List<DealerCreditLimitSales> _creditLimitSales = new();
 
                 var allProposals = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all") ?? new();
                 _proposal = allProposals.FirstOrDefault(p => p.DealerId == dealerId.Value) ?? new();
+try
+{
+    var allApprovals = await Http.GetFromJsonAsync<List<DealerApprovalHistory>>("api/DealerApprovalHistory/all") ?? new();
+    _approvalHistories = allApprovals.Where(a => a.DealerId == dealerId.Value).ToList();
+}
+catch (Exception ex) { Console.WriteLine($"Approval history load failed: {ex.Message}"); }
+
 
                 // var allWh = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new();
                 // _savedWarehouses = allWh.Where(w => w.DealerId == dealerId.Value).ToList();
@@ -3255,6 +3254,15 @@ private bool IsGreenstarPerfProduct(Product? p)
     if (p == null) return false;
     var cat = _categoriesAll.FirstOrDefault(c => c.Id == p.CategoryId);
     return (IsFertilizerCategory(cat) && !IsUreaProduct(p)) || IsSpecialityCategory(cat);
+}
+private decimal GetApprovalLimit(Func<DealerApprovalHistory, decimal?> selector)
+{
+    if (_approvalHistories == null || !_approvalHistories.Any()) return 0m;
+    var row = _approvalHistories
+        .Where(h => (selector(h) ?? 0m) > 0m)
+        .OrderByDescending(h => h.ApprovedAt)
+        .FirstOrDefault();
+    return row != null ? (selector(row) ?? 0m) : 0m;
 }
     // --- DTO Definitions (matching your Register component) --- //
     public class DealerFormModel
@@ -3765,6 +3773,19 @@ public class DealerCreditLimitSales
     public int FinancialYearId { get; set; }
     public decimal? Quantity { get; set; }
     public decimal? GrossAmount { get; set; }
+}
+public class DealerApprovalHistory
+{
+    public int Id { get; set; }
+    public int DealerId { get; set; }
+    public string? ApprovedBy { get; set; }
+    public string? Role { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+    public string? Remarks { get; set; }
+    public bool IsApproved { get; set; }
+    public decimal? AvpCreditLimit { get; set; }
+    public decimal? RmCreditLimit { get; set; }
+    public decimal? SmCreditLimit { get; set; }
 }
         
 }
