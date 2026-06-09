@@ -1438,19 +1438,19 @@ private void OnDealerStateChanged()
 
     if (_gstFile != null)
         uploads.Add(UploadFileToServer(dealerId, "GST", _gstFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.GSTFilePath = t.Result; filesUpdated = true; } }));
+            .ContinueWith(t => { if (t.Result != null) { _model.GSTFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.GST) && string.IsNullOrWhiteSpace(_model.GSTNumber)) { _model.GSTNumber = t.Result.GST; OnGSTNumberChanged(); } filesUpdated = true; } }));
     if (_panFile != null)
         uploads.Add(UploadFileToServer(dealerId, "PAN", _panFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.PANFilePath = t.Result; filesUpdated = true; } }));
+            .ContinueWith(t => { if (t.Result != null) { _model.PANFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.PAN) && string.IsNullOrWhiteSpace(_model.PANNumber)) { _model.PANNumber = t.Result.PAN; OnPANNumberChanged(); } filesUpdated = true; } }));
     if (_aadhaarFile != null)
         uploads.Add(UploadFileToServer(dealerId, "Aadhaar", _aadhaarFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.AadhaarFilePath = t.Result; filesUpdated = true; } }));
+            .ContinueWith(t => { if (t.Result != null) { _model.AadhaarFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.Aadhaar) && string.IsNullOrWhiteSpace(_model.AadhaarNumber)) { _model.AadhaarNumber = t.Result.Aadhaar; OnAadhaarNumberChanged(); } filesUpdated = true; } }));
     if (_wholesaleFile != null)
         uploads.Add(UploadFileToServer(dealerId, "WholesaleLicense", _wholesaleFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.WholesaleLicenseFilePath = t.Result; filesUpdated = true; } }));
+            .ContinueWith(t => { if (t.Result != null) { _model.WholesaleLicenseFilePath = t.Result.FilePath; filesUpdated = true; } }));
     if (_retailFile != null)
         uploads.Add(UploadFileToServer(dealerId, "RetailLicense", _retailFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.RetailLicenseFilePath = t.Result; filesUpdated = true; } }));
+            .ContinueWith(t => { if (t.Result != null) { _model.RetailLicenseFilePath = t.Result.FilePath; filesUpdated = true; } }));
 
     await Task.WhenAll(uploads);
 
@@ -1560,6 +1560,25 @@ private void OnDealerStateChanged()
 
         _panFile = file;
         _model.PANFilePath = file.Name;
+
+        // Immediately extract PAN number via OCR
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync("api/DealerFile/ocr-extract", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
+                if (!string.IsNullOrEmpty(result?.PAN) && string.IsNullOrWhiteSpace(_model.PANNumber))
+                {
+                    _model.PANNumber = result.PAN;
+                    OnPANNumberChanged();
+                }
+            }
+        }
+        catch { }
     }
 
     private void RemovePanFile()
@@ -1590,6 +1609,25 @@ private void OnDealerStateChanged()
 
         _aadhaarFile = file;
         _model.AadhaarFilePath = file.Name;
+
+        // Immediately extract Aadhaar number via OCR
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync("api/DealerFile/ocr-extract", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
+                if (!string.IsNullOrEmpty(result?.Aadhaar) && string.IsNullOrWhiteSpace(_model.AadhaarNumber))
+                {
+                    _model.AadhaarNumber = result.Aadhaar;
+                    OnAadhaarNumberChanged();
+                }
+            }
+        }
+        catch { }
     }
 
     private void RemoveAadhaarFile()
@@ -1630,7 +1668,7 @@ private void OnDealerStateChanged()
         OpenDeleteModal("RetailLicense", "Retail License", _model.RetailLicenseFilePath);
     }
 
-    private async Task<string?> UploadFileToServer(int dealerId, string docType, IBrowserFile file)
+    private async Task<FileUploadResponse?> UploadFileToServer(int dealerId, string docType, IBrowserFile file)
     {
         try
         {
@@ -1641,8 +1679,7 @@ private void OnDealerStateChanged()
             var response = await Http.PostAsync($"api/DealerFile/upload/{dealerId}/{docType}", content);
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<FileUploadResponse>();
-                return result?.FilePath;
+                return await response.Content.ReadFromJsonAsync<FileUploadResponse>();
             }
         }
         catch { }
@@ -1958,6 +1995,16 @@ private void OnDealerStateChanged()
     public class FileUploadResponse
     {
         public string FilePath { get; set; } = "";
+        public string? Aadhaar { get; set; }
+        public string? PAN { get; set; }
+        public string? GST { get; set; }
+    }
+
+    public class OcrExtractResult
+    {
+        public string? Aadhaar { get; set; }
+        public string? PAN { get; set; }
+        public string? GST { get; set; }
     }
     private void ApplyLockedEmployeeLocation()
 {
