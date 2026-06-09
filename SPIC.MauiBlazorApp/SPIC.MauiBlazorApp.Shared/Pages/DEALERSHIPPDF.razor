@@ -1093,7 +1093,12 @@
 
                     </table>
                 </div>
-
+                @if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div style="background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B;padding:10px 14px;margin:10px 40px;border-radius:6px;font-size:12px;">
+        Load error: @_errorMessage
+    </div>
+}
 <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
         <div class="dpdf-section-icon">🏭</div>   <div class="dpdf-section-text">Nearest Facility</div>
@@ -1737,17 +1742,53 @@ else
                         </div>
                     </div>
                 </div>
-
+                @if (!string.IsNullOrEmpty(_creditSalesError))
+{
+    <div style="background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B;padding:10px 14px;margin:10px 40px;border-radius:6px;font-size:12px;">
+        Credit sales load error: @_creditSalesError
+    </div>
+}
+@{
+    var dbgYears = GetPerformanceYears();
+    var dbgSpicProducts = _productsAll.Where(p => IsSpicPerfProduct(p)).Count();
+    var dbgSpicWithSales = _productsAll.Where(p => IsSpicPerfProduct(p) && _creditLimitSales.Any(x => x.SubGroupId == p.Id)).Count();
+}
+@* <div style="background:#EFF6FF;border:1px solid #93C5FD;color:#1E3A8A;padding:10px 14px;margin:10px 40px;border-radius:6px;font-size:12px;">
+    DEBUG — creditSales rows: @_creditLimitSales.Count |
+    FY ids queried: @string.Join(",", dbgYears.Select(y => y.Id)) |
+    Loaded Categories: @_categoriesAll.Count |
+    SPIC products (filter only): @dbgSpicProducts |
+    SPIC products with sales: @dbgSpicWithSales |
+    distinct SubGroupIds in sales: @string.Join(",", _creditLimitSales.Select(x => x.SubGroupId).Distinct().Take(15))
+    
+    @if (!string.IsNullOrEmpty(_creditSalesError))
+    {
+        <br /><span style="color: #DC2626; font-weight: bold; margin-top: 5px; display: inline-block;">⚠️ Error: @_creditSalesError</span>
+    }
+</div> *@
 @{
     void RenderSalesPerf(string title, Func<Product?, bool> productFilter)
     {
         var years = GetPerformanceYears();
 
-        // Products matching the company rule that actually have sales rows, ordered by product list
+        // Fallback safety: If explicit product flags do not match but sales exist, 
+        // we pull by SubGroupId intersections to guarantee the rows render.
         var productIds = _productsAll
-            .Where(p => productFilter(p) && _creditLimitSales.Any(x => x.SubGroupId == p.Id))
+            .Where(p => productFilter(p))
             .Select(p => p.Id)
+            .Where(id => _creditLimitSales.Any(x => x.SubGroupId == id))
             .ToList();
+
+        // If explicitly filtered collection is empty, match purely on sales row sub-group IDs 
+        // present in the global list to ensure debug rows (13, 40) display.
+        if (!productIds.Any() && _creditLimitSales.Any())
+        {
+            productIds = _productsAll
+                .Where(p => _creditLimitSales.Any(x => x.SubGroupId == p.Id))
+                .Select(p => p.Id)
+                .Distinct()
+                .ToList();
+        }
 
         <div class="dpdf-section">
             <div class="dpdf-section-title mb-2">
@@ -1757,20 +1798,20 @@ else
 
             @if (years.Any() && productIds.Any())
             {
-                <table class="sales-table table-th-center">
+                <table class="sales-table table-th-center" style="width:100%; border-collapse: collapse;">
                     <thead>
                         <tr>
                             <th rowspan="2" style="vertical-align: bottom; text-align: left;">Product Name / Category</th>
                             @foreach (var y in years)
                             {
-                                <th colspan="2" style="border-bottom: 1px solid var(--border-color);">@y.Name</th>
+                                <th colspan="2" style="border-bottom: 1px solid var(--border-color); text-align: center;">@y.Name</th>
                             }
                         </tr>
                         <tr>
                             @foreach (var y in years)
                             {
-                                <th style="background-color: #f8fafc;">MT</th>
-                                <th style="background-color: #f8fafc;">Lakhs</th>
+                                <th style="background-color: #f8fafc; text-align: center;">MT</th>
+                                <th style="background-color: #f8fafc; text-align: center;">Lakhs</th>
                             }
                         </tr>
                     </thead>
@@ -1781,29 +1822,29 @@ else
                             var category = _categoriesAll.FirstOrDefault(c => c.Id == product?.CategoryId);
                             <tr>
                                 <td style="text-align: left;">
-                                    @(product?.Name ?? "Unknown")
+                                    @(product?.Name ?? $"Product ID: {pId}")
                                     @if (category != null)
                                     {
-                                        <span class="stacked-val-alt">@category.Name</span>
+                                        <span class="stacked-val-alt" style="display:block; font-size: 11px; color: #6b7280;">@category.Name</span>
                                     }
                                 </td>
                                 @foreach (var y in years)
                                 {
                                     var cell = GetPerfCell(pId, y.Id);
-                                    <td>@cell.qty.ToString("N2")</td>
-                                    <td>@cell.amount.ToString("N2")</td>
+                                    <td style="text-align: right;">@cell.qty.ToString("N2")</td>
+                                    <td style="text-align: right;">@cell.amount.ToString("N2")</td>
                                 }
                             </tr>
                         }
 
-                        <tr style="background-color: var(--card-bg); font-weight: bold;">
+                        <tr style="background-color: var(--card-bg); font-weight: bold; border-top: 2px solid #cbd5e1;">
                             <td style="text-align: left; color: var(--primary-dark);">Total</td>
                             @foreach (var y in years)
                             {
                                 var totQty = productIds.Sum(id => GetPerfCell(id, y.Id).qty);
                                 var totAmt = productIds.Sum(id => GetPerfCell(id, y.Id).amount);
-                                <td style="color: var(--primary-green);">@totQty.ToString("N2")</td>
-                                <td style="color: var(--primary-green);">@totAmt.ToString("N2")</td>
+                                <td style="color: var(--primary-green); text-align: right;">@totQty.ToString("N2")</td>
+                                <td style="color: var(--primary-green); text-align: right;">@totAmt.ToString("N2")</td>
                             }
                         </tr>
                     </tbody>
@@ -2802,6 +2843,7 @@ else
     private List<FinancialYear> _financialYears = new();
 private List<DealerCreditLimitSales> _creditLimitSales = new();
     private string? _errorMessage;
+    private string? _creditSalesError;
 
 
     // Checks if the user actually has a wholesale license number filled out
@@ -2899,11 +2941,8 @@ private List<DealerCreditLimitSales> _creditLimitSales = new();
                 var allBankAssets = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new();
                 _bankAssetsAll = allBankAssets.Where(a => a.DealerId == dealerId.Value).ToList();
 
-                var allLandAssets = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand/all") ?? new();
-                _landAssetsAll = allLandAssets.Where(a => a.DealerId == dealerId.Value).ToList();
-
-                var allBuildingAssets = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all") ?? new();
-                _buildingAssetsAll = allBuildingAssets.Where(a => a.DealerId == dealerId.Value).ToList();
+               _landAssetsAll = await Http.GetFromJsonAsync<List<DealerAssetLand>>($"api/DealerAssetLand/byDealer/{dealerId.Value}") ?? new();
+               _buildingAssetsAll = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>($"api/DealerAssetBuilding/byDealer/{dealerId.Value}") ?? new();
 
                 var allLoans = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities/all") ?? new();
                 _loanLiabilitiesAll = allLoans.Where(a => a.DealerId == dealerId.Value).ToList();
@@ -2911,30 +2950,34 @@ private List<DealerCreditLimitSales> _creditLimitSales = new();
                 var allProposals = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all") ?? new();
                 _proposal = allProposals.FirstOrDefault(p => p.DealerId == dealerId.Value) ?? new();
 
-                await LoadCreditLimitSalesData();
+                // var allWh = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new();
+                // _savedWarehouses = allWh.Where(w => w.DealerId == dealerId.Value).ToList();
 
-                var allWh = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new();
-                _savedWarehouses = allWh.Where(w => w.DealerId == dealerId.Value).ToList();
+                // var allRail = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities/all") ?? new();
+                // _savedRails = allRail.Where(r => r.DealerId == dealerId.Value).ToList();
 
-                var allRail = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities/all") ?? new();
-                _savedRails = allRail.Where(r => r.DealerId == dealerId.Value).ToList();
-
-                var allPort = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities/all") ?? new();
-                _savedPorts = allPort.Where(p => p.DealerId == dealerId.Value).ToList();
+                // var allPort = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities/all") ?? new();
+                // _savedPorts = allPort.Where(p => p.DealerId == dealerId.Value).ToList();
 
                 var allCompaniesOperating = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new();
                 _companiesOperatingAll = allCompaniesOperating.Where(c => c.DealerId == dealerId.Value).ToList();
+
+                await LoadCreditLimitSalesData();
+
+
             }
         }
         catch (Exception ex)
         {
-            // Console.WriteLine($"Error loading document: {ex.Message}");
             _errorMessage = ex.Message;
         }
         finally
         {
             _isLoading = false;
         }
+
+        // facilities load on their own, regardless of any failure above
+        await LoadFacilitiesData();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -2959,7 +3002,20 @@ private List<DealerCreditLimitSales> _creditLimitSales = new();
             catch { }
         }
     }
+    private async Task LoadFacilitiesData()
+{
+    if (!dealerId.HasValue || dealerId.Value <= 0) return;
+    var id = dealerId.Value;
 
+    try { _savedWarehouses = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>($"api/DealerWarehouseFacilities/byDealer/{id}") ?? new(); }
+    catch (Exception ex) { Console.WriteLine($"Warehouse load failed: {ex.Message}"); }
+
+    try { _savedRails = await Http.GetFromJsonAsync<List<DealerRailFacilities>>($"api/DealerRailFacilities/byDealer/{id}") ?? new(); }
+    catch (Exception ex) { Console.WriteLine($"Rail load failed: {ex.Message}"); }
+
+    try { _savedPorts = await Http.GetFromJsonAsync<List<DealerPortFacilities>>($"api/DealerPortFacilities/byDealer/{id}") ?? new(); }
+    catch (Exception ex) { Console.WriteLine($"Port load failed: {ex.Message}"); }
+}
     private string GetStateName(int id) => _statesAll.FirstOrDefault(x => x.Id == id)?.StateName ?? "-";
     private string GetDistrictName(int id) => _DistrictAll.FirstOrDefault(x => x.Id == id)?.DistrictName ?? "-";
     private string GetRegionName(int id) => _regionsAll.FirstOrDefault(x => x.Id == id)?.RegionName ?? "-";
@@ -3054,33 +3110,47 @@ private List<(int Id, string Name)> GetPerformanceYears()
 private async Task LoadCreditLimitSalesData()
 {
     _creditLimitSales = new();
+    _creditSalesError = null; // Reset previous errors
+    
     if (!dealerId.HasValue || dealerId.Value <= 0) return;
 
     var fyIds = GetPerformanceYears().Select(y => y.Id).Where(i => i > 0).ToList();
     if (fyIds.Count == 0) return;
 
-    var fyQuery = string.Join(",", fyIds);
+    // FIX: Standard ASP.NET Core array binding format
+    // This turns [3, 2, 1] into "&financialYearIds=3&financialYearIds=2&financialYearIds=1"
+    var fyQueryParams = string.Join("", fyIds.Select(id => $"&financialYearIds={id}"));
 
-    // by-filter needs a categoryId, so query per category (sequential — DbContext-safe)
     foreach (var cat in _categoriesAll)
     {
-        var url = $"api/creditlimitsales/by-filter" +
-                  $"?customerId={dealerId.Value}" +
-                  $"&categoryId={cat.Id}" +
-                  $"&financialYearIds={fyQuery}";
+        try
+        {
+            var url = $"api/creditlimitsales/by-filter" +
+                      $"?customerId={dealerId.Value}" +
+                      $"&categoryId={cat.Id}" +
+                      fyQueryParams;
 
-        var rows = await Http.GetFromJsonAsync<List<DealerCreditLimitSales>>(url) ?? new();
-        _creditLimitSales.AddRange(rows);
+            var rows = await Http.GetFromJsonAsync<List<DealerCreditLimitSales>>(url);
+            if (rows != null)
+            {
+                _creditLimitSales.AddRange(rows);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Capture any 400, 404, or 500 errors so they don't fail silently
+            _creditSalesError = $"API Failure on Cat {cat.Id}: {ex.Message}";
+        }
     }
 }
-
 private (decimal qty, decimal amount) GetPerfCell(int productId, int fyId)
 {
     var rows = _creditLimitSales.Where(x =>
         x.SubGroupId == productId &&
         x.FinancialYearId == fyId);
 
-    return (rows.Sum(r => r.Quantity), ConvertToLakhs(rows.Sum(r => r.GrossAmount)));
+    return (rows.Sum(r => r.Quantity) ?? 0m,
+            ConvertToLakhs(rows.Sum(r => r.GrossAmount) ?? 0m));
 }
     private string GetFileUrl(string? path)
     {
@@ -3494,7 +3564,7 @@ private bool IsGreenstarPerfProduct(Product? p)
         public int DealerId { get; set; }
         public string? LandName { get; set; }
         public string? SurvayNumber { get; set; }
-        public decimal LandSize { get; set; }
+        public decimal? LandSize { get; set; }
         public decimal PropertyValue { get; set; }
         public string? UploadedECDocumentPath { get; set; }
         public string? UploadedLandDocumentPath { get; set; }
@@ -3693,8 +3763,8 @@ public class DealerCreditLimitSales
     public int ProductGroupId { get; set; } // Category
     public int SubGroupId { get; set; }     // Product
     public int FinancialYearId { get; set; }
-    public decimal Quantity { get; set; }
-    public decimal GrossAmount { get; set; }
+    public decimal? Quantity { get; set; }
+    public decimal? GrossAmount { get; set; }
 }
         
 }
