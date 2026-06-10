@@ -1530,6 +1530,25 @@ private void OnDealerStateChanged()
 
         _gstFile = file;
         _model.GSTFilePath = file.Name;
+
+        // Immediately extract GST number via OCR
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync("api/DealerFile/ocr-extract", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
+                if (!string.IsNullOrEmpty(result?.GST) && string.IsNullOrWhiteSpace(_model.GSTNumber))
+                {
+                    _model.GSTNumber = result.GST;
+                    OnGSTNumberChanged();
+                }
+            }
+        }
+        catch { }
     }
 
     private void RemoveGstFile()
