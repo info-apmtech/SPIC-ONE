@@ -37,6 +37,11 @@
     private List<DR.DealerCreditLimitSalesPerformance> _creditSales = new();
     private DR.DealerRegistrationDocuments? _documents;
     private List<DR.DealerApprovalHistory> _approvalHistory = new();
+    private List<DR.Competitor> _competitors = new();
+    private Dictionary<string, string> _competitorNames = new();
+    private Dictionary<string, string> _warehouseNames = new();
+    private Dictionary<string, string> _cropNames = new();
+
     private string? _submittedByName;
     private Dictionary<string, string> _userNames = new();
 
@@ -141,8 +146,8 @@
             {
                 try
                 {
-                    var bank = await Http.GetFromJsonAsync<DR.Bank>($"api/Bank/{_dealer.BankId}");
-                    _bankName = bank?.Name;
+                   var banks = await Http.GetFromJsonAsync<List<DR.Bank>>("api/Bank") ?? new();
+                    _bankNames = banks.ToDictionary(b => b.Id, b => b.Name);
                 }
                 catch { }
             }
@@ -151,10 +156,15 @@
             _units = await Http.GetFromJsonAsync<List<DR.Unit>>("api/Unit") ?? new();
             _products = await Http.GetFromJsonAsync<List<DR.Product>>("api/Product") ?? new();
             _productNames = _products.ToDictionary(p => p.Id, p => p.Name);
+            _competitors = await Http.GetFromJsonAsync<List<DR.Competitor>>("api/Competitor") ?? new();
+            _competitorNames = _competitors.ToDictionary(c => c.Id.ToString(), c => c.Name);
+            var warehouses = await Http.GetFromJsonAsync<List<DR.Warehouse>>("api/Warehouse") ?? new();
+            _warehouseNames = warehouses.ToDictionary(w => w.Id.ToString(), w => w.Name);
+            var crops = await Http.GetFromJsonAsync<List<DR.Crop>>("api/Crop") ?? new();
+            _cropNames = crops.ToDictionary(c => c.Id.ToString(), c => c.Name);
         }
         catch { }
     }
-
     private async Task LoadSubmittedByName()
     {
         try
@@ -1585,7 +1595,7 @@
                             {
                                 foreach (var exp in _experiences)
                                 {
-                                    <div class="data-row"><div class="data-label">Company Name:</div><div class="data-value">@exp.CompanyId</div></div>
+                                    <div class="data-row"><div class="data-label">Company Name:</div><div class="data-value">@(_competitorNames.TryGetValue(exp.CompanyId ?? "", out var cn) ? cn : (exp.CompanyId ?? "-"))</div></div>
                                     <div class="data-row"><div class="data-label">Number of years:</div><div class="data-value">@exp.NoOfYears @("Years")</div></div>
                                     <div class="data-row"><div class="data-label">Quantity (MT):</div><div class="data-value">@exp.Quantity</div></div>
                                     <div class="data-row"><div class="data-label">Turnover (Lakhs):</div><div class="data-value">@exp.TurnOver</div></div>
@@ -1692,7 +1702,7 @@
                                         <i class="bi bi-pencil-square edit-icon" @onclick="EditWarehouse" role="button" title="Edit"></i>
                                     </div>
                                     <div class="detail-card-body">
-                                        <div class="data-row"><div class="data-label">Warehouse Id:</div><div class="data-value">@w.WarehouseId</div></div>
+                                        <div class="data-row"><div class="data-label">Warehouse Name:</div><div class="data-value">@(_warehouseNames.TryGetValue(w.WarehouseId.ToString(), out var wn) ? wn : w.WarehouseId.ToString())</div></div>                                    
                                         <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@w.Distance</div></div>
                                         <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@w.Freight</div></div>
                                     </div>
@@ -1767,7 +1777,7 @@
                                     <i class="bi bi-pencil-square edit-icon" @onclick="EditMarketDetails" role="button" title="Edit"></i>
                                 </div>
                                 <div class="detail-card-body">
-                                    <div class="data-row"><div class="data-label">Major Crops:</div><div class="data-value">@m.MajorCrops</div></div>
+                                    <div class="data-row"><div class="data-label">Major Crops:</div><div class="data-value">@(_cropNames.TryGetValue(m.MajorCrops.ToString(), out var cropName) ? cropName : m.MajorCrops.ToString())</div></div>
                                     <div class="data-row"><div class="data-label">No of Dealers:</div><div class="data-value">@m.NoOfDealer</div></div>
                                     <div class="data-row"><div class="data-label">No of Farmers:</div><div class="data-value">@m.NoOfFarmer</div></div>
                                     <div class="data-row"><div class="data-label">Season (From → To):</div><div class="data-value">@m.SeasonFromMonth → @m.SeasonToMonth</div></div>
@@ -2011,7 +2021,7 @@
                             {
                                 foreach (var b in _assetBanks)
                                 {
-                                    <div class="data-row"><div class="data-label">Bank Name:</div><div class="data-value">@b.BankId</div></div>
+                                    <div class="data-row"><div class="data-label">Bank Name:</div><div class="data-value">@(_bankNames.TryGetValue(b.BankId, out var bn) ? bn : b.BankId.ToString())</div></div>
                                     <div class="data-row"><div class="data-label">Bank Branch:</div><div class="data-value">@b.BankBranch</div></div>
                                     <div class="data-row"><div class="data-label">Value (₹):</div><div class="data-value">@b.Value</div></div>
                                     <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@b.Remarks</div></div>
