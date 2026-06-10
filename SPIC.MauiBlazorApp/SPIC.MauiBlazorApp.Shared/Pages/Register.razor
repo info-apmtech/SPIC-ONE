@@ -14,6 +14,31 @@
     fieldset:disabled .file-remove-x {
         display: none !important;
     }
+    .input-with-loader {
+        position: relative;
+    }
+    .input-with-loader .form-control-sm {
+        padding-right: 2rem;
+    }
+    .input-with-loader .field-loader-icon {
+        position: absolute;
+        right: 0.5rem;
+        top: 50%;
+        transform: translateY(calc(-50% - 2px));
+        font-size: 1rem;
+        color: #6c757d;
+        z-index: 4;
+        pointer-events: none;
+    }
+    .ocr-warning {
+        font-size: 0.75rem;
+        color: #856404;
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        padding: 4px 8px;
+        margin-top: 4px;
+    }
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
@@ -592,10 +617,20 @@
                         <div class="compliance-card gst">
                             <div class="fw-bold small mb-2"><i class="bi bi-file-earmark-text text-success me-2"></i>GST Number <span class="text-danger">*</span></div>
                             <label class="form-label-custom">GST Number</label>
-                            <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("GSTNumber") ? "is-invalid" : "")" @bind="_model.GSTNumber" @bind:after="OnGSTNumberChanged" placeholder="15-character GST Number" maxlength="15" style="text-transform: uppercase">
+                            <div class="input-with-loader">
+                                <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("GSTNumber") ? "is-invalid" : "")" @bind="_model.GSTNumber" @bind:after="OnGSTNumberChanged" placeholder="15-character GST Number" maxlength="15" style="text-transform: uppercase">
+                                @if (_isExtractingGst)
+                                {
+                                    <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                }
+                            </div>
                             @if (_errors.ContainsKey("GSTNumber"))
                             {
                                 <div class="field-error">@_errors["GSTNumber"]</div>
+                            }
+                            @if (!string.IsNullOrEmpty(_ocrWarningGst))
+                            {
+                                <div class="ocr-warning">@_ocrWarningGst</div>
                             }
                             <div class="mt-2">
                                 <label class="upload-area">
@@ -621,10 +656,20 @@
                         <div class="compliance-card pan">
                             <div class="fw-bold small mb-2"><i class="bi bi-person-badge text-primary me-2"></i>PAN Number <span class="text-danger">*</span></div>
                             <label class="form-label-custom">PAN Number</label>
-                            <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("PANNumber") ? "is-invalid" : "")" @bind="_model.PANNumber" @bind:after="OnPANNumberChanged" placeholder="10-character PAN Number" maxlength="10" style="text-transform: uppercase">
+                            <div class="input-with-loader">
+                                <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("PANNumber") ? "is-invalid" : "")" @bind="_model.PANNumber" @bind:after="OnPANNumberChanged" placeholder="10-character PAN Number" maxlength="10" style="text-transform: uppercase">
+                                @if (_isExtractingPan)
+                                {
+                                    <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                }
+                            </div>
                             @if (_errors.ContainsKey("PANNumber"))
                             {
                                 <div class="field-error">@_errors["PANNumber"]</div>
+                            }
+                            @if (!string.IsNullOrEmpty(_ocrWarningPan))
+                            {
+                                <div class="ocr-warning">@_ocrWarningPan</div>
                             }
                             <div class="mt-2">
                                 <label class="upload-area">
@@ -651,17 +696,27 @@
                         <div class="compliance-card aadhaar">
                             <div class="fw-bold small mb-2"><i class="bi bi-fingerprint text-danger me-2"></i>Aadhaar Number <span class="text-danger">*</span></div>
                             <label class="form-label-custom">Aadhaar Number</label>
-                            <input type="text"
-                                   class="form-control form-control-sm @(_errors.ContainsKey("AadhaarNumber") ? "is-invalid" : "")"
-                                   @bind="_model.AadhaarNumber"
-                                   @bind:after="OnAadhaarNumberChanged"
-                                   placeholder="12-digit Aadhaar"
-                                   maxlength="12"
-                                   oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                            <div class="input-with-loader">
+                                <input type="text"
+                                       class="form-control form-control-sm @(_errors.ContainsKey("AadhaarNumber") ? "is-invalid" : "")"
+                                       @bind="_model.AadhaarNumber"
+                                       @bind:after="OnAadhaarNumberChanged"
+                                       placeholder="12-digit Aadhaar"
+                                       maxlength="12"
+                                       oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                                @if (_isExtractingAadhaar)
+                                {
+                                    <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                }
+                            </div>
 
                             @if (_errors.ContainsKey("AadhaarNumber"))
                             {
                                 <div class="field-error">@_errors["AadhaarNumber"]</div>
+                            }
+                            @if (!string.IsNullOrEmpty(_ocrWarningAadhaar))
+                            {
+                                <div class="ocr-warning">@_ocrWarningAadhaar</div>
                             }
 
                             <div class="mt-2">
@@ -880,6 +935,16 @@
     private bool _isStateLocked;
     private bool _isRegionLocked;
 private bool _isHqLocked;
+
+    private bool _isExtractingGst;
+    private bool _isExtractingPan;
+    private bool _isExtractingAadhaar;
+    private string? _ocrWarningGst;
+    private string? _ocrWarningPan;
+    private string? _ocrWarningAadhaar;
+    private bool _ocrPopulatedGst;
+    private bool _ocrPopulatedPan;
+    private bool _ocrPopulatedAadhaar;
 
     private IBrowserFile? _gstFile;
     private IBrowserFile? _panFile;
@@ -1102,6 +1167,14 @@ private async Task LoadData()
 
     private void OnGSTNumberChanged()
     {
+        if (_ocrPopulatedGst)
+        {
+            _ocrPopulatedGst = false;
+        }
+        else
+        {
+            _ocrWarningGst = null;
+        }
         if (!string.IsNullOrEmpty(_model.GSTNumber))
             _model.GSTNumber = _model.GSTNumber.ToUpper();
         if (!string.IsNullOrWhiteSpace(_model.GSTNumber) && Regex.IsMatch(_model.GSTNumber, @"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"))
@@ -1110,6 +1183,14 @@ private async Task LoadData()
 
     private void OnPANNumberChanged()
     {
+        if (_ocrPopulatedPan)
+        {
+            _ocrPopulatedPan = false;
+        }
+        else
+        {
+            _ocrWarningPan = null;
+        }
         if (!string.IsNullOrEmpty(_model.PANNumber))
             _model.PANNumber = _model.PANNumber.ToUpper();
         if (!string.IsNullOrWhiteSpace(_model.PANNumber) && Regex.IsMatch(_model.PANNumber, @"^[A-Z]{5}[0-9]{4}[A-Z]{1}$"))
@@ -1118,6 +1199,14 @@ private async Task LoadData()
 
     private void OnAadhaarNumberChanged()
     {
+        if (_ocrPopulatedAadhaar)
+        {
+            _ocrPopulatedAadhaar = false;
+        }
+        else
+        {
+            _ocrWarningAadhaar = null;
+        }
         if (!string.IsNullOrWhiteSpace(_model.AadhaarNumber) && Regex.IsMatch(_model.AadhaarNumber, @"^[0-9]{12}$"))
             _errors.Remove("AadhaarNumber");
     }
@@ -1276,6 +1365,15 @@ private void OnDealerStateChanged()
         _aadhaarFile = null;
         _wholesaleFile = null;
         _retailFile = null;
+        _isExtractingGst = false;
+        _isExtractingPan = false;
+        _isExtractingAadhaar = false;
+        _ocrWarningGst = null;
+        _ocrWarningPan = null;
+        _ocrWarningAadhaar = null;
+        _ocrPopulatedGst = false;
+        _ocrPopulatedPan = false;
+        _ocrPopulatedAadhaar = false;
         _errors.Clear();
         _message = null;
     }
@@ -1532,6 +1630,7 @@ private void OnDealerStateChanged()
         _model.GSTFilePath = file.Name;
 
         // Immediately extract GST number via OCR
+        _isExtractingGst = true;
         try
         {
             using var content = new MultipartFormDataContent();
@@ -1544,11 +1643,17 @@ private void OnDealerStateChanged()
                 if (!string.IsNullOrEmpty(result?.GST) && string.IsNullOrWhiteSpace(_model.GSTNumber))
                 {
                     _model.GSTNumber = result.GST;
+                    _ocrPopulatedGst = true;
+                    _ocrWarningGst = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
                     OnGSTNumberChanged();
                 }
             }
         }
         catch { }
+        finally
+        {
+            _isExtractingGst = false;
+        }
     }
 
     private void RemoveGstFile()
@@ -1581,6 +1686,7 @@ private void OnDealerStateChanged()
         _model.PANFilePath = file.Name;
 
         // Immediately extract PAN number via OCR
+        _isExtractingPan = true;
         try
         {
             using var content = new MultipartFormDataContent();
@@ -1593,11 +1699,17 @@ private void OnDealerStateChanged()
                 if (!string.IsNullOrEmpty(result?.PAN) && string.IsNullOrWhiteSpace(_model.PANNumber))
                 {
                     _model.PANNumber = result.PAN;
+                    _ocrPopulatedPan = true;
+                    _ocrWarningPan = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
                     OnPANNumberChanged();
                 }
             }
         }
         catch { }
+        finally
+        {
+            _isExtractingPan = false;
+        }
     }
 
     private void RemovePanFile()
@@ -1630,6 +1742,7 @@ private void OnDealerStateChanged()
         _model.AadhaarFilePath = file.Name;
 
         // Immediately extract Aadhaar number via OCR
+        _isExtractingAadhaar = true;
         try
         {
             using var content = new MultipartFormDataContent();
@@ -1642,11 +1755,17 @@ private void OnDealerStateChanged()
                 if (!string.IsNullOrEmpty(result?.Aadhaar) && string.IsNullOrWhiteSpace(_model.AadhaarNumber))
                 {
                     _model.AadhaarNumber = result.Aadhaar;
+                    _ocrPopulatedAadhaar = true;
+                    _ocrWarningAadhaar = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
                     OnAadhaarNumberChanged();
                 }
             }
         }
         catch { }
+        finally
+        {
+            _isExtractingAadhaar = false;
+        }
     }
 
     private void RemoveAadhaarFile()
