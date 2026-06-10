@@ -179,10 +179,28 @@
     SalesPlanCardTitle="GreenStar Sales Plan (Current FY)"
     SalesPlanUnitName="MT"
     Company="GreenStar"
-    SpecialtyMtQty="@SpecialtyMtQty"
-    SpecialtyMtAmount="@SpecialtyMtAmount"
-    SpecialtyLtrQty="@SpecialtyLtrQty"
-    SpecialtyLtrAmount="@SpecialtyLtrAmount"
+
+    FertilizerFY1Qty="@FertilizerFY1Qty"
+    FertilizerFY1Amount="@FertilizerFY1Amount"
+    FertilizerFY2Qty="@FertilizerFY2Qty"
+    FertilizerFY2Amount="@FertilizerFY2Amount"
+    FertilizerFY3Qty="@FertilizerFY3Qty"
+    FertilizerFY3Amount="@FertilizerFY3Amount"
+
+    SpecialtyMtFY1Qty="@SpecialtyMtFY1Qty"
+    SpecialtyMtFY1Amount="@SpecialtyMtFY1Amount"
+    SpecialtyMtFY2Qty="@SpecialtyMtFY2Qty"
+    SpecialtyMtFY2Amount="@SpecialtyMtFY2Amount"
+    SpecialtyMtFY3Qty="@SpecialtyMtFY3Qty"
+    SpecialtyMtFY3Amount="@SpecialtyMtFY3Amount"
+
+    SpecialtyLtrFY1Qty="@SpecialtyLtrFY1Qty"
+    SpecialtyLtrFY1Amount="@SpecialtyLtrFY1Amount"
+    SpecialtyLtrFY2Qty="@SpecialtyLtrFY2Qty"
+    SpecialtyLtrFY2Amount="@SpecialtyLtrFY2Amount"
+    SpecialtyLtrFY3Qty="@SpecialtyLtrFY3Qty"
+    SpecialtyLtrFY3Amount="@SpecialtyLtrFY3Amount"
+
     OnCategoryChanged="SelectCategory" />
 		@if (_dealer.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
 		{
@@ -646,11 +664,26 @@ private List<DealerCreditLimitSales> _greenstarDefaultSalesData = new();
 	private decimal TotalPropertyValue => BankingTotal + LandTotal + BuildingTotal + _dealer.AssetValue;
 	private decimal LoansTotal => _loanLiabilities.Sum(l => l.LoanValue);
 	// Fixed specialty-product totals for the latest FY (do NOT change on tab switch)
-private decimal SpecialtyMtQty;
-private decimal SpecialtyMtAmount;
-private decimal SpecialtyLtrQty;
-private decimal SpecialtyLtrAmount;
+private decimal FertilizerFY1Qty;
+private decimal FertilizerFY1Amount;
+private decimal FertilizerFY2Qty;
+private decimal FertilizerFY2Amount;
+private decimal FertilizerFY3Qty;
+private decimal FertilizerFY3Amount;
 
+private decimal SpecialtyMtFY1Qty;
+private decimal SpecialtyMtFY1Amount;
+private decimal SpecialtyMtFY2Qty;
+private decimal SpecialtyMtFY2Amount;
+private decimal SpecialtyMtFY3Qty;
+private decimal SpecialtyMtFY3Amount;
+
+private decimal SpecialtyLtrFY1Qty;
+private decimal SpecialtyLtrFY1Amount;
+private decimal SpecialtyLtrFY2Qty;
+private decimal SpecialtyLtrFY2Amount;
+private decimal SpecialtyLtrFY3Qty;
+private decimal SpecialtyLtrFY3Amount;
 	// Sales Plan totals (from previous SalesPlanning page)
 	private IEnumerable<SalesPlanningInDealerRegistration> GreenStarSalesPlanRows =>
     _salesPlanData.Where(row =>
@@ -1294,22 +1327,52 @@ private decimal CalculateSpecialitySalesTurnover()
 
     return ConvertToLakhs(grossAmount);
 }
+private void ComputeFertilizerCardTotals()
+{
+    FertilizerFY1Qty = FertilizerFY1Amount = 0;
+    FertilizerFY2Qty = FertilizerFY2Amount = 0;
+    FertilizerFY3Qty = FertilizerFY3Amount = 0;
+
+    foreach (var row in _greenstarDefaultSalesData)
+    {
+        if (!IsOtherFertilizerCreditLimitSalesRow(row))
+            continue;
+
+        var amountLakhs = ConvertToLakhs(row.GrossAmount);
+
+        if (row.FinancialYearId == _proposal.FY1)
+        {
+            FertilizerFY1Qty += row.Quantity;
+            FertilizerFY1Amount += amountLakhs;
+        }
+        else if (row.FinancialYearId == _proposal.FY2)
+        {
+            FertilizerFY2Qty += row.Quantity;
+            FertilizerFY2Amount += amountLakhs;
+        }
+        else if (row.FinancialYearId == _proposal.FY3)
+        {
+            FertilizerFY3Qty += row.Quantity;
+            FertilizerFY3Amount += amountLakhs;
+        }
+    }
+}
 private void ComputeSpecialtyCardTotals()
 {
-    SpecialtyMtQty = SpecialtyMtAmount = SpecialtyLtrQty = SpecialtyLtrAmount = 0;
+    SpecialtyMtFY1Qty = SpecialtyMtFY1Amount = 0;
+    SpecialtyMtFY2Qty = SpecialtyMtFY2Amount = 0;
+    SpecialtyMtFY3Qty = SpecialtyMtFY3Amount = 0;
 
-    var fyId = _proposal.FY3;   // latest completed FY (e.g. 2025-2026)
-    if (fyId <= 0)
-        return;
+    SpecialtyLtrFY1Qty = SpecialtyLtrFY1Amount = 0;
+    SpecialtyLtrFY2Qty = SpecialtyLtrFY2Amount = 0;
+    SpecialtyLtrFY3Qty = SpecialtyLtrFY3Amount = 0;
 
-    foreach (var row in _greenstarDefaultSalesData.Where(r => r.FinancialYearId == fyId))
+    foreach (var row in _greenstarDefaultSalesData)
     {
         var category = _categories.FirstOrDefault(c => c.Id == row.ProductGroupId);
         if (category == null || !IsSpecialityCategory(category))
             continue;
 
-        // Classify by the category's UNIT, not its name.
-        // "Gr."/"MT" categories use the MT unit; "Liq."/"Ltr" categories use the Ltr unit.
         var unitName = _units.FirstOrDefault(u => u.Id == category.UnitId)?.Name ?? "";
         var amountLakhs = ConvertToLakhs(row.GrossAmount);
 
@@ -1319,16 +1382,44 @@ private void ComputeSpecialtyCardTotals()
             unitName.Contains("Litre", StringComparison.OrdinalIgnoreCase) ||
             unitName.Contains("Liter", StringComparison.OrdinalIgnoreCase);
 
-        if (isLiquid)
+        if (row.FinancialYearId == _proposal.FY1)
         {
-            SpecialtyLtrQty    += row.Quantity;
-            SpecialtyLtrAmount += amountLakhs;
+            if (isLiquid)
+            {
+                SpecialtyLtrFY1Qty += row.Quantity;
+                SpecialtyLtrFY1Amount += amountLakhs;
+            }
+            else
+            {
+                SpecialtyMtFY1Qty += row.Quantity;
+                SpecialtyMtFY1Amount += amountLakhs;
+            }
         }
-        else
+        else if (row.FinancialYearId == _proposal.FY2)
         {
-            // everything non-liquid (MT / granule) goes to the MT card
-            SpecialtyMtQty    += row.Quantity;
-            SpecialtyMtAmount += amountLakhs;
+            if (isLiquid)
+            {
+                SpecialtyLtrFY2Qty += row.Quantity;
+                SpecialtyLtrFY2Amount += amountLakhs;
+            }
+            else
+            {
+                SpecialtyMtFY2Qty += row.Quantity;
+                SpecialtyMtFY2Amount += amountLakhs;
+            }
+        }
+        else if (row.FinancialYearId == _proposal.FY3)
+        {
+            if (isLiquid)
+            {
+                SpecialtyLtrFY3Qty += row.Quantity;
+                SpecialtyLtrFY3Amount += amountLakhs;
+            }
+            else
+            {
+                SpecialtyMtFY3Qty += row.Quantity;
+                SpecialtyMtFY3Amount += amountLakhs;
+            }
         }
     }
 }
@@ -1339,7 +1430,8 @@ private void ComputeSpecialtyCardTotals()
     {
         //await LoadAnnualSalesDataAsync();
         await LoadGreenstarDefaultSalesPerformanceData();
-		ComputeSpecialtyCardTotals();
+ComputeSpecialtyCardTotals();
+ComputeFertilizerCardTotals();
 
         // Row 1: AnnualSales Other Fertilizer Qty (use selected FY3 by default)
 		var otherFertAnnualQty = CalculateOtherFertilizerAnnualQty();
@@ -1377,7 +1469,7 @@ private void ComputeSpecialtyCardTotals()
 
        // Row 5: Total Specialty Product Turnover in Lakhs
 // Load total Specialty Product amount from latest completed FY into 5th row
-var totalSpecialtyProductTurnover = SpecialtyMtAmount + SpecialtyLtrAmount;
+var totalSpecialtyProductTurnover = SpecialtyMtFY3Amount + SpecialtyLtrFY3Amount;
 
 if (totalSpecialtyProductTurnover > 0 && !_greenstarValueEntered[4])
 {
