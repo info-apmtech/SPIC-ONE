@@ -151,13 +151,13 @@ namespace SpicAPI.Controllers
             string? aadhaar, pan, gst;
             (aadhaar, pan, gst) = ExtractTextFromPdfPig(pdfPath);
 
-            if (aadhaar != null || pan != null || gst != null)
+            if (aadhaar != null && pan != null && gst != null)
             {
                 //_logger.LogInformation("PdfPig extracted values from PDF: Aadhaar={Aadhaar}, PAN={Pan}, GST={Gst}", aadhaar, pan, gst);
                 return (aadhaar, pan, gst);
             }
 
-            // Step 2: No values found — treat as scanned/image-based PDF, fall back to OCR
+            // Step 2: No values found ï¿½ treat as scanned/image-based PDF, fall back to OCR
             //_logger.LogInformation("PdfPig returned no values, falling back to image-based OCR for {PdfPath}", pdfPath);
             (aadhaar, pan, gst) = OcrPdfPages(pdfPath);
 
