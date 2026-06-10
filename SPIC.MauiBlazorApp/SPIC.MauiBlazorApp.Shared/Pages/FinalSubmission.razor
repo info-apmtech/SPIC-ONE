@@ -547,21 +547,32 @@
     private DealerCreditLimitProposal? _creditLimit;
 
     private bool[] _stepStatus = new bool[11];
-    private List<SectionItem> _finalSubmissionSections => new()
+    private List<SectionItem> _finalSubmissionSections
     {
-        new SectionItem("Dealer Registration", "/Register", "bi bi-person-plus", () => _stepStatus[0]),
-        new SectionItem("Experience", "/Experience", "bi bi-award", () => _stepStatus[1]),
-        new SectionItem("Annual Sales", "/AnnualSales", "bi bi-graph-up-arrow", () => _stepStatus[2]),
-        new SectionItem("Warehouse Details", "/Warehouse", "bi bi-box-seam", () => _stepStatus[3]),
-        new SectionItem("Market Details", "/MarketDetails", "bi bi-geo-alt", () => _stepStatus[4]),
-        new SectionItem("Companies Operating", "/Companies", "bi bi-building", () => _stepStatus[5]),
-        new SectionItem("Proprietor Details", "/Proprietor", "bi bi-people", () => _stepStatus[6]),
-        new SectionItem("Sales Planning", "/SalesPlaning", "bi bi-calendar2-check", () => _stepStatus[7]),
-        new SectionItem("Investment", "/Investment", "bi bi-currency-dollar", () => _stepStatus[8]),
-        new SectionItem("Credit Limit \u2014 SPIC", "/CreditLimit", "bi bi-credit-card", () => _stepStatus[9]),
-        new SectionItem("Credit Limit \u2014 GreenStar", "/CreditLimitForGreenStar", "bi bi-star", () => !_dealer.InGreenStar || _creditLimit != null),
-        new SectionItem("Final Submission", "/FinalSubmission", "bi bi-check2-all", () => _stepStatus.All(s => s)),
-    };
+        get
+        {
+            var list = new List<SectionItem>
+            {
+                new SectionItem("Dealer Registration", "/Register", "bi bi-person-plus", () => _stepStatus[0]),
+                new SectionItem("Experience", "/Experience", "bi bi-award", () => _stepStatus[1]),
+                new SectionItem("Annual Sales", "/AnnualSales", "bi bi-graph-up-arrow", () => _stepStatus[2]),
+                new SectionItem("Warehouse Details", "/Warehouse", "bi bi-box-seam", () => _stepStatus[3]),
+                new SectionItem("Market Details", "/MarketDetails", "bi bi-geo-alt", () => _stepStatus[4]),
+                new SectionItem("Companies Operating", "/Companies", "bi bi-building", () => _stepStatus[5]),
+                new SectionItem("Proprietor Details", "/Proprietor", "bi bi-people", () => _stepStatus[6]),
+                new SectionItem("Sales Planning", "/SalesPlaning", "bi bi-calendar2-check", () => _stepStatus[7]),
+                new SectionItem("Investment", "/Investment", "bi bi-currency-dollar", () => _stepStatus[8]),
+            };
+
+            if (_dealer.InSpic)
+                list.Add(new SectionItem("Credit Limit \u2014 SPIC", "/CreditLimit", "bi bi-credit-card", () => _stepStatus[9]));
+
+            if (_dealer.InGreenStar)
+                list.Add(new SectionItem("Credit Limit \u2014 GreenStar", "/CreditLimitForGreenStar", "bi bi-star", () => !_dealer.InGreenStar || _creditLimit != null));
+
+            return list;
+        }
+    }
     private List<EnclosureItem> _enclosureItems = new();
     private int _docUploadedCount;
     private int _docTotalCount;
