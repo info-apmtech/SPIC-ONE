@@ -80,6 +80,12 @@
                                 @onclick='() => Select("Department")'>
                             Department
                         </button>
+
+                        <button type="button"
+                                class="btn @(selected == "Institution" ? "active" : "")"
+                                @onclick='() => Select("Institution")'>
+                            Institution
+                        </button>
                     </div>
                 </div>
 
@@ -310,8 +316,8 @@
             </div>
         </div>
 
-        @if (status == "Inactive")
-        {
+        @if (ShowInactiveStatus)
+{
             <div class="basic-info-card">
                 <div class="card-header-title mb-2">
                     <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/InactiveStatus.svg"
@@ -346,7 +352,7 @@
             </div>
         }
 
-        @if (status == "Active" || status == "Inactive")
+        @if (ShowFullRegistrationSections)
         {
             <div class="form-card">
                 <div class="primary-location-header">
@@ -930,6 +936,32 @@
 
     private string selected = "Dealer";
     private string status = "Active";
+
+    private bool IsDealerSelected => selected == "Dealer";
+    private bool IsDepartmentSelected => selected == "Department";
+    private bool IsInstitutionSelected => selected == "Institution";
+
+    private bool ShowInactiveStatus => status == "Inactive";
+    private bool ShowTerminatedStatus => status == "Terminated";
+
+    // Visibility rules per user requirements
+    // Dealer Active: show full sections
+    // Dealer Inactive: show full sections + inactive status
+    // Dealer Terminated: show basic + business + terminated status
+    private bool ShowDealerFullSections => IsDealerSelected && (status == "Active" || status == "Inactive");
+
+    // Department Active: show full sections
+    // Department Inactive: show only business information + inactive status
+    // Department Terminated: show basic + business + terminated status
+    private bool ShowDepartmentActiveSections => IsDepartmentSelected && status == "Active";
+    private bool ShowDepartmentBusinessOnlyWhenInactive => IsDepartmentSelected && status == "Inactive";
+
+    // Institution Active: show full sections
+    // Institution Inactive: show full sections + inactive status
+    // Institution Terminated: show basic + business + terminated status
+    private bool ShowInstitutionFullSections => IsInstitutionSelected && (status == "Active" || status == "Inactive");
+
+    private bool ShowFullRegistrationSections => ShowDealerFullSections || ShowDepartmentActiveSections || ShowInstitutionFullSections;
     private bool isSpic = true;
     private bool isGreenStar = true;
     private bool _isStateLocked;
@@ -1009,7 +1041,7 @@ private bool _isHqLocked;
             try
             {
                 var dealer = await dealerTask;
-                await ApplyDealerToForm(dealer);
+                await ApplyDealerToForm(dealer, preserveCompanySelection: true);
             }
             catch (Exception ex)
             {
@@ -1037,16 +1069,34 @@ private bool _isHqLocked;
             }
         }
     }
-    private async Task ApplyDealerToForm(DealerFormModel? dealer)
+    private async Task ApplyDealerToForm(DealerFormModel? dealer, bool preserveCompanySelection = false)
 {
     if (dealer == null) return;
 
     _model = dealer;
     _isEditMode = true;
 
-   selected           = _model.IsDealer ? "Dealer" : "Department";
-isSpic             = _model.InSpic;
-isGreenStar     = _model.InGreenStar;
+        // Prefer enum (EntityType) if present, otherwise fallback to legacy IsDealer
+        if (_model.EntityType.HasValue)
+        {
+            selected = _model.EntityType.Value switch
+            {
+                0 => "Dealer",
+                1 => "Department",
+                2 => "Institution",
+                _ => (_model.IsDealer ? "Dealer" : "Department")
+            };
+        }
+        else
+        {
+            selected = _model.IsDealer ? "Dealer" : "Department";
+        }
+
+if (!preserveCompanySelection)
+{
+    isSpic = _model.InSpic;
+    isGreenStar = _model.InGreenStar;
+}
 _basicInfoStateId  = _model.StateId;
 _basicInfoRegionId = _model.Region;
 _basicInfoHqId     = _model.HQ;
@@ -1309,7 +1359,7 @@ private async Task LoadData()
         try
         {
             var dealer = await Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
-            await ApplyDealerToForm(dealer);
+            await ApplyDealerToForm(dealer, preserveCompanySelection: true);
         }
         catch (Exception ex)
         {
@@ -1326,6 +1376,9 @@ private async Task LoadData()
 
     // Restore logged-in user's State / Region / HQ for New Entry
     ApplyLockedEmployeeLocation();
+
+    // Reset selection defaults for new entry
+    selected = "Dealer"; // default to Dealer for new entries
 }
 }
 
@@ -1353,7 +1406,7 @@ private void OnDealerStateChanged()
         _basicInfoStateId = 0;
         _basicInfoRegionId = 0;
         _basicInfoHqId = 0;
-        selected = "Dealer";
+        selected = "New Dealer";
         status = "Active";
         isSpic = true;
         isGreenStar = true;
@@ -1388,12 +1441,19 @@ private void OnDealerStateChanged()
 
         if (string.IsNullOrWhiteSpace(_model.FirmName)) _errors["FirmName"] = "Firm Name is required";
 
-        if (status == "Inactive" || status == "Terminated")
-        {
+       if (status == "Inactive")
+{
             if (_model.LastTransactionDate == null) _errors["LastTransactionDate"] = "Last Transaction Date is required";
         }
+        if (status == "Terminated")
+{
+    if (_model.FinalApprovalDate == null)
+        _errors["FinalApprovalDate"] = "Final Approval Date is required";
 
-        if (status == "Active" || status == "Inactive")
+    if (_model.SettlementDate == null)
+        _errors["SettlementDate"] = "Settlement Date is required";
+}
+        if (ShowFullRegistrationSections)
         {
             if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
             if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";
@@ -1456,7 +1516,20 @@ private void OnDealerStateChanged()
 
         try
         {
+            // Set legacy boolean for backward compatibility
             _model.IsDealer = selected == "Dealer";
+
+            // Set enum (EntityType) value: 0=Dealer,1=Department,2=Institution
+            // Keep both representations for backward compatibility: set DealerType (new) and EntityType (existing int field)
+            _model.DealerType = selected switch
+            {
+                "Dealer" => 0,
+                "Department" => 1,
+                "Institution" => 2,
+                _ => (selected == "Dealer" ? 0 : 1)
+            };
+
+            _model.EntityType = _model.DealerType;
             _model.InSpic = isSpic;
             _model.InGreenStar = isGreenStar;
             _model.StateId = _basicInfoStateId;
@@ -2076,6 +2149,7 @@ private void OnDealerStateChanged()
         public DateTime? ExpectedOfficeAutomationDate { get; set; }
         public bool? IsSDWA { get; set; } = true;
         public int? EntityType { get; set; }
+        public int? DealerType { get; set; }
         public DateTime CreditLimitExperiance { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; }

@@ -11,6 +11,8 @@ namespace SPIC.Core.Entities
         public string UserTableId { get; set; }
         [Display(Name = "Dealar / Department")]
         public bool IsDealer { get; set; }
+        // NEW: Keep old IsDealer for backward compatibility. Add DealerType enum to support Institution.
+        public DealerType? DealerType { get; set; }
         public bool InSpic { get; set; }
         public bool InGreenStar { get; set; }
 
@@ -185,6 +187,11 @@ namespace SPIC.Core.Entities
     public enum IrrigationType
     {
         CANAL, TANK, WELL
+    }
+
+    public enum DealerType
+    {
+        Dealer,Department,Institution
     }
     public class DealerExperience
     {
