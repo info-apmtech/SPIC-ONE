@@ -76,6 +76,7 @@ namespace SPIC.Core.Entities
         public int BankId { get; set; }
         public string Branch { get; set; }
         public string IFSC { get; set; }
+        public string? ChequeFilePath { get; set; }
 
         [Display(Name = "GST Number")]
         public string? GSTNumber { get; set; }

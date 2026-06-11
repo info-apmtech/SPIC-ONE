@@ -609,6 +609,34 @@
                             <div class="field-error">@_errors["IFSC"]</div>
                         }
                     </div>
+                    <div class="col-12">
+                        <div class="cheque-upload-wrap">
+                            <label class="upload-area">
+                                <i class="bi bi-cloud-arrow-up text-secondary"></i>
+                                <span class="small text-secondary fw-600">Upload Cancelled Cheque (PDF or Image)</span>
+                                <InputFile OnChange="HandleChequeUpload" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                                @if (_errors.ContainsKey("ChequeFile"))
+                                {
+                                    <div class="field-error">@_errors["ChequeFile"]</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_model.ChequeFilePath))
+                                {
+                                    <div class="mt-1 small text-success file-name-display">
+                                        <i class="bi bi-check-circle"></i> @_model.ChequeFilePath
+                                        <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveChequeFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                    </div>
+                                }
+                            </label>
+                            @if (_isExtractingCheque)
+                            {
+                                <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Extracting bank details from cheque...</div>
+                            }
+                            @if (!string.IsNullOrEmpty(_ocrWarningCheque))
+                            {
+                                <div class="ocr-warning">@_ocrWarningCheque</div>
+                            }
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -971,9 +999,11 @@ private bool _isHqLocked;
     private bool _isExtractingGst;
     private bool _isExtractingPan;
     private bool _isExtractingAadhaar;
+    private bool _isExtractingCheque;
     private string? _ocrWarningGst;
     private string? _ocrWarningPan;
     private string? _ocrWarningAadhaar;
+    private string? _ocrWarningCheque;
     private bool _ocrPopulatedGst;
     private bool _ocrPopulatedPan;
     private bool _ocrPopulatedAadhaar;
@@ -981,6 +1011,7 @@ private bool _isHqLocked;
     private IBrowserFile? _gstFile;
     private IBrowserFile? _panFile;
     private IBrowserFile? _aadhaarFile;
+    private IBrowserFile? _chequeFile;
     private IBrowserFile? _wholesaleFile;
     private IBrowserFile? _retailFile;
 
@@ -1416,14 +1447,17 @@ private void OnDealerStateChanged()
         _gstFile = null;
         _panFile = null;
         _aadhaarFile = null;
+        _chequeFile = null;
         _wholesaleFile = null;
         _retailFile = null;
         _isExtractingGst = false;
         _isExtractingPan = false;
         _isExtractingAadhaar = false;
+        _isExtractingCheque = false;
         _ocrWarningGst = null;
         _ocrWarningPan = null;
         _ocrWarningAadhaar = null;
+        _ocrWarningCheque = null;
         _ocrPopulatedGst = false;
         _ocrPopulatedPan = false;
         _ocrPopulatedAadhaar = false;
@@ -1616,6 +1650,9 @@ private void OnDealerStateChanged()
     if (_aadhaarFile != null)
         uploads.Add(UploadFileToServer(dealerId, "Aadhaar", _aadhaarFile)
             .ContinueWith(t => { if (t.Result != null) { _model.AadhaarFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.Aadhaar) && string.IsNullOrWhiteSpace(_model.AadhaarNumber)) { _model.AadhaarNumber = t.Result.Aadhaar; OnAadhaarNumberChanged(); } filesUpdated = true; } }));
+    if (_chequeFile != null)
+        uploads.Add(UploadFileToServer(dealerId, "Cheque", _chequeFile)
+            .ContinueWith(t => { if (t.Result != null) { _model.ChequeFilePath = t.Result.FilePath; filesUpdated = true; } }));
     if (_wholesaleFile != null)
         uploads.Add(UploadFileToServer(dealerId, "WholesaleLicense", _wholesaleFile)
             .ContinueWith(t => { if (t.Result != null) { _model.WholesaleLicenseFilePath = t.Result.FilePath; filesUpdated = true; } }));
@@ -1632,6 +1669,7 @@ private void OnDealerStateChanged()
                 _gstFile = null;
                 _panFile = null;
                 _aadhaarFile = null;
+                _chequeFile = null;
                 _wholesaleFile = null;
                 _retailFile = null;
 
@@ -1847,6 +1885,72 @@ private void OnDealerStateChanged()
         OpenDeleteModal("Aadhaar", "Aadhaar Card", _model.AadhaarFilePath);
     }
 
+    async Task HandleChequeUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        _errors.Remove("ChequeFile");
+
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        var allowedExts = new[] { ".pdf", ".jpg", ".jpeg", ".png", ".webp" };
+        if (!allowedExts.Contains(ext))
+        {
+            _errors["ChequeFile"] = "Only PDF, JPG, PNG, or WEBP files are allowed for Cheque";
+            _chequeFile = null;
+            _model.ChequeFilePath = null;
+            return;
+        }
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _errors["ChequeFile"] = "File size must be less than 5 MB";
+            _chequeFile = null;
+            _model.ChequeFilePath = null;
+            return;
+        }
+
+        _chequeFile = file;
+        _model.ChequeFilePath = file.Name;
+
+        // Immediately extract bank details via OCR
+        _isExtractingCheque = true;
+        _ocrWarningCheque = null;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync("api/DealerFile/ocr-extract-cheque", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ChequeOcrResult>();
+                if (result != null)
+                {
+                    if (!string.IsNullOrEmpty(result.AccountNumber) && string.IsNullOrWhiteSpace(_model.AccountNumber))
+                        _model.AccountNumber = result.AccountNumber;
+                    if (!string.IsNullOrEmpty(result.IFSC) && string.IsNullOrWhiteSpace(_model.IFSC))
+                        _model.IFSC = result.IFSC;
+                    if (!string.IsNullOrEmpty(result.Branch) && string.IsNullOrWhiteSpace(_model.Branch))
+                        _model.Branch = result.Branch;
+
+                    if (!string.IsNullOrEmpty(result.AccountNumber) || !string.IsNullOrEmpty(result.IFSC) || !string.IsNullOrEmpty(result.Branch))
+                    {
+                        _ocrWarningCheque = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
+                    }
+                }
+            }
+        }
+        catch { }
+        finally
+        {
+            _isExtractingCheque = false;
+        }
+    }
+
+    private void RemoveChequeFile()
+    {
+        if (string.IsNullOrEmpty(_model.ChequeFilePath)) return;
+        OpenDeleteModal("Cheque", "Cancelled Cheque", _model.ChequeFilePath);
+    }
+
     async Task HandleWholesaleFileUpload(InputFileChangeEventArgs e)
     {
         var file = e.File;
@@ -1955,6 +2059,11 @@ private void OnDealerStateChanged()
                     _retailFile = null;
                     _model.RetailLicenseFilePath = null;
                     _errors.Remove("RetailFile");
+                    break;
+                case "Cheque":
+                    _chequeFile = null;
+                    _model.ChequeFilePath = null;
+                    _errors.Remove("ChequeFile");
                     break;
             }
 
@@ -2137,6 +2246,7 @@ private void OnDealerStateChanged()
         public string? PANFilePath { get; set; }
         public string? AadhaarNumber { get; set; }
         public string? AadhaarFilePath { get; set; }
+        public string? ChequeFilePath { get; set; }
         public string? WholeSaleFertilizerLicenseNumber { get; set; }
         public DateTime? WholesaleLicenseExpiryDate { get; set; }
         public string? WholesalemFMSCode { get; set; }
@@ -2217,6 +2327,13 @@ private void OnDealerStateChanged()
         public string? Aadhaar { get; set; }
         public string? PAN { get; set; }
         public string? GST { get; set; }
+    }
+
+    public class ChequeOcrResult
+    {
+        public string? AccountNumber { get; set; }
+        public string? IFSC { get; set; }
+        public string? Branch { get; set; }
     }
     private void ApplyLockedEmployeeLocation()
 {
