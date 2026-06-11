@@ -44,6 +44,7 @@
 
     private string? _submittedByName;
     private Dictionary<string, string> _userNames = new();
+    private List<UserInfoDto> _users = new();
 
     // Lookup names
     private string? _stateName;
@@ -171,12 +172,16 @@
         {
             if (_dealer == null || string.IsNullOrWhiteSpace(_dealer.CreatedBy)) return;
             var id = _dealer.CreatedBy!;
+            // Ensure we have the user list cached (optimization similar to EmployeeManagement page)
+            await LoadAllUsersIfNeeded();
+
             if (_userNames.ContainsKey(id))
             {
                 _submittedByName = _userNames[id];
                 return;
             }
 
+            // Fallback to per-user API if not found in the list
             var resp = await Http.GetAsync($"api/User/{id}");
             if (!resp.IsSuccessStatusCode) return;
             var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
@@ -199,9 +204,15 @@
         {
             if (_approvalHistory == null || !_approvalHistory.Any()) return;
             var ids = _approvalHistory.Select(h => h.ApprovedBy).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
+
+            // Load full user list first (like EmployeeManagement page) to avoid many per-id calls
+            await LoadAllUsersIfNeeded();
+
             foreach (var id in ids)
             {
                 if (string.IsNullOrEmpty(id) || _userNames.ContainsKey(id)) continue;
+                // try to get from cached list
+                if (_userNames.ContainsKey(id)) continue;
                 try
                 {
                     var resp = await Http.GetAsync($"api/User/{id}");
@@ -217,6 +228,31 @@
             }
         }
         catch { }
+    }
+
+    private async Task LoadAllUsersIfNeeded()
+    {
+        if (_users != null && _users.Any())
+            return;
+        try
+        {
+            var users = await Http.GetFromJsonAsync<List<UserInfoDto>>("api/UserInfo/all");
+            if (users != null && users.Any())
+            {
+                _users = users;
+                _userNames = _users.Where(u => !string.IsNullOrEmpty(u.Id))
+                    .ToDictionary(u => u.Id!, u => !string.IsNullOrEmpty(u.Name) ? u.Name! : (u.UserName ?? u.Id!), StringComparer.OrdinalIgnoreCase);
+            }
+        }
+        catch { }
+    }
+
+    private class UserInfoDto
+    {
+        public string Id { get; set; } = "";
+        public string? UserName { get; set; }
+        public string? Name { get; set; }
+        public string? Email { get; set; }
     }
 
     // NEW: Ensure file urls point to API directly using Http.BaseAddress to resolve port 7032
@@ -1338,7 +1374,11 @@
 
                         <div class="info-row">
                             <span>Action By</span>
-                            <strong>@(action.ApprovedBy ?? "-")</strong>
+                            <strong>@(
+                                !string.IsNullOrEmpty(action.ApprovedBy) && _userNames.ContainsKey(action.ApprovedBy)
+                                    ? _userNames[action.ApprovedBy]
+                                    : (action.ApprovedBy ?? "-")
+                            )</strong>
                         </div>
 
                         <div class="info-row">
