@@ -40,7 +40,10 @@
     private List<DR.Competitor> _competitors = new();
     private Dictionary<string, string> _competitorNames = new();
     private Dictionary<string, string> _warehouseNames = new();
+    private Dictionary<string, string> _railFacilitiesNames = new();
+    private Dictionary<string, string> _portNames = new();
     private Dictionary<string, string> _cropNames = new();
+    private Dictionary<int, string> _financialYearNames = new();
 
     private string? _submittedByName;
     private Dictionary<string, string> _userNames = new();
@@ -161,8 +164,14 @@
             _competitorNames = _competitors.ToDictionary(c => c.Id.ToString(), c => c.Name);
             var warehouses = await Http.GetFromJsonAsync<List<DR.Warehouse>>("api/Warehouse") ?? new();
             _warehouseNames = warehouses.ToDictionary(w => w.Id.ToString(), w => w.Name);
+            var railFacilities = await Http.GetFromJsonAsync<List<DR.RackPoint>>("api/RackPoint") ?? new();
+            _railFacilitiesNames = railFacilities.ToDictionary(w => w.Id.ToString(), w => w.Name);
+            var portNames = await Http.GetFromJsonAsync<List<DR.Port>>("api/Port") ?? new();
+            _portNames = portNames.ToDictionary(w => w.Id.ToString(), w => w.Name);
             var crops = await Http.GetFromJsonAsync<List<DR.Crop>>("api/Crop") ?? new();
             _cropNames = crops.ToDictionary(c => c.Id.ToString(), c => c.Name);
+            var fyears = await Http.GetFromJsonAsync<List<DR.FinancialYear>>("api/FinancialYear") ?? new();
+            _financialYearNames = fyears.ToDictionary(f => f.Id, f => f.Name);
         }
         catch { }
     }
@@ -254,8 +263,9 @@
         public string? Name { get; set; }
         public string? Email { get; set; }
     }
+    private string FyName(int id) => _financialYearNames.TryGetValue(id, out var n) ? n : id.ToString();
 
-    // NEW: Ensure file urls point to API directly using Http.BaseAddress to resolve port 7032
+    // Ensure file urls point to API directly using Http.BaseAddress to resolve port 7032
     private string GetFileUrl(string? path)
     {
         if (string.IsNullOrEmpty(path)) return "";
@@ -1456,7 +1466,7 @@
         </div>
         <div class="accordion-body">
             <div class="row g-4">
-                <div class="col-md-6">
+@*                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
                             <h4 class="detail-card-title"><i class="bi bi-activity"></i> Status Details</h4>
@@ -1474,7 +1484,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
+ *@                <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
                             <h4 class="detail-card-title"><i class="bi bi-briefcase"></i> Business Information</h4>
@@ -1484,13 +1494,13 @@
                             <div class="data-row"><div class="data-label">Firm Name</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
                             <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">@(_dealer?.DealerCode ?? (_dealer != null ? $"DL-{_dealer.Id}" : "-"))</div></div>
                             <div class="data-row"><div class="data-label">Date of Appointment</div><div class="data-value">@(_dealer?.DateOfAppointment.ToString("dd MMM yyyy") ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">Business Type</div><div class="data-value">@(_dealer?.BusinessEntityType ?? "-")</div></div>
+                            @* <div class="data-row"><div class="data-label">Business Type</div><div class="data-value">@(_dealer?.BusinessEntityType ?? "-")</div></div> *@
                             <div class="data-row"><div class="data-label">Years of Experience</div><div class="data-value">@(_dealer?.YearsofExperiance > 0 ? $"{_dealer.YearsofExperiance} Years" : "-")</div></div>
                             <div class="data-row"><div class="data-label">Entity Type</div><div class="data-value">@(_dealer?.EntityType?.ToString() ?? "-")</div></div>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
+@*                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
                             <h4 class="detail-card-title"><i class="bi bi-cash-stack"></i> Investment & Credit</h4>
@@ -1504,7 +1514,7 @@
                         </div>
                     </div>
                 </div>
-
+ *@
                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
@@ -1593,7 +1603,7 @@
                         <div class="detail-card-body">
                             <div class="data-row"><div class="data-label">Account Holder Name</div><div class="data-value">@(_dealer?.AccountHolderName ?? "-")</div></div>
                             <div class="data-row"><div class="data-label">Account Number</div><div class="data-value">@(_dealer?.AccountNumber ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">Bank Name</div><div class="data-value">@(_bankName ?? _dealer?.BankId.ToString() ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Bank Name</div><div class="data-value">@(_dealer != null && _bankNames.TryGetValue(_dealer.BankId, out var dbn) ? dbn : (_dealer?.BankId.ToString() ?? "-"))</div></div>
                             <div class="data-row"><div class="data-label">Bank Branch</div><div class="data-value">@(_dealer?.Branch ?? "-")</div></div>
                             <div class="data-row"><div class="data-label">IFSC Code</div><div class="data-value">@(_dealer?.IFSC ?? "-")</div></div>
                         </div>
@@ -1762,7 +1772,7 @@
                                         <i class="bi bi-pencil-square edit-icon" @onclick="EditWarehouse" role="button" title="Edit"></i>
                                     </div>
                                     <div class="detail-card-body">
-                                        <div class="data-row"><div class="data-label">Rail Facility Id:</div><div class="data-value">@r.RailFacilitiesId</div></div>
+                                        <div class="data-row"><div class="data-label">Rail Facility Name:</div><div class="data-value">@(_railFacilitiesNames.TryGetValue(r.RailFacilitiesId.ToString(), out var rn) ? rn : r.RailFacilitiesId.ToString())</div></div>                                    
                                         <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@r.Distance</div></div>
                                         <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@r.Freight</div></div>
                                     </div>
@@ -1782,7 +1792,7 @@
                                         <i class="bi bi-pencil-square edit-icon" @onclick="EditWarehouse" role="button" title="Edit"></i>
                                     </div>
                                     <div class="detail-card-body">
-                                        <div class="data-row"><div class="data-label">Port Id:</div><div class="data-value">@p.PortId</div></div>
+                                        <div class="data-row"><div class="data-label">Port Name:</div><div class="data-value">@(_portNames.TryGetValue(p.PortId.ToString(), out var rn) ? rn : p.PortId.ToString())</div></div>                                    
                                         <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@p.Distance</div></div>
                                         <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@p.Freight</div></div>
                                     </div>
@@ -1851,7 +1861,7 @@
                         <div class="detail-card-body">
                             @if (_ownership != null)
                             {
-                                <div class="data-row"><div class="data-label">Business Entity Type</div><div class="data-value">@_dealer?.BusinessEntityType ?? "-"</div></div>
+                                @* <div class="data-row"><div class="data-label">Business Entity Type</div><div class="data-value">@_dealer?.BusinessEntityType ?? "-"</div></div> *@
                                 <div class="data-row"><div class="data-label">Proprietor Name:</div><div class="data-value">@_ownership.Name</div></div>
                                 <div class="data-row"><div class="data-label">Father Name:</div><div class="data-value">@_ownership.FatherName</div></div>
                                 <div class="data-row"><div class="data-label">Gender:</div><div class="data-value">@_ownership.Gender.ToString()</div></div>
@@ -2318,9 +2328,12 @@
                                 <i class="bi bi-pencil-square edit-icon" @onclick="EditCreditLimit" role="button" title="Edit"></i>
                             </div>
                             <div class="detail-card-body">
-                                <div class="data-row"><div class="data-label">FY1:</div><div class="data-value">@_creditProposal.FY1</div></div>
+                                <div class="data-row"><div class="data-label">FY1:</div><div class="data-value">@FyName(_creditProposal.FY1)</div></div>
+                                <div class="data-row"><div class="data-label">FY2:</div><div class="data-value">@FyName(_creditProposal.FY2)</div></div>
+                                <div class="data-row"><div class="data-label">FY3:</div><div class="data-value">@FyName(_creditProposal.FY3)</div></div>
+                                @* <div class="data-row"><div class="data-label">FY1:</div><div class="data-value">@_creditProposal.FY1</div></div>
                                 <div class="data-row"><div class="data-label">FY2:</div><div class="data-value">@_creditProposal.FY2</div></div>
-                                <div class="data-row"><div class="data-label">FY3:</div><div class="data-value">@_creditProposal.FY3</div></div>
+                                <div class="data-row"><div class="data-label">FY3:</div><div class="data-value">@_creditProposal.FY3</div></div> *@
                             </div>
                         </div>
                     </div>
