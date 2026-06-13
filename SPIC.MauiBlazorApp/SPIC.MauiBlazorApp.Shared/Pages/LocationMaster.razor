@@ -4,6 +4,42 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 
+<style>
+	.searchable-select-input {
+		cursor: pointer;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 12px center;
+		padding-right: 32px;
+	}
+	.searchable-dropdown-container {
+		position: absolute;
+		width: 100%;
+		background: #ffffff;
+		border: 1px solid #059669;
+		border-radius: 6px;
+		max-height: 220px;
+		overflow-y: auto;
+		z-index: 1050;
+		box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+		margin-top: 4px;
+	}
+	.searchable-dropdown-item {
+		padding: 10px 14px;
+		font-size: 0.85rem;
+		color: #374151;
+		cursor: pointer;
+		border-bottom: 1px solid #F3F4F6;
+		transition: background-color 0.1s ease;
+	}
+	.searchable-dropdown-item:last-child {
+		border-bottom: none;
+	}
+	.searchable-dropdown-item:hover {
+		background-color: #DCFCE7;
+		color: #059669;
+	}
+</style>
 <div class="container-fluid">
 
 	<h2 class="page-title">Location Master</h2>
@@ -69,13 +105,29 @@
 				</div>
 				<div class="col-md-4">
 					<label class="form-label-custom">Zone</label>
-					<select class="form-control-custom w-100" @bind="_stateForm.ZoneId">
-						<option value="0">Select Zone</option>
-						@foreach (var z in _zonesAll)
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select Zone --"
+							   @bind="_stateZoneSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showStateZoneDropdown = true"
+							   @onblur="HideStateZoneDropdown" />
+						@if (_showStateZoneDropdown)
 						{
-							<option value="@z.Id">@z.ZoneName</option>
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectStateZone(0, "")'>
+									-- Select Zone --
+								</div>
+								@foreach (var z in _zonesAll.Where(z => string.IsNullOrWhiteSpace(_stateZoneSearch) ||
+									z.ZoneName.Contains(_stateZoneSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectStateZone(z.Id, z.ZoneName)'>
+										@z.ZoneName
+									</div>
+								}
+							</div>
 						}
-					</select>
+					</div>
 				</div>
 			}
 			else if (ActiveTab == "Districts")
@@ -87,13 +139,29 @@
 				</div>
 				<div class="col-md-4">
 					<label class="form-label-custom">State</label>
-					<select class="form-control-custom w-100" @bind="_districtForm.StateId">
-						<option value="0">Select State</option>
-						@foreach (var s in _statesAll)
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select State --"
+							   @bind="_districtStateSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showDistrictStateDropdown = true"
+							   @onblur="HideDistrictStateDropdown" />
+						@if (_showDistrictStateDropdown)
 						{
-							<option value="@s.Id">@s.StateName</option>
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectDistrictState(0, "")'>
+									-- Select State --
+								</div>
+								@foreach (var s in _statesAll.Where(s => string.IsNullOrWhiteSpace(_districtStateSearch) ||
+									s.StateName.Contains(_districtStateSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectDistrictState(s.Id, s.StateName)'>
+										@s.StateName
+									</div>
+								}
+							</div>
 						}
-					</select>
+					</div>
 				</div>
 			}
 			else if (ActiveTab == "Sub-Districts")
@@ -105,23 +173,55 @@
 				</div>
 				<div class="col-md-3">
 					<label class="form-label-custom">State</label>
-					<select class="form-control-custom w-100" @bind="_subDistrictSelectedStateId" @bind:after="OnSubDistrictStateChanged">
-						<option value="0">Select State</option>
-						@foreach (var s in _statesAll)
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select State --"
+							   @bind="_subDistrictStateSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showSubDistrictStateDropdown = true"
+							   @onblur="HideSubDistrictStateDropdown" />
+						@if (_showSubDistrictStateDropdown)
 						{
-							<option value="@s.Id">@s.StateName</option>
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectSubDistrictState(0, "")'>
+									-- Select State --
+								</div>
+								@foreach (var s in _statesAll.Where(s => string.IsNullOrWhiteSpace(_subDistrictStateSearch) ||
+									s.StateName.Contains(_subDistrictStateSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectSubDistrictState(s.Id, s.StateName)'>
+										@s.StateName
+									</div>
+								}
+							</div>
 						}
-					</select>
+					</div>
 				</div>
 				<div class="col-md-3">
 					<label class="form-label-custom">District</label>
-					<select class="form-control-custom w-100" @bind="_subDistrictForm.DistrictId">
-						<option value="0">Select District</option>
-						@foreach (var d in _subDistrictFilteredDistricts)
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select District --"
+							   @bind="_subDistrictDistrictSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showSubDistrictDistrictDropdown = true"
+							   @onblur="HideSubDistrictDistrictDropdown" />
+						@if (_showSubDistrictDistrictDropdown)
 						{
-							<option value="@d.Id">@d.DistrictName</option>
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectSubDistrictDistrict(0, "")'>
+									-- Select District --
+								</div>
+								@foreach (var d in _subDistrictFilteredDistricts.Where(d => string.IsNullOrWhiteSpace(_subDistrictDistrictSearch) ||
+									d.DistrictName.Contains(_subDistrictDistrictSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectSubDistrictDistrict(d.Id, d.DistrictName)'>
+										@d.DistrictName
+									</div>
+								}
+							</div>
 						}
-					</select>
+					</div>
 				</div>
 			}
 			else if (ActiveTab == "Regions")
@@ -133,13 +233,29 @@
 				</div>
 				<div class="col-md-4">
 					<label class="form-label-custom">State</label>
-					<select class="form-control-custom w-100" @bind="_regionForm.StateId">
-						<option value="0">Select State</option>
-						@foreach (var s in _statesAll)
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select State --"
+							   @bind="_regionStateSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showRegionStateDropdown = true"
+							   @onblur="HideRegionStateDropdown" />
+						@if (_showRegionStateDropdown)
 						{
-							<option value="@s.Id">@s.StateName</option>
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectRegionState(0, "")'>
+									-- Select State --
+								</div>
+								@foreach (var s in _statesAll.Where(s => string.IsNullOrWhiteSpace(_regionStateSearch) ||
+									s.StateName.Contains(_regionStateSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectRegionState(s.Id, s.StateName)'>
+										@s.StateName
+									</div>
+								}
+							</div>
 						}
-					</select>
+					</div>
 				</div>
 			}
 			else if (ActiveTab == "Headquarters")
@@ -151,13 +267,29 @@
 				</div>
 				<div class="col-md-4">
 					<label class="form-label-custom">Region</label>
-					<select class="form-control-custom w-100" @bind="_headquarterForm.RegionId">
-						<option value="0">Select Region</option>
-						@foreach (var r in _regionsAll)
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select Region --"
+							   @bind="_headquarterRegionSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showHeadquarterRegionDropdown = true"
+							   @onblur="HideHeadquarterRegionDropdown" />
+						@if (_showHeadquarterRegionDropdown)
 						{
-							<option value="@r.Id">@r.RegionName</option>
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectHeadquarterRegion(0, "")'>
+									-- Select Region --
+								</div>
+								@foreach (var r in _regionsAll.Where(r => string.IsNullOrWhiteSpace(_headquarterRegionSearch) ||
+									r.RegionName.Contains(_headquarterRegionSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectHeadquarterRegion(r.Id, r.RegionName)'>
+										@r.RegionName
+									</div>
+								}
+							</div>
 						}
-					</select>
+					</div>
 				</div>
 			}
 
@@ -516,6 +648,20 @@
 	private HeadquarterFormModel _headquarterForm = new();
 	private int _subDistrictSelectedStateId;
 	private List<LocationItemDto> _subDistrictFilteredDistricts = new();
+
+	// Searchable dropdown state
+	private string _stateZoneSearch = "";
+	private bool _showStateZoneDropdown;
+	private string _districtStateSearch = "";
+	private bool _showDistrictStateDropdown;
+	private string _subDistrictStateSearch = "";
+	private bool _showSubDistrictStateDropdown;
+	private string _subDistrictDistrictSearch = "";
+	private bool _showSubDistrictDistrictDropdown;
+	private string _regionStateSearch = "";
+	private bool _showRegionStateDropdown;
+	private string _headquarterRegionSearch = "";
+	private bool _showHeadquarterRegionDropdown;
 	private bool _isEditing;
 	private int? _editingId;
 
@@ -770,6 +916,7 @@
 					ZoneId = item.ZoneId,
 					IsActive = item.IsActive
 				};
+				_stateZoneSearch = GetZoneName(item.ZoneId);
 				break;
 			case "Districts":
 				_districtForm = new DistrictFormModel
@@ -778,11 +925,14 @@
 					StateId = item.StateId,
 					IsActive = item.IsActive
 				};
+				_districtStateSearch = GetStateName(item.StateId);
 				break;
 			case "Sub-Districts":
 				var district = _districtsAll.FirstOrDefault(d => d.Id == item.DistrictId);
 				_subDistrictSelectedStateId = district?.StateId ?? 0;
 				_subDistrictFilteredDistricts = _districtsAll.Where(d => d.StateId == _subDistrictSelectedStateId).ToList();
+				_subDistrictStateSearch = GetStateName(_subDistrictSelectedStateId);
+				_subDistrictDistrictSearch = GetDistrictName(item.DistrictId);
 				_subDistrictForm = new SubDistrictFormModel
 				{
 					SubDistrictName = item.Name,
@@ -797,6 +947,7 @@
 					StateId = item.StateId,
 					IsActive = item.IsActive
 				};
+				_regionStateSearch = GetStateName(item.StateId);
 				break;
 			case "Headquarters":
 				_headquarterForm = new HeadquarterFormModel
@@ -805,6 +956,7 @@
 					RegionId = item.RegionId,
 					IsActive = item.IsActive
 				};
+				_headquarterRegionSearch = GetRegionName(item.RegionId);
 				break;
 		}
 
@@ -925,6 +1077,12 @@
 		_headquarterForm = new HeadquarterFormModel();
 		_subDistrictSelectedStateId = 0;
 		_subDistrictFilteredDistricts = new();
+		_stateZoneSearch = "";
+		_districtStateSearch = "";
+		_subDistrictStateSearch = "";
+		_subDistrictDistrictSearch = "";
+		_regionStateSearch = "";
+		_headquarterRegionSearch = "";
 		_isEditing = false;
 		_editingId = null;
 	}
@@ -938,6 +1096,88 @@
 	{
 		_subDistrictForm.DistrictId = 0;
 		_subDistrictFilteredDistricts = _districtsAll.Where(d => d.StateId == _subDistrictSelectedStateId).ToList();
+	}
+
+	// Searchable dropdown handlers
+	private void SelectStateZone(int id, string name)
+	{
+		_stateForm.ZoneId = id;
+		_stateZoneSearch = name;
+		_showStateZoneDropdown = false;
+	}
+
+	private async Task HideStateZoneDropdown()
+	{
+		await Task.Delay(150);
+		_showStateZoneDropdown = false;
+	}
+
+	private void SelectDistrictState(int id, string name)
+	{
+		_districtForm.StateId = id;
+		_districtStateSearch = name;
+		_showDistrictStateDropdown = false;
+	}
+
+	private async Task HideDistrictStateDropdown()
+	{
+		await Task.Delay(150);
+		_showDistrictStateDropdown = false;
+	}
+
+	private void SelectSubDistrictState(int id, string name)
+	{
+		_subDistrictSelectedStateId = id;
+		_subDistrictStateSearch = name;
+		_showSubDistrictStateDropdown = false;
+		_subDistrictForm.DistrictId = 0;
+		_subDistrictDistrictSearch = "";
+		_subDistrictFilteredDistricts = _districtsAll.Where(d => d.StateId == id).ToList();
+	}
+
+	private async Task HideSubDistrictStateDropdown()
+	{
+		await Task.Delay(150);
+		_showSubDistrictStateDropdown = false;
+	}
+
+	private void SelectSubDistrictDistrict(int id, string name)
+	{
+		_subDistrictForm.DistrictId = id;
+		_subDistrictDistrictSearch = name;
+		_showSubDistrictDistrictDropdown = false;
+	}
+
+	private async Task HideSubDistrictDistrictDropdown()
+	{
+		await Task.Delay(150);
+		_showSubDistrictDistrictDropdown = false;
+	}
+
+	private void SelectRegionState(int id, string name)
+	{
+		_regionForm.StateId = id;
+		_regionStateSearch = name;
+		_showRegionStateDropdown = false;
+	}
+
+	private async Task HideRegionStateDropdown()
+	{
+		await Task.Delay(150);
+		_showRegionStateDropdown = false;
+	}
+
+	private void SelectHeadquarterRegion(int id, string name)
+	{
+		_headquarterForm.RegionId = id;
+		_headquarterRegionSearch = name;
+		_showHeadquarterRegionDropdown = false;
+	}
+
+	private async Task HideHeadquarterRegionDropdown()
+	{
+		await Task.Delay(150);
+		_showHeadquarterRegionDropdown = false;
 	}
 
 	private string GetZoneName(int zoneId) =>

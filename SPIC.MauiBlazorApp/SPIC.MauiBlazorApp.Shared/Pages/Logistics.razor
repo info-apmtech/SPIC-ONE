@@ -3,6 +3,42 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 
+<style>
+	.searchable-select-input {
+		cursor: pointer;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 12px center;
+		padding-right: 32px;
+	}
+	.searchable-dropdown-container {
+		position: absolute;
+		width: 100%;
+		background: #ffffff;
+		border: 1px solid #059669;
+		border-radius: 6px;
+		max-height: 220px;
+		overflow-y: auto;
+		z-index: 1050;
+		box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+		margin-top: 4px;
+	}
+	.searchable-dropdown-item {
+		padding: 10px 14px;
+		font-size: 0.85rem;
+		color: #374151;
+		cursor: pointer;
+		border-bottom: 1px solid #F3F4F6;
+		transition: background-color 0.1s ease;
+	}
+	.searchable-dropdown-item:last-child {
+		border-bottom: none;
+	}
+	.searchable-dropdown-item:hover {
+		background-color: #DCFCE7;
+		color: #059669;
+	}
+</style>
 <div class="container-fluid">
 
 	<h2 class="page-title">Logistics Master</h2>
@@ -70,23 +106,55 @@
 				</div>
 				<div class="col">
 					<label class="form-label-custom">State</label>
-					<select class="form-control-custom w-100" @bind="_rakePointForm.StateId" @bind:after="OnRakePointStateChanged">
-						<option value="0">Select State</option>
-						@foreach (var s in _states)
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select State --"
+							   @bind="_rakePointStateSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showRakePointStateDropdown = true"
+							   @onblur="HideRakePointStateDropdown" />
+						@if (_showRakePointStateDropdown)
 						{
-							<option value="@s.Id">@s.StateName</option>
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectRakePointState(0, "")'>
+									-- Select State --
+								</div>
+								@foreach (var s in _states.Where(s => string.IsNullOrWhiteSpace(_rakePointStateSearch) ||
+									s.StateName.Contains(_rakePointStateSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectRakePointState(s.Id, s.StateName)'>
+										@s.StateName
+									</div>
+								}
+							</div>
 						}
-					</select>
+					</div>
 				</div>
 				<div class="col">
 					<label class="form-label-custom">District</label>
-					<select class="form-control-custom w-100" @bind="_rakePointForm.DistrictId">
-						<option value="0">Select District</option>
-						@foreach (var d in _rakePointFilteredDistricts)
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select District --"
+							   @bind="_rakePointDistrictSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showRakePointDistrictDropdown = true"
+							   @onblur="HideRakePointDistrictDropdown" />
+						@if (_showRakePointDistrictDropdown)
 						{
-							<option value="@d.Id">@d.DistrictName</option>
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectRakePointDistrict(0, "")'>
+									-- Select District --
+								</div>
+								@foreach (var d in _rakePointFilteredDistricts.Where(d => string.IsNullOrWhiteSpace(_rakePointDistrictSearch) ||
+									d.DistrictName.Contains(_rakePointDistrictSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectRakePointDistrict(d.Id, d.DistrictName)'>
+										@d.DistrictName
+									</div>
+								}
+							</div>
 						}
-					</select>
+					</div>
 				</div>
 			}
 			else if (ActiveTab == "Port")
@@ -103,23 +171,55 @@
 				</div>
 				<div class="col">
 					<label class="form-label-custom">State</label>
-					<select class="form-control-custom w-100" @bind="_portForm.StateId" @bind:after="OnPortStateChanged">
-						<option value="0">Select State</option>
-						@foreach (var s in _states)
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select State --"
+							   @bind="_portStateSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showPortStateDropdown = true"
+							   @onblur="HidePortStateDropdown" />
+						@if (_showPortStateDropdown)
 						{
-							<option value="@s.Id">@s.StateName</option>
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectPortState(0, "")'>
+									-- Select State --
+								</div>
+								@foreach (var s in _states.Where(s => string.IsNullOrWhiteSpace(_portStateSearch) ||
+									s.StateName.Contains(_portStateSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectPortState(s.Id, s.StateName)'>
+										@s.StateName
+									</div>
+								}
+							</div>
 						}
-					</select>
+					</div>
 				</div>
 				<div class="col">
 					<label class="form-label-custom">District</label>
-					<select class="form-control-custom w-100" @bind="_portForm.DistrictId">
-						<option value="0">Select District</option>
-						@foreach (var d in _portFilteredDistricts)
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select District --"
+							   @bind="_portDistrictSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showPortDistrictDropdown = true"
+							   @onblur="HidePortDistrictDropdown" />
+						@if (_showPortDistrictDropdown)
 						{
-							<option value="@d.Id">@d.DistrictName</option>
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectPortDistrict(0, "")'>
+									-- Select District --
+								</div>
+								@foreach (var d in _portFilteredDistricts.Where(d => string.IsNullOrWhiteSpace(_portDistrictSearch) ||
+									d.DistrictName.Contains(_portDistrictSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectPortDistrict(d.Id, d.DistrictName)'>
+										@d.DistrictName
+									</div>
+								}
+							</div>
 						}
-					</select>
+					</div>
 				</div>
 			}
 
@@ -346,6 +446,18 @@
 	private List<DistrictDto> _rakePointFilteredDistricts = new();
 	private List<DistrictDto> _portFilteredDistricts = new();
 
+	// Searchable dropdown state for Rake Point
+	private string _rakePointStateSearch = "";
+	private bool _showRakePointStateDropdown;
+	private string _rakePointDistrictSearch = "";
+	private bool _showRakePointDistrictDropdown;
+
+	// Searchable dropdown state for Port
+	private string _portStateSearch = "";
+	private bool _showPortStateDropdown;
+	private string _portDistrictSearch = "";
+	private bool _showPortDistrictDropdown;
+
 	// UI state
 	private bool _isLoading = true;
 	private bool _isSaving;
@@ -560,6 +672,8 @@
 					IsActive = item.IsActive
 				};
 				_rakePointFilteredDistricts = _districts.Where(d => d.StateId == item.StateId).ToList();
+				_rakePointStateSearch = GetStateName(item.StateId);
+				_rakePointDistrictSearch = GetDistrictName(item.DistrictId);
 				break;
 			case "Port":
 				_portForm = new PortFormModel
@@ -571,6 +685,8 @@
 					IsActive = item.IsActive
 				};
 				_portFilteredDistricts = _districts.Where(d => d.StateId == item.StateId).ToList();
+				_portStateSearch = GetStateName(item.StateId);
+				_portDistrictSearch = GetDistrictName(item.DistrictId);
 				break;
 		}
 
@@ -654,6 +770,10 @@
 		_portForm = new PortFormModel();
 		_rakePointFilteredDistricts = new();
 		_portFilteredDistricts = new();
+		_rakePointStateSearch = "";
+		_rakePointDistrictSearch = "";
+		_portStateSearch = "";
+		_portDistrictSearch = "";
 		_isEditing = false;
 		_editingId = null;
 	}
@@ -668,6 +788,66 @@
 	{
 		_portForm.DistrictId = 0;
 		_portFilteredDistricts = _districts.Where(d => d.StateId == _portForm.StateId).ToList();
+	}
+
+	// Searchable dropdown handlers for Rake Point
+	private void SelectRakePointState(int id, string name)
+	{
+		_rakePointForm.StateId = id;
+		_rakePointStateSearch = name;
+		_showRakePointStateDropdown = false;
+		_rakePointForm.DistrictId = 0;
+		_rakePointDistrictSearch = "";
+		_rakePointFilteredDistricts = _districts.Where(d => d.StateId == id).ToList();
+	}
+
+	private async Task HideRakePointStateDropdown()
+	{
+		await Task.Delay(150);
+		_showRakePointStateDropdown = false;
+	}
+
+	private void SelectRakePointDistrict(int id, string name)
+	{
+		_rakePointForm.DistrictId = id;
+		_rakePointDistrictSearch = name;
+		_showRakePointDistrictDropdown = false;
+	}
+
+	private async Task HideRakePointDistrictDropdown()
+	{
+		await Task.Delay(150);
+		_showRakePointDistrictDropdown = false;
+	}
+
+	// Searchable dropdown handlers for Port
+	private void SelectPortState(int id, string name)
+	{
+		_portForm.StateId = id;
+		_portStateSearch = name;
+		_showPortStateDropdown = false;
+		_portForm.DistrictId = 0;
+		_portDistrictSearch = "";
+		_portFilteredDistricts = _districts.Where(d => d.StateId == id).ToList();
+	}
+
+	private async Task HidePortStateDropdown()
+	{
+		await Task.Delay(150);
+		_showPortStateDropdown = false;
+	}
+
+	private void SelectPortDistrict(int id, string name)
+	{
+		_portForm.DistrictId = id;
+		_portDistrictSearch = name;
+		_showPortDistrictDropdown = false;
+	}
+
+	private async Task HidePortDistrictDropdown()
+	{
+		await Task.Delay(150);
+		_showPortDistrictDropdown = false;
 	}
 
 	private string GetStateName(int stateId) =>
