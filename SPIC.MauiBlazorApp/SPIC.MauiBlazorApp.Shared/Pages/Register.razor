@@ -39,6 +39,41 @@
         padding: 4px 8px;
         margin-top: 4px;
     }
+    /* Searchable Dropdown Styles */
+    .searchable-select-input {
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 32px;
+    }
+    .searchable-dropdown-container {
+        position: absolute;
+        width: 100%;
+        background: #ffffff;
+        border: 1px solid #059669;
+        border-radius: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+        z-index: 1050;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        margin-top: 4px;
+    }
+    .searchable-dropdown-item {
+        padding: 10px 14px;
+        font-size: 0.85rem;
+        color: #374151;
+        cursor: pointer;
+        border-bottom: 1px solid #F3F4F6;
+        transition: background-color 0.1s ease;
+    }
+    .searchable-dropdown-item:last-child {
+        border-bottom: none;
+    }
+    .searchable-dropdown-item:hover {
+        background-color: #DCFCE7;
+        color: #059669;
+    }
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
@@ -276,23 +311,55 @@
                 <div class="row g-3 mb-3">
                     <div class="col-12 col-md-6">
                         <label class="form-label-custom">Dealer Code & Name</label>
-                        <select class="form-select-custom w-100" @bind="_dealerCodeId" @bind:after="OnDealerCodeChanged">
-                            <option value="0">-- New Entry --</option>
-                            @foreach (var dealer in _filteredDealers)
+                        <div class="position-relative">
+                            <input type="text" class="form-select-custom searchable-select-input w-100"
+                                   placeholder="-- New Entry --"
+                                   @bind="_dealerSearchText"
+                                   @bind:event="oninput"
+                                   @onfocus="() => _showDealerDropdown = true"
+                                   @onblur="HideDealerDropdown" />
+                            @if (_showDealerDropdown)
                             {
-                                <option value="@dealer.Id">@dealer.DealerCode - @dealer.FirmName</option>
+                                <div class="searchable-dropdown-container">
+                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(0, "")'>
+                                        -- New Entry --
+                                    </div>
+                                    @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_dealerSearchText) ||
+                                        $"{d.DealerCode} - {d.FirmName}".Contains(_dealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
+                                            @dealer.DealerCode - @dealer.FirmName
+                                        </div>
+                                    }
+                                </div>
                             }
-                        </select>
+                        </div>
                     </div>
                     <div class="col-12 col-md-6">
                         <label class="form-label-custom">Parent Dealer Code & Name</label>
-                        <select class="form-select-custom w-100" @bind="_parentDealerId">
-                            <option value="0">-- Select Parent Dealer --</option>
-                            @foreach (var dealer in _filteredDealers)
+                        <div class="position-relative">
+                            <input type="text" class="form-select-custom searchable-select-input w-100"
+                                   placeholder="-- Select Parent Dealer --"
+                                   @bind="_parentDealerSearchText"
+                                   @bind:event="oninput"
+                                   @onfocus="() => _showParentDealerDropdown = true"
+                                   @onblur="HideParentDealerDropdown" />
+                            @if (_showParentDealerDropdown)
                             {
-                                <option value="@dealer.Id">@dealer.DealerCode - @dealer.FirmName</option>
+                                <div class="searchable-dropdown-container">
+                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(0, "")'>
+                                        -- Select Parent Dealer --
+                                    </div>
+                                    @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_parentDealerSearchText) ||
+                                        $"{d.DealerCode} - {d.FirmName}".Contains(_parentDealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
+                                            @dealer.DealerCode - @dealer.FirmName
+                                        </div>
+                                    }
+                                </div>
                             }
-                        </select>
+                        </div>
                     </div>
                 </div>
 
@@ -450,13 +517,30 @@
                     </div>
                     <div class="col-12 col-sm-6 col-md-3">
                         <label class="form-label-custom">District</label>
-                      <select class="form-select-custom w-100" @bind="_model.DistrictId">
-    <option value="0">-- Select District --</option>
-    @foreach (var district in _DistrictAll.Where(d => d.StateId == _model.DealerStateId))
-    {
-        <option value="@district.Id">@district.DistrictName</option>
-    }
-</select>
+                        <div class="position-relative">
+                            <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DistrictId") ? "is-invalid" : "")"
+                                   placeholder="-- Select District --"
+                                   @bind="_districtSearchText"
+                                   @bind:event="oninput"
+                                   @onfocus="() => _showDistrictDropdown = true"
+                                   @onblur="HideDistrictDropdown" />
+                            @if (_showDistrictDropdown)
+                            {
+                                <div class="searchable-dropdown-container">
+                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(0, "")'>
+                                        -- Select District --
+                                    </div>
+                                    @foreach (var district in _DistrictAll.Where(d => d.StateId == _model.DealerStateId &&
+                                        (string.IsNullOrWhiteSpace(_districtSearchText) ||
+                                        d.DistrictName.Contains(_districtSearchText, StringComparison.OrdinalIgnoreCase))))
+                                    {
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(district.Id, district.DistrictName)'>
+                                            @district.DistrictName
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
                         @if (_errors.ContainsKey("DistrictId"))
                         {
                             <div class="field-error">@_errors["DistrictId"]</div>
@@ -465,15 +549,29 @@
 
                     <div class="col-12 col-sm-6 col-md-3">
                         <label class="form-label-custom">State</label>
-                       <select class="form-select-custom w-100"
-        @bind="_model.DealerStateId"
-        @bind:after="OnDealerStateChanged">
-    <option value="0">-- Select State --</option>
-    @foreach (var state in _statesAll)
-    {
-        <option value="@state.Id">@state.StateName</option>
-    }
-</select>
+                        <div class="position-relative">
+                            <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DealerStateId") ? "is-invalid" : "")"
+                                   placeholder="-- Select State --"
+                                   @bind="_stateSearchText"
+                                   @bind:event="oninput"
+                                   @onfocus="() => _showStateDropdown = true"
+                                   @onblur="HideStateDropdown" />
+                            @if (_showStateDropdown)
+                            {
+                                <div class="searchable-dropdown-container">
+                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectState(0, "")'>
+                                        -- Select State --
+                                    </div>
+                                    @foreach (var state in _statesAll.Where(s => string.IsNullOrWhiteSpace(_stateSearchText) ||
+                                        s.StateName.Contains(_stateSearchText, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectState(state.Id, state.StateName)'>
+                                            @state.StateName
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
                         @if (_errors.ContainsKey("DealerStateId"))
                         {
                             <div class="field-error">@_errors["DealerStateId"]</div>
@@ -581,13 +679,29 @@
                     </div>
                     <div class="col-12 col-sm-6 col-md-4">
                         <label class="form-label-custom">Bank Name</label>
-                        <select class="form-select-custom w-100 @(_errors.ContainsKey("BankId") ? "is-invalid" : "")" @bind="_model.BankId" @bind:after='() => ValidateFieldOnChange("BankId", _model.BankId > 0)'>
-                            <option value="0">-- Select Bank --</option>
-                            @foreach (var bank in _banksAll)
+                        <div class="position-relative">
+                            <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("BankId") ? "is-invalid" : "")"
+                                   placeholder="-- Select Bank --"
+                                   @bind="_bankSearchText"
+                                   @bind:event="oninput"
+                                   @onfocus="() => _showBankDropdown = true"
+                                   @onblur="HideBankDropdown" />
+                            @if (_showBankDropdown)
                             {
-                                <option value="@bank.Id">@bank.Name</option>
+                                <div class="searchable-dropdown-container">
+                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(0, "")'>
+                                        -- Select Bank --
+                                    </div>
+                                    @foreach (var bank in _banksAll.Where(b => string.IsNullOrWhiteSpace(_bankSearchText) ||
+                                        b.Name.Contains(_bankSearchText, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(bank.Id, bank.Name)'>
+                                            @bank.Name
+                                        </div>
+                                    }
+                                </div>
                             }
-                        </select>
+                        </div>
                         @if (_errors.ContainsKey("BankId"))
                         {
                             <div class="field-error">@_errors["BankId"]</div>
@@ -1044,6 +1158,17 @@ private bool _isHqLocked;
     private int _dealerCodeId;
     private int _parentDealerId;
 
+    private string _dealerSearchText = "";
+    private bool _showDealerDropdown;
+    private string _parentDealerSearchText = "";
+    private bool _showParentDealerDropdown;
+    private string _stateSearchText = "";
+    private bool _showStateDropdown;
+    private string _districtSearchText = "";
+    private bool _showDistrictDropdown;
+    private string _bankSearchText = "";
+    private bool _showBankDropdown;
+
     private string? _message;
     private bool _isError;
     private bool _isPincodeLookup;
@@ -1144,6 +1269,7 @@ _parentDealerId    = _model.ParentDealer;
     _filteredRegions       = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
     _filteredHeadquarters  = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
     _filteredDealers       = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
+    InitializeSearchTexts();
     ApplyLockedEmployeeLocation();
     if (_model.Latitude.HasValue && _model.Longitude.HasValue)
     {
@@ -1207,6 +1333,8 @@ private async Task LoadData()
         _basicInfoHqId = 0;
         _dealerCodeId = 0;
         _parentDealerId = 0;
+        _dealerSearchText = "";
+        _parentDealerSearchText = "";
         _filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
         _filteredHeadquarters = new();
         _filteredDealers = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
@@ -1391,6 +1519,7 @@ private async Task LoadData()
         {
             var dealer = await Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
             await ApplyDealerToForm(dealer, preserveCompanySelection: true);
+            InitializeSearchTexts();
         }
         catch (Exception ex)
         {
@@ -1425,9 +1554,73 @@ private void OnDealerStateChanged()
         if (!districtBelongsToState)
         {
             _model.DistrictId = 0;
+            _districtSearchText = "";
         }
     }
 }
+    private void InitializeSearchTexts()
+    {
+        var dealer = _filteredDealers.FirstOrDefault(d => d.Id == _dealerCodeId);
+        _dealerSearchText = dealer != null ? $"{dealer.DealerCode} - {dealer.FirmName}" : "";
+
+        var parentDealer = _filteredDealers.FirstOrDefault(d => d.Id == _parentDealerId);
+        _parentDealerSearchText = parentDealer != null ? $"{parentDealer.DealerCode} - {parentDealer.FirmName}" : "";
+
+        var state = _statesAll.FirstOrDefault(s => s.Id == _model.DealerStateId);
+        _stateSearchText = state?.StateName ?? "";
+
+        var district = _DistrictAll.FirstOrDefault(d => d.Id == _model.DistrictId);
+        _districtSearchText = district?.DistrictName ?? "";
+
+        var bank = _banksAll.FirstOrDefault(b => b.Id == _model.BankId);
+        _bankSearchText = bank?.Name ?? "";
+    }
+
+    private async Task SelectDealer(int id, string displayText)
+    {
+        _dealerSearchText = displayText;
+        _showDealerDropdown = false;
+        _dealerCodeId = id;
+        await OnDealerCodeChanged();
+        StateHasChanged();
+    }
+
+    private void SelectParentDealer(int id, string displayText)
+    {
+        _parentDealerSearchText = displayText;
+        _showParentDealerDropdown = false;
+        _parentDealerId = id;
+    }
+
+    private void SelectState(int id, string displayText)
+    {
+        _stateSearchText = displayText;
+        _showStateDropdown = false;
+        _model.DealerStateId = id;
+        OnDealerStateChanged();
+    }
+
+    private void SelectDistrict(int id, string displayText)
+    {
+        _districtSearchText = displayText;
+        _showDistrictDropdown = false;
+        _model.DistrictId = id;
+    }
+
+    private void SelectBank(int id, string displayText)
+    {
+        _bankSearchText = displayText;
+        _showBankDropdown = false;
+        _model.BankId = id;
+        ValidateFieldOnChange("BankId", _model.BankId > 0);
+    }
+
+    private async Task HideDealerDropdown() { await Task.Delay(200); _showDealerDropdown = false; StateHasChanged(); }
+    private async Task HideParentDealerDropdown() { await Task.Delay(200); _showParentDealerDropdown = false; StateHasChanged(); }
+    private async Task HideStateDropdown() { await Task.Delay(200); _showStateDropdown = false; StateHasChanged(); }
+    private async Task HideDistrictDropdown() { await Task.Delay(200); _showDistrictDropdown = false; StateHasChanged(); }
+    private async Task HideBankDropdown() { await Task.Delay(200); _showBankDropdown = false; StateHasChanged(); }
+
     private void ResetForm()
     {
         _model = new();
@@ -1444,6 +1637,11 @@ private void OnDealerStateChanged()
         _filteredRegions = new();
         _filteredHeadquarters = new();
         _filteredDealers = new();
+        _dealerSearchText = "";
+        _parentDealerSearchText = "";
+        _stateSearchText = "";
+        _districtSearchText = "";
+        _bankSearchText = "";
         _gstFile = null;
         _panFile = null;
         _aadhaarFile = null;

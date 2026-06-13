@@ -19,6 +19,41 @@
     fieldset:disabled .delete {
         display: none !important;
     }
+    /* Searchable Dropdown Styles */
+    .searchable-select-input {
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 32px;
+    }
+    .searchable-dropdown-container {
+        position: absolute;
+        width: 100%;
+        background: #ffffff;
+        border: 1px solid #059669;
+        border-radius: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+        z-index: 1050;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        margin-top: 4px;
+    }
+    .searchable-dropdown-item {
+        padding: 10px 14px;
+        font-size: 0.85rem;
+        color: #374151;
+        cursor: pointer;
+        border-bottom: 1px solid #F3F4F6;
+        transition: background-color 0.1s ease;
+    }
+    .searchable-dropdown-item:last-child {
+        border-bottom: none;
+    }
+    .searchable-dropdown-item:hover {
+        background-color: #DCFCE7;
+        color: #059669;
+    }
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
@@ -58,13 +93,29 @@
                     <div class="row g-3 mb-3">
                         <div class="col-12">
                             <label class="custom-label">Bank Name</label>
-                            <select class="form-select-custom w-100" @bind="_bankForm.BankId">
-                                <option value="0">Select Bank Name</option>
-                                @foreach (var bank in _banks)
+                            <div class="position-relative">
+                                <input type="text" class="form-select-custom searchable-select-input w-100"
+                                       placeholder="-- Select Bank Name --"
+                                       @bind="_bankSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showBankDropdown = true"
+                                       @onblur="HideBankDropdown" />
+                                @if (_showBankDropdown)
                                 {
-                                    <option value="@bank.Id">@bank.Name</option>
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(0, "")'>
+                                            -- Select Bank Name --
+                                        </div>
+                                        @foreach (var bank in _banks.Where(b => string.IsNullOrWhiteSpace(_bankSearchText) ||
+                                            b.Name.Contains(_bankSearchText, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(bank.Id, bank.Name)'>
+                                                @bank.Name
+                                            </div>
+                                        }
+                                    </div>
                                 }
-                            </select>
+                            </div>
                         </div>
                     </div>
                     <div class="row g-3 mb-3">
@@ -242,23 +293,56 @@
             <div class="row g-3 mb-4">
                 <div class="col-12 col-sm-6 col-md-4">
                     <label class="custom-label">District</label>
-                    <select class="form-select-custom w-100" @bind="_buildingForm.DistrictId">
-                        <option value="0">Select District</option>
-                        @foreach (var d in _districts.Where(d => d.StateId == _buildingForm.StateId))
+                    <div class="position-relative">
+                        <input type="text" class="form-select-custom searchable-select-input w-100"
+                               placeholder="-- Select District --"
+                               @bind="_districtSearchText"
+                               @bind:event="oninput"
+                               @onfocus="() => _showDistrictDropdown = true"
+                               @onblur="HideDistrictDropdown" />
+                        @if (_showDistrictDropdown)
                         {
-                            <option value="@d.Id">@d.DistrictName</option>
+                            <div class="searchable-dropdown-container">
+                                <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(0, "")'>
+                                    -- Select District --
+                                </div>
+                                @foreach (var d in _districts.Where(d => d.StateId == _buildingForm.StateId)
+                                    .Where(d => string.IsNullOrWhiteSpace(_districtSearchText) ||
+                                        d.DistrictName.Contains(_districtSearchText, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(d.Id, d.DistrictName)'>
+                                        @d.DistrictName
+                                    </div>
+                                }
+                            </div>
                         }
-                    </select>
+                    </div>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
                     <label class="custom-label">State</label>
-                    <select class="form-select-custom w-100" @bind="_buildingForm.StateId" @bind:after="OnBuildingStateChanged">
-                        <option value="0">Select State</option>
-                        @foreach (var s in _states)
+                    <div class="position-relative">
+                        <input type="text" class="form-select-custom searchable-select-input w-100"
+                               placeholder="-- Select State --"
+                               @bind="_stateSearchText"
+                               @bind:event="oninput"
+                               @onfocus="() => _showStateDropdown = true"
+                               @onblur="HideStateDropdown" />
+                        @if (_showStateDropdown)
                         {
-                            <option value="@s.Id">@s.StateName</option>
+                            <div class="searchable-dropdown-container">
+                                <div class="searchable-dropdown-item" @onmousedown='() => SelectState(0, "")'>
+                                    -- Select State --
+                                </div>
+                                @foreach (var s in _states.Where(s => string.IsNullOrWhiteSpace(_stateSearchText) ||
+                                    s.StateName.Contains(_stateSearchText, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectState(s.Id, s.StateName)'>
+                                        @s.StateName
+                                    </div>
+                                }
+                            </div>
                         }
-                    </select>
+                    </div>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
                     <label class="custom-label">EC (Encumbrance Certificate)</label>
@@ -653,6 +737,13 @@
     private List<LocationItemDto> _states = new();
     private List<LocationItemDto> _districts = new();
 
+    private string _bankSearchText = "";
+    private bool _showBankDropdown;
+    private string _stateSearchText = "";
+    private bool _showStateDropdown;
+    private string _districtSearchText = "";
+    private bool _showDistrictDropdown;
+
     private bool _isBuildingPincodeLookup;
     private string? _buildingPincodeMessage;
     private bool _buildingPincodeSuccess;
@@ -776,6 +867,7 @@
             }
         }
         _bankForm = new();
+        _bankSearchText = "";
     }
 
     private void EditBankAsset(DealerAssetBank item)
@@ -789,6 +881,7 @@
             Value = item.Value,
             Remarks = item.Remarks
         };
+        _bankSearchText = _banks.FirstOrDefault(b => b.Id == item.BankId)?.Name ?? "";
     }
 
     private async Task SaveLandAsset()
@@ -847,6 +940,8 @@
             }
         }
         _buildingForm = new();
+        _stateSearchText = "";
+        _districtSearchText = "";
     }
 
     private void EditBuildingAsset(DealerAssetBuilding item)
@@ -873,6 +968,8 @@
             UploadedBuildingDocumentPath = item.UploadedBuildingDocumentPath,
             UploadedValuationCertificatePath = item.UploadedValuationCertificatePath
         };
+        _stateSearchText = _states.FirstOrDefault(s => s.Id == item.StateId)?.StateName ?? "";
+        _districtSearchText = _districts.FirstOrDefault(d => d.Id == item.DistrictId)?.DistrictName ?? "";
     }
 
     private async Task SaveLoan()
@@ -975,6 +1072,33 @@
         }
     }
 
+    private void SelectBank(int id, string displayText)
+    {
+        _bankSearchText = displayText;
+        _showBankDropdown = false;
+        _bankForm.BankId = id;
+    }
+
+    private void SelectState(int id, string displayText)
+    {
+        _stateSearchText = displayText;
+        _showStateDropdown = false;
+        _buildingForm.StateId = id;
+        _districtSearchText = "";
+        OnBuildingStateChanged();
+    }
+
+    private void SelectDistrict(int id, string displayText)
+    {
+        _districtSearchText = displayText;
+        _showDistrictDropdown = false;
+        _buildingForm.DistrictId = id;
+    }
+
+    private async Task HideBankDropdown() { await Task.Delay(200); _showBankDropdown = false; StateHasChanged(); }
+    private async Task HideStateDropdown() { await Task.Delay(200); _showStateDropdown = false; StateHasChanged(); }
+    private async Task HideDistrictDropdown() { await Task.Delay(200); _showDistrictDropdown = false; StateHasChanged(); }
+
     private void ShowMessage(string message, bool isError)
     {
         _message = message;
@@ -1029,13 +1153,19 @@
         var matchedDistrict = _districts.FirstOrDefault(d =>
             d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
         if (matchedDistrict != null)
+        {
             _buildingForm.DistrictId = matchedDistrict.Id;
+            _districtSearchText = matchedDistrict.DistrictName;
+        }
 
         var apiState = po.State?.Trim().Replace(" ", "") ?? "";
         var matchedState = _states.FirstOrDefault(s =>
             s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
         if (matchedState != null)
+        {
             _buildingForm.StateId = matchedState.Id;
+            _stateSearchText = matchedState.StateName;
+        }
 
         if (!string.IsNullOrWhiteSpace(po.Block) && po.Block != "NA")
             _buildingForm.Block = po.Block;
@@ -1268,6 +1398,7 @@
             !_districts.Any(d => d.Id == _buildingForm.DistrictId && d.StateId == _buildingForm.StateId))
         {
             _buildingForm.DistrictId = 0;
+            _districtSearchText = "";
         }
     }
     private class CreateResponse<T>
