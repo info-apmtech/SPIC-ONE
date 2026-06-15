@@ -1301,7 +1301,8 @@
 		// Enforce max partners for sole proprietor
 		if (_selectedEntityType == EntityType.soleProprietor && !_isEditingPartner && _savedPartners.Count >= 1)
 			validationErrors.Add("• <b>Entity Type</b>: Sole Proprietor can have only 1 partner.");
-
+			if (string.IsNullOrWhiteSpace(_partnerForm.ProprietorImagePath) && _imageFile == null)
+    validationErrors.Add("• <b>Proprietor / Managing Partner Image</b> is required.");
 		if (validationErrors.Count > 0)
 		{
 			_message = string.Join("<br/>", validationErrors);
@@ -1341,8 +1342,13 @@
 				if (!updateResp.IsSuccessStatusCode)
 				{
 					var err = await updateResp.Content.ReadAsStringAsync();
-					ShowMessage($"Failed to update partner: {err}", true);
-					return;
+
+if (err.Contains("ProprietorImagePath", StringComparison.OrdinalIgnoreCase))
+    ShowMessage("Please upload Proprietor / Managing Partner Image before updating.", true);
+else
+    ShowMessage("Unable to update partner details. Please check the entered details and try again.", true);
+
+return;
 				}
 				partnerId = _editingPartnerId;
 
@@ -1364,8 +1370,13 @@
 				if (!resp.IsSuccessStatusCode)
 				{
 					var err = await resp.Content.ReadAsStringAsync();
-					ShowMessage($"Failed to save partner: {err}", true);
-					return;
+
+if (err.Contains("ProprietorImagePath", StringComparison.OrdinalIgnoreCase))
+    ShowMessage("Please upload Proprietor / Managing Partner Image before saving.", true);
+else
+    ShowMessage("Unable to save partner details. Please check the entered details and try again.", true);
+
+return;
 				}
 				var created = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerOwnershipInfo>>();
 				partnerId = created?.Data?.Id ?? 0;
