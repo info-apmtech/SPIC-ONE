@@ -14,22 +14,26 @@
     fieldset:disabled .file-remove-x {
         display: none !important;
     }
+
     .input-with-loader {
         position: relative;
     }
-    .input-with-loader .form-control-sm {
-        padding-right: 2rem;
-    }
-    .input-with-loader .field-loader-icon {
-        position: absolute;
-        right: 0.5rem;
-        top: 50%;
-        transform: translateY(calc(-50% - 2px));
-        font-size: 1rem;
-        color: #6c757d;
-        z-index: 4;
-        pointer-events: none;
-    }
+
+        .input-with-loader .form-control-sm {
+            padding-right: 2rem;
+        }
+
+        .input-with-loader .field-loader-icon {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(calc(-50% - 2px));
+            font-size: 1rem;
+            color: #6c757d;
+            z-index: 4;
+            pointer-events: none;
+        }
+
     .ocr-warning {
         font-size: 0.75rem;
         color: #856404;
@@ -47,6 +51,7 @@
         background-position: right 12px center;
         padding-right: 32px;
     }
+
     .searchable-dropdown-container {
         position: absolute;
         width: 100%;
@@ -59,6 +64,7 @@
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         margin-top: 4px;
     }
+
     .searchable-dropdown-item {
         padding: 10px 14px;
         font-size: 0.85rem;
@@ -67,973 +73,975 @@
         border-bottom: 1px solid #F3F4F6;
         transition: background-color 0.1s ease;
     }
-    .searchable-dropdown-item:last-child {
-        border-bottom: none;
-    }
-    .searchable-dropdown-item:hover {
-        background-color: #DCFCE7;
-        color: #059669;
-    }
+
+        .searchable-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .searchable-dropdown-item:hover {
+            background-color: #DCFCE7;
+            color: #059669;
+        }
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
-   
 
+   
     <fieldset disabled="@IsViewOnly" style="@(IsViewOnly ? "border:0;padding:0;margin:0;" : "border:0;padding:0;margin:0;")">
 
 
-    <h5 class="fw-bold mb-4 reg-page-heading">Dealer Registration</h5>
+        <h5 class="fw-bold mb-4 reg-page-heading">Dealer Registration</h5>
 
-    @if (!string.IsNullOrEmpty(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
-            @_message
-            <button type="button" class="btn-close" @onclick='() => _message = null'></button>
-        </div>
-    }
-
-    <form @onsubmit:preventDefault>
-        @if (status == "Active" || status == "Inactive" || status == "Terminated")
+        @if (!string.IsNullOrEmpty(_message))
         {
-            <div class="basic-info-card">
-                <div class="basic-info-header">
-                    <h3 class="basic-info-title">
+            <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+                @_message
+                <button type="button" class="btn-close" @onclick='() => _message = null'></button>
+            </div>
+        }
+
+        <form @onsubmit:preventDefault>
+            @if (status == "Active" || status == "Inactive" || status == "Terminated")
+            {
+                <div class="basic-info-card">
+                    <div class="basic-info-header">
+                        <h3 class="basic-info-title">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                                 class="formicon"
+                                 alt="icon" /> Basic Information
+                        </h3>
+
+                        <div class="btn-group-toggle">
+                            <button type="button"
+                                    class="btn @(selected == "Dealer" ? "active" : "")"
+                                    @onclick='() => Select("Dealer")'>
+                                Dealer
+                            </button>
+
+                            <button type="button"
+                                    class="btn @(selected == "Department" ? "active" : "")"
+                                    @onclick='() => Select("Department")'>
+                                Department
+                            </button>
+
+                            <button type="button"
+                                    class="btn @(selected == "Institution" ? "active" : "")"
+                                    @onclick='() => Select("Institution")'>
+                                Institution
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 align-items-center">
+                        <div class="col-12 col-md-5">
+                            <div class="row g-3 h-100">
+
+                                <div class="col-6">
+                                    <div class="logo-card spic @(isSpic ? "active" : "")"
+                                         @onclick="ToggleSpic">
+                                        <div class="card-checkbox">
+                                            <i class="bi bi-check-lg"></i>
+                                        </div>
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" />
+                                        <span>SPIC</span>
+                                    </div>
+                                </div>
+
+                                <div class="col-6">
+                                    <div class="logo-card green-star @(isGreenStar ? "active" : "")"
+                                         @onclick="ToggleGreenStar">
+                                        <div class="card-checkbox">
+                                            <i class="bi bi-check-lg"></i>
+                                        </div>
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" />
+                                        <span>GREEN STAR</span>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-md-7">
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">State</label>
+                                    <select class="form-select-custom w-100 @(_errors.ContainsKey("StateId") ? "is-invalid" : "")" @bind="_basicInfoStateId" @bind:after="OnBasicInfoStateChanged" disabled="@_isStateLocked">
+                                        <option value="0">-- Select State --</option>
+                                        @foreach (var state in _statesAll)
+                                        {
+                                            <option value="@state.Id">@state.StateName</option>
+                                        }
+                                    </select>
+                                    @if (_errors.ContainsKey("StateId"))
+                                    {
+                                        <div class="field-error">@_errors["StateId"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Region</label>
+                                    <select class="form-select-custom w-100 @(_errors.ContainsKey("Region") ? "is-invalid" : "")"
+                                            @bind="_basicInfoRegionId"
+                                            @bind:after="OnBasicInfoRegionChanged"
+                                            disabled="@_isRegionLocked">
+                                        <option value="0">-- Select Region --</option>
+                                        @foreach (var region in _filteredRegions)
+                                        {
+                                            <option value="@region.Id">@region.RegionName</option>
+                                        }
+                                    </select>
+                                    @if (_errors.ContainsKey("Region"))
+                                    {
+                                        <div class="field-error">@_errors["Region"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">HQ</label>
+                                    <select class="form-select-custom w-100 @(_errors.ContainsKey("HQ") ? "is-invalid" : "")"
+                                            @bind="_basicInfoHqId"
+                                            @bind:after='() => ValidateFieldOnChange("HQ", _basicInfoHqId > 0)'
+                                            disabled="@_isHqLocked">
+                                        <option value="0">-- Select HQ --</option>
+                                        @foreach (var hq in _filteredHeadquarters)
+                                        {
+                                            <option value="@hq.Id">@hq.HeadquarterName</option>
+                                        }
+                                    </select>
+                                    @if (_errors.ContainsKey("HQ"))
+                                    {
+                                        <div class="field-error">@_errors["HQ"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Status</label>
+
+                                    <div class="status-btn-group">
+                                        <button type="button"
+                                                class="btn btn_active @(status == "Active" ? "active" : "")"
+                                                @onclick='() => SelectStatus("Active")'>
+                                            Active
+                                        </button>
+
+                                        <button type="button"
+                                                class="btn btn_inactive @(status == "Inactive" ? "active" : "")"
+                                                @onclick='() => SelectStatus("Inactive")'>
+                                            Inactive
+                                        </button>
+
+                                        <button type="button"
+                                                class="btn btn_terminated @(status == "Terminated" ? "active" : "")"
+                                                @onclick='() => SelectStatus("Terminated")'>
+                                            Terminated
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (status == "Terminated")
+            {
+                <div class="basic-info-card">
+                    <div class="card-header-title mb-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/InactiveStatus.svg"
+                             class="formicon"
+                             alt="icon" /> Terminated Status
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Final Amount Status</label>
+                            <div class="status-btn-group">
+                                <button type="button"
+                                        class="btn btn_active @(_model.IsFinalAmountSettled == true ? "active" : "")"
+                                        @onclick='() => _model.IsFinalAmountSettled = true'>
+                                    Settled
+                                </button>
+                                <button type="button"
+                                        class="btn btn_inactive @(_model.IsFinalAmountSettled == false ? "active" : "")"
+                                        @onclick='() => _model.IsFinalAmountSettled = false'>
+                                    Not Settled
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Final Approval Date</label>
+                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("FinalApprovalDate") ? "is-invalid" : "")" @bind="_model.FinalApprovalDate" @bind:after='() => ValidateFieldOnChange("FinalApprovalDate", _model.FinalApprovalDate != null)'>
+                            @if (_errors.ContainsKey("FinalApprovalDate"))
+                            {
+                                <div class="field-error">@_errors["FinalApprovalDate"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Settlement Date</label>
+                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SettlementDate") ? "is-invalid" : "")" @bind="_model.SettlementDate" @bind:after='() => ValidateFieldOnChange("SettlementDate", _model.SettlementDate != null)'>
+                            @if (_errors.ContainsKey("SettlementDate"))
+                            {
+                                <div class="field-error">@_errors["SettlementDate"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Settlement Amount (Lakhs)</label>
+                            <div class="input-icon-left-wrapper">
+                                <span class="input-icon-left">₹</span>
+                                <input type="number"
+                                       class="form-control-custom w-100 input-with-left-icon"
+                                       placeholder="0.00"
+                                       step="0.01"
+                                       @bind="_model.SettlementAmount">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="basic-info-card business-info-card">
+                <div class="business-info-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg" class="formicon" alt="icon" />
+                        <h5 class="fw-semibold m-0 business-info-title">Business Information</h5>
+                    </div>
+                    @if (_isEditMode)
+                    {
+                        <span class="business-info-pill business-info-pill-edit">
+                            <i class="bi bi-pencil-square me-1"></i>Editing
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="business-info-pill business-info-pill-new">
+                            <i class="bi bi-plus-circle me-1"></i>New Entry
+                        </span>
+                    }
+                </div>
+
+                <div class="business-info-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label-custom">Dealer Code & Name</label>
+                            <div class="position-relative">
+                                <input type="text" class="form-select-custom searchable-select-input w-100"
+                                       placeholder="-- New Entry --"
+                                       @bind="_dealerSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showDealerDropdown = true"
+                                       @onblur="HideDealerDropdown" />
+                                @if (_showDealerDropdown)
+                                {
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(0, "")'>
+                                            -- New Entry --
+                                        </div>
+                                        @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_dealerSearchText) ||
+                                            $"{d.DealerCode} - {d.FirmName}".Contains(_dealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
+                                                @dealer.DealerCode - @dealer.FirmName
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label-custom">Parent Dealer Code & Name</label>
+                            <div class="position-relative">
+                                <input type="text" class="form-select-custom searchable-select-input w-100"
+                                       placeholder="-- Select Parent Dealer --"
+                                       @bind="_parentDealerSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showParentDealerDropdown = true"
+                                       @onblur="HideParentDealerDropdown" />
+                                @if (_showParentDealerDropdown)
+                                {
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(0, "")'>
+                                            -- Select Parent Dealer --
+                                        </div>
+                                        @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_parentDealerSearchText) ||
+                                            $"{d.DealerCode} - {d.FirmName}".Contains(_parentDealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
+                                                @dealer.DealerCode - @dealer.FirmName
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-8">
+                            <label class="form-label-custom">Firm Name <small class="text-muted fw-normal">(As per Fertilizer License or GST Trade Name)</small></label>
+                            <div class="firm-name-input-wrap">
+                                <span class="firm-name-prefix">M/s.</span>
+                                <input type="text" class="form-control-custom w-100 firm-name-input @(_errors.ContainsKey("FirmName") ? "is-invalid" : "")" @bind="_model.FirmName" @bind:after="SanitizeFirmName" placeholder="Enter Firm Business Name">
+                            </div>
+                            @if (_errors.ContainsKey("FirmName"))
+                            {
+                                <div class="field-error">@_errors["FirmName"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label-custom">Date of Appointment</label>
+                            <input type="date" class="form-control-custom w-100" @bind="_model.DateOfAppointment">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (ShowInactiveStatus)
+            {
+                <div class="basic-info-card">
+                    <div class="card-header-title mb-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/InactiveStatus.svg"
+                             class="formicon"
+                             alt="icon" /> Inactive Status
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Last Transaction Date</label>
+                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("LastTransactionDate") ? "is-invalid" : "")" @bind="_model.LastTransactionDate" @bind:after='() => ValidateFieldOnChange("LastTransactionDate", _model.LastTransactionDate != null)'>
+                            @if (_errors.ContainsKey("LastTransactionDate"))
+                            {
+                                <div class="field-error">@_errors["LastTransactionDate"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Transaction Type</label>
+                            <div class="status-btn-group">
+                                <button type="button"
+                                        class="btn btn_active @(_model.IsLastTransactionIsSale == true ? "active" : "")"
+                                        @onclick='() => _model.IsLastTransactionIsSale = true'>
+                                    Sales
+                                </button>
+                                <button type="button"
+                                        class="btn btn_inactive @(_model.IsLastTransactionIsSale == false ? "active" : "")"
+                                        @onclick='() => _model.IsLastTransactionIsSale = false'>
+                                    Collection
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (ShowFullRegistrationSections)
+            {
+                <div class="form-card">
+                    <div class="primary-location-header">
+                        <div class="card-header-title mb-0">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LocationIcon.svg" alt="Location" class="formicon" />Primary Location
+                        </div>
+                        <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3 card-header-title use-current-loc-btn" @onclick="UseCurrentLocation" disabled="@_isGettingLocation">
+                            @if (_isGettingLocation)
+                            {
+                                <i class="bi bi-arrow-repeat spin"></i> <span>Getting Location...</span>
+                            }
+                            else
+                            {
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CurrentLocation.svg" alt="Current Location" class="verifyicon" /> <span>Use Current Location</span>
+                            }
+                        </button>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(_locationMessage))
+                    {
+                        <div class="alert @(_locationSuccess ? "alert-success" : "alert-warning") py-1 px-2 small mb-2">@_locationMessage</div>
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <div class="map-box-wrap">
+                                <div id="leafletMap" class="leaflet-map-el"></div>
+                                <button type="button" class="btn btn-sm btn-success rounded-pill px-3 shadow-sm map-loc-btn" @onclick="UseCurrentLocation" disabled="@_isGettingLocation"><i class="bi bi-crosshair"></i> Use current location</button>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-8">
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Google Map URL</label>
+                                    <input type="text" class="form-control-custom w-100" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Click map or Paste Google Maps link">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Shop No / Room No / Block No</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("ShopNo") ? "is-invalid" : "")" @bind="_model.ShopNoORRoomNoOrBlockNo" @bind:after='() => ValidateFieldOnChange("ShopNo", !string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo))' placeholder="">
+                                    @if (_errors.ContainsKey("ShopNo"))
+                                    {
+                                        <div class="field-error">@_errors["ShopNo"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Street / Area / Locality</label>
+                                    <input type="text" class="form-control-custom w-100" @bind="_model.Street" placeholder="">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Sub Village</label>
+                                    <input type="text" class="form-control-custom w-100" @bind="_model.SubVillage" placeholder="Enter Sub Village">
+                                </div>
+
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Pincode</label>
+                                    <input type="text"
+                                           class="form-control-custom w-100 @(_errors.ContainsKey("PinCode") ? "is-invalid" : "")"
+                                           @bind="_model.PinCode"
+                                           @bind:event="oninput"
+                                           @bind:after="OnPincodeChanged"
+                                           placeholder="Enter Pincode"
+                                           maxlength="6"
+                                           inputmode="numeric">
+                                    @if (_isPincodeLookup)
+                                    {
+                                        <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
+                                    }
+                                    @if (_errors.ContainsKey("PinCode"))
+                                    {
+                                        <div class="field-error">@_errors["PinCode"]</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(_pincodeMessage))
+                                    {
+                                        <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">@_pincodeMessage</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Village</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Village") ? "is-invalid" : "")" @bind="_model.Village" @bind:after='() => ValidateFieldOnChange("Village", !string.IsNullOrWhiteSpace(_model.Village))' placeholder="Village">
+                                    @if (_errors.ContainsKey("Village"))
+                                    {
+                                        <div class="field-error">@_errors["Village"]</div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Block</label>
+                            <input type="text" class="form-control-custom w-100" @bind="_model.Block" placeholder="Enter Block">
+                        </div>
+                        <div class="col-6 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Taluk</label>
+                            <input type="text" class="form-control-custom w-100" @bind="_model.Taluk" placeholder="Enter Taluk">
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">District</label>
+                            <div class="position-relative">
+                                <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DistrictId") ? "is-invalid" : "")"
+                                       placeholder="-- Select District --"
+                                       @bind="_districtSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showDistrictDropdown = true"
+                                       @onblur="HideDistrictDropdown" />
+                                @if (_showDistrictDropdown)
+                                {
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(0, "")'>
+                                            -- Select District --
+                                        </div>
+                                        @foreach (var district in _DistrictAll.Where(d => d.StateId == _model.DealerStateId &&
+                                            (string.IsNullOrWhiteSpace(_districtSearchText) ||
+                                            d.DistrictName.Contains(_districtSearchText, StringComparison.OrdinalIgnoreCase))))
+                                        {
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(district.Id, district.DistrictName)'>
+                                                @district.DistrictName
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            @if (_errors.ContainsKey("DistrictId"))
+                            {
+                                <div class="field-error">@_errors["DistrictId"]</div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">State</label>
+                            <div class="position-relative">
+                                <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DealerStateId") ? "is-invalid" : "")"
+                                       placeholder="-- Select State --"
+                                       @bind="_stateSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showStateDropdown = true"
+                                       @onblur="HideStateDropdown" />
+                                @if (_showStateDropdown)
+                                {
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectState(0, "")'>
+                                            -- Select State --
+                                        </div>
+                                        @foreach (var state in _statesAll.Where(s => string.IsNullOrWhiteSpace(_stateSearchText) ||
+                                            s.StateName.Contains(_stateSearchText, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectState(state.Id, state.StateName)'>
+                                                @state.StateName
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            @if (_errors.ContainsKey("DealerStateId"))
+                            {
+                                <div class="field-error">@_errors["DealerStateId"]</div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label class="form-label-custom">Official Contact Number</label>
+                            <input type="tel"
+                                   inputmode="numeric"
+                                   pattern="[0-9]*"
+                                   class="form-control-custom w-100 @(_errors.ContainsKey("OfficialContactNumber") ? "is-invalid" : "")"
+                                   @bind="_model.OfficialContactNumber"
+                                   @bind:after="SanitizeOfficialContact"
+                                   placeholder="10-digit mobile number"
+                                   maxlength="10"
+                                   oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+
+                            @if (_errors.ContainsKey("OfficialContactNumber"))
+                            {
+                                <div class="field-error">@_errors["OfficialContactNumber"]</div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label class="form-label-custom">WhatsApp Number</label>
+                            <input type="tel"
+                                   inputmode="numeric"
+                                   pattern="[0-9]*"
+                                   class="form-control-custom w-100 @(_errors.ContainsKey("WhatsAppNumber") ? "is-invalid" : "")"
+                                   @bind="_model.WhatsAppNumber"
+                                   @bind:after="SanitizeWhatsAppNumber"
+                                   placeholder="10-digit mobile number"
+                                   maxlength="10"
+                                   oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+
+                            @if (_errors.ContainsKey("WhatsAppNumber"))
+                            {
+                                <div class="field-error">@_errors["WhatsAppNumber"]</div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label class="form-label-custom">Alternative Number</label>
+                            <input type="tel"
+                                   inputmode="numeric"
+                                   pattern="[0-9]*"
+                                   class="form-control-custom w-100"
+                                   @bind="_model.AlternativeNumber"
+                                   @bind:after="SanitizeAlternativeNumber"
+                                   placeholder="10-digit mobile number"
+                                   maxlength="10"
+                                   oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="basic-info-card">
+                    <div class="card-header-title mb-2">
                         <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
                              class="formicon"
-                             alt="icon" /> Basic Information
-                    </h3>
-
-                    <div class="btn-group-toggle">
-                        <button type="button"
-                                class="btn @(selected == "Dealer" ? "active" : "")"
-                                @onclick='() => Select("Dealer")'>
-                            Dealer
-                        </button>
-
-                        <button type="button"
-                                class="btn @(selected == "Department" ? "active" : "")"
-                                @onclick='() => Select("Department")'>
-                            Department
-                        </button>
-
-                        <button type="button"
-                                class="btn @(selected == "Institution" ? "active" : "")"
-                                @onclick='() => Select("Institution")'>
-                            Institution
-                        </button>
+                             alt="icon" /> Trade Deposit Details
                     </div>
-                </div>
-
-                <div class="row g-4 align-items-center">
-                    <div class="col-12 col-md-5">
-                        <div class="row g-3 h-100">
-
-                            <div class="col-6">
-                                <div class="logo-card spic @(isSpic ? "active" : "")"
-                                     @onclick="ToggleSpic">
-                                    <div class="card-checkbox">
-                                        <i class="bi bi-check-lg"></i>
-                                    </div>
-                                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" />
-                                    <span>SPIC</span>
-                                </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Trade Deposit Amount (₹ in lakhs)</label>
+                            <div class="input-icon-left-wrapper">
+                                <span class="input-icon-left">₹</span>
+                                <input type="number" class="form-control-custom w-100 input-with-left-icon" placeholder="0.00" step="0.01" @bind="_model.TradeDepositAmount">
                             </div>
-
-                            <div class="col-6">
-                                <div class="logo-card green-star @(isGreenStar ? "active" : "")"
-                                     @onclick="ToggleGreenStar">
-                                    <div class="card-checkbox">
-                                        <i class="bi bi-check-lg"></i>
-                                    </div>
-                                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" />
-                                    <span>GREEN STAR</span>
-                                </div>
-                            </div>
-
                         </div>
-                    </div>
-
-                    <div class="col-12 col-md-7">
-                        <div class="row g-3">
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">State</label>
-                                <select class="form-select-custom w-100 @(_errors.ContainsKey("StateId") ? "is-invalid" : "")" @bind="_basicInfoStateId" @bind:after="OnBasicInfoStateChanged" disabled="@_isStateLocked">
-                                    <option value="0">-- Select State --</option>
-                                    @foreach (var state in _statesAll)
-                                    {
-                                        <option value="@state.Id">@state.StateName</option>
-                                    }
-                                </select>
-                                @if (_errors.ContainsKey("StateId"))
-                                {
-                                    <div class="field-error">@_errors["StateId"]</div>
-                                }
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Region</label>
-                               <select class="form-select-custom w-100 @(_errors.ContainsKey("Region") ? "is-invalid" : "")"
-        @bind="_basicInfoRegionId"
-        @bind:after="OnBasicInfoRegionChanged"
-        disabled="@_isRegionLocked">
-    <option value="0">-- Select Region --</option>
-    @foreach (var region in _filteredRegions)
-    {
-        <option value="@region.Id">@region.RegionName</option>
-    }
-</select>
-                                @if (_errors.ContainsKey("Region"))
-                                {
-                                    <div class="field-error">@_errors["Region"]</div>
-                                }
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">HQ</label>
-                               <select class="form-select-custom w-100 @(_errors.ContainsKey("HQ") ? "is-invalid" : "")"
-        @bind="_basicInfoHqId"
-        @bind:after='() => ValidateFieldOnChange("HQ", _basicInfoHqId > 0)'
-        disabled="@_isHqLocked">
-    <option value="0">-- Select HQ --</option>
-    @foreach (var hq in _filteredHeadquarters)
-    {
-        <option value="@hq.Id">@hq.HeadquarterName</option>
-    }
-</select>
-                                @if (_errors.ContainsKey("HQ"))
-                                {
-                                    <div class="field-error">@_errors["HQ"]</div>
-                                }
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Status</label>
-
-                                <div class="status-btn-group">
-                                    <button type="button"
-                                            class="btn btn_active @(status == "Active" ? "active" : "")"
-                                            @onclick='() => SelectStatus("Active")'>
-                                        Active
-                                    </button>
-
-                                    <button type="button"
-                                            class="btn btn_inactive @(status == "Inactive" ? "active" : "")"
-                                            @onclick='() => SelectStatus("Inactive")'>
-                                        Inactive
-                                    </button>
-
-                                    <button type="button"
-                                            class="btn btn_terminated @(status == "Terminated" ? "active" : "")"
-                                            @onclick='() => SelectStatus("Terminated")'>
-                                        Terminated
-                                    </button>
-                                </div>
-                            </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Receipt No</label>
+                            <input type="text" class="form-control-custom w-100" @bind="_model.TradeDepositReceiptNo" placeholder="Enter Receipt Number">
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Deposit Date</label>
+                            <input type="date" class="form-control-custom w-100" @bind="_model.TradeDepositDate">
                         </div>
                     </div>
                 </div>
-            </div>
-        }
 
-        @if (status == "Terminated")
-        {
-            <div class="basic-info-card">
-                <div class="card-header-title mb-2">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/InactiveStatus.svg"
-                         class="formicon"
-                         alt="icon" /> Terminated Status
-                </div>
-                <div class="row g-3">
-                    <div class="col-12 col-sm-6 col-md-3">
-                        <label class="form-label-custom">Final Amount Status</label>
-                        <div class="status-btn-group">
-                            <button type="button"
-                                    class="btn btn_active @(_model.IsFinalAmountSettled == true ? "active" : "")"
-                                    @onclick='() => _model.IsFinalAmountSettled = true'>
-                                Settled
-                            </button>
-                            <button type="button"
-                                    class="btn btn_inactive @(_model.IsFinalAmountSettled == false ? "active" : "")"
-                                    @onclick='() => _model.IsFinalAmountSettled = false'>
-                                Not Settled
-                            </button>
-                        </div>
+                <div class="basic-info-card">
+                    <div class="card-header-title mb-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                             class="formicon"
+                             alt="icon" /> Bank Details
                     </div>
-                    <div class="col-12 col-sm-6 col-md-3">
-                        <label class="form-label-custom">Final Approval Date</label>
-                        <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("FinalApprovalDate") ? "is-invalid" : "")" @bind="_model.FinalApprovalDate" @bind:after='() => ValidateFieldOnChange("FinalApprovalDate", _model.FinalApprovalDate != null)'>
-                        @if (_errors.ContainsKey("FinalApprovalDate"))
-                        {
-                            <div class="field-error">@_errors["FinalApprovalDate"]</div>
-                        }
-                    </div>
-                    <div class="col-12 col-sm-6 col-md-3">
-                        <label class="form-label-custom">Settlement Date</label>
-                        <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SettlementDate") ? "is-invalid" : "")" @bind="_model.SettlementDate" @bind:after='() => ValidateFieldOnChange("SettlementDate", _model.SettlementDate != null)'>
-                        @if (_errors.ContainsKey("SettlementDate"))
-                        {
-                            <div class="field-error">@_errors["SettlementDate"]</div>
-                        }
-                    </div>
-                    <div class="col-12 col-sm-6 col-md-3">
-                        <label class="form-label-custom">Settlement Amount (Lakhs)</label>
-                        <div class="input-icon-left-wrapper">
-                            <span class="input-icon-left">₹</span>
-                            <input type="number"
-                                   class="form-control-custom w-100 input-with-left-icon"
-                                   placeholder="0.00"
-                                   step="0.01"
-                                   @bind="_model.SettlementAmount">
-                        </div>
-                    </div>
-                </div>
-            </div>
-        }
-
-        <div class="basic-info-card business-info-card">
-            <div class="business-info-header">
-                <div class="d-flex align-items-center gap-2">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg" class="formicon" alt="icon" />
-                    <h5 class="fw-semibold m-0 business-info-title">Business Information</h5>
-                </div>
-                @if (_isEditMode)
-                {
-                    <span class="business-info-pill business-info-pill-edit">
-                        <i class="bi bi-pencil-square me-1"></i>Editing
-                    </span>
-                }
-                else
-                {
-                    <span class="business-info-pill business-info-pill-new">
-                        <i class="bi bi-plus-circle me-1"></i>New Entry
-                    </span>
-                }
-            </div>
-
-            <div class="business-info-body">
-                <div class="row g-3 mb-3">
-                    <div class="col-12 col-md-6">
-                        <label class="form-label-custom">Dealer Code & Name</label>
-                        <div class="position-relative">
-                            <input type="text" class="form-select-custom searchable-select-input w-100"
-                                   placeholder="-- New Entry --"
-                                   @bind="_dealerSearchText"
-                                   @bind:event="oninput"
-                                   @onfocus="() => _showDealerDropdown = true"
-                                   @onblur="HideDealerDropdown" />
-                            @if (_showDealerDropdown)
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label-custom">Account Holder Name</label>
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("AccountHolderName") ? "is-invalid" : "")" @bind="_model.AccountHolderName" @bind:after='() => ValidateFieldOnChange("AccountHolderName", !string.IsNullOrWhiteSpace(_model.AccountHolderName))' placeholder="Enter Account Holder Name">
+                            @if (_errors.ContainsKey("AccountHolderName"))
                             {
-                                <div class="searchable-dropdown-container">
-                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(0, "")'>
-                                        -- New Entry --
-                                    </div>
-                                    @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_dealerSearchText) ||
-                                        $"{d.DealerCode} - {d.FirmName}".Contains(_dealerSearchText, StringComparison.OrdinalIgnoreCase)))
-                                    {
-                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
-                                            @dealer.DealerCode - @dealer.FirmName
+                                <div class="field-error">@_errors["AccountHolderName"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label-custom">Account Number</label>
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("AccountNumber") ? "is-invalid" : "")" @bind="_model.AccountNumber" @bind:after='() => ValidateFieldOnChange("AccountNumber", !string.IsNullOrWhiteSpace(_model.AccountNumber))' placeholder="Enter Account Number">
+                            @if (_errors.ContainsKey("AccountNumber"))
+                            {
+                                <div class="field-error">@_errors["AccountNumber"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Bank Name</label>
+                            <div class="position-relative">
+                                <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("BankId") ? "is-invalid" : "")"
+                                       placeholder="-- Select Bank --"
+                                       @bind="_bankSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showBankDropdown = true"
+                                       @onblur="HideBankDropdown" />
+                                @if (_showBankDropdown)
+                                {
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(0, "")'>
+                                            -- Select Bank --
                                         </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-6">
-                        <label class="form-label-custom">Parent Dealer Code & Name</label>
-                        <div class="position-relative">
-                            <input type="text" class="form-select-custom searchable-select-input w-100"
-                                   placeholder="-- Select Parent Dealer --"
-                                   @bind="_parentDealerSearchText"
-                                   @bind:event="oninput"
-                                   @onfocus="() => _showParentDealerDropdown = true"
-                                   @onblur="HideParentDealerDropdown" />
-                            @if (_showParentDealerDropdown)
-                            {
-                                <div class="searchable-dropdown-container">
-                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(0, "")'>
-                                        -- Select Parent Dealer --
-                                    </div>
-                                    @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_parentDealerSearchText) ||
-                                        $"{d.DealerCode} - {d.FirmName}".Contains(_parentDealerSearchText, StringComparison.OrdinalIgnoreCase)))
-                                    {
-                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
-                                            @dealer.DealerCode - @dealer.FirmName
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </div>
-
-                <div class="row g-3">
-                    <div class="col-12 col-md-8">
-                        <label class="form-label-custom">Firm Name <small class="text-muted fw-normal">(As per Fertilizer License or GST Trade Name)</small></label>
-                        <div class="firm-name-input-wrap">
-                            <span class="firm-name-prefix">M/s.</span>
-                            <input type="text" class="form-control-custom w-100 firm-name-input @(_errors.ContainsKey("FirmName") ? "is-invalid" : "")" @bind="_model.FirmName" @bind:after="SanitizeFirmName" placeholder="Enter Firm Business Name">
-                        </div>
-                        @if (_errors.ContainsKey("FirmName"))
-                        {
-                            <div class="field-error">@_errors["FirmName"]</div>
-                        }
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <label class="form-label-custom">Date of Appointment</label>
-                        <input type="date" class="form-control-custom w-100" @bind="_model.DateOfAppointment">
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        @if (ShowInactiveStatus)
-{
-            <div class="basic-info-card">
-                <div class="card-header-title mb-2">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/InactiveStatus.svg"
-                         class="formicon"
-                         alt="icon" /> Inactive Status
-                </div>
-                <div class="row g-3">
-                    <div class="col-12 col-sm-6 col-md-4">
-                        <label class="form-label-custom">Last Transaction Date</label>
-                        <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("LastTransactionDate") ? "is-invalid" : "")" @bind="_model.LastTransactionDate" @bind:after='() => ValidateFieldOnChange("LastTransactionDate", _model.LastTransactionDate != null)'>
-                        @if (_errors.ContainsKey("LastTransactionDate"))
-                        {
-                            <div class="field-error">@_errors["LastTransactionDate"]</div>
-                        }
-                    </div>
-                    <div class="col-12 col-sm-6 col-md-4">
-                        <label class="form-label-custom">Transaction Type</label>
-                        <div class="status-btn-group">
-                            <button type="button"
-                                    class="btn btn_active @(_model.IsLastTransactionIsSale == true ? "active" : "")"
-                                    @onclick='() => _model.IsLastTransactionIsSale = true'>
-                                Sales
-                            </button>
-                            <button type="button"
-                                    class="btn btn_inactive @(_model.IsLastTransactionIsSale == false ? "active" : "")"
-                                    @onclick='() => _model.IsLastTransactionIsSale = false'>
-                                Collection
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        }
-
-        @if (ShowFullRegistrationSections)
-        {
-            <div class="form-card">
-                <div class="primary-location-header">
-                    <div class="card-header-title mb-0">
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LocationIcon.svg" alt="Location" class="formicon" />Primary Location
-                    </div>
-                    <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3 card-header-title use-current-loc-btn" @onclick="UseCurrentLocation" disabled="@_isGettingLocation">
-                        @if (_isGettingLocation)
-                        {
-                            <i class="bi bi-arrow-repeat spin"></i> <span>Getting Location...</span>
-                        }
-                        else
-                        {
-                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CurrentLocation.svg" alt="Current Location" class="verifyicon" /> <span>Use Current Location</span>
-                        }
-                    </button>
-                </div>
-
-                @if (!string.IsNullOrEmpty(_locationMessage))
-                {
-                    <div class="alert @(_locationSuccess ? "alert-success" : "alert-warning") py-1 px-2 small mb-2">@_locationMessage</div>
-                }
-
-                <div class="row g-3">
-                    <div class="col-12 col-md-4">
-                        <div class="map-box-wrap">
-                            <div id="leafletMap" class="leaflet-map-el"></div>
-                            <button type="button" class="btn btn-sm btn-success rounded-pill px-3 shadow-sm map-loc-btn" @onclick="UseCurrentLocation" disabled="@_isGettingLocation"><i class="bi bi-crosshair"></i> Use current location</button>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-8">
-                        <div class="row g-3">
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Google Map URL</label>
-                                <input type="text" class="form-control-custom w-100" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Click map or Paste Google Maps link">
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Shop No / Room No / Block No</label>
-                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("ShopNo") ? "is-invalid" : "")" @bind="_model.ShopNoORRoomNoOrBlockNo" @bind:after='() => ValidateFieldOnChange("ShopNo", !string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo))' placeholder="">
-                                @if (_errors.ContainsKey("ShopNo"))
-                                {
-                                    <div class="field-error">@_errors["ShopNo"]</div>
-                                }
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Street / Area / Locality</label>
-                                <input type="text" class="form-control-custom w-100" @bind="_model.Street" placeholder="">
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Sub Village</label>
-                                <input type="text" class="form-control-custom w-100" @bind="_model.SubVillage" placeholder="Enter Sub Village">
-                            </div>
-
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Pincode</label>
-<input type="text"
-       class="form-control-custom w-100 @(_errors.ContainsKey("PinCode") ? "is-invalid" : "")"
-       @bind="_model.PinCode"
-       @bind:event="oninput"
-       @bind:after="OnPincodeChanged"
-       placeholder="Enter Pincode"
-       maxlength="6"
-       inputmode="numeric">
-                                @if (_isPincodeLookup)
-                                {
-                                    <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
-                                }
-                                @if (_errors.ContainsKey("PinCode"))
-                                {
-                                    <div class="field-error">@_errors["PinCode"]</div>
-                                }
-                                @if (!string.IsNullOrEmpty(_pincodeMessage))
-                                {
-                                    <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">@_pincodeMessage</div>
-                                }
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Village</label>
-                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Village") ? "is-invalid" : "")" @bind="_model.Village" @bind:after='() => ValidateFieldOnChange("Village", !string.IsNullOrWhiteSpace(_model.Village))' placeholder="Village">
-                                @if (_errors.ContainsKey("Village"))
-                                {
-                                    <div class="field-error">@_errors["Village"]</div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-6 col-sm-6 col-md-3">
-                        <label class="form-label-custom">Block</label>
-                        <input type="text" class="form-control-custom w-100" @bind="_model.Block" placeholder="Enter Block">
-                    </div>
-                    <div class="col-6 col-sm-6 col-md-3">
-                        <label class="form-label-custom">Taluk</label>
-                        <input type="text" class="form-control-custom w-100" @bind="_model.Taluk" placeholder="Enter Taluk">
-                    </div>
-                    <div class="col-12 col-sm-6 col-md-3">
-                        <label class="form-label-custom">District</label>
-                        <div class="position-relative">
-                            <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DistrictId") ? "is-invalid" : "")"
-                                   placeholder="-- Select District --"
-                                   @bind="_districtSearchText"
-                                   @bind:event="oninput"
-                                   @onfocus="() => _showDistrictDropdown = true"
-                                   @onblur="HideDistrictDropdown" />
-                            @if (_showDistrictDropdown)
-                            {
-                                <div class="searchable-dropdown-container">
-                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(0, "")'>
-                                        -- Select District --
-                                    </div>
-                                    @foreach (var district in _DistrictAll.Where(d => d.StateId == _model.DealerStateId &&
-                                        (string.IsNullOrWhiteSpace(_districtSearchText) ||
-                                        d.DistrictName.Contains(_districtSearchText, StringComparison.OrdinalIgnoreCase))))
-                                    {
-                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(district.Id, district.DistrictName)'>
-                                            @district.DistrictName
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                        @if (_errors.ContainsKey("DistrictId"))
-                        {
-                            <div class="field-error">@_errors["DistrictId"]</div>
-                        }
-                    </div>
-
-                    <div class="col-12 col-sm-6 col-md-3">
-                        <label class="form-label-custom">State</label>
-                        <div class="position-relative">
-                            <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DealerStateId") ? "is-invalid" : "")"
-                                   placeholder="-- Select State --"
-                                   @bind="_stateSearchText"
-                                   @bind:event="oninput"
-                                   @onfocus="() => _showStateDropdown = true"
-                                   @onblur="HideStateDropdown" />
-                            @if (_showStateDropdown)
-                            {
-                                <div class="searchable-dropdown-container">
-                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectState(0, "")'>
-                                        -- Select State --
-                                    </div>
-                                    @foreach (var state in _statesAll.Where(s => string.IsNullOrWhiteSpace(_stateSearchText) ||
-                                        s.StateName.Contains(_stateSearchText, StringComparison.OrdinalIgnoreCase)))
-                                    {
-                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectState(state.Id, state.StateName)'>
-                                            @state.StateName
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                        @if (_errors.ContainsKey("DealerStateId"))
-                        {
-                            <div class="field-error">@_errors["DealerStateId"]</div>
-                        }
-                    </div>
-
-                    <div class="col-12 col-md-4">
-                        <label class="form-label-custom">Official Contact Number</label>
-                        <input type="tel"
-                               inputmode="numeric"
-                               pattern="[0-9]*"
-                               class="form-control-custom w-100 @(_errors.ContainsKey("OfficialContactNumber") ? "is-invalid" : "")"
-                               @bind="_model.OfficialContactNumber"
-                               @bind:after="SanitizeOfficialContact"
-                               placeholder="10-digit mobile number"
-                               maxlength="10"
-                               oninput="this.value = this.value.replace(/[^0-9]/g, '')">
-
-                        @if (_errors.ContainsKey("OfficialContactNumber"))
-                        {
-                            <div class="field-error">@_errors["OfficialContactNumber"]</div>
-                        }
-                    </div>
-
-                    <div class="col-12 col-md-4">
-                        <label class="form-label-custom">WhatsApp Number</label>
-                        <input type="tel"
-                               inputmode="numeric"
-                               pattern="[0-9]*"
-                               class="form-control-custom w-100 @(_errors.ContainsKey("WhatsAppNumber") ? "is-invalid" : "")"
-                               @bind="_model.WhatsAppNumber"
-                               @bind:after="SanitizeWhatsAppNumber"
-                               placeholder="10-digit mobile number"
-                               maxlength="10"
-                               oninput="this.value = this.value.replace(/[^0-9]/g, '')">
-
-                        @if (_errors.ContainsKey("WhatsAppNumber"))
-                        {
-                            <div class="field-error">@_errors["WhatsAppNumber"]</div>
-                        }
-                    </div>
-
-                    <div class="col-12 col-md-4">
-                        <label class="form-label-custom">Alternative Number</label>
-                        <input type="tel"
-                               inputmode="numeric"
-                               pattern="[0-9]*"
-                               class="form-control-custom w-100"
-                               @bind="_model.AlternativeNumber"
-                               @bind:after="SanitizeAlternativeNumber"
-                               placeholder="10-digit mobile number"
-                               maxlength="10"
-                               oninput="this.value = this.value.replace(/[^0-9]/g, '')">
-                    </div>
-                </div>
-            </div>
-
-            <div class="basic-info-card">
-                <div class="card-header-title mb-2">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
-                         class="formicon"
-                         alt="icon" /> Trade Deposit Details
-                </div>
-                <div class="row g-3">
-                    <div class="col-12 col-sm-6 col-md-4">
-                        <label class="form-label-custom">Trade Deposit Amount (₹ in lakhs)</label>
-                        <div class="input-icon-left-wrapper">
-                            <span class="input-icon-left">₹</span>
-                            <input type="number" class="form-control-custom w-100 input-with-left-icon" placeholder="0.00" step="0.01" @bind="_model.TradeDepositAmount">
-                        </div>
-                    </div>
-                    <div class="col-12 col-sm-6 col-md-4">
-                        <label class="form-label-custom">Receipt No</label>
-                        <input type="text" class="form-control-custom w-100" @bind="_model.TradeDepositReceiptNo" placeholder="Enter Receipt Number">
-                    </div>
-                    <div class="col-12 col-sm-6 col-md-4">
-                        <label class="form-label-custom">Deposit Date</label>
-                        <input type="date" class="form-control-custom w-100" @bind="_model.TradeDepositDate">
-                    </div>
-                </div>
-            </div>
-
-            <div class="basic-info-card">
-                <div class="card-header-title mb-2">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
-                         class="formicon"
-                         alt="icon" /> Bank Details
-                </div>
-                <div class="row g-3">
-                    <div class="col-12 col-md-6">
-                        <label class="form-label-custom">Account Holder Name</label>
-                        <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("AccountHolderName") ? "is-invalid" : "")" @bind="_model.AccountHolderName" @bind:after='() => ValidateFieldOnChange("AccountHolderName", !string.IsNullOrWhiteSpace(_model.AccountHolderName))' placeholder="Enter Account Holder Name">
-                        @if (_errors.ContainsKey("AccountHolderName"))
-                        {
-                            <div class="field-error">@_errors["AccountHolderName"]</div>
-                        }
-                    </div>
-                    <div class="col-12 col-md-6">
-                        <label class="form-label-custom">Account Number</label>
-                        <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("AccountNumber") ? "is-invalid" : "")" @bind="_model.AccountNumber" @bind:after='() => ValidateFieldOnChange("AccountNumber", !string.IsNullOrWhiteSpace(_model.AccountNumber))' placeholder="Enter Account Number">
-                        @if (_errors.ContainsKey("AccountNumber"))
-                        {
-                            <div class="field-error">@_errors["AccountNumber"]</div>
-                        }
-                    </div>
-                    <div class="col-12 col-sm-6 col-md-4">
-                        <label class="form-label-custom">Bank Name</label>
-                        <div class="position-relative">
-                            <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("BankId") ? "is-invalid" : "")"
-                                   placeholder="-- Select Bank --"
-                                   @bind="_bankSearchText"
-                                   @bind:event="oninput"
-                                   @onfocus="() => _showBankDropdown = true"
-                                   @onblur="HideBankDropdown" />
-                            @if (_showBankDropdown)
-                            {
-                                <div class="searchable-dropdown-container">
-                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(0, "")'>
-                                        -- Select Bank --
-                                    </div>
-                                    @foreach (var bank in _banksAll.Where(b => string.IsNullOrWhiteSpace(_bankSearchText) ||
-                                        b.Name.Contains(_bankSearchText, StringComparison.OrdinalIgnoreCase)))
-                                    {
-                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(bank.Id, bank.Name)'>
-                                            @bank.Name
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                        @if (_errors.ContainsKey("BankId"))
-                        {
-                            <div class="field-error">@_errors["BankId"]</div>
-                        }
-                    </div>
-                    <div class="col-12 col-sm-6 col-md-4">
-                        <label class="form-label-custom">Bank Branch</label>
-                        <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Branch") ? "is-invalid" : "")" @bind="_model.Branch" @bind:after='() => ValidateFieldOnChange("Branch", !string.IsNullOrWhiteSpace(_model.Branch))' placeholder="Enter Bank Branch">
-                        @if (_errors.ContainsKey("Branch"))
-                        {
-                            <div class="field-error">@_errors["Branch"]</div>
-                        }
-                    </div>
-                    <div class="col-12 col-sm-6 col-md-4">
-                        <label class="form-label-custom">IFSC Code</label>
-                        <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("IFSC") ? "is-invalid" : "")" @bind="_model.IFSC" @bind:after='() => ValidateFieldOnChange("IFSC", !string.IsNullOrWhiteSpace(_model.IFSC))' placeholder="Enter IFSC Code">
-                        @if (_errors.ContainsKey("IFSC"))
-                        {
-                            <div class="field-error">@_errors["IFSC"]</div>
-                        }
-                    </div>
-                    <div class="col-12">
-                        <div class="cheque-upload-wrap">
-                            <label class="upload-area">
-                                <i class="bi bi-cloud-arrow-up text-secondary"></i>
-                                <span class="small text-secondary fw-600">Upload Cheque (PDF or Image)</span>
-                                <InputFile OnChange="HandleChequeUpload" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                                @if (_errors.ContainsKey("ChequeFile"))
-                                {
-                                    <div class="field-error">@_errors["ChequeFile"]</div>
-                                }
-                                @if (!string.IsNullOrEmpty(_model.ChequeFilePath))
-                                {
-                                    <div class="mt-1 small text-success file-name-display">
-                                        <i class="bi bi-check-circle"></i> @_model.ChequeFilePath
-                                        <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveChequeFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                        @foreach (var bank in _banksAll.Where(b => string.IsNullOrWhiteSpace(_bankSearchText) ||
+                                            b.Name.Contains(_bankSearchText, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(bank.Id, bank.Name)'>
+                                                @bank.Name
+                                            </div>
+                                        }
                                     </div>
                                 }
-                            </label>
-                            @if (_isExtractingCheque)
+                            </div>
+                            @if (_errors.ContainsKey("BankId"))
                             {
-                                <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Extracting bank details from cheque...</div>
-                            }
-                            @if (!string.IsNullOrEmpty(_ocrWarningCheque))
-                            {
-                                <div class="ocr-warning">@_ocrWarningCheque</div>
+                                <div class="field-error">@_errors["BankId"]</div>
                             }
                         </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="basic-info-card">
-                <div class="card-header-title mb-2">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/TaxComplience.svg"
-                         class="formicon"
-                         alt="icon" /> Tax & Compliance
-                </div>
-                <div class="row g-3">
-                    <div class="col-12 col-md-4">
-                        <div class="compliance-card gst">
-                            <div class="fw-bold small mb-2"><i class="bi bi-file-earmark-text text-success me-2"></i>GST Number <span class="text-danger">*</span></div>
-                            <label class="form-label-custom">GST Number</label>
-                            <div class="input-with-loader">
-                                <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("GSTNumber") ? "is-invalid" : "")" @bind="_model.GSTNumber" @bind:after="OnGSTNumberChanged" placeholder="15-character GST Number" maxlength="15" style="text-transform: uppercase">
-                                @if (_isExtractingGst)
-                                {
-                                    <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
-                                }
-                            </div>
-                            @if (_errors.ContainsKey("GSTNumber"))
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Bank Branch</label>
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Branch") ? "is-invalid" : "")" @bind="_model.Branch" @bind:after='() => ValidateFieldOnChange("Branch", !string.IsNullOrWhiteSpace(_model.Branch))' placeholder="Enter Bank Branch">
+                            @if (_errors.ContainsKey("Branch"))
                             {
-                                <div class="field-error">@_errors["GSTNumber"]</div>
+                                <div class="field-error">@_errors["Branch"]</div>
                             }
-                            @if (!string.IsNullOrEmpty(_ocrWarningGst))
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">IFSC Code</label>
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("IFSC") ? "is-invalid" : "")" @bind="_model.IFSC" @bind:after='() => ValidateFieldOnChange("IFSC", !string.IsNullOrWhiteSpace(_model.IFSC))' placeholder="Enter IFSC Code">
+                            @if (_errors.ContainsKey("IFSC"))
                             {
-                                <div class="ocr-warning">@_ocrWarningGst</div>
+                                <div class="field-error">@_errors["IFSC"]</div>
                             }
-                            <div class="mt-2">
+                        </div>
+                        <div class="col-12">
+                            <div class="cheque-upload-wrap">
                                 <label class="upload-area">
-                                    <i class="bi bi-cloud-arrow-up text-success"></i>
-                                    <span class="small text-success fw-600">Upload GST Certificate (PDF) *</span>
-                                    <InputFile OnChange="HandleGstUpload" accept=".pdf" hidden />
-                                    @if (_errors.ContainsKey("GSTFile"))
+                                    <i class="bi bi-cloud-arrow-up text-secondary"></i>
+                                    <span class="small text-secondary fw-600">Upload Cheque (PDF or Image)</span>
+                                    <InputFile OnChange="HandleChequeUpload" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                                    @if (_errors.ContainsKey("ChequeFile"))
                                     {
-                                        <div class="field-error">@_errors["GSTFile"]</div>
+                                        <div class="field-error">@_errors["ChequeFile"]</div>
                                     }
-                                    @if (!string.IsNullOrEmpty(_model.GSTFilePath))
+                                    @if (!string.IsNullOrEmpty(_model.ChequeFilePath))
                                     {
                                         <div class="mt-1 small text-success file-name-display">
-                                            <i class="bi bi-check-circle"></i> @_model.GSTFilePath
-                                            <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveGstFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                            <i class="bi bi-check-circle"></i> @_model.ChequeFilePath
+                                            <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveChequeFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
                                         </div>
                                     }
                                 </label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <div class="compliance-card pan">
-                            <div class="fw-bold small mb-2"><i class="bi bi-person-badge text-primary me-2"></i>PAN Number <span class="text-danger">*</span></div>
-                            <label class="form-label-custom">PAN Number</label>
-                            <div class="input-with-loader">
-                                <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("PANNumber") ? "is-invalid" : "")" @bind="_model.PANNumber" @bind:after="OnPANNumberChanged" placeholder="10-character PAN Number" maxlength="10" style="text-transform: uppercase">
-                                @if (_isExtractingPan)
+                                @if (_isExtractingCheque)
                                 {
-                                    <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                    <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Extracting bank details from cheque...</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_ocrWarningCheque))
+                                {
+                                    <div class="ocr-warning">@_ocrWarningCheque</div>
                                 }
                             </div>
-                            @if (_errors.ContainsKey("PANNumber"))
-                            {
-                                <div class="field-error">@_errors["PANNumber"]</div>
-                            }
-                            @if (!string.IsNullOrEmpty(_ocrWarningPan))
-                            {
-                                <div class="ocr-warning">@_ocrWarningPan</div>
-                            }
-                            <div class="mt-2">
-                                <label class="upload-area">
-                                    <i class="bi bi-cloud-arrow-up text-primary"></i>
-                                    <span class="small text-primary fw-600">Upload PAN Card (PDF) *</span>
-                                    <InputFile OnChange="HandlePanUpload" accept=".pdf" hidden />
-                                    @if (_errors.ContainsKey("PANFile"))
+                        </div>
+                    </div>
+                </div>
+
+                <div class="basic-info-card">
+                    <div class="card-header-title mb-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/TaxComplience.svg"
+                             class="formicon"
+                             alt="icon" /> Tax & Compliance
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <div class="compliance-card gst">
+                                <div class="fw-bold small mb-2"><i class="bi bi-file-earmark-text text-success me-2"></i>GST Number <span class="text-danger">*</span></div>
+                                <label class="form-label-custom">GST Number</label>
+                                <div class="input-with-loader">
+                                    <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("GSTNumber") ? "is-invalid" : "")" @bind="_model.GSTNumber" @bind:after="OnGSTNumberChanged" placeholder="15-character GST Number" maxlength="15" style="text-transform: uppercase">
+                                    @if (_isExtractingGst)
                                     {
-                                        <div class="field-error">@_errors["PANFile"]</div>
+                                        <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
                                     }
-                                    @if (!string.IsNullOrEmpty(_model.PANFilePath))
+                                </div>
+                                @if (_errors.ContainsKey("GSTNumber"))
+                                {
+                                    <div class="field-error">@_errors["GSTNumber"]</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_ocrWarningGst))
+                                {
+                                    <div class="ocr-warning">@_ocrWarningGst</div>
+                                }
+                                <div class="mt-2">
+                                    <label class="upload-area">
+                                        <i class="bi bi-cloud-arrow-up text-success"></i>
+                                        <span class="small text-success fw-600">Upload GST Certificate (PDF) *</span>
+                                        <InputFile OnChange="HandleGstUpload" accept=".pdf" hidden />
+                                        @if (_errors.ContainsKey("GSTFile"))
+                                        {
+                                            <div class="field-error">@_errors["GSTFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.GSTFilePath))
+                                        {
+                                            <div class="mt-1 small text-success file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.GSTFilePath
+                                                <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveGstFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <div class="compliance-card pan">
+                                <div class="fw-bold small mb-2"><i class="bi bi-person-badge text-primary me-2"></i>PAN Number <span class="text-danger">*</span></div>
+                                <label class="form-label-custom">PAN Number</label>
+                                <div class="input-with-loader">
+                                    <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("PANNumber") ? "is-invalid" : "")" @bind="_model.PANNumber" @bind:after="OnPANNumberChanged" placeholder="10-character PAN Number" maxlength="10" style="text-transform: uppercase">
+                                    @if (_isExtractingPan)
                                     {
-                                        <div class="mt-1 small text-primary file-name-display">
-                                            <i class="bi bi-check-circle"></i> @_model.PANFilePath
-                                            <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemovePanFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
-                                        </div>
+                                        <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
                                     }
-                                </label>
+                                </div>
+                                @if (_errors.ContainsKey("PANNumber"))
+                                {
+                                    <div class="field-error">@_errors["PANNumber"]</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_ocrWarningPan))
+                                {
+                                    <div class="ocr-warning">@_ocrWarningPan</div>
+                                }
+                                <div class="mt-2">
+                                    <label class="upload-area">
+                                        <i class="bi bi-cloud-arrow-up text-primary"></i>
+                                        <span class="small text-primary fw-600">Upload PAN Card (PDF) *</span>
+                                        <InputFile OnChange="HandlePanUpload" accept=".pdf" hidden />
+                                        @if (_errors.ContainsKey("PANFile"))
+                                        {
+                                            <div class="field-error">@_errors["PANFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.PANFilePath))
+                                        {
+                                            <div class="mt-1 small text-primary file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.PANFilePath
+                                                <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemovePanFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <div class="compliance-card aadhaar">
+                                <div class="fw-bold small mb-2"><i class="bi bi-fingerprint text-danger me-2"></i>Aadhaar Number <span class="text-danger">*</span></div>
+                                <label class="form-label-custom">Aadhaar Number</label>
+                                <div class="input-with-loader">
+                                    <input type="text"
+                                           class="form-control form-control-sm @(_errors.ContainsKey("AadhaarNumber") ? "is-invalid" : "")"
+                                           @bind="_model.AadhaarNumber"
+                                           @bind:after="OnAadhaarNumberChanged"
+                                           placeholder="12-digit Aadhaar"
+                                           maxlength="12"
+                                           oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                                    @if (_isExtractingAadhaar)
+                                    {
+                                        <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                    }
+                                </div>
+
+                                @if (_errors.ContainsKey("AadhaarNumber"))
+                                {
+                                    <div class="field-error">@_errors["AadhaarNumber"]</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_ocrWarningAadhaar))
+                                {
+                                    <div class="ocr-warning">@_ocrWarningAadhaar</div>
+                                }
+
+                                <div class="mt-2">
+                                    <label class="upload-area">
+                                        <i class="bi bi-cloud-arrow-up text-danger"></i>
+                                        <span class="small text-danger fw-600">Upload Aadhaar Card (PDF) *</span>
+                                        <InputFile OnChange="HandleAadhaarUpload" accept=".pdf" hidden />
+                                        @if (_errors.ContainsKey("AadhaarFile"))
+                                        {
+                                            <div class="field-error">@_errors["AadhaarFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.AadhaarFilePath))
+                                        {
+                                            <div class="mt-1 small text-danger file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.AadhaarFilePath
+                                                <i class="bi bi-x-circle text-dark ms-2 file-remove-x" @onclick="RemoveAadhaarFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-4 mb-4">
+                    @if (_errors.ContainsKey("FertilizerLicense"))
+                    {
+                        <div class="col-12">
+                            <div class="alert alert-warning py-2 mb-0"><i class="bi bi-exclamation-triangle me-2"></i>@_errors["FertilizerLicense"]</div>
+                        </div>
+                    }
+                    <div class="col-12 col-md-6">
+                        <div class="form-card mb-0 h-100">
+                            <div class="card-header-title">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WholeSale.svg" alt="WholeSale" class="formicon" /> Wholesale Fertilizer Details (as per iFMS)
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Wholesale Fertilizer License Details</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("FertilizerLicense") && string.IsNullOrWhiteSpace(_model.WholeSaleFertilizerLicenseNumber) ? "is-invalid" : "")" @bind="_model.WholeSaleFertilizerLicenseNumber" @bind:after="OnFertilizerLicenseChanged" placeholder="Asper Fertilizer License Number">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Expiry Date</label>
+                                    <input type="date" class="form-control-custom w-100" @bind="_model.WholesaleLicenseExpiryDate">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">mFMS ID</label>
+                                    <input type="text" class="form-control-custom w-100" @bind="_model.WholesalemFMSCode" placeholder="Enter mFMS ID">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="file-upload-box">
+                                        <span><i class="bi bi-upload"></i> Choose file</span>
+                                        <small>Upload License Certificate</small>
+                                        <InputFile OnChange="HandleWholesaleFileUpload" hidden accept=".pdf" />
+                                        @if (_errors.ContainsKey("WholesaleFile"))
+                                        {
+                                            <div class="field-error">@_errors["WholesaleFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.WholesaleLicenseFilePath))
+                                        {
+                                            <div class="mt-2 small text-success file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.WholesaleLicenseFilePath
+                                                <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveWholesaleFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-12 col-md-4">
-                        <div class="compliance-card aadhaar">
-                            <div class="fw-bold small mb-2"><i class="bi bi-fingerprint text-danger me-2"></i>Aadhaar Number <span class="text-danger">*</span></div>
-                            <label class="form-label-custom">Aadhaar Number</label>
-                            <div class="input-with-loader">
-                                <input type="text"
-                                       class="form-control form-control-sm @(_errors.ContainsKey("AadhaarNumber") ? "is-invalid" : "")"
-                                       @bind="_model.AadhaarNumber"
-                                       @bind:after="OnAadhaarNumberChanged"
-                                       placeholder="12-digit Aadhaar"
-                                       maxlength="12"
-                                       oninput="this.value = this.value.replace(/[^0-9]/g, '')">
-                                @if (_isExtractingAadhaar)
+                    <div class="col-12 col-md-6">
+                        <div class="form-card mb-0 h-100">
+                            <div class="card-header-title">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WholeSale.svg" alt="WholeSale" class="formicon" /> Retail Fertilizer Details (as per iFMS)
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Retail Fertilizer License Details</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("FertilizerLicense") && string.IsNullOrWhiteSpace(_model.RetailFertilizerLicenseNumber) ? "is-invalid" : "")" @bind="_model.RetailFertilizerLicenseNumber" @bind:after="OnFertilizerLicenseChanged" placeholder="Asper Fertilizer License Number">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Expiry Date</label>
+                                    <input type="date" class="form-control-custom w-100" @bind="_model.RetailLicenseExpiryDate">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">mFMS ID</label>
+                                    <input type="text" class="form-control-custom w-100" @bind="_model.RetailmFMSCode" placeholder="Enter mFMS ID">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="file-upload-box">
+                                        <span><i class="bi bi-upload"></i> Choose file</span>
+                                        <small>Upload License Certificate</small>
+                                        <InputFile OnChange="HandleRetailFileUpload" hidden accept=".pdf" />
+                                        @if (_errors.ContainsKey("RetailFile"))
+                                        {
+                                            <div class="field-error">@_errors["RetailFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.RetailLicenseFilePath))
+                                        {
+                                            <div class="mt-2 small text-success file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.RetailLicenseFilePath
+                                                <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveRetailFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-md-6">
+                        <div class="form-card h-100">
+                            <div class="fw-bold mb-3 card-header-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/OfficeAutomation.svg" alt="OfficeAutomation" class="formicon" /> Office Automation</div>
+                            <div class="row g-3 align-items-end office-auto-row">
+                                <div class="col-auto">
+                                    <label class="small text-muted mb-2 d-block">Do you have office automation?</label>
+                                    <div class="yes-no-group">
+                                        <button type="button"
+                                                class="btn-yes @(_model.IsOfficeAutomation == true ? "active" : "")"
+                                                @onclick='() => _model.IsOfficeAutomation = true'>
+                                            Yes
+                                        </button>
+                                        <button type="button"
+                                                class="btn-no @(_model.IsOfficeAutomation == false ? "active" : "")"
+                                                @onclick='() => _model.IsOfficeAutomation = false'>
+                                            No
+                                        </button>
+                                    </div>
+                                </div>
+                                @if (_model.IsOfficeAutomation == false)
                                 {
-                                    <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                    <div class="col-12 col-sm">
+                                        <label class="form-label-custom">Expected Office Automation Date</label>
+                                        <input type="date" class="form-control-custom w-100" @bind="_model.ExpectedOfficeAutomationDate" />
+                                    </div>
                                 }
                             </div>
-
-                            @if (_errors.ContainsKey("AadhaarNumber"))
-                            {
-                                <div class="field-error">@_errors["AadhaarNumber"]</div>
-                            }
-                            @if (!string.IsNullOrEmpty(_ocrWarningAadhaar))
-                            {
-                                <div class="ocr-warning">@_ocrWarningAadhaar</div>
-                            }
-
-                            <div class="mt-2">
-                                <label class="upload-area">
-                                    <i class="bi bi-cloud-arrow-up text-danger"></i>
-                                    <span class="small text-danger fw-600">Upload Aadhaar Card (PDF) *</span>
-                                    <InputFile OnChange="HandleAadhaarUpload" accept=".pdf" hidden />
-                                    @if (_errors.ContainsKey("AadhaarFile"))
-                                    {
-                                        <div class="field-error">@_errors["AadhaarFile"]</div>
-                                    }
-                                    @if (!string.IsNullOrEmpty(_model.AadhaarFilePath))
-                                    {
-                                        <div class="mt-1 small text-danger file-name-display">
-                                            <i class="bi bi-check-circle"></i> @_model.AadhaarFilePath
-                                            <i class="bi bi-x-circle text-dark ms-2 file-remove-x" @onclick="RemoveAadhaarFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
-                                        </div>
-                                    }
-                                </label>
-                            </div>
-
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <div class="row g-4 mb-4">
-                @if (_errors.ContainsKey("FertilizerLicense"))
-                {
-                    <div class="col-12">
-                        <div class="alert alert-warning py-2 mb-0"><i class="bi bi-exclamation-triangle me-2"></i>@_errors["FertilizerLicense"]</div>
-                    </div>
-                }
-                <div class="col-12 col-md-6">
-                    <div class="form-card mb-0 h-100">
-                        <div class="card-header-title">
-                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WholeSale.svg" alt="WholeSale" class="formicon" /> Wholesale Fertilizer Details (as per iFMS)
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Wholesale Fertilizer License Details</label>
-                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("FertilizerLicense") && string.IsNullOrWhiteSpace(_model.WholeSaleFertilizerLicenseNumber) ? "is-invalid" : "")" @bind="_model.WholeSaleFertilizerLicenseNumber" @bind:after="OnFertilizerLicenseChanged" placeholder="Asper Fertilizer License Number">
+                    <div class="col-12 col-md-6">
+                        <div class="small-card h-100">
+                            <div class="fw-bold mb-3 card-header-title">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/EnrollmentStatus.svg"
+                                     class="formicon" /> Enrollment Status
                             </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Expiry Date</label>
-                                <input type="date" class="form-control-custom w-100" @bind="_model.WholesaleLicenseExpiryDate">
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">mFMS ID</label>
-                                <input type="text" class="form-control-custom w-100" @bind="_model.WholesalemFMSCode" placeholder="Enter mFMS ID">
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="file-upload-box">
-                                    <span><i class="bi bi-upload"></i> Choose file</span>
-                                    <small>Upload License Certificate</small>
-                                    <InputFile OnChange="HandleWholesaleFileUpload" hidden accept=".pdf" />
-                                    @if (_errors.ContainsKey("WholesaleFile"))
-                                    {
-                                        <div class="field-error">@_errors["WholesaleFile"]</div>
-                                    }
-                                    @if (!string.IsNullOrEmpty(_model.WholesaleLicenseFilePath))
-                                    {
-                                        <div class="mt-2 small text-success file-name-display">
-                                            <i class="bi bi-check-circle"></i> @_model.WholesaleLicenseFilePath
-                                            <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveWholesaleFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
-                                        </div>
-                                    }
-                                </label>
+                            <label class="form text-muted mb-2 d-block">Are you Enrolled in SDWA?</label>
+                            <div class="yes-no-group">
+                                <button type="button"
+                                        class="btn-yes @(_model.IsSDWA == true ? "active" : "")"
+                                        @onclick='() => _model.IsSDWA = true'>
+                                    Yes
+                                </button>
+                                <button type="button"
+                                        class="btn-no @(_model.IsSDWA == false ? "active" : "")"
+                                        @onclick='() => _model.IsSDWA = false'>
+                                    No
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
+            }
 
-                <div class="col-12 col-md-6">
-                    <div class="form-card mb-0 h-100">
-                        <div class="card-header-title">
-                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WholeSale.svg" alt="WholeSale" class="formicon" /> Retail Fertilizer Details (as per iFMS)
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Retail Fertilizer License Details</label>
-                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("FertilizerLicense") && string.IsNullOrWhiteSpace(_model.RetailFertilizerLicenseNumber) ? "is-invalid" : "")" @bind="_model.RetailFertilizerLicenseNumber" @bind:after="OnFertilizerLicenseChanged" placeholder="Asper Fertilizer License Number">
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Expiry Date</label>
-                                <input type="date" class="form-control-custom w-100" @bind="_model.RetailLicenseExpiryDate">
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">mFMS ID</label>
-                                <input type="text" class="form-control-custom w-100" @bind="_model.RetailmFMSCode" placeholder="Enter mFMS ID">
-                            </div>
-                            <div class="col-12 col-sm-6">
-                                <label class="file-upload-box">
-                                    <span><i class="bi bi-upload"></i> Choose file</span>
-                                    <small>Upload License Certificate</small>
-                                    <InputFile OnChange="HandleRetailFileUpload" hidden accept=".pdf" />
-                                    @if (_errors.ContainsKey("RetailFile"))
-                                    {
-                                        <div class="field-error">@_errors["RetailFile"]</div>
-                                    }
-                                    @if (!string.IsNullOrEmpty(_model.RetailLicenseFilePath))
-                                    {
-                                        <div class="mt-2 small text-success file-name-display">
-                                            <i class="bi bi-check-circle"></i> @_model.RetailLicenseFilePath
-                                            <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveRetailFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
-                                        </div>
-                                    }
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="row g-3 mb-4">
-                <div class="col-12 col-md-6">
-                    <div class="form-card h-100">
-                        <div class="fw-bold mb-3 card-header-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/OfficeAutomation.svg" alt="OfficeAutomation" class="formicon" /> Office Automation</div>
-                        <div class="row g-3 align-items-end office-auto-row">
-                            <div class="col-auto">
-                                <label class="small text-muted mb-2 d-block">Do you have office automation?</label>
-                                <div class="yes-no-group">
-                                    <button type="button"
-                                            class="btn-yes @(_model.IsOfficeAutomation == true ? "active" : "")"
-                                            @onclick='() => _model.IsOfficeAutomation = true'>
-                                        Yes
-                                    </button>
-                                    <button type="button"
-                                            class="btn-no @(_model.IsOfficeAutomation == false ? "active" : "")"
-                                            @onclick='() => _model.IsOfficeAutomation = false'>
-                                        No
-                                    </button>
-                                </div>
-                            </div>
-                            @if (_model.IsOfficeAutomation == false)
-                            {
-                                <div class="col-12 col-sm">
-                                    <label class="form-label-custom">Expected Office Automation Date</label>
-                                    <input type="date" class="form-control-custom w-100" @bind="_model.ExpectedOfficeAutomationDate" />
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </div>
-                <div class="col-12 col-md-6">
-                    <div class="small-card h-100">
-                        <div class="fw-bold mb-3 card-header-title">
-                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/EnrollmentStatus.svg"
-                                 class="formicon" /> Enrollment Status
-                        </div>
-                        <label class="form text-muted mb-2 d-block">Are you Enrolled in SDWA?</label>
-                        <div class="yes-no-group">
-                            <button type="button"
-                                    class="btn-yes @(_model.IsSDWA == true ? "active" : "")"
-                                    @onclick='() => _model.IsSDWA = true'>
-                                Yes
-                            </button>
-                            <button type="button"
-                                    class="btn-no @(_model.IsSDWA == false ? "active" : "")"
-                                    @onclick='() => _model.IsSDWA = false'>
-                                No
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        }
-
-    </form>
+        </form>
     </fieldset>
 
     <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
@@ -1108,7 +1116,7 @@
     private bool isGreenStar = true;
     private bool _isStateLocked;
     private bool _isRegionLocked;
-private bool _isHqLocked;
+    private bool _isHqLocked;
 
     private bool _isExtractingGst;
     private bool _isExtractingPan;
@@ -1175,42 +1183,42 @@ private bool _isHqLocked;
     private string? _pincodeMessage;
     private bool _pincodeSuccess;
 
-   protected override async Task OnInitializedAsync()
-{
-    _objRef = DotNetObjectReference.Create(this);
-    Loading.Show();
-    try
+    protected override async Task OnInitializedAsync()
     {
-        // If editing, start the dealer fetch concurrently with the lookups
-        Task<DealerFormModel?>? dealerTask = null;
-        if (DealerIdFromQuery.HasValue && DealerIdFromQuery.Value > 0)
+        _objRef = DotNetObjectReference.Create(this);
+        Loading.Show();
+        try
         {
-            _dealerCodeId = DealerIdFromQuery.Value;
-            dealerTask = Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
+            // If editing, start the dealer fetch concurrently with the lookups
+            Task<DealerFormModel?>? dealerTask = null;
+            if (DealerIdFromQuery.HasValue && DealerIdFromQuery.Value > 0)
+            {
+                _dealerCodeId = DealerIdFromQuery.Value;
+                dealerTask = Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
+            }
+
+            await LoadData();
+            ApplyEmployeeLocationDefaults();
+
+            if (dealerTask != null)
+            {
+                try
+                {
+                    var dealer = await dealerTask;
+                    await ApplyDealerToForm(dealer, preserveCompanySelection: true);
+                }
+                catch (Exception ex)
+                {
+                    ShowMessage($"Failed to load dealer: {ex.Message}", true);
+                    _isEditMode = false;
+                }
+            }
         }
-
-        await LoadData();
-        ApplyEmployeeLocationDefaults();
-
-        if (dealerTask != null)
+        finally
         {
-            try
-            {
-                var dealer = await dealerTask;
-                await ApplyDealerToForm(dealer, preserveCompanySelection: true);
-            }
-            catch (Exception ex)
-            {
-                ShowMessage($"Failed to load dealer: {ex.Message}", true);
-                _isEditMode = false;
-            }
+            Loading.Hide();
         }
     }
-    finally
-    {
-        Loading.Hide();
-    }
-}
 
     public void Dispose() => _objRef?.Dispose();
 
@@ -1226,11 +1234,11 @@ private bool _isHqLocked;
         }
     }
     private async Task ApplyDealerToForm(DealerFormModel? dealer, bool preserveCompanySelection = false)
-{
-    if (dealer == null) return;
+    {
+        if (dealer == null) return;
 
-    _model = dealer;
-    _isEditMode = true;
+        _model = dealer;
+        _isEditMode = true;
 
         // Prefer enum (EntityType) if present, otherwise fallback to legacy IsDealer
         if (_model.EntityType.HasValue)
@@ -1248,34 +1256,34 @@ private bool _isHqLocked;
             selected = _model.IsDealer ? "Dealer" : "Department";
         }
 
-if (!preserveCompanySelection)
-{
-    isSpic = _model.InSpic;
-    isGreenStar = _model.InGreenStar;
-}
-_basicInfoStateId  = _model.StateId;
-_basicInfoRegionId = _model.Region;
-_basicInfoHqId     = _model.HQ;
-_parentDealerId    = _model.ParentDealer;
+        if (!preserveCompanySelection)
+        {
+            isSpic = _model.InSpic;
+            isGreenStar = _model.InGreenStar;
+        }
+        _basicInfoStateId = _model.StateId;
+        _basicInfoRegionId = _model.Region;
+        _basicInfoHqId = _model.HQ;
+        _parentDealerId = _model.ParentDealer;
 
-    status = _model.Status switch
-    {
-        0 => "Active",
-        1 => "Inactive",
-        2 => "Terminated",
-        _ => "Active"
-    };
+        status = _model.Status switch
+        {
+            0 => "Active",
+            1 => "Inactive",
+            2 => "Terminated",
+            _ => "Active"
+        };
 
-    _filteredRegions       = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
-    _filteredHeadquarters  = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
-    _filteredDealers       = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
-    InitializeSearchTexts();
-    ApplyLockedEmployeeLocation();
-    if (_model.Latitude.HasValue && _model.Longitude.HasValue)
-    {
-        await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+        _filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
+        _filteredHeadquarters = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
+        _filteredDealers = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
+        InitializeSearchTexts();
+        ApplyLockedEmployeeLocation();
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+        {
+            await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+        }
     }
-}
     private async Task TriggerMapUpdate(double lat, double lng)
     {
         try { await JS.InvokeVoidAsync("updateLeafletMap", "leafletMap", lat, lng); }
@@ -1293,35 +1301,35 @@ _parentDealerId    = _model.ParentDealer;
         StateHasChanged();
     }
 
-private async Task LoadData()
-{ 
-    try
+    private async Task LoadData()
     {
-        var cacheTask   = LookupCache.EnsureLoadedAsync();
-        var dealersTask = Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/lookup");
+        try
+        {
+            var cacheTask = LookupCache.EnsureLoadedAsync();
+            var dealersTask = Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/lookup");
 
-        await Task.WhenAll(cacheTask, dealersTask);
+            await Task.WhenAll(cacheTask, dealersTask);
 
-        _statesAll       = LookupCache.States;
-        _DistrictAll     = LookupCache.Districts;
-        _regionsAll      = LookupCache.Regions;
-        _headquartersAll = LookupCache.Headquarters;
-        _banksAll        = LookupCache.Banks;
-        _dealersAll      = dealersTask.Result ?? new();
+            _statesAll = LookupCache.States;
+            _DistrictAll = LookupCache.Districts;
+            _regionsAll = LookupCache.Regions;
+            _headquartersAll = LookupCache.Headquarters;
+            _banksAll = LookupCache.Banks;
+            _dealersAll = dealersTask.Result ?? new();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load data: {ex.Message}", true);
+        }
     }
-    catch (Exception ex)
-    {
-        ShowMessage($"Failed to load data: {ex.Message}", true);
-    }
-}
 
     void Select(string type) => selected = type;
     void SelectStatus(string value) => status = value;
 
     private void ApplyEmployeeLocationDefaults()
-{
-    ApplyLockedEmployeeLocation();
-}
+    {
+        ApplyLockedEmployeeLocation();
+    }
 
     void ToggleSpic() => isSpic = !isSpic;
     void ToggleGreenStar() => isGreenStar = !isGreenStar;
@@ -1426,138 +1434,138 @@ private async Task LoadData()
             _errors.Remove("FertilizerLicense");
     }
 
- private async Task OnPincodeChanged()
-{
-    _pincodeMessage = null;
-    _pincodeSuccess = false;
-    _errors.Remove("PinCode");
-
-    // Strip non-digit characters
-    if (!string.IsNullOrEmpty(_model.PinCode))
+    private async Task OnPincodeChanged()
     {
-        var digitsOnly = new string(_model.PinCode.Where(char.IsDigit).ToArray());
-        if (digitsOnly != _model.PinCode)
-            _model.PinCode = digitsOnly;
-    }
+        _pincodeMessage = null;
+        _pincodeSuccess = false;
+        _errors.Remove("PinCode");
 
-    if (string.IsNullOrWhiteSpace(_model.PinCode) || _model.PinCode.Length != 6)
-        return;
-
-    _isPincodeLookup = true;
-    StateHasChanged();
-
-    try
-    {
-        // Call our own backend — no SSL/CORS/auth issues, no DefaultRequestHeaders juggling
-        using var response = await Http.GetAsync($"api/PincodeLookup/{_model.PinCode}");
-
-        if (!response.IsSuccessStatusCode)
+        // Strip non-digit characters
+        if (!string.IsNullOrEmpty(_model.PinCode))
         {
-            var body = await response.Content.ReadAsStringAsync();
-            _pincodeMessage = $"Lookup failed (HTTP {(int)response.StatusCode}): {body}";
-            return;
+            var digitsOnly = new string(_model.PinCode.Where(char.IsDigit).ToArray());
+            if (digitsOnly != _model.PinCode)
+                _model.PinCode = digitsOnly;
         }
 
-        var results = await response.Content.ReadFromJsonAsync<List<PincodeApiResponse>>();
-        var result = results?.FirstOrDefault();
-
-        if (result == null
-            || !string.Equals(result.Status, "Success", StringComparison.OrdinalIgnoreCase)
-            || result.PostOffice == null
-            || result.PostOffice.Count == 0)
-        {
-            _pincodeMessage = $"No data found for pincode {_model.PinCode}";
+        if (string.IsNullOrWhiteSpace(_model.PinCode) || _model.PinCode.Length != 6)
             return;
-        }
 
-        var postOffice = result.PostOffice[0];
+        _isPincodeLookup = true;
+        StateHasChanged();
 
-        var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
-        var matchedDistrict = _DistrictAll.FirstOrDefault(d =>
-            d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
-        if (matchedDistrict != null) _model.DistrictId = matchedDistrict.Id;
-
-        var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
-        var matchedState = _statesAll.FirstOrDefault(s =>
-            s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
-        if (matchedState != null) _model.DealerStateId = matchedState.Id;
-
-        if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
-            _model.Block = postOffice.Block;
-        if (!string.IsNullOrWhiteSpace(postOffice.Division)) _model.Taluk = postOffice.Division;
-        if (!string.IsNullOrWhiteSpace(postOffice.Name))     _model.Village = postOffice.Name;
-
-        _pincodeSuccess = true;
-        _pincodeMessage = $"Auto-filled: {postOffice.District}, {postOffice.State}";
-    }
-    catch (HttpRequestException httpEx)
-    {
-        _pincodeMessage = $"Network error: {httpEx.Message}";
-    }
-    catch (TaskCanceledException)
-    {
-        _pincodeMessage = "Lookup timed out — try again.";
-    }
-    catch (Exception ex)
-    {
-        _pincodeMessage = $"{ex.GetType().Name}: {ex.Message}";
-    }
-    finally
-    {
-        _isPincodeLookup = false;
-    }
-}
-
-    private async Task OnDealerCodeChanged()
-{
-    _errors.Clear();
-    _message = null;
-
-    if (_dealerCodeId > 0)
-    {
         try
         {
-            var dealer = await Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
-            await ApplyDealerToForm(dealer, preserveCompanySelection: false);
-            InitializeSearchTexts();
+            // Call our own backend — no SSL/CORS/auth issues, no DefaultRequestHeaders juggling
+            using var response = await Http.GetAsync($"api/PincodeLookup/{_model.PinCode}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _pincodeMessage = $"Lookup failed (HTTP {(int)response.StatusCode}): {body}";
+                return;
+            }
+
+            var results = await response.Content.ReadFromJsonAsync<List<PincodeApiResponse>>();
+            var result = results?.FirstOrDefault();
+
+            if (result == null
+                || !string.Equals(result.Status, "Success", StringComparison.OrdinalIgnoreCase)
+                || result.PostOffice == null
+                || result.PostOffice.Count == 0)
+            {
+                _pincodeMessage = $"No data found for pincode {_model.PinCode}";
+                return;
+            }
+
+            var postOffice = result.PostOffice[0];
+
+            var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
+            var matchedDistrict = _DistrictAll.FirstOrDefault(d =>
+                d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+            if (matchedDistrict != null) _model.DistrictId = matchedDistrict.Id;
+
+            var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
+            var matchedState = _statesAll.FirstOrDefault(s =>
+                s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
+            if (matchedState != null) _model.DealerStateId = matchedState.Id;
+
+            if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+                _model.Block = postOffice.Block;
+            if (!string.IsNullOrWhiteSpace(postOffice.Division)) _model.Taluk = postOffice.Division;
+            if (!string.IsNullOrWhiteSpace(postOffice.Name)) _model.Village = postOffice.Name;
+
+            _pincodeSuccess = true;
+            _pincodeMessage = $"Auto-filled: {postOffice.District}, {postOffice.State}";
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _pincodeMessage = $"Network error: {httpEx.Message}";
+        }
+        catch (TaskCanceledException)
+        {
+            _pincodeMessage = "Lookup timed out — try again.";
         }
         catch (Exception ex)
         {
-            ShowMessage($"Failed to load dealer: {ex.Message}", true);
-            _isEditMode = false;
+            _pincodeMessage = $"{ex.GetType().Name}: {ex.Message}";
         }
-    }
- else
-{
-    _model = new();
-     isSpic      = true;   // reset to default for new entry
-        isGreenStar = true;   // reset to default for new entry
-    _isEditMode = false;
-
-    // Restore logged-in user's State / Region / HQ for New Entry
-    ApplyLockedEmployeeLocation();
-
-    // Reset selection defaults for new entry
-    selected = "Dealer"; // default to Dealer for new entries
-}
-}
-
-private void OnDealerStateChanged()
-{
-    // If a district was selected but it doesn't belong to the new state, reset it
-    if (_model.DistrictId > 0)
-    {
-        var districtBelongsToState = _DistrictAll.Any(d =>
-            d.Id == _model.DistrictId &&
-            d.StateId == _model.DealerStateId);
-
-        if (!districtBelongsToState)
+        finally
         {
-            _model.DistrictId = 0;
-            _districtSearchText = "";
+            _isPincodeLookup = false;
         }
     }
-}
+
+    private async Task OnDealerCodeChanged()
+    {
+        _errors.Clear();
+        _message = null;
+
+        if (_dealerCodeId > 0)
+        {
+            try
+            {
+                var dealer = await Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
+                await ApplyDealerToForm(dealer, preserveCompanySelection: false);
+                InitializeSearchTexts();
+            }
+            catch (Exception ex)
+            {
+                ShowMessage($"Failed to load dealer: {ex.Message}", true);
+                _isEditMode = false;
+            }
+        }
+        else
+        {
+            _model = new();
+            isSpic = true;   // reset to default for new entry
+            isGreenStar = true;   // reset to default for new entry
+            _isEditMode = false;
+
+            // Restore logged-in user's State / Region / HQ for New Entry
+            ApplyLockedEmployeeLocation();
+
+            // Reset selection defaults for new entry
+            selected = "Dealer"; // default to Dealer for new entries
+        }
+    }
+
+    private void OnDealerStateChanged()
+    {
+        // If a district was selected but it doesn't belong to the new state, reset it
+        if (_model.DistrictId > 0)
+        {
+            var districtBelongsToState = _DistrictAll.Any(d =>
+                d.Id == _model.DistrictId &&
+                d.StateId == _model.DealerStateId);
+
+            if (!districtBelongsToState)
+            {
+                _model.DistrictId = 0;
+                _districtSearchText = "";
+            }
+        }
+    }
     private void InitializeSearchTexts()
     {
         var dealer = _filteredDealers.FirstOrDefault(d => d.Id == _dealerCodeId);
@@ -1673,18 +1681,18 @@ private void OnDealerStateChanged()
 
         if (string.IsNullOrWhiteSpace(_model.FirmName)) _errors["FirmName"] = "Firm Name is required";
 
-       if (status == "Inactive")
-{
+        if (status == "Inactive")
+        {
             if (_model.LastTransactionDate == null) _errors["LastTransactionDate"] = "Last Transaction Date is required";
         }
         if (status == "Terminated")
-{
-    if (_model.FinalApprovalDate == null)
-        _errors["FinalApprovalDate"] = "Final Approval Date is required";
+        {
+            if (_model.FinalApprovalDate == null)
+                _errors["FinalApprovalDate"] = "Final Approval Date is required";
 
-    if (_model.SettlementDate == null)
-        _errors["SettlementDate"] = "Settlement Date is required";
-}
+            if (_model.SettlementDate == null)
+                _errors["SettlementDate"] = "Settlement Date is required";
+        }
         if (ShowFullRegistrationSections)
         {
             if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
@@ -1821,7 +1829,7 @@ private void OnDealerStateChanged()
                     {
                         dealerId = result.Data.Id;
                         _model.Id = dealerId;
-                        _model.UserTableId = result.Data.UserTableId; 
+                        _model.UserTableId = result.Data.UserTableId;
                     }
                 }
                 else
@@ -1830,39 +1838,39 @@ private void OnDealerStateChanged()
                     var result = await response.Content.ReadFromJsonAsync<DealerFormModel>();
                     if (result != null)
                     {
-                        _model.UserTableId = result.UserTableId; 
+                        _model.UserTableId = result.UserTableId;
                     }
                 }
 
                 bool filesUpdated = false;
-               if (dealerId > 0)
-{
-    var uploads = new List<Task>();
+                if (dealerId > 0)
+                {
+                    var uploads = new List<Task>();
 
-    if (_gstFile != null)
-        uploads.Add(UploadFileToServer(dealerId, "GST", _gstFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.GSTFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.GST) && string.IsNullOrWhiteSpace(_model.GSTNumber)) { _model.GSTNumber = t.Result.GST; OnGSTNumberChanged(); } filesUpdated = true; } }));
-    if (_panFile != null)
-        uploads.Add(UploadFileToServer(dealerId, "PAN", _panFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.PANFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.PAN) && string.IsNullOrWhiteSpace(_model.PANNumber)) { _model.PANNumber = t.Result.PAN; OnPANNumberChanged(); } filesUpdated = true; } }));
-    if (_aadhaarFile != null)
-        uploads.Add(UploadFileToServer(dealerId, "Aadhaar", _aadhaarFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.AadhaarFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.Aadhaar) && string.IsNullOrWhiteSpace(_model.AadhaarNumber)) { _model.AadhaarNumber = t.Result.Aadhaar; OnAadhaarNumberChanged(); } filesUpdated = true; } }));
-    if (_chequeFile != null)
-        uploads.Add(UploadFileToServer(dealerId, "Cheque", _chequeFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.ChequeFilePath = t.Result.FilePath; filesUpdated = true; } }));
-    if (_wholesaleFile != null)
-        uploads.Add(UploadFileToServer(dealerId, "WholesaleLicense", _wholesaleFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.WholesaleLicenseFilePath = t.Result.FilePath; filesUpdated = true; } }));
-    if (_retailFile != null)
-        uploads.Add(UploadFileToServer(dealerId, "RetailLicense", _retailFile)
-            .ContinueWith(t => { if (t.Result != null) { _model.RetailLicenseFilePath = t.Result.FilePath; filesUpdated = true; } }));
+                    if (_gstFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "GST", _gstFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.GSTFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.GST) && string.IsNullOrWhiteSpace(_model.GSTNumber)) { _model.GSTNumber = t.Result.GST; OnGSTNumberChanged(); } filesUpdated = true; } }));
+                    if (_panFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "PAN", _panFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.PANFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.PAN) && string.IsNullOrWhiteSpace(_model.PANNumber)) { _model.PANNumber = t.Result.PAN; OnPANNumberChanged(); } filesUpdated = true; } }));
+                    if (_aadhaarFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "Aadhaar", _aadhaarFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.AadhaarFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.Aadhaar) && string.IsNullOrWhiteSpace(_model.AadhaarNumber)) { _model.AadhaarNumber = t.Result.Aadhaar; OnAadhaarNumberChanged(); } filesUpdated = true; } }));
+                    if (_chequeFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "Cheque", _chequeFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.ChequeFilePath = t.Result.FilePath; filesUpdated = true; } }));
+                    if (_wholesaleFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "WholesaleLicense", _wholesaleFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.WholesaleLicenseFilePath = t.Result.FilePath; filesUpdated = true; } }));
+                    if (_retailFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "RetailLicense", _retailFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.RetailLicenseFilePath = t.Result.FilePath; filesUpdated = true; } }));
 
-    await Task.WhenAll(uploads);
+                    await Task.WhenAll(uploads);
 
-    if (filesUpdated)
-        await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{dealerId}", _model);
-}
+                    if (filesUpdated)
+                        await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{dealerId}", _model);
+                }
 
                 _gstFile = null;
                 _panFile = null;
@@ -2534,39 +2542,39 @@ private void OnDealerStateChanged()
         public string? Branch { get; set; }
     }
     private void ApplyLockedEmployeeLocation()
-{
-    if (LoginState.IsAdmin)
-        return;
-
-    if (LoginState.StateId > 0)
     {
-        _basicInfoStateId = LoginState.StateId;
+        if (LoginState.IsAdmin)
+            return;
 
-        _filteredRegions = _regionsAll
-            .Where(r => r.StateId == _basicInfoStateId)
-            .ToList();
+        if (LoginState.StateId > 0)
+        {
+            _basicInfoStateId = LoginState.StateId;
 
-        _filteredDealers = _dealersAll
-            .Where(d => d.StateId == _basicInfoStateId)
-            .ToList();
+            _filteredRegions = _regionsAll
+                .Where(r => r.StateId == _basicInfoStateId)
+                .ToList();
+
+            _filteredDealers = _dealersAll
+                .Where(d => d.StateId == _basicInfoStateId)
+                .ToList();
+        }
+
+        if (LoginState.RegionId > 0)
+        {
+            _basicInfoRegionId = LoginState.RegionId;
+
+            _filteredHeadquarters = _headquartersAll
+                .Where(h => h.RegionId == _basicInfoRegionId)
+                .ToList();
+        }
+
+        if (LoginState.HQId > 0)
+        {
+            _basicInfoHqId = LoginState.HQId;
+        }
+
+        _isStateLocked = LoginState.StateId > 0;
+        _isRegionLocked = LoginState.RegionId > 0;
+        _isHqLocked = LoginState.HQId > 0;
     }
-
-    if (LoginState.RegionId > 0)
-    {
-        _basicInfoRegionId = LoginState.RegionId;
-
-        _filteredHeadquarters = _headquartersAll
-            .Where(h => h.RegionId == _basicInfoRegionId)
-            .ToList();
-    }
-
-    if (LoginState.HQId > 0)
-    {
-        _basicInfoHqId = LoginState.HQId;
-    }
-
-    _isStateLocked = LoginState.StateId > 0;
-    _isRegionLocked = LoginState.RegionId > 0;
-    _isHqLocked = LoginState.HQId > 0;
-}
 }
