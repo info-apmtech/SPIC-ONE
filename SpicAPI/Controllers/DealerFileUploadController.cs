@@ -245,7 +245,7 @@ namespace SpicAPI.Controllers
             if (file == null || file.Length == 0)
             {
                 _logger.LogWarning("Cheque OCR called with null or empty file");
-                return Ok(new { AccountNumber = (string?)null, IFSC = (string?)null, Branch = (string?)null });
+                return Ok(new { AccountNumber = (string?)null, IFSC = (string?)null, Branch = (string?)null, AccountHolderName = (string?)null });
             }
 
             _logger.LogInformation("Cheque OCR starting for file: {FileName}, size: {Size} bytes, type: {ContentType}",
@@ -254,6 +254,7 @@ namespace SpicAPI.Controllers
             string? accountNumber = null;
             string? ifsc = null;
             string? branch = null;
+            string? accountHolderName = null;
 
             try
             {
@@ -263,7 +264,7 @@ namespace SpicAPI.Controllers
                 if (!imageExts.Contains(ext) && ext != ".pdf")
                 {
                     _logger.LogWarning("Cheque OCR: unsupported file extension {Ext} for file {FileName}", ext, file.FileName);
-                    return Ok(new { AccountNumber = accountNumber, IFSC = ifsc, Branch = branch });
+                    return Ok(new { AccountNumber = accountNumber, IFSC = ifsc, Branch = branch, AccountHolderName = accountHolderName });
                 }
 
                 if (imageExts.Contains(ext))
@@ -274,7 +275,7 @@ namespace SpicAPI.Controllers
                     ms.Position = 0;
                     var text = OcrImageBytesToText(ms.ToArray());
                     _logger.LogInformation("Cheque image OCR produced text length: {Length}", text?.Length ?? 0);
-                    (accountNumber, ifsc, branch) = ExtractChequeValuesFromText(text);
+                    (accountNumber, ifsc, branch, accountHolderName) = ExtractChequeValuesFromText(text);
                 }
                 else
                 {
@@ -288,7 +289,7 @@ namespace SpicAPI.Controllers
                             await file.CopyToAsync(fs);
 
                         _logger.LogInformation("Cheque PDF saved to temp file: {TempFile}", tempFile);
-                        (accountNumber, ifsc, branch) = ExtractChequeFromPdf(tempFile);
+                        (accountNumber, ifsc, branch, accountHolderName) = ExtractChequeFromPdf(tempFile);
                     }
                     finally
                     {
@@ -305,30 +306,22 @@ namespace SpicAPI.Controllers
                 _logger.LogError(ex, "Cheque OCR extraction failed for file {FileName}", file.FileName);
             }
 
-            _logger.LogInformation("Cheque OCR result - AccountNumber: {Acc}, IFSC: {Ifsc}, Branch: {Branch}",
-                accountNumber ?? "(null)", ifsc ?? "(null)", branch ?? "(null)");
+            _logger.LogInformation("Cheque OCR result - AccountNumber: {Acc}, IFSC: {Ifsc}, Branch: {Branch}, AccountHolderName: {Holder}",
+                accountNumber ?? "(null)", ifsc ?? "(null)", branch ?? "(null)", accountHolderName ?? "(null)");
 
-            return Ok(new { AccountNumber = accountNumber, IFSC = ifsc, Branch = branch });
+            return Ok(new { AccountNumber = accountNumber, IFSC = ifsc, Branch = branch, AccountHolderName = accountHolderName });
         }
 
-        /// <summary>
-        /// Extracts cheque bank details from a PDF file using the same
-        /// two-phase approach as the existing Aadhaar/PAN/GST extraction:
-        ///   1. Try direct text extraction via PdfPig (fast, text-based PDFs)
-        ///   2. Fall back to image-based OCR via Tesseract (scanned PDFs)
-        /// Phase 2 is always attempted, even if Phase 1 throws.
-        /// </summary>
-        private (string? accountNumber, string? ifsc, string? branch) ExtractChequeFromPdf(string pdfPath)
+        private (string? accountNumber, string? ifsc, string? branch, string? accountHolderName) ExtractChequeFromPdf(string pdfPath)
         {
-            // Phase 1 — attempt direct text extraction via PdfPig
             try
             {
                 var text = ExtractRawPdfPigText(pdfPath);
                 if (!string.IsNullOrWhiteSpace(text))
                 {
-                    var (acc, ifs, br) = ExtractChequeValuesFromText(text);
-                    if (acc != null || ifs != null || br != null)
-                        return (acc, ifs, br);
+                    var (acc, ifs, br, holder) = ExtractChequeValuesFromText(text);
+                    if (acc != null || ifs != null || br != null || holder != null)
+                        return (acc, ifs, br, holder);
                 }
                 _logger.LogInformation("PdfPig extracted text from cheque PDF but no bank values found, falling back to image OCR");
             }
@@ -337,7 +330,6 @@ namespace SpicAPI.Controllers
                 _logger.LogWarning(ex, "PdfPig text extraction failed for cheque PDF, falling back to image OCR: {PdfPath}", pdfPath);
             }
 
-            // Phase 2 — no values found or Phase 1 failed; treat as scanned/image-based PDF, run OCR
             _logger.LogInformation("Running image-based OCR on cheque PDF: {PdfPath}", pdfPath);
             try
             {
@@ -351,7 +343,7 @@ namespace SpicAPI.Controllers
                 _logger.LogError(ex, "Image-based OCR failed for cheque PDF: {PdfPath}", pdfPath);
             }
 
-            return (null, null, null);
+            return (null, null, null, null);
         }
 
         private static string ExtractRawPdfPigText(string pdfPath)
@@ -363,7 +355,7 @@ namespace SpicAPI.Controllers
                 sb.Append(page.Text);
                 sb.Append(' ');
             }
-            return System.Text.RegularExpressions.Regex.Replace(sb.ToString(), "\r\n|\n|\r", " ").Trim();
+            return sb.ToString().Trim();
         }
 
         private string OcrPdfPagesToText(string pdfPath)
@@ -389,13 +381,12 @@ namespace SpicAPI.Controllers
                         using var pix = Pix.LoadFromMemory(pngBytes);
                         using var page = engine.Process(pix);
                         var pageText = page.GetText() ?? string.Empty;
-                        var normalized = System.Text.RegularExpressions.Regex.Replace(pageText, "\r\n|\n|\r", " ").Trim();
 
-                        if (!string.IsNullOrWhiteSpace(normalized))
-                            _logger.LogInformation("Cheque PDF page {PageIndex} OCR produced {CharCount} chars", pageIndex, normalized.Length);
+                        if (!string.IsNullOrWhiteSpace(pageText))
+                            _logger.LogInformation("Cheque PDF page {PageIndex} OCR produced {CharCount} chars", pageIndex, pageText.Length);
 
-                        fullText.Append(normalized);
-                        fullText.Append(' ');
+                        fullText.Append(pageText);
+                        fullText.Append('\n');
                     }
                     catch (Exception ex)
                     {
@@ -414,31 +405,29 @@ namespace SpicAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Runs Tesseract OCR on raw image bytes and returns the recognized text.
-        /// </summary>
         private static string OcrImageBytesToText(byte[] imageBytes)
         {
             using var engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default);
             using var img = Pix.LoadFromMemory(imageBytes);
             using var page = engine.Process(img);
-            var text = page.GetText() ?? string.Empty;
-            return System.Text.RegularExpressions.Regex.Replace(text, "\r\n|\n|\r", " ").Trim();
+            return (page.GetText() ?? string.Empty).Trim();
         }
 
-        private static (string? accountNumber, string? ifsc, string? branch) ExtractChequeValuesFromText(string text)
+        private static (string? accountNumber, string? ifsc, string? branch, string? accountHolderName) ExtractChequeValuesFromText(string rawText)
         {
             string? accountNumber = null;
             string? ifsc = null;
             string? branch = null;
+            string? accountHolderName = null;
+
+            // Normalize for existing IFSC/Account/Branch extraction
+            var text = System.Text.RegularExpressions.Regex.Replace(rawText, "\r\n|\n|\r", " ").Trim();
 
             // ── IFSC Code ────────────────────────────────────────────────────
-            // Standard format: 4 letters + 0 + 6 alphanumeric (e.g., SBIN0001234)
             var ifscMatch = System.Text.RegularExpressions.Regex.Match(text, "[A-Z]{4}0[A-Z0-9]{6}", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             if (ifscMatch.Success)
                 ifsc = ifscMatch.Value.ToUpperInvariant();
 
-            // Try on compact text (remove all spaces) — handles "SBIN 0001234"
             if (ifsc == null)
             {
                 var compact = text.Replace(" ", "");
@@ -448,7 +437,6 @@ namespace SpicAPI.Controllers
             }
 
             // ── Account Number ────────────────────────────────────────────────
-            // 1. Try contiguous 9-18 digits
             var accountMatch = System.Text.RegularExpressions.Regex.Match(text, @"\b\d{9,18}\b");
             if (accountMatch.Success)
             {
@@ -456,7 +444,6 @@ namespace SpicAPI.Controllers
             }
             else
             {
-                // 2. Try digits with optional internal spaces (e.g., "1234 5678 9012")
                 var spacedMatch = System.Text.RegularExpressions.Regex.Match(text, @"\b\d{2,6}(?:\s?\d{2,6}){2,5}\b");
                 if (spacedMatch.Success)
                 {
@@ -466,7 +453,6 @@ namespace SpicAPI.Controllers
                 }
             }
 
-            // 3. Fallback: look for long digit runs without word boundaries
             if (accountNumber == null)
             {
                 var anyDigits = System.Text.RegularExpressions.Regex.Matches(text, @"\d{9,}");
@@ -482,21 +468,18 @@ namespace SpicAPI.Controllers
             }
 
             // ── Branch Name ──────────────────────────────────────────────────
-            // 1. Look for text after IFSC code
             if (ifsc != null)
             {
                 var ifscIndex = text.IndexOf(ifsc, StringComparison.OrdinalIgnoreCase);
                 if (ifscIndex >= 0)
                 {
                     var afterIfsc = text.Substring(ifscIndex + ifsc.Length).Trim();
-                    // Take up to next word boundary or comma
                     var branchMatch = System.Text.RegularExpressions.Regex.Match(afterIfsc, @"^[\s,]*([A-Za-z\s]+?)(?=[,\d]|$)");
                     if (branchMatch.Success)
                         branch = branchMatch.Groups[1].Value.Trim();
                 }
             }
 
-            // 2. Try "BRANCH" keyword
             if (string.IsNullOrWhiteSpace(branch))
             {
                 var branchKeywordMatch = System.Text.RegularExpressions.Regex.Match(text, @"BRANCH\s*[:\-]?\s*([A-Za-z\s]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -504,7 +487,6 @@ namespace SpicAPI.Controllers
                     branch = branchKeywordMatch.Groups[1].Value.Trim();
             }
 
-            // 3. "AT" / "PO" pattern (common in Indian cheques)
             if (string.IsNullOrWhiteSpace(branch))
             {
                 var atMatch = System.Text.RegularExpressions.Regex.Match(text, @"\bAT\s+([A-Za-z\s]+?)(?:\s+(?:PO|DIST|DISTRICT|STATE))", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -512,7 +494,6 @@ namespace SpicAPI.Controllers
                     branch = atMatch.Groups[1].Value.Trim();
             }
 
-            // 4. Try "CITY" / "VILL" / "DIST" as anchor for branch location
             if (string.IsNullOrWhiteSpace(branch))
             {
                 var cityMatch = System.Text.RegularExpressions.Regex.Match(text, @"\b(?:CITY|VILL|VILLAGE|TOWN)\s*[:\-]?\s*([A-Za-z\s]+?)(?:\s+(?:DIST|DISTRICT|STATE|PIN))", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -520,7 +501,31 @@ namespace SpicAPI.Controllers
                     branch = cityMatch.Groups[1].Value.Trim();
             }
 
-            return (accountNumber, ifsc, branch);
+            // ── Account Holder Name ──────────────────────────────────────────
+            // Extract line-by-line from raw text to respect line boundaries.
+            // Only the line containing M/S/MESSRS is used; subsequent lines with
+            // OCR noise, MICR numbers, or cheque instructions are ignored.
+            foreach (var line in rawText.Split('\n', '\r'))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.Length == 0)
+                    continue;
+
+                var holderMatch = System.Text.RegularExpressions.Regex.Match(trimmed,
+                    @"^(?:M/S|M/S\.|MESSRS|MESSRS\.)\s*(.+)",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (holderMatch.Success)
+                {
+                    accountHolderName = holderMatch.Groups[1].Value.Trim();
+                    accountHolderName = System.Text.RegularExpressions.Regex.Replace(accountHolderName, @"\s+", " ");
+                    accountHolderName = accountHolderName.TrimEnd(',', '.', ';', '-', '/');
+                    if (string.IsNullOrWhiteSpace(accountHolderName))
+                        accountHolderName = null;
+                    break;
+                }
+            }
+
+            return (accountNumber, ifsc, branch, accountHolderName);
         }
 
         private static (string? aadhaar, string? pan, string? gst) ExtractValuesFromText(string text)
