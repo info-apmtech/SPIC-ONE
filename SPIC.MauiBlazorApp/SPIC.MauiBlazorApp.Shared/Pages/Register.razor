@@ -1129,6 +1129,7 @@
     private bool _ocrPopulatedGst;
     private bool _ocrPopulatedPan;
     private bool _ocrPopulatedAadhaar;
+    private bool _ocrPopulatedCheque;
 
     private IBrowserFile? _gstFile;
     private IBrowserFile? _panFile;
@@ -1680,6 +1681,7 @@
         _ocrPopulatedGst = false;
         _ocrPopulatedPan = false;
         _ocrPopulatedAadhaar = false;
+        _ocrPopulatedCheque = false;
         _errors.Clear();
         _message = null;
     }
@@ -1959,6 +1961,14 @@
         _gstFile = file;
         _model.GSTFilePath = file.Name;
 
+        // Clear any previously OCR-populated values before re-processing
+        if (_ocrPopulatedGst)
+        {
+            _model.GSTNumber = null;
+            _ocrPopulatedGst = false;
+        }
+        _ocrWarningGst = null;
+
         // Immediately extract GST number via OCR
         _isExtractingGst = true;
         try
@@ -1970,14 +1980,14 @@
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
-                if (!string.IsNullOrEmpty(result?.GST) && string.IsNullOrWhiteSpace(_model.GSTNumber))
+                if (!string.IsNullOrEmpty(result?.GST))
                 {
                     _model.GSTNumber = result.GST;
                     _ocrPopulatedGst = true;
                     _ocrWarningGst = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
                     OnGSTNumberChanged();
                 }
-                else if (string.IsNullOrEmpty(result?.GST))
+                else
                 {
                     _ocrWarningGst = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
                 }
@@ -2026,6 +2036,14 @@
         _panFile = file;
         _model.PANFilePath = file.Name;
 
+        // Clear any previously OCR-populated values before re-processing
+        if (_ocrPopulatedPan)
+        {
+            _model.PANNumber = null;
+            _ocrPopulatedPan = false;
+        }
+        _ocrWarningPan = null;
+
         // Immediately extract PAN number via OCR
         _isExtractingPan = true;
         try
@@ -2037,14 +2055,14 @@
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
-                if (!string.IsNullOrEmpty(result?.PAN) && string.IsNullOrWhiteSpace(_model.PANNumber))
+                if (!string.IsNullOrEmpty(result?.PAN))
                 {
                     _model.PANNumber = result.PAN;
                     _ocrPopulatedPan = true;
                     _ocrWarningPan = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
                     OnPANNumberChanged();
                 }
-                else if (string.IsNullOrEmpty(result?.PAN))
+                else
                 {
                     _ocrWarningPan = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
                 }
@@ -2093,6 +2111,14 @@
         _aadhaarFile = file;
         _model.AadhaarFilePath = file.Name;
 
+        // Clear any previously OCR-populated values before re-processing
+        if (_ocrPopulatedAadhaar)
+        {
+            _model.AadhaarNumber = null;
+            _ocrPopulatedAadhaar = false;
+        }
+        _ocrWarningAadhaar = null;
+
         // Immediately extract Aadhaar number via OCR
         _isExtractingAadhaar = true;
         try
@@ -2104,14 +2130,14 @@
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
-                if (!string.IsNullOrEmpty(result?.Aadhaar) && string.IsNullOrWhiteSpace(_model.AadhaarNumber))
+                if (!string.IsNullOrEmpty(result?.Aadhaar))
                 {
                     _model.AadhaarNumber = result.Aadhaar;
                     _ocrPopulatedAadhaar = true;
                     _ocrWarningAadhaar = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
                     OnAadhaarNumberChanged();
                 }
-                else if (string.IsNullOrEmpty(result?.Aadhaar))
+                else
                 {
                     _ocrWarningAadhaar = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
                 }
@@ -2162,9 +2188,19 @@
         _chequeFile = file;
         _model.ChequeFilePath = file.Name;
 
+        // Clear any previously OCR-populated values before re-processing
+        if (_ocrPopulatedCheque)
+        {
+            _model.AccountHolderName = null;
+            _model.AccountNumber = null;
+            _model.IFSC = null;
+            _model.Branch = null;
+            _ocrPopulatedCheque = false;
+        }
+        _ocrWarningCheque = null;
+
         // Immediately extract bank details via OCR
         _isExtractingCheque = true;
-        _ocrWarningCheque = null;
         try
         {
             using var content = new MultipartFormDataContent();
@@ -2190,6 +2226,7 @@
 
                     if (!string.IsNullOrEmpty(result.AccountNumber) || !string.IsNullOrEmpty(result.IFSC) || !string.IsNullOrEmpty(result.Branch) || !string.IsNullOrEmpty(result.AccountHolderName))
                     {
+                        _ocrPopulatedCheque = true;
                         _ocrWarningCheque = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
                     }
                     else
