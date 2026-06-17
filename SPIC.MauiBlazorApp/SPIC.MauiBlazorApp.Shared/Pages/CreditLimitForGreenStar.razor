@@ -201,6 +201,13 @@
     SpecialtyLtrFY3Qty="@SpecialtyLtrFY3Qty"
     SpecialtyLtrFY3Amount="@SpecialtyLtrFY3Amount"
 
+    SalesPlanFertilizerVolume="@SalesPlanFertilizerVolume"
+    SalesPlanFertilizerAmount="@SalesPlanFertilizerAmount"
+    SalesPlanSpecialtyGrVolume="@SalesPlanSpecialtyGrVolume"
+    SalesPlanSpecialtyGrAmount="@SalesPlanSpecialtyGrAmount"
+    SalesPlanSpecialtyLiqVolume="@SalesPlanSpecialtyLiqVolume"
+    SalesPlanSpecialtyLiqAmount="@SalesPlanSpecialtyLiqAmount"
+
     OnCategoryChanged="SelectCategory" />
 		@if (_dealer.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
 		{
@@ -695,6 +702,47 @@ private decimal SalesPlanTotalQty =>
 
 private decimal SalesPlanTotalAmount =>
     GreenStarSalesPlanRows.Sum(GetSalesPlanRowTotalAmount);
+
+// Sales Planning volume/amount values for the Total Card
+private decimal SalesPlanFertilizerVolume =>
+    _salesPlanData.Where(IsFertilizerSalesPlanRow).Sum(GetSalesPlanRowTotalQty);
+
+private decimal SalesPlanFertilizerAmount =>
+    _salesPlanData.Where(IsFertilizerSalesPlanRow).Sum(GetSalesPlanRowTotalAmount);
+
+private bool IsSpecialtyGranularSalesPlanRow(SalesPlanningInDealerRegistration row)
+{
+    var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+    if (!IsSpecialityCategory(category))
+        return false;
+    var unitName = _units.FirstOrDefault(u => u.Id == category?.UnitId)?.Name ?? "";
+    return unitName.Contains("MT", StringComparison.OrdinalIgnoreCase) ||
+           unitName.Contains("Gr", StringComparison.OrdinalIgnoreCase);
+}
+
+private bool IsSpecialtyLiquidSalesPlanRow(SalesPlanningInDealerRegistration row)
+{
+    var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+    if (!IsSpecialityCategory(category))
+        return false;
+    var unitName = _units.FirstOrDefault(u => u.Id == category?.UnitId)?.Name ?? "";
+    return unitName.Contains("Ltr", StringComparison.OrdinalIgnoreCase) ||
+           unitName.Contains("Liq", StringComparison.OrdinalIgnoreCase) ||
+           unitName.Contains("Litre", StringComparison.OrdinalIgnoreCase) ||
+           unitName.Contains("Liter", StringComparison.OrdinalIgnoreCase);
+}
+
+private decimal SalesPlanSpecialtyGrVolume =>
+    _salesPlanData.Where(IsSpecialtyGranularSalesPlanRow).Sum(GetSalesPlanRowTotalQty);
+
+private decimal SalesPlanSpecialtyGrAmount =>
+    _salesPlanData.Where(IsSpecialtyGranularSalesPlanRow).Sum(GetSalesPlanRowTotalAmount);
+
+private decimal SalesPlanSpecialtyLiqVolume =>
+    _salesPlanData.Where(IsSpecialtyLiquidSalesPlanRow).Sum(GetSalesPlanRowTotalQty);
+
+private decimal SalesPlanSpecialtyLiqAmount =>
+    _salesPlanData.Where(IsSpecialtyLiquidSalesPlanRow).Sum(GetSalesPlanRowTotalAmount);
 
 private static decimal GetSalesPlanRowTotalQty(SalesPlanningInDealerRegistration r) =>
     r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty +
