@@ -1623,6 +1623,19 @@
         ValidateFieldOnChange("BankId", _model.BankId > 0);
     }
 
+    private void AutoSelectBankByIfscPrefix(string ifscCode)
+    {
+        if (string.IsNullOrWhiteSpace(ifscCode) || ifscCode.Length < 4)
+            return;
+
+        var prefix = ifscCode[..4].ToUpperInvariant();
+        var bank = _banksAll.FirstOrDefault(b =>
+            string.Equals(b.IFSCPrefix, prefix, StringComparison.OrdinalIgnoreCase));
+
+        if (bank != null)
+            SelectBank(bank.Id, bank.Name);
+    }
+
     private async Task HideDealerDropdown() { await Task.Delay(200); _showDealerDropdown = false; StateHasChanged(); }
     private async Task HideParentDealerDropdown() { await Task.Delay(200); _showParentDealerDropdown = false; StateHasChanged(); }
     private async Task HideStateDropdown() { await Task.Delay(200); _showStateDropdown = false; StateHasChanged(); }
@@ -2166,7 +2179,10 @@
                     if (!string.IsNullOrEmpty(result.AccountNumber) && string.IsNullOrWhiteSpace(_model.AccountNumber))
                         _model.AccountNumber = result.AccountNumber;
                     if (!string.IsNullOrEmpty(result.IFSC) && string.IsNullOrWhiteSpace(_model.IFSC))
+                    {
                         _model.IFSC = result.IFSC;
+                        AutoSelectBankByIfscPrefix(_model.IFSC);
+                    }
                     if (!string.IsNullOrEmpty(result.Branch) && string.IsNullOrWhiteSpace(_model.Branch))
                         _model.Branch = result.Branch;
                     if (!string.IsNullOrEmpty(result.AccountHolderName) && string.IsNullOrWhiteSpace(_model.AccountHolderName))

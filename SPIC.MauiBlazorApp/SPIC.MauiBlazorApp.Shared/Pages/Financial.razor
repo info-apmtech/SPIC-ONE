@@ -38,12 +38,18 @@
 		<div class="row g-3 mb-4">
 			@if (ActiveTab == "Bank")
 			{
-				<div class="col-md-5">
+				<div class="col-md-4">
 					<label class="form-label-custom">Bank Name</label>
 					<input type="text" class="form-control-custom w-100" placeholder="Enter Bank Name"
 						   @bind="_bankForm.Name" @ref="_firstInputRef" />
 				</div>
-				<div class="col-md-5">
+				<div class="col-md-3">
+					<label class="form-label-custom">IFSC Prefix</label>
+				<input type="text" class="form-control-custom w-100" placeholder="e.g. HDFC, ICIC, SBIN"
+					   @bind="_bankForm.IFSCPrefix" @bind:after="OnIFSCPrefixChanged" maxlength="4" />
+					<small class="text-danger d-block mt-1">⚠️ Please enter only the first 4 alphabetic characters of the IFSC code.</small>
+				</div>
+				<div class="col-md-3">
 					<label class="form-label-custom">Bank Logo</label>
 					<div class="d-flex align-items-center gap-3">
 						@if (!string.IsNullOrEmpty(_logoPreview))
@@ -190,6 +196,10 @@
 												</span>
 											</div>
 											<h4 class="bank-card-title">@item.Name</h4>
+											@if (!string.IsNullOrEmpty(item.IFSCPrefix))
+											{
+												<div class="text-muted" style="font-size:0.85rem;">IFSC: @item.IFSCPrefix</div>
+											}
 										</div>
 										<div class="bank-card-footer-strip mt-4">
 											<div class="added-on-text">
@@ -497,8 +507,8 @@
 			object payload = ActiveTab switch
 			{
                 "Bank" => _isEditing
-					? new { Id = _editingId!.Value, _bankForm.Name, _bankForm.Icon, _bankForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
-					: new { _bankForm.Name, _bankForm.Icon, _bankForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
+					? new { Id = _editingId!.Value, _bankForm.Name, _bankForm.Icon, _bankForm.IFSCPrefix, _bankForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
+					: new { _bankForm.Name, _bankForm.Icon, _bankForm.IFSCPrefix, _bankForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
 				"Financial Year" => _isEditing
 					? (object)new { Id = _editingId!.Value, _fyForm.Name, _fyForm.StartDate, _fyForm.EndDate, _fyForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
 					: new { _fyForm.Name, _fyForm.StartDate, _fyForm.EndDate, _fyForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
@@ -555,6 +565,7 @@
 				{
 					Name = item.Name,
 					Icon = item.Icon,
+					IFSCPrefix = item.IFSCPrefix ?? "",
 					IsActive = item.IsActive
 				};
 				_logoPreview = item.Icon;
@@ -686,6 +697,12 @@
 		_logoPreview = null;
 	}
 
+	private void OnIFSCPrefixChanged()
+	{
+		if (!string.IsNullOrEmpty(_bankForm.IFSCPrefix))
+			_bankForm.IFSCPrefix = _bankForm.IFSCPrefix.ToUpperInvariant();
+	}
+
 	private void ShowMessage(string message, bool isError)
 	{
 		_message = message;
@@ -755,6 +772,7 @@
 		public string Name { get; set; } = "";
 		// Bank-specific
 		public string? Icon { get; set; }
+		public string? IFSCPrefix { get; set; }
 		// Financial Year-specific
 		public DateTime StartDate { get; set; }
 		public DateTime EndDate { get; set; }
@@ -769,6 +787,7 @@
 	{
 		public string Name { get; set; } = "";
 		public string? Icon { get; set; }
+		public string IFSCPrefix { get; set; } = "";
 		public bool IsActive { get; set; } = true;
 	}
 
