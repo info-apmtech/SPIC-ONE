@@ -199,25 +199,25 @@
 								<td class="fw-medium">Fixed Deposit with SPIC</td>
 								<td><input type="text" class="form-control-custom w-100" placeholder="FD Number" @bind="_proposal.SpicFDNumber" /></td>
 								<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.SpicFDOtherDetails" /></td>
-								<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.SpicFDAmount" /></td>
+								<td><input type="number" class="form-control-custom w-100" step="0.01" value="@_proposal.SpicFDAmount" @onchange="OnSpicFDAmountChanged" /></td>
 							</tr>
 							<tr>
 								<td class="fw-medium">BG in favour of SPIC</td>
 								<td><input type="text" class="form-control-custom w-100" placeholder="BG Number" @bind="_proposal.SpicBGNumber" /></td>
 								<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.SpicBGOtherDetails" /></td>
-								<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.SpicBGAmount" /></td>
+								<td><input type="number" class="form-control-custom w-100" step="0.01" value="@_proposal.SpicBGAmount" @onchange="OnSpicBGAmountChanged" /></td>
 							</tr>
 							<tr>
 								<td class="fw-medium">Collateral Security</td>
 								<td><input type="text" class="form-control-custom w-100" placeholder="Number" @bind="_proposal.SpicCollateralNumber" /></td>
 								<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.SpicCollateralOtherDetails" /></td>
-								<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.SpicCollateralAmount" /></td>
+								<td><input type="number" class="form-control-custom w-100" step="0.01" value="@_proposal.SpicCollateralAmount" @onchange="OnSpicCollateralAmountChanged" /></td>
 							</tr>
 							<tr>
 								<td class="fw-medium">Trade Deposit As On Date</td>
 								<td><input type="text" class="form-control-custom w-100" placeholder="Number" @bind="_proposal.SpicTradeDepositNumber" /></td>
 								<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.SpicTradeDepositOtherDetails" /></td>
-								<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.SpicTradeDepositAmount" /></td>
+								<td><input type="number" class="form-control-custom w-100" step="0.01" value="@_proposal.SpicTradeDepositAmount" @onchange="OnSpicTradeDepositAmountChanged" /></td>
 							</tr>
 						</tbody>
 						<tfoot>
@@ -942,6 +942,41 @@ if (existing != null)
 	private decimal GetFYTotalQty(int fyIdx) => GetFYTotalQtyByCategory(fyIdx);
 
 	private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx);
+
+	private static decimal ParseDecimal(ChangeEventArgs e) =>
+		decimal.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+
+	private void OnSpicFDAmountChanged(ChangeEventArgs e)
+	{
+		_proposal.SpicFDAmount = ParseDecimal(e);
+		RefreshSpicSecurityTotal();
+	}
+
+	private void OnSpicBGAmountChanged(ChangeEventArgs e)
+	{
+		_proposal.SpicBGAmount = ParseDecimal(e);
+		RefreshSpicSecurityTotal();
+	}
+
+	private void OnSpicCollateralAmountChanged(ChangeEventArgs e)
+	{
+		_proposal.SpicCollateralAmount = ParseDecimal(e);
+		RefreshSpicSecurityTotal();
+	}
+
+	private void OnSpicTradeDepositAmountChanged(ChangeEventArgs e)
+	{
+		_proposal.SpicTradeDepositAmount = ParseDecimal(e);
+		RefreshSpicSecurityTotal();
+	}
+
+	private void RefreshSpicSecurityTotal()
+	{
+		var total = (double)(_proposal.SpicFDAmount + _proposal.SpicBGAmount + _proposal.SpicCollateralAmount + _proposal.SpicTradeDepositAmount);
+		_spicValues[8] = total;
+		_spicValueEntered[8] = total > 0;
+		RecalculateSpicPercentages();
+	}
 
 	private void OnSpicValueChanged(int idx, ChangeEventArgs e)
 	{

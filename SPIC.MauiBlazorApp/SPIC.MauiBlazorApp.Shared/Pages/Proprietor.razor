@@ -42,6 +42,41 @@
 		padding: 4px 8px;
 		margin-top: 4px;
 	}
+	/* Searchable Dropdown Styles */
+	.searchable-select-input {
+		cursor: pointer;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 12px center;
+		padding-right: 32px;
+	}
+	.searchable-dropdown-container {
+		position: absolute;
+		width: 100%;
+		background: #ffffff;
+		border: 1px solid #059669;
+		border-radius: 6px;
+		max-height: 220px;
+		overflow-y: auto;
+		z-index: 1050;
+		box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+		margin-top: 4px;
+	}
+	.searchable-dropdown-item {
+		padding: 10px 14px;
+		font-size: 0.85rem;
+		color: #374151;
+		cursor: pointer;
+		border-bottom: 1px solid #F3F4F6;
+		transition: background-color 0.1s ease;
+	}
+	.searchable-dropdown-item:last-child {
+		border-bottom: none;
+	}
+	.searchable-dropdown-item:hover {
+		background-color: #DCFCE7;
+		color: #059669;
+	}
 </style>
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -192,6 +227,10 @@
 								</div>
 								<label class="btn-upload-attach mb-0">
 									<i class="bi bi-upload"></i> @(_aadhaarFile != null ? _aadhaarFile.Name : "Upload Aadhaar")
+									@if (_aadhaarFile != null)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveAadhaarFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
 									<InputFile hidden OnChange="OnAadhaarSelected" accept=".pdf" />
 								</label>
 							</div>
@@ -212,6 +251,10 @@
 								</div>
 								<label class="btn-upload-attach mb-0">
 									<i class="bi bi-upload"></i> @(_panFile != null ? _panFile.Name : "Upload Pan PDF")
+									@if (_panFile != null)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemovePanFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
 									<InputFile hidden OnChange="OnPanSelected" accept=".pdf" />
 								</label>
 							</div>
@@ -293,23 +336,56 @@
             </div>
             <div class="col-md-4">
                 <label class="custom-label">District</label>
-                <select class="form-select-custom w-100" @bind="_partnerForm.DistrictId">
-                    <option value="0">Select District</option>
-                    @foreach (var d in _districtsAll.Where(d => d.StateId == _partnerForm.StateId))
+                <div class="position-relative">
+                    <input type="text" class="form-select-custom searchable-select-input w-100"
+                           placeholder="-- Select District --"
+                           @bind="_districtSearchText"
+                           @bind:event="oninput"
+                           @onfocus="() => _showDistrictDropdown = true"
+                           @onblur="HideDistrictDropdown" />
+                    @if (_showDistrictDropdown)
                     {
-                        <option value="@d.Id">@d.DistrictName</option>
+                        <div class="searchable-dropdown-container">
+                            <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(0, "")'>
+                                -- Select District --
+                            </div>
+                            @foreach (var d in _districtsAll.Where(d => d.StateId == _partnerForm.StateId)
+                                .Where(d => string.IsNullOrWhiteSpace(_districtSearchText) ||
+                                    d.DistrictName.Contains(_districtSearchText, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(d.Id, d.DistrictName)'>
+                                    @d.DistrictName
+                                </div>
+                            }
+                        </div>
                     }
-                </select>
+                </div>
             </div>
             <div class="col-md-4">
                 <label class="custom-label">State</label>
-                <select class="form-select-custom w-100" @bind="_partnerForm.StateId">
-                    <option value="0">Select State</option>
-                    @foreach (var s in _statesAll)
+                <div class="position-relative">
+                    <input type="text" class="form-select-custom searchable-select-input w-100"
+                           placeholder="-- Select State --"
+                           @bind="_stateSearchText"
+                           @bind:event="oninput"
+                           @onfocus="() => _showStateDropdown = true"
+                           @onblur="HideStateDropdown" />
+                    @if (_showStateDropdown)
                     {
-                        <option value="@s.Id">@s.StateName</option>
+                        <div class="searchable-dropdown-container">
+                            <div class="searchable-dropdown-item" @onmousedown='() => SelectState(0, "")'>
+                                -- Select State --
+                            </div>
+                            @foreach (var state in _statesAll.Where(s => string.IsNullOrWhiteSpace(_stateSearchText) ||
+                                s.StateName.Contains(_stateSearchText, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <div class="searchable-dropdown-item" @onmousedown='() => SelectState(state.Id, state.StateName)'>
+                                    @state.StateName
+                                </div>
+                            }
+                        </div>
                     }
-                </select>
+                </div>
             </div>
 
 		</div>
@@ -829,6 +905,10 @@
 	private List<RelationshipEntity> _relationships = new();
 	private List<State> _statesAll = new();
 	private List<District> _districtsAll = new();
+	private string _stateSearchText = "";
+	private bool _showStateDropdown;
+	private string _districtSearchText = "";
+	private bool _showDistrictDropdown;
 
 	// Partner form
 	private DealerOwnershipInfo _partnerForm = new() { DOB = DateTime.Today }; // Set DOB default to current date;
@@ -978,6 +1058,14 @@
 		var file = e.File;
 		_aadhaarFile = file;
 
+		// Clear any previously OCR-populated values before re-processing
+		if (_ocrPopulatedAadhaar)
+		{
+			_partnerForm.AadhaarNumber = null;
+			_ocrPopulatedAadhaar = false;
+		}
+		_ocrWarningAadhaar = null;
+
 		_isExtractingAadhaar = true;
 		try
 		{
@@ -988,16 +1076,27 @@
 			if (response.IsSuccessStatusCode)
 			{
 				var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
-				if (!string.IsNullOrEmpty(result?.Aadhaar) && string.IsNullOrWhiteSpace(_partnerForm.AadhaarNumber))
+				if (!string.IsNullOrEmpty(result?.Aadhaar))
 				{
 					_partnerForm.AadhaarNumber = result.Aadhaar;
 					_ocrPopulatedAadhaar = true;
 					_ocrWarningAadhaar = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
 					OnAadhaarNumberChanged();
 				}
+				else
+				{
+					_ocrWarningAadhaar = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+				}
+			}
+			else
+			{
+				_ocrWarningAadhaar = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
 			}
 		}
-		catch { }
+		catch
+		{
+			_ocrWarningAadhaar = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+		}
 		finally
 		{
 			_isExtractingAadhaar = false;
@@ -1009,6 +1108,14 @@
 		var file = e.File;
 		_panFile = file;
 
+		// Clear any previously OCR-populated values before re-processing
+		if (_ocrPopulatedPan)
+		{
+			_partnerForm.PANNumber = null;
+			_ocrPopulatedPan = false;
+		}
+		_ocrWarningPan = null;
+
 		_isExtractingPan = true;
 		try
 		{
@@ -1019,16 +1126,27 @@
 			if (response.IsSuccessStatusCode)
 			{
 				var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
-				if (!string.IsNullOrEmpty(result?.PAN) && string.IsNullOrWhiteSpace(_partnerForm.PANNumber))
+				if (!string.IsNullOrEmpty(result?.PAN))
 				{
 					_partnerForm.PANNumber = result.PAN;
 					_ocrPopulatedPan = true;
 					_ocrWarningPan = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
 					OnPANNumberChanged();
 				}
+				else
+				{
+					_ocrWarningPan = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+				}
+			}
+			else
+			{
+				_ocrWarningPan = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
 			}
 		}
-		catch { }
+		catch
+		{
+			_ocrWarningPan = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+		}
 		finally
 		{
 			_isExtractingPan = false;
@@ -1042,12 +1160,24 @@
 	{
 		_aadhaarFile = null;
 		_partnerForm.AadhaarFilePath = null;
+		_ocrWarningAadhaar = null;
+		if (_ocrPopulatedAadhaar)
+		{
+			_partnerForm.AadhaarNumber = null;
+			_ocrPopulatedAadhaar = false;
+		}
 	}
 
 	private void RemovePanFile()
 	{
 		_panFile = null;
 		_partnerForm.PANFilePath = null;
+		_ocrWarningPan = null;
+		if (_ocrPopulatedPan)
+		{
+			_partnerForm.PANNumber = null;
+			_ocrPopulatedPan = false;
+		}
 	}
 
 	private void RemoveImageFile()
@@ -1187,7 +1317,8 @@
 		// Enforce max partners for sole proprietor
 		if (_selectedEntityType == EntityType.soleProprietor && !_isEditingPartner && _savedPartners.Count >= 1)
 			validationErrors.Add("• <b>Entity Type</b>: Sole Proprietor can have only 1 partner.");
-
+			if (string.IsNullOrWhiteSpace(_partnerForm.ProprietorImagePath) && _imageFile == null)
+    validationErrors.Add("• <b>Proprietor / Managing Partner Image</b> is required.");
 		if (validationErrors.Count > 0)
 		{
 			_message = string.Join("<br/>", validationErrors);
@@ -1227,8 +1358,13 @@
 				if (!updateResp.IsSuccessStatusCode)
 				{
 					var err = await updateResp.Content.ReadAsStringAsync();
-					ShowMessage($"Failed to update partner: {err}", true);
-					return;
+
+if (err.Contains("ProprietorImagePath", StringComparison.OrdinalIgnoreCase))
+    ShowMessage("Please upload Proprietor / Managing Partner Image before updating.", true);
+else
+    ShowMessage("Unable to update partner details. Please check the entered details and try again.", true);
+
+return;
 				}
 				partnerId = _editingPartnerId;
 
@@ -1250,8 +1386,13 @@
 				if (!resp.IsSuccessStatusCode)
 				{
 					var err = await resp.Content.ReadAsStringAsync();
-					ShowMessage($"Failed to save partner: {err}", true);
-					return;
+
+if (err.Contains("ProprietorImagePath", StringComparison.OrdinalIgnoreCase))
+    ShowMessage("Please upload Proprietor / Managing Partner Image before saving.", true);
+else
+    ShowMessage("Unable to save partner details. Please check the entered details and try again.", true);
+
+return;
 				}
 				var created = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerOwnershipInfo>>();
 				partnerId = created?.Data?.Id ?? 0;
@@ -1345,6 +1486,11 @@
 		_ocrPopulatedAadhaar = false;
 		_ocrPopulatedPan = false;
 		_message = null;
+
+		var state = _statesAll.FirstOrDefault(s => s.Id == partner.StateId);
+		_stateSearchText = state?.StateName ?? "";
+		var district = _districtsAll.FirstOrDefault(d => d.Id == partner.DistrictId);
+		_districtSearchText = district?.DistrictName ?? "";
 	}
 
 	private void CancelPartnerEdit()
@@ -1479,7 +1625,27 @@
 		_ocrWarningPan = null;
 		_ocrPopulatedAadhaar = false;
 		_ocrPopulatedPan = false;
+		_stateSearchText = "";
+		_districtSearchText = "";
 	}
+
+	private void SelectState(int id, string displayText)
+	{
+		_stateSearchText = displayText;
+		_showStateDropdown = false;
+		_partnerForm.StateId = id;
+		_districtSearchText = "";
+	}
+
+	private void SelectDistrict(int id, string displayText)
+	{
+		_districtSearchText = displayText;
+		_showDistrictDropdown = false;
+		_partnerForm.DistrictId = id;
+	}
+
+	private async Task HideStateDropdown() { await Task.Delay(200); _showStateDropdown = false; StateHasChanged(); }
+	private async Task HideDistrictDropdown() { await Task.Delay(200); _showDistrictDropdown = false; StateHasChanged(); }
 
 	private string GetRelationshipName(int id) =>
 		_relationships.FirstOrDefault(r => r.Id == id)?.Name ?? "—";
@@ -1603,13 +1769,19 @@
         var matchedDistrict = _districtsAll.FirstOrDefault(d =>
             d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
         if (matchedDistrict != null)
+        {
             _partnerForm.DistrictId = matchedDistrict.Id;
+            _districtSearchText = matchedDistrict.DistrictName;
+        }
 
         var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
         var matchedState = _statesAll.FirstOrDefault(s =>
             s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
         if (matchedState != null)
+        {
             _partnerForm.StateId = matchedState.Id;
+            _stateSearchText = matchedState.StateName;
+        }
 
         if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
             _partnerForm.Block = postOffice.Block;

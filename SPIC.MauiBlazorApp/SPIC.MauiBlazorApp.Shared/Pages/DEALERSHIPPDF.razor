@@ -2616,13 +2616,15 @@ else
 </div>
 
     
-                <div class="section mt-5" style="page-break-before: always;">
-                    <div class="dpdf-section-title mb-4">
-                        <div class="dpdf-section-icon">📑</div>  <div class="dpdf-section-text">Attached Documents</div>
-                    </div>
-                    
-                    @{
-                        void RenderDocViewer(string title, string? path)
+                @if (HasAnyDocuments())
+                {
+                    <div class="section mt-5" style="page-break-before: always;">
+                        <div class="dpdf-section-title mb-4">
+                            <div class="dpdf-section-icon">📑</div>  <div class="dpdf-section-text">Attached Documents</div>
+                        </div>
+                        
+                        @{
+                            void RenderDocViewer(string title, string? path)
                         {
                             if (!string.IsNullOrWhiteSpace(path))
                             {
@@ -2701,6 +2703,16 @@ else
                         if (_showAuthorizationLetter) RenderDocViewer("Authorization Letter", _docs?.AuthorizationLetterFilePath);
                     }
                 </div>
+                }
+                else
+                {
+                    <div class="section mt-5" style="page-break-before: always;">
+                        <div class="dpdf-section-title mb-4">
+                            <div class="dpdf-section-icon">📑</div>  <div class="dpdf-section-text">Attached Documents</div>
+                        </div>
+                        <div style="text-align: center; padding: 20px; color: #6b7280;">No documents uploaded.</div>
+                    </div>
+                }
             </div>
         </div>
     }
@@ -2850,8 +2862,41 @@ else
     }
     private bool _isSoleProprietor => _model.EntityType == (int)EntityType.soleProprietor;
 
-    // Add these three lines below _isSoleProprietor:
     private bool _showPartnershipDeed => _model.EntityType == (int)EntityType.Partnership || _model.EntityType == (int)EntityType.LLP;
+
+    private bool HasAnyDocuments()
+    {
+        if (!string.IsNullOrWhiteSpace(_docs?.SpecimanFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.GreenstarSpecimanFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_model?.GSTFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_model?.PANFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_model?.AadhaarFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_model?.WholesaleLicenseFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_model?.RetailLicenseFilePath)) return true;
+        if (_savedPartners != null && _savedPartners.Any(p =>
+            !string.IsNullOrWhiteSpace(p.ProprietorImagePath) ||
+            !string.IsNullOrWhiteSpace(p.PANFilePath) ||
+            !string.IsNullOrWhiteSpace(p.AadhaarFilePath))) return true;
+        if (_landAssets != null && _landAssets.Any(l =>
+            !string.IsNullOrWhiteSpace(l.UploadedECDocumentPath) ||
+            !string.IsNullOrWhiteSpace(l.UploadedLandDocumentPath) ||
+            !string.IsNullOrWhiteSpace(l.UploadedValuationCertificatePath))) return true;
+        if (_buildingAssets != null && _buildingAssets.Any(b =>
+            !string.IsNullOrWhiteSpace(b.UploadedECDocumentPath) ||
+            !string.IsNullOrWhiteSpace(b.UploadedBuildingDocumentPath) ||
+            !string.IsNullOrWhiteSpace(b.UploadedValuationCertificatePath))) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.FY1ITReturnFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.FY2ITReturnFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.ValuationCertificateFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.RetailerListFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.PartnershipDeadFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.BoardReasolutionFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.BankGauranteeFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.AffidavitFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.DeedOfGuaranteeFilePath)) return true;
+        if (!string.IsNullOrWhiteSpace(_docs?.AuthorizationLetterFilePath)) return true;
+        return false;
+    }
     private bool _showBoardResolution => _model.EntityType == (int)EntityType.PvtLtd || _model.EntityType == (int)EntityType.PubLtd;
     private bool _showAuthorizationLetter => !_isSoleProprietor;
 

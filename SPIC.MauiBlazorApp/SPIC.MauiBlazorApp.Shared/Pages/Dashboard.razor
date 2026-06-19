@@ -3,9 +3,11 @@
 @using System.Text.Json
 @using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Services
+@using ClosedXML.Excel
 @inject HttpClient Http
 @inject NavigationManager NavManager
 @inject LoginState LoginState
+@inject IJSRuntime JSRuntime
 
 <div class="container-fluid py-4 px-0">
 
@@ -21,6 +23,10 @@
             <button class="btn-create-new" @onclick="() => _showImportModal = true"
                     style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
                 <i class="bi bi-cloud-arrow-up"></i> Import from Excel
+            </button>
+            <button class="btn-create-new" @onclick="ExportDealers"
+                    style="background: #fff; color: #2563eb; border: 1.5px solid #2563eb;">
+                <i class="bi bi-download"></i> Export Dealers
             </button>
         </div>
     </div>
@@ -819,6 +825,58 @@
             _showDeleteConfirm = false;
             _dealerToDelete = null;
         }
+    }
+
+    private async Task ExportDealers()
+    {
+        var data = _filteredDealers.ToList();
+        if (!data.Any()) return;
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Dealers");
+
+        var headers = new[] { "Dealer Code", "Firm Name", "Company", "Region", "HQ", "Entity Type", "Status", "Approval Status", "Pincode", "SPIC Code", "GreenStar Code", "Wholesale License", "Retail License", "Last Updated" };
+        for (int c = 0; c < headers.Length; c++)
+        {
+            ws.Cell(1, c + 1).Value = headers[c];
+            ws.Cell(1, c + 1).Style.Font.Bold = true;
+            ws.Cell(1, c + 1).Style.Fill.BackgroundColor = XLColor.LightGray;
+        }
+
+        for (int r = 0; r < data.Count; r++)
+        {
+            var d = data[r];
+            var company = d.InSpic && d.InGreenStar ? "Both" : d.InSpic ? "SPIC" : d.InGreenStar ? "GreenStar" : "-";
+            var regionName = _regionsAll.FirstOrDefault(x => x.Id == d.Region)?.RegionName ?? "-";
+            var hqName = _headquartersAll.FirstOrDefault(x => x.Id == d.HQ)?.HeadquarterName ?? "-";
+            var status = GetStatusName(d.Status);
+            var approvalStatus = GetApprovalStatus(d);
+
+            ws.Cell(r + 2, 1).Value = d.DealerCode ?? $"DL-{d.Id}";
+            ws.Cell(r + 2, 2).Value = d.FirmName ?? "";
+            ws.Cell(r + 2, 3).Value = company;
+            ws.Cell(r + 2, 4).Value = regionName;
+            ws.Cell(r + 2, 5).Value = hqName;
+            ws.Cell(r + 2, 6).Value = d.BusinessEntityType ?? "";
+            ws.Cell(r + 2, 7).Value = status;
+            ws.Cell(r + 2, 8).Value = approvalStatus;
+            ws.Cell(r + 2, 9).Value = d.PinCode ?? "";
+            ws.Cell(r + 2, 10).Value = d.SPICCode ?? "";
+            ws.Cell(r + 2, 11).Value = d.GreenStarCode ?? "";
+            ws.Cell(r + 2, 12).Value = d.WholeSaleFertilizerLicenseNumber ?? "";
+            ws.Cell(r + 2, 13).Value = d.RetailFertilizerLicenseNumber ?? "";
+            ws.Cell(r + 2, 14).Value = d.UpdatedAt.ToString("dd MMM yyyy");
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+
+        var fileName = $"Dealer_List_{DateTime.Now:yyyyMMdd}.xlsx";
+        var dataUri = $"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{Convert.ToBase64String(stream.ToArray())}";
+        var js = $@"var a = document.createElement('a'); a.href = '{dataUri}'; a.download = '{fileName}'; document.body.appendChild(a); a.click(); document.body.removeChild(a);";
+        await JSRuntime.InvokeVoidAsync("eval", js);
     }
 
     public class DealerDto

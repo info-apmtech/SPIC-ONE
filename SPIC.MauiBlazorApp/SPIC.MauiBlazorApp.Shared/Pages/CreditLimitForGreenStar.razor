@@ -201,6 +201,13 @@
     SpecialtyLtrFY3Qty="@SpecialtyLtrFY3Qty"
     SpecialtyLtrFY3Amount="@SpecialtyLtrFY3Amount"
 
+    SalesPlanFertilizerVolume="@SalesPlanFertilizerVolume"
+    SalesPlanFertilizerAmount="@SalesPlanFertilizerAmount"
+    SalesPlanSpecialtyGrVolume="@SalesPlanSpecialtyGrVolume"
+    SalesPlanSpecialtyGrAmount="@SalesPlanSpecialtyGrAmount"
+    SalesPlanSpecialtyLiqVolume="@SalesPlanSpecialtyLiqVolume"
+    SalesPlanSpecialtyLiqAmount="@SalesPlanSpecialtyLiqAmount"
+
     OnCategoryChanged="SelectCategory" />
 		@if (_dealer.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
 		{
@@ -227,25 +234,25 @@
 									<td class="fw-medium">Fixed Deposit with GFL</td>
 									<td><input type="text" class="form-control-custom w-100" placeholder="FD Number" @bind="_proposal.GreenstarFDNumber" /></td>
 									<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.GreenstarFDOtherDetails" /></td>
-									<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.GreenstarFDAmount" /></td>
+									<td><input type="number" class="form-control-custom w-100" step="0.01" value="@_proposal.GreenstarFDAmount" @onchange="OnGreenstarFDAmountChanged" /></td>
 								</tr>
 								<tr>
 									<td class="fw-medium">BG in favour of GFL</td>
 									<td><input type="text" class="form-control-custom w-100" placeholder="BG Number" @bind="_proposal.GreenstarBGNumber" /></td>
 									<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.GreenstarBGOtherDetails" /></td>
-									<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.GreenstarBGAmount" /></td>
+									<td><input type="number" class="form-control-custom w-100" step="0.01" value="@_proposal.GreenstarBGAmount" @onchange="OnGreenstarBGAmountChanged" /></td>
 								</tr>
 								<tr>
 									<td class="fw-medium">Collateral Security</td>
 									<td><input type="text" class="form-control-custom w-100" placeholder="Number" @bind="_proposal.GreenstarCollateralNumber" /></td>
 									<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.GreenstarCollateralOtherDetails" /></td>
-									<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.GreenstarCollateralAmount" /></td>
+									<td><input type="number" class="form-control-custom w-100" step="0.01" value="@_proposal.GreenstarCollateralAmount" @onchange="OnGreenstarCollateralAmountChanged" /></td>
 								</tr>
 								<tr>
 									<td class="fw-medium">Trade Deposit As On Date</td>
 									<td><input type="text" class="form-control-custom w-100" placeholder="Number" @bind="_proposal.GreenstarTradeDepositNumber" /></td>
 									<td><input type="text" class="form-control-custom w-100" placeholder="Details" @bind="_proposal.GreenstarTradeDepositOtherDetails" /></td>
-									<td><input type="number" class="form-control-custom w-100" step="0.01" @bind="_proposal.GreenstarTradeDepositAmount" /></td>
+									<td><input type="number" class="form-control-custom w-100" step="0.01" value="@_proposal.GreenstarTradeDepositAmount" @onchange="OnGreenstarTradeDepositAmountChanged" /></td>
 								</tr>
 							</tbody>
 							<tfoot>
@@ -696,6 +703,47 @@ private decimal SalesPlanTotalQty =>
 private decimal SalesPlanTotalAmount =>
     GreenStarSalesPlanRows.Sum(GetSalesPlanRowTotalAmount);
 
+// Sales Planning volume/amount values for the Total Card
+private decimal SalesPlanFertilizerVolume =>
+    _salesPlanData.Where(IsFertilizerSalesPlanRow).Sum(GetSalesPlanRowTotalQty);
+
+private decimal SalesPlanFertilizerAmount =>
+    _salesPlanData.Where(IsFertilizerSalesPlanRow).Sum(GetSalesPlanRowTotalAmount);
+
+private bool IsSpecialtyGranularSalesPlanRow(SalesPlanningInDealerRegistration row)
+{
+    var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+    if (!IsSpecialityCategory(category))
+        return false;
+    var unitName = _units.FirstOrDefault(u => u.Id == category?.UnitId)?.Name ?? "";
+    return unitName.Contains("MT", StringComparison.OrdinalIgnoreCase) ||
+           unitName.Contains("Gr", StringComparison.OrdinalIgnoreCase);
+}
+
+private bool IsSpecialtyLiquidSalesPlanRow(SalesPlanningInDealerRegistration row)
+{
+    var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+    if (!IsSpecialityCategory(category))
+        return false;
+    var unitName = _units.FirstOrDefault(u => u.Id == category?.UnitId)?.Name ?? "";
+    return unitName.Contains("Ltr", StringComparison.OrdinalIgnoreCase) ||
+           unitName.Contains("Liq", StringComparison.OrdinalIgnoreCase) ||
+           unitName.Contains("Litre", StringComparison.OrdinalIgnoreCase) ||
+           unitName.Contains("Liter", StringComparison.OrdinalIgnoreCase);
+}
+
+private decimal SalesPlanSpecialtyGrVolume =>
+    _salesPlanData.Where(IsSpecialtyGranularSalesPlanRow).Sum(GetSalesPlanRowTotalQty);
+
+private decimal SalesPlanSpecialtyGrAmount =>
+    _salesPlanData.Where(IsSpecialtyGranularSalesPlanRow).Sum(GetSalesPlanRowTotalAmount);
+
+private decimal SalesPlanSpecialtyLiqVolume =>
+    _salesPlanData.Where(IsSpecialtyLiquidSalesPlanRow).Sum(GetSalesPlanRowTotalQty);
+
+private decimal SalesPlanSpecialtyLiqAmount =>
+    _salesPlanData.Where(IsSpecialtyLiquidSalesPlanRow).Sum(GetSalesPlanRowTotalAmount);
+
 private static decimal GetSalesPlanRowTotalQty(SalesPlanningInDealerRegistration r) =>
     r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty +
     r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty +
@@ -1111,6 +1159,38 @@ private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx)
 	// 	}
 	// 	RecalculateSpicPercentages();
 	// }
+
+	private void OnGreenstarFDAmountChanged(ChangeEventArgs e)
+	{
+		_proposal.GreenstarFDAmount = decimal.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+		RefreshGreenstarSecurityTotal();
+	}
+
+	private void OnGreenstarBGAmountChanged(ChangeEventArgs e)
+	{
+		_proposal.GreenstarBGAmount = decimal.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+		RefreshGreenstarSecurityTotal();
+	}
+
+	private void OnGreenstarCollateralAmountChanged(ChangeEventArgs e)
+	{
+		_proposal.GreenstarCollateralAmount = decimal.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+		RefreshGreenstarSecurityTotal();
+	}
+
+	private void OnGreenstarTradeDepositAmountChanged(ChangeEventArgs e)
+	{
+		_proposal.GreenstarTradeDepositAmount = decimal.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+		RefreshGreenstarSecurityTotal();
+	}
+
+	private void RefreshGreenstarSecurityTotal()
+	{
+		var total = (double)(_proposal.GreenstarFDAmount + _proposal.GreenstarBGAmount + _proposal.GreenstarCollateralAmount + _proposal.GreenstarTradeDepositAmount);
+		_greenstarValues[9] = total;
+		_greenstarValueEntered[9] = total > 0;
+		RecalculateGreenstarPercentages();
+	}
 
 	private void OnGreenstarValueChanged(int idx, ChangeEventArgs e)
 	{

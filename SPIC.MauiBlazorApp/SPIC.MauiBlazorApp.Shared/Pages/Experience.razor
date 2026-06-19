@@ -11,6 +11,40 @@
 	fieldset:disabled .action-link {
 		display: none !important;
 	}
+    .searchable-select-input {
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 32px;
+    }
+    .searchable-dropdown-container {
+        position: absolute;
+        width: 100%;
+        background: #ffffff;
+        border: 1px solid #059669;
+        border-radius: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+        z-index: 1050;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        margin-top: 4px;
+    }
+    .searchable-dropdown-item {
+        padding: 10px 14px;
+        font-size: 0.85rem;
+        color: #374151;
+        cursor: pointer;
+        border-bottom: 1px solid #F3F4F6;
+        transition: background-color 0.1s ease;
+    }
+    .searchable-dropdown-item:last-child {
+        border-bottom: none;
+    }
+    .searchable-dropdown-item:hover {
+        background-color: #DCFCE7;
+        color: #059669;
+    }
 </style>
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -67,16 +101,32 @@
 		</div>
 
 		<div class="row g-3">
-			<div class="col-md-6">
-				<label class="form-label-custom">Company Name</label>
-				<select class="form-select-custom w-100" @bind="_form.CompanyId">
-					<option value="">Select Company</option>
-					@foreach (var company in _companyAll)
-					{
-						<option value="@company.Id">@company.Name</option>
-					}
-				</select>
+		<div class="col-md-6">
+			<label class="form-label-custom">Company Name</label>
+			<div class="position-relative">
+				<input type="text" class="form-select-custom searchable-select-input w-100"
+					   placeholder="Select Company"
+					   @bind="_companySearchText"
+					   @bind:event="oninput"
+					   @onfocus="() => _showCompanyDropdown = true"
+					   @onblur="HideCompanyDropdown" />
+				@if (_showCompanyDropdown)
+				{
+					<div class="searchable-dropdown-container">
+						<div class="searchable-dropdown-item" @onmousedown='() => SelectCompany(0, "")'>
+							Select Company
+						</div>
+						@foreach (var company in _companyAll.Where(c => string.IsNullOrWhiteSpace(_companySearchText) ||
+							c.Name.Contains(_companySearchText, StringComparison.OrdinalIgnoreCase)))
+						{
+							<div class="searchable-dropdown-item" @onmousedown='() => SelectCompany(company.Id, company.Name)'>
+								@company.Name
+							</div>
+						}
+					</div>
+				}
 			</div>
+		</div>
 			<div class="col-md-6">
 				<label class="form-label-custom">Number of the years</label>
 
@@ -248,6 +298,9 @@
 	private string? _message;
 	private bool _isError;
 
+	private string _companySearchText = "";
+	private bool _showCompanyDropdown;
+
 	protected override async Task OnInitializedAsync()
 	{
 		Loading.Show();
@@ -385,6 +438,7 @@
 			TurnOver = exp.TurnOver,
 			IsActive = exp.IsActive
 		};
+		_companySearchText = GetCompanyName(exp.CompanyId);
 		_isEditMode = true;
 		_message = null;
 	}
@@ -392,6 +446,7 @@
 	private void CancelEdit()
 	{
 		_form = new DealerExperience { IsActive = true };
+		_companySearchText = "";
 		_isEditMode = false;
 		_message = null;
 	}
@@ -456,6 +511,27 @@
 	{
 		if (_yearsOfExperience < 0) _yearsOfExperience = 0;
 		if (_yearsOfExperience > 99) _yearsOfExperience = 99;
+	}
+
+	private string GetCompanyName(string companyId)
+	{
+		if (int.TryParse(companyId, out var id))
+			return _companyAll.FirstOrDefault(c => c.Id == id)?.Name ?? "";
+		return "";
+	}
+
+	private void SelectCompany(int id, string displayText)
+	{
+		_companySearchText = displayText;
+		_showCompanyDropdown = false;
+		_form.CompanyId = id.ToString();
+	}
+
+	private async Task HideCompanyDropdown()
+	{
+		await Task.Delay(200);
+		_showCompanyDropdown = false;
+		StateHasChanged();
 	}
 
 	}

@@ -107,6 +107,7 @@ namespace SPIC.Core.Entities
     {
         public int Id { get; set; }
         public required string Name { get; set; }
+        public required string IFSCPrefix { get; set; }
         public string? Icon { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
