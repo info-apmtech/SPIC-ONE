@@ -48,6 +48,40 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public bool IsDirectorOrAVP => UserRole is AppRole.Director or AppRole.AVP;
         public bool IsReviewerRole => UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP or AppRole.SMD or AppRole.SMM or AppRole.RM or AppRole.RMD;
 
+        // ---------------- Page-level permissions (from Designation.RoleAccess) ----------------
+
+        // Empty set => no restriction (treated as full access).
+        // Preserves behaviour for users without an assigned designation.
+        public HashSet<string> AllowedPages { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public void SetAllowedPages(string? roleAccessCsv)
+        {
+            AllowedPages = string.IsNullOrWhiteSpace(roleAccessCsv)
+                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                : roleAccessCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                               .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            OnChange?.Invoke();
+        }
+
+        public void ClearAllowedPages()
+        {
+            AllowedPages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            OnChange?.Invoke();
+        }
+
+        public bool CanAccess(PagePermission page) => CanAccess(page.ToString());
+
+        public bool CanAccess(string pageKey)
+        {
+            // Admin group bypasses everything
+            if (IsAdmin) return true;
+            // No designation assigned => no restriction
+            if (AllowedPages.Count == 0) return true;
+            return AllowedPages.Contains(pageKey);
+        }
+
+        // -------------------------------------------------------------------------------------
+
         private void ParseClaims(string? token)
         {
             UserRole = null;

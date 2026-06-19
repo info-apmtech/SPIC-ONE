@@ -1,10 +1,13 @@
 ﻿@inherits LayoutComponentBase
 @using System.Net.Http.Headers
+@using SPIC.Core.Entities
 @inject HttpClient Http
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.AppSearchState SearchState
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
+
+<PageGuard />
 
 <div class="app-shell">
 	<LoadingOverlay />
@@ -75,95 +78,135 @@
 	</div>
 	<div class="offcanvas-body">
 		<nav class="nav nav-pills flex-column nav-section">
-			<NavLink class="nav-link" href="/Dashboard" Match="NavLinkMatch.All">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
-				Dashboard
-			</NavLink>
-
-			@if (LoginState.IsAdmin)
+			@if (LoginState.CanAccess(PagePermission.Dashboard))
 			{
-			<NavLink class="nav-link" href="/Purchases">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
-				Purchases
-			</NavLink>
-
-			<NavLink class="nav-link" href="/Rewards">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg" class="SideBariconimg" />
-				Rewards
-			</NavLink>
-
-			<NavLink class="nav-link" href="/CropAdvice">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg" class="SideBariconimg" />
-				Crop Advice
-			</NavLink>
-
-			<NavLink class="nav-link" href="/YieldPrediction">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg" class="SideBariconimg" />
-				Yield Prediction
-			</NavLink>
-
-			<NavLink class="nav-link" href="/DiseaseDetection">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg" class="SideBariconimg" />
-				Disease Detection
-			</NavLink>
-
-			<NavLink class="nav-link" href="/Community">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg" class="SideBariconimg" />
-				Community
-			</NavLink>
-
-			<NavLink class="nav-link" href="/Notifications">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg" class="SideBariconimg" />
-				Notifications
-			</NavLink>
-
-			<NavLink class="nav-link" href="/Profile">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
-				Profile
-			</NavLink>
-			<NavLink class="nav-link" href="/EmployeeManagement">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
-				Employee
-			</NavLink>
-
-			@if (LoginState.IsReviewerRole)
+				<NavLink class="nav-link" href="/Dashboard" Match="NavLinkMatch.All">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
+					Dashboard
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Purchases))
 			{
-			<NavLink class="nav-link" href="/DealerApplicationReview">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
-				Dealer Application Review
-			</NavLink>
+				<NavLink class="nav-link" href="/Purchases">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+					Purchases
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Rewards))
+			{
+				<NavLink class="nav-link" href="/Rewards">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg" class="SideBariconimg" />
+					Rewards
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.CropAdvice))
+			{
+				<NavLink class="nav-link" href="/CropAdvice">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg" class="SideBariconimg" />
+					Crop Advice
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.YieldPrediction))
+			{
+				<NavLink class="nav-link" href="/YieldPrediction">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg" class="SideBariconimg" />
+					Yield Prediction
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.DiseaseDetection))
+			{
+				<NavLink class="nav-link" href="/DiseaseDetection">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg" class="SideBariconimg" />
+					Disease Detection
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Community))
+			{
+				<NavLink class="nav-link" href="/Community">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg" class="SideBariconimg" />
+					Community
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Notifications))
+			{
+				<NavLink class="nav-link" href="/Notifications">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg" class="SideBariconimg" />
+					Notifications
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Profile))
+			{
+				<NavLink class="nav-link" href="/Profile">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+					Profile
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Employee))
+			{
+				<NavLink class="nav-link" href="/EmployeeManagement">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+					Employee
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.dealerreviewlist))
+			{
+				<NavLink class="nav-link" href="/DealerApplicationReview">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+					Dealer Application Review
+				</NavLink>
 			}
 
-			<div class="settings-menu-wrapper">
-				<a href="javascript:void(0);"
-					   class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
-					   @onclick="ToggleSettingsMenu">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
-					Settings
-					<i class="bi @(isSettingsOpen ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
-				</a>
+			@if (LoginState.CanAccess(PagePermission.LocationMaster)
+				 || LoginState.CanAccess(PagePermission.Agriculture)
+				 || LoginState.CanAccess(PagePermission.Logistics)
+				 || LoginState.CanAccess(PagePermission.Financial)
+				 || LoginState.CanAccess(PagePermission.Relationship))
+			{
+				<div class="settings-menu-wrapper">
+					<a href="javascript:void(0);"
+						   class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
+						   @onclick="ToggleSettingsMenu">
+						<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
+						Settings
+						<i class="bi @(isSettingsOpen ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+					</a>
 
-				@if (isSettingsOpen)
-				{
-					<ul class="submenu-list">
-						<li class="submenu-item">
-							<NavLink href="/LocationMaster" class="submenu-link" Match="NavLinkMatch.All">Location Master</NavLink>
-						</li>
-						<li class="submenu-item">
-							<NavLink href="/Agriculture" class="submenu-link" Match="NavLinkMatch.All">Agriculture & Prod...</NavLink>
-						</li>
-						<li class="submenu-item">
-							<NavLink href="/Logistics" class="submenu-link" Match="NavLinkMatch.All">Logistics Master</NavLink>
-						</li>
-						<li class="submenu-item">
-							<NavLink href="/Financial" class="submenu-link" Match="NavLinkMatch.All">Financial Master</NavLink>
-						</li>
-						<li class="submenu-item">
-							<NavLink href="/Relationship" class="submenu-link" Match="NavLinkMatch.All">Relationship Master</NavLink>
-						</li>
-					</ul>
-				}
-			</div>
+					@if (isSettingsOpen)
+					{
+						<ul class="submenu-list">
+							@if (LoginState.CanAccess(PagePermission.LocationMaster))
+							{
+								<li class="submenu-item">
+									<NavLink href="/LocationMaster" class="submenu-link" Match="NavLinkMatch.All">Location Master</NavLink>
+								</li>
+							}
+							@if (LoginState.CanAccess(PagePermission.Agriculture))
+							{
+								<li class="submenu-item">
+									<NavLink href="/Agriculture" class="submenu-link" Match="NavLinkMatch.All">Agriculture & Prod...</NavLink>
+								</li>
+							}
+							@if (LoginState.CanAccess(PagePermission.Logistics))
+							{
+								<li class="submenu-item">
+									<NavLink href="/Logistics" class="submenu-link" Match="NavLinkMatch.All">Logistics Master</NavLink>
+								</li>
+							}
+							@if (LoginState.CanAccess(PagePermission.Financial))
+							{
+								<li class="submenu-item">
+									<NavLink href="/Financial" class="submenu-link" Match="NavLinkMatch.All">Financial Master</NavLink>
+								</li>
+							}
+							@if (LoginState.CanAccess(PagePermission.Relationship))
+							{
+								<li class="submenu-item">
+									<NavLink href="/Relationship" class="submenu-link" Match="NavLinkMatch.All">Relationship Master</NavLink>
+								</li>
+							}
+						</ul>
+					}
+				</div>
 			}
 		</nav>
 	</div>
@@ -194,10 +237,8 @@
 
 	protected override void OnInitialized()
 	{
-		// Open settings submenu automatically if current page belongs to settings
 		isSettingsOpen = IsSettingsSectionActive();
 
-		// In-circuit navigation (e.g. after login): token is already in memory
 		if (Http.DefaultRequestHeaders.Authorization != null)
 		{
 			_isReady = true;
@@ -227,8 +268,10 @@
 		catch { }
 
 		LoginState.Token = null;
+		LoginState.ClearAllowedPages();
 		Http.DefaultRequestHeaders.Authorization = null;
 		await JS.InvokeVoidAsync("sessionStorage.removeItem", "jwt_token");
+		await JS.InvokeVoidAsync("sessionStorage.removeItem", "spic_role_access");
 		Navigation.NavigateTo("/login", forceLoad: true);
 	}
 
@@ -247,7 +290,7 @@
 	{
 		if (firstRender && !_isReady)
 		{
-			// Page refresh: restore token from sessionStorage via JS interop
+			// Page refresh: restore token + page permissions from sessionStorage
 			var token = await JS.InvokeAsync<string?>("sessionStorage.getItem", "jwt_token");
 
 			if (!string.IsNullOrWhiteSpace(token))
@@ -255,8 +298,12 @@
 				Http.DefaultRequestHeaders.Authorization =
 					new AuthenticationHeaderValue("Bearer", token);
 				LoginState.Token = token;
+
+				var roleAccess = await JS.InvokeAsync<string?>("sessionStorage.getItem", "spic_role_access");
+				LoginState.SetAllowedPages(roleAccess);
+
 				_isReady = true;
-				StateHasChanged(); // Re-render to show @Body
+				StateHasChanged();
 			}
 			else
 			{
@@ -267,7 +314,6 @@
 
 	private async Task HandleSearchKeyDown(KeyboardEventArgs e)
 	{
-		// If the user hits Enter, tell JS to click the highlighted link
 		if (e.Key == "Enter")
 		{
 			try
