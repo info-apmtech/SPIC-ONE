@@ -54,7 +54,8 @@ namespace SpicAPI.Controllers
                 "sector" => new[] { "name", "isactive" },
                 "unit" => new[] { "name", "unitcode", "isactive" },
                 "category" => new[] { "name", "unitid", "isspecialityproduct", "isactive" },
-                "product" => new[] { "name", "categoryid", "isactive" },
+                "productgroup" => new[] { "name", "isactive" },
+                "product" => new[] { "name", "category", "productgroup", "rpu", "isactive" },
                 _ => Array.Empty<string>()
             };
 
@@ -123,15 +124,41 @@ namespace SpicAPI.Controllers
                                     _db.Categories.Add(ent);
                                 }
                                 break;
-                            case "product":
-                                {
-                                    var name = GetCellString(row, headerMap, "name");
-                                    if (string.IsNullOrEmpty(name)) { errors.Add($"Row {row.RowNumber()}: Name empty"); break; }
-                                    if (!TryParseIntFromRow(row, headerMap, "categoryid", out var catId)) { errors.Add($"Row {row.RowNumber()}: CategoryId invalid or missing"); break; }
-                                    var ent = new Product { Name = name, CategoryId = catId, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Products.Add(ent);
-                                }
-                                break;
+							case "productgroup":
+								{
+									var name = GetCellString(row, headerMap, "name");
+									if (string.IsNullOrEmpty(name)) { errors.Add($"Row {row.RowNumber()}: Name empty"); break; }
+									var ent = new ProductGroup { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
+									_db.ProductGroups.Add(ent);
+								}
+								break;
+							case "product":
+								{
+									var name = GetCellString(row, headerMap, "name");
+									if (string.IsNullOrEmpty(name)) { errors.Add($"Row {row.RowNumber()}: Name empty"); break; }
+									var catName = GetCellString(row, headerMap, "category");
+									if (string.IsNullOrEmpty(catName)) { errors.Add($"Row {row.RowNumber()}: Category empty"); break; }
+									var category = _db.Categories.FirstOrDefault(c => c.Name.ToLower() == catName.ToLower());
+									if (category is null) { errors.Add($"Row {row.RowNumber()}: Category '{catName}' not found"); break; }
+									var catId = category.Id;
+									var pgName = GetCellString(row, headerMap, "productgroup");
+									int? pgId = null;
+									if (!string.IsNullOrEmpty(pgName))
+									{
+										var pg = _db.ProductGroups.FirstOrDefault(p => p.Name.ToLower() == pgName.ToLower());
+										if (pg is null)
+											errors.Add($"Row {row.RowNumber()}: Product Group '{pgName}' not found");
+										else
+											pgId = pg.Id;
+									}
+									decimal? rpu = null;
+									var rpuStr = GetCellString(row, headerMap, "rpu");
+									if (!string.IsNullOrEmpty(rpuStr) && decimal.TryParse(rpuStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var rpuVal))
+										rpu = rpuVal;
+									var ent = new Product { Name = name, CategoryId = catId, ProductGroupId = pgId, RPU = rpu, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
+									_db.Products.Add(ent);
+								}
+								break;
                             default:
                                 return BadRequest("Unknown type");
                         }
