@@ -58,6 +58,18 @@ namespace SPIC.Core.Entities
         public required string Name { get; set; }
         public int CategoryId { get; set; }
         public Category? Category { get; set; }
+        public decimal? RPU { get; set; }
+        public int? ProductGroupId { get; set; }
+        public ProductGroup? ProductGroup { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public required string UpdatedBy { get; set; }
+    }
+    public class ProductGroup
+    {
+        public int Id { get; set; }
+        public required string Name { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

@@ -96,6 +96,7 @@
 						<tr>
 							<!-- FIRST REPEAT -->
 							<th>Product Name</th>
+							<th>RPU (₹)</th>
 							<th>Own Retail Qty (@_selectedUnitName)</th>
 							<th>TO (₹)in Lakhs</th>
 							@if (_hasWholesaleLicense)
@@ -127,10 +128,13 @@
 								<td data-label="Product Name">
 									<div class="product-title">@(product?.Name ?? "Unknown")</div>
 								</td>
+								<td data-label="RPU (₹)" class="text-value">
+									@(product?.RPU?.ToString("N2") ?? "-")
+								</td>
 								<td data-label="Own Retail Qty (@_selectedUnitName)">
 									<input class="table-input" type="number" step="0.01"
 										   value="@row.OwnRetailsSaleQty"
-										   @onchange="(e) => UpdateField(row, e, r => r.OwnRetailsSaleQty, (r, v) => r.OwnRetailsSaleQty = v)" />
+										   @onchange="(e) => UpdateRetailQty(row, e)" />
 								</td>
 								<td data-label="TO (₹)in Lakhs">
 									<input class="table-input" type="number" step="0.01"
@@ -142,7 +146,7 @@
 									<td data-label="Sale to Dealer Qty (@_selectedUnitName)">
 										<input class="table-input" type="number" step="0.01"
 											   value="@row.SaleToDealerQty"
-											   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerQty, (r, v) => r.SaleToDealerQty = v)" />
+											   @onchange="(e) => UpdateDealerQty(row, e)" />
 									</td>
 									<td data-label="TO (₹)in Lakhs">
 										<input class="table-input" type="number" step="0.01"
@@ -190,6 +194,7 @@
 						<tr>
 							<!-- FIRST REPEAT -->
 							<td>Grand Total</td>
+							<td></td>
 							<td>@_currentRows.Sum(r => r.OwnRetailsSaleQty).ToString("N2")</td>
 							<td>@_currentRows.Sum(r => r.OwnRetailsSaleAmount).ToString("N2")</td>
 							@if (_hasWholesaleLicense)
@@ -531,6 +536,30 @@
 	{
 		if (decimal.TryParse(e.Value?.ToString(), out var val))
 			setter(row, val);
+	}
+
+	private void UpdateRetailQty(AnnualSaleDataLastFYofDealerRegistration row, ChangeEventArgs e)
+	{
+		if (!decimal.TryParse(e.Value?.ToString(), out var qty)) return;
+		row.OwnRetailsSaleQty = qty;
+
+		var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+		if (product?.RPU.HasValue == true)
+		{
+			row.OwnRetailsSaleAmount = (product.RPU.Value * qty) / 100000m;
+		}
+	}
+
+	private void UpdateDealerQty(AnnualSaleDataLastFYofDealerRegistration row, ChangeEventArgs e)
+	{
+		if (!decimal.TryParse(e.Value?.ToString(), out var qty)) return;
+		row.SaleToDealerQty = qty;
+
+		var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+		if (product?.RPU.HasValue == true)
+		{
+			row.SaleToDealerAmount = (product.RPU.Value * qty) / 100000m;
+		}
 	}
 
 	private async Task HandleNext()
