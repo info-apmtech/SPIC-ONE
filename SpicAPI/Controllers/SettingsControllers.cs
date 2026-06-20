@@ -20,6 +20,9 @@ namespace SpicAPI.Controllers
     public class CategoryController(IGenericRepository<Category> repo) : GenericCrudController<Category>(repo);
 
     [Route("api/[controller]")]
+    public class ProductGroupController(IGenericRepository<ProductGroup> repo) : GenericCrudController<ProductGroup>(repo);
+
+    [Route("api/[controller]")]
     public class ProductController(IGenericRepository<Product> repo) : GenericCrudController<Product>(repo);
 
     [Route("api/[controller]")]

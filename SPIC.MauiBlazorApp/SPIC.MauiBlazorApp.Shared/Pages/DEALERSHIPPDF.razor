@@ -2719,38 +2719,42 @@ else
 
 <script>
     window.renderAllPDFs = async function() {
-        // Ensure pdfjsLib is ready
         if (typeof pdfjsLib === 'undefined') return;
         
-        // Configure the worker to match the CDN version
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
         const targets = document.querySelectorAll('.pdf-render-target:not(.rendered)');
         
         for (let i = 0; i < targets.length; i++) {
             const target = targets[i];
-            target.classList.add('rendered'); // Mark as processed to prevent double rendering
             const url = target.getAttribute('data-pdf-url');
-            
             if (!url) continue;
 
-            try {
-                // ADDED: withCredentials: true to fix Auth/CORS blocks
-                const loadingTask = pdfjsLib.getDocument({
-                    url: url,
-                    withCredentials: true 
-                });
-                
-                const pdf = await loadingTask.promise;
-                
-                // Clear the "Loading..." text
-                target.innerHTML = ''; 
+            await renderPdfWithRetry(target, url, 3);
+        }
+    };
 
-                // Loop through every page in the PDF and create a canvas for it
+    async function renderPdfWithRetry(target, url, maxRetries) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // Fetch the PDF ourselves — this avoids PDF.js internal HTTP error throws
+                const response = await fetch(url, { credentials: 'include' });
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('pdf') && !contentType.includes('octet-stream')) {
+                    throw new Error('Response is not a PDF (content-type: ' + contentType + ')');
+                }
+                const buffer = await response.arrayBuffer();
+
+                // Pass raw bytes to PDF.js — no URL loading, so no MissingPDFException
+                const loadingTask = pdfjsLib.getDocument({ data: buffer });
+                const pdf = await loadingTask.promise;
+
+                target.innerHTML = '';
+
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                     const page = await pdf.getPage(pageNum);
-                    // Scale 1.5 usually provides crisp enough text
-                    const viewport = page.getViewport({ scale: 1.5 }); 
+                    const viewport = page.getViewport({ scale: 1.5 });
 
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
@@ -2759,25 +2763,27 @@ else
 
                     target.appendChild(canvas);
 
-                    const renderContext = {
+                    await page.render({
                         canvasContext: ctx,
                         viewport: viewport
-                    };
-                    await page.render(renderContext).promise;
+                    }).promise;
                 }
-            } catch(err) {
-                // Log for debugging, but don't show anything on the page —
-                // hide the entire document block (title + body) on failure.
-                console.error('Error rendering PDF from URL:', url, err);
-                const container = target.closest('.document-view-container');
-                if (container) {
-                    container.style.display = 'none';
+
+                target.classList.add('rendered');
+                return; // success
+            } catch (err) {
+                console.error('Attempt ' + attempt + '/' + maxRetries + ' failed for PDF:', url, err);
+                if (attempt < maxRetries) {
+                    // Wait before retrying (exponential backoff: 1s, 2s)
+                    await new Promise(r => setTimeout(r, attempt * 1000));
                 } else {
-                    target.innerHTML = '';
+                    // All attempts exhausted — hide the container silently
+                    const container = target.closest('.document-view-container');
+                    if (container) container.style.display = 'none';
                 }
             }
         }
-    };
+    }
 
     window.triggerPrint = function () {
         try {

@@ -62,7 +62,7 @@
 				}
 			else if (ActiveTab == "Products")
 				{
-					<div class="col-md-4">
+					<div class="col-md-3">
 						<label class="form-label-custom">Category</label>
 						<select class="form-control-custom w-100" @bind="_productForm.CategoryId" @ref="_firstInputRef">
 							<option value="0">Select Category</option>
@@ -72,11 +72,26 @@
 							}
 						</select>
 					</div>
-					<div class="col-md-4">
+					<div class="col-md-3">
 						<label class="form-label-custom">Product Name</label>
 						<input type="text" class="form-control-custom w-100" placeholder="Enter Product Name"
 							   @bind="_productForm.Name" />
 					</div>
+				<div class="col-md-3">
+					<label class="form-label-custom">Product Group</label>
+					<select class="form-control-custom w-100" @bind="_productForm.ProductGroupId">
+						<option value="">Select Product Group</option>
+						@foreach (var pg in _productGroupsAll)
+						{
+							<option value="@pg.Id">@pg.Name</option>
+						}
+					</select>
+				</div>
+				<div class="col-md-3">
+					<label class="form-label-custom">Rate Per Unit (RPU)</label>
+					<input type="number" step="any" class="form-control-custom w-100" placeholder="Enter Rate Per Unit"
+						   @bind="_productForm.RPU" />
+				</div>
 				}
 				else
 				{
@@ -203,6 +218,8 @@
 								else if (ActiveTab == "Products")
 								{
 									<th>Category</th>
+									<th>RPU</th>
+									<th>Product Group</th>
 								}
 
 								<th>Status</th>
@@ -225,6 +242,8 @@
 								else if (ActiveTab == "Products")
 								{
 									<td>@GetCategoryName(item.CategoryId)</td>
+									<td>@item.RPU?.ToString("N2")</td>
+									<td>@GetProductGroupName(item.ProductGroupId)</td>
 								}
 
 								<td>
@@ -294,7 +313,7 @@
 					}
 
 @code {
-	private readonly List<string> TabOptions = ["Crops", "Competitors", "Sector", "Units", "Categories", "Products"];
+	private readonly List<string> TabOptions = ["Crops", "Competitors", "Sector", "Units", "Categories", "Product Groups", "Products"];
 
 	// Element reference for focusing
 	private ElementReference _firstInputRef;
@@ -308,6 +327,7 @@
 		"Sector" => "api/Sector",
 		"Units" => "api/Unit",
 		"Categories" => "api/Category",
+		"Product Groups" => "api/ProductGroup",
 		"Products" => "api/Product",
 		_ => ""
 	};
@@ -317,6 +337,7 @@
 	private List<AgriItemDto> _competitorsAll = new();
 	private List<AgriItemDto> _sectorsAll = new();
 	private List<AgriItemDto> _categoriesAll = new();
+	private List<AgriItemDto> _productGroupsAll = new();
 	private List<AgriItemDto> _productsAll = new();
 	private List<AgriItemDto> _filteredItems = new();
 
@@ -330,6 +351,7 @@
 		"Sector" => _sectorsAll,
 		"Units" => _unitsAll,
 		"Categories" => _categoriesAll,
+		"Product Groups" => _productGroupsAll,
 		"Products" => _productsAll,
 		_ => new()
 	};
@@ -344,6 +366,7 @@
 	private bool CurrentFormIsActive => ActiveTab switch
 	{
 		"Categories" => _categoryForm.IsActive,
+		"Product Groups" => _simpleForm.IsActive,
 		"Products" => _productForm.IsActive,
 		_ => _simpleForm.IsActive
 	};
@@ -396,6 +419,7 @@
 			_sectorsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Sector/all") ?? new();
 			_unitsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Unit/all") ?? new();
 			_categoriesAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Category/all") ?? new();
+			_productGroupsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/ProductGroup/all") ?? new();
 			_productsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Product/all") ?? new();
 		}
 		catch (Exception ex)
@@ -418,6 +442,7 @@
 				case "Sector": _sectorsAll = items; break;
 				case "Units": _unitsAll = items; break;
 				case "Categories": _categoriesAll = items; break;
+				case "Product Groups": _productGroupsAll = items; break;
 				case "Products": _productsAll = items; break;
 			}
 
@@ -459,6 +484,8 @@
 		else if (ActiveTab == "Products")
 		{
 			cols.Add(new ExportColumn<AgriItemDto> { Header = "Category", ValueSelector = item => GetCategoryName(item.CategoryId) });
+			cols.Add(new ExportColumn<AgriItemDto> { Header = "RPU", ValueSelector = item => item.RPU?.ToString("N2") ?? "" });
+			cols.Add(new ExportColumn<AgriItemDto> { Header = "Product Group", ValueSelector = item => GetProductGroupName(item.ProductGroupId) });
 		}
 
 		cols.Add(new ExportColumn<AgriItemDto> { Header = "Status", ValueSelector = item => item.IsActive ? "Active" : "Inactive" });
@@ -538,9 +565,9 @@
 				"Categories" => _isEditing
 					? new { Id = _editingId!.Value, Name = trimmedName, _categoryForm.UnitId, _categoryForm.IsSpecialityProduct, _categoryForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
 					: new { Name = trimmedName, _categoryForm.UnitId, _categoryForm.IsSpecialityProduct, _categoryForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
-				"Products" => _isEditing
-					? (object)new { Id = _editingId!.Value, Name = trimmedName, _productForm.CategoryId, _productForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
-					: new { Name = trimmedName, _productForm.CategoryId, _productForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
+			"Products" => _isEditing
+				? (object)new { Id = _editingId!.Value, Name = trimmedName, _productForm.CategoryId, _productForm.RPU, ProductGroupId = _productForm.ProductGroupId, _productForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
+				: new { Name = trimmedName, _productForm.CategoryId, _productForm.RPU, ProductGroupId = _productForm.ProductGroupId, _productForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") },
 				_ => _isEditing
 					? (object)new { Id = _editingId!.Value, Name = trimmedName, _simpleForm.IsActive, UpdatedBy = (_currentUserId ?? "current-user") }
 					: new { Name = trimmedName, _simpleForm.IsActive, CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now, CreatedBy = (_currentUserId ?? "current-user"), UpdatedBy = (_currentUserId ?? "current-user") }
@@ -599,14 +626,16 @@
 					IsActive = item.IsActive
 				};
 				break;
-			case "Products":
-				_productForm = new ProductFormModel
-				{
-					Name = item.Name,
-					CategoryId = item.CategoryId,
-					IsActive = item.IsActive
-				};
-				break;
+		case "Products":
+			_productForm = new ProductFormModel
+			{
+				Name = item.Name,
+				CategoryId = item.CategoryId,
+				RPU = item.RPU,
+				ProductGroupId = item.ProductGroupId,
+				IsActive = item.IsActive
+			};
+			break;
 			default:
 				_simpleForm = new SimpleFormModel
 				{
@@ -722,12 +751,16 @@
 	private string GetCategoryName(int categoryId) =>
 		_categoriesAll.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "";
 
+	private string GetProductGroupName(int? productGroupId) =>
+		productGroupId.HasValue ? _productGroupsAll.FirstOrDefault(pg => pg.Id == productGroupId.Value)?.Name ?? "" : "";
+
 	private string GetSingularName(string pluralName) => pluralName switch
 	{
 		"Crops" => "Crop",
 		"Competitors" => "Competitor",
 		"Units" => "Unit",
 		"Categories" => "Category",
+		"Product Groups" => "Product Group",
 		"Products" => "Product",
 		"Sector" => "Sector",
 		_ => pluralName.TrimEnd('s')
@@ -779,6 +812,7 @@
 		else if (typeMap == "sector") typeMap = "sector";
 		else if (typeMap == "units") typeMap = "unit";
 		else if (typeMap == "categories") typeMap = "category";
+		else if (typeMap == "product groups") typeMap = "productgroup";
 		else if (typeMap == "products") typeMap = "product";
 
 		_isUploading = true;
@@ -825,6 +859,8 @@
 		public int UnitId { get; set; }
 		public bool IsSpecialityProduct { get; set; }
 		public int CategoryId { get; set; }
+		public decimal? RPU { get; set; }
+		public int? ProductGroupId { get; set; }
 		public bool IsActive { get; set; }
 		public DateTime CreatedAt { get; set; }
 		public DateTime UpdatedAt { get; set; }
@@ -849,6 +885,8 @@
 	{
 		public string Name { get; set; } = "";
 		public int CategoryId { get; set; }
+		public decimal? RPU { get; set; }
+		public int? ProductGroupId { get; set; }
 		public bool IsActive { get; set; } = true;
 	}
 }

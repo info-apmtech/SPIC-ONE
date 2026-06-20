@@ -54,6 +54,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<Sector> Sectors { get; set; }
         public DbSet<Unit> Units { get; set; }
         public DbSet<Category> Categories { get; set; }
+        public DbSet<ProductGroup> ProductGroups { get; set; }
         public DbSet<Product> Products { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
         public DbSet<RackPoint> RackPoints { get; set; }
