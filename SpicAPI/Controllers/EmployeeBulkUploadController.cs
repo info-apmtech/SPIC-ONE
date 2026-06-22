@@ -48,6 +48,12 @@ namespace SpicAPI.Controllers
             var hqMap = await _db.Headquarters
                 .ToDictionaryAsync(h => h.HeadquarterName.Trim(), h => h.Id, StringComparer.OrdinalIgnoreCase);
 
+            var designationMap = await _db.Designations
+    .ToDictionaryAsync(
+        d => d.Name.Trim(),
+        d => new { d.Id, d.IsActive },
+        StringComparer.OrdinalIgnoreCase);
+
             using var stream = file.OpenReadStream();
             using var workbook = new XLWorkbook(stream);
             var worksheet = workbook.Worksheets.First();
@@ -111,6 +117,8 @@ namespace SpicAPI.Controllers
                         var hqName = Cell(row, "hq");
                         var phone = Cell(row, "phonenumber");
                         var email = Cell(row, "emailid");
+                        var designationName = Cell(row, "designation");
+
                         if (string.IsNullOrWhiteSpace(email)) email = Cell(row, "email");
 
                         // --- Validation ---
@@ -292,6 +300,29 @@ namespace SpicAPI.Controllers
                             continue;
                         }
 
+                        // --- Resolve Designation (optional, but if provided it MUST be valid and active) ---
+                        int? designationId = null;
+                        if (!string.IsNullOrWhiteSpace(designationName))
+                        {
+                            if (!designationMap.TryGetValue(designationName, out var desig))
+                            {
+                                AddError("Unknown Designation",
+                                    $"Row {rowNum} ({empName}): Designation '{designationName}' does not exist.");
+                                skipped++;
+                                continue;
+                            }
+
+                            if (!desig.IsActive)
+                            {
+                                AddError("Inactive Designation",
+                                    $"Row {rowNum} ({empName}): Designation '{designationName}' is deactivated. Activate it first, or use a different one.");
+                                skipped++;
+                                continue;
+                            }
+
+                            designationId = desig.Id;
+                        }
+
                         // ---  1. Create AppUsers (UserInfo) First ---
 
                         var user = new UserInfo
@@ -302,6 +333,7 @@ namespace SpicAPI.Controllers
                             PhoneNumber = phone,
                             Name = empName,
                             Role = role,
+                            DesignationId = designationId,
                             CreatedAt = now,
                             CreatedBy = currentUser,
                             UpdatedAt = now,

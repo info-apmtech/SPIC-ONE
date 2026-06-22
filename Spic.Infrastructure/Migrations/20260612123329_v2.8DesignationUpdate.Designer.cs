@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260612123329_v2.8DesignationUpdate")]
+    partial class v28DesignationUpdate
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -185,7 +188,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AnnualSaleDataLastFY", (string)null);
+                    b.ToTable("AnnualSaleDataLastFY");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Bank", b =>
@@ -198,10 +201,6 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("IFSCPrefix")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<string>("Icon")
                         .HasColumnType("text");
@@ -222,7 +221,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Banks", (string)null);
+                    b.ToTable("Banks");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
@@ -260,7 +259,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("UnitId");
 
-                    b.ToTable("Categories", (string)null);
+                    b.ToTable("Categories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Competitor", b =>
@@ -290,7 +289,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Competitors", (string)null);
+                    b.ToTable("Competitors");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Crop", b =>
@@ -320,7 +319,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Crops", (string)null);
+                    b.ToTable("Crops");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerApprovalHistory", b =>
@@ -363,7 +362,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerApprovalHistories", (string)null);
+                    b.ToTable("DealerApprovalHistories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerAssetBank", b =>
@@ -394,7 +393,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerAssetBanks", (string)null);
+                    b.ToTable("DealerAssetBanks");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerAssetBuilding", b =>
@@ -464,7 +463,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerAssetBuildings", (string)null);
+                    b.ToTable("DealerAssetBuildings");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerAssetLand", b =>
@@ -501,7 +500,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerAssetLands", (string)null);
+                    b.ToTable("DealerAssetLands");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerCompaniesOperatingInArea", b =>
@@ -520,7 +519,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerCompaniesOperatingInAreas", (string)null);
+                    b.ToTable("DealerCompaniesOperatingInAreas");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerCreditLimitProposal", b =>
@@ -710,7 +709,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerCreditLimitProposals", (string)null);
+                    b.ToTable("DealerCreditLimitProposals");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerCreditLimitSales", b =>
@@ -748,7 +747,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerCreditLimitSalesData", (string)null);
+                    b.ToTable("DealerCreditLimitSalesData");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerCreditLimitSalesPerformance", b =>
@@ -788,7 +787,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerCreditLimitSalesPerformances", (string)null);
+                    b.ToTable("DealerCreditLimitSalesPerformances");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerExperience", b =>
@@ -820,7 +819,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerExperiences", (string)null);
+                    b.ToTable("DealerExperiences");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerLoanLiabilities", b =>
@@ -845,7 +844,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerLoanLiabilities", (string)null);
+                    b.ToTable("DealerLoanLiabilities");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerMarketDetail", b =>
@@ -889,7 +888,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerMarketDetails", (string)null);
+                    b.ToTable("DealerMarketDetails");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerOwnershipInfo", b =>
@@ -975,7 +974,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerOwnershipInfos", (string)null);
+                    b.ToTable("DealerOwnershipInfos");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerPortFacilities", b =>
@@ -1000,7 +999,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerPortFacilities", (string)null);
+                    b.ToTable("DealerPortFacilities");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerRailFacilities", b =>
@@ -1025,7 +1024,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerRailFacilities", (string)null);
+                    b.ToTable("DealerRailFacilities");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerRegistration", b =>
@@ -1082,9 +1081,6 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("numeric");
 
                     b.Property<string>("CashCreditLimitRrmarks")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ChequeFilePath")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1300,7 +1296,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerRegistrations", (string)null);
+                    b.ToTable("DealerRegistrations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerRegistrationDocuments", b =>
@@ -1362,7 +1358,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerRegistrationDocuments", (string)null);
+                    b.ToTable("DealerRegistrationDocuments");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerWarehouseFacilities", b =>
@@ -1387,7 +1383,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerWarehouseFacilities", (string)null);
+                    b.ToTable("DealerWarehouseFacilities");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Designation", b =>
@@ -1422,7 +1418,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Designations", (string)null);
+                    b.ToTable("Designations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.District", b =>
@@ -1457,7 +1453,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("StateId");
 
-                    b.ToTable("Districts", (string)null);
+                    b.ToTable("Districts");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.EmployeeRegistration+EmployeeInformation", b =>
@@ -1503,7 +1499,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("EmployeeInformation", (string)null);
+                    b.ToTable("EmployeeInformation");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.EmployeeRegistration+Employeelogin", b =>
@@ -1541,7 +1537,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Employeelogins", (string)null);
+                    b.ToTable("Employeelogins");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.FinancialYear", b =>
@@ -1577,7 +1573,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("FinancialYears", (string)null);
+                    b.ToTable("FinancialYears");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Headquarter", b =>
@@ -1612,7 +1608,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("RegionId");
 
-                    b.ToTable("Headquarters", (string)null);
+                    b.ToTable("Headquarters");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.PartnerFamilyDetails", b =>
@@ -1644,7 +1640,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PartnerFamilyDetails", (string)null);
+                    b.ToTable("PartnerFamilyDetails");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.PartnerOccupation", b =>
@@ -1670,7 +1666,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PartnerOccupations", (string)null);
+                    b.ToTable("PartnerOccupations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Port", b =>
@@ -1713,7 +1709,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("StateId");
 
-                    b.ToTable("Ports", (string)null);
+                    b.ToTable("Ports");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Product", b =>
@@ -1737,54 +1733,18 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<decimal?>("RPU")
-                        .HasColumnType("numeric");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("UpdatedBy")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int?>("productId")
-                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
 
-                    b.ToTable("Products", (string)null);
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.ProductGroup", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ProductGroups", (string)null);
+                    b.ToTable("Products");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.RackPoint", b =>
@@ -1830,7 +1790,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("StateId");
 
-                    b.ToTable("RackPoints", (string)null);
+                    b.ToTable("RackPoints");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Region", b =>
@@ -1865,7 +1825,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("StateId");
 
-                    b.ToTable("Regions", (string)null);
+                    b.ToTable("Regions");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Relationship", b =>
@@ -1895,7 +1855,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Relationships", (string)null);
+                    b.ToTable("Relationships");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SalesPlanningInDealerRegistration", b =>
@@ -1989,7 +1949,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SalesPlannings", (string)null);
+                    b.ToTable("SalesPlannings");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Sector", b =>
@@ -2019,7 +1979,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Sectors", (string)null);
+                    b.ToTable("Sectors");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.State", b =>
@@ -2054,7 +2014,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("ZoneId");
 
-                    b.ToTable("States", (string)null);
+                    b.ToTable("States");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SubDistrict", b =>
@@ -2089,7 +2049,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("DistrictId");
 
-                    b.ToTable("SubDistricts", (string)null);
+                    b.ToTable("SubDistricts");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Unit", b =>
@@ -2119,7 +2079,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Units", (string)null);
+                    b.ToTable("Units");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.UserInfo", b =>
@@ -2251,7 +2211,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Warehouses", (string)null);
+                    b.ToTable("Warehouses");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Zone", b =>
@@ -2287,7 +2247,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Zones", (string)null);
+                    b.ToTable("Zones");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
