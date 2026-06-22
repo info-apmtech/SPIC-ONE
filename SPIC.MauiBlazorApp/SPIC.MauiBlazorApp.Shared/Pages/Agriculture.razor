@@ -133,20 +133,65 @@
 										<div class="modal-content">
 											<div class="modal-header">
 												<h5 class="modal-title">Bulk Upload - @ActiveTab</h5>
-												<button type="button" class="btn-close" @onclick="() => _showUploadModal = false"></button>
+												<button type="button" class="btn-close" @onclick="CloseUploadModal"></button>
 											</div>
 											<div class="modal-body">
-												<InputFile OnChange="OnBulkFileSelected" />
-												<div class="upload-result" style="margin-top:10px;">
-													@if (_isUploading)
-													{
-														<p class="text-muted">Uploading...</p>
-													}
-													else if (!string.IsNullOrEmpty(_uploadResult))
-													{
-														<p>@_uploadResult</p>
-													}
-												</div>
+												@if (_uploadCompleted)
+												{
+													<div class="upload-summary">
+														<div class="summary-stats mb-3">
+															<div>Total Records in File: <strong>@(_uploadResponse?.TotalRecords ?? 0)</strong></div>
+															<div class="text-success">Successfully Inserted: <strong>@(_uploadResponse?.InsertedCount ?? 0)</strong></div>
+															<div class="text-info">Updated: <strong>@(_uploadResponse?.UpdatedCount ?? 0)</strong></div>
+															@if (_uploadResponse?.RejectedCount > 0)
+															{
+																<div class="text-danger">Rejected Records: <strong>@_uploadResponse.RejectedCount</strong></div>
+															}
+														</div>
+														@if (_uploadResponse?.RejectedRecords?.Any() == true)
+														{
+															<h6 class="text-danger mb-2">Rejected Records</h6>
+															<div style="max-height:250px;overflow-y:auto;">
+																<table class="table table-sm table-bordered mb-0" style="font-size:0.85rem;">
+																	<thead>
+																		<tr>
+																			<th>Row No</th>
+																			<th>Product Name</th>
+																			<th>Reason</th>
+																		</tr>
+																	</thead>
+																	<tbody>
+																		@foreach (var rec in _uploadResponse.RejectedRecords)
+																		{
+																			<tr>
+																				<td>@rec.RowNumber</td>
+																				<td>@rec.ProductName</td>
+																				<td class="text-danger">@rec.Reason</td>
+																			</tr>
+																		}
+																	</tbody>
+																</table>
+															</div>
+														}
+														<div class="mt-3">
+															<button class="btn btn-secondary btn-sm" @onclick="CloseUploadModal">Close</button>
+														</div>
+													</div>
+												}
+												else
+												{
+													<InputFile OnChange="OnBulkFileSelected" />
+													<div class="upload-result" style="margin-top:10px;">
+														@if (_isUploading)
+														{
+															<p class="text-muted">Uploading...</p>
+														}
+														else if (!string.IsNullOrEmpty(_uploadResult))
+														{
+															<p class="text-danger">@_uploadResult</p>
+														}
+													</div>
+												}
 											</div>
 										</div>
 									</div>
@@ -387,6 +432,8 @@
 	private bool _showUploadModal = false;
 	private bool _isUploading = false;
 	private string _uploadResult = string.Empty;
+	private BulkUploadResponse? _uploadResponse;
+	private bool _uploadCompleted;
 
 	// Search & filter
 	private string _searchText = "";
@@ -817,6 +864,8 @@
 
 		_isUploading = true;
 		_uploadResult = string.Empty;
+		_uploadResponse = null;
+		_uploadCompleted = false;
 
 		try
 		{
@@ -833,7 +882,8 @@
 			var body = await resp.Content.ReadAsStringAsync();
 			if (resp.IsSuccessStatusCode)
 			{
-				_uploadResult = "Upload successful";
+				_uploadResponse = System.Text.Json.JsonSerializer.Deserialize<BulkUploadResponse>(body, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+				_uploadCompleted = true;
 				await LoadAllData();
 			}
 			else
@@ -849,6 +899,14 @@
 		{
 			_isUploading = false;
 		}
+	}
+
+	private void CloseUploadModal()
+	{
+		_showUploadModal = false;
+		_uploadCompleted = false;
+		_uploadResponse = null;
+		_uploadResult = string.Empty;
 	}
 
 	// Unified DTO
@@ -888,5 +946,21 @@
 		public decimal? RPU { get; set; }
 		public int? ProductGroupId { get; set; }
 		public bool IsActive { get; set; } = true;
+	}
+
+	public class RejectedRecord
+	{
+		public int RowNumber { get; set; }
+		public string ProductName { get; set; } = "";
+		public string Reason { get; set; } = "";
+	}
+
+	public class BulkUploadResponse
+	{
+		public int TotalRecords { get; set; }
+		public int InsertedCount { get; set; }
+		public int UpdatedCount { get; set; }
+		public int RejectedCount { get; set; }
+		public List<RejectedRecord> RejectedRecords { get; set; } = new();
 	}
 }

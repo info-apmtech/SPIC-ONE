@@ -39,13 +39,22 @@ namespace SpicAPI.Controllers
             if (lastHeaderCell == 0)
                 return BadRequest("Empty worksheet or missing header row");
 
+            // Build header map with normalized column names
+            var rawHeaders = new List<string>();
             var headerMap = new Dictionary<string,int>();
             for (int c = 1; c <= lastHeaderCell; c++)
             {
-                var raw = headerRow.Cell(c).GetString();
+                var raw = headerRow.Cell(c).GetString().Trim();
+                rawHeaders.Add(raw);
                 var n = NormalizeHeader(raw);
-                if (!string.IsNullOrEmpty(n) && !headerMap.ContainsKey(n)) headerMap[n] = c;
+                if (!string.IsNullOrEmpty(n) && !headerMap.ContainsKey(n))
+                    headerMap[n] = c;
             }
+
+            // Add alias entries so common variations (e.g. "Group" -> "productgroup") resolve correctly
+            AddAliasEntries(headerMap);
+
+            _logger.LogInformation("Detected Columns: {Columns}", string.Join(" | ", rawHeaders));
 
             string[] expected = type?.ToLowerInvariant() switch
             {
@@ -55,7 +64,7 @@ namespace SpicAPI.Controllers
                 "unit" => new[] { "name", "unitcode", "isactive" },
                 "category" => new[] { "name", "unitid", "isspecialityproduct", "isactive" },
                 "productgroup" => new[] { "name", "isactive" },
-                "product" => new[] { "name", "category", "productgroup", "rpu", "isactive" },
+                "product" => new[] { "category", "productname", "productgroup", "rpu" },
                 _ => Array.Empty<string>()
             };
 
@@ -69,118 +78,180 @@ namespace SpicAPI.Controllers
                 return BadRequest($"Invalid template. Missing columns: {display}");
             }
 
-            var rows = worksheet.RowsUsed().Skip(1);
-            var now = DateTime.UtcNow;
-            var errors = new List<string>();
+			var rows = worksheet.RowsUsed().Skip(1);
+			var now = DateTime.UtcNow;
+			var rejectedRecords = new List<RejectedRecord>();
+			var totalRecords = 0;
+			var insertedCount = 0;
+			var updatedCount = 0;
 
-            using var tx = await _db.Database.BeginTransactionAsync();
-            try
-            {
-                foreach (var row in rows)
-                {
-                    try
-                    {
-                        switch (type?.ToLowerInvariant())
-                        {
-                            case "crop":
-                                {
-                                    var name = GetCellString(row, headerMap, "name");
-                                    if (string.IsNullOrEmpty(name)) { errors.Add($"Row {row.RowNumber()}: Name empty"); break; }
-                                    var ent = new Crop { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Crops.Add(ent);
-                                }
-                                break;
-                            case "competitor":
-                                {
-                                    var name = GetCellString(row, headerMap, "name");
-                                    if (string.IsNullOrEmpty(name)) { errors.Add($"Row {row.RowNumber()}: Name empty"); break; }
-                                    var ent = new Competitor { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Competitors.Add(ent);
-                                }
-                                break;
-                            case "sector":
-                                {
-                                    var name = GetCellString(row, headerMap, "name");
-                                    if (string.IsNullOrEmpty(name)) { errors.Add($"Row {row.RowNumber()}: Name empty"); break; }
-                                    var ent = new Sector { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Sectors.Add(ent);
-                                }
-                                break;
-                            case "unit":
-                                {
-                                    var name = GetCellString(row, headerMap, "name");
-                                    if (string.IsNullOrEmpty(name)) { errors.Add($"Row {row.RowNumber()}: Name empty"); break; }
-                                    var ent = new Unit { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Units.Add(ent);
-                                }
-                                break;
-                            case "category":
-                                {
-                                    var name = GetCellString(row, headerMap, "name");
-                                    if (string.IsNullOrEmpty(name)) { errors.Add($"Row {row.RowNumber()}: Name empty"); break; }
-                                    if (!TryParseIntFromRow(row, headerMap, "unitid", out var unitId)) { errors.Add($"Row {row.RowNumber()}: UnitId invalid or missing"); break; }
-                                    var isSpec = ParseBoolCellByValue(GetCellString(row, headerMap, "isspecialityproduct"));
-                                    var ent = new Category { Name = name, UnitId = unitId, IsSpecialityProduct = isSpec, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Categories.Add(ent);
-                                }
-                                break;
+			var seenProductNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+			using var tx = await _db.Database.BeginTransactionAsync();
+			try
+			{
+				foreach (var row in rows)
+				{
+					totalRecords++;
+					try
+					{
+						switch (type?.ToLowerInvariant())
+						{
+							case "crop":
+								{
+									var name = GetCellString(row, headerMap, "name");
+									if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
+									var ent = new Crop { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
+									_db.Crops.Add(ent);
+									insertedCount++;
+								}
+								break;
+							case "competitor":
+								{
+									var name = GetCellString(row, headerMap, "name");
+									if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
+									var ent = new Competitor { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
+									_db.Competitors.Add(ent);
+									insertedCount++;
+								}
+								break;
+							case "sector":
+								{
+									var name = GetCellString(row, headerMap, "name");
+									if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
+									var ent = new Sector { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
+									_db.Sectors.Add(ent);
+									insertedCount++;
+								}
+								break;
+							case "unit":
+								{
+									var name = GetCellString(row, headerMap, "name");
+									if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
+									var ent = new Unit { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
+									_db.Units.Add(ent);
+									insertedCount++;
+								}
+								break;
+							case "category":
+								{
+									var name = GetCellString(row, headerMap, "name");
+									if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
+									if (!TryParseIntFromRow(row, headerMap, "unitid", out var unitId)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "UnitId invalid or missing")); break; }
+									var isSpec = ParseBoolCellByValue(GetCellString(row, headerMap, "isspecialityproduct"));
+									var ent = new Category { Name = name, UnitId = unitId, IsSpecialityProduct = isSpec, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
+									_db.Categories.Add(ent);
+									insertedCount++;
+								}
+								break;
 							case "productgroup":
 								{
 									var name = GetCellString(row, headerMap, "name");
-									if (string.IsNullOrEmpty(name)) { errors.Add($"Row {row.RowNumber()}: Name empty"); break; }
+									if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
 									var ent = new ProductGroup { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
 									_db.ProductGroups.Add(ent);
+									insertedCount++;
 								}
 								break;
 							case "product":
 								{
-									var name = GetCellString(row, headerMap, "name");
-									if (string.IsNullOrEmpty(name)) { errors.Add($"Row {row.RowNumber()}: Name empty"); break; }
+									var productName = GetCellString(row, headerMap, "productname");
+									if (string.IsNullOrEmpty(productName)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), "", "Product Name is required")); break; }
+
 									var catName = GetCellString(row, headerMap, "category");
-									if (string.IsNullOrEmpty(catName)) { errors.Add($"Row {row.RowNumber()}: Category empty"); break; }
+									if (string.IsNullOrEmpty(catName)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Category is required")); break; }
+
 									var category = _db.Categories.FirstOrDefault(c => c.Name.ToLower() == catName.ToLower());
-									if (category is null) { errors.Add($"Row {row.RowNumber()}: Category '{catName}' not found"); break; }
+									if (category is null) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Category not found in master data")); break; }
 									var catId = category.Id;
+
 									var pgName = GetCellString(row, headerMap, "productgroup");
-									int? pgId = null;
-									if (!string.IsNullOrEmpty(pgName))
-									{
-										var pg = _db.ProductGroups.FirstOrDefault(p => p.Name.ToLower() == pgName.ToLower());
-										if (pg is null)
-											errors.Add($"Row {row.RowNumber()}: Product Group '{pgName}' not found");
-										else
-											pgId = pg.Id;
-									}
-									decimal? rpu = null;
+									if (string.IsNullOrEmpty(pgName)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Product Group is required")); break; }
+
+									var pg = _db.ProductGroups.FirstOrDefault(p => p.Name.ToLower() == pgName.ToLower());
+									if (pg is null) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Product Group not found in master data")); break; }
+									var pgId = pg.Id;
+
 									var rpuStr = GetCellString(row, headerMap, "rpu");
-									if (!string.IsNullOrEmpty(rpuStr) && decimal.TryParse(rpuStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var rpuVal))
-										rpu = rpuVal;
-									var ent = new Product { Name = name, CategoryId = catId, ProductGroupId = pgId, RPU = rpu, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
+									if (string.IsNullOrEmpty(rpuStr) || !decimal.TryParse(rpuStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var rpuVal))
+									{
+										rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Invalid RPU"));
+										break;
+									}
+
+									var existing = _db.Products.FirstOrDefault(p => p.Name.ToLower() == productName.ToLower());
+									if (existing != null)
+									{
+										var updated = false;
+										if (existing.CategoryId == null) { existing.CategoryId = catId; updated = true; }
+										if (existing.ProductGroupId == null) { existing.ProductGroupId = pgId; updated = true; }
+										if (existing.RPU == null) { existing.RPU = rpuVal; updated = true; }
+
+										if (updated)
+										{
+											existing.UpdatedAt = now;
+											existing.UpdatedBy = "bulk-upload";
+											updatedCount++;
+										}
+										else
+										{
+											rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Product already exists"));
+										}
+										break;
+									}
+
+									if (!seenProductNames.Add(productName))
+									{
+										rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Duplicate Product"));
+										break;
+									}
+
+									var ent = new Product
+									{
+										Name = productName,
+										CategoryId = catId,
+										ProductGroupId = pgId,
+										RPU = rpuVal,
+										IsActive = true,
+										CreatedAt = now,
+										UpdatedAt = now,
+										UpdatedBy = "bulk-upload"
+									};
 									_db.Products.Add(ent);
+									insertedCount++;
 								}
 								break;
-                            default:
-                                return BadRequest("Unknown type");
-                        }
-                    }
-                    catch (Exception exRow)
-                    {
-                        _logger.LogWarning(exRow, "Row parse error");
-                        errors.Add($"Row {row.RowNumber()} error: {exRow.Message}");
-                    }
-                }
+							default:
+								return BadRequest("Unknown type");
+						}
+					}
+					catch (Exception exRow)
+					{
+						_logger.LogWarning(exRow, "Row parse error");
+						rejectedRecords.Add(new RejectedRecord(row.RowNumber(), "", exRow.Message));
+					}
+				}
 
-                await _db.SaveChangesAsync();
-                await tx.CommitAsync();
-            }
-            catch (Exception ex)
-            {
-                await tx.RollbackAsync();
-                _logger.LogError(ex, "Bulk upload failed");
-                return StatusCode(500, "Bulk upload failed: " + ex.Message);
-            }
+				await _db.SaveChangesAsync();
+				await tx.CommitAsync();
+			}
+			catch (Exception ex)
+			{
+				await tx.RollbackAsync();
+				_logger.LogError(ex, "Bulk upload failed");
+				return StatusCode(500, "Bulk upload failed: " + ex.Message);
+			}
 
-            return Ok(new { Success = true, Message = "Upload completed", Errors = errors });
+			var response = new BulkUploadResponse
+			{
+				TotalRecords = totalRecords,
+				InsertedCount = insertedCount,
+				UpdatedCount = updatedCount,
+				RejectedCount = rejectedRecords.Count,
+				RejectedRecords = rejectedRecords
+			};
+
+			return Ok(response);
         }
 
         // helpers (same approach as location upload)
@@ -208,6 +279,49 @@ namespace SpicAPI.Controllers
         }
 
         private static string NormalizeHeader(string h) => (h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("-", "").ToLowerInvariant();
+
+        private static void AddAliasEntries(Dictionary<string, int> headerMap)
+        {
+            var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "name", "productname" },
+                { "product", "productname" },
+                { "group", "productgroup" },
+                { "rateperunit", "rpu" },
+                { "rate", "rpu" },
+            };
+
+            foreach (var kvp in headerMap.ToList())
+            {
+                if (aliases.TryGetValue(kvp.Key, out var alias) && !headerMap.ContainsKey(alias))
+                    headerMap[alias] = kvp.Value;
+            }
+        }
         private static string PrettyHeader(string h) => h;
+    }
+
+    public class RejectedRecord
+    {
+        public int RowNumber { get; set; }
+        public string ProductName { get; set; } = "";
+        public string Reason { get; set; } = "";
+
+        public RejectedRecord() { }
+
+        public RejectedRecord(int rowNumber, string productName, string reason)
+        {
+            RowNumber = rowNumber;
+            ProductName = productName;
+            Reason = reason;
+        }
+    }
+
+    public class BulkUploadResponse
+    {
+        public int TotalRecords { get; set; }
+        public int InsertedCount { get; set; }
+        public int UpdatedCount { get; set; }
+        public int RejectedCount { get; set; }
+        public List<RejectedRecord> RejectedRecords { get; set; } = new();
     }
 }
