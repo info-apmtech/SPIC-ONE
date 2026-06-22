@@ -221,6 +221,7 @@
                                 <th rowspan="2" class="sticky-first-col sticky-head-first">
                                     Product Name / Category
                                 </th>
+                                <th rowspan="2" class="text-center">RPU (₹)</th>
 
                                 @foreach (var month in _months)
                                 {
@@ -247,6 +248,9 @@
                                 <tr>
                                     <td class="fw-medium text-dark sticky-first-col">
                                         @(product?.Name ?? "Unknown")
+                                    </td>
+                                    <td class="text-center">
+                                        @(product?.RPU?.ToString("N2") ?? "-")
                                     </td>
 
                                     @for (int i = 0; i < _months.Length; i++)
@@ -280,6 +284,7 @@
                         <tfoot>
                             <tr>
                                 <td class="fw-medium text-dark sticky-first-col">Monthly Total</td>
+                                <td></td>
                                 @for (int i = 0; i < _months.Length; i++)
                                 {
                                     var monthIndex = i;
@@ -557,7 +562,7 @@
         _ => 0
     };
 
-    private static void SetQty(SalesPlanningInDealerRegistration row, int m, ChangeEventArgs e)
+    private void SetQty(SalesPlanningInDealerRegistration row, int m, ChangeEventArgs e)
     {
         if (!decimal.TryParse(e.Value?.ToString(), out var val)) return;
         switch (m)
@@ -574,6 +579,26 @@
             case 9: row.JanuaryQty = val; break;
             case 10: row.FebruaryQty = val; break;
             case 11: row.MarchQty = val; break;
+        }
+        var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+        if (product?.RPU.HasValue == true)
+        {
+            var amount = (product.RPU.Value * val) / 100000m;
+            switch (m)
+            {
+                case 0: row.AprilAmount = amount; break;
+                case 1: row.MayAmount = amount; break;
+                case 2: row.JuneAmount = amount; break;
+                case 3: row.JulyAmount = amount; break;
+                case 4: row.AugustAmount = amount; break;
+                case 5: row.SeptemberAmount = amount; break;
+                case 6: row.OctoberAmount = amount; break;
+                case 7: row.NovemberAmount = amount; break;
+                case 8: row.DecemberAmount = amount; break;
+                case 9: row.JanuaryAmount = amount; break;
+                case 10: row.FebruaryAmount = amount; break;
+                case 11: row.MarchAmount = amount; break;
+            }
         }
     }
 
