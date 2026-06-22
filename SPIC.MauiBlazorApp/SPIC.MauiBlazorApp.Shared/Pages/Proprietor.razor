@@ -266,15 +266,28 @@
 					}
                 </div>
             </div>
-            <div class="col-md-3">
-                <label class="image-upload-box mb-0" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; width:100%;">
-                    <i class="bi bi-image"></i>
-                    <span class="btn-upload-attach">
-                        @(_imageFile != null ? _imageFile.Name : "Upload Proprietor / Managing Partner Image")
-                    </span>
-                    <InputFile hidden OnChange="OnImageSelected" accept=".jpg,.jpeg,.png,.webp" />
-                </label>
-            </div>
+					<div class="col-md-3">
+						<label class="image-upload-box mb-0" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; width:100%;">
+							@if (!string.IsNullOrEmpty(_imagePreviewUrl))
+							{
+								<img src="@_imagePreviewUrl" alt="Proprietor preview"
+									 style="width:100%; max-height:160px; object-fit:contain; border-radius:8px;" />
+								<span class="btn-upload-attach mt-2">@(_imageFile?.Name ?? "Change Image")</span>
+							}
+							else if (!string.IsNullOrEmpty(_partnerForm.ProprietorImagePath))
+							{
+								<img src="@_partnerForm.ProprietorImagePath" alt="Proprietor image"
+									 style="width:100%; max-height:160px; object-fit:contain; border-radius:8px;" />
+								<span class="btn-upload-attach mt-2">Change Image</span>
+							}
+							else
+							{
+								<i class="bi bi-image"></i>
+								<span class="btn-upload-attach">Upload Proprietor / Managing Partner Image</span>
+							}
+							<InputFile hidden OnChange="OnImageSelected" accept=".jpg,.jpeg,.png,.webp" />
+						</label>
+					</div>
         </div>
     </div>
 
@@ -919,6 +932,7 @@
 	private IBrowserFile? _aadhaarFile;
 	private IBrowserFile? _panFile;
 	private IBrowserFile? _imageFile;
+	private string? _imagePreviewUrl;
 
 	private bool _isExtractingAadhaar;
 	private bool _isExtractingPan;
@@ -1153,8 +1167,30 @@
 		}
 	}
 
-	private void OnImageSelected(InputFileChangeEventArgs e) => _imageFile = e.File;
+	private async Task OnImageSelected(InputFileChangeEventArgs e)
+	{
+		_imageFile = e.File;
 
+		if (_imageFile == null)
+		{
+			_imagePreviewUrl = null;
+			return;
+		}
+
+		try
+		{
+			// Downscale for a lightweight preview; original file is still used for upload
+			var resized = await _imageFile.RequestImageFileAsync("image/png", 400, 400);
+			using var stream = resized.OpenReadStream(5 * 1024 * 1024);
+			using var ms = new MemoryStream();
+			await stream.CopyToAsync(ms);
+			_imagePreviewUrl = $"data:image/png;base64,{Convert.ToBase64String(ms.ToArray())}";
+		}
+		catch
+		{
+			_imagePreviewUrl = null;
+		}
+	}
 	// File Removal Handlers
 	private void RemoveAadhaarFile()
 	{
@@ -1183,6 +1219,7 @@
 	private void RemoveImageFile()
 	{
 		_imageFile = null;
+		_imagePreviewUrl = null;
 		_partnerForm.ProprietorImagePath = null;
 	}
 
@@ -1619,6 +1656,7 @@ return;
 		_aadhaarFile = null;
 		_panFile = null;
 		_imageFile = null;
+		_imagePreviewUrl = null;
 		_isExtractingAadhaar = false;
 		_isExtractingPan = false;
 		_ocrWarningAadhaar = null;
