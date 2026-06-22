@@ -38,7 +38,7 @@ namespace SPIC.Core.Entities
     }
     public enum PagePermission
     {
-        Dashboard, Employee, dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
+        Dashboard, Designation, Employee, dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
         CompanySales,
         SalesReport,
         AgeingReport,
