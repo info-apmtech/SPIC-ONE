@@ -42,6 +42,23 @@
 			min-width: 160px; /* Total column */
 			width: 180px;
 		}
+
+		/* Group row styling */
+		.group-row {
+			cursor: pointer;
+			font-weight: 600;
+		}
+
+			.group-row td {
+				border-top: 2px solid #dee2e6;
+			}
+
+		.expand-icon {
+			margin-right: 8px;
+			font-size: 0.8em;
+			display: inline-block;
+			width: 12px;
+		}
 </style>
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
@@ -119,77 +136,78 @@
 							<th>Total</th>
 						</tr>
 					</thead>
-					<tbody>
-						@foreach (var row in _currentRows)
-						{
-							var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
-							<tr>
-								<!-- FIRST REPEAT -->
+					@foreach (var group in _groupedRows)
+					{
+						<tbody>
+							<tr class="group-row" @onclick="() => ToggleGroup(group.ProductGroupId)">
 								<td data-label="Product Name">
-									<div class="product-title">@(product?.Name ?? "Unknown")</div>
+									<span class="expand-icon">@(IsExpanded(group.ProductGroupId) ? "▼" : "▶")</span>
+									@group.GroupName
 								</td>
-								<td data-label="RPU (₹)" class="text-value">
-									@(product?.RPU?.ToString("N2") ?? "-")
-								</td>
+								<td data-label="RPU (₹)"></td>
 								<td data-label="Own Retail Qty (@_selectedUnitName)">
-									<input class="table-input" type="number" step="0.01"
-										   value="@row.OwnRetailsSaleQty"
-										   @onchange="(e) => UpdateRetailQty(row, e)" />
+									@group.Rows.Sum(r => r.OwnRetailsSaleQty).ToString("N2")
 								</td>
 								<td data-label="TO (₹)in Lakhs">
-									<input class="table-input" type="number" step="0.01"
-										   value="@row.OwnRetailsSaleAmount"
-										   @onchange="(e) => UpdateField(row, e, r => r.OwnRetailsSaleAmount, (r, v) => r.OwnRetailsSaleAmount = v)" />
+									@group.Rows.Sum(r => r.OwnRetailsSaleAmount).ToString("N2")
 								</td>
 								@if (_hasWholesaleLicense)
 								{
 									<td data-label="Sale to Dealer Qty (@_selectedUnitName)">
-										<input class="table-input" type="number" step="0.01"
-											   value="@row.SaleToDealerQty"
-											   @onchange="(e) => UpdateDealerQty(row, e)" />
+										@group.Rows.Sum(r => r.SaleToDealerQty).ToString("N2")
 									</td>
 									<td data-label="TO (₹)in Lakhs">
-										<input class="table-input" type="number" step="0.01"
-											   value="@row.SaleToDealerAmount"
-											   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerAmount, (r, v) => r.SaleToDealerAmount = v)" />
+										@group.Rows.Sum(r => r.SaleToDealerAmount).ToString("N2")
 									</td>
 								}
-
-								@*  <!-- SECOND REPEAT -->
-                                <td class="annual-second-repeat" data-label="Product Name">
-                                    <div class="product-title">@(product?.Name ?? "Unknown")</div>
-                                </td>
-                                <td class="annual-second-repeat" data-label="Own Retail Qty (@_selectedUnitName)">
-                                    <input class="table-input" type="number" step="0.01"
-                                           value="@row.OwnRetailsSaleQty"
-                                           @onchange="(e) => UpdateField(row, e, r => r.OwnRetailsSaleQty, (r, v) => r.OwnRetailsSaleQty = v)" />
-                                </td>
-                                <td class="annual-second-repeat" data-label="TO (₹)in Lakhs">
-                                    <input class="table-input" type="number" step="0.01"
-                                           value="@row.OwnRetailsSaleAmount"
-                                           @onchange="(e) => UpdateField(row, e, r => r.OwnRetailsSaleAmount, (r, v) => r.OwnRetailsSaleAmount = v)" />
-                                </td>
-                                @if (_hasWholesaleLicense)
-                                {
-                                    <td class="annual-second-repeat" data-label="Sale to Dealer Qty (@_selectedUnitName)">
-                                        <input class="table-input" type="number" step="0.01"
-                                               value="@row.SaleToDealerQty"
-                                               @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerQty, (r, v) => r.SaleToDealerQty = v)" />
-                                    </td>
-                                    <td class="annual-second-repeat" data-label="TO (₹)in Lakhs">
-                                        <input class="table-input" type="number" step="0.01"
-                                               value="@row.SaleToDealerAmount"
-                                               @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerAmount, (r, v) => r.SaleToDealerAmount = v)" />
-                                    </td>
-                                } *@
-
-								<!-- TOTALS COMBINED -->
 								<td class="text-value annual-total-cell" data-label="Total">
-									@((row.OwnRetailsSaleQty + row.SaleToDealerQty).ToString("N2")) / @((row.OwnRetailsSaleAmount + row.SaleToDealerAmount).ToString("N2"))
+									@group.Rows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty).ToString("N2") /
+									@group.Rows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount).ToString("N2")
 								</td>
 							</tr>
-						}
-					</tbody>
+							@if (IsExpanded(group.ProductGroupId))
+							{
+								@foreach (var row in group.Rows)
+								{
+									var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+									<tr>
+										<td data-label="Product Name">
+											<div class="product-title" style="padding-left: 24px;">@(product?.Name ?? "Unknown")</div>
+										</td>
+										<td data-label="RPU (₹)" class="text-value">
+											@(product?.RPU?.ToString("N2") ?? "-")
+										</td>
+										<td data-label="Own Retail Qty (@_selectedUnitName)">
+											<input class="table-input" type="number" step="0.01"
+												   value="@row.OwnRetailsSaleQty"
+												   @onchange="(e) => UpdateRetailQty(row, e)" />
+										</td>
+										<td data-label="TO (₹)in Lakhs">
+											<input class="table-input" type="number" step="0.01"
+												   value="@row.OwnRetailsSaleAmount"
+												   @onchange="(e) => UpdateField(row, e, r => r.OwnRetailsSaleAmount, (r, v) => r.OwnRetailsSaleAmount = v)" />
+										</td>
+										@if (_hasWholesaleLicense)
+										{
+											<td data-label="Sale to Dealer Qty (@_selectedUnitName)">
+												<input class="table-input" type="number" step="0.01"
+													   value="@row.SaleToDealerQty"
+													   @onchange="(e) => UpdateDealerQty(row, e)" />
+											</td>
+											<td data-label="TO (₹)in Lakhs">
+												<input class="table-input" type="number" step="0.01"
+													   value="@row.SaleToDealerAmount"
+													   @onchange="(e) => UpdateField(row, e, r => r.SaleToDealerAmount, (r, v) => r.SaleToDealerAmount = v)" />
+											</td>
+										}
+										<td class="text-value annual-total-cell" data-label="Total">
+											@((row.OwnRetailsSaleQty + row.SaleToDealerQty).ToString("N2")) / @((row.OwnRetailsSaleAmount + row.SaleToDealerAmount).ToString("N2"))
+										</td>
+									</tr>
+								}
+							}
+						</tbody>
+					}
 					<tfoot>
 						<tr>
 							<!-- FIRST REPEAT -->
@@ -387,6 +405,8 @@
 	private string? _message;
 	private bool _isError;
 	private bool _hasWholesaleLicense;
+	private List<ProductGroup> _productGroups = new();
+	private HashSet<int?> _expandedGroups = new();
 	// Replace both SpecialtyMTCategoryId and SpecialtyLtrCategoryId with one helper set:
 	private HashSet<int> SpecialtyCategoryIds => _categories
 		.Where(c => c.Name != null &&
@@ -403,7 +423,8 @@
 		{
 			LoadCategories(),
 			LoadUnits(),
-			LoadProducts()
+			LoadProducts(),
+		LoadProductGroups()
 		};
 
 			if (DealerId.HasValue && DealerId.Value > 0)
@@ -461,6 +482,18 @@
 		catch (Exception ex)
 		{
 			ShowMessage($"Failed to load products: {ex.Message}", true);
+		}
+	}
+
+	private async Task LoadProductGroups()
+	{
+		try
+		{
+			_productGroups = await Http.GetFromJsonAsync<List<ProductGroup>>("api/ProductGroup") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load product groups: {ex.Message}", true);
 		}
 	}
 
@@ -531,6 +564,52 @@
 			}
 		}
 	}
+
+	private class GroupData
+	{
+		public int? ProductGroupId { get; set; }
+		public string GroupName { get; set; } = "";
+		public List<AnnualSaleDataLastFYofDealerRegistration> Rows { get; set; } = new();
+	}
+
+	private IEnumerable<GroupData> _groupedRows
+	{
+		get
+		{
+			return _currentRows
+				.GroupBy(r =>
+				{
+					var product = _products.FirstOrDefault(p => p.Id == r.ProductId);
+					return product?.ProductGroupId;
+				})
+				.OrderBy(g =>
+				{
+					if (g.Key == null) return "";
+					var pg = _productGroups.FirstOrDefault(p => p.Id == g.Key);
+					return pg?.Name ?? "";
+				})
+				.Select(g =>
+				{
+					var pg = g.Key.HasValue ? _productGroups.FirstOrDefault(p => p.Id == g.Key.Value) : null;
+					return new GroupData
+					{
+						ProductGroupId = g.Key,
+						GroupName = pg?.Name ?? "Uncategorized",
+						Rows = g.ToList()
+					};
+				});
+		}
+	}
+
+	private void ToggleGroup(int? productGroupId)
+	{
+		if (_expandedGroups.Contains(productGroupId))
+			_expandedGroups.Remove(productGroupId);
+		else
+			_expandedGroups.Add(productGroupId);
+	}
+
+	private bool IsExpanded(int? productGroupId) => _expandedGroups.Contains(productGroupId);
 
 	private void UpdateField(AnnualSaleDataLastFYofDealerRegistration row, ChangeEventArgs e, Func<AnnualSaleDataLastFYofDealerRegistration, decimal> getter, Action<AnnualSaleDataLastFYofDealerRegistration, decimal> setter)
 	{

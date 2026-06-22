@@ -176,6 +176,23 @@
     z-index: 25;
     background: #f8fafc !important;
 }
+
+/* Group row styling */
+.group-row {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+    .group-row td {
+        border-top: 2px solid #dee2e6;
+    }
+
+.expand-icon {
+    margin-right: 8px;
+    font-size: 0.8em;
+    display: inline-block;
+    width: 12px;
+}
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
@@ -241,46 +258,81 @@
                             </tr>
                         </thead>
 
-                        <tbody>
-                            @foreach (var row in _currentRows)
-                            {
-                                var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
-                                <tr>
+                        @foreach (var group in _groupedRows)
+                        {
+                            <tbody>
+                                <tr class="group-row" @onclick="() => ToggleGroup(group.ProductGroupId)">
                                     <td class="fw-medium text-dark sticky-first-col">
-                                        @(product?.Name ?? "Unknown")
+                                        <span class="expand-icon">@(IsExpanded(group.ProductGroupId) ? "▼" : "▶")</span>
+                                        @group.GroupName
                                     </td>
-                                    <td class="text-center">
-                                        @(product?.RPU?.ToString("N2") ?? "-")
-                                    </td>
+                                    <td class="text-center"></td>
 
                                     @for (int i = 0; i < _months.Length; i++)
                                     {
                                         var monthIndex = i;
 
-                                        <td class="border-start">
-                                            <input class="table-input sp-table-input" type="number" step="0.01"
-                                                   value="@GetQty(row, monthIndex)"
-                                                   @onchange="(e) => SetQty(row, monthIndex, e)" />
+                                        <td class="border-start text-center">
+                                            @group.Rows.Sum(r => GetQty(r, monthIndex)).ToString("N2")
                                         </td>
 
-                                        <td>
-                                            <input class="table-input sp-table-input" type="number" step="0.01"
-                                                   value="@GetAmount(row, monthIndex)"
-                                                   @onchange="(e) => SetAmount(row, monthIndex, e)" />
+                                        <td class="text-center">
+                                            @group.Rows.Sum(r => GetAmount(r, monthIndex)).ToString("N2")
                                         </td>
                                     }
                                     <td class="border-start text-center sp-row-total-cell">
-                                        <span class="sp-row-total-main">@GetRowTotalQty(row).ToString("N2")</span>
+                                        <span class="sp-row-total-main">@group.Rows.Sum(GetRowTotalQty).ToString("N2")</span>
                                         <span class="sp-row-total-unit">@_selectedUnitName</span>
                                     </td>
 
                                     <td class="text-center sp-row-total-cell">
-                                        <span class="sp-row-total-main">₹ @GetRowTotalAmount(row).ToString("N2")</span>
+                                        <span class="sp-row-total-main">₹ @group.Rows.Sum(GetRowTotalAmount).ToString("N2")</span>
                                         <span class="sp-row-total-unit">Lakhs</span>
                                     </td>
                                 </tr>
-                            }
-                        </tbody>
+                                @if (IsExpanded(group.ProductGroupId))
+                                {
+                                    @foreach (var row in group.Rows)
+                                    {
+                                        var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+                                        <tr>
+                                            <td class="fw-medium text-dark sticky-first-col" style="padding-left: 24px;">
+                                                @(product?.Name ?? "Unknown")
+                                            </td>
+                                            <td class="text-center">
+                                                @(product?.RPU?.ToString("N2") ?? "-")
+                                            </td>
+
+                                            @for (int i = 0; i < _months.Length; i++)
+                                            {
+                                                var monthIndex = i;
+
+                                                <td class="border-start">
+                                                    <input class="table-input sp-table-input" type="number" step="0.01"
+                                                           value="@GetQty(row, monthIndex)"
+                                                           @onchange="(e) => SetQty(row, monthIndex, e)" />
+                                                </td>
+
+                                                <td>
+                                                    <input class="table-input sp-table-input" type="number" step="0.01"
+                                                           value="@GetAmount(row, monthIndex)"
+                                                           @onchange="(e) => SetAmount(row, monthIndex, e)" />
+                                                </td>
+                                            }
+                                            <td class="border-start text-center sp-row-total-cell">
+                                                <span class="sp-row-total-main">@GetRowTotalQty(row).ToString("N2")</span>
+                                                <span class="sp-row-total-unit">@_selectedUnitName</span>
+                                            </td>
+
+                                            <td class="text-center sp-row-total-cell">
+                                                <span class="sp-row-total-main">₹ @GetRowTotalAmount(row).ToString("N2")</span>
+                                                <span class="sp-row-total-unit">Lakhs</span>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        }
                         <tfoot>
                             <tr>
                                 <td class="fw-medium text-dark sticky-first-col">Monthly Total</td>
@@ -431,6 +483,8 @@
     private bool _isSaving;
     private string? _message;
     private bool _isError;
+    private List<ProductGroup> _productGroups = new();
+    private HashSet<int?> _expandedGroups = new();
 
     private static readonly string[] _months =
         ["April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February", "March"];
@@ -440,7 +494,7 @@
         Loading.Show();
         try
         {
-            var tasks = new List<Task> { LoadCategories(), LoadUnits(), LoadProducts() };
+            var tasks = new List<Task> { LoadCategories(), LoadUnits(), LoadProducts(), LoadProductGroups() };
             if (DealerId.HasValue && DealerId.Value > 0)
                 tasks.Add(LoadSalesData());
 
@@ -476,6 +530,12 @@
     {
         try { _products = await Http.GetFromJsonAsync<List<Product>>("api/Product") ?? new(); }
         catch (Exception ex) { ShowMessage($"Failed to load products: {ex.Message}", true); }
+    }
+
+    private async Task LoadProductGroups()
+    {
+        try { _productGroups = await Http.GetFromJsonAsync<List<ProductGroup>>("api/ProductGroup") ?? new(); }
+        catch (Exception ex) { ShowMessage($"Failed to load product groups: {ex.Message}", true); }
     }
 
     private async Task LoadSalesData()
@@ -527,6 +587,52 @@
             }
         }
     }
+
+    private class GroupData
+    {
+        public int? ProductGroupId { get; set; }
+        public string GroupName { get; set; } = "";
+        public List<SalesPlanningInDealerRegistration> Rows { get; set; } = new();
+    }
+
+    private IEnumerable<GroupData> _groupedRows
+    {
+        get
+        {
+            return _currentRows
+                .GroupBy(r =>
+                {
+                    var product = _products.FirstOrDefault(p => p.Id == r.ProductId);
+                    return product?.ProductGroupId;
+                })
+                .OrderBy(g =>
+                {
+                    if (g.Key == null) return "";
+                    var pg = _productGroups.FirstOrDefault(p => p.Id == g.Key);
+                    return pg?.Name ?? "";
+                })
+                .Select(g =>
+                {
+                    var pg = g.Key.HasValue ? _productGroups.FirstOrDefault(p => p.Id == g.Key.Value) : null;
+                    return new GroupData
+                    {
+                        ProductGroupId = g.Key,
+                        GroupName = pg?.Name ?? "Uncategorized",
+                        Rows = g.ToList()
+                    };
+                });
+        }
+    }
+
+    private void ToggleGroup(int? productGroupId)
+    {
+        if (_expandedGroups.Contains(productGroupId))
+            _expandedGroups.Remove(productGroupId);
+        else
+            _expandedGroups.Add(productGroupId);
+    }
+
+    private bool IsExpanded(int? productGroupId) => _expandedGroups.Contains(productGroupId);
 
     private static decimal GetQty(SalesPlanningInDealerRegistration row, int m) => m switch
     {
