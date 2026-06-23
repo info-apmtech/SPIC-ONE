@@ -550,11 +550,13 @@ namespace SPIC.Core.Entities
         //Dealer Name
         public int CustomerId { get; set; }
         //Product
-        public int SubGroupId { get; set; }
-        //Categories
-        public int ProductGroupId { get; set; }
-        //Financial year 
-        public int FinancialYearId { get; set; }
+        public int ProductId { get; set; }		
+		//Categories
+		public int CategoryId { get; set; }
+		//Product Groups
+		public int ProductGroupId { get; set; }
+		//Financial year 
+		public int FinancialYearId { get; set; }
         public decimal Quantity { get; set; }
         public decimal GrossAmount { get; set; }
 
