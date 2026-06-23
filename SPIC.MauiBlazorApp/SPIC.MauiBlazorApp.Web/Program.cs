@@ -27,12 +27,15 @@ builder.Services.AddSingleton(new PlatformService
 {
     IsWeb = true
 });
+builder.Services.AddTransient<AuthHttpMessageHandler>();
 builder.Services.AddScoped(sp =>
 {
+    var handler = sp.GetRequiredService<AuthHttpMessageHandler>();
+    handler.InnerHandler = new HttpClientHandler();
     var config = sp.GetRequiredService<IConfiguration>();
     var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
     //var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
-    return new HttpClient
+    return new HttpClient(handler)
     {
         BaseAddress = new Uri(baseUrl),
         Timeout = TimeSpan.FromMinutes(60)

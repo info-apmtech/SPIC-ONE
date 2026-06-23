@@ -13,6 +13,8 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public string? ErrorMessage { get; set; }
 
         private string? _token;
+        public DateTime Expiration { get; set; }
+        public bool IsTokenExpired => Expiration != default && DateTime.UtcNow >= Expiration.ToUniversalTime();
         public event Action? OnChange;
 
         public string? Token

@@ -30,11 +30,17 @@ namespace SPIC.MauiBlazorApp
             {
                 IsWeb = false
             });
-            builder.Services.AddScoped(sp => new HttpClient
+            builder.Services.AddTransient<AuthHttpMessageHandler>();
+            builder.Services.AddScoped(sp =>
             {
-                //BaseAddress = new Uri("https://localhost:7032/")
-                BaseAddress = new Uri("https://spicapi.apmiot.com/"),
-                Timeout = TimeSpan.FromMinutes(30)
+                var handler = sp.GetRequiredService<AuthHttpMessageHandler>();
+                handler.InnerHandler = new HttpClientHandler();
+                return new HttpClient(handler)
+                {
+                    //BaseAddress = new Uri("https://localhost:7032/")
+                    BaseAddress = new Uri("https://spicapi.apmiot.com/"),
+                    Timeout = TimeSpan.FromMinutes(30)
+                };
             });
 
 #if DEBUG

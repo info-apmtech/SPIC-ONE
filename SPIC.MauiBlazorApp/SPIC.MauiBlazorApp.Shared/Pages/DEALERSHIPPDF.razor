@@ -1775,7 +1775,7 @@ else
 @{
     var dbgYears = GetPerformanceYears();
     var dbgSpicProducts = _productsAll.Where(p => IsSpicPerfProduct(p)).Count();
-    var dbgSpicWithSales = _productsAll.Where(p => IsSpicPerfProduct(p) && _creditLimitSales.Any(x => x.SubGroupId == p.Id)).Count();
+    var dbgSpicWithSales = _productsAll.Where(p => IsSpicPerfProduct(p) && _creditLimitSales.Any(x => x.ProductId == p.Id)).Count();
 }
 @* <div style="background:#EFF6FF;border:1px solid #93C5FD;color:#1E3A8A;padding:10px 14px;margin:10px 40px;border-radius:6px;font-size:12px;">
     DEBUG — creditSales rows: @_creditLimitSales.Count |
@@ -1783,7 +1783,7 @@ else
     Loaded Categories: @_categoriesAll.Count |
     SPIC products (filter only): @dbgSpicProducts |
     SPIC products with sales: @dbgSpicWithSales |
-    distinct SubGroupIds in sales: @string.Join(",", _creditLimitSales.Select(x => x.SubGroupId).Distinct().Take(15))
+    distinct ProductIds in sales: @string.Join(",", _creditLimitSales.Select(x => x.ProductId).Distinct().Take(15))
     
     @if (!string.IsNullOrEmpty(_creditSalesError))
     {
@@ -1799,11 +1799,11 @@ void RenderSalesPerf(string title, Func<Category?, Product?, bool> rule)
     var productIds = _creditLimitSales
         .Where(r =>
         {
-            var prod = _productsAll.FirstOrDefault(p => p.Id == r.SubGroupId);
+            var prod = _productsAll.FirstOrDefault(p => p.Id == r.ProductId);
             var cat  = _categoriesAll.FirstOrDefault(c => c.Id == r.ProductGroupId);
             return rule(cat, prod);
         })
-        .Select(r => r.SubGroupId)
+        .Select(r => r.ProductId)
         .Distinct()
         .ToList();
 
@@ -3044,7 +3044,7 @@ private async Task LoadCreditLimitSalesData()
 private (decimal qty, decimal amount) GetPerfCell(int productId, int fyId)
 {
     var rows = _creditLimitSales.Where(x =>
-        x.SubGroupId == productId &&
+        x.ProductId == productId &&
         x.FinancialYearId == fyId);
 
     return (rows.Sum(r => r.Quantity) ?? 0m,
@@ -3179,7 +3179,7 @@ private decimal SpicPerfUreaQty()
     var fy = _proposal.FY3;
     return _creditLimitSales
         .Where(r => r.FinancialYearId == fy)
-        .Where(r => { var p = _productsAll.FirstOrDefault(x => x.Id == r.SubGroupId); return IsSpicPerfProduct(p); })
+        .Where(r => { var p = _productsAll.FirstOrDefault(x => x.Id == r.ProductId); return IsSpicPerfProduct(p); })
         .Sum(r => r.Quantity ?? 0m);
 }
 
@@ -3188,7 +3188,7 @@ private decimal SpicPerfUreaTurnover()
     var fy = _proposal.FY3;
     var gross = _creditLimitSales
         .Where(r => r.FinancialYearId == fy)
-        .Where(r => { var p = _productsAll.FirstOrDefault(x => x.Id == r.SubGroupId); return IsSpicPerfProduct(p); })
+        .Where(r => { var p = _productsAll.FirstOrDefault(x => x.Id == r.ProductId); return IsSpicPerfProduct(p); })
         .Sum(r => r.GrossAmount ?? 0m);
     return ConvertToLakhs(gross);
 }
@@ -3241,7 +3241,7 @@ private decimal GsPerfFertQty()
 {
     var fy = _proposal.FY3;
     return _creditLimitSales.Where(r => r.FinancialYearId == fy)
-        .Where(r => IsGreenstarFertProduct(_productsAll.FirstOrDefault(x => x.Id == r.SubGroupId)))
+        .Where(r => IsGreenstarFertProduct(_productsAll.FirstOrDefault(x => x.Id == r.ProductId)))
         .Sum(r => r.Quantity ?? 0m);
 }
 
@@ -3249,7 +3249,7 @@ private decimal GsPerfFertTurnover()
 {
     var fy = _proposal.FY3;
     var gross = _creditLimitSales.Where(r => r.FinancialYearId == fy)
-        .Where(r => IsGreenstarFertProduct(_productsAll.FirstOrDefault(x => x.Id == r.SubGroupId)))
+        .Where(r => IsGreenstarFertProduct(_productsAll.FirstOrDefault(x => x.Id == r.ProductId)))
         .Sum(r => r.GrossAmount ?? 0m);
     return ConvertToLakhs(gross);
 }
@@ -3258,7 +3258,7 @@ private decimal GsSpTurnover()
 {
     var fy = _proposal.FY3;
     var gross = _creditLimitSales.Where(r => r.FinancialYearId == fy)
-        .Where(r => IsSpecialityProduct(_productsAll.FirstOrDefault(x => x.Id == r.SubGroupId)))
+        .Where(r => IsSpecialityProduct(_productsAll.FirstOrDefault(x => x.Id == r.ProductId)))
         .Sum(r => r.GrossAmount ?? 0m);
     return ConvertToLakhs(gross);
 }
@@ -3783,8 +3783,9 @@ public class DealerCreditLimitSales
 {
     public int Id { get; set; }
     public int CustomerId { get; set; }
+    public int CategoryId { get; set; }
     public int ProductGroupId { get; set; } // Category
-    public int SubGroupId { get; set; }     // Product
+    public int ProductId { get; set; }      // Product (was SubGroupId)
     public int FinancialYearId { get; set; }
     public decimal? Quantity { get; set; }
     public decimal? GrossAmount { get; set; }

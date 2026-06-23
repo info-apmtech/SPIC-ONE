@@ -1,6 +1,22 @@
 ﻿@using SPIC.Core.Entities
 
 <style>
+	.group-row {
+		cursor: pointer;
+		font-weight: 600;
+	}
+
+		.group-row td {
+			border-top: 2px solid #dee2e6;
+		}
+
+	.expand-icon {
+		margin-right: 8px;
+		font-size: 0.8em;
+		display: inline-block;
+		width: 12px;
+	}
+
 	.fy-breakup-card {
 		border: 1px solid #E5E7EB;
 		border-left: 4px solid #8A8A8A;
@@ -207,59 +223,88 @@ else if (!string.IsNullOrEmpty(Company) && Company.Equals("GreenStar", StringCom
 					</tr>
 				</thead>
 
-				<tbody>
-					@foreach (var row in displayedRows)
-					{
-						<tr>
-							<td class="fw-medium text-dark">@row.ProductName</td>
+				@{
+					var groupedRows = displayedRows
+						.GroupBy(r =>
+						{
+							var product = Products?.FirstOrDefault(p => p.Id == r.ProductId);
+							return product?.ProductGroupId;
+						})
+						.OrderBy(g =>
+						{
+							if (g.Key == null) return "";
+							var pg = ProductGroups?.FirstOrDefault(p => p.Id == g.Key);
+							return pg?.Name ?? "";
+						})
+						.Select(g =>
+						{
+							var pg = g.Key.HasValue ? ProductGroups?.FirstOrDefault(p => p.Id == g.Key.Value) : null;
+							return new GroupData
+							{
+								ProductGroupId = g.Key,
+								GroupName = pg?.Name ?? "Uncategorized",
+								Rows = g.ToList()
+							};
+						})
+						.ToList();
+				}
 
-							<td class="border-start">
-								<input class="table-input"
-									   type="number"
-									   step="0.01"
-									   value="@row.FY1Qty"
-									   readonly />
+				@foreach (var group in groupedRows)
+				{
+					<tbody>
+						<tr class="group-row" @onclick="() => ToggleGroup(group.ProductGroupId)">
+							<td class="fw-medium text-dark">
+								<span class="expand-icon">@(IsExpanded(group.ProductGroupId) ? "▼" : "▶")</span>
+								@group.GroupName
 							</td>
-							<td>
-								<input class="table-input"
-									   type="number"
-									   step="0.01"
-									   value="@row.FY1Amount"
-									   readonly />
+							<td class="border-start fw-bold text-center">
+								@group.Rows.Sum(r => r.FY1Qty).ToString("N2")
 							</td>
-
-							<td class="border-start">
-								<input class="table-input"
-									   type="number"
-									   step="0.01"
-									   value="@row.FY2Qty"
-									   readonly />
+							<td class="fw-bold text-center">
+								@group.Rows.Sum(r => r.FY1Amount).ToString("N2")
 							</td>
-							<td>
-								<input class="table-input"
-									   type="number"
-									   step="0.01"
-									   value="@row.FY2Amount"
-									   readonly />
+							<td class="border-start fw-bold text-center">
+								@group.Rows.Sum(r => r.FY2Qty).ToString("N2")
 							</td>
-
-							<td class="border-start">
-								<input class="table-input"
-									   type="number"
-									   step="0.01"
-									   value="@row.FY3Qty"
-									   readonly />
+							<td class="fw-bold text-center">
+								@group.Rows.Sum(r => r.FY2Amount).ToString("N2")
 							</td>
-							<td>
-								<input class="table-input"
-									   type="number"
-									   step="0.01"
-									   value="@row.FY3Amount"
-									   readonly />
+							<td class="border-start fw-bold text-center">
+								@group.Rows.Sum(r => r.FY3Qty).ToString("N2")
+							</td>
+							<td class="fw-bold text-center">
+								@group.Rows.Sum(r => r.FY3Amount).ToString("N2")
 							</td>
 						</tr>
-					}
-				</tbody>
+						@if (IsExpanded(group.ProductGroupId))
+						{
+							@foreach (var row in group.Rows)
+							{
+								<tr>
+									<td class="fw-medium text-dark" style="padding-left: 24px;">@row.ProductName</td>
+									<td class="border-start">
+										<input class="table-input" type="number" step="0.01" value="@row.FY1Qty" readonly />
+									</td>
+									<td>
+										<input class="table-input" type="number" step="0.01" value="@row.FY1Amount" readonly />
+									</td>
+									<td class="border-start">
+										<input class="table-input" type="number" step="0.01" value="@row.FY2Qty" readonly />
+									</td>
+									<td>
+										<input class="table-input" type="number" step="0.01" value="@row.FY2Amount" readonly />
+									</td>
+									<td class="border-start">
+										<input class="table-input" type="number" step="0.01" value="@row.FY3Qty" readonly />
+									</td>
+									<td>
+										<input class="table-input" type="number" step="0.01" value="@row.FY3Amount" readonly />
+									</td>
+								</tr>
+							}
+						}
+					</tbody>
+				}
 
 				<tfoot>
 					<tr>
@@ -514,6 +559,8 @@ else if (!string.IsNullOrEmpty(Company) && Company.Equals("GreenStar", StringCom
 	[Parameter] public List<Category> Categories { get; set; } = new();
 	[Parameter] public List<Unit> Units { get; set; } = new();
 	[Parameter] public List<FinancialYear> FinancialYears { get; set; } = new();
+	[Parameter] public List<Product> Products { get; set; } = new();
+	[Parameter] public List<ProductGroup> ProductGroups { get; set; } = new();
 
 	[Parameter] public List<SalesPerfViewRow> SalesPerfRows { get; set; } = new();
 
@@ -560,6 +607,25 @@ else if (!string.IsNullOrEmpty(Company) && Company.Equals("GreenStar", StringCom
 	[Parameter] public bool ShowSalesPlanCard { get; set; } = true;
 	[Parameter] public string SalesPlanBreakupCardTitle { get; set; } = "Total";
 	[Parameter] public EventCallback<int> OnCategoryChanged { get; set; }
+
+	private HashSet<int?> _expandedGroups = new();
+
+	private class GroupData
+	{
+		public int? ProductGroupId { get; set; }
+		public string GroupName { get; set; } = "";
+		public List<SalesPerfViewRow> Rows { get; set; } = new();
+	}
+
+	private void ToggleGroup(int? productGroupId)
+	{
+		if (_expandedGroups.Contains(productGroupId))
+			_expandedGroups.Remove(productGroupId);
+		else
+			_expandedGroups.Add(productGroupId);
+	}
+
+	private bool IsExpanded(int? productGroupId) => _expandedGroups.Contains(productGroupId);
 
 	private int GetSelectedFY(int fyIdx) => fyIdx switch
 	{

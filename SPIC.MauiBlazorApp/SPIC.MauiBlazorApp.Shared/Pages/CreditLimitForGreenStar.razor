@@ -168,6 +168,8 @@
     Categories="_categories"
     Units="_units"
     FinancialYears="_financialYears"
+    Products="_products"
+    ProductGroups="_productGroups"
     SalesPerfRows="_salesPerfViewRows"
     SelectedCategoryId="_selectedCategoryId"
     SelectedUnitName="@_selectedUnitName"
@@ -647,6 +649,7 @@
 	private List<Category> _categories = new();
 	private List<Unit> _units = new();
 	private List<Product> _products = new();
+	private List<ProductGroup> _productGroups = new();
 	private List<SalesPlanningInDealerRegistration> _salesPlanData = new();
 
 	private DealerCreditLimitProposal _proposal = new();
@@ -860,6 +863,7 @@ private bool IsFertilizerSalesPlanRow(SalesPlanningInDealerRegistration row)
 var catTask  = SafeGetAsync<List<Category>>("api/Category");
 var unitTask = SafeGetAsync<List<Unit>>("api/Unit");
 var prodTask = SafeGetAsync<List<Product>>("api/Product");
+var prodGroupTask = SafeGetAsync<List<ProductGroup>>("api/ProductGroup");
 
 var bankTask      = SafeGetAsync<List<DealerAssetBank>>($"api/DealerAssetBank/byDealer/{DealerId}");
 var landTask      = SafeGetAsync<List<DealerAssetLand>>($"api/DealerAssetLand/byDealer/{DealerId}");
@@ -870,7 +874,7 @@ var proposalTask  = SafeGetAsync<List<DealerCreditLimitProposal>>($"api/DealerCr
 var annualTask    = SafeGetAsync<List<AnnualSaleDataLastFYofDealerRegistration>>($"api/AnnualSaleDataLastFY/byDealer/{DealerId}");
 
 await Task.WhenAll(
-    fyTask, catTask, unitTask, prodTask,
+    fyTask, catTask, unitTask, prodTask, prodGroupTask,
     bankTask, landTask, buildingTask,
     loanTask, salesPlanTask, proposalTask, annualTask
 );
@@ -879,6 +883,7 @@ _financialYears = fyTask.Result ?? new();
 _categories     = catTask.Result ?? new();
 _units          = unitTask.Result ?? new();
 _products       = prodTask.Result ?? new();
+_productGroups  = prodGroupTask.Result ?? new();
 
 _bankAssets      = bankTask.Result ?? new();      // server filtered — no .Where
 _landAssets      = landTask.Result ?? new();
@@ -1009,7 +1014,7 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 	return _creditLimitSalesData.FirstOrDefault(x =>
 		x.CustomerId == _dealer.Id &&
 		x.ProductGroupId == _selectedCategoryId &&
-		x.SubGroupId == productId &&
+		x.ProductId == productId &&
 		x.FinancialYearId == financialYearId);
 }
 
@@ -1372,13 +1377,13 @@ private bool IsOtherFertilizerAnnualRow(AnnualSaleDataLastFYofDealerRegistration
 	// --- Helper Methods for Sales Performance Data ---
 	private bool IsOtherFertilizerCreditLimitSalesRow(DealerCreditLimitSales row)
 {
-    var product = _products.FirstOrDefault(p => p.Id == row.SubGroupId);
+    var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
     return IsOtherFertilizerProduct(product);
 }
 
 private bool IsSpecialityCreditLimitSalesRow(DealerCreditLimitSales row)
 {
-    var product = _products.FirstOrDefault(p => p.Id == row.SubGroupId);
+    var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
     return IsSpecialityProduct(product);
 }
 

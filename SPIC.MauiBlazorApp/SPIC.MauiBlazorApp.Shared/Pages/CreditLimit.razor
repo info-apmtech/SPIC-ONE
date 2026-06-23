@@ -162,6 +162,8 @@
 	<_creditLimitSalesPerformanceReview Categories="_categories"
 										Units="_units"
 										FinancialYears="_financialYears"
+										Products="_products"
+										ProductGroups="_productGroups"
 										SalesPerfRows="_salesPerfViewRows"
 										SelectedCategoryId="_selectedCategoryId"
 										SelectedUnitName="@_selectedUnitName"
@@ -583,6 +585,7 @@
 	private List<Category> _categories = new();
 	private List<Unit> _units = new();
 	private List<Product> _products = new();
+	private List<ProductGroup> _productGroups = new();
 	private List<SalesPlanningInDealerRegistration> _salesPlanData = new();
 
 	private DealerCreditLimitProposal _proposal = new();
@@ -688,6 +691,7 @@
 			var catTask = SafeGetAsync<List<Category>>("api/Category");
 			var unitTask = SafeGetAsync<List<Unit>>("api/Unit");
 			var prodTask = SafeGetAsync<List<Product>>("api/Product");
+			var prodGroupTask = SafeGetAsync<List<ProductGroup>>("api/ProductGroup");
 
 			if (DealerId.HasValue && DealerId.Value > 0)
 {
@@ -701,7 +705,7 @@
     var annualTask     = SafeGetAsync<List<AnnualSaleDataLastFYofDealerRegistration>>($"api/AnnualSaleDataLastFY/byDealer/{DealerId}");
 
     await Task.WhenAll(
-        fyTask, catTask, unitTask, prodTask,
+        fyTask, catTask, unitTask, prodTask, prodGroupTask,
         dealerTask, bankTask, landTask, buildingTask,
         loanTask, salesPlanTask, proposalTask, annualTask
     );
@@ -710,6 +714,7 @@
     _categories     = catTask.Result ?? new();
     _units          = unitTask.Result ?? new();
     _products       = prodTask.Result ?? new();
+    _productGroups  = prodGroupTask.Result ?? new();
 
     _dealer          = dealerTask.Result ?? new();
     _bankAssets      = bankTask.Result ?? new();      // server already filtered — no .Where
@@ -728,12 +733,13 @@ if (existing != null)
 }
 			else
 			{
-				await Task.WhenAll(fyTask, catTask, unitTask, prodTask);
+				await Task.WhenAll(fyTask, catTask, unitTask, prodTask, prodGroupTask);
 
 				_financialYears = fyTask.Result ?? new();
 				_categories = catTask.Result ?? new();
 				_units = unitTask.Result ?? new();
 				_products = prodTask.Result ?? new();
+				_productGroups = prodGroupTask.Result ?? new();
 			}
 
 			if (_categories.Count > 0)
@@ -840,7 +846,7 @@ if (existing != null)
 		return _creditLimitSalesData.FirstOrDefault(x =>
 			x.CustomerId == _dealer.Id &&
 			x.ProductGroupId == _selectedCategoryId &&
-			x.SubGroupId == productId &&
+			x.ProductId == productId &&
 			x.FinancialYearId == financialYearId);
 	}
 
@@ -1163,7 +1169,7 @@ if (existing != null)
 
 	private bool IsUreaCreditLimitSalesRow(DealerCreditLimitSales row)
 	{
-		var product = _products.FirstOrDefault(p => p.Id == row.SubGroupId);
+		var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
 		var category = _categories.FirstOrDefault(c => c.Id == row.ProductGroupId);
 
 		return IsFertilizerCategory(category) && IsUreaProduct(product);

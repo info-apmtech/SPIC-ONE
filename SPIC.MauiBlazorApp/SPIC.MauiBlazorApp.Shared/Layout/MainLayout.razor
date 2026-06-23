@@ -1,4 +1,5 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
 @using System.Net.Http.Headers
 @using SPIC.Core.Entities
 @inject HttpClient Http
@@ -234,10 +235,12 @@
 @code {
 	private bool _isReady;
 	private bool isSettingsOpen = false;
+	private Timer? _tokenExpiryTimer;
 
 	protected override void OnInitialized()
 	{
 		isSettingsOpen = IsSettingsSectionActive();
+		StartExpiryCheck();
 
 		if (Http.DefaultRequestHeaders.Authorization != null)
 		{
@@ -302,6 +305,10 @@
 				var roleAccess = await JS.InvokeAsync<string?>("sessionStorage.getItem", "spic_role_access");
 				LoginState.SetAllowedPages(roleAccess);
 
+				var expStr = await JS.InvokeAsync<string?>("sessionStorage.getItem", "jwt_expiration");
+				if (!string.IsNullOrWhiteSpace(expStr) && DateTime.TryParse(expStr, out var exp))
+					LoginState.Expiration = exp;
+
 				_isReady = true;
 				StateHasChanged();
 			}
@@ -310,6 +317,41 @@
 				Navigation.NavigateTo("/login");
 			}
 		}
+	}
+
+	private void StartExpiryCheck()
+	{
+		_tokenExpiryTimer?.Dispose();
+		_tokenExpiryTimer = new Timer(async _ =>
+		{
+			if (LoginState.IsTokenExpired)
+			{
+				await InvokeAsync(async () => await AutoLogout());
+			}
+		}, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+	}
+
+	private async Task AutoLogout()
+	{
+		_tokenExpiryTimer?.Dispose();
+		_tokenExpiryTimer = null;
+		LoginState.Token = null;
+		LoginState.Expiration = default;
+		LoginState.ClearAllowedPages();
+		Http.DefaultRequestHeaders.Authorization = null;
+		try
+		{
+			await JS.InvokeVoidAsync("sessionStorage.removeItem", "jwt_token");
+			await JS.InvokeVoidAsync("sessionStorage.removeItem", "jwt_expiration");
+			await JS.InvokeVoidAsync("sessionStorage.removeItem", "spic_role_access");
+		}
+		catch { }
+		Navigation.NavigateTo("/login", forceLoad: true);
+	}
+
+	public void Dispose()
+	{
+		_tokenExpiryTimer?.Dispose();
 	}
 
 	private async Task HandleSearchKeyDown(KeyboardEventArgs e)
