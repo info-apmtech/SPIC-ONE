@@ -1020,17 +1020,26 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @if (_annualSales != null && _annualSales.Any())
+                            @{
+                                var annualSalesFiltered = (_annualSales ?? new()).Where(s =>
+                                {
+                                    var prod = _productsAll.FirstOrDefault(p => p.Id == s.ProductId);
+                                    if (SelectedCompany == "SPIC") return IsSpicPerfProduct(prod);
+                                    if (SelectedCompany == "GreenStar") return IsGreenstarPerfProduct(prod);
+                                    return true; // both companies / no filter → show all
+                                }).ToList();
+                            }
+                            @if (annualSalesFiltered.Any())
                             {
-                                var totalOwnRetailQty = _annualSales.Sum(s => s.OwnRetailsSaleQty);
-                                var totalDealerQty = _annualSales.Sum(s => s.SaleToDealerQty);
-                                var totalQty = _annualSales.Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty);
+                                var totalOwnRetailQty = annualSalesFiltered.Sum(s => s.OwnRetailsSaleQty);
+                                var totalDealerQty = annualSalesFiltered.Sum(s => s.SaleToDealerQty);
+                                var totalQty = annualSalesFiltered.Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty);
 
-                                var totalOwnRetailAmt = _annualSales.Sum(s => s.OwnRetailsSaleAmount);
-                                var totalDealerAmt = _annualSales.Sum(s => s.SaleToDealerAmount);
-                                var totalAmount = _annualSales.Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount);
+                                var totalOwnRetailAmt = annualSalesFiltered.Sum(s => s.OwnRetailsSaleAmount);
+                                var totalDealerAmt = annualSalesFiltered.Sum(s => s.SaleToDealerAmount);
+                                var totalAmount = annualSalesFiltered.Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount);
 
-                                @foreach (var sale in _annualSales)
+                                @foreach (var sale in annualSalesFiltered)
                                 {
                                     var product = _productsAll.FirstOrDefault(p => p.Id == sale.ProductId);
                                     var category = _categoriesAll.FirstOrDefault(c => c.Id == sale.CategoryId);
@@ -1259,8 +1268,11 @@
                 <tr style="background-color: var(--card-bg);">
                     <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Name</th>
                     <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Father Name</th>
-                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Aadhaar No</th>
-                    <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">PAN No</th>
+                    @if (!_isSoleProprietor)
+                    {
+                        <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Aadhaar No</th>
+                        <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">PAN No</th>
+                    }
                     <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Phone No</th>
                     <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Email ID</th>
                 </tr>
@@ -1270,9 +1282,12 @@
                 {
                     <tr>
                         <td style="padding: 6px 10px; border: 1px solid var(--border-color); font-weight: 600; color: #1F2937;">@(partner.Name ?? "-")</td>
-                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.FatherName ?? "-")</td>
-                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.AadhaarNumber ?? "-")</td>
-                        <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.PANNumber ?? "-")</td>
+                       <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.FatherName ?? "-")</td>
+                        @if (!_isSoleProprietor)
+                        {
+                            <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.AadhaarNumber ?? "-")</td>
+                            <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.PANNumber ?? "-")</td>
+                        }
                         <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(partner.PhoneNumber ?? "-")</td>
                         <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; word-break: break-word;">@(partner.Email ?? "-")</td>
                     </tr>
@@ -1382,10 +1397,20 @@ else
     @if (_salesPlanningAll != null && _salesPlanningAll.Any() && _categoriesAll != null)
     {
         int catIndex = 1;
+        bool anyRendered = false;
         @foreach (var cat in _categoriesAll)
         {
-            var catSales = _salesPlanningAll.Where(s => s.CategoryId == cat.Id).ToList();
+           var catSales = _salesPlanningAll.Where(s => s.CategoryId == cat.Id).Where(s =>
+{
+    var prod = _productsAll.FirstOrDefault(p => p.Id == s.ProductId);
+    if (SelectedCompany == "SPIC")
+        return IsFertilizerCategory(cat) && IsUreaProduct(prod);
+    if (SelectedCompany == "GreenStar")
+        return (IsFertilizerCategory(cat) && !IsUreaProduct(prod)) || IsSpecialityCategory(cat);
+    return true; // no company → show all
+}).ToList();;
             if (!catSales.Any()) continue;
+            anyRendered = true;
 
             var catUnit = _unitsAll.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
 
@@ -1505,7 +1530,14 @@ else
                 </div>
             </div>
 
-            catIndex++;
+           catIndex++;
+        }
+
+        @if (!anyRendered)
+        {
+            <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">
+                No Sales Planning Data Available
+            </div>
         }
     }
     else
@@ -1525,10 +1557,10 @@ else
                    <label>Firm Name:</label>
                    <div class="inline-val">@(_model.FirmName ?? "-")</div>
                </div>
-               <div class="inline-field">
-                   <label>Total Fixed Assets (Land + Building):</label>
-                   <div class="inline-val">₹ @(_model.CapitalInvestment.ToString("N2"))</div>
-               </div>
+              <div class="inline-field">
+                       <label>Total Fixed Assets (Land + Building):</label>
+                       <div class="inline-val">₹ @(((_landAssetsAll?.Sum(l => l.PropertyValue) ?? 0) + (_buildingAssetsAll?.Sum(b => b.PropertyValue) ?? 0)).ToString("N2"))</div>
+                   </div>
                <div class="inline-field">
                    <label>Godown Capacity:</label>
                    <div class="inline-val">@(_model.OwnGodownCapacity + _model.RentGodownCapacity) Metric Tonnes</div>
@@ -1545,17 +1577,17 @@ else
                <div class="dpdf-section-icon">📈</div>  <div class="dpdf-section-text">Existing Credit Limit</div>
            </div>
            <div class="grid-3" style="row-gap: 6px;">
-               <div class="inline-field">
+             <div class="inline-field">
                    <label>Credit Limit Amount (₹):</label>
-                   <div class="inline-val">₹ @(_proposal.ExistingCreditLimitAmount.ToString("N2"))</div>
+                   <div class="inline-val">₹ @(_proposal.SpicExistingCreditLimitAmount.ToString("N2"))</div>
                </div>
                <div class="inline-field">
                    <label>Valid From:</label>
-                   <div class="inline-val">@(_proposal.ExistingCreditLimitFrom.ToString("dd/MM/yyyy") ?? "-")</div>
+                   <div class="inline-val">@(_proposal.SpicExistingCreditLimitFrom.Year > 1 ? _proposal.SpicExistingCreditLimitFrom.ToString("dd/MM/yyyy") : "-")</div>
                </div>
                <div class="inline-field">
                    <label>Valid To:</label>
-                   <div class="inline-val">@(_proposal.ExistingCreditLimitTo.ToString("dd/MM/yyyy") ?? "-")</div>
+                   <div class="inline-val">@(_proposal.SpicExistingCreditLimitTo.Year > 1 ? _proposal.SpicExistingCreditLimitTo.ToString("dd/MM/yyyy") : "-")</div>
                </div>
            </div>
        </div>
@@ -1759,105 +1791,101 @@ else
     }
 </div> *@
 @{
-    void RenderSalesPerf(string title, Func<Product?, bool> productFilter)
-    {
-        var years = GetPerformanceYears();
+void RenderSalesPerf(string title, Func<Category?, Product?, bool> rule)
+{
+    var years = GetPerformanceYears();
 
-        // Fallback safety: If explicit product flags do not match but sales exist, 
-        // we pull by SubGroupId intersections to guarantee the rows render.
-        var productIds = _productsAll
-            .Where(p => productFilter(p))
-            .Select(p => p.Id)
-            .Where(id => _creditLimitSales.Any(x => x.SubGroupId == id))
-            .ToList();
-
-        // If explicitly filtered collection is empty, match purely on sales row sub-group IDs 
-        // present in the global list to ensure debug rows (13, 40) display.
-        if (!productIds.Any() && _creditLimitSales.Any())
+    // Build product IDs from sales rows whose ROW category + product both match the company rule
+    var productIds = _creditLimitSales
+        .Where(r =>
         {
-            productIds = _productsAll
-                .Where(p => _creditLimitSales.Any(x => x.SubGroupId == p.Id))
-                .Select(p => p.Id)
-                .Distinct()
-                .ToList();
-        }
+            var prod = _productsAll.FirstOrDefault(p => p.Id == r.SubGroupId);
+            var cat  = _categoriesAll.FirstOrDefault(c => c.Id == r.ProductGroupId);
+            return rule(cat, prod);
+        })
+        .Select(r => r.SubGroupId)
+        .Distinct()
+        .ToList();
 
-        <div class="dpdf-section">
-            <div class="dpdf-section-title mb-2">
-                <div class="dpdf-section-icon">📊</div>
-                <div class="dpdf-section-text">@title</div>
-            </div>
+    // (the old debug fallback that pulled every product is removed)
 
-            @if (years.Any() && productIds.Any())
-            {
-                <table class="sales-table table-th-center" style="width:100%; border-collapse: collapse;">
-                    <thead>
-                        <tr>
-                            <th rowspan="2" style="vertical-align: bottom; text-align: left;">Product Name / Category</th>
-                            @foreach (var y in years)
-                            {
-                                <th colspan="2" style="border-bottom: 1px solid var(--border-color); text-align: center;">@y.Name</th>
-                            }
-                        </tr>
-                        <tr>
-                            @foreach (var y in years)
-                            {
-                                <th style="background-color: #f8fafc; text-align: center;">MT</th>
-                                <th style="background-color: #f8fafc; text-align: center;">Lakhs</th>
-                            }
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var pId in productIds)
-                        {
-                            var product = _productsAll.FirstOrDefault(p => p.Id == pId);
-                            var category = _categoriesAll.FirstOrDefault(c => c.Id == product?.CategoryId);
-                            <tr>
-                                <td style="text-align: left;">
-                                    @(product?.Name ?? $"Product ID: {pId}")
-                                    @if (category != null)
-                                    {
-                                        <span class="stacked-val-alt" style="display:block; font-size: 11px; color: #6b7280;">@category.Name</span>
-                                    }
-                                </td>
-                                @foreach (var y in years)
-                                {
-                                    var cell = GetPerfCell(pId, y.Id);
-                                    <td style="text-align: right;">@cell.qty.ToString("N2")</td>
-                                    <td style="text-align: right;">@cell.amount.ToString("N2")</td>
-                                }
-                            </tr>
-                        }
-
-                        <tr style="background-color: var(--card-bg); font-weight: bold; border-top: 2px solid #cbd5e1;">
-                            <td style="text-align: left; color: var(--primary-dark);">Total</td>
-                            @foreach (var y in years)
-                            {
-                                var totQty = productIds.Sum(id => GetPerfCell(id, y.Id).qty);
-                                var totAmt = productIds.Sum(id => GetPerfCell(id, y.Id).amount);
-                                <td style="color: var(--primary-green); text-align: right;">@totQty.ToString("N2")</td>
-                                <td style="color: var(--primary-green); text-align: right;">@totAmt.ToString("N2")</td>
-                            }
-                        </tr>
-                    </tbody>
-                </table>
-            }
-            else
-            {
-                <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Sales Performance Data Available</div>
-            }
+    <div class="dpdf-section">
+        <div class="dpdf-section-title mb-2">
+            <div class="dpdf-section-icon">📊</div>
+            <div class="dpdf-section-text">@title</div>
         </div>
-    }
 
-    if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
-    {
-        RenderSalesPerf("Sales Performance Review - SPIC", IsSpicPerfProduct);
-    }
+        @if (years.Any() && productIds.Any())
+        {
+            <table class="sales-table table-th-center" style="width:100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th rowspan="2" style="vertical-align: bottom; text-align: left;">Product Name / Category</th>
+                        @foreach (var y in years)
+                        {
+                            <th colspan="2" style="border-bottom: 1px solid var(--border-color); text-align: center;">@y.Name</th>
+                        }
+                    </tr>
+                    <tr>
+                        @foreach (var y in years)
+                        {
+                            <th style="background-color: #f8fafc; text-align: center;">MT</th>
+                            <th style="background-color: #f8fafc; text-align: center;">Lakhs</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var pId in productIds)
+                    {
+                        var product = _productsAll.FirstOrDefault(p => p.Id == pId);
+                        var category = _categoriesAll.FirstOrDefault(c => c.Id == product?.CategoryId);
+                        <tr>
+                            <td style="text-align: left;">
+                                @(product?.Name ?? $"Product ID: {pId}")
+                                @if (category != null)
+                                {
+                                    <span class="stacked-val-alt" style="display:block; font-size: 11px; color: #6b7280;">@category.Name</span>
+                                }
+                            </td>
+                            @foreach (var y in years)
+                            {
+                                var cell = GetPerfCell(pId, y.Id);
+                                <td style="text-align: right;">@cell.qty.ToString("N2")</td>
+                                <td style="text-align: right;">@cell.amount.ToString("N2")</td>
+                            }
+                        </tr>
+                    }
 
-    if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
-    {
-        RenderSalesPerf("Sales Performance Review - GreenStar", IsGreenstarPerfProduct);
-    }
+                    <tr style="background-color: var(--card-bg); font-weight: bold; border-top: 2px solid #cbd5e1;">
+                        <td style="text-align: left; color: var(--primary-dark);">Total</td>
+                        @foreach (var y in years)
+                        {
+                            var totQty = productIds.Sum(id => GetPerfCell(id, y.Id).qty);
+                            var totAmt = productIds.Sum(id => GetPerfCell(id, y.Id).amount);
+                            <td style="color: var(--primary-green); text-align: right;">@totQty.ToString("N2")</td>
+                            <td style="color: var(--primary-green); text-align: right;">@totAmt.ToString("N2")</td>
+                        }
+                    </tr>
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Sales Performance Data Available</div>
+        }
+    </div>
+}
+ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
+{
+    RenderSalesPerf("Sales Performance Review - SPIC",
+        (cat, prod) => IsFertilizerCategory(cat) && IsUreaProduct(prod));
+}
+
+if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
+{
+    RenderSalesPerf("Sales Performance Review - GreenStar",
+        (cat, prod) => (IsFertilizerCategory(cat) && !IsUreaProduct(prod)) || IsSpecialityCategory(cat));
+}
 }
 @if (_proposal != null && _proposal.Id > 0 && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
 {
@@ -2006,251 +2034,118 @@ else
                                                 <th class="text-center" style="width:6%;">Marks</th>
                                             </tr>
                                         </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">1</td>
-                                                <td rowspan="2" class="align-middle">Total Urea Sales Volume during last year</td>
-                                                <td rowspan="8" class="text-center align-middle text-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td class="text-center">MT</td>
-                                                <td class="text-center">&gt;3000</td>
-                                                <td class="text-center">&gt;1500</td>
-                                                <td class="text-center">&gt;1000</td>
-                                                <td class="text-center">&gt;500</td>
-                                                <td class="text-center">&lt;500</td>
-                                                <td rowspan="2" class="align-middle">
-                                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
-                                                </td>
-                                                <td rowspan="2" class="text-center align-middle">
-                                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q1Mark</div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="text-center text-muted">Marks</td>
-                                                <td class="text-center">10</td>
-                                                <td class="text-center">8</td>
-                                                <td class="text-center">6</td>
-                                                <td class="text-center">4</td>
-                                                <td class="text-center">2</td>
-                                            </tr>
+<tbody>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">1</td>
+        <td rowspan="2" class="align-middle">Total Urea Sales Volume during last year</td>
+        <td rowspan="8" class="text-center align-middle text-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td class="text-center">MT</td>
+        <td class="text-center">&gt;3000</td><td class="text-center">&gt;1500</td><td class="text-center">&gt;1000</td><td class="text-center">&gt;500</td><td class="text-center">&lt;500</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicAnnualUreaQty().ToString("N2"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q1Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">2</td>
-                                                <td rowspan="2" class="align-middle">Urea Sales Volume with SPIC during last year</td>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td class="text-center">MT</td>
-                                                <td class="text-center">&gt;500</td>
-                                                <td class="text-center">&gt;300</td>
-                                                <td class="text-center">&gt;200</td>
-                                                <td class="text-center">&gt;100</td>
-                                                <td class="text-center">&lt;100</td>
-                                                <td rowspan="2" class="align-middle">
-                                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
-                                                </td>
-                                                <td rowspan="2" class="text-center align-middle">
-                                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q2Mark</div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="text-center text-muted">Marks</td>
-                                                <td class="text-center">10</td>
-                                                <td class="text-center">8</td>
-                                                <td class="text-center">6</td>
-                                                <td class="text-center">4</td>
-                                                <td class="text-center">2</td>
-                                            </tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">2</td>
+        <td rowspan="2" class="align-middle">Urea Sales Volume with SPIC during last year</td>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td class="text-center">MT</td>
+        <td class="text-center">&gt;500</td><td class="text-center">&gt;300</td><td class="text-center">&gt;200</td><td class="text-center">&gt;100</td><td class="text-center">&lt;100</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicPerfUreaQty().ToString("N2"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q2Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">3</td>
-                                                <td rowspan="2" class="align-middle">Total Urea Sales Turnover during last year</td>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td class="text-center">&gt;200</td>
-                                                <td class="text-center">&gt;100</td>
-                                                <td class="text-center">&gt;60</td>
-                                                <td class="text-center">&gt;30</td>
-                                                <td class="text-center">&lt;30</td>
-                                                <td rowspan="2" class="align-middle">
-                                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
-                                                </td>
-                                                <td rowspan="2" class="text-center align-middle">
-                                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q3Mark</div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="text-center text-muted">Marks</td>
-                                                <td class="text-center">10</td>
-                                                <td class="text-center">8</td>
-                                                <td class="text-center">6</td>
-                                                <td class="text-center">4</td>
-                                                <td class="text-center">2</td>
-                                            </tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">3</td>
+        <td rowspan="2" class="align-middle">Total Urea Sales Turnover during last year</td>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td class="text-center">&gt;200</td><td class="text-center">&gt;100</td><td class="text-center">&gt;60</td><td class="text-center">&gt;30</td><td class="text-center">&lt;30</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicAnnualUreaTurnover().ToString("N2"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q3Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">4</td>
-                                                <td rowspan="2" class="align-middle">Urea Sales Turnover with SPIC during last year</td>
-                                                <td rowspan="2" class="text-center align-middle">20</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td class="text-center">&gt;30</td>
-                                                <td class="text-center">&gt;20</td>
-                                                <td class="text-center">&gt;15</td>
-                                                <td class="text-center">&gt;10</td>
-                                                <td class="text-center">&lt;10</td>
-                                                <td rowspan="2" class="align-middle">
-                                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
-                                                </td>
-                                                <td rowspan="2" class="text-center align-middle">
-                                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q4Mark</div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="text-center text-muted">Marks</td>
-                                                <td class="text-center">20</td>
-                                                <td class="text-center">16</td>
-                                                <td class="text-center">12</td>
-                                                <td class="text-center">8</td>
-                                                <td class="text-center">4</td>
-                                            </tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">4</td>
+        <td rowspan="2" class="align-middle">Urea Sales Turnover with SPIC during last year</td>
+        <td rowspan="2" class="text-center align-middle">20</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;15</td><td class="text-center">&gt;10</td><td class="text-center">&lt;10</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicPerfUreaTurnover().ToString("N2"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q4Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">5</td>
-                                                <td rowspan="2" class="align-middle">Dealership tenure with SPIC</td>
-                                                <td rowspan="2" class="text-center align-middle text-muted">Loyalty to SPIC</td>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td class="text-center">Years</td>
-                                                <td class="text-center">&gt;10</td>
-                                                <td class="text-center">&gt;8</td>
-                                                <td class="text-center">&gt;6</td>
-                                                <td class="text-center">&gt;4</td>
-                                                <td class="text-center">&gt;1</td>
-                                                <td rowspan="2" class="align-middle">
-                                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
-                                                </td>
-                                                <td rowspan="2" class="text-center align-middle">
-                                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q5Mark</div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="text-center text-muted">Marks</td>
-                                                <td class="text-center">10</td>
-                                                <td class="text-center">8</td>
-                                                <td class="text-center">6</td>
-                                                <td class="text-center">4</td>
-                                                <td class="text-center">2</td>
-                                            </tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">5</td>
+        <td rowspan="2" class="align-middle">Dealership tenure with SPIC</td>
+        <td rowspan="2" class="text-center align-middle text-muted">Loyalty to SPIC</td>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td class="text-center">Years</td>
+        <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&gt;1</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicTenureYears().ToString("N1"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q5Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">6</td>
-                                                <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
-                                                <td rowspan="2" class="text-center align-middle"></td>
-                                                <td rowspan="2" class="text-center align-middle">20</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td class="text-center">&lt;1</td>
-                                                <td class="text-center">&lt;5</td>
-                                                <td class="text-center">&lt;10</td>
-                                                <td class="text-center">&lt;20</td>
-                                                <td class="text-center">&lt;30</td>
-                                                <td rowspan="2" class="align-middle">
-                                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
-                                                </td>
-                                                <td rowspan="2" class="text-center align-middle">
-                                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q6Mark</div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="text-center text-muted">Marks</td>
-                                                <td class="text-center">20</td>
-                                                <td class="text-center">16</td>
-                                                <td class="text-center">12</td>
-                                                <td class="text-center">8</td>
-                                                <td class="text-center">4</td>
-                                            </tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">6</td>
+        <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+        <td rowspan="2" class="text-center align-middle"></td>
+        <td rowspan="2" class="text-center align-middle">20</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td class="text-center">&lt;1</td><td class="text-center">&lt;5</td><td class="text-center">&lt;10</td><td class="text-center">&lt;20</td><td class="text-center">&lt;30</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@_proposal.SpicMonthlyAvgNetOverdues.ToString("N2")</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q6Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
 
-                                            <tr>
-                                                <td class="text-center align-middle">7</td>
-                                                <td class="align-middle">Value of dealer's property - Fixed Assets</td>
-                                                <td rowspan="3" class="text-center align-middle text-muted">Financial Soundness</td>
-                                                <td rowspan="3" class="text-center align-middle">10</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td class="align-middle">
-                                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
-                                                </td>
-                                                <td class="text-center align-middle text-muted">-</td>
-                                            </tr>
+    <tr>
+        <td class="text-center align-middle">7</td>
+        <td class="align-middle">Value of dealer's property - Fixed Assets</td>
+        <td rowspan="3" class="text-center align-middle text-muted">Financial Soundness</td>
+        <td rowspan="3" class="text-center align-middle">10</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td></td><td></td><td></td><td></td><td></td>
+        <td class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicFixedAssets().ToString("N2"))</div></td>
+        <td class="text-center align-middle text-muted">-</td>
+    </tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">8</td>
-                                                <td rowspan="2" class="align-middle">Property Value as % of the Sales Turnover with SPIC during last year</td>
-                                                <td class="text-center">%</td>
-                                                <td class="text-center">&gt;50</td>
-                                                <td class="text-center">&gt;40</td>
-                                                <td class="text-center">&gt;30</td>
-                                                <td class="text-center">&gt;20</td>
-                                                <td class="text-center">&gt;10</td>
-                                                <td rowspan="2" class="align-middle">
-                                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
-                                                </td>
-                                                <td rowspan="2" class="text-center align-middle">
-                                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q8Mark</div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="text-center text-muted">Marks</td>
-                                                <td class="text-center">10</td>
-                                                <td class="text-center">8</td>
-                                                <td class="text-center">6</td>
-                                                <td class="text-center">4</td>
-                                                <td class="text-center">2</td>
-                                            </tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">8</td>
+        <td rowspan="2" class="align-middle">Property Value as % of the Sales Turnover with SPIC during last year</td>
+        <td class="text-center">%</td>
+        <td class="text-center">&gt;50</td><td class="text-center">&gt;40</td><td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;10</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicPropertyPercent().ToString("N2"))%</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q8Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td class="text-center align-middle">9</td>
-                                                <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
-                                                <td rowspan="3" class="text-center align-middle text-muted">Credit Security</td>
-                                                <td rowspan="3" class="text-center align-middle">10</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td class="align-middle">
-                                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
-                                                </td>
-                                                <td class="text-center align-middle text-muted">-</td>
-                                            </tr>
+    <tr>
+        <td class="text-center align-middle">9</td>
+        <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+        <td rowspan="3" class="text-center align-middle text-muted">Credit Security</td>
+        <td rowspan="3" class="text-center align-middle">10</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td></td><td></td><td></td><td></td><td></td>
+        <td class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicSecurityTotalValue().ToString("N2"))</div></td>
+        <td class="text-center align-middle text-muted">-</td>
+    </tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with SPIC during last year</td>
-                                                <td class="text-center">%</td>
-                                                <td class="text-center">&gt;10</td>
-                                                <td class="text-center">&gt;8</td>
-                                                <td class="text-center">&gt;6</td>
-                                                <td class="text-center">&gt;4</td>
-                                                <td class="text-center">&lt;4</td>
-                                                <td rowspan="2" class="align-middle">
-                                                    <div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div>
-                                                </td>
-                                                <td rowspan="2" class="text-center align-middle">
-                                                    <div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q10Mark</div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="text-center text-muted">Marks</td>
-                                                <td class="text-center">10</td>
-                                                <td class="text-center">8</td>
-                                                <td class="text-center">6</td>
-                                                <td class="text-center">4</td>
-                                                <td class="text-center">2</td>
-                                            </tr>
-                                        </tbody>
-                                        <tfoot>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with SPIC during last year</td>
+        <td class="text-center">%</td>
+        <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&lt;4</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicSecurityPercent().ToString("N2"))%</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.Q10Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+</tbody>                                        <tfoot>
                                             <tr>
                                                 <td colspan="11"><strong>Grand Total</strong></td>
                                                 <td class="text-center"><strong style="color: #059669;">@_proposal.Q11Mark / 100</strong></td>
@@ -2291,174 +2186,129 @@ else
                                                 <th class="text-center" style="width:6%;">Marks</th>
                                             </tr>
                                         </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">1</td>
-                                                <td rowspan="2" class="align-middle">Total Fertilizer Sales Volume during last year</td>
-                                                <td rowspan="10" class="text-center align-middle text-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td class="text-center">MT</td>
-                                                <td class="text-center">&gt;3000</td>
-                                                <td class="text-center">&gt;1500</td>
-                                                <td class="text-center">&gt;1000</td>
-                                                <td class="text-center">&gt;500</td>
-                                                <td class="text-center">&lt;500</td>
-                                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ1Mark</div></td>
-                                            </tr>
-                                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+<tbody>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">1</td>
+        <td rowspan="2" class="align-middle">Total Fertilizer Sales Volume during last year</td>
+        <td rowspan="10" class="text-center align-middle text-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td class="text-center">MT</td>
+        <td class="text-center">&gt;3000</td><td class="text-center">&gt;1500</td><td class="text-center">&gt;1000</td><td class="text-center">&gt;500</td><td class="text-center">&lt;500</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(GsAnnualFertQty().ToString("N2"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ1Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">2</td>
-                                                <td rowspan="2" class="align-middle">Fertilizer Sales Volume with GFL during last year</td>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td class="text-center">MT</td>
-                                                <td class="text-center">&gt;500</td>
-                                                <td class="text-center">&gt;300</td>
-                                                <td class="text-center">&gt;200</td>
-                                                <td class="text-center">&gt;100</td>
-                                                <td class="text-center">&lt;100</td>
-                                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ2Mark</div></td>
-                                            </tr>
-                                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">2</td>
+        <td rowspan="2" class="align-middle">Fertilizer Sales Volume with GFL during last year</td>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td class="text-center">MT</td>
+        <td class="text-center">&gt;500</td><td class="text-center">&gt;300</td><td class="text-center">&gt;200</td><td class="text-center">&gt;100</td><td class="text-center">&lt;100</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(GsPerfFertQty().ToString("N2"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ2Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">3</td>
-                                                <td rowspan="2" class="align-middle">Total Fertilizer Sales Turnover during last year</td>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td class="text-center">&gt;200</td>
-                                                <td class="text-center">&gt;100</td>
-                                                <td class="text-center">&gt;60</td>
-                                                <td class="text-center">&gt;30</td>
-                                                <td class="text-center">&lt;30</td>
-                                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ3Mark</div></td>
-                                            </tr>
-                                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">3</td>
+        <td rowspan="2" class="align-middle">Total Fertilizer Sales Turnover during last year</td>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td class="text-center">&gt;200</td><td class="text-center">&gt;100</td><td class="text-center">&gt;60</td><td class="text-center">&gt;30</td><td class="text-center">&lt;30</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(GsAnnualFertTurnover().ToString("N2"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ3Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">4</td>
-                                                <td rowspan="2" class="align-middle">Fertilizer Sales Turnover with GFL during last year</td>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td class="text-center">&gt;30</td>
-                                                <td class="text-center">&gt;20</td>
-                                                <td class="text-center">&gt;15</td>
-                                                <td class="text-center">&gt;10</td>
-                                                <td class="text-center">&lt;10</td>
-                                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ4Mark</div></td>
-                                            </tr>
-                                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">4</td>
+        <td rowspan="2" class="align-middle">Fertilizer Sales Turnover with GFL during last year</td>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;15</td><td class="text-center">&gt;10</td><td class="text-center">&lt;10</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(GsPerfFertTurnover().ToString("N2"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ4Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">5</td>
-                                                <td rowspan="2" class="align-middle">SP Turnover during last year</td>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td class="text-center">&gt;30</td>
-                                                <td class="text-center">&gt;20</td>
-                                                <td class="text-center">&gt;15</td>
-                                                <td class="text-center">&gt;10</td>
-                                                <td class="text-center">&lt;10</td>
-                                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ5Mark</div></td>
-                                            </tr>
-                                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">5</td>
+        <td rowspan="2" class="align-middle">SP Turnover during last year</td>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;15</td><td class="text-center">&gt;10</td><td class="text-center">&lt;10</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(GsSpTurnover().ToString("N2"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ5Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">6</td>
-                                                <td rowspan="2" class="align-middle">Dealership tenure with GFL</td>
-                                                <td rowspan="2" class="text-center align-middle text-muted">Loyalty</td>
-                                                <td rowspan="2" class="text-center align-middle">10</td>
-                                                <td class="text-center">Years</td>
-                                                <td class="text-center">&gt;10</td>
-                                                <td class="text-center">&gt;8</td>
-                                                <td class="text-center">&gt;6</td>
-                                                <td class="text-center">&gt;4</td>
-                                                <td class="text-center">&gt;1</td>
-                                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ6Mark</div></td>
-                                            </tr>
-                                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">6</td>
+        <td rowspan="2" class="align-middle">Dealership tenure with GFL</td>
+        <td rowspan="2" class="text-center align-middle text-muted">Loyalty</td>
+        <td rowspan="2" class="text-center align-middle">10</td>
+        <td class="text-center">Years</td>
+        <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&gt;1</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicTenureYears().ToString("N1"))</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ6Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">7</td>
-                                                <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
-                                                <td rowspan="2" class="text-center align-middle text-muted"></td>
-                                                <td rowspan="2" class="text-center align-middle">20</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td class="text-center">&lt;1</td>
-                                                <td class="text-center">&lt;5</td>
-                                                <td class="text-center">&lt;10</td>
-                                                <td class="text-center">&lt;20</td>
-                                                <td class="text-center">&lt;30</td>
-                                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ7Mark</div></td>
-                                            </tr>
-                                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">7</td>
+        <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+        <td rowspan="2" class="text-center align-middle text-muted"></td>
+        <td rowspan="2" class="text-center align-middle">20</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td class="text-center">&lt;1</td><td class="text-center">&lt;5</td><td class="text-center">&lt;10</td><td class="text-center">&lt;20</td><td class="text-center">&lt;30</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@_proposal.GreenstarMonthlyAvgNetOverdues.ToString("N2")</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ7Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
 
-                                            <tr>
-                                                <td class="text-center align-middle">8</td>
-                                                <td class="align-middle">Value of dealer's property - Fixed Assets</td>
-                                                <td rowspan="3" class="text-center align-middle text-muted">Financial Soundness</td>
-                                                <td rowspan="3" class="text-center align-middle">10</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td class="text-center align-middle text-muted">-</td>
-                                            </tr>
+    <tr>
+        <td class="text-center align-middle">8</td>
+        <td class="align-middle">Value of dealer's property - Fixed Assets</td>
+        <td rowspan="3" class="text-center align-middle text-muted">Financial Soundness</td>
+        <td rowspan="3" class="text-center align-middle">10</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td></td><td></td><td></td><td></td><td></td>
+        <td class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(SpicFixedAssets().ToString("N2"))</div></td>
+        <td class="text-center align-middle text-muted">-</td>
+    </tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">9</td>
-                                                <td rowspan="2" class="align-middle">Property Value as % of the Sales Turnover with GFL during last year</td>
-                                                <td class="text-center">%</td>
-                                                <td class="text-center">&gt;50</td>
-                                                <td class="text-center">&gt;40</td>
-                                                <td class="text-center">&gt;30</td>
-                                                <td class="text-center">&gt;20</td>
-                                                <td class="text-center">&gt;10</td>
-                                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ9Mark</div></td>
-                                            </tr>
-                                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">9</td>
+        <td rowspan="2" class="align-middle">Property Value as % of the Sales Turnover with GFL during last year</td>
+        <td class="text-center">%</td>
+        <td class="text-center">&gt;50</td><td class="text-center">&gt;40</td><td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;10</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(GsPropertyPercent().ToString("N2"))%</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ9Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
 
-                                            <tr>
-                                                <td class="text-center align-middle">10</td>
-                                                <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
-                                                <td rowspan="3" class="text-center align-middle text-muted">Credit Security</td>
-                                                <td rowspan="3" class="text-center align-middle">10</td>
-                                                <td class="text-center">Rs. Lakhs</td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td></td>
-                                                <td class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td class="text-center align-middle text-muted">-</td>
-                                            </tr>
+    <tr>
+        <td class="text-center align-middle">10</td>
+        <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+        <td rowspan="3" class="text-center align-middle text-muted">Credit Security</td>
+        <td rowspan="3" class="text-center align-middle">10</td>
+        <td class="text-center">Rs. Lakhs</td>
+        <td></td><td></td><td></td><td></td><td></td>
+        <td class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(GsSecurityTotalValue().ToString("N2"))</div></td>
+        <td class="text-center align-middle text-muted">-</td>
+    </tr>
 
-                                            <tr>
-                                                <td rowspan="2" class="text-center align-middle">11</td>
-                                                <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with GFL during last year</td>
-                                                <td class="text-center">%</td>
-                                                <td class="text-center">&gt;10</td>
-                                                <td class="text-center">&gt;8</td>
-                                                <td class="text-center">&gt;6</td>
-                                                <td class="text-center">&gt;4</td>
-                                                <td class="text-center">&lt;4</td>
-                                                <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#9CA3AF; text-align:center;">-</div></td>
-                                                <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ11Mark</div></td>
-                                            </tr>
-                                            <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
-                                        </tbody>
-                                        <tfoot>
+    <tr>
+        <td rowspan="2" class="text-center align-middle">11</td>
+        <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with GFL during last year</td>
+        <td class="text-center">%</td>
+        <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&lt;4</td>
+        <td rowspan="2" class="align-middle"><div class="table-val-box" style="background:#F9FAFB; color:#1F2937; text-align:center;">@(GsSecurityPercent().ToString("N2"))%</div></td>
+        <td rowspan="2" class="text-center align-middle"><div class="table-val-box" style="font-weight:600; color:#1F2937;">@_proposal.GQ11Mark</div></td>
+    </tr>
+    <tr><td class="text-center text-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+</tbody>                                        <tfoot>
                                             <tr>
                                                 <td colspan="11"><strong>Grand Total</strong></td>
                                                 <td class="text-center"><strong style="color: #059669;">@_proposal.GQ12Mark / 100</strong></td>
@@ -2604,7 +2454,7 @@ else
                 <div class="inline-val">₹ @GetApprovalLimit(h => h.SmCreditLimit).ToString("N2")</div>
             </div>
             <div class="inline-field">
-                <label>AVP Recommended Credit Limit:</label>
+                <label>AVP Approved Credit Limit:</label>
                 <div class="inline-val">₹ @GetApprovalLimit(h => h.AvpCreditLimit).ToString("N2")</div>
             </div>
         </div>
@@ -3313,6 +3163,115 @@ private decimal GetApprovalLimit(Func<DealerApprovalHistory, decimal?> selector)
         .FirstOrDefault();
     return row != null ? (selector(row) ?? 0m) : 0m;
 }
+// ---- SPIC Valuation "Value" column (recomputed; not stored on proposal) ----
+private decimal SpicAnnualUreaQty() =>
+    _annualSales
+        .Where(s => { var p = _productsAll.FirstOrDefault(x => x.Id == s.ProductId); return IsSpicPerfProduct(p); })
+        .Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty);
+
+private decimal SpicAnnualUreaTurnover() =>
+    _annualSales
+        .Where(s => { var p = _productsAll.FirstOrDefault(x => x.Id == s.ProductId); return IsSpicPerfProduct(p); })
+        .Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount);
+
+private decimal SpicPerfUreaQty()
+{
+    var fy = _proposal.FY3;
+    return _creditLimitSales
+        .Where(r => r.FinancialYearId == fy)
+        .Where(r => { var p = _productsAll.FirstOrDefault(x => x.Id == r.SubGroupId); return IsSpicPerfProduct(p); })
+        .Sum(r => r.Quantity ?? 0m);
+}
+
+private decimal SpicPerfUreaTurnover()
+{
+    var fy = _proposal.FY3;
+    var gross = _creditLimitSales
+        .Where(r => r.FinancialYearId == fy)
+        .Where(r => { var p = _productsAll.FirstOrDefault(x => x.Id == r.SubGroupId); return IsSpicPerfProduct(p); })
+        .Sum(r => r.GrossAmount ?? 0m);
+    return ConvertToLakhs(gross);
+}
+
+private decimal SpicTenureYears()
+{
+    if (_model.DateOfAppointment == null || _model.DateOfAppointment > DateTime.Now) return 0;
+    return Math.Round((decimal)((DateTime.Now - _model.DateOfAppointment.Value).TotalDays / 365.25), 1);
+}
+
+private decimal SpicFixedAssets() =>
+    (_landAssetsAll?.Sum(l => l.PropertyValue) ?? 0) + (_buildingAssetsAll?.Sum(b => b.PropertyValue) ?? 0);
+
+private decimal SpicSecurityTotalValue() =>
+    _proposal.SpicFDAmount + _proposal.SpicBGAmount + _proposal.SpicCollateralAmount + _proposal.SpicTradeDepositAmount;
+
+private decimal SpicPropertyPercent() =>
+    SpicPerfUreaTurnover() > 0 ? (SpicFixedAssets() / SpicPerfUreaTurnover()) * 100m : 0m;
+
+private decimal SpicSecurityPercent() =>
+    SpicPerfUreaTurnover() > 0 ? (SpicSecurityTotalValue() / SpicPerfUreaTurnover()) * 100m : 0m;
+
+private static string ValOrDash(decimal v) => v > 0 ? v.ToString("N2") : "-";
+// non-Urea fertilizer products only
+private bool IsGreenstarFertProduct(Product? p)
+{
+    if (p == null) return false;
+    var cat = _categoriesAll.FirstOrDefault(c => c.Id == p.CategoryId);
+    return IsFertilizerCategory(cat) && !IsUreaProduct(p);
+}
+
+private bool IsSpecialityProduct(Product? p)
+{
+    if (p == null) return false;
+    var cat = _categoriesAll.FirstOrDefault(c => c.Id == p.CategoryId);
+    return IsSpecialityCategory(cat);
+}
+
+// Annual (AnnualSales)
+private decimal GsAnnualFertQty() =>
+    _annualSales.Where(s => IsGreenstarFertProduct(_productsAll.FirstOrDefault(x => x.Id == s.ProductId)))
+                .Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty);
+
+private decimal GsAnnualFertTurnover() =>
+    _annualSales.Where(s => IsGreenstarFertProduct(_productsAll.FirstOrDefault(x => x.Id == s.ProductId)))
+                .Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount);
+
+// Performance (CreditLimitSales, latest FY = FY3)
+private decimal GsPerfFertQty()
+{
+    var fy = _proposal.FY3;
+    return _creditLimitSales.Where(r => r.FinancialYearId == fy)
+        .Where(r => IsGreenstarFertProduct(_productsAll.FirstOrDefault(x => x.Id == r.SubGroupId)))
+        .Sum(r => r.Quantity ?? 0m);
+}
+
+private decimal GsPerfFertTurnover()
+{
+    var fy = _proposal.FY3;
+    var gross = _creditLimitSales.Where(r => r.FinancialYearId == fy)
+        .Where(r => IsGreenstarFertProduct(_productsAll.FirstOrDefault(x => x.Id == r.SubGroupId)))
+        .Sum(r => r.GrossAmount ?? 0m);
+    return ConvertToLakhs(gross);
+}
+
+private decimal GsSpTurnover()
+{
+    var fy = _proposal.FY3;
+    var gross = _creditLimitSales.Where(r => r.FinancialYearId == fy)
+        .Where(r => IsSpecialityProduct(_productsAll.FirstOrDefault(x => x.Id == r.SubGroupId)))
+        .Sum(r => r.GrossAmount ?? 0m);
+    return ConvertToLakhs(gross);
+}
+
+private decimal GsSecurityTotalValue() =>
+    _proposal.GreenstarFDAmount + _proposal.GreenstarBGAmount
+    + _proposal.GreenstarCollateralAmount + _proposal.GreenstarTradeDepositAmount;
+
+private decimal GsPropertyPercent() =>
+    GsPerfFertTurnover() > 0 ? (SpicFixedAssets() / GsPerfFertTurnover()) * 100m : 0m;
+
+private decimal GsSecurityPercent() =>
+    GsPerfFertTurnover() > 0 ? (GsSecurityTotalValue() / GsPerfFertTurnover()) * 100m : 0m;
     // --- DTO Definitions (matching your Register component) --- //
     public class DealerFormModel
     {
@@ -3666,6 +3625,10 @@ private decimal GetApprovalLimit(Func<DealerApprovalHistory, decimal?> selector)
         public decimal ExistingCreditLimitAmount { get; set; }
         public DateTime ExistingCreditLimitFrom { get; set; }
         public DateTime ExistingCreditLimitTo { get; set; }
+        // Manually entered — Monthly Average Net Overdues (Rs. Lakhs)
+public decimal SpicMonthlyAvgNetOverdues { get; set; }
+public decimal GreenstarMonthlyAvgNetOverdues { get; set; }
+
 
         // SPIC Securities
 public string? SpicFDNumber { get; set; }
@@ -3684,6 +3647,9 @@ public string? SpicTradeDepositNumber { get; set; }
 public string? SpicTradeDepositOtherDetails { get; set; }
 public decimal SpicTradeDepositAmount { get; set; }
         
+public decimal SpicExistingCreditLimitAmount { get; set; }
+        public DateTime SpicExistingCreditLimitFrom { get; set; }
+        public DateTime SpicExistingCreditLimitTo { get; set; }
         // GreenStar Securities
 public string? GreenstarFDNumber { get; set; }
 public string? GreenstarFDOtherDetails { get; set; }

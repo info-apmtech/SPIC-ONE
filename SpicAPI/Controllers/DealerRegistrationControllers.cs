@@ -284,7 +284,17 @@ namespace SpicAPI.Controllers
 
             return Ok(new { message = "Send back recorded" });
         }
+        [HttpPut("{id}/entity-type/{entityType:int}")]
+        public async Task<IActionResult> SetEntityType(int id, int entityType)
+        {
+            var updated = await _repo.UpdatePropertyAsync(
+                id,
+                nameof(DealerRegistration.EntityType),
+                (SPIC.Core.Entities.EntityType)entityType);
 
+            if (updated == null) return NotFound();
+            return Ok(new { updated.Id, EntityType = (int)entityType });
+        }
         public class DealerSendBackRequest
         {
             public int DealerId { get; set; }
@@ -367,6 +377,7 @@ namespace SpicAPI.Controllers
 
             return Ok(hasGreenStar);
         }
+
     }
 
     [Route("api/[controller]")]
