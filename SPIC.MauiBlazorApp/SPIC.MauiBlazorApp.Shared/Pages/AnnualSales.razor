@@ -95,11 +95,16 @@
 				Last Financial Year
 			</div>
 
-			<button class="btn-verified">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Verifiedicon.svg"
-					 class="verifyicon" />
-				Verified Units
-			</button>
+			<div class="d-flex gap-2 align-items-center">
+				<button class="btn btn-sm btn-outline-primary" @onclick="OpenProductPopup" title="Add New Product">
+					<i class="bi bi-plus-lg"></i> Add Product
+				</button>
+				<button class="btn-verified">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Verifiedicon.svg"
+						 class="verifyicon" />
+					Verified Units
+				</button>
+			</div>
 		</div>
 
 		<!-- Dynamic Category Tabs -->
@@ -400,6 +405,58 @@
 		</div>		
 	</div>
 	</fieldset>
+
+	@if (_showProductPopup)
+	{
+		<div class="modal-backdrop fade show"></div>
+		<div class="modal fade show d-block" tabindex="-1" role="dialog">
+			<div class="modal-dialog modal-dialog-centered" role="document">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h5 class="modal-title">Add New Product</h5>
+						<button type="button" class="btn-close" @onclick="CloseProductPopup"></button>
+					</div>
+					<div class="modal-body">
+						<div class="mb-3">
+							<label class="form-label-custom">Category</label>
+							<select class="form-control-custom w-100" @bind="_popupProduct.CategoryId">
+								<option value="0">Select Category</option>
+								@foreach (var c in _categories)
+								{
+									<option value="@c.Id">@c.Name (@(_units.FirstOrDefault(u => u.Id == c.UnitId)?.Name ?? ""))</option>
+								}
+							</select>
+						</div>
+						<div class="mb-3">
+							<label class="form-label-custom">Product Group</label>
+							<select class="form-control-custom w-100" @bind="_popupProduct.ProductGroupId">
+								<option value="">Select Product Group</option>
+								@foreach (var pg in _productGroups)
+								{
+									<option value="@pg.Id">@pg.Name</option>
+								}
+							</select>
+						</div>
+						<div class="mb-3">
+							<label class="form-label-custom">Product Name</label>
+							<input type="text" class="form-control-custom w-100" placeholder="Enter Product Name" @bind="_popupProduct.Name" />
+						</div>
+						<div class="mb-3">
+							<label class="form-label-custom">Rate Per Unit (RPU)</label>
+							<input type="number" step="any" class="form-control-custom w-100" placeholder="Enter Rate Per Unit" @bind="_popupProduct.RPU" />
+						</div>
+					</div>
+					<div class="modal-footer">
+						<button class="btn btn-secondary" @onclick="CloseProductPopup">Cancel</button>
+						<button class="btn btn-primary" @onclick="HandleCreateProduct" disabled="@_isCreatingProduct">
+							@(_isCreatingProduct ? "Saving..." : "Save")
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+
 	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
@@ -761,5 +818,95 @@
 		return _allSalesData
 			.Where(IsOtherFertilizerRow)
 			.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+	}
+
+	private bool _showProductPopup;
+	private bool _isCreatingProduct;
+	private ProductPopupModel _popupProduct = new();
+
+	private void OpenProductPopup()
+	{
+		_popupProduct = new ProductPopupModel();
+		_showProductPopup = true;
+	}
+
+	private void CloseProductPopup()
+	{
+		_showProductPopup = false;
+		_popupProduct = new ProductPopupModel();
+	}
+
+	private async Task HandleCreateProduct()
+	{
+		if (string.IsNullOrWhiteSpace(_popupProduct.Name))
+		{
+			ShowMessage("Product name is required.", true);
+			return;
+		}
+
+		var trimmedName = _popupProduct.Name.Trim();
+
+		if (_popupProduct.CategoryId == 0)
+		{
+			ShowMessage("Category is required.", true);
+			return;
+		}
+
+		var isDuplicate = _products.Any(p =>
+			p.Name.Equals(trimmedName, StringComparison.OrdinalIgnoreCase) &&
+			p.CategoryId == _popupProduct.CategoryId);
+
+		if (isDuplicate)
+		{
+			ShowMessage($"A Product with the name '{trimmedName}' already exists in this Category.", true);
+			return;
+		}
+
+		try
+		{
+			_isCreatingProduct = true;
+			var payload = new
+			{
+				Name = trimmedName,
+				CategoryId = _popupProduct.CategoryId,
+				RPU = _popupProduct.RPU,
+				ProductGroupId = _popupProduct.ProductGroupId,
+				IsActive = true,
+				CreatedAt = DateTime.Now,
+				UpdatedAt = DateTime.Now,
+				CreatedBy = LoginState.UserId ?? "current-user",
+				UpdatedBy = LoginState.UserId ?? "current-user"
+			};
+
+			var response = await Http.PostAsJsonAsync("api/Product", payload);
+			if (response.IsSuccessStatusCode)
+			{
+				ShowMessage("Product created successfully.", false);
+				CloseProductPopup();
+				await LoadProducts();
+				BuildCurrentRows();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Create failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isCreatingProduct = false;
+		}
+	}
+
+	private class ProductPopupModel
+	{
+		public int CategoryId { get; set; }
+		public string Name { get; set; } = "";
+		public decimal? RPU { get; set; }
+		public int? ProductGroupId { get; set; }
 	}
 }
