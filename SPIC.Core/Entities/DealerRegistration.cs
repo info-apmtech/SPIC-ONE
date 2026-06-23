@@ -179,7 +179,7 @@ namespace SPIC.Core.Entities
     }
     public enum EntityType
     {
-        soleProprietor, Partnership, LLP, PvtLtd, PubLtd, Society
+        soleProprietor = 1, Partnership, LLP, PvtLtd, PubLtd, Society
     }
     public enum DealerStatus
     {
@@ -192,7 +192,7 @@ namespace SPIC.Core.Entities
 
     public enum DealerType
     {
-        Dealer,Department,Institution
+        Dealer, Department, Institution
     }
     public class DealerExperience
     {
@@ -441,16 +441,16 @@ namespace SPIC.Core.Entities
     {
         public int Id { get; set; }
         public int DealerId { get; set; }
-		//Existing Credit Limit For Spic
-		public decimal SpicExistingCreditLimitAmount { get; set; }
-		public DateTime SpicExistingCreditLimitFrom { get; set; }
-		public DateTime SpicExistingCreditLimitTo { get; set; }
-		//Existing Credit Limit For Greenstar
-		public decimal GSExistingCreditLimitAmount { get; set; }
-		public DateTime GSExistingCreditLimitFrom { get; set; }
-		public DateTime GSExistingCreditLimitTo { get; set; }
+        //Existing Credit Limit For Spic
+        public decimal SpicExistingCreditLimitAmount { get; set; }
+        public DateTime SpicExistingCreditLimitFrom { get; set; }
+        public DateTime SpicExistingCreditLimitTo { get; set; }
+        //Existing Credit Limit For Greenstar
+        public decimal GSExistingCreditLimitAmount { get; set; }
+        public DateTime GSExistingCreditLimitFrom { get; set; }
+        public DateTime GSExistingCreditLimitTo { get; set; }
 
-		public int FY1 { get; set; }
+        public int FY1 { get; set; }
         public int FY2 { get; set; }
         public int FY3 { get; set; }
         public double Q1Mark { get; set; }
@@ -540,39 +540,39 @@ namespace SPIC.Core.Entities
         public string? DeedOfGuaranteeFilePath { get; set; }
 
     }
-	public class DealerCreditLimitSales
-	{
-		public int Id { get; set; }
-		//public int DealerId { get; set; }
-		public int StateId { get; set; }
-		//Dealer Code
-		public string CustomerNumber { get; set; }
-		//Dealer Name
-		public int CustomerId { get; set; }
-		//Product
-		public int SubGroupId { get; set; }
-		//Categories
-		public int ProductGroupId { get; set; }
+    public class DealerCreditLimitSales
+    {
+        public int Id { get; set; }
+        //public int DealerId { get; set; }
+        public int StateId { get; set; }
+        //Dealer Code
+        public string CustomerNumber { get; set; }
+        //Dealer Name
+        public int CustomerId { get; set; }
+        //Product
+        public int SubGroupId { get; set; }
+        //Categories
+        public int ProductGroupId { get; set; }
         //Financial year 
-		public int FinancialYearId { get; set; }
-		public decimal Quantity { get; set; }
-		public decimal GrossAmount { get; set; }
+        public int FinancialYearId { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal GrossAmount { get; set; }
 
-	}
+    }
 
 
-	public class SalesPerfViewRow
-	{
-		public int ProductId { get; set; }
-		public string ProductName { get; set; } = "";
+    public class SalesPerfViewRow
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
 
-		public decimal FY1Qty { get; set; }
-		public decimal FY1Amount { get; set; }
+        public decimal FY1Qty { get; set; }
+        public decimal FY1Amount { get; set; }
 
-		public decimal FY2Qty { get; set; }
-		public decimal FY2Amount { get; set; }
+        public decimal FY2Qty { get; set; }
+        public decimal FY2Amount { get; set; }
 
-		public decimal FY3Qty { get; set; }
-		public decimal FY3Amount { get; set; }
-	}
+        public decimal FY3Qty { get; set; }
+        public decimal FY3Amount { get; set; }
+    }
 }

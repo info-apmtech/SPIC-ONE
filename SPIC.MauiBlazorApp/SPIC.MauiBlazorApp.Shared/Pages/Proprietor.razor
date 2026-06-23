@@ -1053,11 +1053,11 @@
 		_selectedEntityType = et;
 		try
 		{
-			var dealer = await Http.GetFromJsonAsync<DealerReg>($"api/DealerRegistration/{DealerId}");
-			if (dealer != null)
+			var resp = await Http.PutAsync($"api/DealerRegistration/{DealerId}/entity-type/{(int)et}", null);
+			if (!resp.IsSuccessStatusCode)
 			{
-				dealer.EntityType = et;
-				await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", dealer);
+				var err = await resp.Content.ReadAsStringAsync();
+				ShowMessage($"Failed to save entity type: {err}", true);
 			}
 		}
 		catch (Exception ex)
