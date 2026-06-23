@@ -79,16 +79,27 @@
                 </select>
             </div>
 
-            <div class="col-md-3">
-                <label class="form-label-custom">Product Group</label>
-                <select class="form-control-custom w-100" @bind="_form.ProductGroupId">
-                    <option value="0">Select Category</option>
-                    @foreach (var category in _categoriesList)
-                    {
-                        <option value="@category.Id">@category.Name</option>
-                    }
-                </select>
-            </div>
+           <div class="col-md-3">
+    <label class="form-label-custom">Product Group</label>
+    <select class="form-control-custom w-100" @bind="_form.ProductGroupId">
+        <option value="0">Select Product Group</option>
+        @foreach (var group in _productGroupsList)
+        {
+            <option value="@group.Id">@group.Name</option>
+        }
+    </select>
+</div>
+
+<div class="col-md-3">
+    <label class="form-label-custom">Category</label>
+    <select class="form-control-custom w-100" @bind="_form.CategoryId">
+        <option value="0">Select Category</option>
+        @foreach (var category in _categoriesList)
+        {
+            <option value="@category.Id">@category.Name</option>
+        }
+    </select>
+</div>
 
             <div class="col-md-3">
                 <label class="form-label-custom">Quantity</label>
@@ -145,8 +156,9 @@
         <th>Financial Year</th>
         <th>Dealer Code</th>
         <th>Dealer Name</th>
-        <th>SubGroup</th>
-        <th>Product Group</th>
+       <th>Product</th>
+<th>Product Group</th>
+<th>Category</th>
         <th>Quantity</th>
         <th>Gross Amount</th>
         <th>Action</th>
@@ -158,7 +170,8 @@
         <td>@item.CustomerNumber</td>
         <td>@GetDealerName(item.CustomerId)</td>
         <td>@GetProductName(item.ProductId)</td>
-        <td>@GetCategoryName(item.ProductGroupId)</td>
+<td>@GetProductGroupName(item.ProductGroupId)</td>
+<td>@GetCategoryName(item.CategoryId)</td>
         <td>@item.Quantity</td>
         <td>@item.GrossAmount.ToString("F2")</td>
         <td>
@@ -387,6 +400,7 @@ private int _uploadFileKey = 0;  // incrementing this key forces InputFile to re
     private string? _currentUserId;
     private int _bulkUploadFinancialYearId = 0;
 private List<FinancialYearDto> _financialYears = new();
+private List<LookupDto> _productGroupsList = new(); 
 public class FinancialYearDto
 {
     public int Id { get; set; }
@@ -411,21 +425,22 @@ public class FinancialYearDto
         _isLoading = false;
     }
 
-    private async Task LoadLookups()
+   private async Task LoadLookups()
+{
+    try
     {
-        try
-        {
-            _states = await Http.GetFromJsonAsync<List<StateDto>>("api/State/all") ?? new();
-            _categoriesList = await Http.GetFromJsonAsync<List<LookupDto>>("api/Category/all") ?? new();
-            _productsList = await Http.GetFromJsonAsync<List<LookupDto>>("api/Product/all") ?? new();
-            _dealersAll = await Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/all") ?? new(); 
-            _financialYears = await Http.GetFromJsonAsync<List<FinancialYearDto>>("api/FinancialYear/all") ?? new();
-        }
-        catch (Exception ex)
-        {
-            ShowMessage($"Failed to load lookups: {ex.Message}", true);
-        }
+        _states = await Http.GetFromJsonAsync<List<StateDto>>("api/State/all") ?? new();
+        _productsList = await Http.GetFromJsonAsync<List<LookupDto>>("api/Product/all") ?? new();
+        _categoriesList = await Http.GetFromJsonAsync<List<LookupDto>>("api/Category/all") ?? new();
+        _productGroupsList = await Http.GetFromJsonAsync<List<LookupDto>>("api/ProductGroup/all") ?? new();
+        _dealersAll = await Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/all") ?? new();
+        _financialYears = await Http.GetFromJsonAsync<List<FinancialYearDto>>("api/FinancialYear/all") ?? new();
     }
+    catch (Exception ex)
+    {
+        ShowMessage($"Failed to load lookups: {ex.Message}", true);
+    }
+}
 
     private async Task LoadData()
     {
@@ -469,7 +484,7 @@ private void ApplyFilter()
     private async Task HandleSave()
     {
       if (_form.FinancialYearId == 0 || _form.StateId == 0 || string.IsNullOrWhiteSpace(_form.CustomerNumber) ||
-    _form.CustomerId == 0 || _form.ProductId == 0 || _form.ProductGroupId == 0)
+    _form.CustomerId == 0 || _form.ProductId == 0 || _form.ProductGroupId == 0 || _form.CategoryId == 0)
 {
     ShowMessage("All required fields must be filled.", true);
     return;
@@ -487,8 +502,9 @@ private void ApplyFilter()
         _form.StateId,
         _form.CustomerNumber,
         _form.CustomerId,
-        ProductId = _form.ProductId,
+        _form.ProductId,
         _form.ProductGroupId,
+        _form.CategoryId,
         _form.Quantity,
         _form.GrossAmount
     }
@@ -498,8 +514,9 @@ private void ApplyFilter()
         _form.StateId,
         _form.CustomerNumber,
         _form.CustomerId,
-        ProductId = _form.ProductId,
+        _form.ProductId,
         _form.ProductGroupId,
+        _form.CategoryId,
         _form.Quantity,
         _form.GrossAmount
     };
@@ -545,7 +562,7 @@ private void ApplyFilter()
     {
         _isEditing = true;
 
-      _form = new CreditLimitSalesForm
+    _form = new CreditLimitSalesForm
 {
     Id = item.Id,
     FinancialYearId = item.FinancialYearId,
@@ -554,6 +571,7 @@ private void ApplyFilter()
     CustomerId = item.CustomerId,
     ProductId = item.ProductId,
     ProductGroupId = item.ProductGroupId,
+    CategoryId = item.CategoryId,
     Quantity = item.Quantity,
     GrossAmount = item.GrossAmount
 };
@@ -741,8 +759,9 @@ private List<ExportColumn<CreditLimitSalesForm>> GetExportColumns()
         new ExportColumn<CreditLimitSalesForm> { Header = "State",         ValueSelector = item => GetStateName(item.StateId) },
         new ExportColumn<CreditLimitSalesForm> { Header = "Dealer Code",   ValueSelector = item => item.CustomerNumber ?? "" },
         new ExportColumn<CreditLimitSalesForm> { Header = "Dealer Name",   ValueSelector = item => GetDealerName(item.CustomerId) },
-        new ExportColumn<CreditLimitSalesForm> { Header = "Product",      ValueSelector = item => GetProductName(item.ProductId) },
-        new ExportColumn<CreditLimitSalesForm> { Header = "Product Group", ValueSelector = item => GetCategoryName(item.ProductGroupId) },
+       new ExportColumn<CreditLimitSalesForm> { Header = "Product", ValueSelector = item => GetProductName(item.ProductId) },
+new ExportColumn<CreditLimitSalesForm> { Header = "Product Group", ValueSelector = item => GetProductGroupName(item.ProductGroupId) },
+new ExportColumn<CreditLimitSalesForm> { Header = "Category", ValueSelector = item => GetCategoryName(item.CategoryId) },
         new ExportColumn<CreditLimitSalesForm> { Header = "Quantity",      ValueSelector = item => item.Quantity.ToString("F2") },
         new ExportColumn<CreditLimitSalesForm> { Header = "Gross Amount",  ValueSelector = item => item.GrossAmount.ToString("F2") }
     };
@@ -776,17 +795,18 @@ private List<ExportColumn<CreditLimitSalesForm>> GetExportColumns()
     private string GetFinancialYearName(int id) =>
     id == 0 ? "N/A" : _financialYears.FirstOrDefault(f => f.Id == id)?.Name ?? id.ToString();
     public class CreditLimitSalesForm
-    {
-        public int Id { get; set; }
-        public int StateId { get; set; } = 0;
-        public string CustomerNumber { get; set; } = "";
-        public int CustomerId { get; set; } = 0;
-        public int ProductId { get; set; } = 0;
-        public int ProductGroupId { get; set; } = 0;
-        public decimal Quantity { get; set; } = 0;
-        public decimal GrossAmount { get; set; } = 0;
-         public int FinancialYearId { get; set; } = 0;
-    }
+{
+    public int Id { get; set; }
+    public int StateId { get; set; } = 0;
+    public string CustomerNumber { get; set; } = "";
+    public int CustomerId { get; set; } = 0;
+    public int ProductId { get; set; } = 0;
+    public int ProductGroupId { get; set; } = 0;
+    public int CategoryId { get; set; } = 0;
+    public decimal Quantity { get; set; } = 0;
+    public decimal GrossAmount { get; set; } = 0;
+    public int FinancialYearId { get; set; } = 0;
+}
 
     public class StateDto
     {
@@ -817,4 +837,6 @@ private List<ExportColumn<CreditLimitSalesForm>> GetExportColumns()
     _bulkUploadFinancialYearId = 0;
     _uploadFileKey++;           // reset file chooser for next time
 }
+private string GetProductGroupName(int id) =>
+    id == 0 ? "N/A" : _productGroupsList.FirstOrDefault(pg => pg.Id == id)?.Name ?? id.ToString();
 }
