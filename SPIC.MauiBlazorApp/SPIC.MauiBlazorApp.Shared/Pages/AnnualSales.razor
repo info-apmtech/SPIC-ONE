@@ -166,23 +166,23 @@
 									<td data-label="RPU (₹)"></td>
 								}
 								<td data-label="Own Retail Qty (@_selectedUnitName)">
-									@group.Rows.Sum(r => r.OwnRetailsSaleQty).ToString("N2")
+									@Fmt(group.Rows.Sum(r => r.OwnRetailsSaleQty))
 								</td>
 								<td data-label="TO (₹)in Lakhs">
-									@group.Rows.Sum(r => r.OwnRetailsSaleAmount).ToString("N2")
+									@Fmt(group.Rows.Sum(r => r.OwnRetailsSaleAmount))
 								</td>
 								@if (_hasWholesaleLicense)
 								{
 									<td data-label="Sale to Dealer Qty (@_selectedUnitName)">
-										@group.Rows.Sum(r => r.SaleToDealerQty).ToString("N2")
+										@Fmt(group.Rows.Sum(r => r.SaleToDealerQty))
 									</td>
 									<td data-label="TO (₹)in Lakhs">
-										@group.Rows.Sum(r => r.SaleToDealerAmount).ToString("N2")
+										@Fmt(group.Rows.Sum(r => r.SaleToDealerAmount))
 									</td>
 								}
 								<td class="text-value annual-total-cell" data-label="Total">
-									@group.Rows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty).ToString("N2") /
-									@group.Rows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount).ToString("N2")
+									@Fmt(group.Rows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty)) /
+									@Fmt(group.Rows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount))
 								</td>
 							</tr>
 							@if (IsExpanded(group.ProductGroupId))
@@ -206,7 +206,7 @@
 												   @onchange="(e) => UpdateRetailQty(row, e)" />
 										</td>
 										<td data-label="TO (₹)in Lakhs">
-											<span class="table-value">@row.OwnRetailsSaleAmount.ToString("N2")</span>
+											<span class="table-value">@Fmt(row.OwnRetailsSaleAmount)</span>
 										</td>
 										@if (_hasWholesaleLicense)
 										{
@@ -216,11 +216,11 @@
 													   @onchange="(e) => UpdateDealerQty(row, e)" />
 											</td>
 											<td data-label="TO (₹)in Lakhs">
-												<span class="table-value">@row.SaleToDealerAmount.ToString("N2")</span>
+												<span class="table-value">@Fmt(row.SaleToDealerAmount)</span>
 											</td>
 										}
 										<td class="text-value annual-total-cell" data-label="Total">
-											@((row.OwnRetailsSaleQty + row.SaleToDealerQty).ToString("N2")) / @((row.OwnRetailsSaleAmount + row.SaleToDealerAmount).ToString("N2"))
+											@Fmt(row.OwnRetailsSaleQty + row.SaleToDealerQty) / @Fmt(row.OwnRetailsSaleAmount + row.SaleToDealerAmount)
 										</td>
 									</tr>
 								}
@@ -235,12 +235,12 @@
 							{
 								<td></td>
 							}
-							<td>@_currentRows.Sum(r => r.OwnRetailsSaleQty).ToString("N2")</td>
-							<td>@_currentRows.Sum(r => r.OwnRetailsSaleAmount).ToString("N2")</td>
+							<td>@Fmt(_currentRows.Sum(r => r.OwnRetailsSaleQty))</td>
+							<td>@Fmt(_currentRows.Sum(r => r.OwnRetailsSaleAmount))</td>
 							@if (_hasWholesaleLicense)
 							{
-								<td>@_currentRows.Sum(r => r.SaleToDealerQty).ToString("N2")</td>
-								<td>@_currentRows.Sum(r => r.SaleToDealerAmount).ToString("N2")</td>
+								<td>@Fmt(_currentRows.Sum(r => r.SaleToDealerQty))</td>
+								<td>@Fmt(_currentRows.Sum(r => r.SaleToDealerAmount))</td>
 							}
 
 							@*  <!-- SECOND REPEAT -->
@@ -255,7 +255,7 @@
 
 							<!-- TOTALS COMBINED -->
 							<td>
-								@_currentRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty).ToString("N2") MT / @_currentRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount).ToString("N2") Lakhs
+								@Fmt(_currentRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty)) MT / @Fmt(_currentRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount)) Lakhs
 							</td>
 						</tr>
 					</tfoot>
@@ -283,10 +283,10 @@
 						 alt="GrowthForecast" />
 					<div class="total-value-title category-summary-title">@cat.Name</div>
 					<div class="total-value-amount category-summary-amount">
-						₹ @catTotalAmt.ToString("N0") <span class="total-value-unit">Lakhs</span>
+						₹ @(catTotalAmt == 0 ? "-" : catTotalAmt.ToString("N0")) <span class="total-value-unit">Lakhs</span>
 					</div>
 					<div class="category-summary-meta">
-						@catTotalQty.ToString("N2") @unitName &nbsp;|&nbsp; Dealer Ratio: @ratio.ToString("N1")%
+						@Fmt(catTotalQty) @unitName &nbsp;|&nbsp; Dealer Ratio: @(ratio == 0 ? "-" : ratio.ToString("N1"))%
 					</div>
 				</div>
 			</div>
@@ -321,7 +321,7 @@
 				}
 
 				<div class="category-summary-meta mt-3">
-					@ureaTotalQty.ToString("N2") MT / ₹ @ureaTotalAmt.ToString("N2") Lakhs
+					@Fmt(ureaTotalQty) MT / ₹ @Fmt(ureaTotalAmt) Lakhs
 				</div>
 			</div>
 		</div>
@@ -341,7 +341,7 @@
 				}
 
 				<div class="category-summary-meta mt-3">
-					@otherTotalQty.ToString("N2") MT / ₹ @otherTotalAmt.ToString("N2") Lakhs
+					@Fmt(otherTotalQty) MT / ₹ @Fmt(otherTotalAmt) Lakhs
 				</div>
 			</div>
 		</div>
@@ -359,7 +359,7 @@
 							.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
 					}
 					<div class="category-summary-meta mt-3">
-						₹ @combinedAmt.ToString("N2") Lakhs
+						₹ @Fmt(combinedAmt) Lakhs
 					</div>
 				</div>
 			</div>
@@ -378,7 +378,7 @@
 				}
 
 				<div class="category-summary-meta mt-3">
-					@* @grandTotalQty.ToString("N2") MT / *@ ₹ @grandTotalAmt.ToString("N2") Lakhs
+					@* @grandTotalQty.ToString("N2") MT / *@ ₹ @Fmt(grandTotalAmt) Lakhs
 				</div>
 			</div>
 		</div>
@@ -394,7 +394,7 @@
 						var totalDealer = _allSalesData.Sum(r => r.SaleToDealerAmount);
 						var grandTotal = totalRetail + totalDealer;
 						var ratio = grandTotal > 0 ? (totalDealer / grandTotal * 100) : 0;
-						<span>Based on your entries, your overall dealer-to-retail ratio is <strong>@ratio.ToString("N1")%</strong>.</span>
+						<span>Based on your entries, your overall dealer-to-retail ratio is <strong>@(ratio == 0 ? "-" : ratio.ToString("N1"))%</strong>.</span>
 					}
 					else
 					{
@@ -684,6 +684,8 @@
 	}
 
 	private bool IsExpanded(int? productGroupId) => _expandedGroups.Contains(productGroupId);
+
+	private static string Fmt(decimal value) => value == 0 ? "-" : value.ToString("N2");
 
 	private void UpdateField(AnnualSaleDataLastFYofDealerRegistration row, ChangeEventArgs e, Func<AnnualSaleDataLastFYofDealerRegistration, decimal> getter, Action<AnnualSaleDataLastFYofDealerRegistration, decimal> setter)
 	{
