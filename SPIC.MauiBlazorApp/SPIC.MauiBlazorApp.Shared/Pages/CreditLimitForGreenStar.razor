@@ -149,13 +149,15 @@
 				</div>
 				<div class="col-md-4">
 					<label class="form-label">Valid From</label>
-					<input type="date" class="form-control-custom w-100"
-					@bind="_proposal.GSExistingCreditLimitFrom" />
+						<input type="date" class="form-control-custom w-100"
+							   value="@_gsValidFromText"
+							   @onchange="OnGSValidFromChanged" />
 				</div>
 				<div class="col-md-4">
 					<label class="form-label">Valid To</label>
-					<input type="date" class="form-control-custom w-100"
-					@bind="_proposal.GSExistingCreditLimitTo" />
+						<input type="date" class="form-control-custom w-100"
+							   value="@_gsValidToText"
+							   @onchange="OnGSValidToChanged" />
 				</div>
 			</div>
 		</div> 
@@ -652,11 +654,15 @@
 	private List<ProductGroup> _productGroups = new();
 	private List<SalesPlanningInDealerRegistration> _salesPlanData = new();
 
-	private DealerCreditLimitProposal _proposal = new();
+	private DealerCreditLimitProposal _proposal = new()
+	{
+		GSExistingCreditLimitFrom = DateTime.Today,
+		GSExistingCreditLimitTo = DateTime.Today
+	}; 
 	private List<DealerCreditLimitSales> _creditLimitSalesData = new();
-private List<SalesPerfViewRow> _salesPerfViewRows = new();
-private List<AnnualSaleDataLastFYofDealerRegistration> _annualSalesData = new();
-private List<DealerCreditLimitSales> _greenstarDefaultSalesData = new();
+	private List<SalesPerfViewRow> _salesPerfViewRows = new();
+	private List<AnnualSaleDataLastFYofDealerRegistration> _annualSalesData = new();
+	private List<DealerCreditLimitSales> _greenstarDefaultSalesData = new();
 
 	private int _selectedCategoryId;
 	private string _selectedUnitName = "MT";
@@ -664,6 +670,8 @@ private List<DealerCreditLimitSales> _greenstarDefaultSalesData = new();
 	private bool _isCheckingGreenStar = true;
 	private string? _message;
 	private bool _isError;
+	private string _gsValidFromText = DateTime.Today.ToString("yyyy-MM-dd");
+	private string _gsValidToText = DateTime.Today.ToString("yyyy-MM-dd");
 	private double[] _spicValues = new double[10];
 	private double[] _greenstarValues = new double[11];
 	private bool[] _spicValueEntered = new bool[10];
@@ -892,12 +900,18 @@ _loanLiabilities = loanTask.Result ?? new();
 _salesPlanData   = salesPlanTask.Result ?? new();
 _annualSalesData = annualTask.Result ?? new();    // hoisted out of the tail
 
-var proposals = proposalTask.Result ?? new();
-var existing  = proposals.FirstOrDefault(p => p.DealerId == DealerId.Value);
-if (existing != null)
-    _proposal = existing;
-
-InitValuesFromData();
+			var proposals = proposalTask.Result ?? new();
+			var existing = proposals.FirstOrDefault(p => p.DealerId == DealerId.Value);
+			if (existing != null)
+			{
+				_proposal = existing;
+				if (_proposal.GSExistingCreditLimitFrom == DateTime.MinValue)
+					_proposal.GSExistingCreditLimitFrom = DateTime.Today;
+				if (_proposal.GSExistingCreditLimitTo == DateTime.MinValue)
+					_proposal.GSExistingCreditLimitTo = DateTime.Today;
+			}
+			SyncDateBuffers();
+			InitValuesFromData();
 
 		if (_categories.Count > 0)
 		{
@@ -1166,7 +1180,32 @@ private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx)
 	// 	}
 	// 	RecalculateSpicPercentages();
 	// }
+	private void OnGSValidFromChanged(ChangeEventArgs e)
+	{
+		var newVal = e.Value?.ToString();
+		if (string.IsNullOrEmpty(newVal)) return;
 
+		_gsValidFromText = newVal;
+		if (DateTime.TryParse(newVal, out var dt))
+			_proposal.GSExistingCreditLimitFrom = dt;
+	}
+
+	private void OnGSValidToChanged(ChangeEventArgs e)
+	{
+		var newVal = e.Value?.ToString();
+		if (string.IsNullOrEmpty(newVal)) return;
+
+		_gsValidToText = newVal;
+		if (DateTime.TryParse(newVal, out var dt))
+			_proposal.GSExistingCreditLimitTo = dt;
+	}
+
+	private void SyncDateBuffers()
+	{
+		string Fmt(DateTime? d) => d.HasValue && d.Value != DateTime.MinValue ? d.Value.ToString("yyyy-MM-dd") : "";
+		_gsValidFromText = Fmt(_proposal.GSExistingCreditLimitFrom);
+		_gsValidToText = Fmt(_proposal.GSExistingCreditLimitTo);
+	}
 	private void OnGreenstarFDAmountChanged(ChangeEventArgs e)
 	{
 		_proposal.GreenstarFDAmount = decimal.TryParse(e.Value?.ToString(), out var v) ? v : 0;

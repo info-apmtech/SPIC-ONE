@@ -177,8 +177,10 @@
 					</div>
 					<div class="col-md-3">
 						<label class="custom-label">Date Of Birth</label>
-						<input type="date" class="custom-input" @bind="_partnerForm.DOB" @bind:format="yyyy-MM-dd" />
-					</div>
+								<input type="date" class="custom-input"
+									   value="@_dobText"
+									   @onchange="OnDOBChanged" />
+							</div>
 					<div class="col-md-3">
 						<label class="custom-label">Phone Number</label>
                         <input type="tel"
@@ -276,7 +278,7 @@
 							}
 							else if (!string.IsNullOrEmpty(_partnerForm.ProprietorImagePath))
 							{
-								<img src="@_partnerForm.ProprietorImagePath" alt="Proprietor image"
+								<img src="@GetFileUrl(_partnerForm.ProprietorImagePath)" alt="Proprietor image"
 									 style="width:100%; max-height:160px; object-fit:contain; border-radius:8px;" />
 								<span class="btn-upload-attach mt-2">Change Image</span>
 							}
@@ -417,8 +419,10 @@
 			</div>
 			<div class="col-md-4">
 				<label class="custom-label">D.O.B</label>
-				<input type="date" class="custom-input" @bind="_familyForm.DateOfBirth" @bind:after="CalculateFamilyAge" />
-			</div>
+						<input type="date" class="custom-input"
+							   value="@_familyDobText"
+							   @onchange="OnFamilyDateOfBirthChanged" />
+					</div>
 			<div class="col-md-4">
 				<label class="custom-label">Age</label>
 				<input type="number" class="custom-input" placeholder="Age" value="@_familyForm.Age" readonly />
@@ -974,6 +978,8 @@
 	private bool _isPincodeLookup;
 	private string? _pincodeMessage;
 	private bool _pincodeSuccess;
+	private string _dobText = "";
+	private string _familyDobText = "";
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -981,13 +987,42 @@
 		try
 		{
 			await Task.WhenAll(LoadSectors(), LoadRelationships(), LoadDealerEntityType(), LoadSavedPartners(), LoadStates(), LoadDistricts());
+			SyncDateBuffers();
 		}
 		finally
 		{
 			Loading.Hide();
 		}
 	}
+	private void SyncDateBuffers()
+	{
+		string Fmt(DateTime d) => d != DateTime.MinValue ? d.ToString("yyyy-MM-dd") : "";
 
+		_dobText = Fmt(_partnerForm.DOB);
+		_familyDobText = Fmt(_familyForm.DateOfBirth);
+	}
+	private void OnDOBChanged(ChangeEventArgs e)
+	{
+		var newVal = e.Value?.ToString();
+		if (string.IsNullOrEmpty(newVal)) return; // ignore mid-typing/invalid
+
+		_dobText = newVal;
+		if (DateTime.TryParse(newVal, out var dt))
+			_partnerForm.DOB = dt;
+	}
+
+	private void OnFamilyDateOfBirthChanged(ChangeEventArgs e)
+	{
+		var newVal = e.Value?.ToString();
+		if (string.IsNullOrEmpty(newVal)) return;
+
+		_familyDobText = newVal;
+		if (DateTime.TryParse(newVal, out var dt))
+		{
+			_familyForm.DateOfBirth = dt;
+			CalculateFamilyAge();
+		}
+	}
 	private async Task LoadSectors()
 	{
 		try { _sectors = await Http.GetFromJsonAsync<List<Sector>>("api/Sector/all") ?? new(); } catch { }
@@ -1258,6 +1293,7 @@
 			_currentFamilyList.Add(CloneFamily(_familyForm));
 		}
 		_familyForm = NewFamilyForm();
+		_familyDobText = _familyForm.DateOfBirth.ToString("yyyy-MM-dd");  
 		_message = null;
 	}
 
@@ -1266,18 +1302,25 @@
 		_editingFamilyIndex = index;
 		var src = _currentFamilyList[index];
 		_familyForm = CloneFamily(src);
+	    _familyDobText = _familyForm.DateOfBirth.ToString("yyyy-MM-dd"); 
 	}
 
 	private void RemoveFamily(int index)
 	{
 		_currentFamilyList.RemoveAt(index);
-		if (_editingFamilyIndex == index) { _editingFamilyIndex = -1; _familyForm = NewFamilyForm(); }
+		if (_editingFamilyIndex == index)
+		{
+			_editingFamilyIndex = -1;
+			_familyForm = NewFamilyForm();
+			_familyDobText = _familyForm.DateOfBirth.ToString("yyyy-MM-dd"); 
+		}
 	}
 
 	private void CancelFamilyEdit()
 	{
 		_editingFamilyIndex = -1;
 		_familyForm = NewFamilyForm();
+		_familyDobText = _familyForm.DateOfBirth.ToString("yyyy-MM-dd");  
 	}
 
 	// --- Occupation CRUD (in-memory) ---
@@ -1493,6 +1536,7 @@ return;
 			ProprietorImagePath = partner.ProprietorImagePath,
 			Gender = partner.Gender,
 			MaritalStatus = partner.MaritalStatus,
+			DOB = partner.DOB,
 			ShopNoORRoomNoOrBlockNo = partner.ShopNoORRoomNoOrBlockNo,
 			Street = partner.Street,
 			SubVillage = partner.SubVillage,
@@ -1524,6 +1568,8 @@ return;
 		_ocrPopulatedPan = false;
 		_message = null;
 
+		SyncDateBuffers();  
+
 		var state = _statesAll.FirstOrDefault(s => s.Id == partner.StateId);
 		_stateSearchText = state?.StateName ?? "";
 		var district = _districtsAll.FirstOrDefault(d => d.Id == partner.DistrictId);
@@ -1536,7 +1582,12 @@ return;
 		_editingPartnerId = 0;
 		ResetPartnerForm();
 	}
-
+	private string GetFileUrl(string? path)
+	{
+		if (string.IsNullOrEmpty(path)) return "";
+		var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+		return $"{baseUrl}/api/DealerFile/view/{Uri.EscapeDataString(path).Replace("%2F", "/")}";
+	}
 	// --- Delete Partner ---
 	private void ConfirmDeletePartner(DealerOwnershipInfo partner)
 	{
@@ -1665,6 +1716,7 @@ return;
 		_ocrPopulatedPan = false;
 		_stateSearchText = "";
 		_districtSearchText = "";
+		SyncDateBuffers();
 	}
 
 	private void SelectState(int id, string displayText)
