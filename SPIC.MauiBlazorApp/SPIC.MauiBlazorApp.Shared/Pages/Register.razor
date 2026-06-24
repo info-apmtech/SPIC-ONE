@@ -266,7 +266,9 @@
                         </div>
                         <div class="col-12 col-sm-6 col-md-3">
                             <label class="form-label-custom">Final Approval Date</label>
-                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("FinalApprovalDate") ? "is-invalid" : "")" @bind="_model.FinalApprovalDate" @bind:after='() => ValidateFieldOnChange("FinalApprovalDate", _model.FinalApprovalDate != null)'>
+                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("FinalApprovalDate") ? "is-invalid" : "")"
+                                   value="@_finalApprovalDateText"
+                                   @onchange="OnFinalApprovalDateChanged">
                             @if (_errors.ContainsKey("FinalApprovalDate"))
                             {
                                 <div class="field-error">@_errors["FinalApprovalDate"]</div>
@@ -274,7 +276,9 @@
                         </div>
                         <div class="col-12 col-sm-6 col-md-3">
                             <label class="form-label-custom">Settlement Date</label>
-                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SettlementDate") ? "is-invalid" : "")" @bind="_model.SettlementDate" @bind:after='() => ValidateFieldOnChange("SettlementDate", _model.SettlementDate != null)'>
+                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SettlementDate") ? "is-invalid" : "")"
+                                   value="@_settlementDateText"
+                                   @onchange="OnSettlementDateChanged">
                             @if (_errors.ContainsKey("SettlementDate"))
                             {
                                 <div class="field-error">@_errors["SettlementDate"]</div>
@@ -385,7 +389,9 @@
                         </div>
                         <div class="col-12 col-md-4">
                             <label class="form-label-custom">Date of Appointment</label>
-                            <input type="date" class="form-control-custom w-100" @bind="_model.DateOfAppointment">
+                            <input type="date" class="form-control-custom w-100"
+                                   value="@_dateOfAppointmentText"
+                                   @onchange="OnDateOfAppointmentChanged">
                         </div>
                     </div>
                 </div>
@@ -402,7 +408,9 @@
                     <div class="row g-3">
                         <div class="col-12 col-sm-6 col-md-4">
                             <label class="form-label-custom">Last Transaction Date</label>
-                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("LastTransactionDate") ? "is-invalid" : "")" @bind="_model.LastTransactionDate" @bind:after='() => ValidateFieldOnChange("LastTransactionDate", _model.LastTransactionDate != null)'>
+                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("LastTransactionDate") ? "is-invalid" : "")"
+                                   value="@_lastTransactionDateText"
+                                   @onchange="OnLastTransactionDateChanged">
                             @if (_errors.ContainsKey("LastTransactionDate"))
                             {
                                 <div class="field-error">@_errors["LastTransactionDate"]</div>
@@ -657,7 +665,9 @@
                         </div>
                         <div class="col-12 col-sm-6 col-md-4">
                             <label class="form-label-custom">Deposit Date</label>
-                            <input type="date" class="form-control-custom w-100" @bind="_model.TradeDepositDate">
+                            <input type="date" class="form-control-custom w-100"
+                                   value="@_tradeDepositDateText"
+                                   @onchange="OnTradeDepositDateChanged">
                         </div>
                     </div>
                 </div>
@@ -918,7 +928,9 @@
                                 </div>
                                 <div class="col-12 col-sm-6">
                                     <label class="form-label-custom">Expiry Date</label>
-                                    <input type="date" class="form-control-custom w-100" @bind="_model.WholesaleLicenseExpiryDate">
+                                    <input type="date" class="form-control-custom w-100"
+                                           value="@_wholesaleLicenseExpiryDateText"
+                                           @onchange="OnWholesaleLicenseExpiryDateChanged">
                                 </div>
                                 <div class="col-12 col-sm-6">
                                     <label class="form-label-custom">mFMS ID</label>
@@ -958,7 +970,9 @@
                                 </div>
                                 <div class="col-12 col-sm-6">
                                     <label class="form-label-custom">Expiry Date</label>
-                                    <input type="date" class="form-control-custom w-100" @bind="_model.RetailLicenseExpiryDate">
+                                    <input type="date" class="form-control-custom w-100"
+                                           value="@_retailLicenseExpiryDateText"
+                                           @onchange="OnRetailLicenseExpiryDateChanged">
                                 </div>
                                 <div class="col-12 col-sm-6">
                                     <label class="form-label-custom">mFMS ID</label>
@@ -1079,7 +1093,16 @@
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 
-    private DealerFormModel _model = new();
+    private DealerFormModel _model = new()
+    {
+        DateOfAppointment = DateTime.Today,
+        LastTransactionDate = DateTime.Today,
+        FinalApprovalDate = DateTime.Today,
+        SettlementDate = DateTime.Today,
+        TradeDepositDate = DateTime.Today,
+        WholesaleLicenseExpiryDate = DateTime.Today,
+        RetailLicenseExpiryDate = DateTime.Today
+    };
     private bool _isEditMode;
     private bool _isSaving;
     private Dictionary<string, string> _errors = new();
@@ -1183,6 +1206,17 @@
     private bool _isPincodeLookup;
     private string? _pincodeMessage;
     private bool _pincodeSuccess;
+    private string _dateOfAppointmentText = "";
+    private string _lastTransactionDateText = "";
+    private string _finalApprovalDateText = "";
+    private string _settlementDateText = "";
+    private string _tradeDepositDateText = "";
+    private string _wholesaleLicenseExpiryDateText = "";
+    private string _retailLicenseExpiryDateText = "";
+    protected override void OnInitialized()
+    {
+        SyncDateBuffersFromModel();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -1239,6 +1273,8 @@
         if (dealer == null) return;
 
         _model = dealer;
+        SyncDateBuffersFromModel();
+
         _isEditMode = true;
 
         // Prefer enum (EntityType) if present, otherwise fallback to legacy IsDealer
@@ -1538,7 +1574,18 @@
         }
         else
         {
-            _model = new();
+            _model = new()
+            {
+                DateOfAppointment = DateTime.Today,
+                LastTransactionDate = DateTime.Today,
+                FinalApprovalDate = DateTime.Today,
+                SettlementDate = DateTime.Today,
+                TradeDepositDate = DateTime.Today,
+                WholesaleLicenseExpiryDate = DateTime.Today,
+                RetailLicenseExpiryDate = DateTime.Today
+            };
+            SyncDateBuffersFromModel();
+
             isSpic = true;   // reset to default for new entry
             isGreenStar = true;   // reset to default for new entry
             _isEditMode = false;
@@ -1645,7 +1692,16 @@
 
     private void ResetForm()
     {
-        _model = new();
+        _model = new()
+        {
+            DateOfAppointment = DateTime.Today,
+            LastTransactionDate = DateTime.Today,
+            FinalApprovalDate = DateTime.Today,
+            SettlementDate = DateTime.Today,
+            TradeDepositDate = DateTime.Today,
+            WholesaleLicenseExpiryDate = DateTime.Today,
+            RetailLicenseExpiryDate = DateTime.Today
+        }; 
         _isEditMode = false;
         _dealerCodeId = 0;
         _parentDealerId = 0;
@@ -1684,6 +1740,8 @@
         _ocrPopulatedCheque = false;
         _errors.Clear();
         _message = null;
+        SyncDateBuffersFromModel();
+
     }
 
     private bool Validate()
@@ -2477,6 +2535,96 @@
             _isGettingLocation = false;
             StateHasChanged();
         }
+    }
+    private void SyncDateBuffersFromModel()
+    {
+        string Fmt(DateTime? d) => d.HasValue && d.Value != DateTime.MinValue ? d.Value.ToString("yyyy-MM-dd") : "";
+
+        _dateOfAppointmentText = Fmt(_model.DateOfAppointment);
+        _lastTransactionDateText = Fmt(_model.LastTransactionDate);
+        _finalApprovalDateText = Fmt(_model.FinalApprovalDate);
+        _settlementDateText = Fmt(_model.SettlementDate);
+        _tradeDepositDateText = Fmt(_model.TradeDepositDate);
+        _wholesaleLicenseExpiryDateText = Fmt(_model.WholesaleLicenseExpiryDate);
+        _retailLicenseExpiryDateText = Fmt(_model.RetailLicenseExpiryDate);
+    }
+    private void OnDateOfAppointmentChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return; // ignore mid-typing/invalid
+
+        _dateOfAppointmentText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+            _model.DateOfAppointment = dt;
+    }
+
+    private void OnLastTransactionDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return;
+
+        _lastTransactionDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.LastTransactionDate = dt;
+            ValidateFieldOnChange("LastTransactionDate", true);
+        }
+    }
+
+    private void OnFinalApprovalDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return;
+
+        _finalApprovalDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.FinalApprovalDate = dt;
+            ValidateFieldOnChange("FinalApprovalDate", true);
+        }
+    }
+
+    private void OnSettlementDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return;
+
+        _settlementDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.SettlementDate = dt;
+            ValidateFieldOnChange("SettlementDate", true);
+        }
+    }
+
+    private void OnTradeDepositDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return;
+
+        _tradeDepositDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+            _model.TradeDepositDate = dt;
+    }
+
+    private void OnWholesaleLicenseExpiryDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return;
+
+        _wholesaleLicenseExpiryDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+            _model.WholesaleLicenseExpiryDate = dt;
+    }
+
+    private void OnRetailLicenseExpiryDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return;
+
+        _retailLicenseExpiryDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+            _model.RetailLicenseExpiryDate = dt;
     }
 
     public static double CalculateDistanceKm(double lat1, double lng1, double lat2, double lng2)

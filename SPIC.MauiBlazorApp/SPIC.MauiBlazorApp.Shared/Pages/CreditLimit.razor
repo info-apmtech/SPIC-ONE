@@ -146,13 +146,15 @@
 			</div>
 			<div class="col-md-4">
 				<label class="form-label">Valid From</label>
-				<input type="date" class="form-control-custom w-100"
-					   @bind="_proposal.SpicExistingCreditLimitFrom" />
+					<input type="date" class="form-control-custom w-100"
+						   value="@_spicValidFromText"
+						   @onchange="OnSpicValidFromChanged" />
 			</div>
 			<div class="col-md-4">
 				<label class="form-label">Valid To</label>
-				<input type="date" class="form-control-custom w-100"
-					   @bind="_proposal.SpicExistingCreditLimitTo" />
+					<input type="date" class="form-control-custom w-100"
+						   value="@_spicValidToText"
+						   @onchange="OnSpicValidToChanged" />
 			</div>
 		</div>
 	</div>
@@ -588,7 +590,11 @@
 	private List<ProductGroup> _productGroups = new();
 	private List<SalesPlanningInDealerRegistration> _salesPlanData = new();
 
-	private DealerCreditLimitProposal _proposal = new();
+	private DealerCreditLimitProposal _proposal = new()
+	{
+		SpicExistingCreditLimitFrom = DateTime.Today,
+		SpicExistingCreditLimitTo = DateTime.Today
+	}; 
 	private List<DealerCreditLimitSales> _creditLimitSalesData = new();
 	private List<SalesPerfViewRow> _salesPerfViewRows = new();
 	private List<AnnualSaleDataLastFYofDealerRegistration> _annualSalesData = new();
@@ -598,6 +604,8 @@
 	private bool _isSaving;
 	private string? _message;
 	private bool _isError;
+	private string _spicValidFromText = DateTime.Today.ToString("yyyy-MM-dd");
+	private string _spicValidToText = DateTime.Today.ToString("yyyy-MM-dd");
 	private double[] _spicValues = new double[10];
 	private double[] _greenstarValues = new double[11];
 	private bool[] _spicValueEntered = new bool[10];
@@ -724,12 +732,18 @@
     _salesPlanData   = salesPlanTask.Result ?? new();
     _annualSalesData = annualTask.Result ?? new();    // hoisted out of the serial tail
 
-    var proposals = proposalTask.Result ?? new();
-var existing  = proposals.FirstOrDefault(p => p.DealerId == DealerId.Value);
-if (existing != null)
-    _proposal = existing;
-
-    InitValuesFromData();
+				var proposals = proposalTask.Result ?? new();
+				var existing = proposals.FirstOrDefault(p => p.DealerId == DealerId.Value);
+				if (existing != null)
+				{
+					_proposal = existing;
+					if (_proposal.SpicExistingCreditLimitFrom == DateTime.MinValue)
+						_proposal.SpicExistingCreditLimitFrom = DateTime.Today;
+					if (_proposal.SpicExistingCreditLimitTo == DateTime.MinValue)
+						_proposal.SpicExistingCreditLimitTo = DateTime.Today;
+				}
+				SyncDateBuffers();
+				InitValuesFromData();
 }
 			else
 			{
@@ -950,7 +964,34 @@ if (existing != null)
 	private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx);
 
 	private static decimal ParseDecimal(ChangeEventArgs e) =>
-		decimal.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+	decimal.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+
+	private void OnSpicValidFromChanged(ChangeEventArgs e)
+	{
+		var newVal = e.Value?.ToString();
+		if (string.IsNullOrEmpty(newVal)) return;
+
+		_spicValidFromText = newVal;
+		if (DateTime.TryParse(newVal, out var dt))
+			_proposal.SpicExistingCreditLimitFrom = dt;
+	}
+
+	private void OnSpicValidToChanged(ChangeEventArgs e)
+	{
+		var newVal = e.Value?.ToString();
+		if (string.IsNullOrEmpty(newVal)) return;
+
+		_spicValidToText = newVal;
+		if (DateTime.TryParse(newVal, out var dt))
+			_proposal.SpicExistingCreditLimitTo = dt;
+	}
+
+	private void SyncDateBuffers()
+	{
+		string Fmt(DateTime? d) => d.HasValue && d.Value != DateTime.MinValue ? d.Value.ToString("yyyy-MM-dd") : "";
+		_spicValidFromText = Fmt(_proposal.SpicExistingCreditLimitFrom);
+		_spicValidToText = Fmt(_proposal.SpicExistingCreditLimitTo);
+	}
 
 	private void OnSpicFDAmountChanged(ChangeEventArgs e)
 	{

@@ -55,6 +55,7 @@ namespace SPIC.Core.Entities
         Notifications,
         Profile,
         CSR1Create,
-        CSR1Management
+        CSR1Management,
+        Register
     }
 }
