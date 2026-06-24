@@ -38,7 +38,9 @@ namespace SPIC.Core.Entities
     }
     public enum PagePermission
     {
-        Dashboard, Designation, Employee, dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
+        Dashboard,
+        Register, Experience, AnnualSales, Warehouse, MarketDetails, Companies, Proprietor, SalesPlaning, Investment, CreditLimit, CreditLimitForGreenStar, Enclosures, FinalSubmission,
+        Designation, Employee, dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
         CompanySales,
         SalesReport,
         AgeingReport,
@@ -56,6 +58,6 @@ namespace SPIC.Core.Entities
         Profile,
         CSR1Create,
         CSR1Management,
-        Register
+
     }
 }
