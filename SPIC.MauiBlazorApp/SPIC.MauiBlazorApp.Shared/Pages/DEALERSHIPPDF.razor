@@ -2465,7 +2465,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         <div class="grid-2" style="row-gap: 12px;">
             <div class="inline-field">
                 <label>MO Recommended Credit Limit</label>
-                <div class="inline-val">₹ @_proposal.ExistingCreditLimitAmount.ToString("N2")</div>
+                <div class="inline-val">₹ @GetMoRecommendedLimit().ToString("N2")</div>
             </div>
             <div class="inline-field">
                 <label>RM Recommended Credit Limit</label>
@@ -3317,6 +3317,31 @@ private string GetSpicExperienceDisplay()
     if (years == 0) return $"{days} Days";
     if (days == 0) return $"{years} Years";
     return $"{years} Years {days} Days";
+}
+private double GetCreditPercentFromScore(double scorePercent) => scorePercent switch
+{
+    >= 75 => 25,
+    >= 60 => 20,
+    >= 45 => 15,
+    >= 30 => 10,
+    _ => 0
+};
+
+// Replicates the CreditLimit page: MO recommended = Proposed Limit + Additional Credit Limit
+private decimal GetMoRecommendedLimit()
+{
+    if (SelectedCompany == "GreenStar")
+    {
+        var pct = GetCreditPercentFromScore(_proposal.GQ12Mark);
+        var proposed = GsPerfFertTurnover() * (decimal)(pct / 100.0);
+        return proposed + _proposal.GreenstarAdditionalCreditLimit;
+    }
+    else
+    {
+        var pct = GetCreditPercentFromScore(_proposal.Q11Mark);
+        var proposed = SpicPerfUreaTurnover() * (decimal)(pct / 100.0);
+        return proposed + _proposal.AdditionalCreditLimit;
+    }
 }
     // --- DTO Definitions (matching your Register component) --- //
     public class DealerFormModel

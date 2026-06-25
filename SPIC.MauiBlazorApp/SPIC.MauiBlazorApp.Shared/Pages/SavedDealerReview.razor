@@ -334,6 +334,59 @@
     private decimal GetTotalLoans() => _loans?.Sum(x => x.LoanValue) ?? 0m;
     private decimal GetNetValue() => GetCapitalPosition() + GetTotalAssets() - GetTotalLoans();
 
+    // Score → credit percent (same table the CreditLimit pages use)
+private double GetCreditPercentFromScore(double scorePercent) => scorePercent switch
+{
+    >= 75 => 25,
+    >= 60 => 20,
+    >= 45 => 15,
+    >= 30 => 10,
+    _ => 0
+};
+
+private bool IsFertilizerCategory(DR.Category? c) =>
+    c?.Name != null && c.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
+
+private bool IsUreaProduct(DR.Product? p) =>
+    p?.Name != null && p.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+
+// SPIC MO recommended = (Urea-fertilizer FY3 turnover × percent) + SPIC Additional
+private decimal GetSpicMoRecommendedLimit()
+{
+    if (_creditProposal == null) return 0m;
+
+    decimal turnover = _creditSales
+        .Where(s =>
+        {
+            var prod = _products.FirstOrDefault(p => p.Id == s.ProductId);
+            var cat  = _categories.FirstOrDefault(c => c.Id == s.CategoryId);
+            return IsFertilizerCategory(cat) && IsUreaProduct(prod);
+        })
+        .Sum(s => s.FY3Amount);
+
+    var pct = GetCreditPercentFromScore(_creditProposal.Q11Mark);
+    var proposed = turnover * (decimal)(pct / 100.0);
+    return proposed + _creditProposal.AdditionalCreditLimit;
+}
+
+// GFL MO recommended = (non-Urea-fertilizer FY3 turnover × percent) + Greenstar Additional
+private decimal GetGflMoRecommendedLimit()
+{
+    if (_creditProposal == null) return 0m;
+
+    decimal turnover = _creditSales
+        .Where(s =>
+        {
+            var prod = _products.FirstOrDefault(p => p.Id == s.ProductId);
+            var cat  = _categories.FirstOrDefault(c => c.Id == s.CategoryId);
+            return IsFertilizerCategory(cat) && !IsUreaProduct(prod);
+        })
+        .Sum(s => s.FY3Amount);
+
+    var pct = GetCreditPercentFromScore(_creditProposal.GQ12Mark);
+    var proposed = turnover * (decimal)(pct / 100.0);
+    return proposed + _creditProposal.GreenstarAdditionalCreditLimit;
+}
     private static decimal GetSalesQty(DR.SalesPlanningInDealerRegistration row, int monthIndex)
     {
         return monthIndex switch { 0 => row.AprilQty, 1 => row.MayQty, 2 => row.JuneQty, 3 => row.JulyQty, 4 => row.AugustQty, 5 => row.SeptemberQty, 6 => row.OctoberQty, 7 => row.NovemberQty, 8 => row.DecemberQty, 9 => row.JanuaryQty, 10 => row.FebruaryQty, 11 => row.MarchQty, _ => 0 };
@@ -1103,8 +1156,12 @@
                                     <span class="cp-summary-value">@(_dealer?.FirmName ?? "-")</span>
                                 </div>
                                 <div class="cp-summary-item">
-                                    <span class="cp-summary-label">Proposed Credit Limit</span>
-                                    <span class="cp-summary-value">₹ @(_dealer?.CashCreditLimit.ToString("N2") ?? "0.00")</span>
+                                    <span class="cp-summary-label">MO Recommended CreditLimit  (SPIC)</span>
+                                    <span class="cp-summary-value">₹ @GetSpicMoRecommendedLimit().ToString("N2")</span>
+                                </div>
+                                <div class="cp-summary-item">
+                                    <span class="cp-summary-label">MO Recommended CreditLimit (GFL)</span>
+                                    <span class="cp-summary-value">₹ @GetGflMoRecommendedLimit().ToString("N2")</span>
                                 </div>
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Current Stage</span>
