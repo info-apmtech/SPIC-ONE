@@ -2,6 +2,7 @@
 @inject NavigationManager Nav
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
+@using System.Linq
 @using SPIC.Core.Entities
 
 @code {
@@ -67,9 +68,14 @@
             .TrimStart('/')
             .TrimEnd('/');
 
-        if (_alwaysOpen.Contains(path)) return;
+        // Match on the FIRST path segment only, so routes WITH parameters
+        var firstSegment = path
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault() ?? "";
 
-        if (!LoginState.AllowedPages.Contains(path))
+        if (_alwaysOpen.Contains(firstSegment)) return;
+
+        if (!LoginState.AllowedPages.Contains(firstSegment))
         {
             Nav.NavigateTo("/Dashboard", replace: true);
         }

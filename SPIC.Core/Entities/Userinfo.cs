@@ -39,25 +39,10 @@ namespace SPIC.Core.Entities
     public enum PagePermission
     {
         Dashboard,
-        Register, Experience, AnnualSales, Warehouse, MarketDetails, Companies, Proprietor, SalesPlaning, Investment, CreditLimit, CreditLimitForGreenStar, Enclosures, FinalSubmission,
+        Register, Experience, AnnualSales, Warehouse, MarketDetails, Companies, Proprietor, SalesPlaning, Investment, CreditLimit, CreditLimitForGreenStar, Enclosures, FinalSubmission, DealershipPDF,
         Designation, Employee, dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
-        CompanySales,
-        SalesReport,
-        AgeingReport,
-        Acknowledgement,
-        LiquidationCycle,
-        BudgetSubmissions,
-        WelfareSchemes,
-        Purchases,
-        Rewards,
-        CropAdvice,
-        YieldPrediction,
-        DiseaseDetection,
-        Community,
-        Notifications,
-        Profile,
-        CSR1Create,
-        CSR1Management,
+        CompanySales, SalesReport, AgeingReport, Acknowledgement, LiquidationCycle, BudgetSubmissions, WelfareSchemes, Purchases, Rewards, CropAdvice, YieldPrediction, DiseaseDetection,
+        Community, Notifications, Profile, CSR1Create, CSR1Management,
 
     }
 }
