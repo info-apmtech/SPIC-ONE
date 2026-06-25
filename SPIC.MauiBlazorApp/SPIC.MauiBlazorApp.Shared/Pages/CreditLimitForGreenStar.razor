@@ -1611,8 +1611,12 @@ if (dealerTenure > 0 && !_greenstarValueEntered[5])
     _greenstarValues[5] = dealerTenure;
     _greenstarValueEntered[5] = true;
 }
-        // Row 7: Manual only
-        // Do not auto-feed _greenstarValues[6]
+        // Row 7: Manual only - restore from DB if previously saved
+        if (_proposal.Id > 0 && _proposal.GreenstarMonthlyAvgNetOverdues.HasValue && !_greenstarValueEntered[6])
+        {
+            _greenstarValues[6] = _proposal.GreenstarMonthlyAvgNetOverdues.Value;
+            _greenstarValueEntered[6] = true;
+        }
 
         // Row 8: Fixed Assets = LandTotal + BuildingTotal
         var fixedAssets = LandTotal + BuildingTotal;
@@ -1685,6 +1689,7 @@ if (dealerTenure > 0 && !_greenstarValueEntered[5])
 			_proposal.GQ4Mark = GetGreenstarMark(3);
 			_proposal.GQ5Mark = GetGreenstarMark(4);
 			_proposal.GQ6Mark = GetGreenstarMark(5);
+			_proposal.GreenstarMonthlyAvgNetOverdues = _greenstarValueEntered[6] ? _greenstarValues[6] : null;
 			_proposal.GQ7Mark = GetGreenstarMark(6);
 			_proposal.GQ8Mark = GetGreenstarMark(7);
 			_proposal.GQ9Mark = GetGreenstarMark(8);
