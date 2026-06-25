@@ -506,6 +506,10 @@ namespace SPIC.Core.Entities
         public string? GreenstarTradeDepositNumber { get; set; }
         public string? GreenstarTradeDepositOtherDetails { get; set; }
         public decimal GreenstarTradeDepositAmount { get; set; }
+
+        // Raw valuation values (manually entered, not calculated marks)
+        public double? SpicMonthlyAvgNetOverdues { get; set; }
+        public double? GreenstarMonthlyAvgNetOverdues { get; set; }
     }
     public class DealerCreditLimitSalesPerformance
     {

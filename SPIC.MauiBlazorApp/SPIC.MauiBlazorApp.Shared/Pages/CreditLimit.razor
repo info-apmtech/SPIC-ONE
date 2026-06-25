@@ -1110,6 +1110,7 @@
 			_proposal.Q3Mark = GetSpicMark(2);
 			_proposal.Q4Mark = GetSpicMark(3);
 			_proposal.Q5Mark = GetSpicMark(4);
+			_proposal.SpicMonthlyAvgNetOverdues = _spicValueEntered[5] ? _spicValues[5] : null;
 			_proposal.Q6Mark = GetSpicMark(5);
 			_proposal.Q7Mark = GetSpicMark(6);
 			_proposal.Q8Mark = GetSpicMark(7);
@@ -1326,8 +1327,12 @@
 			_spicValueEntered[4] = true;
 		}
 
-		// Row 6: Manual only
-		// Do not auto-feed _spicValues[5]
+		// Row 6: Manual only - restore from DB if previously saved
+		if (_proposal.Id > 0 && _proposal.SpicMonthlyAvgNetOverdues.HasValue && !_spicValueEntered[5])
+		{
+			_spicValues[5] = _proposal.SpicMonthlyAvgNetOverdues.Value;
+			_spicValueEntered[5] = true;
+		}
 
 		// Row 7: Fixed Assets = LandTotal + BuildingTotal
 		var fixedAssets = LandTotal + BuildingTotal;
