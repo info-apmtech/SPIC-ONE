@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Text.RegularExpressions;
 using Tesseract;
+using System.Text.RegularExpressions;
 
 namespace SpicAPI.Controllers
 {
@@ -95,59 +97,68 @@ namespace SpicAPI.Controllers
             return Ok(new { FilePath = relativePath });
         }
 
-        [HttpPost("ocr-extract")]
-        public async Task<IActionResult> OcrExtract(IFormFile file)
-        {
-            if (file == null || file.Length == 0)
-                return Ok(new { Aadhaar = (string?)null, PAN = (string?)null, GST = (string?)null });
+		[HttpPost("ocr-extract")]
+		public async Task<IActionResult> OcrExtract(IFormFile file)
+		{
+			if (file == null || file.Length == 0)
+				return Ok(new { Aadhaar = (string?)null, PAN = (string?)null, GST = (string?)null });
 
-            string? extractedAadhaar = null;
-            string? extractedPan = null;
-            string? extractedGst = null;
+			string? extractedAadhaar = null;
+			string? extractedPan = null;
+			string? extractedGst = null;
 
-            try
-            {
-                var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-                var imageExts = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+			try
+			{
+				var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+				var imageExts = new[] { ".jpg", ".jpeg", ".png", ".webp" };
 
-                if (!imageExts.Contains(ext) && ext != ".pdf")
-                    return Ok(new { Aadhaar = extractedAadhaar, PAN = extractedPan, GST = extractedGst });
+				if (!imageExts.Contains(ext) && ext != ".pdf")
+					return Ok(new { Aadhaar = extractedAadhaar, PAN = extractedPan, GST = extractedGst });
 
-                if (imageExts.Contains(ext))
-                {
-                    using var ms = new MemoryStream();
-                    await file.CopyToAsync(ms);
-                    ms.Position = 0;
-                    (extractedAadhaar, extractedPan, extractedGst) = OcrImageBytes(ms.ToArray());
-                }
-                else
-                {
-                    var tempDir = Path.Combine(_env.ContentRootPath, "Uploads", "_temp");
-                    Directory.CreateDirectory(tempDir);
-                    var tempFile = Path.Combine(tempDir, $"ocr_{DateTime.Now:yyyyMMddHHmmssfff}_{file.FileName}");
-                    try
-                    {
-                        await using (var fs = new FileStream(tempFile, FileMode.Create))
-                            await file.CopyToAsync(fs);
+				if (imageExts.Contains(ext))
+				{
+					using var ms = new MemoryStream();
+					await file.CopyToAsync(ms);
+					ms.Position = 0;
 
-                        (extractedAadhaar, extractedPan, extractedGst) = ExtractFromPdf(tempFile);
-                    }
-                    finally
-                    {
-                        if (System.IO.File.Exists(tempFile))
-                            System.IO.File.Delete(tempFile);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                //_logger.LogWarning(ex, "OCR extraction failed for file {FileName}", file.FileName);
-            }
+					(extractedAadhaar, extractedPan, extractedGst) = OcrImageBytes(ms.ToArray());
+				}
+				else
+				{
+					var tempDir = Path.Combine(_env.ContentRootPath, "Uploads", "_temp");
+					Directory.CreateDirectory(tempDir);
 
-            return Ok(new { Aadhaar = extractedAadhaar, PAN = extractedPan, GST = extractedGst });
-        }
+					var safeFileName = Path.GetFileName(file.FileName);
+					var tempFile = Path.Combine(tempDir, $"ocr_{DateTime.Now:yyyyMMddHHmmssfff}_{safeFileName}");
 
-        private (string? aadhaar, string? pan, string? gst) ExtractFromPdf(string pdfPath)
+					try
+					{
+						await using (var fs = new FileStream(tempFile, FileMode.Create))
+							await file.CopyToAsync(fs);
+
+						(extractedAadhaar, extractedPan, extractedGst) = ExtractFromPdf(tempFile);
+					}
+					finally
+					{
+						if (System.IO.File.Exists(tempFile))
+							System.IO.File.Delete(tempFile);
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, "OCR extraction failed for file {FileName}", file.FileName);
+			}
+
+			return Ok(new
+			{
+				Aadhaar = extractedAadhaar,
+				PAN = extractedPan,
+				GST = extractedGst
+			});
+		}
+
+		private (string? aadhaar, string? pan, string? gst) ExtractFromPdf(string pdfPath)
         {
             // Step 1: Try direct text extraction via PdfPig (for text-based PDFs)
             string? aadhaar, pan, gst;
@@ -528,49 +539,78 @@ namespace SpicAPI.Controllers
             return (accountNumber, ifsc, branch, accountHolderName);
         }
 
-        private static (string? aadhaar, string? pan, string? gst) ExtractValuesFromText(string text)
-        {
-            string? aadhaar = null, pan = null, gst = null;
+		private static (string? aadhaar, string? pan, string? gst) ExtractValuesFromText(string text)
+		{
+			string? aadhaar = null;
+			string? pan = null;
+			string? gst = null;
 
-            // Aadhaar: try with optional spaces first, then bare 12 digits
-            var aadhaarMatch = System.Text.RegularExpressions.Regex.Match(text, "(\\d{4}\\s?\\d{4}\\s?\\d{4})|(\\d{12})");
-            if (aadhaarMatch.Success)
-                aadhaar = aadhaarMatch.Value.Replace(" ", "");
+			text ??= "";
 
-            // PAN: try exact match first
-            var panMatch = System.Text.RegularExpressions.Regex.Match(text, "[A-Z]{5}[0-9]{4}[A-Z]{1}", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (panMatch.Success)
-                pan = panMatch.Value.ToUpperInvariant();
+			var normalized = Regex.Replace(text, @"\r\n|\n|\r", " ");
+			normalized = Regex.Replace(normalized, @"\s+", " ").Trim();
 
-            // GST: try exact match first
-            var gstMatch = System.Text.RegularExpressions.Regex.Match(text, "\\d{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (gstMatch.Success)
-                gst = gstMatch.Value.ToUpperInvariant();
+			// PAN
+			var panMatch = Regex.Match(normalized, @"\b[A-Z]{5}[0-9]{4}[A-Z]\b", RegexOptions.IgnoreCase);
+			if (panMatch.Success)
+				pan = panMatch.Value.ToUpperInvariant();
 
-            // If any value still missing, retry on space-stripped text (OCR/PdfPig may insert spaces)
-            if (pan == null || gst == null)
-            {
-                var compact = text.Replace(" ", "");
+			// GST
+			var gstMatch = Regex.Match(normalized, @"\b\d{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b", RegexOptions.IgnoreCase);
+			if (gstMatch.Success)
+				gst = gstMatch.Value.ToUpperInvariant();
 
-                if (pan == null)
-                {
-                    panMatch = System.Text.RegularExpressions.Regex.Match(compact, "[A-Z]{5}[0-9]{4}[A-Z]{1}", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                    if (panMatch.Success)
-                        pan = panMatch.Value.ToUpperInvariant();
-                }
+			// IMPORTANT: remove any 16 digit VID first
+			normalized = Regex.Replace(
+				normalized,
+				@"(?<!\d)\d{4}\s?\d{4}\s?\d{4}\s?\d{4}(?!\d)",
+				" ",
+				RegexOptions.IgnoreCase);
 
-                if (gst == null)
-                {
-                    gstMatch = System.Text.RegularExpressions.Regex.Match(compact, "\\d{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                    if (gstMatch.Success)
-                        gst = gstMatch.Value.ToUpperInvariant();
-                }
-            }
+			// Remove masked Aadhaar also
+			normalized = Regex.Replace(
+				normalized,
+				@"(?:X|x|\*){4}\s?(?:X|x|\*){4}\s?\d{4}",
+				" ",
+				RegexOptions.IgnoreCase);
 
-            return (aadhaar, pan, gst);
-        }
+			// Extract Aadhaar only after removing VID
+			var aadhaarMatches = Regex.Matches(
+				normalized,
+				@"(?<!\d)\d{4}\s?\d{4}\s?\d{4}(?!\d)"
+			);
 
-        [HttpDelete("delete")]
+			foreach (Match match in aadhaarMatches)
+			{
+				var candidate = Regex.Replace(match.Value, @"\D", "");
+
+				if (IsValidAadhaarCandidate(candidate))
+				{
+					aadhaar = candidate;
+					break;
+				}
+			}
+
+			return (aadhaar, pan, gst);
+		}
+
+		private static bool IsValidAadhaarCandidate(string candidate)
+		{
+			candidate = Regex.Replace(candidate ?? "", @"\D", "");
+
+			if (candidate.Length != 12)
+				return false;
+
+			if (candidate.StartsWith("0") || candidate.StartsWith("1"))
+				return false;
+
+			if (Regex.IsMatch(candidate, @"^(\d)\1{11}$"))
+				return false;
+
+			return true;
+		}
+
+		[HttpDelete("delete")]
         public IActionResult DeleteFile([FromQuery] string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
