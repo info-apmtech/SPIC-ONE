@@ -129,11 +129,11 @@ namespace SpicAPI.Controllers
 
             // ── Pre-load phase: pull all needed reference data into memory before the loop.
             //    This reduces DB round-trips from O(N) to at most 3 queries per upload, regardless of file size.
-            var existingNames   = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // zone / state name dedup
-            var existingKeys    = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // "name|parentId" dedup
-            var zoneNameToId    = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var stateNameToId   = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var regionNameToId  = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var existingNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // zone / state name dedup
+            var existingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // "name|parentId" dedup
+            var zoneNameToId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var stateNameToId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var regionNameToId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             // districtName → [(districtId, stateId)] for state-context narrowing in subdistrict upload
             var districtsByName = new Dictionary<string, List<(int Id, int StateId)>>(StringComparer.OrdinalIgnoreCase);
 
@@ -186,7 +186,7 @@ namespace SpicAPI.Controllers
 
             // In-batch duplicate tracking (separate from DB-existing sets so error messages stay distinct)
             var batchNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // zone / state
-            var batchKeys  = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // "name|parentId"
+            var batchKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // "name|parentId"
 
             // ── Local FK resolvers: use pre-loaded dicts — zero DB calls inside the loop ──
             bool TryResolveZoneId(IXLRow row, out int id)
@@ -260,7 +260,9 @@ namespace SpicAPI.Controllers
                                         ZoneCode = GetCellString(row, headerMap, "zonecode"),
                                         ZoneColorCode = GetCellString(row, headerMap, "zonecolorcode"),
                                         IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload"
+                                        CreatedAt = now,
+                                        UpdatedAt = now,
+                                        UpdatedBy = "bulk-upload"
                                     });
                                 }
                                 break;
@@ -284,7 +286,9 @@ namespace SpicAPI.Controllers
                                         StateName = stateName,
                                         ZoneId = zoneId,
                                         IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload"
+                                        CreatedAt = now,
+                                        UpdatedAt = now,
+                                        UpdatedBy = "bulk-upload"
                                     });
                                 }
                                 break;
@@ -309,7 +313,9 @@ namespace SpicAPI.Controllers
                                         DistrictName = districtName,
                                         StateId = stateId,
                                         IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload"
+                                        CreatedAt = now,
+                                        UpdatedAt = now,
+                                        UpdatedBy = "bulk-upload"
                                     });
                                 }
                                 break;
@@ -336,7 +342,9 @@ namespace SpicAPI.Controllers
                                         SubDistrictName = subName,
                                         DistrictId = districtId,
                                         IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload"
+                                        CreatedAt = now,
+                                        UpdatedAt = now,
+                                        UpdatedBy = "bulk-upload"
                                     });
                                 }
                                 break;
@@ -361,7 +369,9 @@ namespace SpicAPI.Controllers
                                         RegionName = regionName,
                                         StateId = stateId,
                                         IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload"
+                                        CreatedAt = now,
+                                        UpdatedAt = now,
+                                        UpdatedBy = "bulk-upload"
                                     });
                                 }
                                 break;
@@ -386,7 +396,9 @@ namespace SpicAPI.Controllers
                                         HeadquarterName = hqName,
                                         RegionId = regionId,
                                         IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload"
+                                        CreatedAt = now,
+                                        UpdatedAt = now,
+                                        UpdatedBy = "bulk-upload"
                                     });
                                 }
                                 break;
@@ -413,6 +425,87 @@ namespace SpicAPI.Controllers
 
             var totalSkipped = groupedErrors.Values.Sum(v => v.Count);
             return Ok(new { Success = true, Message = "Upload completed", GroupedErrors = groupedErrors, TotalSkipped = totalSkipped });
+        }
+
+        // GET /api/locationbulkupload/sample-template?type=zone
+        [HttpGet("sample-template")]
+        public IActionResult SampleTemplate([FromQuery] string type)
+        {
+            var t = type?.ToLowerInvariant() ?? "";
+
+            (string Header, string Sample)[] columns = t switch
+            {
+                "zone" => new[]
+                {
+            ("ZoneName", "North Zone"),
+            ("ZoneCode", "NZ"),
+            ("ZoneColorCode", "#3B82F6"),
+            ("IsActive", "TRUE")
+        },
+                "state" => new[]
+                {
+            ("StateName", "Tamil Nadu"),
+            ("ZoneName", "South Zone"),
+            ("IsActive", "TRUE")
+        },
+                "district" => new[]
+                {
+            ("DistrictName", "Chennai"),
+            ("StateName", "Tamil Nadu"),
+            ("IsActive", "TRUE")
+        },
+                "subdistrict" or "sub-district" or "sub_district" => new[]
+                {
+            ("SubDistrictName", "Egmore"),
+            ("DistrictName", "Chennai"),
+            ("StateName", "Tamil Nadu"),
+            ("IsActive", "TRUE")
+        },
+                "region" => new[]
+                {
+            ("RegionName", "Chennai Region"),
+            ("StateName", "Tamil Nadu"),
+            ("IsActive", "TRUE")
+        },
+                "headquarter" or "headquarters" => new[]
+                {
+            ("HeadquarterName", "Chennai HQ"),
+            ("RegionName", "Chennai Region"),
+            ("IsActive", "TRUE")
+        },
+                _ => Array.Empty<(string, string)>()
+            };
+
+            if (columns.Length == 0)
+                return BadRequest(new { Success = false, Message = "Unknown type. Use Zone, State, District, SubDistrict, Region, Headquarter" });
+
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("Template");
+
+            for (int i = 0; i < columns.Length; i++)
+            {
+                var headerCell = ws.Cell(1, i + 1);
+                headerCell.Value = columns[i].Header;
+                headerCell.Style.Font.Bold = true;
+                headerCell.Style.Fill.BackgroundColor = XLColor.FromHtml("#059669");
+                headerCell.Style.Font.FontColor = XLColor.White;
+                headerCell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                // sample data row (guidance for the user)
+                ws.Cell(2, i + 1).Value = columns[i].Sample;
+            }
+
+            ws.Columns().AdjustToContents();
+            ws.SheetView.FreezeRows(1);
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            var bytes = ms.ToArray();
+
+            var fileName = $"{type}_Sample_Template.xlsx";
+            return File(bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                fileName);
         }
 
         private static int? ParseIntCell(IXLCell cell)

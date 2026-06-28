@@ -29,7 +29,14 @@
 	<div class="main-card">
 		<div class="section-header">
 			<h3 class="section-title">@(_isEditing ? $"Edit {GetSingularName(ActiveTab)}" : $"Add New {GetSingularName(ActiveTab)}")</h3>
-			<button class="btn-outline-green" style="width:12%;" @onclick="() => _showUploadModal = true"><i class="bi bi-cloud-arrow-up"></i> Bulk Upload</button>
+			<div class="d-flex gap-2">
+				<button class="btn-outline-green" @onclick="DownloadSampleTemplate">
+					<i class="bi bi-file-earmark-excel"></i> Sample Format
+				</button>
+				<button class="btn-outline-green" @onclick="() => _showUploadModal = true">
+					<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
+				</button>
+			</div>
 		</div>
 
 		<div class="row g-3 mb-4">
@@ -357,6 +364,7 @@
 						</div>
 					}
 
+
 @code {
 	private readonly List<string> TabOptions = ["Crops", "Competitors", "Sector", "Units", "Categories", "Product Groups", "Products"];
 
@@ -540,7 +548,31 @@
 
 		return cols;
 	}
+	private async Task DownloadSampleTemplate()
+	{
+		var typeMap = ActiveTab.ToLowerInvariant();
+		if (typeMap == "crops") typeMap = "crop";
+		else if (typeMap == "competitors") typeMap = "competitor";
+		else if (typeMap == "sector") typeMap = "sector";
+		else if (typeMap == "units") typeMap = "unit";
+		else if (typeMap == "categories") typeMap = "category";
+		else if (typeMap == "product groups") typeMap = "productgroup";
+		else if (typeMap == "products") typeMap = "product";
 
+		try
+		{
+			var bytes = await Http.GetByteArrayAsync($"api/agriculturebulkupload/sample-template?type={typeMap}");
+			var base64 = Convert.ToBase64String(bytes);
+			await JS.InvokeVoidAsync("downloadFileFromBytes",
+				$"{ActiveTab}_Sample_Template.xlsx",
+				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				base64);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to download sample template: {ex.Message}", true);
+		}
+	}
 	private void ApplyFilter()
 	{
 		_filteredItems = CurrentAllItems

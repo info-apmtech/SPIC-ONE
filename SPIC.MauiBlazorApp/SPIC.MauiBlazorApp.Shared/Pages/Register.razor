@@ -1293,20 +1293,20 @@
         _isEditMode = true;
 
         // Prefer enum (EntityType) if present, otherwise fallback to legacy IsDealer
-        if (_model.EntityType.HasValue)
+        int? entityCode = null;
+
+        if (_model.DealerType is 0 or 1 or 2)
+            entityCode = _model.DealerType;
+        else if (_model.EntityType is 0 or 1 or 2)
+            entityCode = _model.EntityType;
+
+        selected = entityCode switch
         {
-            selected = _model.EntityType.Value switch
-            {
-                0 => "Dealer",
-                1 => "Department",
-                2 => "Institution",
-                _ => (_model.IsDealer ? "Dealer" : "Department")
-            };
-        }
-        else
-        {
-            selected = _model.IsDealer ? "Dealer" : "Department";
-        }
+            0 => "Dealer",
+            1 => "Department",
+            2 => "Institution",
+            _ => (_model.IsDealer ? "Dealer" : "Department")
+        };
 
         if (!preserveCompanySelection)
         {

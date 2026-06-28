@@ -66,9 +66,14 @@
 	<div class="main-card">
 		<div class="section-header">
 			<h3 class="section-title">@(_isEditing ? $"Edit {GetSingularName(ActiveTab)}" : $"Add New {GetSingularName(ActiveTab)}")</h3>
-			<button class="btn-outline-green" style="width: 12%;" @onclick="() => _showUploadModal = true">
-				<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
-			</button>
+			<div class="d-flex gap-2">
+				<button class="btn-outline-green" @onclick="DownloadSampleTemplate">
+					<i class="bi bi-file-earmark-excel"></i> Sample Format
+				</button>
+				<button class="btn-outline-green" @onclick="() => _showUploadModal = true">
+					<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
+				</button>
+			</div>
 		</div>
 
 		<div class="row g-3 mb-4">
@@ -796,7 +801,33 @@
 
 		return cols;
 	}
+	private async Task DownloadSampleTemplate()
+	{
+		var typeMap = ActiveTab.ToLowerInvariant() switch
+		{
+			"zones" => "zone",
+			"states" => "state",
+			"districts" => "district",
+			var s when s.Contains("sub") => "subdistrict",
+			"regions" => "region",
+			var s when s.Contains("headquarter") => "headquarter",
+			_ => ActiveTab.ToLowerInvariant()
+		};
 
+		try
+		{
+			var bytes = await Http.GetByteArrayAsync($"api/locationbulkupload/sample-template?type={typeMap}");
+			var base64 = Convert.ToBase64String(bytes);
+			await JS.InvokeVoidAsync("downloadFileFromBytes",
+				$"{ActiveTab}_Sample_Template.xlsx",
+				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				base64);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to download sample template: {ex.Message}", true);
+		}
+	}
 	private void ApplyFilter()
 	{
 		_filteredItems = CurrentAllItems
