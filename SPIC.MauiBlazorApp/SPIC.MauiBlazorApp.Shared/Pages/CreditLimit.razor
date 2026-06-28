@@ -852,17 +852,17 @@
 			BuildSalesPerfRows();
 		}
 
-	private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financialYearId)
-	{
-		if (financialYearId <= 0)
-			return null;
+private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financialYearId)
+{
+	if (financialYearId <= 0)
+		return null;
 
-		return _creditLimitSalesData.FirstOrDefault(x =>
-			x.CustomerId == _dealer.Id &&
-			x.ProductGroupId == _selectedCategoryId &&
-			x.ProductId == productId &&
-			x.FinancialYearId == financialYearId);
-	}
+	return _creditLimitSalesData.FirstOrDefault(x =>
+		x.CustomerId == _dealer.Id &&
+		x.CategoryId == _selectedCategoryId &&     // FIXED: was ProductGroupId
+		x.ProductId == productId &&
+		x.FinancialYearId == financialYearId);
+}
 
 	private static decimal ConvertToLakhs(decimal grossAmount)
 	{
@@ -1212,7 +1212,7 @@
 	private bool IsUreaCreditLimitSalesRow(DealerCreditLimitSales row)
 	{
 		var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
-		var category = _categories.FirstOrDefault(c => c.Id == row.ProductGroupId);
+		var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
 
 		return IsFertilizerCategory(category) && IsUreaProduct(product);
 	}
