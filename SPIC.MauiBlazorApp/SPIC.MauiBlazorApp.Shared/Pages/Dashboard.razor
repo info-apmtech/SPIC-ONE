@@ -20,6 +20,10 @@
             <NavLink href="/Register" class="btn-create-new text-decoration-none">
                 <i class="bi bi-plus-lg"></i> Create New Registration
             </NavLink>
+            <button class="btn-create-new" @onclick="DownloadSampleTemplate"
+                    style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
+                <i class="bi bi-file-earmark-excel"></i> Sample Format
+            </button>
             <button class="btn-create-new" @onclick="() => _showImportModal = true"
                     style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
                 <i class="bi bi-cloud-arrow-up"></i> Import from Excel
@@ -696,7 +700,23 @@
         2 => "Terminated",
         _ => "Unknown"
     };
-
+    private async Task DownloadSampleTemplate()
+    {
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync("api/dealerbulkupload/sample-template");
+            var fileName = "Dealer_Import_Sample_Template.xlsx";
+            var dataUri = $"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{Convert.ToBase64String(bytes)}";
+            var js = $@"var a = document.createElement('a'); a.href = '{dataUri}'; a.download = '{fileName}'; document.body.appendChild(a); a.click(); document.body.removeChild(a);";
+            await JSRuntime.InvokeVoidAsync("eval", js);
+        }
+        catch (Exception ex)
+        {
+            _importResult = $"Failed to download sample template: {ex.Message}";
+            _importSuccess = false;
+            _showImportModal = true;
+        }
+    }
     private async Task OnImportFileSelected(InputFileChangeEventArgs e)
     {
         var file = e.File;

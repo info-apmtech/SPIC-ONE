@@ -439,6 +439,85 @@ namespace SpicAPI.Controllers
                 GroupedErrors = groupedErrors
             });
         }
+        // GET /api/EmployeeBulkUpload/sample-template
+        [HttpGet("sample-template")]
+        public IActionResult SampleTemplate()
+        {
+            var headers = new[]
+            {
+        "EmployeeID", "EmpName", "UserName", "Permission",
+        "State", "Region", "HQ", "PhoneNumber", "EmailID", "Designation"
+    };
+
+            // Sample rows that demonstrate each role tier's location requirement
+            var sampleRows = new[]
+            {
+        // MO/MDO/JMDO -> State + Region + HQ
+        new[] { "EMP001", "Ravi Kumar", "ravi.kumar", "MO", "Tamil Nadu", "Chennai Region", "Chennai HQ", "9876543210", "ravi@example.com", "Field Officer" },
+        // RM/RMD -> State + Region
+        new[] { "EMP002", "Priya S", "priya.s", "RM", "Tamil Nadu", "Chennai Region", "", "9876543211", "priya@example.com", "" },
+        // SMD/SMM -> State only
+        new[] { "EMP003", "Arun M", "arun.m", "SMM", "Tamil Nadu", "", "", "9876543212", "arun@example.com", "" },
+    };
+
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("Employees");
+
+            // Header row
+            for (int i = 0; i < headers.Length; i++)
+            {
+                var cell = ws.Cell(1, i + 1);
+                cell.Value = headers[i];
+                cell.Style.Font.Bold = true;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#059669");
+                cell.Style.Font.FontColor = XLColor.White;
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+
+            // Sample data rows
+            for (int r = 0; r < sampleRows.Length; r++)
+                for (int c = 0; c < sampleRows[r].Length; c++)
+                    ws.Cell(r + 2, c + 1).Value = sampleRows[r][c];
+
+            ws.Columns().AdjustToContents();
+            ws.SheetView.FreezeRows(1);
+
+            // Instructions sheet so rules stay attached to the file
+            var notes = wb.Worksheets.Add("Instructions");
+            var lines = new[]
+            {
+        "Bulk Upload - Employee Instructions",
+        "",
+        "Required columns: EmployeeID, EmpName, UserName, Permission, State, Region, HQ, PhoneNumber, EmailID, Designation",
+        "",
+        "PhoneNumber is used as the login password (minimum 6 characters).",
+        "Designation is optional. If given, it must match an existing ACTIVE designation name.",
+        "",
+        "Role -> Required location columns:",
+        "  SMD, SMM    -> State",
+        "  RM, RMD     -> State + Region",
+        "  MDO, MO, JMDO -> State + Region + HQ",
+        "",
+        "State must already exist in master data.",
+        "Region / HQ are auto-created if missing (only when their parent State/Region is valid).",
+        "UserName must be unique - duplicates are skipped.",
+    };
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var cell = notes.Cell(i + 1, 1);
+                cell.Value = lines[i];
+                if (i == 0) { cell.Style.Font.Bold = true; cell.Style.Font.FontSize = 13; }
+            }
+            notes.Column(1).Width = 90;
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            var bytes = ms.ToArray();
+
+            return File(bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "Employee_Sample_Template.xlsx");
+        }
 
         private static string NormalizeHeader(string h) =>
             (h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("-", "").ToLowerInvariant();

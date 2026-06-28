@@ -19,6 +19,9 @@
             <div class="page-subtitle">Manage employees, roles, and location-based login assignments</div>
         </div>
         <div class="d-flex gap-2 align-items-center">
+            <button class="btn-outline-green emp-action-btn" @onclick="DownloadSampleTemplate">
+                <i class="bi bi-file-earmark-excel"></i> Sample Format
+            </button>
             <button class="btn-outline-green emp-action-btn" @onclick="() => _showUploadModal = true">
                 <i class="bi bi-cloud-arrow-up"></i> Bulk Upload
             </button>
@@ -229,7 +232,22 @@
             new ExportColumn<EmployeeGridItem> { Header = "State", ValueSelector = item => item.StateName }
         };
     }
-
+    private async Task DownloadSampleTemplate()
+    {
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync("api/EmployeeBulkUpload/sample-template");
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBytes",
+                "Employee_Sample_Template.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                base64);
+        }
+        catch (Exception ex)
+        {
+            _uploadResult = $"Failed to download sample template: {ex.Message}";
+        }
+    }
     private void ApplyFilter()
     {
         var q = (_searchText ?? string.Empty).Trim();
