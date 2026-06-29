@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
+using System.Xml.Linq;
 
 namespace SPIC.Core.Entities
 {
@@ -162,8 +163,14 @@ namespace SPIC.Core.Entities
         //infra
         public decimal OwnGodownCapacity { get; set; }
         public decimal RentGodownCapacity { get; set; }
+		[Display(Name = "Legal Name")]
+		public string? GSTLegalName { get; set; }
+		[Display(Name = "Trade Name")]
+		public string? GSTTradeName { get; set; }
+		[Display(Name = "Constitution of Business")]
+		public string? GSTConstitutionofBusiness { get; set; }
 
-    }
+	}
     public class DealerApprovalHistory
     {
         public int Id { get; set; }
