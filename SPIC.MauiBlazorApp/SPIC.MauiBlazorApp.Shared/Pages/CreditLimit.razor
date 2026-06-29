@@ -944,20 +944,20 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 	}
 
 	private decimal GetFYTotalQtyByCategory(int fyIdx) => _salesPerfViewRows.Sum(r => fyIdx switch
-	{
-		0 => r.FY1Qty,
-		1 => r.FY2Qty,
-		2 => r.FY3Qty,
-		_ => 0
-	});
+{
+    0 => r.FY1Qty ?? 0,
+    1 => r.FY2Qty ?? 0,
+    2 => r.FY3Qty ?? 0,
+    _ => 0m
+});
 
 	private decimal GetFYTotalAmountByCategory(int fyIdx) => _salesPerfViewRows.Sum(r => fyIdx switch
-	{
-		0 => r.FY1Amount,
-		1 => r.FY2Amount,
-		2 => r.FY3Amount,
-		_ => 0
-	});
+{
+    0 => r.FY1Amount ?? 0,
+    1 => r.FY2Amount ?? 0,
+    2 => r.FY3Amount ?? 0,
+    _ => 0m
+});
 
 	private decimal GetFYTotalQty(int fyIdx) => GetFYTotalQtyByCategory(fyIdx);
 
@@ -1177,17 +1177,64 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 
 	private void SetFixedFinancialYears()
 	{
-		// Only completed financial years (EndDate in the past)
-		var completedYears = _financialYears
-			.Where(fy => fy.EndDate <= DateTime.Today)
-			.OrderByDescending(fy => fy.EndDate)
-			.Take(3)
-			.OrderBy(fy => fy.EndDate)  // oldest → newest left to right
+		var years = GetReviewFinancialYears();
+		_proposal.FY1 = years.Count > 0 ? years[0].Id : 0;
+		_proposal.FY2 = years.Count > 1 ? years[1].Id : 0;
+		_proposal.FY3 = years.Count > 2 ? years[2].Id : 0;
+	}
+
+	// Returns 2023-24, 2024-25, 2025-26 style: the 3 completed FYs
+	// immediately before the current financial year (April–March).
+	private List<FinancialYear> GetReviewFinancialYears()
+	{
+		var today = DateTime.Today;
+		int currentFyStartYear = today.Month >= 4 ? today.Year : today.Year - 1;
+
+		var wantedStartYears = new[]
+		{
+			currentFyStartYear - 3,
+			currentFyStartYear - 2,
+			currentFyStartYear - 1
+		};
+
+		var matched = _financialYears
+			.Where(fy => wantedStartYears.Contains(GetFyStartYear(fy)))
+			.OrderBy(fy => GetFyStartYear(fy))   // oldest -> newest, left to right
 			.ToList();
 
-		_proposal.FY1 = completedYears.Count > 0 ? completedYears[0].Id : 0;
-		_proposal.FY2 = completedYears.Count > 1 ? completedYears[1].Id : 0;
-		_proposal.FY3 = completedYears.Count > 2 ? completedYears[2].Id : 0;
+		// Fallback: if naming/dates don't line up, take the 3 most recent FYs we have
+		if (matched.Count == 0)
+		{
+			matched = _financialYears
+				.OrderByDescending(fy => fy.EndDate)
+				.ThenByDescending(fy => fy.Id)
+				.Take(3)
+				.OrderBy(fy => fy.EndDate)
+				.ThenBy(fy => fy.Id)
+				.ToList();
+		}
+
+		return matched;
+	}
+
+	// Derives the FY start year. Prefers StartDate, falls back to parsing the Name
+	// (handles "2023-24", "2023-2024", "FY 2023-24", "2023/24", etc.), then EndDate.
+	private int GetFyStartYear(FinancialYear fy)
+	{
+		if (fy.StartDate != default && fy.StartDate.Year > 1)
+			return fy.StartDate.Year;
+
+		if (!string.IsNullOrWhiteSpace(fy.Name))
+		{
+			var match = System.Text.RegularExpressions.Regex.Match(fy.Name, @"(\d{4})");
+			if (match.Success && int.TryParse(match.Groups[1].Value, out var y))
+				return y;
+		}
+
+		if (fy.EndDate != default && fy.EndDate.Year > 1)
+			return fy.EndDate.Month >= 4 ? fy.EndDate.Year : fy.EndDate.Year - 1;
+
+		return 0;
 	}
 	private bool IsUreaProduct(Product? product)
 {
@@ -1365,11 +1412,6 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 	}
 	private List<int> GetCompletedFYIds()
 	{
-		return _financialYears
-			.Where(fy => fy.EndDate <= DateTime.Today)
-			.OrderByDescending(fy => fy.EndDate)
-			.Take(3)
-			.Select(fy => fy.Id)
-			.ToList();
+		return GetReviewFinancialYears().Select(fy => fy.Id).ToList();
 	}
 }

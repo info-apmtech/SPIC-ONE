@@ -620,34 +620,54 @@
     }
 
     private IEnumerable<GroupData> _groupedRows
+{
+    get
     {
-        get
+        var selectedCategory = _categories.FirstOrDefault(c => c.Id == _selectedCategoryId);
+
+        // Fertilizer category -> only two buckets: Urea vs Other Products
+        if (IsFertilizerCategory(selectedCategory))
         {
             return _currentRows
                 .GroupBy(r =>
                 {
                     var product = _products.FirstOrDefault(p => p.Id == r.ProductId);
-                    return product?.ProductGroupId;
+                    return product != null && IsUreaProduct(product); // true = Urea, false = Other
                 })
-                .OrderBy(g =>
+                .OrderByDescending(g => g.Key) // Urea first (optional)
+                .Select(g => new GroupData
                 {
-                    if (g.Key == null) return "";
-                    var pg = _productGroups.FirstOrDefault(p => p.Id == g.Key);
-                    return pg?.Name ?? "";
-                })
-                .Select(g =>
-                {
-                    var pg = g.Key.HasValue ? _productGroups.FirstOrDefault(p => p.Id == g.Key.Value) : null;
-                    return new GroupData
-                    {
-                        ProductGroupId = g.Key,
-                        GroupName = pg?.Name ?? "Uncategorized",
-                        Rows = g.ToList()
-                    };
+                    ProductGroupId = g.Key ? -1 : -2, // sentinel keys for expand/collapse
+                    GroupName = g.Key ? "Fertilizer - Urea" : "Fertilizer - Other Products",
+                    Rows = g.ToList()
                 });
         }
-    }
 
+        // Default: group by ProductGroupId (Specialty, etc.)
+        return _currentRows
+            .GroupBy(r =>
+            {
+                var product = _products.FirstOrDefault(p => p.Id == r.ProductId);
+                return product?.ProductGroupId;
+            })
+            .OrderBy(g =>
+            {
+                if (g.Key == null) return "";
+                var pg = _productGroups.FirstOrDefault(p => p.Id == g.Key);
+                return pg?.Name ?? "";
+            })
+            .Select(g =>
+            {
+                var pg = g.Key.HasValue ? _productGroups.FirstOrDefault(p => p.Id == g.Key.Value) : null;
+                return new GroupData
+                {
+                    ProductGroupId = g.Key,
+                    GroupName = pg?.Name ?? "Uncategorized",
+                    Rows = g.ToList()
+                };
+            });
+    }
+}
     private void ToggleGroup(int? productGroupId)
     {
         if (_expandedGroups.Contains(productGroupId))

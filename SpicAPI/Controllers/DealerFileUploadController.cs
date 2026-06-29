@@ -109,9 +109,9 @@ namespace SpicAPI.Controllers
 					Aadhaar = (string?)null,
 					PAN = (string?)null,
 					GST = (string?)null,
-					LegalName = (string?)null,
-					TradeName = (string?)null,
-					GSTConstitution = (string?)null
+					GSTLegalName = (string?)null,
+					GSTTradeName = (string?)null,
+					GSTConstitutionofBusiness = (string?)null
 				});
 
 			string? extractedAadhaar = null;
@@ -127,7 +127,7 @@ namespace SpicAPI.Controllers
 				var imageExts = new[] { ".jpg", ".jpeg", ".png", ".webp" };
 
 				if (!imageExts.Contains(ext) && ext != ".pdf")
-					return Ok(new { Aadhaar = extractedAadhaar, PAN = extractedPan, GST = extractedGst, LegalName = legalName, TradeName = tradeName, GSTConstitution = gstConstitution });
+					return Ok(new { Aadhaar = extractedAadhaar, PAN = extractedPan, GST = extractedGst, GSTLegalName = legalName, GSTTradeName = tradeName, GSTConstitutionofBusiness = gstConstitution });
 
 				if (imageExts.Contains(ext))
 				{
@@ -169,9 +169,9 @@ namespace SpicAPI.Controllers
 				Aadhaar = extractedAadhaar,
 				PAN = extractedPan,
 				GST = extractedGst,
-				LegalName = legalName,
-				TradeName = tradeName,
-				GSTConstitution = gstConstitution
+				GSTLegalName = legalName,
+				GSTTradeName = tradeName,
+				GSTConstitutionofBusiness = gstConstitution
 			});
 		}
 

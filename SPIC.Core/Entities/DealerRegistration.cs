@@ -579,13 +579,13 @@ namespace SPIC.Core.Entities
         public int ProductId { get; set; }
         public string ProductName { get; set; } = "";
 
-        public decimal FY1Qty { get; set; }
-        public decimal FY1Amount { get; set; }
+        public decimal? FY1Qty { get; set; }
+        public decimal? FY1Amount { get; set; }
 
-        public decimal FY2Qty { get; set; }
-        public decimal FY2Amount { get; set; }
+        public decimal? FY2Qty { get; set; }
+        public decimal? FY2Amount { get; set; }
 
-        public decimal FY3Qty { get; set; }
-        public decimal FY3Amount { get; set; }
+        public decimal? FY3Qty { get; set; }
+        public decimal? FY3Amount { get; set; }
     }
 }

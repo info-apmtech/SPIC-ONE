@@ -639,42 +639,46 @@
 	}
 
 	// ── OSRM road distance with Haversine fallback ──
-	private async Task<double> ComputeDistanceAsync(string? googleUrl)
-	{
-		if (!_dealerLat.HasValue || !_dealerLng.HasValue) return 0;
-		var coords = ParseGoogleUrl(googleUrl);
-		if (coords == null) return 0;
+	// ── OSRM road distance with Haversine fallback ──
+private async Task<double> ComputeDistanceAsync(string? googleUrl)
+{
+    if (!_dealerLat.HasValue || !_dealerLng.HasValue) return 0;
+    var coords = ParseGoogleUrl(googleUrl);
+    if (coords == null) return 0;
 
-		var destLat = coords.Value.lat;
-		var destLng = coords.Value.lng;
-		var originLat = _dealerLat.Value;
-		var originLng = _dealerLng.Value;
+    var destLat = coords.Value.lat;
+    var destLng = coords.Value.lng;
+    var originLat = _dealerLat.Value;
+    var originLng = _dealerLng.Value;
 
-		// Try OSRM (driving route via roads) first
-		try
-		{
-			var url = $"https://router.project-osrm.org/route/v1/driving/" +
-					  $"{originLng.ToString(CultureInfo.InvariantCulture)},{originLat.ToString(CultureInfo.InvariantCulture)};" +
-					  $"{destLng.ToString(CultureInfo.InvariantCulture)},{destLat.ToString(CultureInfo.InvariantCulture)}" +
-					  $"?overview=false";
+    // Try OSRM (driving route via roads) first — use a PLAIN client,
+    // not the authed app HttpClient (avoids AuthHttpMessageHandler + TLS handshake issues)
+    try
+    {
+        var url = $"https://router.project-osrm.org/route/v1/driving/" +
+                  $"{originLng.ToString(CultureInfo.InvariantCulture)},{originLat.ToString(CultureInfo.InvariantCulture)};" +
+                  $"{destLng.ToString(CultureInfo.InvariantCulture)},{destLat.ToString(CultureInfo.InvariantCulture)}" +
+                  $"?overview=false";
 
-			var osrm = await Http.GetFromJsonAsync<OsrmResponse>(url);
-			if (osrm != null
-				&& string.Equals(osrm.Code, "Ok", StringComparison.OrdinalIgnoreCase)
-				&& osrm.Routes != null
-				&& osrm.Routes.Count > 0)
-			{
-				return Math.Round(osrm.Routes[0].Distance / 1000.0, 1);
-			}
-		}
-		catch
-		{
-			// Network / parsing / CORS issue — fall back to Haversine below
-		}
+        using var osrmClient = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        var osrm = await osrmClient.GetFromJsonAsync<OsrmResponse>(url);
 
-		// Fallback: straight-line distance
-		return Math.Round(CalculateDistanceKm(originLat, originLng, destLat, destLng), 1);
-	}
+        if (osrm != null
+            && string.Equals(osrm.Code, "Ok", StringComparison.OrdinalIgnoreCase)
+            && osrm.Routes != null
+            && osrm.Routes.Count > 0)
+        {
+            return Math.Round(osrm.Routes[0].Distance / 1000.0, 1);
+        }
+    }
+    catch
+    {
+        // Network / TLS / rate-limit issue — fall back to Haversine below
+    }
+
+    // Fallback: straight-line distance
+    return Math.Round(CalculateDistanceKm(originLat, originLng, destLat, destLng), 1);
+}
 
 	// ── Warehouse ──
 	private async Task OnWarehouseSelected(ChangeEventArgs e)
