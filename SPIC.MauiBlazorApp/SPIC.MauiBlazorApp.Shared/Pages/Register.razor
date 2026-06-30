@@ -1344,15 +1344,16 @@
         _basicInfoHqId = _model.HQ;
         _parentDealerId = _model.ParentDealer;
 
-        status = _model.Status switch
-        {
-            0 => "Active",
-            1 => "Inactive",
-            2 => "Terminated",
-            _ => "Active"
-        };
+       status = _model.Status switch
+{
+    DealerStatus.Active => "Active",
+    DealerStatus.InActive => "Inactive",
+    DealerStatus.Terminated => "Terminated",
+    _ => "Active"
+};
 
-        _inactiveProposal = (FutureBusinessProposal?)_model.InactiveProposal ?? FutureBusinessProposal.FutureBusiness;
+_inactiveProposal = _model.InactiveProposal ?? FutureBusinessProposal.FutureBusiness;
+
 
         _filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
         _filteredHeadquarters = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
@@ -1898,15 +1899,17 @@
             _model.Region = _basicInfoRegionId;
             _model.HQ = _basicInfoHqId;
             _model.ParentDealer = _parentDealerId;
-            _model.InactiveProposal = status == "Inactive" ? (int)_inactiveProposal : null;
+           _model.InactiveProposal = status == "Inactive"
+    ? _inactiveProposal
+    : null;
 
-            _model.Status = status switch
-            {
-                "Active" => 0,
-                "Inactive" => 1,
-                "Terminated" => 2,
-                _ => 0
-            };
+_model.Status = status switch
+{
+    "Active" => DealerStatus.Active,
+    "Inactive" => DealerStatus.InActive,
+    "Terminated" => DealerStatus.Terminated,
+    _ => DealerStatus.Active
+};
 
             // _model.UserTableId = LoginState.UserId ?? "";
             _model.FirmName ??= "";
@@ -2726,7 +2729,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         public int StateId { get; set; }
         public int Region { get; set; }
         public int HQ { get; set; }
-        public int Status { get; set; }
+        //public int Status { get; set; }
         public int ParentDealer { get; set; }
         public string? FirmName { get; set; }
         public DateTime? DateOfAppointment { get; set; }
@@ -2804,7 +2807,8 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
        public string? GSTLegalName { get; set; }
 public string? GSTTradeName { get; set; }
 public string? GSTConstitutionofBusiness { get; set; }
-        public int? InactiveProposal { get; set; }
+public DealerStatus Status { get; set; }
+public FutureBusinessProposal? InactiveProposal { get; set; }
     }
 
     
