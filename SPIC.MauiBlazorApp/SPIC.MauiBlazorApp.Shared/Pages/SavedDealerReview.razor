@@ -49,6 +49,15 @@
     private Dictionary<string, string> _userNames = new();
     private List<UserInfoDto> _users = new();
 
+    private decimal? _rmCreditLimitSpic;
+    private decimal? _rmCreditLimitGfl;
+    private decimal? _smCreditLimitSpic;
+    private decimal? _smCreditLimitGfl;
+    private decimal? _avpCreditLimitSpic;
+    private decimal? _avpCreditLimitGfl;
+    private decimal? _previousRmCreditLimitGfl;
+    private decimal? _previousSmCreditLimitGfl;
+
     // Lookup names
     private string? _stateName;
     private string? _regionName;
@@ -497,24 +506,46 @@ private decimal GetGflMoRecommendedLimit()
     private decimal? _previousRmCreditLimit;
     private decimal? _previousSmCreditLimit;
 
-    private void ShowConfirmProceedPopup()
-    {
-        ConfirmRemarks = ""; 
-        _rmCreditLimit = null;
-        _smCreditLimit = null;
-        _avpCreditLimit = null;
+private void ShowConfirmProceedPopup()
+{
+    ConfirmRemarks = ""; 
+    _rmCreditLimitSpic = null;
+    _rmCreditLimitGfl = null;
+    _smCreditLimitSpic = null;
+    _smCreditLimitGfl = null;
+    _avpCreditLimitSpic = null;
+    _avpCreditLimitGfl = null;
 
-        var rmApproval = _approvalHistory?.FirstOrDefault(h => h.RmCreditLimit.HasValue && h.IsApproved);
-        _previousRmCreditLimit = rmApproval?.RmCreditLimit;
+    // Fetch RM approved limits (both SPIC and GFL)
+    var rmSpicApproval = _approvalHistory?
+        .Where(h => h.IsApproved)
+        .OrderByDescending(h => h.ApprovedAt)
+        .FirstOrDefault(h => h.RmCreditLimit.HasValue && h.RmCreditLimit > 0);
+    _previousRmCreditLimit = rmSpicApproval?.RmCreditLimit;
 
-        var smApproval = _approvalHistory?.FirstOrDefault(h => h.SmCreditLimit.HasValue && h.IsApproved);
-        _previousSmCreditLimit = smApproval?.SmCreditLimit;
+    var rmGflApproval = _approvalHistory?
+        .Where(h => h.IsApproved)
+        .OrderByDescending(h => h.ApprovedAt)
+        .FirstOrDefault(h => h.RmCreditLimitGfl.HasValue && h.RmCreditLimitGfl > 0);
+    _previousRmCreditLimitGfl = rmGflApproval?.RmCreditLimitGfl;
 
-        IsConfirmProceedPopupVisible = true;
-        StateHasChanged();
-    }
+    // Fetch SM approved limits (both SPIC and GFL)
+    var smSpicApproval = _approvalHistory?
+        .Where(h => h.IsApproved)
+        .OrderByDescending(h => h.ApprovedAt)
+        .FirstOrDefault(h => h.SmCreditLimit.HasValue && h.SmCreditLimit > 0);
+    _previousSmCreditLimit = smSpicApproval?.SmCreditLimit;
 
-    private void HideConfirmProceedPopup()
+    var smGflApproval = _approvalHistory?
+        .Where(h => h.IsApproved)
+        .OrderByDescending(h => h.ApprovedAt)
+        .FirstOrDefault(h => h.SmCreditLimitGfl.HasValue && h.SmCreditLimitGfl > 0);
+    _previousSmCreditLimitGfl = smGflApproval?.SmCreditLimitGfl;
+
+    IsConfirmProceedPopupVisible = true;
+    StateHasChanged();
+}
+private void HideConfirmProceedPopup()
     {
         IsConfirmProceedPopupVisible = false;
         StateHasChanged();
@@ -538,67 +569,67 @@ private decimal GetGflMoRecommendedLimit()
         return "Next Stage";
     }
 
-    private async Task ApproveDealer()
+private async Task ApproveDealer()
+{
+    if (_dealer == null) return;
+
+    _isApproving = true;
+    StateHasChanged(); 
+
+    try
     {
-        if (_dealer == null) return;
-
-        _isApproving = true;
-        StateHasChanged(); 
-
-        try
+        if (LoginState.IsRMGroup)
         {
-            if (LoginState.IsRMGroup)
-            {
-                _dealer.RMApproved = true;
-                if (_dealer.SMApproved == false) _dealer.SMApproved = null;
-            }
-            else if (LoginState.IsSMGroup)
-            {
-                _dealer.SMApproved = true;
-                if (_dealer.AVPApproved == false) _dealer.AVPApproved = null;
-            }
-            else if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
-            {
-                _dealer.AVPApproved = true;
-                _dealer.Status = DR.DealerStatus.Active;
-            }
-
-            var response = await Http.PutAsJsonAsync($"api/DealerRegistration/{_dealer.Id}", _dealer);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var role = LoginState.UserRole?.ToString() ?? "";
-                var history = new DR.DealerApprovalHistory
-                {
-                    DealerId = _dealer.Id,
-                    ApprovedBy = LoginState.UserId ?? "",
-                    Role = role,
-                    ApprovedAt = DateTime.Now,
-                    Remarks = string.IsNullOrWhiteSpace(ConfirmRemarks) ? "" : ConfirmRemarks,
-                    IsApproved = true,
-                    RmCreditLimit = _rmCreditLimit,
-                    SmCreditLimit = _smCreditLimit,
-                    AvpCreditLimit = _avpCreditLimit
-                };
-                try { await Http.PostAsJsonAsync("api/DealerApprovalHistory", history); } catch { }
-
-                IsConfirmProceedPopupVisible = false;
-                _showSuccessNotification = true;
-                StateHasChanged();
-                await Task.Delay(3000);
-                _showSuccessNotification = false;
-                Nav.NavigateTo("/Dashboard");
-            }
+            _dealer.RMApproved = true;
+            if (_dealer.SMApproved == false) _dealer.SMApproved = null;
         }
-        finally
+        else if (LoginState.IsSMGroup)
         {
-            _isApproving = false;
+            _dealer.SMApproved = true;
+            if (_dealer.AVPApproved == false) _dealer.AVPApproved = null;
+        }
+        else if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
+        {
+            _dealer.AVPApproved = true;
+            _dealer.Status = DR.DealerStatus.Active;
+        }
+
+        var response = await Http.PutAsJsonAsync($"api/DealerRegistration/{_dealer.Id}", _dealer);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var role = LoginState.UserRole?.ToString() ?? "";
+            var history = new DR.DealerApprovalHistory
+            {
+                DealerId = _dealer.Id,
+                ApprovedBy = LoginState.UserId ?? "",
+                Role = role,
+                ApprovedAt = DateTime.Now,
+                Remarks = string.IsNullOrWhiteSpace(ConfirmRemarks) ? "" : ConfirmRemarks,
+                IsApproved = true,
+                RmCreditLimit = _rmCreditLimitSpic,
+                RmCreditLimitGfl = _rmCreditLimitGfl,
+                SmCreditLimit = _smCreditLimitSpic,
+                SmCreditLimitGfl = _smCreditLimitGfl,
+                AvpCreditLimit = _avpCreditLimitSpic,
+                AvpCreditLimitGfl = _avpCreditLimitGfl
+            };
+            try { await Http.PostAsJsonAsync("api/DealerApprovalHistory", history); } catch { }
+
+            IsConfirmProceedPopupVisible = false;
+            _showSuccessNotification = true;
             StateHasChanged();
+            await Task.Delay(3000);
+            _showSuccessNotification = false;
+            Nav.NavigateTo("/Dashboard");
         }
     }
-
-
-    public record TimelineItem(
+    finally
+    {
+        _isApproving = false;
+        StateHasChanged();
+    }
+}    public record TimelineItem(
         string Title,
         string Status,
         string UserName,
@@ -1104,9 +1135,9 @@ private decimal GetGflMoRecommendedLimit()
             .cp-summary-label { color: #6b7280; flex: 0 0 130px; }
             .cp-summary-value { color: #1f2937; font-weight: 600; }
             .cp-credit-section { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-            .cp-credit-field { flex: 1; min-width: 180px; }
-            .cp-credit-field label { display: block; font-size: 0.75rem; font-weight: 600; color: #374151; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
-            .cp-credit-field input, .cp-credit-field .cp-credit-readonly { width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.85rem; color: #374151; outline: none; transition: border-color 0.2s; height: 36px; }
+            .cp-credit-field { flex: 1; min-width: 180px; display: flex; flex-direction: column; }
+            .cp-credit-field label { display: block; font-size: 0.75rem; font-weight: 600; color: #374151; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; min-height: 28px; line-height: 1.3; }
+            .cp-credit-field input, .cp-credit-field .cp-credit-readonly { margin-top: auto; }
             .cp-credit-field input:focus { border-color: #115e59; box-shadow: 0 0 0 2px rgba(17, 94, 89, 0.1); }
             .cp-credit-field .cp-credit-readonly { background: #f3f4f6; color: #4b5563; font-weight: 600; display: flex; align-items: center; }
             .cp-remarks-section { margin-bottom: 12px; }
@@ -1147,9 +1178,13 @@ private decimal GetGflMoRecommendedLimit()
                         <section class="cp-summary-section">
                             <h2 class="cp-section-title">Application Summary</h2>
                             <div class="cp-summary-grid">
-                                <div class="cp-summary-item">
+                                @* <div class="cp-summary-item">
                                     <span class="cp-summary-label">Ref No</span>
                                     <span class="cp-summary-value">@(_dealer?.DealerCode ?? $"DL-{_dealer?.Id}")</span>
+                                </div> *@
+                                <div class="cp-summary-item">
+                                    <span class="cp-summary-label">Dealer ID</span>
+                                    <span class="cp-summary-value">@(_dealer?.Id.ToString() ?? "-")</span>
                                 </div>
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Dealer Name</span>
@@ -1179,54 +1214,97 @@ private decimal GetGflMoRecommendedLimit()
                             <textarea class="cp-remarks-input" @bind="ConfirmRemarks" placeholder="Enter Remarks Optional"></textarea>
                         </section>
 
-                        @if (LoginState.IsRMGroup)
-                        {
-                            <section class="cp-credit-section">
-                                <div class="cp-credit-field">
-                                    <label>RM Credit Limit</label>
-                                    <input type="number" step="0.01" @bind="_rmCreditLimit" placeholder="Enter RM Credit Limit" />
-                                </div>
-                            </section>
-                        }
-                        @if (LoginState.IsSMGroup)
-                        {
-                            <section class="cp-credit-section">
-                                @if (_previousRmCreditLimit.HasValue)
-                                {
-                                    <div class="cp-credit-field">
-                                        <label>RM Credit Limit (Approved)</label>
-                                        <div class="cp-credit-readonly">₹ @_previousRmCreditLimit.Value.ToString("N2")</div>
-                                    </div>
-                                }
-                                <div class="cp-credit-field">
-                                    <label>SM Credit Limit</label>
-                                    <input type="number" step="0.01" @bind="_smCreditLimit" placeholder="Enter SM Credit Limit" />
-                                </div>
-                            </section>
-                        }
-                        @if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
-                        {
-                            <section class="cp-credit-section">
-                                @if (_previousRmCreditLimit.HasValue)
-                                {
-                                    <div class="cp-credit-field">
-                                        <label>RM Credit Limit (Approved)</label>
-                                        <div class="cp-credit-readonly">₹ @_previousRmCreditLimit.Value.ToString("N2")</div>
-                                    </div>
-                                }
-                                @if (_previousSmCreditLimit.HasValue)
-                                {
-                                    <div class="cp-credit-field">
-                                        <label>SM Credit Limit (Approved)</label>
-                                        <div class="cp-credit-readonly">₹ @_previousSmCreditLimit.Value.ToString("N2")</div>
-                                    </div>
-                                }
-                                <div class="cp-credit-field">
-                                    <label>AVP Credit Limit</label>
-                                    <input type="number" step="0.01" @bind="_avpCreditLimit" placeholder="Enter AVP Credit Limit" />
-                                </div>
-                            </section>
-                        }
+                       @if (LoginState.IsRMGroup)
+{
+    <section class="cp-credit-section">
+        <div class="cp-credit-field">
+            <label>RM Credit Limit (SPIC)</label>
+            <input type="number" step="0.01" @bind="_rmCreditLimitSpic" placeholder="Enter RM Credit Limit (SPIC)" />
+        </div>
+        <div class="cp-credit-field">
+            <label>RM Credit Limit (GFL)</label>
+            <input type="number" step="0.01" @bind="_rmCreditLimitGfl" placeholder="Enter RM Credit Limit (GFL)" />
+        </div>
+    </section>
+}
+@if (LoginState.IsSMGroup)
+{
+    <section class="cp-credit-section">
+        @{
+            var rmSpicApproval = _approvalHistory?.FirstOrDefault(h => h.RmCreditLimit.HasValue && h.IsApproved);
+            var rmGflApproval = _approvalHistory?.FirstOrDefault(h => h.RmCreditLimitGfl.HasValue && h.IsApproved);
+        }
+        @if (rmSpicApproval?.RmCreditLimit.HasValue == true)
+        {
+            <div class="cp-credit-field">
+                <label>RM Credit Limit (SPIC) (Approved)</label>
+                <div class="cp-credit-readonly">₹ @rmSpicApproval.RmCreditLimit.Value.ToString("N2")</div>
+            </div>
+        }
+        @if (rmGflApproval?.RmCreditLimitGfl.HasValue == true)
+        {
+            <div class="cp-credit-field">
+                <label>RM Credit Limit (GFL) (Approved)</label>
+                <div class="cp-credit-readonly">₹ @rmGflApproval.RmCreditLimitGfl.Value.ToString("N2")</div>
+            </div>
+        }
+        <div class="cp-credit-field">
+            <label>SM Credit Limit (SPIC)</label>
+            <input type="number" step="0.01" @bind="_smCreditLimitSpic" placeholder="Enter SM Credit Limit (SPIC)" />
+        </div>
+        <div class="cp-credit-field">
+            <label>SM Credit Limit (GFL)</label>
+            <input type="number" step="0.01" @bind="_smCreditLimitGfl" placeholder="Enter SM Credit Limit (GFL)" />
+        </div>
+    </section>
+}
+@if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
+{
+    <section class="cp-credit-section">
+        @{
+            var rmSpicApproval = _approvalHistory?.FirstOrDefault(h => h.RmCreditLimit.HasValue && h.IsApproved);
+            var rmGflApproval = _approvalHistory?.FirstOrDefault(h => h.RmCreditLimitGfl.HasValue && h.IsApproved);
+            var smSpicApproval = _approvalHistory?.FirstOrDefault(h => h.SmCreditLimit.HasValue && h.IsApproved);
+            var smGflApproval = _approvalHistory?.FirstOrDefault(h => h.SmCreditLimitGfl.HasValue && h.IsApproved);
+        }
+        @if (rmSpicApproval?.RmCreditLimit.HasValue == true)
+        {
+            <div class="cp-credit-field">
+                <label>RM Credit Limit (SPIC) (Approved)</label>
+                <div class="cp-credit-readonly">₹ @rmSpicApproval.RmCreditLimit.Value.ToString("N2")</div>
+            </div>
+        }
+        @if (rmGflApproval?.RmCreditLimitGfl.HasValue == true)
+        {
+            <div class="cp-credit-field">
+                <label>RM Credit Limit (GFL) (Approved)</label>
+                <div class="cp-credit-readonly">₹ @rmGflApproval.RmCreditLimitGfl.Value.ToString("N2")</div>
+            </div>
+        }
+        @if (smSpicApproval?.SmCreditLimit.HasValue == true)
+        {
+            <div class="cp-credit-field">
+                <label>SM Credit Limit (SPIC) (Approved)</label>
+                <div class="cp-credit-readonly">₹ @smSpicApproval.SmCreditLimit.Value.ToString("N2")</div>
+            </div>
+        }
+        @if (smGflApproval?.SmCreditLimitGfl.HasValue == true)
+        {
+            <div class="cp-credit-field">
+                <label>SM Credit Limit (GFL) (Approved)</label>
+                <div class="cp-credit-readonly">₹ @smGflApproval.SmCreditLimitGfl.Value.ToString("N2")</div>
+            </div>
+        }
+        <div class="cp-credit-field">
+            <label>AVP Credit Limit (SPIC)</label>
+            <input type="number" step="0.01" @bind="_avpCreditLimitSpic" placeholder="Enter AVP Credit Limit (SPIC)" />
+        </div>
+        <div class="cp-credit-field">
+            <label>AVP Credit Limit (GFL)</label>
+            <input type="number" step="0.01" @bind="_avpCreditLimitGfl" placeholder="Enter AVP Credit Limit (GFL)" />
+        </div>
+    </section>
+}
 
                         <div class="cp-info-alert">
                             <div class="cp-alert-icon">
