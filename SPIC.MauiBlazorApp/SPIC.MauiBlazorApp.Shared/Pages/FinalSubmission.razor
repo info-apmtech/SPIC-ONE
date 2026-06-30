@@ -526,12 +526,15 @@
 @code {
     [SupplyParameterFromQuery(Name = "dealerId")]
     public int DealerId { get; set; }
+
     [SupplyParameterFromQuery(Name = "mode")]
     public string? Mode { get; set; }
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
     private DealerReg _dealer = new();
     private DealerRegistrationDocuments? _docs;
+
     private List<DealerOwnershipInfo> _partners = new();
     private List<DealerExperience> _experiences = new();
     private List<AnnualSaleDataLastFYofDealerRegistration> _annualSales = new();
@@ -547,6 +550,7 @@
     private DealerCreditLimitProposal? _creditLimit;
 
     private bool[] _stepStatus = new bool[11];
+
     private List<SectionItem> _finalSubmissionSections
     {
         get
@@ -565,15 +569,17 @@
             };
 
             if (_dealer.InSpic)
-                list.Add(new SectionItem("Credit Limit \u2014 SPIC", "/CreditLimit", "bi bi-credit-card", () => _stepStatus[9]));
+                list.Add(new SectionItem("Credit Limit — SPIC", "/CreditLimit", "bi bi-credit-card", () => _stepStatus[9]));
 
             if (_dealer.InGreenStar)
-                list.Add(new SectionItem("Credit Limit \u2014 GreenStar", "/CreditLimitForGreenStar", "bi bi-star", () => !_dealer.InGreenStar || _creditLimit != null));
+                list.Add(new SectionItem("Credit Limit — GreenStar", "/CreditLimitForGreenStar", "bi bi-star", () => !_dealer.InGreenStar || _creditLimit != null));
 
             return list;
         }
     }
+
     private List<EnclosureItem> _enclosureItems = new();
+
     private int _docUploadedCount;
     private int _docTotalCount;
     private int _docMissingCount;
@@ -588,47 +594,57 @@
     private int _progressPercent;
 
     private bool _isSoleProprietor => _dealer.EntityType == EntityType.soleProprietor;
-    private bool _hasWholesaleLicense => !string.IsNullOrEmpty(_dealer.WholeSaleFertilizerLicenseNumber);
-    private bool _hasRetailLicense => !string.IsNullOrEmpty(_dealer.RetailFertilizerLicenseNumber);
-    private bool _isRetailerListRequired => !_hasRetailLicense || _hasWholesaleLicense;
 
-    private bool _showPartnershipDeed
-    {
-        get
-        {
-            var t = _dealer.BusinessEntityType?.Trim();
-            if (string.IsNullOrEmpty(t)) return false;
-            return t.Contains("Partnership", StringComparison.OrdinalIgnoreCase) ||
-                   t.Equals("LLP", StringComparison.OrdinalIgnoreCase);
-        }
-    }
+    private bool _hasWholesaleLicense =>
+        !string.IsNullOrEmpty(_dealer.WholeSaleFertilizerLicenseNumber);
 
+    private bool _hasRetailLicense =>
+        !string.IsNullOrEmpty(_dealer.RetailFertilizerLicenseNumber);
+
+    private bool _isRetailerListRequired =>
+        !_hasRetailLicense || _hasWholesaleLicense;
+
+    // Deed of Guarantee optional for all business types
+    private bool _isDeedOfGuaranteeRequired => false;
+
+    // Partnership Deed mandatory only for Partnership firm
+    private bool _showPartnershipDeed =>
+        _dealer.EntityType == EntityType.Partnership;
+
+    // Keep old Authorization Letter flow unchanged
     private bool _showAuthorizationLetter
     {
         get
         {
             var t = _dealer.BusinessEntityType?.Trim();
             if (string.IsNullOrEmpty(t)) return false;
+
             if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
                 t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
                 return false;
+
             return true;
         }
     }
 
+    // Keep old Board Resolution flow unchanged
     private bool _showBoardResolution
     {
         get
         {
             var t = _dealer.BusinessEntityType?.Trim();
             if (string.IsNullOrEmpty(t)) return false;
+
             if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
                 t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
                 return false;
+
             if (t.Contains("Partnership", StringComparison.OrdinalIgnoreCase))
                 return false;
+
             if (t.Equals("LLP", StringComparison.OrdinalIgnoreCase))
                 return false;
+
             return true;
         }
     }
@@ -636,28 +652,30 @@
     protected override async Task OnInitializedAsync()
     {
         Loading.Show();
+
         try
         {
-        await Task.WhenAll(
-            LoadDealer(),
-            LoadExperiences(),
-            LoadAnnualSales(),
-            LoadWarehouses(),
-            LoadRailFacilities(),
-            LoadPortFacilities(),
-            LoadMarketDetails(),
-            LoadCompanies(),
-            LoadPartners(),
-            LoadSalesPlans(),
-            LoadAssetBanks(),
-            LoadAssetLands(),
-            LoadAssetBuildings(),
-            LoadCreditLimit(),
-            LoadDocuments()
-        );
-        BuildEnclosureItems();
-        CalculateStepStatus();
-        CalculateProgress();
+            await Task.WhenAll(
+                LoadDealer(),
+                LoadExperiences(),
+                LoadAnnualSales(),
+                LoadWarehouses(),
+                LoadRailFacilities(),
+                LoadPortFacilities(),
+                LoadMarketDetails(),
+                LoadCompanies(),
+                LoadPartners(),
+                LoadSalesPlans(),
+                LoadAssetBanks(),
+                LoadAssetLands(),
+                LoadAssetBuildings(),
+                LoadCreditLimit(),
+                LoadDocuments()
+            );
+
+            BuildEnclosureItems();
+            CalculateStepStatus();
+            CalculateProgress();
         }
         finally
         {
@@ -667,82 +685,162 @@
 
     private async Task LoadDealer()
     {
-        try { var d = await Http.GetFromJsonAsync<DealerReg>($"api/DealerRegistration/{DealerId}"); if (d != null) _dealer = d; } catch { }
+        try
+        {
+            var d = await Http.GetFromJsonAsync<DealerReg>($"api/DealerRegistration/{DealerId}");
+            if (d != null) _dealer = d;
+        }
+        catch { }
     }
 
     private async Task LoadExperiences()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience/all") ?? new(); _experiences = all.Where(e => e.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience/all") ?? new();
+            _experiences = all.Where(e => e.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadAnnualSales()
     {
-        try { var all = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all") ?? new(); _annualSales = all.Where(a => a.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all") ?? new();
+            _annualSales = all.Where(a => a.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadWarehouses()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new(); _warehouses = all.Where(w => w.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new();
+            _warehouses = all.Where(w => w.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadRailFacilities()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities/all") ?? new(); _railFacilities = all.Where(r => r.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities/all") ?? new();
+            _railFacilities = all.Where(r => r.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadPortFacilities()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities/all") ?? new(); _portFacilities = all.Where(p => p.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities/all") ?? new();
+            _portFacilities = all.Where(p => p.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadMarketDetails()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new(); _marketDetails = all.Where(m => m.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new();
+            _marketDetails = all.Where(m => m.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadCompanies()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new(); _companies = all.Where(c => c.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new();
+            _companies = all.Where(c => c.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadPartners()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all") ?? new(); _partners = all.Where(p => p.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all") ?? new();
+            _partners = all.Where(p => p.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadSalesPlans()
     {
-        try { var all = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new(); _salesPlans = all.Where(s => s.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new();
+            _salesPlans = all.Where(s => s.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadAssetBanks()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new(); _assetBanks = all.Where(a => a.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new();
+            _assetBanks = all.Where(a => a.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadAssetLands()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand/all") ?? new(); _assetLands = all.Where(a => a.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand/all") ?? new();
+            _assetLands = all.Where(a => a.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadAssetBuildings()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all") ?? new(); _assetBuildings = all.Where(a => a.DealerId == DealerId).ToList(); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all") ?? new();
+            _assetBuildings = all.Where(a => a.DealerId == DealerId).ToList();
+        }
+        catch { }
     }
 
     private async Task LoadCreditLimit()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all") ?? new(); _creditLimit = all.FirstOrDefault(c => c.DealerId == DealerId); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all") ?? new();
+            _creditLimit = all.FirstOrDefault(c => c.DealerId == DealerId);
+        }
+        catch { }
     }
 
     private async Task LoadDocuments()
     {
-        try { var all = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments/all") ?? new(); _docs = all.FirstOrDefault(d => d.DealerId == DealerId); } catch { }
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments/all") ?? new();
+            _docs = all.FirstOrDefault(d => d.DealerId == DealerId);
+        }
+        catch { }
     }
 
     private void CalculateStepStatus()
     {
-        _stepStatus[0] = !string.IsNullOrEmpty(_dealer.FirmName) && _dealer.StateId > 0 && !string.IsNullOrEmpty(_dealer.OfficialContactNumber) && _dealer.BankId > 0;
+        _stepStatus[0] =
+            !string.IsNullOrEmpty(_dealer.FirmName) &&
+            _dealer.StateId > 0 &&
+            !string.IsNullOrEmpty(_dealer.OfficialContactNumber) &&
+            _dealer.BankId > 0;
+
         _stepStatus[1] = _experiences.Count > 0;
         _stepStatus[2] = _annualSales.Count > 0;
         _stepStatus[3] = _warehouses.Count > 0 || _railFacilities.Count > 0 || _portFacilities.Count > 0;
@@ -752,17 +850,10 @@
         _stepStatus[7] = _salesPlans.Count > 0;
         _stepStatus[8] = _assetBanks.Count > 0 || _assetLands.Count > 0 || _assetBuildings.Count > 0;
         _stepStatus[9] = _creditLimit != null;
-        var enclosureStepComplete = _docs != null &&
-            !string.IsNullOrEmpty(_docs.BankGauranteeFilePath) &&
-            !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath) &&
-            !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath) &&
-            (!_isRetailerListRequired || !string.IsNullOrEmpty(_docs.RetailerListFilePath)) &&
-            _docMissingCount == 0;
 
-        if (_dealer.InSpic)
-            enclosureStepComplete = enclosureStepComplete && !string.IsNullOrEmpty(_docs.SpecimanFilePath);
-        if (_dealer.InGreenStar)
-            enclosureStepComplete = enclosureStepComplete && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath);
+        // Enclosure complete based on required document list.
+        // Deed of Guarantee is optional, so it is not counted as missing.
+        var enclosureStepComplete = _docs != null && _docMissingCount == 0;
 
         _stepStatus[10] = enclosureStepComplete;
     }
@@ -782,33 +873,54 @@
         if (_dealer.InSpic)
             _enclosureItems.Add(new("SPIC Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.SpecimanFilePath)));
 
+        if (_dealer.InGreenStar)
+            _enclosureItems.Add(new("Greenstar Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath)));
+
+        if (_isRetailerListRequired)
+            _enclosureItems.Add(new("List of Retailers with Complete Details", _docs != null && !string.IsNullOrEmpty(_docs.RetailerListFilePath)));
+
+        if (_hasWholesaleLicense)
+            _enclosureItems.Add(new("Wholesale Fertilizers License", !string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath)));
+
+        if (_hasRetailLicense)
+            _enclosureItems.Add(new("Retail Fertilizers License", !string.IsNullOrEmpty(_dealer.RetailLicenseFilePath)));
+
+        // Partnership Deed mandatory only for Partnership firms
+        if (_showPartnershipDeed)
+        {
+            _enclosureItems.Add(new("Partnership Deed",
+                _docs != null && !string.IsNullOrEmpty(_docs.PartnershipDeadFilePath)));
+        }
+        else if (_docs != null && !string.IsNullOrEmpty(_docs.PartnershipDeadFilePath))
+        {
+            _enclosureItems.Add(new("Partnership Deed", true));
+        }
+
+        // Board Resolution old flow unchanged
+        if (_showBoardResolution)
+        {
+            _enclosureItems.Add(new("Board Resolution",
+                _docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath)));
+        }
+
+        // Authorization Letter old flow unchanged
+        if (_showAuthorizationLetter)
+        {
+            _enclosureItems.Add(new("Authorization Letter",
+                _docs != null && !string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath)));
+        }
+
+        // Optional documents: show only if uploaded
         if (_docs != null && !string.IsNullOrEmpty(_docs.AffidavitFilePath))
             _enclosureItems.Add(new("Affidavit", true));
 
         if (_docs != null && !string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath))
             _enclosureItems.Add(new("Deed of Guarantee", true));
 
-        if (_isRetailerListRequired)
-            _enclosureItems.Add(new("List of Retailers with Complete Details", _docs != null && !string.IsNullOrEmpty(_docs.RetailerListFilePath)));
-
-        if (_dealer.InGreenStar)
-            _enclosureItems.Add(new("Greenstar Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath)));
-
-        if (_hasWholesaleLicense)
-            _enclosureItems.Add(new("Wholesale Fertilizers License", !string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath)));
-        if (_hasRetailLicense)
-            _enclosureItems.Add(new("Retail Fertilizers License", !string.IsNullOrEmpty(_dealer.RetailLicenseFilePath)));
-
-        if (_showPartnershipDeed)
-            _enclosureItems.Add(new("Partnership Deed", _docs != null && !string.IsNullOrEmpty(_docs.PartnershipDeadFilePath)));
-        if (_showBoardResolution)
-            _enclosureItems.Add(new("Board Resolution", _docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath)));
-        if (_showAuthorizationLetter)
-            _enclosureItems.Add(new("Authorization Letter", _docs != null && !string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath)));
-
         foreach (var p in _partners)
         {
             _enclosureItems.Add(new($"Photo — {p.Name}", !string.IsNullOrEmpty(p.ProprietorImagePath)));
+
             if (!_isSoleProprietor)
             {
                 _enclosureItems.Add(new($"Aadhaar — {p.Name}", !string.IsNullOrEmpty(p.AadhaarFilePath)));
@@ -839,7 +951,10 @@
     {
         _completedSections = _stepStatus.Count(s => s);
         _incompleteSections = _totalSections - _completedSections;
-        _progressPercent = _totalSections > 0 ? (int)Math.Round((double)_completedSections / _totalSections * 100) : 0;
+
+        _progressPercent = _totalSections > 0
+            ? (int)Math.Round((double)_completedSections / _totalSections * 100)
+            : 0;
     }
 
     private async Task HandleSubmit()
@@ -862,11 +977,15 @@
                 _dealer.SMApproved = null;
                 _dealer.AVPApproved = null;
             }
+
             _dealer.Status = DealerStatus.Active;
+
             var resp = await Http.PutAsJsonAsync($"api/DealerRegistration/{_dealer.Id}", _dealer);
             resp.EnsureSuccessStatusCode();
+
             SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(13, false);
             ShowMessage("Registration submitted successfully!", false);
+
             await Task.Delay(1500);
             Nav.NavigateTo("/Dashboard");
         }
@@ -885,6 +1004,7 @@
     {
         if (string.IsNullOrEmpty(value)) return "—";
         if (value.Length <= 4) return value;
+
         return new string('*', value.Length - 4) + value[^4..];
     }
 
