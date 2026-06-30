@@ -169,6 +169,8 @@ namespace SPIC.Core.Entities
 		public string? GSTTradeName { get; set; }
 		[Display(Name = "Constitution of Business")]
 		public string? GSTConstitutionofBusiness { get; set; }
+		[Display(Name = "Inactive Proposal")]
+		public FutureBusinessProposal? InactiveProposal { get; set; }
 
 	}
     public class DealerApprovalHistory
@@ -200,6 +202,11 @@ namespace SPIC.Core.Entities
     public enum DealerType
     {
         Dealer, Department, Institution
+    }
+    public enum FutureBusinessProposal
+    {
+        FutureBusiness = 1,
+        Terminated = 2
     }
     public class DealerExperience
     {

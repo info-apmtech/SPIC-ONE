@@ -104,11 +104,13 @@
 
     private string _queryString = string.Empty;
     private bool _hasGreenStar;
+    private bool _isRestrictedFlow;
 
     protected override async Task OnInitializedAsync()
     {
         LoadQueryString();
         SetCurrentStep();
+        _isRestrictedFlow = GetFlowRestricted();
 
         var dealerId = GetDealerIdFromQuery();
 
@@ -131,7 +133,26 @@
             _hasGreenStar = false;
         }
 
-        VisibleSteps = FormStepData.GetVisibleSteps(_hasGreenStar);
+        VisibleSteps = FormStepData.GetVisibleSteps(_hasGreenStar, _isRestrictedFlow);
+    }
+
+    private bool GetFlowRestricted()
+    {
+        var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+        var qIndex = baseRelative.IndexOf('?');
+
+        if (qIndex < 0)
+            return false;
+
+        var queryString = baseRelative[(qIndex + 1)..];
+
+        var parts = queryString.Split('&')
+            .Select(p => p.Split('=', 2))
+            .Where(p => p.Length == 2)
+            .ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
+
+        return parts.TryGetValue("flow", out var flow) &&
+            string.Equals(flow, "restricted", StringComparison.OrdinalIgnoreCase);
     }
 
     private void LoadQueryString()
@@ -202,7 +223,8 @@
 
         var previousRoute = FormStepData.GetPreviousRoute(
             CurrentStep.Route,
-            _hasGreenStar);
+            _hasGreenStar,
+            _isRestrictedFlow);
 
         Nav.NavigateTo(previousRoute + _queryString);
     }
@@ -216,7 +238,8 @@
 
         var nextRoute = FormStepData.GetNextRoute(
             CurrentStep.Route,
-            _hasGreenStar);
+            _hasGreenStar,
+            _isRestrictedFlow);
 
         Nav.NavigateTo(nextRoute + _queryString);
     }

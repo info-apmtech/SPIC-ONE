@@ -139,8 +139,18 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 			}
 		};
 
-		public static List<FormStepModel> GetVisibleSteps(bool hasGreenStar)
+		private static readonly List<string> RestrictedRoutes = new()
 		{
+			"/Register",
+			"/Proprietor",
+			"/Investment"
+		};
+
+		public static List<FormStepModel> GetVisibleSteps(bool hasGreenStar, bool isRestricted = false)
+		{
+			if (isRestricted)
+				return Steps.Where(x => RestrictedRoutes.Contains(x.Route, StringComparer.OrdinalIgnoreCase)).ToList();
+
 			if (hasGreenStar)
 				return Steps;
 
@@ -155,8 +165,20 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 				x.Route.Equals(route, StringComparison.OrdinalIgnoreCase));
 		}
 
-		public static string GetNextRoute(string currentRoute, bool hasGreenStar)
+		public static string GetNextRoute(string currentRoute, bool hasGreenStar, bool isRestricted = false)
 		{
+			if (isRestricted)
+			{
+				if (currentRoute.Equals("/Register", StringComparison.OrdinalIgnoreCase))
+					return "/Proprietor";
+				if (currentRoute.Equals("/Proprietor", StringComparison.OrdinalIgnoreCase))
+					return "/Investment";
+				if (currentRoute.Equals("/Investment", StringComparison.OrdinalIgnoreCase))
+					return "/Dashboard";
+
+				return GetStepByRoute(currentRoute)?.NextRoute ?? "/Dashboard";
+			}
+
 			if (currentRoute.Equals("/CreditLimit", StringComparison.OrdinalIgnoreCase))
 			{
 				return hasGreenStar ? "/CreditLimitForGreenStar" : "/Enclosures";
@@ -165,8 +187,20 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 			return GetStepByRoute(currentRoute)?.NextRoute ?? "/Dashboard";
 		}
 
-		public static string GetPreviousRoute(string currentRoute, bool hasGreenStar)
+		public static string GetPreviousRoute(string currentRoute, bool hasGreenStar, bool isRestricted = false)
 		{
+			if (isRestricted)
+			{
+				if (currentRoute.Equals("/Investment", StringComparison.OrdinalIgnoreCase))
+					return "/Proprietor";
+				if (currentRoute.Equals("/Proprietor", StringComparison.OrdinalIgnoreCase))
+					return "/Register";
+				if (currentRoute.Equals("/Register", StringComparison.OrdinalIgnoreCase))
+					return "/Dashboard";
+
+				return GetStepByRoute(currentRoute)?.PreviousRoute ?? "/Dashboard";
+			}
+
 			if (currentRoute.Equals("/Enclosures", StringComparison.OrdinalIgnoreCase))
 			{
 				return hasGreenStar ? "/CreditLimitForGreenStar" : "/CreditLimit";

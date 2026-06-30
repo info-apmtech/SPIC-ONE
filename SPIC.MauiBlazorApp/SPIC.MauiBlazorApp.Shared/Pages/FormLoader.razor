@@ -48,6 +48,7 @@
 	private FormStepModel? CurrentStep;
 
 	private List<FormStepModel> _visibleSteps = FormStepData.GetVisibleSteps(false);
+	private bool _isRestrictedFlow;
 
 	private List<FormStepModel> StepsList => _visibleSteps;
 
@@ -81,21 +82,41 @@
 	private async Task LoadVisibleSteps()
 	{
 		var dealerId = GetDealerIdFromQuery();
+		_isRestrictedFlow = GetFlowRestricted();
 
 		if (dealerId <= 0)
 		{
 			// Create mode / no dealerId yet
 			// Default should be 12 steps, no GreenStar page
-			_visibleSteps = FormStepData.GetVisibleSteps(false);
+			_visibleSteps = FormStepData.GetVisibleSteps(false, _isRestrictedFlow);
 			SetCurrentStep();
 			return;
 		}
 
 		var hasGreenStar = await HasGreenStarCompany(dealerId);
 
-		_visibleSteps = FormStepData.GetVisibleSteps(hasGreenStar);
+		_visibleSteps = FormStepData.GetVisibleSteps(hasGreenStar, _isRestrictedFlow);
 
 		SetCurrentStep();
+	}
+
+	private bool GetFlowRestricted()
+	{
+		var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+		var qIndex = baseRelative.IndexOf('?');
+
+		if (qIndex < 0)
+			return false;
+
+		var queryString = baseRelative[(qIndex + 1)..];
+
+		var parts = queryString.Split('&')
+			.Select(p => p.Split('=', 2))
+			.Where(p => p.Length == 2)
+			.ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
+
+		return parts.TryGetValue("flow", out var flow) &&
+			string.Equals(flow, "restricted", StringComparison.OrdinalIgnoreCase);
 	}
 
 	private async Task<bool> HasGreenStarCompany(int dealerId)
@@ -195,6 +216,9 @@
 			var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
 			var qIndex = baseRelative.IndexOf('?');
 			var queryString = qIndex >= 0 ? baseRelative[qIndex..] : string.Empty;
+
+			if (_isRestrictedFlow && !queryString.Contains("flow=restricted", StringComparison.OrdinalIgnoreCase))
+				queryString += (queryString.Contains('?') ? "&" : "?") + "flow=restricted";
 
 			Nav.NavigateTo(step.Route + queryString);
 		}

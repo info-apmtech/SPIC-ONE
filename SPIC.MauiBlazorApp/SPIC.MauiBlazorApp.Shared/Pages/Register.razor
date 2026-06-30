@@ -3,6 +3,7 @@
 @using System.Net.Http.Json
 @using System.Text.RegularExpressions
 @using Microsoft.AspNetCore.Components
+@using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Services
 @inject HttpClient Http
 @inject NavigationManager Nav
@@ -430,6 +431,14 @@
                                     Collection
                                 </button>
                             </div>
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Future Business Proposal</label>
+                            <select class="form-select-custom w-100"
+                                    @bind="_inactiveProposal">
+                                <option value="@FutureBusinessProposal.FutureBusiness">Future Business</option>
+                                <option value="@FutureBusinessProposal.Terminated">Terminated</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -1106,6 +1115,7 @@
     public string? Mode { get; set; }
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+    private bool IsRestrictedFlow => status == "Terminated" || (status == "Inactive" && _inactiveProposal == FutureBusinessProposal.Terminated);
 
     private DealerFormModel _model = new()
     {
@@ -1123,6 +1133,7 @@
 
     private string selected = "Dealer";
     private string status = "Active";
+    private FutureBusinessProposal _inactiveProposal = FutureBusinessProposal.FutureBusiness;
 
     private bool IsDealerSelected => selected == "Dealer";
     private bool IsDepartmentSelected => selected == "Department";
@@ -1133,22 +1144,23 @@
 
     // Visibility rules per user requirements
     // Dealer Active: show full sections
-    // Dealer Inactive: show full sections + inactive status
-    // Dealer Terminated: show basic + business + terminated status
-    private bool ShowDealerFullSections => IsDealerSelected && (status == "Active" || status == "Inactive");
+    // Dealer Inactive + Future Business: show full sections + inactive status
+    // Dealer Inactive + Terminated: show only basic + business + inactive status (no full registration sections)
+    // Dealer Terminated: show only basic + business + terminated status
+    private bool ShowDealerFullSections => IsDealerSelected && (status == "Active" || (status == "Inactive" && _inactiveProposal == FutureBusinessProposal.FutureBusiness));
 
     // Department Active: show full sections
-    // Department Inactive: show only business information + inactive status
+    // Department Inactive + Future Business: show only business information + inactive status
     // Department Terminated: show basic + business + terminated status
     private bool ShowDepartmentActiveSections => IsDepartmentSelected && status == "Active";
-    private bool ShowDepartmentBusinessOnlyWhenInactive => IsDepartmentSelected && status == "Inactive";
+    private bool ShowDepartmentBusinessOnlyWhenInactive => IsDepartmentSelected && status == "Inactive" && _inactiveProposal == FutureBusinessProposal.FutureBusiness;
 
     // Institution Active: show full sections
-    // Institution Inactive: show full sections + inactive status
-    // Institution Terminated: show basic + business + terminated status
-    private bool ShowInstitutionFullSections => IsInstitutionSelected && (status == "Active" || status == "Inactive");
+    // Institution Inactive + Future Business: show full sections + inactive status
+    // Institution Terminated: show only basic + business + terminated status
+    private bool ShowInstitutionFullSections => IsInstitutionSelected && (status == "Active" || (status == "Inactive" && _inactiveProposal == FutureBusinessProposal.FutureBusiness));
 
-    private bool ShowFullRegistrationSections => ShowDealerFullSections || ShowDepartmentActiveSections || ShowInstitutionFullSections;
+    private bool ShowFullRegistrationSections => !IsRestrictedFlow && (ShowDealerFullSections || ShowDepartmentActiveSections || ShowInstitutionFullSections);
     private bool isSpic = true;
     private bool isGreenStar = true;
     private bool _isStateLocked;
@@ -1340,6 +1352,8 @@
             _ => "Active"
         };
 
+        _inactiveProposal = (FutureBusinessProposal?)_model.InactiveProposal ?? FutureBusinessProposal.FutureBusiness;
+
         _filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
         _filteredHeadquarters = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
         _filteredDealers = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
@@ -1390,7 +1404,12 @@
     }
 
     void Select(string type) => selected = type;
-    void SelectStatus(string value) => status = value;
+    void SelectStatus(string value)
+    {
+        status = value;
+        if (value != "Inactive")
+            _inactiveProposal = FutureBusinessProposal.FutureBusiness;
+    }
 
     private void ApplyEmployeeLocationDefaults()
     {
@@ -1739,6 +1758,7 @@
         _basicInfoHqId = 0;
         selected = "New Dealer";
         status = "Active";
+        _inactiveProposal = FutureBusinessProposal.FutureBusiness;
         isSpic = true;
         isGreenStar = true;
         _filteredRegions = new();
@@ -1783,7 +1803,7 @@
 
         if (string.IsNullOrWhiteSpace(_model.FirmName)) _errors["FirmName"] = "Firm Name is required";
 
-        if (status == "Inactive")
+        if (status == "Inactive" && !IsRestrictedFlow)
         {
             if (_model.LastTransactionDate == null) _errors["LastTransactionDate"] = "Last Transaction Date is required";
         }
@@ -1878,6 +1898,8 @@
             _model.Region = _basicInfoRegionId;
             _model.HQ = _basicInfoHqId;
             _model.ParentDealer = _parentDealerId;
+            _model.InactiveProposal = status == "Inactive" ? (int)_inactiveProposal : null;
+
             _model.Status = status switch
             {
                 "Active" => 0,
@@ -2008,7 +2030,8 @@
         if (IsViewOnly)
         {
             Loading.Show();
-            Nav.NavigateTo($"/Experience?dealerId={_model.Id}&mode=view");
+            var viewNext = IsRestrictedFlow ? "/Proprietor" : "/Experience";
+            Nav.NavigateTo($"{viewNext}?dealerId={_model.Id}&mode=view");
             return;
         }
 
@@ -2017,7 +2040,10 @@
         {
             SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, false);
             Loading.Show();
-            Nav.NavigateTo($"/Experience?dealerId={_model.Id}");
+            if (IsRestrictedFlow)
+                Nav.NavigateTo($"/Proprietor?dealerId={_model.Id}&flow=restricted");
+            else
+                Nav.NavigateTo($"/Experience?dealerId={_model.Id}");
         }
         else
         {
@@ -2778,6 +2804,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
        public string? GSTLegalName { get; set; }
 public string? GSTTradeName { get; set; }
 public string? GSTConstitutionofBusiness { get; set; }
+        public int? InactiveProposal { get; set; }
     }
 
     

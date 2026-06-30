@@ -720,6 +720,8 @@
     public int? DealerId { get; set; }
     [SupplyParameterFromQuery(Name = "mode")]
     public string? Mode { get; set; }
+    [SupplyParameterFromQuery(Name = "flow")]
+    public string? Flow { get; set; }
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
     private DealerReg _dealer = new();
@@ -1045,7 +1047,8 @@
         if (IsViewOnly)
         {
             Loading.Show();
-            Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}&mode=view");
+            var viewNext = string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase) ? "/Dashboard" : "/CreditLimit";
+            Nav.NavigateTo($"{viewNext}?dealerId={DealerId}&mode=view");
             return;
         }
         if (!DealerId.HasValue || DealerId.Value <= 0)
@@ -1060,7 +1063,10 @@
             var response = await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", _dealer);
             response.EnsureSuccessStatusCode();
             FormStepData.MarkStepError(9, false);
-            Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}");
+            if (string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase))
+                Nav.NavigateTo($"/Dashboard?dealerId={DealerId}");
+            else
+                Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}");
         }
         catch (Exception ex)
         {

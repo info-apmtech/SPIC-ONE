@@ -903,6 +903,8 @@
 	public int DealerId { get; set; }
 	[SupplyParameterFromQuery(Name = "mode")]
 	public string? Mode { get; set; }
+	[SupplyParameterFromQuery(Name = "flow")]
+	public string? Flow { get; set; }
 
 	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 	// Entity type selection
@@ -1656,7 +1658,8 @@ return;
 		if (IsViewOnly)
 		{
 			Loading.Show();
-			Nav.NavigateTo($"/SalesPlaning?dealerId={DealerId}&mode=view");
+			var viewNext = string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase) ? "/Investment" : "/SalesPlaning";
+			Nav.NavigateTo($"{viewNext}?dealerId={DealerId}&mode=view");
 			return;
 		}
 		if (_selectedEntityType == null)
@@ -1685,7 +1688,10 @@ return;
 		{
 			FormStepData.MarkStepError(7, false);
 			Loading.Show();
-			Nav.NavigateTo($"/SalesPlaning?dealerId={DealerId}");
+			var isRestricted = string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase);
+			var nextRoute = isRestricted ? "/Investment" : "/SalesPlaning";
+			var flowParam = isRestricted ? "&flow=restricted" : "";
+			Nav.NavigateTo($"{nextRoute}?dealerId={DealerId}{flowParam}");
 		}
 		finally
 		{
