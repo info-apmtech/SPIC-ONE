@@ -183,8 +183,11 @@ namespace SPIC.Core.Entities
         public string Remarks { get; set; }
         public bool IsApproved { get; set; }
         public decimal? RmCreditLimit { get; set; }
+        public decimal? RmCreditLimitGfl { get; set; }
         public decimal? SmCreditLimit { get; set; }
+        public decimal? SmCreditLimitGfl { get; set; }
         public decimal? AvpCreditLimit { get; set; }
+        public decimal? AvpCreditLimitGfl { get; set; }
     }
     public enum EntityType
     {
@@ -568,13 +571,13 @@ namespace SPIC.Core.Entities
         //Dealer Name
         public int CustomerId { get; set; }
         //Product
-        public int ProductId { get; set; }		
-		//Categories
-		public int CategoryId { get; set; }
-		//Product Groups
-		public int ProductGroupId { get; set; }
-		//Financial year 
-		public int FinancialYearId { get; set; }
+        public int ProductId { get; set; }
+        //Categories
+        public int CategoryId { get; set; }
+        //Product Groups
+        public int ProductGroupId { get; set; }
+        //Financial year 
+        public int FinancialYearId { get; set; }
         public decimal Quantity { get; set; }
         public decimal GrossAmount { get; set; }
 

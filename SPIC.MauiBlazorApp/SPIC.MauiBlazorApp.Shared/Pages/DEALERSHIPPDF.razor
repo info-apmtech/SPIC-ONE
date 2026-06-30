@@ -735,7 +735,7 @@
 <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
         <div class="dpdf-section-icon">🏢</div>
-        <div class="dpdf-section-text">Company Details</div>
+        <div class="dpdf-section-text">Dealer Details</div>
     </div>
 
     @{
@@ -746,7 +746,7 @@
         <div style="flex: 1; min-width: 0;">
             <div class="grid-2" style="row-gap: 12px;">
                 <div class="inline-field">
-                    <label>Company Name</label>
+                    <label>Dealer Name</label>
                     <div class="inline-val">@(_model.FirmName ?? "-")</div>
                 </div>
                 <div class="inline-field">
@@ -796,11 +796,11 @@
                             <div class="inline-val">@(_model.DateOfAppointment?.ToString("dd MMMM yyyy") ?? "-")</div>
                         </div>
                         <div class="inline-field">
-                            <label>Years of Experiance</label>
+                            <label>Experience in Industry</label>
                             <div class="inline-val">@(_model.YearsofExperiance > 0 ? $"{_model.YearsofExperiance} Years" : "-")</div>
                         </div>
                         <div class="inline-field">
-    <label>Experience in SPIC</label>
+    <label>Experience in @ExperienceCompanyLabel</label>
     <div class="inline-val">@GetSpicExperienceDisplay()</div>
 </div>
                     </div>
@@ -1313,9 +1313,56 @@
             </tbody>
         </table>
     </div>
+    @* ===================== FAMILY MEMBERS (separate per partner) ===================== *@
+@if (_savedPartners != null && _savedPartners.Any())
+{
+    @foreach (var partner in _savedPartners)
+    {
+        var partnerFamily = (_familyAll ?? new List<PartnerFamilyDetails>())
+            .Where(f => f.OwnershipPartnerId == partner.Id)
+            .ToList();
 
+        <div class="dpdf-section">
+            <div class="dpdf-section-title mb-2">
+                <div class="dpdf-section-icon">👨‍👩‍👧‍👦</div>
+                <div class="dpdf-section-text">Family Members — @(partner.Name ?? "Partner")</div>
+            </div>
+
+            @if (partnerFamily.Any())
+            {
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: var(--pdf-font-size);">
+                    <thead>
+                        <tr style="background-color: var(--card-bg);">
+                            <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Name</th>
+                            <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600;">D.O.B</th>
+                            <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600;">Age</th>
+                            <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Occupation</th>
+                            <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Relationship</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var fm in partnerFamily)
+                        {
+                            <tr>
+                                <td style="padding: 6px 10px; border: 1px solid var(--border-color); font-weight: 600; color: #1F2937;">@(fm.FamilyMemberName ?? "-")</td>
+                                <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; text-align: center;">@fm.DateOfBirth.ToString("dd/MM/yyyy")</td>
+                                <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500; text-align: center;">@fm.Age Years</td>
+                                <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@(fm.Occupation ?? "-")</td>
+                                <td style="padding: 6px 10px; border: 1px solid var(--border-color); color: var(--primary-green); font-weight: 500;">@GetRelationshipName(fm.RelationshipId)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <div class="value" style="padding: 10px; text-align: center; color: var(--label-color);">No Family Details Available for @(partner.Name ?? "this partner")</div>
+            }
+        </div>
+    }
+}
     @* ===================== FAMILY MEMBERS (consolidated) ===================== *@
-    <div class="dpdf-section">
+@*     <div class="dpdf-section">
         <div class="dpdf-section-title mb-2">
             <div class="dpdf-section-icon">👨‍👩‍👧‍👦</div>
             <div class="dpdf-section-text">Family Members</div>
@@ -1333,7 +1380,7 @@
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: var(--pdf-font-size);">
                 <thead>
                     <tr style="background-color: var(--card-bg);">
-                        <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Proprietor</th>
+                        <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Proprietor / Partner</th>
                         <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: left; color: var(--label-color); font-weight: 600;">Name</th>
                         <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600;">D.O.B</th>
                         <th style="padding: 6px 10px; border: 1px solid var(--border-color); text-align: center; color: var(--label-color); font-weight: 600;">Age</th>
@@ -1362,7 +1409,7 @@
             <div class="value" style="padding: 10px; text-align: center; color: var(--label-color);">No Family Details Available</div>
         }
     </div>
-}
+ *@}
 else
 {
     <div class="dpdf-section">
@@ -1406,7 +1453,7 @@ else
         <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Company Details Available</div>
     }
 </div>
-<div class="dpdf-section">
+@* <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
         <div class="dpdf-section-icon">📈</div>
         <div class="dpdf-section-text">Sales Planning & Forecast</div>
@@ -1565,10 +1612,170 @@ else
         </div>
     }
 </div>
-                   <div class="dpdf-section">
+ *@ 
+<div class="dpdf-section">
+    <div class="dpdf-section-title mb-2">
+        <div class="dpdf-section-icon">📈</div>
+        <div class="dpdf-section-text">Sales Planning & Forecast</div>
+    </div>
+
+    @if (_salesPlanningAll != null && _salesPlanningAll.Any() && _categoriesAll != null)
+    {
+        int catIndex = 1;
+        bool anyRendered = false;
+        @foreach (var cat in _categoriesAll)
+        {
+           var catSales = _salesPlanningAll.Where(s => s.CategoryId == cat.Id).Where(s =>
+{
+    var prod = _productsAll.FirstOrDefault(p => p.Id == s.ProductId);
+    if (SelectedCompany == "SPIC")
+        return IsFertilizerCategory(cat) && IsUreaProduct(prod);
+    if (SelectedCompany == "GreenStar")
+        return (IsFertilizerCategory(cat) && !IsUreaProduct(prod)) || IsSpecialityCategory(cat);
+    return true; // no company → show all
+}).ToList();;
+            if (!catSales.Any()) continue;
+            anyRendered = true;
+
+            var catUnit = _unitsAll.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+
+            var catTotalVolume = catSales.Sum(r => r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty);
+            var catTotalValue = catSales.Sum(r => r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount);
+
+            var aprilQtyTotal = catSales.Sum(r => r.AprilQty);
+            var mayQtyTotal = catSales.Sum(r => r.MayQty);
+            var juneQtyTotal = catSales.Sum(r => r.JuneQty);
+            var julyQtyTotal = catSales.Sum(r => r.JulyQty);
+            var augustQtyTotal = catSales.Sum(r => r.AugustQty);
+            var septemberQtyTotal = catSales.Sum(r => r.SeptemberQty);
+
+            var aprilAmountTotal = catSales.Sum(r => r.AprilAmount);
+            var mayAmountTotal = catSales.Sum(r => r.MayAmount);
+            var juneAmountTotal = catSales.Sum(r => r.JuneAmount);
+            var julyAmountTotal = catSales.Sum(r => r.JulyAmount);
+            var augustAmountTotal = catSales.Sum(r => r.AugustAmount);
+            var septemberAmountTotal = catSales.Sum(r => r.SeptemberAmount);
+
+            var octoberQtyTotal = catSales.Sum(r => r.OctoberQty);
+            var novemberQtyTotal = catSales.Sum(r => r.NovemberQty);
+            var decemberQtyTotal = catSales.Sum(r => r.DecemberQty);
+            var januaryQtyTotal = catSales.Sum(r => r.JanuaryQty);
+            var februaryQtyTotal = catSales.Sum(r => r.FebruaryQty);
+            var marchQtyTotal = catSales.Sum(r => r.MarchQty);
+
+            var octoberAmountTotal = catSales.Sum(r => r.OctoberAmount);
+            var novemberAmountTotal = catSales.Sum(r => r.NovemberAmount);
+            var decemberAmountTotal = catSales.Sum(r => r.DecemberAmount);
+            var januaryAmountTotal = catSales.Sum(r => r.JanuaryAmount);
+            var februaryAmountTotal = catSales.Sum(r => r.FebruaryAmount);
+            var marchAmountTotal = catSales.Sum(r => r.MarchAmount);
+
+            <div class="sub-card">
+                <h3 class="sub-card-title">@catIndex. @cat.Name Sales Forecast (@catUnit / Value)</h3>
+
+                <table class="sales-table table-th-center mb-15">
+                    <thead>
+                        <tr>
+                            <th>PRODUCT</th>
+                            <th>APR</th><th>MAY</th><th>JUN</th><th>JUL</th><th>AUG</th><th>SEP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sale in catSales)
+                        {
+                            var product = _productsAll.FirstOrDefault(p => p.Id == sale.ProductId);
+                            <tr>
+                                <td>@(product?.Name ?? "Unknown")</td>
+                                <td>@(RenderStackedCell(sale.AprilQty, sale.AprilAmount, catUnit))</td>
+                                <td>@(RenderStackedCell(sale.MayQty, sale.MayAmount, catUnit))</td>
+                                <td>@(RenderStackedCell(sale.JuneQty, sale.JuneAmount, catUnit))</td>
+                                <td>@(RenderStackedCell(sale.JulyQty, sale.JulyAmount, catUnit))</td>
+                                <td>@(RenderStackedCell(sale.AugustQty, sale.AugustAmount, catUnit))</td>
+                                <td>@(RenderStackedCell(sale.SeptemberQty, sale.SeptemberAmount, catUnit))</td>
+                            </tr>
+                        }
+
+                        <tr class="total-row">
+                            <td><strong>TOTAL</strong></td>
+                            <td>@(RenderStackedCell(aprilQtyTotal, aprilAmountTotal, catUnit))</td>
+                            <td>@(RenderStackedCell(mayQtyTotal, mayAmountTotal, catUnit))</td>
+                            <td>@(RenderStackedCell(juneQtyTotal, juneAmountTotal, catUnit))</td>
+                            <td>@(RenderStackedCell(julyQtyTotal, julyAmountTotal, catUnit))</td>
+                            <td>@(RenderStackedCell(augustQtyTotal, augustAmountTotal, catUnit))</td>
+                            <td>@(RenderStackedCell(septemberQtyTotal, septemberAmountTotal, catUnit))</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <table class="sales-table table-th-center">
+                    <thead>
+                        <tr>
+                            <th>PRODUCT</th>
+                            <th>OCT</th><th>NOV</th><th>DEC</th><th>JAN</th><th>FEB</th><th>MAR</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sale in catSales)
+                        {
+                            var product = _productsAll.FirstOrDefault(p => p.Id == sale.ProductId);
+                            <tr>
+                                <td>@(product?.Name ?? "Unknown")</td>
+                                <td>@(RenderStackedCell(sale.OctoberQty, sale.OctoberAmount, catUnit))</td>
+                                <td>@(RenderStackedCell(sale.NovemberQty, sale.NovemberAmount, catUnit))</td>
+                                <td>@(RenderStackedCell(sale.DecemberQty, sale.DecemberAmount, catUnit))</td>
+                                <td>@(RenderStackedCell(sale.JanuaryQty, sale.JanuaryAmount, catUnit))</td>
+                                <td>@(RenderStackedCell(sale.FebruaryQty, sale.FebruaryAmount, catUnit))</td>
+                                <td>@(RenderStackedCell(sale.MarchQty, sale.MarchAmount, catUnit))</td>
+                            </tr>
+                        }
+
+                        <tr class="total-row">
+                            <td><strong>TOTAL</strong></td>
+                            <td>@(RenderStackedCell(octoberQtyTotal, octoberAmountTotal, catUnit))</td>
+                            <td>@(RenderStackedCell(novemberQtyTotal, novemberAmountTotal, catUnit))</td>
+                            <td>@(RenderStackedCell(decemberQtyTotal, decemberAmountTotal, catUnit))</td>
+                            <td>@(RenderStackedCell(januaryQtyTotal, januaryAmountTotal, catUnit))</td>
+                            <td>@(RenderStackedCell(februaryQtyTotal, februaryAmountTotal, catUnit))</td>
+                            <td>@(RenderStackedCell(marchQtyTotal, marchAmountTotal, catUnit))</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="totals-wrapper">
+                    <div class="totals-box d-flex flex-wrap align-items-center" style="gap: 2rem; background-color: #F9FAFB; padding: 12px 16px; border-radius: 6px; border: 1px solid #E5E7EB;">
+                        <div class="total-col d-flex align-items-center" style="gap: 8px;">
+                            <span class="total-label" style="color: #6B7280; font-weight: 500;">Grand Total Volume:</span>
+                            <span class="total-val" style="color: #1F2937; font-weight: 700;">@(catTotalVolume == 0 ? "-" : catTotalVolume.ToString("N0")) @catUnit</span>
+                        </div>
+                        <div class="total-col d-flex align-items-center" style="gap: 8px;">
+                            <span class="total-label" style="color: #6B7280; font-weight: 500;">Grand Total Forecast Value:</span>
+                            <span class="total-val" style="color: #059669; font-weight: 700;">₹ @(catTotalValue == 0 ? "-" : catTotalValue.ToString("N0"))</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+           catIndex++;
+        }
+
+        @if (!anyRendered)
+        {
+            <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">
+                No Sales Planning Data Available
+            </div>
+        }
+    }
+    else
+    {
+        <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">
+            No Sales Planning Data Available
+        </div>
+    }
+</div>
+        <div class="dpdf-section">
            <div class="dpdf-section-title mb-2">
                <div class="dpdf-section-icon">📑</div>  
-               <div class="dpdf-section-text">SPIC Credit Limit</div>
+               <div class="dpdf-section-text">@(SelectedCompany == "GreenStar" ? "GFL" : "SPIC") Credit Limit</div>
            </div>
            <div class="grid-2" style="row-gap: 6px;">
                <div class="inline-field">
@@ -1588,7 +1795,7 @@ else
     <div class="inline-val">@(_model.YearsofExperiance > 0 ? $"{_model.YearsofExperiance} Years" : "-")</div>
 </div>
 <div class="inline-field">
-    <label>Experience in SPIC</label>
+    <label>Experience in @ExperienceCompanyLabel</label>
     <div class="inline-val">@GetSpicExperienceDisplay()</div>
 </div>
            </div>
@@ -2469,15 +2676,15 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
             </div>
             <div class="inline-field">
                 <label>RM Recommended Credit Limit</label>
-                <div class="inline-val">₹ @GetApprovalLimit(h => h.RmCreditLimit).ToString("N2")</div>
+                <div class="inline-val">₹ @GetRmRecommendedLimit().ToString("N2")</div>
             </div>
             <div class="inline-field">
                 <label>SM Recommended Credit Limit</label>
-                <div class="inline-val">₹ @GetApprovalLimit(h => h.SmCreditLimit).ToString("N2")</div>
+                <div class="inline-val">₹ @GetSmRecommendedLimit().ToString("N2")</div>
             </div>
             <div class="inline-field">
                 <label>AVP Approved Credit Limit</label>
-                <div class="inline-val">₹ @GetApprovalLimit(h => h.AvpCreditLimit).ToString("N2")</div>
+                <div class="inline-val">₹ @GetAvpApprovedLimit().ToString("N2")</div>
             </div>
         </div>
     }
@@ -2486,7 +2693,6 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         <div class="value" style="padding: 10px; text-align: center; color: var(--label-color);">No Credit Limit Data Available</div>
     }
 </div>
-
     
                 @if (HasAnyDocuments())
                 {
@@ -2963,6 +3169,39 @@ catch (Exception ex) { Console.WriteLine($"Approval history load failed: {ex.Mes
         if (block.IsWell) types.Add("Well");
         return types.Count > 0 ? string.Join(", ", types) : "—";
     }
+    private string ExperienceCompanyLabel =>
+    SelectedCompany == "GreenStar" ? "GFL" : "SPIC";
+
+    private string FormatQtyOrDash(decimal value) => value == 0 ? "-" : value.ToString("N0");
+    private string FormatAmountOrDash(decimal value) => value == 0 ? "-" : value.ToString("N0");
+
+    private RenderFragment RenderStackedCell(decimal qty, decimal amount, string unit)
+{
+    if (qty == 0 && amount == 0)
+    {
+        return builder =>
+        {
+            builder.OpenElement(0, "span");
+            builder.AddAttribute(1, "style", "color: #6b7280;");
+            builder.AddContent(2, "-");
+            builder.CloseElement();
+        };
+    }
+
+    return builder =>
+    {
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", "stacked-val");
+        builder.AddContent(2, $"{qty.ToString("N0")} {unit} / ₹");
+        builder.CloseElement();
+
+        builder.OpenElement(3, "span");
+        builder.AddAttribute(4, "class", "stacked-val-alt");
+        builder.AddContent(5, amount.ToString("N0"));
+        builder.CloseElement();
+    };
+}
+
     private string GetRelationshipName(int id) => _relationshipsAll.FirstOrDefault(r => r.Id == id)?.Name ?? "—";
 
     private string GetSectorName(int id) => _sectorsAll.FirstOrDefault(s => s.Id == id)?.Name ?? "—";
@@ -3182,11 +3421,27 @@ private decimal GetApprovalLimit(Func<DealerApprovalHistory, decimal?> selector)
 {
     if (_approvalHistories == null || !_approvalHistories.Any()) return 0m;
     var row = _approvalHistories
+        .Where(h => h.IsApproved)
         .Where(h => (selector(h) ?? 0m) > 0m)
         .OrderByDescending(h => h.ApprovedAt)
         .FirstOrDefault();
     return row != null ? (selector(row) ?? 0m) : 0m;
 }
+
+private decimal GetRmRecommendedLimit() => 
+    SelectedCompany == "GreenStar" 
+        ? GetApprovalLimit(h => h.RmCreditLimitGfl) 
+        : GetApprovalLimit(h => h.RmCreditLimit);
+
+private decimal GetSmRecommendedLimit() => 
+    SelectedCompany == "GreenStar" 
+        ? GetApprovalLimit(h => h.SmCreditLimitGfl) 
+        : GetApprovalLimit(h => h.SmCreditLimit);
+
+private decimal GetAvpApprovedLimit() => 
+    SelectedCompany == "GreenStar" 
+        ? GetApprovalLimit(h => h.AvpCreditLimitGfl) 
+        : GetApprovalLimit(h => h.AvpCreditLimit);
 // ---- SPIC Valuation "Value" column (recomputed; not stored on proposal) ----
 private decimal SpicAnnualUreaQty() =>
     _annualSales
@@ -3236,7 +3491,63 @@ private decimal SpicSecurityPercent() =>
     SpicPerfUreaTurnover() > 0 ? (SpicSecurityTotalValue() / SpicPerfUreaTurnover()) * 100m : 0m;
 
 private static string ValOrDash(decimal v) => v > 0 ? v.ToString("N2") : "-";
-// non-Urea fertilizer products only
+
+// Tolerates landSize coming back as "", null, or a string number without crashing deserialization
+ public class LenientNullableDecimalConverter : System.Text.Json.Serialization.JsonConverter<decimal?>
+    {
+        public override decimal? Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+        {
+            if (reader.TokenType == System.Text.Json.JsonTokenType.Null)
+                return null;
+
+            if (reader.TokenType == System.Text.Json.JsonTokenType.Number)
+                return reader.GetDecimal();
+
+            if (reader.TokenType == System.Text.Json.JsonTokenType.String)
+            {
+                var s = reader.GetString();
+                if (string.IsNullOrWhiteSpace(s)) return null;
+                if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d))
+                    return d;
+                return null;
+            }
+
+            return null;
+        }
+
+       public override void Write(System.Text.Json.Utf8JsonWriter writer, decimal? value, System.Text.Json.JsonSerializerOptions options)
+        {
+            if (value.HasValue) writer.WriteNumberValue(value.Value);
+            else writer.WriteNullValue();
+        }
+    }
+
+    // Same tolerance but for non-nullable decimal (defaults bad/empty values to 0)
+    public class LenientDecimalConverter : System.Text.Json.Serialization.JsonConverter<decimal>
+    {
+        public override decimal Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+        {
+            if (reader.TokenType == System.Text.Json.JsonTokenType.Number)
+                return reader.GetDecimal();
+
+            if (reader.TokenType == System.Text.Json.JsonTokenType.String)
+            {
+                var s = reader.GetString();
+                if (string.IsNullOrWhiteSpace(s)) return 0m;
+                if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d))
+                    return d;
+                return 0m;
+            }
+
+            return 0m;
+        }
+
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, decimal value, System.Text.Json.JsonSerializerOptions options)
+        {
+            writer.WriteNumberValue(value);
+        }
+    }
+    // non-Urea fertilizer products only
 private bool IsGreenstarFertProduct(Product? p)
 {
     if (p == null) return false;
@@ -3658,6 +3969,7 @@ public class ProductGroup
         public int DealerId { get; set; }
         public string? LandName { get; set; }
         public string? SurvayNumber { get; set; }
+        [System.Text.Json.Serialization.JsonConverter(typeof(LenientNullableDecimalConverter))]
         public decimal? LandSize { get; set; }
         public decimal PropertyValue { get; set; }
         public string? UploadedECDocumentPath { get; set; }
@@ -3672,6 +3984,7 @@ public class ProductGroup
         public string? BuildingName { get; set; }
         public decimal PropertyValue { get; set; }
         public string? SurveyNumber { get; set; }
+        [System.Text.Json.Serialization.JsonConverter(typeof(LenientDecimalConverter))]
         public decimal LandSize { get; set; }
         public string? Remarks { get; set; }
         public string? ShopNoORRoomNoOrBlockNo { get; set; }
@@ -3880,6 +4193,9 @@ public class DealerApprovalHistory
     public decimal? AvpCreditLimit { get; set; }
     public decimal? RmCreditLimit { get; set; }
     public decimal? SmCreditLimit { get; set; }
+    public decimal? AvpCreditLimitGfl { get; set; }
+    public decimal? RmCreditLimitGfl { get; set; }
+    public decimal? SmCreditLimitGfl { get; set; }
 }
         
 }
