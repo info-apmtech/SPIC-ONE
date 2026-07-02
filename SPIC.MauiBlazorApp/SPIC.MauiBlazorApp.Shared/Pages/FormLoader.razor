@@ -93,7 +93,17 @@
 			return;
 		}
 
-		var hasGreenStar = await HasGreenStarCompany(dealerId);
+		var dealer = await GetDealer(dealerId);
+		var hasGreenStar = dealer?.InGreenStar ?? false;
+
+		// Even if the URL doesn't carry "flow=restricted" (e.g. opening an
+		// existing dealer straight from the Dashboard), a Terminated or
+		// Inactive-Terminated dealer must still use the restricted step flow.
+		if (!_isRestrictedFlow && dealer != null)
+		{
+			_isRestrictedFlow = dealer.Status == DealerStatus.Terminated ||
+				(dealer.Status == DealerStatus.InActive && dealer.InactiveProposal == FutureBusinessProposal.Terminated);
+		}
 
 		_visibleSteps = FormStepData.GetVisibleSteps(hasGreenStar, _isRestrictedFlow);
 
@@ -119,16 +129,15 @@
 			string.Equals(flow, "restricted", StringComparison.OrdinalIgnoreCase);
 	}
 
-	private async Task<bool> HasGreenStarCompany(int dealerId)
+	private async Task<SPIC.Core.Entities.DealerRegistration?> GetDealer(int dealerId)
 	{
-        try
+		try
 		{
-			var dealer = await Http.GetFromJsonAsync<SPIC.Core.Entities.DealerRegistration>($"api/DealerRegistration/{dealerId}");
-			return dealer?.InGreenStar ?? false;
+			return await Http.GetFromJsonAsync<SPIC.Core.Entities.DealerRegistration>($"api/DealerRegistration/{dealerId}");
 		}
 		catch
 		{
-			return false;
+			return null;
 		}
 	}
 

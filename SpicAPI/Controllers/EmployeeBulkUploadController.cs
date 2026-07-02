@@ -17,16 +17,17 @@ namespace SpicAPI.Controllers
         private readonly AppDbContext _db;
         private readonly ILogger<EmployeeBulkUploadController> _logger;
         private readonly UserManager<UserInfo> _userManager;
-
-        public EmployeeBulkUploadController(
+		private readonly RoleManager<IdentityRole> _roleManager;
+		public EmployeeBulkUploadController(
             AppDbContext db,
             ILogger<EmployeeBulkUploadController> logger,
-            UserManager<UserInfo> userManager)
+            UserManager<UserInfo> userManager, RoleManager<IdentityRole> roleManager)
         {
             _db = db;
             _logger = logger;
             _userManager = userManager;
-        }
+			_roleManager = roleManager;
+		}
 
         [HttpPost("bulk-upload")]
         public async Task<IActionResult> BulkUpload(IFormFile file)
@@ -350,9 +351,18 @@ namespace SpicAPI.Controllers
                             skipped++;
                             continue;
                         }
-
-                        // ---  2. Insert OR Reuse EmployeeInformation ---
-                        EmployeeInformation emp;
+						try
+						{
+							await EnsureRoleAndAssignAsync(user, role);
+						}
+						catch (Exception roleEx)
+						{
+							AddError("Role Save Error", $"Row {rowNum} ({empName}): {roleEx.Message}");
+							skipped++;
+							continue;
+						}
+						// ---  2. Insert OR Reuse EmployeeInformation ---
+						EmployeeInformation emp;
 
                         if (!string.IsNullOrWhiteSpace(employeeId) && existingEmployees.TryGetValue(employeeId, out var existingEmp))
                         {
@@ -521,5 +531,25 @@ namespace SpicAPI.Controllers
 
         private static string NormalizeHeader(string h) =>
             (h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("-", "").ToLowerInvariant();
-    }
+		private async Task EnsureRoleAndAssignAsync(UserInfo user, AppRole role)
+		{
+			var roleName = role.ToString();
+
+			if (!await _roleManager.RoleExistsAsync(roleName))
+			{
+				var roleResult = await _roleManager.CreateAsync(new IdentityRole(roleName));
+
+				if (!roleResult.Succeeded)
+					throw new Exception(string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+			}
+
+			if (!await _userManager.IsInRoleAsync(user, roleName))
+			{
+				var addRoleResult = await _userManager.AddToRoleAsync(user, roleName);
+
+				if (!addRoleResult.Succeeded)
+					throw new Exception(string.Join(", ", addRoleResult.Errors.Select(e => e.Description)));
+			}
+		}
+	}
 }

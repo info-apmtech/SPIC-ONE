@@ -61,8 +61,8 @@ namespace SPIC.Core.Entities
         public string? Block { get; set; }
         public string? Taluk { get; set; }
         [Display(Name = "District")]
-        public int DistrictId { get; set; }
-        public int DealerStateId { get; set; }
+        public int? DistrictId { get; set; }
+        public int? DealerStateId { get; set; }
         [Display(Name = "Official Contact Number")]
         public string OfficialContactNumber { get; set; }
         [Display(Name = "WhatsApp Number")]
@@ -74,7 +74,7 @@ namespace SPIC.Core.Entities
         //Bank Details
         public string AccountHolderName { get; set; }
         public string AccountNumber { get; set; }
-        public int BankId { get; set; }
+        public int? BankId { get; set; }
         public string Branch { get; set; }
         public string IFSC { get; set; }
         public string? ChequeFilePath { get; set; }

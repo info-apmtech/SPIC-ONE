@@ -1135,6 +1135,12 @@
     private string status = "Active";
     private FutureBusinessProposal _inactiveProposal = FutureBusinessProposal.FutureBusiness;
 
+    // Tracks whether the user has manually picked Entity Type / Status on this page
+    // visit. If so, selecting an existing dealer via the search box below must NOT
+    // silently overwrite those choices with the loaded record's values.
+    private bool _entityTypeManuallySet;
+    private bool _statusManuallySet;
+
     private bool IsDealerSelected => selected == "Dealer";
     private bool IsDepartmentSelected => selected == "Department";
     private bool IsInstitutionSelected => selected == "Institution";
@@ -1326,13 +1332,18 @@
         else if (_model.EntityType is 0 or 1 or 2)
             entityCode = _model.EntityType;
 
-        selected = entityCode switch
+      // Only load the entity type from the record if the user hasn't
+        // already made a manual selection on this page visit.
+        if (!_entityTypeManuallySet)
         {
-            0 => "Dealer",
-            1 => "Department",
-            2 => "Institution",
-            _ => (_model.IsDealer ? "Dealer" : "Department")
-        };
+            selected = entityCode switch
+            {
+                0 => "Dealer",
+                1 => "Department",
+                2 => "Institution",
+                _ => (_model.IsDealer ? "Dealer" : "Department")
+            };
+        }
 
         if (!preserveCompanySelection)
         {
@@ -1344,15 +1355,20 @@
         _basicInfoHqId = _model.HQ;
         _parentDealerId = _model.ParentDealer;
 
-       status = _model.Status switch
-{
-    DealerStatus.Active => "Active",
-    DealerStatus.InActive => "Inactive",
-    DealerStatus.Terminated => "Terminated",
-    _ => "Active"
-};
+        // Same rule for Status: don't clobber a manual selection the user
+        // already made before picking a dealer from the search box.
+        if (!_statusManuallySet)
+        {
+            status = _model.Status switch
+            {
+                DealerStatus.Active => "Active",
+                DealerStatus.InActive => "Inactive",
+                DealerStatus.Terminated => "Terminated",
+                _ => "Active"
+            };
 
-_inactiveProposal = _model.InactiveProposal ?? FutureBusinessProposal.FutureBusiness;
+            _inactiveProposal = _model.InactiveProposal ?? FutureBusinessProposal.FutureBusiness;
+        }
 
 
         _filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
@@ -1404,10 +1420,15 @@ _inactiveProposal = _model.InactiveProposal ?? FutureBusinessProposal.FutureBusi
         }
     }
 
-    void Select(string type) => selected = type;
+    void Select(string type)
+    {
+        selected = type;
+        _entityTypeManuallySet = true;
+    }
     void SelectStatus(string value)
     {
         status = value;
+        _statusManuallySet = true;
         if (value != "Inactive")
             _inactiveProposal = FutureBusinessProposal.FutureBusiness;
     }
@@ -1757,9 +1778,11 @@ _inactiveProposal = _model.InactiveProposal ?? FutureBusinessProposal.FutureBusi
         _basicInfoStateId = 0;
         _basicInfoRegionId = 0;
         _basicInfoHqId = 0;
-        selected = "New Dealer";
+       selected = "New Dealer";
         status = "Active";
         _inactiveProposal = FutureBusinessProposal.FutureBusiness;
+        _entityTypeManuallySet = false;
+        _statusManuallySet = false;
         isSpic = true;
         isGreenStar = true;
         _filteredRegions = new();
@@ -1822,8 +1845,8 @@ _inactiveProposal = _model.InactiveProposal ?? FutureBusinessProposal.FutureBusi
             if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";
             if (string.IsNullOrWhiteSpace(_model.PinCode)) _errors["PinCode"] = "Pincode is required";
             else if (_model.PinCode.Length != 6) _errors["PinCode"] = "Pincode must be 6 digits";
-            if (_model.DistrictId == 0) _errors["DistrictId"] = "District is required in Primary Location";
-            if (_model.DealerStateId == 0) _errors["DealerStateId"] = "State is required in Primary Location";
+           if ((_model.DistrictId ?? 0) == 0) _errors["DistrictId"] = "District is required in Primary Location";
+            if ((_model.DealerStateId ?? 0) == 0) _errors["DealerStateId"] = "State is required in Primary Location";
             if (string.IsNullOrWhiteSpace(_model.OfficialContactNumber)) _errors["OfficialContactNumber"] = "Official Contact Number is required";
             else if (_model.OfficialContactNumber.Length != 10) _errors["OfficialContactNumber"] = "Official Contact Number must be 10 digits";
             if (string.IsNullOrWhiteSpace(_model.WhatsAppNumber)) _errors["WhatsAppNumber"] = "WhatsApp Number is required";
@@ -1831,7 +1854,7 @@ _inactiveProposal = _model.InactiveProposal ?? FutureBusinessProposal.FutureBusi
 
             if (string.IsNullOrWhiteSpace(_model.AccountHolderName)) _errors["AccountHolderName"] = "Account Holder Name is required";
             if (string.IsNullOrWhiteSpace(_model.AccountNumber)) _errors["AccountNumber"] = "Account Number is required";
-            if (_model.BankId == 0) _errors["BankId"] = "Bank is required";
+           if ((_model.BankId ?? 0) == 0) _errors["BankId"] = "Bank is required";
             if (string.IsNullOrWhiteSpace(_model.Branch)) _errors["Branch"] = "Bank Branch is required";
             if (string.IsNullOrWhiteSpace(_model.IFSC)) _errors["IFSC"] = "IFSC Code is required";
 
@@ -1899,6 +1922,11 @@ _inactiveProposal = _model.InactiveProposal ?? FutureBusinessProposal.FutureBusi
             _model.Region = _basicInfoRegionId;
             _model.HQ = _basicInfoHqId;
             _model.ParentDealer = _parentDealerId;
+            // Optional FK fields: terminated/restricted dealers skip Primary Location
+            // & Bank Details, so send null (not 0) to avoid FK constraint violations.
+            if (_model.DealerStateId == 0) _model.DealerStateId = null;
+            if (_model.DistrictId == 0)    _model.DistrictId = null;
+            if (_model.BankId == 0)        _model.BankId = null;
            _model.InactiveProposal = status == "Inactive"
     ? _inactiveProposal
     : null;
@@ -2751,14 +2779,14 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         public string? PinCode { get; set; }
         public string? Block { get; set; }
         public string? Taluk { get; set; }
-        public int DistrictId { get; set; }
-        public int DealerStateId { get; set; }
+        public int? DistrictId { get; set; }
+        public int? DealerStateId { get; set; }
         public string? OfficialContactNumber { get; set; }
         public string? WhatsAppNumber { get; set; }
         public string? AlternativeNumber { get; set; }
         public string? AccountHolderName { get; set; }
         public string? AccountNumber { get; set; }
-        public int BankId { get; set; }
+        public int? BankId { get; set; }
         public string? Branch { get; set; }
         public string? IFSC { get; set; }
         public string? GSTNumber { get; set; }
