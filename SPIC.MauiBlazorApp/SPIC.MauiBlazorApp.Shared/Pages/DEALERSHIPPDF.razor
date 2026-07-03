@@ -2025,11 +2025,11 @@ void RenderSalesPerf(string title, Func<Category?, Product?, bool> rule)
     var years = GetPerformanceYears();
 
     // Build product IDs from sales rows whose ROW category + product both match the company rule
-    var productIds = _creditLimitSales
+   var productIds = _creditLimitSales
         .Where(r =>
         {
             var prod = _productsAll.FirstOrDefault(p => p.Id == r.ProductId);
-            var cat  = _categoriesAll.FirstOrDefault(c => c.Id == r.ProductGroupId);
+            var cat  = _categoriesAll.FirstOrDefault(c => c.Id == r.CategoryId);
             return rule(cat, prod);
         })
         .Select(r => r.ProductId)
@@ -3001,28 +3001,57 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                 SelectedCompany = "GreenStar";
             }
 
-            var allDocs = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments/all") ?? new();
+          var docsTask         = Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments/all");
+            var statesTask       = Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all");
+            var districtTask     = Http.GetFromJsonAsync<List<LocationItemDto>>("api/District/all");
+            var regionsTask      = Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all");
+            var hqTask           = Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all");
+            var banksTask        = Http.GetFromJsonAsync<List<BankItemDto>>("api/Bank/all");
+            var dealersTask      = Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/all");
+            var companyTask      = Http.GetFromJsonAsync<List<Competitor>>("api/Competitor/all");
+            var categoriesTask   = Http.GetFromJsonAsync<List<Category>>("api/Category");
+            var productsTask     = Http.GetFromJsonAsync<List<Product>>("api/Product");
+            var productGroupTask = Http.GetFromJsonAsync<List<ProductGroup>>("api/ProductGroup");
+            var cropsTask        = Http.GetFromJsonAsync<List<Crop>>("api/Crop");
+            var relationshipTask = Http.GetFromJsonAsync<List<RelationshipItemDto>>("api/Relationship/all");
+            var sectorsTask      = Http.GetFromJsonAsync<List<SectorItemDto>>("api/Sector/all");
+            var unitsTask        = Http.GetFromJsonAsync<List<Unit>>("api/Unit");
+            var warehousesTask   = Http.GetFromJsonAsync<List<WarehouseEntity>>("api/Warehouse");
+            var rackPointsTask   = Http.GetFromJsonAsync<List<RackPoint>>("api/RackPoint");
+            var portsTask        = Http.GetFromJsonAsync<List<Port>>("api/Port");
+            var fyTask           = Http.GetFromJsonAsync<List<FinancialYear>>("api/FinancialYear");
+            var landAssetsTask   = Http.GetFromJsonAsync<List<DealerAssetLand>>($"api/DealerAssetLand/byDealer/{dealerId.Value}");
+            var buildingAssetsTask = Http.GetFromJsonAsync<List<DealerAssetBuilding>>($"api/DealerAssetBuilding/byDealer/{dealerId.Value}");
+
+            await Task.WhenAll(
+                docsTask, statesTask, districtTask, regionsTask, hqTask, banksTask,
+                dealersTask, companyTask, categoriesTask, productsTask, productGroupTask,
+                cropsTask, relationshipTask, sectorsTask, unitsTask, warehousesTask,
+                rackPointsTask, portsTask, fyTask, landAssetsTask, buildingAssetsTask
+            );
+
+            var allDocs = docsTask.Result ?? new();
             _docs = allDocs.FirstOrDefault(d => d.DealerId == dealerId.Value) ?? new();
-            _statesAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
-            _DistrictAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/District/all") ?? new();
-            _regionsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all") ?? new();
-            _headquartersAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all") ?? new();
-            _banksAll = await Http.GetFromJsonAsync<List<BankItemDto>>("api/Bank/all") ?? new();
-            _dealersAll = await Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/all") ?? new();
-            _companyAll = await Http.GetFromJsonAsync<List<Competitor>>("api/Competitor/all") ?? new();
-            _categoriesAll = await Http.GetFromJsonAsync<List<Category>>("api/Category") ?? new();
-            _productsAll = await Http.GetFromJsonAsync<List<Product>>("api/Product") ?? new();
-            _productGroupsAll = await Http.GetFromJsonAsync<List<ProductGroup>>("api/ProductGroup") ?? new();
-            _cropsAll = await Http.GetFromJsonAsync<List<Crop>>("api/Crop") ?? new();
-            _relationshipsAll = await Http.GetFromJsonAsync<List<RelationshipItemDto>>("api/Relationship/all") ?? new();
-            _sectorsAll = await Http.GetFromJsonAsync<List<SectorItemDto>>("api/Sector/all") ?? new();
-            _unitsAll = await Http.GetFromJsonAsync<List<Unit>>("api/Unit") ?? new();
-            _warehousesAll = await Http.GetFromJsonAsync<List<WarehouseEntity>>("api/Warehouse") ?? new();
-            _rackPointsAll = await Http.GetFromJsonAsync<List<RackPoint>>("api/RackPoint") ?? new();
-            _portsAll = await Http.GetFromJsonAsync<List<Port>>("api/Port") ?? new();
-            _financialYears = await Http.GetFromJsonAsync<List<FinancialYear>>("api/FinancialYear") ?? new();
-            _landAssets = await Http.GetFromJsonAsync<List<DealerAssetLand>>($"api/DealerAssetLand/byDealer/{dealerId.Value}") ?? new();
-            _buildingAssets = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>($"api/DealerAssetBuilding/byDealer/{dealerId.Value}") ?? new();
+            _statesAll = statesTask.Result ?? new();
+            _DistrictAll = districtTask.Result ?? new();
+            _regionsAll = regionsTask.Result ?? new();
+            _headquartersAll = hqTask.Result ?? new();
+            _banksAll = banksTask.Result ?? new();
+            _dealersAll = dealersTask.Result ?? new();
+            _companyAll = companyTask.Result ?? new();
+            _categoriesAll = categoriesTask.Result ?? new();
+            _productsAll = productsTask.Result ?? new();
+            _productGroupsAll = productGroupTask.Result ?? new();
+            _cropsAll = cropsTask.Result ?? new();
+            _relationshipsAll = relationshipTask.Result ?? new();
+            _sectorsAll = sectorsTask.Result ?? new();
+            _unitsAll = unitsTask.Result ?? new();
+            _warehousesAll = warehousesTask.Result ?? new();
+            _rackPointsAll = rackPointsTask.Result ?? new();
+            _portsAll = portsTask.Result ?? new();
+            _financialYears = fyTask.Result ?? new();
+            _landAssets = landAssetsTask.Result ?? new();
+            _buildingAssets = buildingAssetsTask.Result ?? new();
             // Load main dealer
             if (dealerId.HasValue && dealerId.Value > 0)
             {
@@ -3036,63 +3065,72 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
             }
             if (dealerId.HasValue && dealerId.Value > 0)
             {
-                _experiences = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience/all") ?? new();
+                var experienceTask   = Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience/all");
+                var salesTask        = Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all");
+                var marketTask       = Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all");
+                var partnersTask     = Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all");
+                var familyTask       = Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails/all");
+                var occTask          = Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation/all");
+                var salesPlanTask    = Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all");
+                var bankAssetsTask   = Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all");
+                var landAssetsAllTask     = Http.GetFromJsonAsync<List<DealerAssetLand>>($"api/DealerAssetLand/byDealer/{dealerId.Value}");
+                var buildingAssetsAllTask = Http.GetFromJsonAsync<List<DealerAssetBuilding>>($"api/DealerAssetBuilding/byDealer/{dealerId.Value}");
+                var loansTask        = Http.GetFromJsonAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities/all");
+                var proposalsTask    = Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all");
+                var approvalsTask    = SafeGetAsync<List<DealerApprovalHistory>>("api/DealerApprovalHistory/all");
+                var companiesOpTask  = Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all");
 
-                _experiences = _experiences
+                await Task.WhenAll(
+                    experienceTask, salesTask, marketTask, partnersTask, familyTask, occTask,
+                    salesPlanTask, bankAssetsTask, landAssetsAllTask, buildingAssetsAllTask,
+                    loansTask, proposalsTask, approvalsTask, companiesOpTask
+                );
+
+                _experiences = (experienceTask.Result ?? new())
                     .Where(x => x.DealerId == dealerId.Value)
                     .ToList();
-                var allSales = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all") ?? new();
+
+                var allSales = salesTask.Result ?? new();
                 _annualSales = allSales.Where(x => x.DealerId == dealerId.Value).ToList();
-                var allMarketDetails = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new();
+
+                var allMarketDetails = marketTask.Result ?? new();
                 _marketDetails = allMarketDetails.Where(x => x.DealerId == dealerId.Value).ToList();
-                var allPartners = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all") ?? new();
+
+                var allPartners = partnersTask.Result ?? new();
                 _savedPartners = allPartners.Where(x => x.DealerId == dealerId.Value).ToList();
 
                 // Only fetch family & occupations linked to this dealer's partners
                 var partnerIds = _savedPartners.Select(p => p.Id).ToList();
 
-                var allFamily = await Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails/all") ?? new();
+                var allFamily = familyTask.Result ?? new();
                 _familyAll = allFamily.Where(f => partnerIds.Contains(f.OwnershipPartnerId)).ToList();
 
-                var allOcc = await Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation/all") ?? new();
+                var allOcc = occTask.Result ?? new();
                 _occupationsAll = allOcc.Where(o => partnerIds.Contains(o.OwnershipPartnerId)).ToList();
-                var allSalesPlan = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new();
+
+                var allSalesPlan = salesPlanTask.Result ?? new();
                 _salesPlanningAll = allSalesPlan.Where(x => x.DealerId == dealerId.Value).ToList();
 
-                var allBankAssets = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new();
+                var allBankAssets = bankAssetsTask.Result ?? new();
                 _bankAssetsAll = allBankAssets.Where(a => a.DealerId == dealerId.Value).ToList();
 
-               _landAssetsAll = await Http.GetFromJsonAsync<List<DealerAssetLand>>($"api/DealerAssetLand/byDealer/{dealerId.Value}") ?? new();
-               _buildingAssetsAll = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>($"api/DealerAssetBuilding/byDealer/{dealerId.Value}") ?? new();
+                _landAssetsAll = landAssetsAllTask.Result ?? new();
+                _buildingAssetsAll = buildingAssetsAllTask.Result ?? new();
 
-                var allLoans = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities/all") ?? new();
+                var allLoans = loansTask.Result ?? new();
                 _loanLiabilitiesAll = allLoans.Where(a => a.DealerId == dealerId.Value).ToList();
 
-                var allProposals = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all") ?? new();
+                var allProposals = proposalsTask.Result ?? new();
                 _proposal = allProposals.FirstOrDefault(p => p.DealerId == dealerId.Value) ?? new();
-try
-{
-    var allApprovals = await Http.GetFromJsonAsync<List<DealerApprovalHistory>>("api/DealerApprovalHistory/all") ?? new();
-    _approvalHistories = allApprovals.Where(a => a.DealerId == dealerId.Value).ToList();
-}
-catch (Exception ex) { Console.WriteLine($"Approval history load failed: {ex.Message}"); }
 
+                _approvalHistories = (approvalsTask.Result ?? new())
+                    .Where(a => a.DealerId == dealerId.Value)
+                    .ToList();
 
-                // var allWh = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new();
-                // _savedWarehouses = allWh.Where(w => w.DealerId == dealerId.Value).ToList();
-
-                // var allRail = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities/all") ?? new();
-                // _savedRails = allRail.Where(r => r.DealerId == dealerId.Value).ToList();
-
-                // var allPort = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities/all") ?? new();
-                // _savedPorts = allPort.Where(p => p.DealerId == dealerId.Value).ToList();
-
-                var allCompaniesOperating = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new();
+                var allCompaniesOperating = companiesOpTask.Result ?? new();
                 _companiesOperatingAll = allCompaniesOperating.Where(c => c.DealerId == dealerId.Value).ToList();
 
                 await LoadCreditLimitSalesData();
-
-
             }
         }
         catch (Exception ex)
@@ -3107,7 +3145,11 @@ catch (Exception ex) { Console.WriteLine($"Approval history load failed: {ex.Mes
         // facilities load on their own, regardless of any failure above
         await LoadFacilitiesData();
     }
-
+    private async Task<T?> SafeGetAsync<T>(string url)
+    {
+        try { return await Http.GetFromJsonAsync<T>(url); }
+        catch (Exception ex) { Console.WriteLine($"Load failed for {url}: {ex.Message}"); return default; }
+    }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Wait until Loading is finished before triggering the print
@@ -3130,19 +3172,20 @@ catch (Exception ex) { Console.WriteLine($"Approval history load failed: {ex.Mes
             catch { }
         }
     }
-    private async Task LoadFacilitiesData()
+   private async Task LoadFacilitiesData()
 {
     if (!dealerId.HasValue || dealerId.Value <= 0) return;
     var id = dealerId.Value;
 
-    try { _savedWarehouses = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>($"api/DealerWarehouseFacilities/byDealer/{id}") ?? new(); }
-    catch (Exception ex) { Console.WriteLine($"Warehouse load failed: {ex.Message}"); }
+    var whTask   = SafeGetAsync<List<DealerWarehouseFacilities>>($"api/DealerWarehouseFacilities/byDealer/{id}");
+    var railTask = SafeGetAsync<List<DealerRailFacilities>>($"api/DealerRailFacilities/byDealer/{id}");
+    var portTask = SafeGetAsync<List<DealerPortFacilities>>($"api/DealerPortFacilities/byDealer/{id}");
 
-    try { _savedRails = await Http.GetFromJsonAsync<List<DealerRailFacilities>>($"api/DealerRailFacilities/byDealer/{id}") ?? new(); }
-    catch (Exception ex) { Console.WriteLine($"Rail load failed: {ex.Message}"); }
+    await Task.WhenAll(whTask, railTask, portTask);
 
-    try { _savedPorts = await Http.GetFromJsonAsync<List<DealerPortFacilities>>($"api/DealerPortFacilities/byDealer/{id}") ?? new(); }
-    catch (Exception ex) { Console.WriteLine($"Port load failed: {ex.Message}"); }
+    _savedWarehouses = whTask.Result ?? new();
+    _savedRails = railTask.Result ?? new();
+    _savedPorts = portTask.Result ?? new();
 }
     private string GetStateName(int id) => _statesAll.FirstOrDefault(x => x.Id == id)?.StateName ?? "-";
     private string GetDistrictName(int id) => _DistrictAll.FirstOrDefault(x => x.Id == id)?.DistrictName ?? "-";
@@ -3245,64 +3288,87 @@ catch (Exception ex) { Console.WriteLine($"Approval history load failed: {ex.Mes
     private static decimal ConvertToLakhs(decimal grossAmount) => grossAmount / 100000m;
 
 // FY columns in order (oldest -> newest), matching the CreditLimit page
+// FY columns in order (oldest -> newest) — computed live, same logic as CreditLimit.razor,
+// instead of trusting potentially-stale _proposal.FY1/FY2/FY3 values from the database.
 private List<(int Id, string Name)> GetPerformanceYears()
 {
-    var ids = new List<int>();
-    if (_proposal.FY1 > 0) ids.Add(_proposal.FY1);
-    if (_proposal.FY2 > 0) ids.Add(_proposal.FY2);
-    if (_proposal.FY3 > 0) ids.Add(_proposal.FY3);
+    var today = DateTime.Today;
+    int currentFyStartYear = today.Month >= 4 ? today.Year : today.Year - 1;
 
-    // Fallback: 3 most recent completed FYs if the proposal didn't store them
-    if (ids.Count == 0)
+    var wantedStartYears = new[]
     {
-        ids = _financialYears
-            .Where(fy => fy.EndDate <= DateTime.Today)
+        currentFyStartYear - 3,
+        currentFyStartYear - 2,
+        currentFyStartYear - 1
+    };
+
+    var matched = _financialYears
+        .Where(fy => wantedStartYears.Contains(GetFyStartYear(fy)))
+        .OrderBy(fy => GetFyStartYear(fy))
+        .ToList();
+
+    // Fallback: if naming/dates don't line up, take the 3 most recent FYs we have
+    if (matched.Count == 0)
+    {
+        matched = _financialYears
             .OrderByDescending(fy => fy.EndDate)
+            .ThenByDescending(fy => fy.Id)
             .Take(3)
             .OrderBy(fy => fy.EndDate)
-            .Select(fy => fy.Id)
+            .ThenBy(fy => fy.Id)
             .ToList();
     }
 
-    return ids.Select(id =>
-        (id, _financialYears.FirstOrDefault(f => f.Id == id)?.Name ?? "FY")).ToList();
+    return matched.Select(fy => (fy.Id, fy.Name)).ToList();
+}
+
+// Derives the FY start year. Prefers StartDate, falls back to parsing the Name
+// (handles "2023-24", "2023-2024", "FY 2023-24", "2023/24", etc.), then EndDate.
+private int GetFyStartYear(FinancialYear fy)
+{
+    if (fy.StartDate != default && fy.StartDate.Year > 1)
+        return fy.StartDate.Year;
+
+    if (!string.IsNullOrWhiteSpace(fy.Name))
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(fy.Name, @"(\d{4})");
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var y))
+            return y;
+    }
+
+    if (fy.EndDate != default && fy.EndDate.Year > 1)
+        return fy.EndDate.Month >= 4 ? fy.EndDate.Year : fy.EndDate.Year - 1;
+
+    return 0;
 }
 
 private async Task LoadCreditLimitSalesData()
 {
     _creditLimitSales = new();
     _creditSalesError = null; // Reset previous errors
-    
+
     if (!dealerId.HasValue || dealerId.Value <= 0) return;
 
     var fyIds = GetPerformanceYears().Select(y => y.Id).Where(i => i > 0).ToList();
     if (fyIds.Count == 0) return;
 
-    // FIX: Standard ASP.NET Core array binding format
-    // This turns [3, 2, 1] into "&financialYearIds=3&financialYearIds=2&financialYearIds=1"
-    var fyQueryParams = string.Join("", fyIds.Select(id => $"&financialYearIds={id}"));
+    var fyQuery = string.Join(",", fyIds);
 
-    foreach (var cat in _categoriesAll)
+    var tasks = _categoriesAll.Select(cat =>
     {
-        try
-        {
-            var url = $"api/creditlimitsales/by-filter" +
-                      $"?customerId={dealerId.Value}" +
-                      $"&categoryId={cat.Id}" +
-                      fyQueryParams;
+        var url = $"api/creditlimitsales/by-filter" +
+                  $"?customerId={dealerId.Value}" +
+                  $"&categoryId={cat.Id}" +
+                  $"&financialYearIds={fyQuery}";
+        return SafeGetAsync<List<DealerCreditLimitSales>>(url);
+    });
 
-            var rows = await Http.GetFromJsonAsync<List<DealerCreditLimitSales>>(url);
-            if (rows != null)
-            {
-                _creditLimitSales.AddRange(rows);
-            }
-        }
-        catch (Exception ex)
-        {
-            // Capture any 400, 404, or 500 errors so they don't fail silently
-            _creditSalesError = $"API Failure on Cat {cat.Id}: {ex.Message}";
-        }
-    }
+    var results = await Task.WhenAll(tasks);
+
+    _creditLimitSales = results
+        .Where(r => r != null)
+        .SelectMany(r => r!)
+        .ToList();
 }
 private (decimal qty, decimal amount) GetPerfCell(int productId, int fyId)
 {
@@ -3400,7 +3466,7 @@ private bool IsSpecialityCategory(Category? c) =>
     (c.Name.Contains("Speciality", StringComparison.OrdinalIgnoreCase) ||
      c.Name.Contains("Specialty", StringComparison.OrdinalIgnoreCase));
      private bool IsUreaProduct(Product? p) =>
-    p?.Name != null && p.Name.Contains("Urea", StringComparison.OrdinalIgnoreCase);
+    p?.Name != null && p.Name.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase);
 
 // SPIC: Urea fertilizer products only
 private bool IsSpicPerfProduct(Product? p)
