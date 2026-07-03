@@ -611,13 +611,16 @@
     private int CountRejectedBySMM() => _filteredDealers.Count(d => d.SMApproved == false);
     private int CountRejectedByAVP() => _filteredDealers.Count(d => d.AVPApproved == false);
 
-    private string GetApprovalStatus(DealerDto d)
+   private string GetApprovalStatus(DealerDto d)
     {
+        // Nothing counts as "in review" until the user explicitly clicked Submit Registration
+        // on the Final Submission page — filling in all sections alone is not enough.
+        if (!d.IsSubmittedForReview) return "Draft";
+
         if (d.RMApproved == false) return "Rejected by RM";
         if (d.SMApproved == false) return "Rejected by SMM";
         if (d.AVPApproved == false) return "Rejected by AVP";
         if (d.AVPApproved == true) return "Approved";
-        if (!IsDealerComplete(d.Id)) return "Draft";
         if (d.RMApproved == null) return "In RM";
         if (d.RMApproved == true && d.SMApproved == null) return "In SMM";
         if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return "In AVP";
@@ -635,7 +638,7 @@
             if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false) showForRejected = true;
         }
 
-        if (!IsDealerComplete(d.Id) && !showForRejected) return false;
+       if ((!d.IsSubmittedForReview || !IsDealerComplete(d.Id)) && !showForRejected) return false;
         if (d.AVPApproved == true) return false;
 
         if (LoginState.IsRegionRole)
@@ -808,7 +811,7 @@
             if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false) showForRejected = true;
         }
 
-        if (!IsDealerComplete(d.Id) && !showForRejected && !(status != null && status.StartsWith("Rejected"))) return false;
+        if ((!d.IsSubmittedForReview || !IsDealerComplete(d.Id)) && !showForRejected && !(status != null && status.StartsWith("Rejected"))) return false;
 
         if (!(status == "In RM" || status == "In SMM" || status == "In AVP" || showForRejected || (status != null && status.StartsWith("Rejected")))) return false;
 
@@ -921,6 +924,7 @@
         public bool? RMApproved { get; set; }
         public bool? SMApproved { get; set; }
         public bool? AVPApproved { get; set; }
+        public bool IsSubmittedForReview { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
 

@@ -3672,11 +3672,18 @@ private decimal GsSecurityTotalValue() =>
     _proposal.GreenstarFDAmount + _proposal.GreenstarBGAmount
     + _proposal.GreenstarCollateralAmount + _proposal.GreenstarTradeDepositAmount;
 
+private decimal GsSalesTurnoverForCreditLimit() =>
+    GsPerfFertTurnover() + GsSpTurnover();
+
 private decimal GsPropertyPercent() =>
-    GsPerfFertTurnover() > 0 ? (SpicFixedAssets() / GsPerfFertTurnover()) * 100m : 0m;
+    GsSalesTurnoverForCreditLimit() > 0
+        ? (SpicFixedAssets() / GsSalesTurnoverForCreditLimit()) * 100m
+        : 0m;
 
 private decimal GsSecurityPercent() =>
-    GsPerfFertTurnover() > 0 ? (GsSecurityTotalValue() / GsPerfFertTurnover()) * 100m : 0m;
+    GsSalesTurnoverForCreditLimit() > 0
+        ? (GsSecurityTotalValue() / GsSalesTurnoverForCreditLimit()) * 100m
+        : 0m;
 private string GetSpicExperienceDisplay()
 {
     if (!_model.DateOfAppointment.HasValue) return "-";
@@ -3714,15 +3721,22 @@ private decimal GetMoRecommendedLimit()
     if (SelectedCompany == "GreenStar")
     {
         var pct = GetCreditPercentFromScore(_proposal.GQ12Mark);
-        var proposed = GsPerfFertTurnover() * (decimal)(pct / 100.0);
+
+        // GreenStar page calculation:
+        // GreenstarSalesTurnover = Fertilizer Sales Turnover with GFL + SP Turnover
+        var greenstarSalesTurnover = GsPerfFertTurnover() + GsSpTurnover();
+
+        var proposed = greenstarSalesTurnover * (decimal)(pct / 100.0);
+
         return proposed + _proposal.GreenstarAdditionalCreditLimit;
     }
-    else
-    {
-        var pct = GetCreditPercentFromScore(_proposal.Q11Mark);
-        var proposed = SpicPerfUreaTurnover() * (decimal)(pct / 100.0);
-        return proposed + _proposal.AdditionalCreditLimit;
-    }
+
+    // SPIC page calculation:
+    // SPIC uses only Urea Sales Turnover with SPIC
+    var spicPct = GetCreditPercentFromScore(_proposal.Q11Mark);
+    var spicProposed = SpicPerfUreaTurnover() * (decimal)(spicPct / 100.0);
+
+    return spicProposed + _proposal.AdditionalCreditLimit;
 }
     // --- DTO Definitions (matching your Register component) --- //
     public class DealerFormModel

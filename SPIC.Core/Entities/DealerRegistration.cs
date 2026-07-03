@@ -171,6 +171,7 @@ namespace SPIC.Core.Entities
 		public string? GSTConstitutionofBusiness { get; set; }
 		[Display(Name = "Inactive Proposal")]
 		public FutureBusinessProposal? InactiveProposal { get; set; }
+        public bool? IsSubmittedForReview { get; set; } = false;
 
 	}
     public class DealerApprovalHistory
