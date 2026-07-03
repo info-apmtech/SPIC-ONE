@@ -68,6 +68,7 @@
     private Dictionary<int, string> _bankNames = new();
     private List<DR.Category> _categories = new();
     private List<DR.Product> _products = new();
+    private List<DR.ProductGroup> _productGroups = new();
     private List<DR.Unit> _units = new();
     private static readonly string[] _months = ["April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February", "March"];
     private decimal _totalSalesQty = 0;
@@ -169,6 +170,7 @@
             _units = await Http.GetFromJsonAsync<List<DR.Unit>>("api/Unit") ?? new();
             _products = await Http.GetFromJsonAsync<List<DR.Product>>("api/Product") ?? new();
             _productNames = _products.ToDictionary(p => p.Id, p => p.Name);
+            _productGroups = await Http.GetFromJsonAsync<List<DR.ProductGroup>>("api/ProductGroup") ?? new();
             _competitors = await Http.GetFromJsonAsync<List<DR.Competitor>>("api/Competitor") ?? new();
             _competitorNames = _competitors.ToDictionary(c => c.Id.ToString(), c => c.Name);
             var warehouses = await Http.GetFromJsonAsync<List<DR.Warehouse>>("api/Warehouse") ?? new();
@@ -275,13 +277,54 @@
     private string FyName(int id) => _financialYearNames.TryGetValue(id, out var n) ? n : id.ToString();
 
     // Ensure file urls point to API directly using Http.BaseAddress to resolve port 7032
-    private string GetFileUrl(string? path)
+  private string GetFileUrl(string? path)
     {
         if (string.IsNullOrEmpty(path)) return "";
         var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
         var segments = path.Split('/').Select(Uri.EscapeDataString);
         return $"{baseUrl}/api/DealerFile/view/{string.Join("/", segments)}";
     }
+
+    private string GetShortFileName(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return "-";
+        return path.Replace('\\', '/').Split('/').Last();
+    }
+    private static string NumOrDash(decimal v) => v == 0 ? "-" : v.ToString("N2");
+    private RenderFragment RenderFileRow(string? path) => builder =>
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            builder.OpenElement(0, "span");
+            builder.AddAttribute(1, "class", "file-view-none");
+            builder.AddContent(2, "No file uploaded");
+            builder.CloseElement();
+            return;
+        }
+
+        var url = GetFileUrl(path);
+        var name = GetShortFileName(path);
+
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "file-view-row");
+
+        builder.OpenElement(2, "span");
+        builder.AddAttribute(3, "class", "file-view-name");
+        builder.AddAttribute(4, "title", name);
+        builder.AddContent(5, name);
+        builder.CloseElement();
+
+        builder.OpenElement(6, "a");
+        builder.AddAttribute(7, "class", "file-view-btn");
+        builder.AddAttribute(8, "href", url);
+        builder.AddAttribute(9, "target", "_blank");
+        builder.AddAttribute(10, "rel", "noopener noreferrer");
+        builder.AddAttribute(11, "data-enhance-nav", "false");
+        builder.AddContent(12, "View");
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
 
     private IEnumerable<(string title, string? path)> GetEnclosureItems()
     {
@@ -313,24 +356,28 @@
         return list;
     }
 
-    private string GetEnclosureHtml()
+private string GetEnclosureHtml()
     {
         var sb = new System.Text.StringBuilder();
-        foreach (var item in GetEnclosureItems())
+
+        // Only render documents that were actually uploaded (non-empty path)
+        var uploaded = GetEnclosureItems()
+            .Where(item => !string.IsNullOrWhiteSpace(item.path))
+            .ToList();
+
+        if (!uploaded.Any())
         {
-            if (!string.IsNullOrEmpty(item.path))
-            {
-                // data-enhance-nav="false" is required to stop Blazor from intercepting the link
-                sb.Append($"<a class=\"enclosure-btn\" href=\"{GetFileUrl(item.path)}\" data-enhance-nav=\"false\">{System.Net.WebUtility.HtmlEncode(item.title)}</a>");
-            }
-            else
-            {
-                sb.Append($"<div class=\"enclosure-btn\">{System.Net.WebUtility.HtmlEncode(item.title)}</div>");
-            }
+            return "<div class=\"enclosure-btn\">No documents submitted</div>";
         }
+
+        foreach (var item in uploaded)
+        {
+            // data-enhance-nav="false" is required to stop Blazor from intercepting the link
+            sb.Append($"<a class=\"enclosure-btn\" href=\"{GetFileUrl(item.path)}\" data-enhance-nav=\"false\">{System.Net.WebUtility.HtmlEncode(item.title)}</a>");
+        }
+
         return sb.ToString();
     }
-
     private decimal GetCapitalPosition() => _dealer?.CapitalInvestment ?? 0m;
     private decimal GetTotalAssets()
     {
@@ -342,6 +389,21 @@
     }
     private decimal GetTotalLoans() => _loans?.Sum(x => x.LoanValue) ?? 0m;
     private decimal GetNetValue() => GetCapitalPosition() + GetTotalAssets() - GetTotalLoans();
+
+     private string GetEntityTypeName(DR.EntityType? entityType)
+    {
+        if (!entityType.HasValue) return "-";
+        return entityType.Value switch
+        {
+            DR.EntityType.soleProprietor => "Sole Proprietor",
+            DR.EntityType.Partnership    => "Partnership",
+            DR.EntityType.LLP            => "LLP",
+            DR.EntityType.PvtLtd         => "PVT LTD",
+            DR.EntityType.PubLtd         => "PUB LTD",
+            DR.EntityType.Society        => "Society",
+            _                            => "-"
+        };
+    }
 
     // Score → credit percent (same table the CreditLimit pages use)
 private double GetCreditPercentFromScore(double scorePercent) => scorePercent switch
@@ -396,6 +458,113 @@ private decimal GetGflMoRecommendedLimit()
     var proposed = turnover * (decimal)(pct / 100.0);
     return proposed + _creditProposal.GreenstarAdditionalCreditLimit;
 }
+
+// ---- Valuation "Value" column helpers (mirror DealershipPDF, adapted to this page's data) ----
+private bool IsSpecialityCategory(DR.Category? c) =>
+    c?.Name != null &&
+    (c.Name.Contains("Speciality", StringComparison.OrdinalIgnoreCase) ||
+     c.Name.Contains("Specialty", StringComparison.OrdinalIgnoreCase));
+
+private bool IsSpicPerfProduct(DR.Product? p)
+{
+    if (p == null) return false;
+    var cat = _categories.FirstOrDefault(c => c.Id == p.CategoryId);
+    return IsFertilizerCategory(cat) && IsUreaProduct(p);
+}
+
+private bool IsGreenstarFertProduct(DR.Product? p)
+{
+    if (p == null) return false;
+    var cat = _categories.FirstOrDefault(c => c.Id == p.CategoryId);
+    return IsFertilizerCategory(cat) && !IsUreaProduct(p);
+}
+
+private bool IsSpecialityProduct(DR.Product? p)
+{
+    if (p == null) return false;
+    var cat = _categories.FirstOrDefault(c => c.Id == p.CategoryId);
+    return IsSpecialityCategory(cat);
+}
+
+// SPIC — annual (from _annualSales)
+private decimal SpicAnnualUreaQty() =>
+    _annualSales.Where(s => IsSpicPerfProduct(_products.FirstOrDefault(p => p.Id == s.ProductId)))
+                .Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty);
+
+private decimal SpicAnnualUreaTurnover() =>
+    _annualSales.Where(s => IsSpicPerfProduct(_products.FirstOrDefault(p => p.Id == s.ProductId)))
+                .Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount);
+
+// SPIC — performance (latest FY = FY3 columns of DealerCreditLimitSalesPerformance)
+private decimal SpicPerfUreaQty() =>
+    _creditSales.Where(s => IsSpicPerfProduct(_products.FirstOrDefault(p => p.Id == s.ProductId)))
+                .Sum(s => s.FY3Qty);
+
+private decimal SpicPerfUreaTurnover() =>
+    _creditSales.Where(s => IsSpicPerfProduct(_products.FirstOrDefault(p => p.Id == s.ProductId)))
+                .Sum(s => s.FY3Amount);
+
+private decimal SpicTenureYears()
+{
+    if (_dealer == null) return 0;
+    var appt = _dealer.DateOfAppointment;
+    if (appt == default || appt > DateTime.Now) return 0;
+    return Math.Round((decimal)((DateTime.Now - appt).TotalDays / 365.25), 1);
+}
+
+private decimal SpicFixedAssets() =>
+    (_assetLands?.Sum(l => l.PropertyValue) ?? 0) + (_assetBuildings?.Sum(b => b.PropertyValue) ?? 0);
+
+private decimal SpicSecurityTotalValue() =>
+    (_creditProposal?.SpicFDAmount ?? 0) + (_creditProposal?.SpicBGAmount ?? 0)
+    + (_creditProposal?.SpicCollateralAmount ?? 0) + (_creditProposal?.SpicTradeDepositAmount ?? 0);
+
+private decimal SpicPropertyPercent() =>
+    SpicPerfUreaTurnover() > 0 ? (SpicFixedAssets() / SpicPerfUreaTurnover()) * 100m : 0m;
+
+private decimal SpicSecurityPercent() =>
+    SpicPerfUreaTurnover() > 0 ? (SpicSecurityTotalValue() / SpicPerfUreaTurnover()) * 100m : 0m;
+
+private string SpicOverduesDisplay() =>
+    _creditProposal?.SpicMonthlyAvgNetOverdues.HasValue == true
+        ? _creditProposal.SpicMonthlyAvgNetOverdues.Value.ToString("N2") : "-";
+
+// GreenStar — annual
+private decimal GsAnnualFertQty() =>
+    _annualSales.Where(s => IsGreenstarFertProduct(_products.FirstOrDefault(p => p.Id == s.ProductId)))
+                .Sum(s => s.OwnRetailsSaleQty + s.SaleToDealerQty);
+
+private decimal GsAnnualFertTurnover() =>
+    _annualSales.Where(s => IsGreenstarFertProduct(_products.FirstOrDefault(p => p.Id == s.ProductId)))
+                .Sum(s => s.OwnRetailsSaleAmount + s.SaleToDealerAmount);
+
+// GreenStar — performance (FY3)
+private decimal GsPerfFertQty() =>
+    _creditSales.Where(s => IsGreenstarFertProduct(_products.FirstOrDefault(p => p.Id == s.ProductId)))
+                .Sum(s => s.FY3Qty);
+
+private decimal GsPerfFertTurnover() =>
+    _creditSales.Where(s => IsGreenstarFertProduct(_products.FirstOrDefault(p => p.Id == s.ProductId)))
+                .Sum(s => s.FY3Amount);
+
+private decimal GsSpTurnover() =>
+    _creditSales.Where(s => IsSpecialityProduct(_products.FirstOrDefault(p => p.Id == s.ProductId)))
+                .Sum(s => s.FY3Amount);
+
+private decimal GsSecurityTotalValue() =>
+    (_creditProposal?.GreenstarFDAmount ?? 0) + (_creditProposal?.GreenstarBGAmount ?? 0)
+    + (_creditProposal?.GreenstarCollateralAmount ?? 0) + (_creditProposal?.GreenstarTradeDepositAmount ?? 0);
+
+private decimal GsPropertyPercent() =>
+    GsPerfFertTurnover() > 0 ? (SpicFixedAssets() / GsPerfFertTurnover()) * 100m : 0m;
+
+private decimal GsSecurityPercent() =>
+    GsPerfFertTurnover() > 0 ? (GsSecurityTotalValue() / GsPerfFertTurnover()) * 100m : 0m;
+
+private string GsOverduesDisplay() =>
+    _creditProposal?.GreenstarMonthlyAvgNetOverdues.HasValue == true
+        ? _creditProposal.GreenstarMonthlyAvgNetOverdues.Value.ToString("N2") : "-";
+    
     private static decimal GetSalesQty(DR.SalesPlanningInDealerRegistration row, int monthIndex)
     {
         return monthIndex switch { 0 => row.AprilQty, 1 => row.MayQty, 2 => row.JuneQty, 3 => row.JulyQty, 4 => row.AugustQty, 5 => row.SeptemberQty, 6 => row.OctoberQty, 7 => row.NovemberQty, 8 => row.DecemberQty, 9 => row.JanuaryQty, 10 => row.FebruaryQty, 11 => row.MarchQty, _ => 0 };
@@ -1631,8 +1800,7 @@ private async Task ApproveDealer()
                             <div class="data-row"><div class="data-label">Date of Appointment</div><div class="data-value">@(_dealer?.DateOfAppointment.ToString("dd MMM yyyy") ?? "-")</div></div>
                             @* <div class="data-row"><div class="data-label">Business Type</div><div class="data-value">@(_dealer?.BusinessEntityType ?? "-")</div></div> *@
                             <div class="data-row"><div class="data-label">Years of Experience</div><div class="data-value">@(_dealer?.YearsofExperiance > 0 ? $"{_dealer.YearsofExperiance} Years" : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Entity Type</div><div class="data-value">@(_dealer?.EntityType?.ToString() ?? "-")</div></div>
-                        </div>
+                            <div class="data-row"><div class="data-label">Entity Type</div><div class="data-value">@GetEntityTypeName(_dealer?.EntityType)</div></div>                        </div>
                     </div>
                 </div>
 @*                 <div class="col-md-6">
@@ -1682,11 +1850,11 @@ private async Task ApproveDealer()
                         </div>
                         <div class="detail-card-body">
                             <div class="data-row"><div class="data-label">GST Number</div><div class="data-value">@(_dealer?.GSTNumber ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.GSTFilePath) ? "Yes" : "No")</div></div>
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(_dealer?.GSTFilePath)</div></div>
                             <div class="data-row mt-4"><div class="data-label">PAN Number</div><div class="data-value">@(_dealer?.PANNumber ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.PANFilePath) ? "Yes" : "No")</div></div>
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(_dealer?.PANFilePath)</div></div>
                             <div class="data-row mt-4"><div class="data-label">Aadhaar Number</div><div class="data-value">@(_dealer?.AadhaarNumber ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.AadhaarFilePath) ? "Yes" : "No")</div></div>
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(_dealer?.AadhaarFilePath)</div></div>
                         </div>
                     </div>
                 </div>
@@ -1697,15 +1865,11 @@ private async Task ApproveDealer()
                             <h4 class="detail-card-title"><i class="bi bi-box-seam"></i> Wholesale Fertilizer Details</h4>
                             <i class="bi bi-pencil-square edit-icon" @onclick="EditRegister" role="button" title="Edit"></i>
                         </div>
-                        <div class="detail-card-body">
+                       <div class="detail-card-body">
                             <div class="data-row"><div class="data-label">Wholesale Fertilizer License</div><div class="data-value">@(_dealer?.WholeSaleFertilizerLicenseNumber ?? "-")</div></div>
                             <div class="data-row"><div class="data-label">Expiry Date</div><div class="data-value">@(_dealer?.WholesaleLicenseExpiryDate != DateTime.MinValue ? _dealer?.WholesaleLicenseExpiryDate.ToString("dd MMM yyyy") : "-")</div></div>
                             <div class="data-row"><div class="data-label">mFMS Code</div><div class="data-value">@(_dealer?.WholesalemFMSCode ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.WholesaleLicenseFilePath) ? "Yes" : "No")</div></div>
-                            @if (!string.IsNullOrEmpty(_dealer?.WholesaleLicenseFilePath))
-                            {
-                                <div class="data-row"><div class="data-label">View File</div><div class="data-value"><a href="@GetFileUrl(_dealer.WholesaleLicenseFilePath)" data-enhance-nav="false" class="text-primary fw-bold">Open</a></div></div>
-                            }
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(_dealer?.WholesaleLicenseFilePath)</div></div>
                         </div>
                     </div>
                 </div>
@@ -1716,15 +1880,11 @@ private async Task ApproveDealer()
                             <h4 class="detail-card-title"><i class="bi bi-shop"></i> Retail Fertilizer Details</h4>
                             <i class="bi bi-pencil-square edit-icon" @onclick="EditRegister" role="button" title="Edit"></i>
                         </div>
-                        <div class="detail-card-body">
+                       <div class="detail-card-body">
                             <div class="data-row"><div class="data-label">Retail Fertilizer License Details</div><div class="data-value">@(_dealer?.RetailFertilizerLicenseNumber ?? "-")</div></div>
                             <div class="data-row"><div class="data-label">Expiry Date</div><div class="data-value">@(_dealer?.RetailLicenseExpiryDate != DateTime.MinValue ? _dealer?.RetailLicenseExpiryDate.ToString("dd MMM yyyy") : "-")</div></div>
                             <div class="data-row"><div class="data-label">mFMS Code</div><div class="data-value">@(_dealer?.RetailmFMSCode ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">File Uploaded</div><div class="data-value">@(!string.IsNullOrEmpty(_dealer?.RetailLicenseFilePath) ? "Yes" : "No")</div></div>
-                            @if (!string.IsNullOrEmpty(_dealer?.RetailLicenseFilePath))
-                            {
-                                <div class="data-row"><div class="data-label">View File</div><div class="data-value"><a href="@GetFileUrl(_dealer.RetailLicenseFilePath)" data-enhance-nav="false" class="text-primary fw-bold">Open</a></div></div>
-                            }
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(_dealer?.RetailLicenseFilePath)</div></div>
                         </div>
                     </div>
                 </div>
@@ -1816,6 +1976,7 @@ private async Task ApproveDealer()
                             <tr>
                                 <th>S:No</th>
                                 <th>Product</th>
+                                <th>Group</th>
                                 <th>Category</th>
                                 <th>Own Retail Qty (MT)</th>
                                 <th>Own Retail Amount (₹)</th>
@@ -1833,32 +1994,34 @@ private async Task ApproveDealer()
                                 {
                                     var product = _products.FirstOrDefault(p => p.Id == a.ProductId);
                                     var category = _categories.FirstOrDefault(c => c.Id == a.CategoryId);
+                                    var group = _productGroups.FirstOrDefault(g => g.Id == product?.ProductGroupId);
                                     <tr>
                                         <td>@idx</td>
                                         <td>@(product?.Name ?? a.ProductId.ToString())</td>
+                                        <td>@(group?.Name ?? "-")</td>
                                         <td>@(category?.Name ?? a.CategoryId.ToString())</td>
-                                        <td>@a.OwnRetailsSaleQty.ToString("N2")</td>
-                                        <td>@a.OwnRetailsSaleAmount.ToString("N2")</td>
-                                        <td>@a.SaleToDealerQty.ToString("N2")</td>
-                                        <td>@a.SaleToDealerAmount.ToString("N2")</td>
-                                        <td>@((a.OwnRetailsSaleQty + a.SaleToDealerQty).ToString("N2"))</td>
-                                        <td>@((a.OwnRetailsSaleAmount + a.SaleToDealerAmount).ToString("N2"))</td>
+                                        <td>@NumOrDash(a.OwnRetailsSaleQty)</td>
+                                        <td>@NumOrDash(a.OwnRetailsSaleAmount)</td>
+                                        <td>@NumOrDash(a.SaleToDealerQty)</td>
+                                        <td>@NumOrDash(a.SaleToDealerAmount)</td>
+                                        <td>@NumOrDash(a.OwnRetailsSaleQty + a.SaleToDealerQty)</td>
+                                        <td>@NumOrDash(a.OwnRetailsSaleAmount + a.SaleToDealerAmount)</td>
                                     </tr>
                                     idx++;
                                 }
                                 <tr class="grand-total-row">
-                                    <td colspan="3" style="text-align: right; padding-right: 40px;">GRAND TOTAL</td>
-                                    <td>@_annualSales.Sum(x => x.OwnRetailsSaleQty).ToString("N2")</td>
-                                    <td>@_annualSales.Sum(x => x.OwnRetailsSaleAmount).ToString("N2")</td>
-                                    <td>@_annualSales.Sum(x => x.SaleToDealerQty).ToString("N2")</td>
-                                    <td>@_annualSales.Sum(x => x.SaleToDealerAmount).ToString("N2")</td>
-                                    <td>@_annualSales.Sum(x => x.OwnRetailsSaleQty + x.SaleToDealerQty).ToString("N2")</td>
-                                    <td>@_annualSales.Sum(x => x.OwnRetailsSaleAmount + x.SaleToDealerAmount).ToString("N2")</td>
+                                    <td colspan="4" style="text-align: right; padding-right: 40px;">GRAND TOTAL</td>
+                                    <td>@NumOrDash(_annualSales.Sum(x => x.OwnRetailsSaleQty))</td>
+                                    <td>@NumOrDash(_annualSales.Sum(x => x.OwnRetailsSaleAmount))</td>
+                                    <td>@NumOrDash(_annualSales.Sum(x => x.SaleToDealerQty))</td>
+                                    <td>@NumOrDash(_annualSales.Sum(x => x.SaleToDealerAmount))</td>
+                                    <td>@NumOrDash(_annualSales.Sum(x => x.OwnRetailsSaleQty + x.SaleToDealerQty))</td>
+                                    <td>@NumOrDash(_annualSales.Sum(x => x.OwnRetailsSaleAmount + x.SaleToDealerAmount))</td>
                                 </tr>
                             }
                             else
                             {
-                                <tr><td colspan="9">No annual sales data</td></tr>
+                                <tr><td colspan="10">No annual sales data</td></tr>
                             }
                         </tbody>
                     </table>
@@ -1988,7 +2151,7 @@ private async Task ApproveDealer()
         <div class="accordion-body">
             <div class="row g-4">
                 <div class="col-md-6">
-                    <div class="detail-card">
+                    <div class="detail-card h-100">
                         <div class="detail-card-header">
                             <h4 class="detail-card-title"><i class="bi bi-person-badge"></i> Ownership Information</h4>
                             <i class="bi bi-pencil-square edit-icon" @onclick="EditProprietor" role="button" title="Edit"></i>
@@ -2005,11 +2168,10 @@ private async Task ApproveDealer()
                                 <div class="data-row"><div class="data-label">Phone Number:</div><div class="data-value">@_ownership.PhoneNumber</div></div>
                                 <div class="data-row"><div class="data-label">Email:</div><div class="data-value">@_ownership.Email</div></div>
                                 <div class="data-row"><div class="data-label">Aadhaar Number:</div><div class="data-value">@_ownership.AadhaarNumber</div></div>
-                                <div class="data-row"><div class="data-label">Aadhaar Document:</div><div class="data-value">@(!string.IsNullOrEmpty(_ownership.AadhaarFilePath) ? "Yes" : "No")</div></div>
+                                <div class="data-row"><div class="data-label">Aadhaar Document:</div><div class="data-value">@RenderFileRow(_ownership.AadhaarFilePath)</div></div>
                                 <div class="data-row"><div class="data-label">PAN Number:</div><div class="data-value">@_ownership.PANNumber</div></div>
-                                <div class="data-row"><div class="data-label">PAN Document:</div><div class="data-value">@(!string.IsNullOrEmpty(_ownership.PANFilePath) ? "Yes" : "No")</div></div>
-                                <div class="data-row"><div class="data-label">Uploaded Image:</div><div class="data-value">@(!string.IsNullOrEmpty(_ownership.ProprietorImagePath) ? "Yes" : "No")</div></div>
-
+                                <div class="data-row"><div class="data-label">PAN Document:</div><div class="data-value">@RenderFileRow(_ownership.PANFilePath)</div></div>
+                                <div class="data-row"><div class="data-label">Proprietor Image:</div><div class="data-value">@RenderFileRow(_ownership.ProprietorImagePath)</div></div>
                                 <div class="mt-3 mb-2"><strong>Address Details</strong></div>
                                 <div class="data-row"><div class="data-label">Shop No / Room No / Block No:</div><div class="data-value">@(_ownership.ShopNoORRoomNoOrBlockNo ?? "-")</div></div>
                                 <div class="data-row"><div class="data-label">Street:</div><div class="data-value">@(_ownership.Street ?? "-")</div></div>
@@ -2028,60 +2190,61 @@ private async Task ApproveDealer()
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-briefcase"></i> Other Occupation / Agencies</h4>
-                            <i class="bi bi-pencil-square edit-icon" @onclick="EditProprietor" role="button" title="Edit"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            @if (_occupations != null && _occupations.Any())
-                            {
-                                foreach (var oc in _occupations)
+<div class="col-md-6">
+                    <div class="d-flex flex-column gap-4 h-100">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-briefcase"></i> Other Occupation / Agencies</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="EditProprietor" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                @if (_occupations != null && _occupations.Any())
                                 {
-                                    <div class="data-row"><div class="data-label">Name of Company</div><div class="data-value">@oc.NameofCompany</div></div>
-                                    <div class="data-row"><div class="data-label">Sector:</div><div class="data-value">@oc.SectorId</div></div>
-                                    <div class="data-row"><div class="data-label">Annual Turnover:</div><div class="data-value">@oc.AnnualTurnover</div></div>
-                                    <div class="mb-2"></div>
+                                    foreach (var oc in _occupations)
+                                    {
+                                        <div class="data-row"><div class="data-label">Name of Company</div><div class="data-value">@oc.NameofCompany</div></div>
+                                        <div class="data-row"><div class="data-label">Sector:</div><div class="data-value">@oc.SectorId</div></div>
+                                        <div class="data-row"><div class="data-label">Annual Turnover:</div><div class="data-value">@oc.AnnualTurnover</div></div>
+                                        <div class="mb-2"></div>
+                                    }
                                 }
-                            }
-                            else
-                            {
-                                <div class="data-row"><div class="data-label">Other Occupation</div><div class="data-value">None</div></div>
-                            }
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-people"></i> Family Members</h4>
-                            <i class="bi bi-pencil-square edit-icon" @onclick="EditProprietor" role="button" title="Edit"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            @if (_partners != null && _partners.Any())
-                            {
-                                foreach (var p in _partners)
+                                else
                                 {
-                                    <div class="data-row"><div class="data-label">Family Member Name:</div><div class="data-value">@p.FamilyMemberName</div></div>
-                                    <div class="data-row"><div class="data-label">D.O.B:</div><div class="data-value">@p.DateOfBirth.ToString("dd/MM/yyyy")</div></div>
-                                    <div class="data-row"><div class="data-label">Age:</div><div class="data-value">@p.Age</div></div>
-                                    <div class="data-row"><div class="data-label">Relationship:</div><div class="data-value">@p.RelationshipId</div></div>
-                                    <div class="data-row"><div class="data-label">Occupation:</div><div class="data-value">@p.Occupation ?? "-"</div></div>
-                                    <div class="mb-2"></div>
+                                    <div class="data-row"><div class="data-label">Other Occupation</div><div class="data-value">None</div></div>
                                 }
-                            }
-                            else
-                            {
-                                <div class="data-row"><div class="data-label">Family Members</div><div class="data-value">None</div></div>
-                            }
+                            </div>
+                        </div>
+
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-people"></i> Family Members</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="EditProprietor" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                @if (_partners != null && _partners.Any())
+                                {
+                                    foreach (var p in _partners)
+                                    {
+                                        <div class="data-row"><div class="data-label">Family Member Name:</div><div class="data-value">@p.FamilyMemberName</div></div>
+                                        <div class="data-row"><div class="data-label">D.O.B:</div><div class="data-value">@p.DateOfBirth.ToString("dd/MM/yyyy")</div></div>
+                                        <div class="data-row"><div class="data-label">Age:</div><div class="data-value">@p.Age</div></div>
+                                        <div class="data-row"><div class="data-label">Relationship:</div><div class="data-value">@p.RelationshipId</div></div>
+                                        <div class="data-row"><div class="data-label">Occupation:</div><div class="data-value">@(p.Occupation ?? "-")</div></div>
+                                        <div class="mb-2"></div>
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="data-row"><div class="data-label">Family Members</div><div class="data-value">None</div></div>
+                                }
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
+           
     <div class="custom-accordion @(IsCompaniesOperatingOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsCompaniesOperatingOpen = !IsCompaniesOperatingOpen">
             Companies Operating In Your Place
@@ -2120,6 +2283,11 @@ private async Task ApproveDealer()
         <div class="accordion-body">
             @if (_salesPlanning != null && _salesPlanning.Any())
             {
+                @* Only keep months where at least one row has a non-zero qty or amount *@
+                var activeMonths = Enumerable.Range(0, _months.Length)
+                    .Where(i => _salesPlanning.Any(x => GetSalesQty(x, i) != 0 || GetSalesAmount(x, i) != 0))
+                    .ToList();
+
                 <div class="detail-card">
                     <div class="detail-card-header">
                         <h4 class="detail-card-title"><i class="bi bi-file-earmark-bar-graph"></i> Sales Planning & Forecast</h4>
@@ -2129,13 +2297,13 @@ private async Task ApproveDealer()
                             <thead>
                                 <tr>
                                     <th rowspan="2" style="min-width: 180px; position: sticky; left: 0; background: #fff; z-index: 2;">Product Name</th>
-                                    @foreach (var month in _months)
+                                    @foreach (var i in activeMonths)
                                     {
-                                        <th colspan="2" class="text-center border-start">@month</th>
+                                        <th colspan="2" class="text-center border-start">@_months[i]</th>
                                     }
                                 </tr>
                                 <tr>
-                                    @foreach (var month in _months)
+                                    @foreach (var i in activeMonths)
                                     {
                                         <th class="text-center text-muted fw-normal border-start">Qty</th>
                                         <th class="text-center text-muted fw-normal">Lakhs</th>
@@ -2150,20 +2318,24 @@ private async Task ApproveDealer()
                                     var unitName = category != null ? (_units.FirstOrDefault(u => u.Id == category.UnitId)?.Name ?? "MT") : "MT";
                                     <tr>
                                         <td class="fw-medium text-dark" style="position: sticky; left: 0; background: #fff; z-index: 1;">@(product?.Name ?? "Unknown") (@unitName)</td>
-                                        @for (int i = 0; i < _months.Length; i++)
+                                        @foreach (var i in activeMonths)
                                         {
-                                            <td class="border-start">@GetSalesQty(item, i).ToString("N2")</td>
-                                            <td>₹@GetSalesAmount(item, i).ToString("N2")</td>
+                                            var q = GetSalesQty(item, i);
+                                            var amt = GetSalesAmount(item, i);
+                                            <td class="border-start">@(q == 0 ? "-" : q.ToString("N2"))</td>
+                                            <td>@(amt == 0 ? "-" : $"₹{amt.ToString("N2")}")</td>
                                         }
                                     </tr>
                                 }
                                 <tr class="grand-total-row">
                                     <td style="text-align: right; padding-right: 40px; position: sticky; left: 0; background: #fff; z-index: 1;">GRAND TOTAL</td>
-                                    @for (int i = 0; i < _months.Length; i++)
+                                    @foreach (var i in activeMonths)
                                     {
                                         var monthIndex = i;
-                                        <td class="border-start">@(_salesPlanning.Sum(x => GetSalesQty(x, monthIndex)).ToString("N2"))</td>
-                                        <td>₹@(_salesPlanning.Sum(x => GetSalesAmount(x, monthIndex)).ToString("N2"))</td>
+                                        var qTot = _salesPlanning.Sum(x => GetSalesQty(x, monthIndex));
+                                        var amtTot = _salesPlanning.Sum(x => GetSalesAmount(x, monthIndex));
+                                        <td class="border-start">@(qTot == 0 ? "-" : qTot.ToString("N2"))</td>
+                                        <td>@(amtTot == 0 ? "-" : $"₹{amtTot.ToString("N2")}")</td>
                                     }
                                 </tr>
                             </tbody>
@@ -2212,16 +2384,7 @@ private async Task ApproveDealer()
                                     <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@b.Remarks</div></div>
                                     <div class="data-row">
                                         <div class="data-label">Document:</div>
-                                        <div class="data-value">
-                                            @if (!string.IsNullOrEmpty(b.FileUploadPath))
-                                            {
-                                                <a href="@GetFileUrl(b.FileUploadPath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
-                                            }
-                                            else
-                                            {
-                                                @("No")
-                                            }
-                                        </div>
+                                        <div class="data-value">@RenderFileRow(b.FileUploadPath)</div>
                                     </div>
                                     <div class="mb-2"></div>
                                 }
@@ -2249,44 +2412,17 @@ private async Task ApproveDealer()
                                     <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">@l.SurvayNumber</div></div>
                                     <div class="data-row"><div class="data-label">Land Size (in Cent):</div><div class="data-value">@l.LandSize</div></div>
                                     <div class="data-row"><div class="data-label">Property Value (₹ in Lakhs):</div><div class="data-value">@l.PropertyValue</div></div>
-                                    <div class="data-row">
+                                   <div class="data-row">
                                         <div class="data-label">Land Document:</div>
-                                        <div class="data-value">
-                                            @if (!string.IsNullOrEmpty(l.UploadedLandDocumentPath))
-                                            {
-                                                <a href="@GetFileUrl(l.UploadedLandDocumentPath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
-                                            }
-                                            else
-                                            {
-                                                @("No")
-                                            }
-                                        </div>
+                                        <div class="data-value">@RenderFileRow(l.UploadedLandDocumentPath)</div>
                                     </div>
                                     <div class="data-row">
                                         <div class="data-label">EC Document:</div>
-                                        <div class="data-value">
-                                            @if (!string.IsNullOrEmpty(l.UploadedECDocumentPath))
-                                            {
-                                                <a href="@GetFileUrl(l.UploadedECDocumentPath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
-                                            }
-                                            else
-                                            {
-                                                @("No")
-                                            }
-                                        </div>
+                                        <div class="data-value">@RenderFileRow(l.UploadedECDocumentPath)</div>
                                     </div>
                                     <div class="data-row">
                                         <div class="data-label">Valuation Certificate:</div>
-                                        <div class="data-value">
-                                            @if (!string.IsNullOrEmpty(l.UploadedValuationCertificatePath))
-                                            {
-                                                <a href="@GetFileUrl(l.UploadedValuationCertificatePath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
-                                            }
-                                            else
-                                            {
-                                                @("No")
-                                            }
-                                        </div>
+                                        <div class="data-value">@RenderFileRow(l.UploadedValuationCertificatePath)</div>
                                     </div>
                                     <div class="mb-2"></div>
                                 }
@@ -2317,42 +2453,15 @@ private async Task ApproveDealer()
                                     <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@bld.Remarks</div></div>
                                     <div class="data-row">
                                         <div class="data-label">Building Document:</div>
-                                        <div class="data-value">
-                                            @if (!string.IsNullOrEmpty(bld.UploadedBuildingDocumentPath))
-                                            {
-                                                <a href="@GetFileUrl(bld.UploadedBuildingDocumentPath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
-                                            }
-                                            else
-                                            {
-                                                @("No")
-                                            }
-                                        </div>
+                                        <div class="data-value">@RenderFileRow(bld.UploadedBuildingDocumentPath)</div>
                                     </div>
                                     <div class="data-row">
                                         <div class="data-label">EC Document:</div>
-                                        <div class="data-value">
-                                            @if (!string.IsNullOrEmpty(bld.UploadedECDocumentPath))
-                                            {
-                                                <a href="@GetFileUrl(bld.UploadedECDocumentPath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
-                                            }
-                                            else
-                                            {
-                                                @("No")
-                                            }
-                                        </div>
+                                        <div class="data-value">@RenderFileRow(bld.UploadedECDocumentPath)</div>
                                     </div>
                                     <div class="data-row">
                                         <div class="data-label">Valuation Certificate:</div>
-                                        <div class="data-value">
-                                            @if (!string.IsNullOrEmpty(bld.UploadedValuationCertificatePath))
-                                            {
-                                                <a href="@GetFileUrl(bld.UploadedValuationCertificatePath)" data-enhance-nav="false" class="text-primary fw-bold">View</a>
-                                            }
-                                            else
-                                            {
-                                                @("No")
-                                            }
-                                        </div>
+                                        <div class="data-value">@RenderFileRow(bld.UploadedValuationCertificatePath)</div>
                                     </div>
                                     <div class="mb-2"></div>
                                 }
@@ -2420,7 +2529,7 @@ private async Task ApproveDealer()
                             <i class="bi bi-pencil-square edit-icon" @onclick="EditInvestment" role="button" title="Edit"></i>
                         </div>
                         <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Capital Position:</div><div class="data-value">@($"₹{GetCapitalPosition():N0}")</div></div>
+                            @* <div class="data-row"><div class="data-label">Capital Position:</div><div class="data-value">@($"₹{GetCapitalPosition():N0}")</div></div> *@
                             <div class="data-row"><div class="data-label">Assets:</div><div class="data-value">@($"₹{GetTotalAssets():N0}")</div></div>
                             <div class="data-row"><div class="data-label">Loans:</div><div class="data-value">@($"₹{GetTotalLoans():N0}")</div></div>
                             <div class="data-row"><div class="data-label">Net Value:</div><div class="data-value">@($"₹{GetNetValue():N0}")</div></div>
@@ -2440,35 +2549,190 @@ private async Task ApproveDealer()
             <div class="row g-4">
                 @if (_creditProposal != null)
                 {
-                    <div class="col-md-6">
-                        <div class="detail-card">
+<div class="col-md-6">
+                        <div class="detail-card h-100">
                             <div class="detail-card-header">
-                                <h4 class="detail-card-title"><i class="bi bi-credit-card"></i> Existing Credit Limit</h4>
+                                <h4 class="detail-card-title"><i class="bi bi-credit-card"></i> Existing Credit Limit — SPIC</h4>
                                 <i class="bi bi-pencil-square edit-icon" @onclick="EditCreditLimit" role="button" title="Edit"></i>
                             </div>
                             <div class="detail-card-body">
                                 <div class="data-row"><div class="data-label">Amount:</div><div class="data-value">₹@_creditProposal.SpicExistingCreditLimitAmount.ToString("N2")</div></div>
-                                <div class="data-row"><div class="data-label">From:</div><div class="data-value">@_creditProposal.SpicExistingCreditLimitFrom.ToString("dd MMM yyyy")</div></div>
-                                <div class="data-row"><div class="data-label">To:</div><div class="data-value">@_creditProposal.SpicExistingCreditLimitTo.ToString("dd MMM yyyy")</div></div>
+                                <div class="data-row"><div class="data-label">From:</div><div class="data-value">@(_creditProposal.SpicExistingCreditLimitFrom.Year > 1 ? _creditProposal.SpicExistingCreditLimitFrom.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">To:</div><div class="data-value">@(_creditProposal.SpicExistingCreditLimitTo.Year > 1 ? _creditProposal.SpicExistingCreditLimitTo.ToString("dd MMM yyyy") : "-")</div></div>
                                 <div class="data-row"><div class="data-label">Additional Credit Limit:</div><div class="data-value">₹@_creditProposal.AdditionalCreditLimit.ToString("N2")</div></div>
-                                <div class="data-row"><div class="data-label">Greenstar Additional:</div><div class="data-value">₹@_creditProposal.GreenstarAdditionalCreditLimit.ToString("N2")</div></div>
                             </div>
                         </div>
                     </div>
 
                     <div class="col-md-6">
-                        <div class="detail-card">
+                        <div class="detail-card h-100">
                             <div class="detail-card-header">
-                                <h4 class="detail-card-title"><i class="bi bi-calendar-week"></i> Fiscal Years</h4>
+                                <h4 class="detail-card-title"><i class="bi bi-credit-card"></i> Existing Credit Limit — GreenStar</h4>
                                 <i class="bi bi-pencil-square edit-icon" @onclick="EditCreditLimit" role="button" title="Edit"></i>
                             </div>
                             <div class="detail-card-body">
-                                <div class="data-row"><div class="data-label">FY1:</div><div class="data-value">@FyName(_creditProposal.FY1)</div></div>
-                                <div class="data-row"><div class="data-label">FY2:</div><div class="data-value">@FyName(_creditProposal.FY2)</div></div>
-                                <div class="data-row"><div class="data-label">FY3:</div><div class="data-value">@FyName(_creditProposal.FY3)</div></div>
-                                @* <div class="data-row"><div class="data-label">FY1:</div><div class="data-value">@_creditProposal.FY1</div></div>
-                                <div class="data-row"><div class="data-label">FY2:</div><div class="data-value">@_creditProposal.FY2</div></div>
-                                <div class="data-row"><div class="data-label">FY3:</div><div class="data-value">@_creditProposal.FY3</div></div> *@
+                                <div class="data-row"><div class="data-label">Amount:</div><div class="data-value">₹@_creditProposal.GSExistingCreditLimitAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">From:</div><div class="data-value">@(_creditProposal.GSExistingCreditLimitFrom.Year > 1 ? _creditProposal.GSExistingCreditLimitFrom.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">To:</div><div class="data-value">@(_creditProposal.GSExistingCreditLimitTo.Year > 1 ? _creditProposal.GSExistingCreditLimitTo.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Greenstar Additional:</div><div class="data-value">₹@_creditProposal.GreenstarAdditionalCreditLimit.ToString("N2")</div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-calendar-week"></i> Fiscal Years </h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="EditCreditLimit" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="row">
+                                    <div class="col-md-4"><div class="data-row"><div class="data-label">FY1:</div><div class="data-value">@FyName(_creditProposal.FY1)</div></div></div>
+                                    <div class="col-md-4"><div class="data-row"><div class="data-label">FY2:</div><div class="data-value">@FyName(_creditProposal.FY2)</div></div></div>
+                                    <div class="col-md-4"><div class="data-row"><div class="data-label">FY3:</div><div class="data-value">@FyName(_creditProposal.FY3)</div></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+<div class="col-12">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-clipboard-data"></i> SPIC Valuation</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="EditCreditLimit" role="button" title="Edit"></i>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="rv-table">
+                                    <thead>
+                                        <tr>
+                                            <th rowspan="2" style="width:4%;">S.No</th>
+                                            <th rowspan="2">Critical Parameter</th>
+                                            <th rowspan="2" style="width:12%;">Measure</th>
+                                            <th rowspan="2" style="width:7%;">Weightage (%)</th>
+                                            <th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+                                            <th colspan="5" class="text-center">Norms / Marks</th>
+                                            <th colspan="2" class="text-center">Dealer Score</th>
+                                        </tr>
+                                        <tr>
+                                            <th class="text-center">1</th><th class="text-center">2</th><th class="text-center">3</th><th class="text-center">4</th><th class="text-center">5</th>
+                                            <th class="text-center" style="width:9%;">Value</th>
+                                            <th class="text-center" style="width:7%;">Marks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">1</td>
+                                            <td rowspan="2" class="align-middle">Total Urea Sales Volume during last year</td>
+                                            <td rowspan="8" class="text-center align-middle rv-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">MT</td>
+                                            <td class="text-center">&gt;3000</td><td class="text-center">&gt;1500</td><td class="text-center">&gt;1000</td><td class="text-center">&gt;500</td><td class="text-center">&lt;500</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@SpicAnnualUreaQty().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.Q1Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">2</td>
+                                            <td rowspan="2" class="align-middle">Urea Sales Volume with SPIC during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">MT</td>
+                                            <td class="text-center">&gt;500</td><td class="text-center">&gt;300</td><td class="text-center">&gt;200</td><td class="text-center">&gt;100</td><td class="text-center">&lt;100</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@SpicPerfUreaQty().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.Q2Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">3</td>
+                                            <td rowspan="2" class="align-middle">Total Urea Sales Turnover during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&gt;200</td><td class="text-center">&gt;100</td><td class="text-center">&gt;60</td><td class="text-center">&gt;30</td><td class="text-center">&lt;30</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@SpicAnnualUreaTurnover().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.Q3Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">4</td>
+                                            <td rowspan="2" class="align-middle">Urea Sales Turnover with SPIC during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">20</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;15</td><td class="text-center">&gt;10</td><td class="text-center">&lt;10</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@SpicPerfUreaTurnover().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.Q4Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">5</td>
+                                            <td rowspan="2" class="align-middle">Dealership tenure with SPIC</td>
+                                            <td rowspan="2" class="text-center align-middle rv-muted">Loyalty to SPIC</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Years</td>
+                                            <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&gt;1</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@SpicTenureYears().ToString("N1")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.Q5Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">6</td>
+                                            <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">20</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&lt;1</td><td class="text-center">&lt;5</td><td class="text-center">&lt;10</td><td class="text-center">&lt;20</td><td class="text-center">&lt;30</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@SpicOverduesDisplay()</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.Q6Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
+
+                                        <tr>
+                                            <td class="text-center align-middle">7</td>
+                                            <td class="align-middle">Value of dealer's property - Fixed Assets</td>
+                                            <td rowspan="3" class="text-center align-middle rv-muted">Financial Soundness</td>
+                                            <td rowspan="3" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td></td><td></td><td></td><td></td><td></td>
+                                            <td class="align-middle"><div class="rv-val-box">@SpicFixedAssets().ToString("N2")</div></td>
+                                            <td class="text-center align-middle rv-muted">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">8</td>
+                                            <td rowspan="2" class="align-middle">Property Value as % of Sales Turnover with SPIC (7/4 x 100)</td>
+                                            <td class="text-center">%</td>
+                                            <td class="text-center">&gt;50</td><td class="text-center">&gt;40</td><td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;10</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@SpicPropertyPercent().ToString("N2")%</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.Q8Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td class="text-center align-middle">9</td>
+                                            <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+                                            <td rowspan="3" class="text-center align-middle rv-muted">Credit Security</td>
+                                            <td rowspan="3" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td></td><td></td><td></td><td></td><td></td>
+                                            <td class="align-middle"><div class="rv-val-box">@SpicSecurityTotalValue().ToString("N2")</div></td>
+                                            <td class="text-center align-middle rv-muted">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with SPIC (9/4 x 100)</td>
+                                            <td class="text-center">%</td>
+                                            <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&lt;4</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@SpicSecurityPercent().ToString("N2")%</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.Q10Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td colspan="11"><strong>Grand Total</strong></td>
+                                            <td class="text-center"><strong style="color:#059669;">@_creditProposal.Q11Mark / 100</strong></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -2476,43 +2740,159 @@ private async Task ApproveDealer()
                     <div class="col-12">
                         <div class="detail-card">
                             <div class="detail-card-header">
-                                <h4 class="detail-card-title"><i class="bi bi-clipboard-data"></i> Performance Marks (Q1-Q11)</h4>
+                                <h4 class="detail-card-title"><i class="bi bi-clipboard-data"></i> GreenStar Valuation</h4>
                                 <i class="bi bi-pencil-square edit-icon" @onclick="EditCreditLimit" role="button" title="Edit"></i>
                             </div>
                             <div class="table-responsive">
-                                <table class="sales-table">
+                                <table class="rv-table">
                                     <thead>
                                         <tr>
-                                            <th>Parameter</th>
-                                            <th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Q5</th><th>Q6</th>
-                                            <th>Q7</th><th>Q8</th><th>Q9</th><th>Q10</th><th>Q11</th>
+                                            <th rowspan="2" style="width:4%;">S.No</th>
+                                            <th rowspan="2">Critical Parameter</th>
+                                            <th rowspan="2" style="width:12%;">Measure</th>
+                                            <th rowspan="2" style="width:7%;">Weightage (%)</th>
+                                            <th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+                                            <th colspan="5" class="text-center">Norms / Marks</th>
+                                            <th colspan="2" class="text-center">Dealer Score</th>
+                                        </tr>
+                                        <tr>
+                                            <th class="text-center">1</th><th class="text-center">2</th><th class="text-center">3</th><th class="text-center">4</th><th class="text-center">5</th>
+                                            <th class="text-center" style="width:9%;">Value</th>
+                                            <th class="text-center" style="width:7%;">Marks</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <tr>
-                                            <td>Product Marks</td>
-                                            <td>@_creditProposal.Q1Mark</td><td>@_creditProposal.Q2Mark</td>
-                                            <td>@_creditProposal.Q3Mark</td><td>@_creditProposal.Q4Mark</td>
-                                            <td>@_creditProposal.Q5Mark</td><td>@_creditProposal.Q6Mark</td>
-                                            <td>@_creditProposal.Q7Mark</td><td>@_creditProposal.Q8Mark</td>
-                                            <td>@_creditProposal.Q9Mark</td><td>@_creditProposal.Q10Mark</td>
-                                            <td>@_creditProposal.Q11Mark</td>
+                                            <td rowspan="2" class="text-center align-middle">1</td>
+                                            <td rowspan="2" class="align-middle">Total Fertilizer Sales Volume during last year</td>
+                                            <td rowspan="8" class="text-center align-middle rv-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">MT</td>
+                                            <td class="text-center">&gt;3000</td><td class="text-center">&gt;1500</td><td class="text-center">&gt;1000</td><td class="text-center">&gt;500</td><td class="text-center">&lt;500</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@GsAnnualFertQty().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.GQ1Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">2</td>
+                                            <td rowspan="2" class="align-middle">Fertilizer Sales Volume with GFL during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">MT</td>
+                                            <td class="text-center">&gt;500</td><td class="text-center">&gt;350</td><td class="text-center">&gt;250</td><td class="text-center">&gt;150</td><td class="text-center">&gt;75</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@GsPerfFertQty().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.GQ2Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">3</td>
+                                            <td rowspan="2" class="align-middle">Total Fertilizer Sales Turnover during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&gt;700</td><td class="text-center">&gt;350</td><td class="text-center">&gt;250</td><td class="text-center">&gt;125</td><td class="text-center">&lt;125</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@GsAnnualFertTurnover().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.GQ3Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">4</td>
+                                            <td rowspan="2" class="align-middle">Fertilizer Sales Turnover with GFL during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&gt;125</td><td class="text-center">&gt;80</td><td class="text-center">&gt;60</td><td class="text-center">&gt;35</td><td class="text-center">&lt;15</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@GsPerfFertTurnover().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.GQ4Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">5</td>
+                                            <td rowspan="2" class="align-middle">SP Turnover during last year</td>
+                                            <td rowspan="2" class="text-center align-middle rv-muted">Specialty products involvement</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&gt;100</td><td class="text-center">&gt;50</td><td class="text-center">&gt;25</td><td class="text-center">&gt;10</td><td class="text-center">&lt;10</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@GsSpTurnover().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.GQ5Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">6</td>
+                                            <td rowspan="2" class="align-middle">Dealership tenure with GFL</td>
+                                            <td rowspan="2" class="text-center align-middle rv-muted">Loyalty to GFL</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Years</td>
+                                            <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&gt;1</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@SpicTenureYears().ToString("N1")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.GQ6Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">7</td>
+                                            <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+                                            <td rowspan="2" class="text-center align-middle rv-muted"></td>
+                                            <td rowspan="2" class="text-center align-middle">20</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&lt;1</td><td class="text-center">&lt;5</td><td class="text-center">&lt;10</td><td class="text-center">&lt;20</td><td class="text-center">&lt;30</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@GsOverduesDisplay()</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.GQ7Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
+
+                                        <tr>
+                                            <td class="text-center align-middle">8</td>
+                                            <td class="align-middle">Value of dealer's property - Fixed Assets</td>
+                                            <td rowspan="3" class="text-center align-middle rv-muted">Financial Soundness</td>
+                                            <td rowspan="3" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td></td><td></td><td></td><td></td><td></td>
+                                            <td class="align-middle"><div class="rv-val-box">@SpicFixedAssets().ToString("N2")</div></td>
+                                            <td class="text-center align-middle rv-muted">-</td>
                                         </tr>
                                         <tr>
-                                            <td>Group Marks</td>
-                                            <td>@_creditProposal.GQ1Mark</td><td>@_creditProposal.GQ2Mark</td>
-                                            <td>@_creditProposal.GQ3Mark</td><td>@_creditProposal.GQ4Mark</td>
-                                            <td>@_creditProposal.GQ5Mark</td><td>@_creditProposal.GQ6Mark</td>
-                                            <td>@_creditProposal.GQ7Mark</td><td>@_creditProposal.GQ8Mark</td>
-                                            <td>@_creditProposal.GQ9Mark</td><td>@_creditProposal.GQ10Mark</td>
-                                            <td>@_creditProposal.GQ11Mark</td>
+                                            <td rowspan="2" class="text-center align-middle">9</td>
+                                            <td rowspan="2" class="align-middle">Property Value as % of Sales Turnover with GFL (8/(4+5) x 100)</td>
+                                            <td class="text-center">%</td>
+                                            <td class="text-center">&gt;50</td><td class="text-center">&gt;40</td><td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;10</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@GsPropertyPercent().ToString("N2")%</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.GQ9Mark</div></td>
                                         </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td class="text-center align-middle">10</td>
+                                            <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+                                            <td rowspan="3" class="text-center align-middle rv-muted">Credit Security</td>
+                                            <td rowspan="3" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td></td><td></td><td></td><td></td><td></td>
+                                            <td class="align-middle"><div class="rv-val-box">@GsSecurityTotalValue().ToString("N2")</div></td>
+                                            <td class="text-center align-middle rv-muted">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">11</td>
+                                            <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with GFL (10/(4+5) x 100)</td>
+                                            <td class="text-center">%</td>
+                                            <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&lt;4</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@GsSecurityPercent().ToString("N2")%</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@_creditProposal.GQ11Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
                                     </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td colspan="11"><strong>Grand Total</strong></td>
+                                            <td class="text-center"><strong style="color:#059669;">@_creditProposal.GQ12Mark / 100</strong></td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
                         </div>
                     </div>
-
                     <div class="col-md-6">
                         <div class="detail-card">
                             <div class="detail-card-header">
@@ -2660,3 +3040,18 @@ private async Task ApproveDealer()
     </button>
     </div>
 }
+<style>
+    .file-view-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
+.file-view-name { color: #059669; font-weight: 600; word-break: break-word; flex: 1; min-width: 0; font-size: 0.75rem; }
+.file-view-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #1f2937; text-decoration: none; font-size: 0.72rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.file-view-btn:hover { border-color: #9ca3af; background: #f9fafb; }
+.file-view-none { color: #9ca3af; font-size: 0.75rem; }
+
+.rv-table { width: 100%; border-collapse: collapse; font-size: 11px; background: #fff; table-layout: fixed; }
+.rv-table th, .rv-table td { padding: 4px 4px; border: 1px solid #E5E7EB; word-wrap: break-word; overflow-wrap: anywhere; white-space: normal; vertical-align: middle; line-height: 1.25; }
+.rv-table thead th { background: #F9FAFB; color: #6B7280; font-weight: 600; text-align: center; }
+.rv-table tfoot td { background: #F9FAFB; border-top: 2px solid #E5E7EB; font-weight: 700; }
+.rv-val-box { padding: 3px 4px; border-radius: 3px; font-size: 11px; text-align: center; background: #F9FAFB; color: #1F2937; }
+.rv-mark-box { padding: 3px 4px; border-radius: 3px; font-size: 11px; text-align: center; font-weight: 600; color: #1F2937; background: #F9FAFB; }
+.rv-muted { color: #6B7280; }
+</style>
