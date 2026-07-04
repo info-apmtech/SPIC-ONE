@@ -9,8 +9,38 @@
 @inject LoginState LoginState
 @inject IJSRuntime JSRuntime
 
-<div class="container-fluid py-4 px-0">
+<style>
+    /* Dealer card status badge colors — visual only, no logic change */
+    .badge-status-active { background:#D1FAE5; color:#047857; }
+    .badge-status-inactive { background:#FFEDD5; color:#C2410C; }
+    .badge-status-terminated { background:#FEE2E2; color:#DC2626; }
+    .badge-status-draft { background:#FEF9C3; color:#A16207; }
+    .badge-status-inrm { background:#DBEAFE; color:#1D4ED8; }
+    .badge-status-insmm { background:#EDE9FE; color:#7C3AED; }
+    .badge-status-inavp { background:#E0E7FF; color:#4338CA; }
 
+    .btn-completed-badge {
+        background:#F3F4F6;
+        color:#6B7280;
+        border:1px solid #E5E7EB;
+        padding:6px 14px;
+        border-radius:999px;
+        font-size:0.85rem;
+        font-weight:600;
+        cursor:not-allowed;
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+    }
+
+    .progress-val-small {
+        font-size: 0.78rem !important;
+        line-height: 1 !important;
+        white-space: nowrap;
+    }
+</style>
+
+<div class="container-fluid py-4 px-0">
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3 mb-4 page-header-row">
         <div class="page-header-text">
             <h1 class="page-title">Dealer Registrations</h1>
@@ -122,7 +152,6 @@
     <div class="filter-bar">
 
         <div class="search-wrap">
-            @* <i class="bi bi-search"></i> *@
             <input type="text" class="search-input" placeholder="Search by Dealer Code or Firm Name" @bind="_searchText" @bind:after="ApplyFilters">
         </div>
 
@@ -189,10 +218,34 @@
                 var hqName = _headquartersAll.FirstOrDefault(h => h.Id == dealer.HQ)?.HeadquarterName ?? "-";
                 var isPendingForMe = IsPendingForMe(dealer);
 
+                // Terminated-specific display flags — do NOT affect GetApprovalStatus, filters,
+                // KPI counts, or IsDealerComplete/CanShowReviewButton logic used elsewhere.
+                var isTerminatedDealer = dealer.Status == 2;
+                var isTerminatedSubmitted = dealer.Status == 2 && dealer.IsSubmittedForReview == true;
+
                 <div class="col-12 col-sm-12 col-md-6 col-xl-4">
                     <div class="reg-card @(isPendingForMe ? "border-primary shadow-sm" : "")">
                         <div class="card-top-row">
-                            @if (approvalStatus == "Approved")
+
+                            @if (isTerminatedSubmitted)
+                            {
+                                <div class="progress-circle p-30">
+                                    <div class="progress-inner">
+                                        <div class="progress-val progress-val-small">Term</div>
+                                        <div class="progress-steps">Completed</div>
+                                    </div>
+                                </div>
+                            }
+                            else if (isTerminatedDealer)
+                            {
+                                <div class="progress-circle p-30">
+                                    <div class="progress-inner">
+                                        <div class="progress-val">Draft</div>
+                                        <div class="progress-steps">Draft</div>
+                                    </div>
+                                </div>
+                            }
+                            else if (approvalStatus == "Approved")
                             {
                                 <div class="progress-circle p-100">
                                     <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
@@ -221,7 +274,12 @@
 
                             <div class="d-flex flex-column align-items-end gap-2 card-top-right">
                                 <div class="badge-group">
-                                    @if (isPendingForMe)
+
+                                    @if (isTerminatedSubmitted)
+                                    {
+                                        <span class="badge-custom badge-status-terminated">Terminated</span>
+                                    }
+                                    else if (isPendingForMe)
                                     {
                                         <span class="badge-custom bg-primary text-white border-0">Action Required</span>
                                     }
@@ -235,16 +293,39 @@
                                     }
                                     else if (approvalStatus == "Draft")
                                     {
-                                        <span class="badge-custom badge-yellow">Draft</span>
+                                        <span class="badge-custom badge-status-draft">Draft</span>
+                                    }
+                                    else if (approvalStatus == "In RM")
+                                    {
+                                        <span class="badge-custom badge-status-inrm">In RM</span>
+                                    }
+                                    else if (approvalStatus == "In SMM")
+                                    {
+                                        <span class="badge-custom badge-status-insmm">In SMM</span>
+                                    }
+                                    else if (approvalStatus == "In AVP")
+                                    {
+                                        <span class="badge-custom badge-status-inavp">In AVP</span>
                                     }
                                     else
                                     {
                                         <span class="badge-custom badge-yellow">@approvalStatus</span>
                                     }
-                                    <span class="badge-custom @(statusName == "Active" ? "badge-green-dashboard" : "badge-yellow")">@statusName</span>
+
+                                    @if (!isTerminatedDealer)
+                                    {
+                                        <span class="badge-custom @(statusName switch { "Active" => "badge-status-active", "Inactive" => "badge-status-inactive", "Terminated" => "badge-status-terminated", _ => "badge-yellow" })">@statusName</span>
+                                    }
                                 </div>
                                 <div class="d-flex flex-wrap justify-content-end gap-2 card-action-row">
-                                    @if (IsDealerComplete(dealer.Id))
+
+                                    @if (isTerminatedDealer && !isTerminatedSubmitted && (LoginState.IsHQCreatorRole || LoginState.IsAdmin))
+                                    {
+                                        <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
+                                            <i class="bi bi-pencil-square me-1"></i> Edit
+                                        </button>
+                                    }
+                                    else if (!isTerminatedDealer && IsDealerComplete(dealer.Id))
                                     {
                                         if (dealer.RMApproved == false && (LoginState.IsHQCreatorRole || LoginState.IsAdmin))
                                         {
@@ -259,26 +340,28 @@
                                             </button>
                                         }
                                     }
-                            else if (LoginState.IsHQCreatorRole || LoginState.IsAdmin)
-                            {
-                                if (approvalStatus != "Approved" && !approvalStatus.StartsWith("Rejected"))
-                                {
-                                    <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
-                                        <i class="bi bi-pencil-square me-1"></i> Edit
-                                    </button>
-                                }
+                                    else if (!isTerminatedDealer && (LoginState.IsHQCreatorRole || LoginState.IsAdmin))
+                                    {
+                                        if (approvalStatus != "Approved" && !approvalStatus.StartsWith("Rejected"))
+                                        {
+                                            <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
+                                                <i class="bi bi-pencil-square me-1"></i> Edit
+                                            </button>
+                                        }
                                     }
+
                                     <button class="btn-view" @onclick="() => ViewDealer(dealer.Id)"><i class="bi bi-eye"></i></button>
+
                                     @if (dealer.InSpic)
                                     {
-                                        <a class="btn-view text-decoration-none" href="/DealershipPDF/@dealer.Id?company=SPIC">
+                                        <a class="btn-view text-decoration-none" href="@($"/DealershipPDF/{dealer.Id}?company=SPIC")">
                                             <i class="bi bi-file-earmark-pdf me-1"></i> SPIC
                                         </a>
                                     }
 
                                     @if (dealer.InGreenStar)
                                     {
-                                        <a class="btn-view text-decoration-none" href="/DealershipPDF/@dealer.Id?company=GreenStar">
+                                        <a class="btn-view text-decoration-none" href="@($"/DealershipPDF/{dealer.Id}?company=GreenStar")">
                                             <i class="bi bi-file-earmark-pdf me-1"></i> GFL
                                         </a>
                                     }
@@ -344,7 +427,7 @@
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
                         Expected columns: <strong>CUSTOMER</strong>, <strong>CUSTOMER NAME</strong>, <strong>State</strong>.<br />
-                        CUSTOMER prefix: <code>D</code> → SPICCode, <code>N,Z,T</code> → GreenStarCode, @* <code>D</code> → TradeCode. *@
+                        CUSTOMER prefix: <code>D</code> → SPICCode, <code>N,Z,T</code> → GreenStarCode.
                     </p>
                     <InputFile OnChange="OnImportFileSelected" accept=".xlsx,.xls" disabled="@_isImporting" />
                     <div class="mt-3">
@@ -486,79 +569,81 @@
     private List<DealerCreditLimitProposal> _allCreditProposals = new();
     private List<DealerCreditLimitSalesPerformance> _allCreditSales = new();
     private List<DealerRegistrationDocuments> _allDocuments = new();
+
     private async Task<List<TItem>> SafeGet<TItem>(string url)
-{
-    try { return await Http.GetFromJsonAsync<List<TItem>>(url) ?? new(); }
-    catch { return new(); }
-}
-   private async Task LoadData()
-{
-    _isLoading = true;
-    try
     {
-        // Kick off every request at once (no awaits yet)
-        var dealersTask   = SafeGet<DealerDto>("api/DealerRegistration/submitted");
-        var regionsTask   = SafeGet<RegionDto>("api/Region/all");
-        var hqTask        = SafeGet<HeadquarterDto>("api/Headquarter/all");
-        var expTask       = SafeGet<DealerExperience>("api/DealerExperience");
-        var annualTask    = SafeGet<AnnualSaleDataLastFYofDealerRegistration>("api/AnnualSaleDataLastFYofDealerRegistration");
-        var whTask        = SafeGet<DealerWarehouseFacilities>("api/DealerWarehouseFacilities");
-        var railTask      = SafeGet<DealerRailFacilities>("api/DealerRailFacilities");
-        var portTask      = SafeGet<DealerPortFacilities>("api/DealerPortFacilities");
-        var marketTask    = SafeGet<DealerMarketDetail>("api/DealerMarketDetail");
-        var compTask      = SafeGet<DealerCompaniesOperatingInArea>("api/DealerCompaniesOperatingInArea");
-        var ownerTask     = SafeGet<DealerOwnershipInfo>("api/DealerOwnershipInfo");
-        var partnerTask   = SafeGet<PartnerFamilyDetails>("api/PartnerFamilyDetails");
-        var occTask       = SafeGet<PartnerOccupation>("api/PartnerOccupation");
-        var salesPlanTask = SafeGet<SalesPlanningInDealerRegistration>("api/SalesPlanning");
-        var bankTask      = SafeGet<DealerAssetBank>("api/DealerAssetBank");
-        var landTask      = SafeGet<DealerAssetLand>("api/DealerAssetLand");
-        var buildingTask  = SafeGet<DealerAssetBuilding>("api/DealerAssetBuilding");
-        var loanTask      = SafeGet<DealerLoanLiabilities>("api/DealerLoanLiabilities");
-        var creditTask    = SafeGet<DealerCreditLimitProposal>("api/DealerCreditLimitProposal");
-        var creditSalesTask = SafeGet<DealerCreditLimitSalesPerformance>("api/DealerCreditLimitSalesPerformance");
-        var docsTask      = SafeGet<DealerRegistrationDocuments>("api/DealerRegistrationDocuments");
-
-        // Wait for all of them in parallel
-        await Task.WhenAll(
-            dealersTask, regionsTask, hqTask, expTask, annualTask, whTask, railTask,
-            portTask, marketTask, compTask, ownerTask, partnerTask, occTask,
-            salesPlanTask, bankTask, landTask, buildingTask, loanTask,
-            creditTask, creditSalesTask, docsTask);
-
-        // Assign results (identical to before)
-        _allDealers          = await dealersTask;
-        _regionsAll          = await regionsTask;
-        _headquartersAll     = await hqTask;
-        _allExperiences      = await expTask;
-        _allAnnualSales      = await annualTask;
-        _allWarehouses       = await whTask;
-        _allRails            = await railTask;
-        _allPorts            = await portTask;
-        _allMarketDetails    = await marketTask;
-        _allCompaniesOperating = await compTask;
-        _allOwnerships       = await ownerTask;
-        _allPartners         = await partnerTask;
-        _allOccupations      = await occTask;
-        _allSalesPlanning    = await salesPlanTask;
-        _allAssetBanks       = await bankTask;
-        _allAssetLands       = await landTask;
-        _allAssetBuildings   = await buildingTask;
-        _allLoans            = await loanTask;
-        _allCreditProposals  = await creditTask;
-        _allCreditSales      = await creditSalesTask;
-        _allDocuments        = await docsTask;
-
-        BuildCompletionSet();
-        ApplyRoleFilter();
-        ApplyFilters();
+        try { return await Http.GetFromJsonAsync<List<TItem>>(url) ?? new(); }
+        catch { return new(); }
     }
-    catch { }
-    finally
+
+    private async Task LoadData()
     {
-        _isLoading = false;
+        _isLoading = true;
+        try
+        {
+            // Kick off every request at once (no awaits yet)
+            var dealersTask   = SafeGet<DealerDto>("api/DealerRegistration/submitted");
+            var regionsTask   = SafeGet<RegionDto>("api/Region/all");
+            var hqTask        = SafeGet<HeadquarterDto>("api/Headquarter/all");
+            var expTask       = SafeGet<DealerExperience>("api/DealerExperience");
+            var annualTask    = SafeGet<AnnualSaleDataLastFYofDealerRegistration>("api/AnnualSaleDataLastFYofDealerRegistration");
+            var whTask        = SafeGet<DealerWarehouseFacilities>("api/DealerWarehouseFacilities");
+            var railTask      = SafeGet<DealerRailFacilities>("api/DealerRailFacilities");
+            var portTask      = SafeGet<DealerPortFacilities>("api/DealerPortFacilities");
+            var marketTask    = SafeGet<DealerMarketDetail>("api/DealerMarketDetail");
+            var compTask      = SafeGet<DealerCompaniesOperatingInArea>("api/DealerCompaniesOperatingInArea");
+            var ownerTask     = SafeGet<DealerOwnershipInfo>("api/DealerOwnershipInfo");
+            var partnerTask   = SafeGet<PartnerFamilyDetails>("api/PartnerFamilyDetails");
+            var occTask       = SafeGet<PartnerOccupation>("api/PartnerOccupation");
+            var salesPlanTask = SafeGet<SalesPlanningInDealerRegistration>("api/SalesPlanning");
+            var bankTask      = SafeGet<DealerAssetBank>("api/DealerAssetBank");
+            var landTask      = SafeGet<DealerAssetLand>("api/DealerAssetLand");
+            var buildingTask  = SafeGet<DealerAssetBuilding>("api/DealerAssetBuilding");
+            var loanTask      = SafeGet<DealerLoanLiabilities>("api/DealerLoanLiabilities");
+            var creditTask    = SafeGet<DealerCreditLimitProposal>("api/DealerCreditLimitProposal");
+            var creditSalesTask = SafeGet<DealerCreditLimitSalesPerformance>("api/DealerCreditLimitSalesPerformance");
+            var docsTask      = SafeGet<DealerRegistrationDocuments>("api/DealerRegistrationDocuments");
+
+            // Wait for all of them in parallel
+            await Task.WhenAll(
+                dealersTask, regionsTask, hqTask, expTask, annualTask, whTask, railTask,
+                portTask, marketTask, compTask, ownerTask, partnerTask, occTask,
+                salesPlanTask, bankTask, landTask, buildingTask, loanTask,
+                creditTask, creditSalesTask, docsTask);
+
+            // Assign results
+            _allDealers          = await dealersTask;
+            _regionsAll          = await regionsTask;
+            _headquartersAll     = await hqTask;
+            _allExperiences      = await expTask;
+            _allAnnualSales      = await annualTask;
+            _allWarehouses       = await whTask;
+            _allRails            = await railTask;
+            _allPorts            = await portTask;
+            _allMarketDetails    = await marketTask;
+            _allCompaniesOperating = await compTask;
+            _allOwnerships       = await ownerTask;
+            _allPartners         = await partnerTask;
+            _allOccupations      = await occTask;
+            _allSalesPlanning    = await salesPlanTask;
+            _allAssetBanks       = await bankTask;
+            _allAssetLands       = await landTask;
+            _allAssetBuildings   = await buildingTask;
+            _allLoans            = await loanTask;
+            _allCreditProposals  = await creditTask;
+            _allCreditSales      = await creditSalesTask;
+            _allDocuments        = await docsTask;
+
+            BuildCompletionSet();
+            ApplyRoleFilter();
+            ApplyFilters();
+        }
+        catch { }
+        finally
+        {
+            _isLoading = false;
+        }
     }
-}
 
     private void ApplyRoleFilter()
     {
@@ -611,7 +696,7 @@
     private int CountRejectedBySMM() => _filteredDealers.Count(d => d.SMApproved == false);
     private int CountRejectedByAVP() => _filteredDealers.Count(d => d.AVPApproved == false);
 
-   private string GetApprovalStatus(DealerDto d)
+    private string GetApprovalStatus(DealerDto d)
     {
         // Nothing counts as "in review" until the user explicitly clicked Submit Registration
         // on the Final Submission page — filling in all sections alone is not enough.
@@ -638,7 +723,7 @@
             if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false) showForRejected = true;
         }
 
-       if ((!d.IsSubmittedForReview || !IsDealerComplete(d.Id)) && !showForRejected) return false;
+        if ((!d.IsSubmittedForReview || !IsDealerComplete(d.Id)) && !showForRejected) return false;
         if (d.AVPApproved == true) return false;
 
         if (LoginState.IsRegionRole)
@@ -703,6 +788,7 @@
         2 => "Terminated",
         _ => "Unknown"
     };
+
     private async Task DownloadSampleTemplate()
     {
         try
@@ -720,6 +806,7 @@
             _showImportModal = true;
         }
     }
+
     private async Task OnImportFileSelected(InputFileChangeEventArgs e)
     {
         var file = e.File;
@@ -788,8 +875,7 @@
 
     private void EditDealer(int dealerId) => NavManager.NavigateTo($"/Register?dealerId={dealerId}");
     private void ReviewDealer(int dealerId) => NavManager.NavigateTo($"/SavedDealerReview?dealerId={dealerId}");
-    private void ViewDealer(int dealerId) => NavManager.NavigateTo($"/Register?dealerId={dealerId}&mode=view");  
-
+    private void ViewDealer(int dealerId) => NavManager.NavigateTo($"/Register?dealerId={dealerId}&mode=view");
 
     private void ConfirmDelete(DealerDto dealer)
     {
@@ -925,6 +1011,7 @@
         public bool? SMApproved { get; set; }
         public bool? AVPApproved { get; set; }
         public bool IsSubmittedForReview { get; set; }
+        public bool? IsFinalAmountSettled { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
 
