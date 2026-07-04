@@ -79,7 +79,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-gray"><i class="bi bi-file-earmark-text"></i></div>
-                    <div class="kpi-number">@_filteredDealers.Count(d => GetApprovalStatus(d) == "Draft")</div>
+                    <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && GetApprovalStatus(d) == "Draft")</div>
                 </div>
                 <div class="kpi-label">Draft</div>
             </div>
@@ -88,7 +88,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                    <div class="kpi-number">@_filteredDealers.Count(d => d.IsSubmittedForReview == true && ((d.RMApproved == null) || (d.RMApproved == true && d.SMApproved == false)))</div>
+                   <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && d.IsSubmittedForReview == true && ((d.RMApproved == null) || (d.RMApproved == true && d.SMApproved == false)))</div>
                 </div>
                 <div class="kpi-label">In RM</div>
             </div>
@@ -97,7 +97,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                    <div class="kpi-number">@_filteredDealers.Count(d => (_completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == null) || (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false))</div>
+                  <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && ((_completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == null) || (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false)))</div>
                 </div>
                 <div class="kpi-label">In SMM</div>
             </div>
@@ -108,7 +108,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                    <div class="kpi-number">@_filteredDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)</div>
+                  <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)</div>
                 </div>
                 <div class="kpi-label">In Office</div>
             </div>
@@ -117,7 +117,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-green"><i class="bi bi-check-circle"></i></div>
-                    <div class="kpi-number">@_filteredDealers.Count(d => d.AVPApproved == true)</div>
+                   <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && d.AVPApproved == true)</div>
                 </div>
                 <div class="kpi-label">Approved</div>
             </div>
@@ -691,12 +691,12 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
 
     private int CountRejectedTotal()
     {
-        return _filteredDealers.Count(d => d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false);
+        return _filteredDealers.Count(d => d.Status != 2 && (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false));
     }
 
-    private int CountRejectedByRM() => _filteredDealers.Count(d => d.RMApproved == false);
-    private int CountRejectedBySMM() => _filteredDealers.Count(d => d.SMApproved == false);
-    private int CountRejectedByAVP() => _filteredDealers.Count(d => d.AVPApproved == false);
+    private int CountRejectedByRM() => _filteredDealers.Count(d => d.Status != 2 && d.RMApproved == false);
+    private int CountRejectedBySMM() => _filteredDealers.Count(d => d.Status != 2 && d.SMApproved == false);
+    private int CountRejectedByAVP() => _filteredDealers.Count(d => d.Status != 2 && d.AVPApproved == false);
 
     private string GetApprovalStatus(DealerDto d)
     {
@@ -716,6 +716,8 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
 
     private bool IsPendingForMe(DealerDto d)
     {
+        if (d.Status == 2) return false; // Terminated dealers never enter anyone's action queue
+
         var status = GetApprovalStatus(d);
 
         var showForRejected = false;
