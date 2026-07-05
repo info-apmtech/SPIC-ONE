@@ -434,8 +434,10 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
                 <table class="table mb-0" style="background:#fff;">
                     <thead style="background:#F9FAFB;">
                         <tr>
+                            <th style="padding:12px 16px; font-weight:700; color:#374151; width:60px;">S.No</th>
                             <th style="padding:12px 16px; font-weight:700; color:#374151;">State</th>
                             <th style="padding:12px 16px; font-weight:700; color:#374151;">As Per SAP Data</th>
+                            <th style="padding:12px 16px; font-weight:700; color:#374151;">Saved Dealers</th>
                             <th style="padding:12px 16px; font-weight:700; color:#374151;">MO</th>
                             <th style="padding:12px 16px; font-weight:700; color:#374151;">RM</th>
                             <th style="padding:12px 16px; font-weight:700; color:#374151;">SMM</th>
@@ -444,11 +446,13 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var row in GetStateWiseSummary())
+                        @foreach (var (row, idx) in StateTablePagedRows.Select((v, i) => (v, i)))
                         {
                             <tr>
+                                <td style="padding:10px 16px; color:#6B7280;">@((_stateTableCurrentPage - 1) * _stateTablePageSize + idx + 1)</td>
                                 <td style="padding:10px 16px;">@row.StateName</td>
                                 <td style="padding:10px 16px;">@row.AsPerSap</td>
+                                <td style="padding:10px 16px;">@row.SavedDealers</td>
                                 <td style="padding:10px 16px;">@row.Mo</td>
                                 <td style="padding:10px 16px;">@row.Rm</td>
                                 <td style="padding:10px 16px;">@row.Smm</td>
@@ -456,8 +460,56 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
                                 <td style="padding:10px 16px;">@row.Completed</td>
                             </tr>
                         }
-                    </tbody>
+                   </tbody>
+                    <tfoot>
+                        @{
+                            var allRows = GetCachedStateWiseSummary();
+                        }
+                       <tr style="background:#F9FAFB; border-top:2px solid #E5E7EB;">
+                            <td style="padding:10px 16px;"></td>
+                            <td style="padding:10px 16px; font-weight:700; color:#1F2937;">Total</td>
+                            <td style="padding:10px 16px; font-weight:700; color:#1F2937;">@allRows.Sum(r => r.AsPerSap)</td>
+                            <td style="padding:10px 16px; font-weight:700; color:#1F2937;">@allRows.Sum(r => r.SavedDealers)</td>
+                            <td style="padding:10px 16px; font-weight:700; color:#1F2937;">@allRows.Sum(r => r.Mo)</td>
+                            <td style="padding:10px 16px; font-weight:700; color:#1F2937;">@allRows.Sum(r => r.Rm)</td>
+                            <td style="padding:10px 16px; font-weight:700; color:#1F2937;">@allRows.Sum(r => r.Smm)</td>
+                            <td style="padding:10px 16px; font-weight:700; color:#1F2937;">@allRows.Sum(r => r.Avp)</td>
+                            <td style="padding:10px 16px; font-weight:700; color:#1F2937;">@allRows.Sum(r => r.Completed)</td>
+                        </tr>
+                    </tfoot>
                 </table>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mt-3">
+                <div class="d-flex align-items-center gap-2" style="font-size:0.85rem; color:#374151;">
+                    Items Per Page
+                    <select class="filter-select" style="width:auto; padding:4px 10px;" @bind="_stateTablePageSize" @bind:after="StateTableOnPageSizeChanged">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" disabled="@(_stateTableCurrentPage <= 1)" @onclick="StateTablePreviousPage">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    @foreach (var pageNum in StateTablePageNumbers)
+                    {
+                        @if (pageNum == -1)
+                        {
+                            <span class="px-2">...</span>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm @(pageNum == _stateTableCurrentPage ? "btn-primary" : "btn-outline-secondary")" @onclick="() => StateTableGoToPage(pageNum)">@pageNum</button>
+                        }
+                    }
+                    <button class="btn btn-sm btn-outline-secondary" disabled="@(_stateTableCurrentPage >= StateTableTotalPages)" @onclick="StateTableNextPage">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
             </div>
         </div>
     }
@@ -571,8 +623,14 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     private List<DealerDto> _filteredDealers = new();
     private List<RegionDto> _regionsAll = new();
     private List<HeadquarterDto> _headquartersAll = new();
-      private List<StateDto> _statesAll = new();
+    private List<StateDto> _statesAll = new();
     private int _trueTotalDealerCount = 0;
+    private List<DealerDto> _allDealersFull = new();
+    private List<StateWiseSummary> _stateWiseSummaryCache = new();
+
+    // Pagination for the state-wise table
+    private int _stateTableCurrentPage = 1;
+    private int _stateTablePageSize = 10;
     private bool _isLoading = true;
 
     // Filters
@@ -675,8 +733,9 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
             _allDealers          = await dealersTask;
             _regionsAll          = await regionsTask;
             _headquartersAll     = await hqTask;
-             _statesAll           = await statesTask;
-            _trueTotalDealerCount = (await allDealersCountTask).Count;
+           _statesAll           = await statesTask;
+            _allDealersFull       = await allDealersCountTask;
+            _trueTotalDealerCount = _allDealersFull.Count;
             _allExperiences      = await expTask;
             _allAnnualSales      = await annualTask;
             _allWarehouses       = await whTask;
@@ -699,9 +758,11 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
             _allProducts         = await productsTask;
           _allApprovalHistory  = await approvalHistoryTask;
 
-            BuildCompletionSet();
+         BuildCompletionSet();
             ApplyRoleFilter();
             ApplyFilters();
+            _stateWiseSummaryCache = new();
+            _stateTableCurrentPage = 1;
         }
         catch { }
         finally
@@ -955,9 +1016,17 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     private decimal GetSpicAvpRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.AvpCreditLimit);
     private decimal GetGflAvpRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.AvpCreditLimitGfl);
 
-   private List<StateWiseSummary> GetStateWiseSummary()
+  private List<StateWiseSummary> GetStateWiseSummary()
     {
-        return _allDealers
+        // "As Per SAP Data" comes from the full dealer table (every record, matching the
+        // Total Dealers count), grouped by state. "Saved Dealers" and the workflow stage
+        // counts (MO/RM/SMM/AVP/Completed) come from _allDealers (submitted dealers only),
+        // since those pipeline stages only make sense for submitted registrations.
+        var sapCountsByState = _allDealersFull
+            .GroupBy(d => d.StateId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var savedByState = _allDealers
             .GroupBy(d => d.StateId)
             .Select(g =>
             {
@@ -967,7 +1036,8 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
                 return new StateWiseSummary
                 {
                     StateName = stateName,
-                    AsPerSap = dealers.Count,
+                    AsPerSap = sapCountsByState.TryGetValue(g.Key, out var sapCount) ? sapCount : 0,
+                    SavedDealers = dealers.Count,
                     Mo = dealers.Count(d => d.Status != 2 && GetApprovalStatus(d) == "Draft"),
                     Rm = dealers.Count(d => d.Status != 2 && d.IsSubmittedForReview == true && ((d.RMApproved == null) || (d.RMApproved == true && d.SMApproved == false))),
                     Smm = dealers.Count(d => d.Status != 2 && ((_completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == null) || (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false))),
@@ -975,8 +1045,66 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
                     Completed = dealers.Count(d => d.Status != 2 && d.AVPApproved == true)
                 };
             })
+            .ToList();
+
+        // Also include states that exist in the full dealer table but have zero submitted
+        // dealers, so "As Per SAP Data" doesn't silently drop states with no submissions yet.
+        var missingStates = sapCountsByState.Keys
+            .Where(stateId => !savedByState.Any(s => _statesAll.FirstOrDefault(st => st.StateName == s.StateName)?.Id == stateId))
+            .Select(stateId => new StateWiseSummary
+            {
+                StateName = _statesAll.FirstOrDefault(s => s.Id == stateId)?.StateName ?? "Unknown",
+                AsPerSap = sapCountsByState[stateId],
+                SavedDealers = 0,
+                Mo = 0,
+                Rm = 0,
+                Smm = 0,
+                Avp = 0,
+                Completed = 0
+            });
+
+        return savedByState
+            .Concat(missingStates)
             .OrderBy(s => s.StateName)
             .ToList();
+    }
+private List<StateWiseSummary> GetCachedStateWiseSummary()
+    {
+        if (_stateWiseSummaryCache.Count == 0)
+            _stateWiseSummaryCache = GetStateWiseSummary();
+        return _stateWiseSummaryCache;
+    }
+
+    private int StateTableTotalPages => Math.Max(1, (int)Math.Ceiling(GetCachedStateWiseSummary().Count / (double)_stateTablePageSize));
+
+    private IEnumerable<StateWiseSummary> StateTablePagedRows => GetCachedStateWiseSummary()
+        .Skip((_stateTableCurrentPage - 1) * _stateTablePageSize)
+        .Take(_stateTablePageSize);
+
+    private void StateTableGoToPage(int page) { _stateTableCurrentPage = page; }
+    private void StateTablePreviousPage() { if (_stateTableCurrentPage > 1) _stateTableCurrentPage--; }
+    private void StateTableNextPage() { if (_stateTableCurrentPage < StateTableTotalPages) _stateTableCurrentPage++; }
+    private void StateTableOnPageSizeChanged() { _stateTableCurrentPage = 1; }
+
+    private IEnumerable<int> StateTablePageNumbers
+    {
+        get
+        {
+            var total = StateTableTotalPages;
+            if (total <= 7)
+                return Enumerable.Range(1, total);
+
+            var pages = new List<int> { 1 };
+            var start = Math.Max(2, _stateTableCurrentPage - 1);
+            var end = Math.Min(total - 1, _stateTableCurrentPage + 1);
+
+            if (start > 2) pages.Add(-1);
+            for (var i = start; i <= end; i++) pages.Add(i);
+            if (end < total - 1) pages.Add(-1);
+            pages.Add(total);
+
+            return pages;
+        }
     }
 
     private string GetStatusName(int status) => status switch
@@ -1249,6 +1377,7 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     {
         public string StateName { get; set; } = "";
         public int AsPerSap { get; set; }
+        public int SavedDealers { get; set; }
         public int Mo { get; set; }
         public int Rm { get; set; }
         public int Smm { get; set; }
