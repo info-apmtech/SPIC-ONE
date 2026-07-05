@@ -181,6 +181,10 @@
 									   value="@_dobText"
 									   @onchange="OnDOBChanged" />
 							</div>
+					<div class="col-md-2">
+						<label class="custom-label">Age</label>
+						<input type="number" class="custom-input" value="@_partnerAge" readonly />
+					</div>
 					<div class="col-md-3">
 						<label class="custom-label">Phone Number</label>
                         <input type="tel"
@@ -982,6 +986,7 @@
 	private bool _pincodeSuccess;
 	private string _dobText = "";
 	private string _familyDobText = "";
+	private int _partnerAge;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -990,6 +995,7 @@
 		{
 			await Task.WhenAll(LoadSectors(), LoadRelationships(), LoadDealerEntityType(), LoadSavedPartners(), LoadStates(), LoadDistricts());
 			SyncDateBuffers();
+			CalculatePartnerAge();
 		}
 		finally
 		{
@@ -1010,7 +1016,26 @@
 
 		_dobText = newVal;
 		if (DateTime.TryParse(newVal, out var dt))
+		{
 			_partnerForm.DOB = dt;
+			CalculatePartnerAge();
+		}
+	}
+
+	private void CalculatePartnerAge()
+	{
+		var dob = _partnerForm.DOB;
+		if (dob < DateTime.Today)
+		{
+			var today = DateTime.Today;
+			int age = today.Year - dob.Year;
+			if (dob.Date > today.AddYears(-age)) age--;
+			_partnerAge = age;
+		}
+		else
+		{
+			_partnerAge = 0;
+		}
 	}
 
 	private void OnFamilyDateOfBirthChanged(ChangeEventArgs e)
@@ -1571,9 +1596,9 @@ return;
 		_message = null;
 
 		SyncDateBuffers();  
+		CalculatePartnerAge();
 
 		var state = _statesAll.FirstOrDefault(s => s.Id == partner.StateId);
-		_stateSearchText = state?.StateName ?? "";
 		var district = _districtsAll.FirstOrDefault(d => d.Id == partner.DistrictId);
 		_districtSearchText = district?.DistrictName ?? "";
 	}
@@ -1723,6 +1748,7 @@ return;
 		_stateSearchText = "";
 		_districtSearchText = "";
 		SyncDateBuffers();
+		CalculatePartnerAge();
 	}
 
 	private void SelectState(int id, string displayText)

@@ -241,7 +241,7 @@
                 </div>
             }
 
-            @if (status == "Terminated")
+          @if (IsRestrictedFlow)
             {
                 <div class="basic-info-card">
                     <div class="card-header-title mb-2">
@@ -1115,7 +1115,7 @@
     public string? Mode { get; set; }
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
-    private bool IsRestrictedFlow => status == "Terminated" || (status == "Inactive" && _inactiveProposal == FutureBusinessProposal.Terminated);
+    private bool IsRestrictedFlow => status == "Terminated";
 
     private DealerFormModel _model = new()
     {
@@ -1135,9 +1135,6 @@
     private string status = "Active";
     private FutureBusinessProposal _inactiveProposal = FutureBusinessProposal.FutureBusiness;
 
-    // Tracks whether the user has manually picked Entity Type / Status on this page
-    // visit. If so, selecting an existing dealer via the search box below must NOT
-    // silently overwrite those choices with the loaded record's values.
     private bool _entityTypeManuallySet;
     private bool _statusManuallySet;
 
@@ -1148,23 +1145,15 @@
     private bool ShowInactiveStatus => status == "Inactive";
     private bool ShowTerminatedStatus => status == "Terminated";
 
-    // Visibility rules per user requirements
-    // Dealer Active: show full sections
-    // Dealer Inactive + Future Business: show full sections + inactive status
-    // Dealer Inactive + Terminated: show only basic + business + inactive status (no full registration sections)
-    // Dealer Terminated: show only basic + business + terminated status
-    private bool ShowDealerFullSections => IsDealerSelected && (status == "Active" || (status == "Inactive" && _inactiveProposal == FutureBusinessProposal.FutureBusiness));
+    private bool ShowDealerFullSections => IsDealerSelected && status != "Terminated";
 
     // Department Active: show full sections
-    // Department Inactive + Future Business: show only business information + inactive status
-    // Department Terminated: show basic + business + terminated status
-    private bool ShowDepartmentActiveSections => IsDepartmentSelected && status == "Active";
-    private bool ShowDepartmentBusinessOnlyWhenInactive => IsDepartmentSelected && status == "Inactive" && _inactiveProposal == FutureBusinessProposal.FutureBusiness;
+    // Department Inactive: show full sections too (same as Dealer/Institution)
+    private bool ShowDepartmentActiveSections => IsDepartmentSelected && status != "Terminated";
+    private bool ShowDepartmentBusinessOnlyWhenInactive => false;
 
-    // Institution Active: show full sections
-    // Institution Inactive + Future Business: show full sections + inactive status
-    // Institution Terminated: show only basic + business + terminated status
-    private bool ShowInstitutionFullSections => IsInstitutionSelected && (status == "Active" || (status == "Inactive" && _inactiveProposal == FutureBusinessProposal.FutureBusiness));
+    // Institution Active/Inactive: show full sections
+    private bool ShowInstitutionFullSections => IsInstitutionSelected && status != "Terminated";
 
     private bool ShowFullRegistrationSections => !IsRestrictedFlow && (ShowDealerFullSections || ShowDepartmentActiveSections || ShowInstitutionFullSections);
     private bool isSpic = true;
@@ -1256,7 +1245,6 @@
         Loading.Show();
         try
         {
-            // If editing, start the dealer fetch concurrently with the lookups
             Task<DealerFormModel?>? dealerTask = null;
             if (DealerIdFromQuery.HasValue && DealerIdFromQuery.Value > 0)
             {
@@ -1305,7 +1293,6 @@
         if (dealer == null) return;
 
         _model = dealer;
-        // Default any null/MinValue dates to today so date pickers don't go blank
         if (!_model.DateOfAppointment.HasValue || _model.DateOfAppointment.Value == DateTime.MinValue)
             _model.DateOfAppointment = DateTime.Today;
         if (!_model.LastTransactionDate.HasValue || _model.LastTransactionDate.Value == DateTime.MinValue)
@@ -1324,7 +1311,6 @@
 
         _isEditMode = true;
 
-        // Prefer enum (EntityType) if present, otherwise fallback to legacy IsDealer
         int? entityCode = null;
 
         if (_model.DealerType is 0 or 1 or 2)
@@ -1332,8 +1318,6 @@
         else if (_model.EntityType is 0 or 1 or 2)
             entityCode = _model.EntityType;
 
-      // Only load the entity type from the record if the user hasn't
-        // already made a manual selection on this page visit.
         if (!_entityTypeManuallySet)
         {
             selected = entityCode switch
@@ -1355,8 +1339,6 @@
         _basicInfoHqId = _model.HQ;
         _parentDealerId = _model.ParentDealer;
 
-        // Same rule for Status: don't clobber a manual selection the user
-        // already made before picking a dealer from the search box.
         if (!_statusManuallySet)
         {
             status = _model.Status switch
@@ -1547,7 +1529,6 @@
         _pincodeSuccess = false;
         _errors.Remove("PinCode");
 
-        // Strip non-digit characters
         if (!string.IsNullOrEmpty(_model.PinCode))
         {
             var digitsOnly = new string(_model.PinCode.Where(char.IsDigit).ToArray());
@@ -1563,7 +1544,6 @@
 
         try
         {
-            // Call our own backend — no SSL/CORS/auth issues, no DefaultRequestHeaders juggling
             using var response = await Http.GetAsync($"api/PincodeLookup/{_model.PinCode}");
 
             if (!response.IsSuccessStatusCode)
@@ -1656,21 +1636,18 @@
             };
             SyncDateBuffersFromModel();
 
-            isSpic = true;   // reset to default for new entry
-            isGreenStar = true;   // reset to default for new entry
+            isSpic = true;
+            isGreenStar = true;
             _isEditMode = false;
 
-            // Restore logged-in user's State / Region / HQ for New Entry
             ApplyLockedEmployeeLocation();
 
-            // Reset selection defaults for new entry
-            selected = "Dealer"; // default to Dealer for new entries
+            selected = "Dealer";
         }
     }
 
     private void OnDealerStateChanged()
     {
-        // If a district was selected but it doesn't belong to the new state, reset it
         if (_model.DistrictId > 0)
         {
             var districtBelongsToState = _DistrictAll.Any(d =>
@@ -1831,7 +1808,7 @@
         {
             if (_model.LastTransactionDate == null) _errors["LastTransactionDate"] = "Last Transaction Date is required";
         }
-        if (status == "Terminated")
+     if (IsRestrictedFlow)
         {
             if (_model.FinalApprovalDate == null)
                 _errors["FinalApprovalDate"] = "Final Approval Date is required";
@@ -1902,11 +1879,8 @@
 
         try
         {
-            // Set legacy boolean for backward compatibility
             _model.IsDealer = selected == "Dealer";
 
-            // Set enum (EntityType) value: 0=Dealer,1=Department,2=Institution
-            // Keep both representations for backward compatibility: set DealerType (new) and EntityType (existing int field)
             _model.DealerType = selected switch
             {
                 "Dealer" => 0,
@@ -1922,8 +1896,6 @@
             _model.Region = _basicInfoRegionId;
             _model.HQ = _basicInfoHqId;
             _model.ParentDealer = _parentDealerId;
-            // Optional FK fields: terminated/restricted dealers skip Primary Location
-            // & Bank Details, so send null (not 0) to avoid FK constraint violations.
             if (_model.DealerStateId == 0) _model.DealerStateId = null;
             if (_model.DistrictId == 0)    _model.DistrictId = null;
             if (_model.BankId == 0)        _model.BankId = null;
@@ -1939,7 +1911,6 @@ _model.Status = status switch
     _ => DealerStatus.Active
 };
 
-            // _model.UserTableId = LoginState.UserId ?? "";
             _model.FirmName ??= "";
             _model.ShopNoORRoomNoOrBlockNo ??= "";
             _model.Village ??= "";
@@ -1976,7 +1947,6 @@ _model.Status = status switch
             {
                 int dealerId = _model.Id;
                 
-                //  Capture the newly generated UserTableId from the server's response!
                 if (!_isEditMode)
                 {
                     var result = await response.Content.ReadFromJsonAsync<CreateResponse>();
@@ -1989,7 +1959,6 @@ _model.Status = status switch
                 }
                 else
                 {
-                    // For Edit mode, grab the updated model from the server
                     var result = await response.Content.ReadFromJsonAsync<DealerFormModel>();
                     if (result != null)
                     {
@@ -2035,7 +2004,6 @@ _model.Status = status switch
                 _retailFile = null;
 
                 ShowMessage(_isEditMode ? "Dealer updated successfully!" : "Dealer registered successfully!", false);
-                //await LoadData();
                 success = true;
             }
             else
@@ -2105,7 +2073,6 @@ _model.Status = status switch
         _gstFile = file;
         _model.GSTFilePath = file.Name;
 
-        // Clear any previously OCR-populated values before re-processing
         if (_ocrPopulatedGst)
         {
             _model.GSTNumber = null;
@@ -2113,7 +2080,6 @@ _model.Status = status switch
         }
         _ocrWarningGst = null;
 
-        // Immediately extract GST number via OCR
         _isExtractingGst = true;
         try
         {
@@ -2188,7 +2154,6 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         _panFile = file;
         _model.PANFilePath = file.Name;
 
-        // Clear any previously OCR-populated values before re-processing
         if (_ocrPopulatedPan)
         {
             _model.PANNumber = null;
@@ -2196,7 +2161,6 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         }
         _ocrWarningPan = null;
 
-        // Immediately extract PAN number via OCR
         _isExtractingPan = true;
         try
         {
@@ -2263,7 +2227,6 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         _aadhaarFile = file;
         _model.AadhaarFilePath = file.Name;
 
-        // Clear any previously OCR-populated values before re-processing
         if (_ocrPopulatedAadhaar)
         {
             _model.AadhaarNumber = null;
@@ -2271,7 +2234,6 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         }
         _ocrWarningAadhaar = null;
 
-        // Immediately extract Aadhaar number via OCR
         _isExtractingAadhaar = true;
         try
         {
@@ -2340,7 +2302,6 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         _chequeFile = file;
         _model.ChequeFilePath = file.Name;
 
-        // Clear any previously OCR-populated values before re-processing
         if (_ocrPopulatedCheque)
         {
             _model.AccountHolderName = null;
@@ -2351,7 +2312,6 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         }
         _ocrWarningCheque = null;
 
-        // Immediately extract bank details via OCR
         _isExtractingCheque = true;
         try
         {
@@ -2643,7 +2603,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
     private void OnDateOfAppointmentChanged(ChangeEventArgs e)
     {
         var newVal = e.Value?.ToString();
-        if (string.IsNullOrEmpty(newVal)) return; // ignore mid-typing/invalid
+        if (string.IsNullOrEmpty(newVal)) return;
 
         _dateOfAppointmentText = newVal;
         if (DateTime.TryParse(newVal, out var dt))
@@ -2757,7 +2717,6 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         public int StateId { get; set; }
         public int Region { get; set; }
         public int HQ { get; set; }
-        //public int Status { get; set; }
         public int ParentDealer { get; set; }
         public string? FirmName { get; set; }
         public DateTime? DateOfAppointment { get; set; }
@@ -2849,7 +2808,7 @@ public FutureBusinessProposal? InactiveProposal { get; set; }
         public int StateId { get; set; }
     }
 
-    public class PincodeApiResponse
+   public class PincodeApiResponse
     {
         public string Status { get; set; } = "";
         public string Message { get; set; } = "";
@@ -2929,4 +2888,5 @@ public string? GSTConstitutionofBusiness { get; set; }
         _isRegionLocked = LoginState.RegionId > 0;
         _isHqLocked = LoginState.HQId > 0;
     }
+}
 }

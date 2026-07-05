@@ -412,6 +412,54 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
                 </div>
             }
         </div>
+   }
+
+    @if (LoginState.IsAdmin && !_isLoading)
+    {
+       <div class="mt-5">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h4 class="fw-bold m-0" style="color:#1F2937;">Total Dealers — State Wise</h4>
+                <div class="d-flex gap-3">
+                    <div class="d-flex align-items-center gap-2" style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:6px 14px;">
+                        <span style="color:#1D4ED8; font-weight:600; font-size:0.85rem;">Total Dealers:</span>
+                       <span style="color:#1D4ED8; font-weight:700; font-size:1rem;">@_trueTotalDealerCount</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2" style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:8px; padding:6px 14px;">
+                        <span style="color:#047857; font-weight:600; font-size:0.85rem;">Completed:</span>
+                        <span style="color:#047857; font-weight:700; font-size:1rem;">@_allDealers.Count(d => d.Status != 2 && d.AVPApproved == true)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="table-responsive" style="border:1px solid #E5E7EB; border-radius:12px; overflow:hidden;">
+                <table class="table mb-0" style="background:#fff;">
+                    <thead style="background:#F9FAFB;">
+                        <tr>
+                            <th style="padding:12px 16px; font-weight:700; color:#374151;">State</th>
+                            <th style="padding:12px 16px; font-weight:700; color:#374151;">As Per SAP Data</th>
+                            <th style="padding:12px 16px; font-weight:700; color:#374151;">MO</th>
+                            <th style="padding:12px 16px; font-weight:700; color:#374151;">RM</th>
+                            <th style="padding:12px 16px; font-weight:700; color:#374151;">SMM</th>
+                            <th style="padding:12px 16px; font-weight:700; color:#374151;">AVP</th>
+                            <th style="padding:12px 16px; font-weight:700; color:#374151;">Completed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in GetStateWiseSummary())
+                        {
+                            <tr>
+                                <td style="padding:10px 16px;">@row.StateName</td>
+                                <td style="padding:10px 16px;">@row.AsPerSap</td>
+                                <td style="padding:10px 16px;">@row.Mo</td>
+                                <td style="padding:10px 16px;">@row.Rm</td>
+                                <td style="padding:10px 16px;">@row.Smm</td>
+                                <td style="padding:10px 16px;">@row.Avp</td>
+                                <td style="padding:10px 16px;">@row.Completed</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
     }
 
 </div>
@@ -523,6 +571,8 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     private List<DealerDto> _filteredDealers = new();
     private List<RegionDto> _regionsAll = new();
     private List<HeadquarterDto> _headquartersAll = new();
+      private List<StateDto> _statesAll = new();
+    private int _trueTotalDealerCount = 0;
     private bool _isLoading = true;
 
     // Filters
@@ -590,6 +640,8 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
             var dealersTask   = SafeGet<DealerDto>("api/DealerRegistration/submitted");
             var regionsTask   = SafeGet<RegionDto>("api/Region/all");
             var hqTask        = SafeGet<HeadquarterDto>("api/Headquarter/all");
+           var statesTask    = SafeGet<StateDto>("api/State/all");
+            var allDealersCountTask = SafeGet<DealerDto>("api/DealerRegistration/all");
             var expTask       = SafeGet<DealerExperience>("api/DealerExperience");
             var annualTask    = SafeGet<AnnualSaleDataLastFYofDealerRegistration>("api/AnnualSaleDataLastFYofDealerRegistration");
             var whTask        = SafeGet<DealerWarehouseFacilities>("api/DealerWarehouseFacilities");
@@ -617,12 +669,14 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
                 dealersTask, regionsTask, hqTask, expTask, annualTask, whTask, railTask,
                 portTask, marketTask, compTask, ownerTask, partnerTask, occTask,
                 salesPlanTask, bankTask, landTask, buildingTask, loanTask,
-              creditTask, creditSalesTask, docsTask, categoriesTask, productsTask, approvalHistoryTask);
+            creditTask, creditSalesTask, docsTask, categoriesTask, productsTask, approvalHistoryTask, statesTask, allDealersCountTask);
 
             // Assign results
             _allDealers          = await dealersTask;
             _regionsAll          = await regionsTask;
             _headquartersAll     = await hqTask;
+             _statesAll           = await statesTask;
+            _trueTotalDealerCount = (await allDealersCountTask).Count;
             _allExperiences      = await expTask;
             _allAnnualSales      = await annualTask;
             _allWarehouses       = await whTask;
@@ -901,6 +955,30 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     private decimal GetSpicAvpRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.AvpCreditLimit);
     private decimal GetGflAvpRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.AvpCreditLimitGfl);
 
+   private List<StateWiseSummary> GetStateWiseSummary()
+    {
+        return _allDealers
+            .GroupBy(d => d.StateId)
+            .Select(g =>
+            {
+                var stateName = _statesAll.FirstOrDefault(s => s.Id == g.Key)?.StateName ?? "Unknown";
+                var dealers = g.ToList();
+
+                return new StateWiseSummary
+                {
+                    StateName = stateName,
+                    AsPerSap = dealers.Count,
+                    Mo = dealers.Count(d => d.Status != 2 && GetApprovalStatus(d) == "Draft"),
+                    Rm = dealers.Count(d => d.Status != 2 && d.IsSubmittedForReview == true && ((d.RMApproved == null) || (d.RMApproved == true && d.SMApproved == false))),
+                    Smm = dealers.Count(d => d.Status != 2 && ((_completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == null) || (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false))),
+                    Avp = dealers.Count(d => d.Status != 2 && _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null),
+                    Completed = dealers.Count(d => d.Status != 2 && d.AVPApproved == true)
+                };
+            })
+            .OrderBy(s => s.StateName)
+            .ToList();
+    }
+
     private string GetStatusName(int status) => status switch
     {
         0 => "Active",
@@ -1160,5 +1238,21 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     {
         public int Id { get; set; }
         public string HeadquarterName { get; set; } = "";
+    }
+      public class StateDto
+    {
+        public int Id { get; set; }
+        public string StateName { get; set; } = "";
+    }
+
+    public class StateWiseSummary
+    {
+        public string StateName { get; set; } = "";
+        public int AsPerSap { get; set; }
+        public int Mo { get; set; }
+        public int Rm { get; set; }
+        public int Smm { get; set; }
+        public int Avp { get; set; }
+        public int Completed { get; set; }
     }
 }
