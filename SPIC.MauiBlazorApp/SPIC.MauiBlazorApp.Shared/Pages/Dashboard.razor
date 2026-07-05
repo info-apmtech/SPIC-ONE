@@ -570,7 +570,10 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     private List<DealerLoanLiabilities> _allLoans = new();
     private List<DealerCreditLimitProposal> _allCreditProposals = new();
     private List<DealerCreditLimitSalesPerformance> _allCreditSales = new();
-    private List<DealerRegistrationDocuments> _allDocuments = new();
+   private List<DealerRegistrationDocuments> _allDocuments = new();
+    private List<Category> _allCategories = new();
+    private List<Product> _allProducts = new();
+    private List<DealerApprovalHistory> _allApprovalHistory = new();    
 
     private async Task<List<TItem>> SafeGet<TItem>(string url)
     {
@@ -604,14 +607,17 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
             var loanTask      = SafeGet<DealerLoanLiabilities>("api/DealerLoanLiabilities");
             var creditTask    = SafeGet<DealerCreditLimitProposal>("api/DealerCreditLimitProposal");
             var creditSalesTask = SafeGet<DealerCreditLimitSalesPerformance>("api/DealerCreditLimitSalesPerformance");
-            var docsTask      = SafeGet<DealerRegistrationDocuments>("api/DealerRegistrationDocuments");
+           var docsTask      = SafeGet<DealerRegistrationDocuments>("api/DealerRegistrationDocuments");
+          var categoriesTask = SafeGet<Category>("api/Category");
+            var productsTask   = SafeGet<Product>("api/Product");
+           var approvalHistoryTask = SafeGet<DealerApprovalHistory>("api/DealerApprovalHistory");
 
             // Wait for all of them in parallel
             await Task.WhenAll(
                 dealersTask, regionsTask, hqTask, expTask, annualTask, whTask, railTask,
                 portTask, marketTask, compTask, ownerTask, partnerTask, occTask,
                 salesPlanTask, bankTask, landTask, buildingTask, loanTask,
-                creditTask, creditSalesTask, docsTask);
+              creditTask, creditSalesTask, docsTask, categoriesTask, productsTask, approvalHistoryTask);
 
             // Assign results
             _allDealers          = await dealersTask;
@@ -634,7 +640,10 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
             _allLoans            = await loanTask;
             _allCreditProposals  = await creditTask;
             _allCreditSales      = await creditSalesTask;
-            _allDocuments        = await docsTask;
+           _allDocuments        = await docsTask;
+            _allCategories       = await categoriesTask;
+            _allProducts         = await productsTask;
+          _allApprovalHistory  = await approvalHistoryTask;
 
             BuildCompletionSet();
             ApplyRoleFilter();
@@ -784,6 +793,113 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
 
         _filteredDealers = query.ToList();
     }
+    private string GetEntityTypeName(int? entityType)
+    {
+        if (!entityType.HasValue) return "-";
+        return entityType.Value switch
+        {
+            1 => "Sole Proprietor",
+            2 => "Partnership",
+            3 => "LLP",
+            4 => "PVT LTD",
+            5 => "PUB LTD",
+            6 => "Society",
+            _ => "-"
+        };
+    }
+
+    private bool IsFertilizerCategoryDash(int categoryId) =>
+        _allCategories.FirstOrDefault(c => c.Id == categoryId)?.Name?.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase) == true;
+
+    private bool IsSpecialityCategoryDash(int categoryId) =>
+        _allCategories.FirstOrDefault(c => c.Id == categoryId)?.Name is string n &&
+        (n.Contains("Speciality", StringComparison.OrdinalIgnoreCase) || n.Contains("Specialty", StringComparison.OrdinalIgnoreCase));
+
+    private bool IsUreaProductDash(int productId) =>
+        _allProducts.FirstOrDefault(p => p.Id == productId)?.Name?.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase) == true;
+
+    private double GetCreditPercentFromScoreDash(double scorePercent) => scorePercent switch
+    {
+        >= 75 => 25,
+        >= 60 => 20,
+        >= 45 => 15,
+        >= 30 => 10,
+        _ => 0
+    };
+
+   private static decimal ConvertToLakhsDash(decimal grossAmount) => grossAmount / 100000m;
+
+    private int GetFertilizerCategoryIdDash() =>
+        _allCategories.FirstOrDefault(c => c.Name != null && c.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase))?.Id ?? 0;
+
+    private List<int> GetSpecialityCategoryIdsDash() =>
+        _allCategories.Where(c => c.Name != null &&
+            (c.Name.Contains("Speciality", StringComparison.OrdinalIgnoreCase) || c.Name.Contains("Specialty", StringComparison.OrdinalIgnoreCase)))
+            .Select(c => c.Id).ToList();
+
+    // Fetches the exact same by-filter data the real CreditLimit/CreditLimitForGreenStar pages use
+    private async Task<List<DealerCreditLimitSales>> GetCreditLimitSalesByFilterDash(int dealerId, int categoryId, int financialYearId)
+    {
+        if (categoryId <= 0 || financialYearId <= 0) return new();
+        var url = $"api/creditlimitsales/by-filter?customerId={dealerId}&categoryId={categoryId}&financialYearIds={financialYearId}";
+        return await SafeGet<DealerCreditLimitSales>(url);
+    }
+
+    private async Task<decimal> GetSpicMoRecommendedCreditLimitAsync(int dealerId)
+    {
+        var proposal = _allCreditProposals.FirstOrDefault(p => p.DealerId == dealerId);
+        if (proposal == null) return 0m;
+
+        var fertCatId = GetFertilizerCategoryIdDash();
+        var rows = await GetCreditLimitSalesByFilterDash(dealerId, fertCatId, proposal.FY3);
+
+        var turnoverGross = rows
+            .Where(s => IsUreaProductDash(s.ProductId))
+            .Sum(s => s.GrossAmount);
+
+        var turnover = ConvertToLakhsDash(turnoverGross);
+        var pct = GetCreditPercentFromScoreDash(proposal.Q11Mark);
+        return (turnover * (decimal)(pct / 100.0)) + proposal.AdditionalCreditLimit;
+    }
+
+    private async Task<decimal> GetGflMoRecommendedCreditLimitAsync(int dealerId)
+    {
+        var proposal = _allCreditProposals.FirstOrDefault(p => p.DealerId == dealerId);
+        if (proposal == null) return 0m;
+
+        var fertCatId = GetFertilizerCategoryIdDash();
+        var fertRows = await GetCreditLimitSalesByFilterDash(dealerId, fertCatId, proposal.FY3);
+        var fertTurnover = ConvertToLakhsDash(fertRows
+            .Where(s => !IsUreaProductDash(s.ProductId))
+            .Sum(s => s.GrossAmount));
+
+        decimal spTurnover = 0m;
+        foreach (var specCatId in GetSpecialityCategoryIdsDash())
+        {
+            var specRows = await GetCreditLimitSalesByFilterDash(dealerId, specCatId, proposal.FY3);
+            spTurnover += ConvertToLakhsDash(specRows.Sum(s => s.GrossAmount));
+        }
+
+        var pct = GetCreditPercentFromScoreDash(proposal.GQ12Mark);
+        return ((fertTurnover + spTurnover) * (decimal)(pct / 100.0)) + proposal.GreenstarAdditionalCreditLimit;
+    }
+
+    private decimal GetApprovalLimitDash(int dealerId, Func<DealerApprovalHistory, decimal?> selector)
+    {
+        var row = _allApprovalHistory
+            .Where(h => h.DealerId == dealerId && h.IsApproved)
+            .Where(h => (selector(h) ?? 0m) > 0m)
+            .OrderByDescending(h => h.ApprovedAt)
+            .FirstOrDefault();
+        return row != null ? (selector(row) ?? 0m) : 0m;
+    }
+
+    private decimal GetSpicRmRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.RmCreditLimit);
+    private decimal GetGflRmRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.RmCreditLimitGfl);
+    private decimal GetSpicSmmRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.SmCreditLimit);
+    private decimal GetGflSmmRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.SmCreditLimitGfl);
+    private decimal GetSpicAvpRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.AvpCreditLimit);
+    private decimal GetGflAvpRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.AvpCreditLimitGfl);
 
     private string GetStatusName(int status) => status switch
     {
@@ -948,7 +1064,7 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Dealers");
 
-        var headers = new[] { "Dealer Code", "Firm Name", "Company", "Region", "HQ", "Entity Type", "Status", "Approval Status", "Pincode", "SPIC Code", "GreenStar Code", "Wholesale License", "Retail License", "Last Updated" };
+      var headers = new[] { "Dealer Code", "Firm Name", "Company", "Region", "HQ", "Entity Type", "Status", "Approval Status", /* "Pincode", */ "SPIC Code", "GreenStar Code",/*  "Wholesale License", "Retail License", */ "MO Recommended (SPIC)", "MO Recommended (GFL)", "RM Recommended (SPIC)", "RM Recommended (GFL)", "SMM Recommended (SPIC)", "SMM Recommended (GFL)", "AVP Recommended (SPIC)", "AVP Recommended (GFL)"/* , "Last Updated" */ };
         for (int c = 0; c < headers.Length; c++)
         {
             ws.Cell(1, c + 1).Value = headers[c];
@@ -970,15 +1086,29 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
             ws.Cell(r + 2, 3).Value = company;
             ws.Cell(r + 2, 4).Value = regionName;
             ws.Cell(r + 2, 5).Value = hqName;
-            ws.Cell(r + 2, 6).Value = d.BusinessEntityType ?? "";
+           ws.Cell(r + 2, 6).Value = GetEntityTypeName(d.EntityType);          
             ws.Cell(r + 2, 7).Value = status;
             ws.Cell(r + 2, 8).Value = approvalStatus;
-            ws.Cell(r + 2, 9).Value = d.PinCode ?? "";
-            ws.Cell(r + 2, 10).Value = d.SPICCode ?? "";
-            ws.Cell(r + 2, 11).Value = d.GreenStarCode ?? "";
-            ws.Cell(r + 2, 12).Value = d.WholeSaleFertilizerLicenseNumber ?? "";
-            ws.Cell(r + 2, 13).Value = d.RetailFertilizerLicenseNumber ?? "";
-            ws.Cell(r + 2, 14).Value = d.UpdatedAt.ToString("dd MMM yyyy");
+            // ws.Cell(r + 2, 9).Value = d.PinCode ?? "";
+            ws.Cell(r + 2, 9).Value = d.SPICCode ?? "";
+            ws.Cell(r + 2, 10).Value = d.GreenStarCode ?? "";
+            // ws.Cell(r + 2, 12).Value = d.WholeSaleFertilizerLicenseNumber ?? "";
+          //ws.Cell(r + 2, 13).Value = d.RetailFertilizerLicenseNumber ?? "";
+            ws.Cell(r + 2, 11).Value = (double)Math.Round(await GetSpicMoRecommendedCreditLimitAsync(d.Id));
+            ws.Cell(r + 2, 12).Value = (double)Math.Round(await GetGflMoRecommendedCreditLimitAsync(d.Id));
+            ws.Cell(r + 2, 13).Value = (double)Math.Round(GetSpicRmRecommendedCreditLimit(d.Id),2);
+            ws.Cell(r + 2, 14).Value = (double)Math.Round(GetGflRmRecommendedCreditLimit(d.Id),2);
+            ws.Cell(r + 2, 15).Value = (double)Math.Round(GetSpicSmmRecommendedCreditLimit(d.Id),2);
+            ws.Cell(r + 2, 16).Value = (double)Math.Round(GetGflSmmRecommendedCreditLimit(d.Id),2);
+            ws.Cell(r + 2, 17).Value = (double)Math.Round(GetSpicAvpRecommendedCreditLimit(d.Id),2);
+            ws.Cell(r + 2, 18).Value = (double)Math.Round(GetGflAvpRecommendedCreditLimit(d.Id),2);
+            // ws.Cell(r + 2, 20).Value = d.UpdatedAt.ToString("dd MMM yyyy");
+
+        }
+
+       for (int col = 14; col <= 21; col++)
+        {
+            ws.Column(col).Style.NumberFormat.Format = "0.00";
         }
 
         ws.Columns().AdjustToContents();
@@ -1008,6 +1138,7 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
         public int Status { get; set; }
         public string? FirmName { get; set; }
         public string? BusinessEntityType { get; set; }
+        public int? EntityType { get; set; }
         public string? WholeSaleFertilizerLicenseNumber { get; set; }
         public string? RetailFertilizerLicenseNumber { get; set; }
         public string? PinCode { get; set; }
