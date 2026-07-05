@@ -784,8 +784,8 @@
                             <div class="inline-val">@_model.DealerCode - @_model.FirmName</div>
                         </div>
                         <div class="inline-field">
-                            <label>Parent Dealer</label>
-                            <div class="inline-val">@GetDealerName(_model.ParentDealer)</div>
+                            <label>Parent Dealer Code & Name</label>
+                            <div class="inline-val">@GetDealerCodeAndName(_model.ParentDealer)</div>
                         </div>
                         <div class="inline-field">
                             <label>Business Type</label>
@@ -1801,9 +1801,11 @@ else
            </div>
        </div>
 
+      @if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
+{
        <div class="dpdf-section">
            <div class="dpdf-section-title mb-2">
-               <div class="dpdf-section-icon">📈</div>  <div class="dpdf-section-text">Existing Credit Limit</div>
+               <div class="dpdf-section-icon">📈</div>  <div class="dpdf-section-text">Existing Credit Limit — SPIC</div>
            </div>
            <div class="grid-3" style="row-gap: 6px;">
              <div class="inline-field">
@@ -1820,6 +1822,30 @@ else
                </div>
            </div>
        </div>
+}
+
+@if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
+{
+       <div class="dpdf-section">
+           <div class="dpdf-section-title mb-2">
+               <div class="dpdf-section-icon">📈</div>  <div class="dpdf-section-text">Existing Credit Limit — GreenStar</div>
+           </div>
+           <div class="grid-3" style="row-gap: 6px;">
+             <div class="inline-field">
+                   <label>Credit Limit Amount (₹)</label>
+                   <div class="inline-val">@MoneyOrDash(_proposal.GSExistingCreditLimitAmount)</div>
+               </div>
+               <div class="inline-field">
+                   <label>Valid From</label>
+                   <div class="inline-val">@(_proposal.GSExistingCreditLimitFrom.Year > 1 ? _proposal.GSExistingCreditLimitFrom.ToString("dd/MM/yyyy") : "-")</div>
+               </div>
+               <div class="inline-field">
+                   <label>Valid To</label>
+                   <div class="inline-val">@(_proposal.GSExistingCreditLimitTo.Year > 1 ? _proposal.GSExistingCreditLimitTo.ToString("dd/MM/yyyy") : "-")</div>
+               </div>
+           </div>
+       </div>
+}
 
          <div class="dpdf-section">
            <div class="dpdf-section-title mb-2">
@@ -3200,6 +3226,13 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
     private string GetBankName(int id) => _banksAll.FirstOrDefault(x => x.Id == id)?.Name ?? "-";
     private string GetDealerName(int id) => _dealersAll.FirstOrDefault(x => x.Id == id)?.FirmName ?? "-";
 
+    private string GetDealerCodeAndName(int id)
+    {
+        var d = _dealersAll.FirstOrDefault(x => x.Id == id);
+        if (d == null) return "-";
+        return !string.IsNullOrWhiteSpace(d.DealerCode) ? $"{d.DealerCode} - {d.FirmName}" : (d.FirmName ?? "-");
+    }
+
     private string GetStatusName(int status)
     {
         return status switch
@@ -4145,6 +4178,12 @@ public decimal SpicTradeDepositAmount { get; set; }
 public decimal SpicExistingCreditLimitAmount { get; set; }
         public DateTime SpicExistingCreditLimitFrom { get; set; }
         public DateTime SpicExistingCreditLimitTo { get; set; }
+
+[System.Text.Json.Serialization.JsonConverter(typeof(LenientDecimalConverter))]
+public decimal GSExistingCreditLimitAmount { get; set; }
+        public DateTime GSExistingCreditLimitFrom { get; set; }
+        public DateTime GSExistingCreditLimitTo { get; set; }
+        // GreenStar Securities
         // GreenStar Securities
 public string? GreenstarFDNumber { get; set; }
 public string? GreenstarFDOtherDetails { get; set; }
