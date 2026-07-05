@@ -241,7 +241,7 @@
                 </div>
             }
 
-          @if (IsRestrictedFlow)
+         @if (IsRestrictedNavFlow)
             {
                 <div class="basic-info-card">
                     <div class="card-header-title mb-2">
@@ -1115,7 +1115,16 @@
     public string? Mode { get; set; }
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+    // Controls whether the FULL registration page (Location/Bank/Tax/License/etc.) is hidden.
+    // Only pure Terminated status hides these — Inactive+Terminated still shows the full page.
     private bool IsRestrictedFlow => status == "Terminated";
+
+    // Controls NAVIGATION only: both pure Terminated AND Inactive+Terminated use the
+    // restricted 3-step flow (Register -> Proprietor -> Investment), and both show the
+    // "Terminated Status" card + require Final Approval/Settlement dates.
+    private bool IsRestrictedNavFlow => status == "Terminated" ||
+        (status == "Inactive" && _inactiveProposal == FutureBusinessProposal.Terminated);
 
     private DealerFormModel _model = new()
     {
@@ -1804,11 +1813,11 @@
 
         if (string.IsNullOrWhiteSpace(_model.FirmName)) _errors["FirmName"] = "Firm Name is required";
 
-        if (status == "Inactive" && !IsRestrictedFlow)
+       if (status == "Inactive" && !IsRestrictedNavFlow)
         {
             if (_model.LastTransactionDate == null) _errors["LastTransactionDate"] = "Last Transaction Date is required";
         }
-     if (IsRestrictedFlow)
+     if (IsRestrictedNavFlow)
         {
             if (_model.FinalApprovalDate == null)
                 _errors["FinalApprovalDate"] = "Final Approval Date is required";
@@ -2024,12 +2033,12 @@ _model.Status = status switch
         return success;
     }
 
-    private async Task HandleNext()
+  private async Task HandleNext()
     {
         if (IsViewOnly)
         {
             Loading.Show();
-            var viewNext = IsRestrictedFlow ? "/Proprietor" : "/Experience";
+            var viewNext = IsRestrictedNavFlow ? "/Proprietor" : "/Experience";
             Nav.NavigateTo($"{viewNext}?dealerId={_model.Id}&mode=view");
             return;
         }
@@ -2039,7 +2048,7 @@ _model.Status = status switch
         {
             SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, false);
             Loading.Show();
-            if (IsRestrictedFlow)
+            if (IsRestrictedNavFlow)
                 Nav.NavigateTo($"/Proprietor?dealerId={_model.Id}&flow=restricted");
             else
                 Nav.NavigateTo($"/Experience?dealerId={_model.Id}");
@@ -2888,5 +2897,4 @@ public string? GSTConstitutionofBusiness { get; set; }
         _isRegionLocked = LoginState.RegionId > 0;
         _isHqLocked = LoginState.HQId > 0;
     }
-}
 }
