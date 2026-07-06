@@ -86,10 +86,10 @@ namespace SpicAPI.Controllers
                 .Where(d =>
                     (d.SPICCode != null && allNumericCodes.Contains(d.SPICCode)) ||
                     (d.GreenStarCode != null && allNumericCodes.Contains(d.GreenStarCode)) ||
-                    (d.TnCode != null && allNumericCodes.Contains(d.TnCode)) ||
-                    (d.DealerCode != null && allNumericCodes.Contains(d.DealerCode)))
-                .ToListAsync();
-
+				   (d.TnCode != null && allNumericCodes.Contains(d.TnCode)) ||
+					(d.NCode != null && allNumericCodes.Contains(d.NCode)) ||
+					(d.DealerCode != null && allNumericCodes.Contains(d.DealerCode)))
+				.ToListAsync();
             // Index by every code field so we can find a dealer by numeric part
             var dealerByNumeric = new Dictionary<string, DealerRegistration>(
                 StringComparer.OrdinalIgnoreCase);
@@ -100,11 +100,13 @@ namespace SpicAPI.Controllers
                     dealerByNumeric.TryAdd(d.SPICCode, d);
                 if (!string.IsNullOrEmpty(d.GreenStarCode))
                     dealerByNumeric.TryAdd(d.GreenStarCode, d);
-                if (!string.IsNullOrEmpty(d.TnCode))
-                    dealerByNumeric.TryAdd(d.TnCode, d);
-                if (!string.IsNullOrEmpty(d.DealerCode))
-                    dealerByNumeric.TryAdd(d.DealerCode, d);
-            }
+				if (!string.IsNullOrEmpty(d.TnCode))
+					dealerByNumeric.TryAdd(d.TnCode, d);
+				if (!string.IsNullOrEmpty(d.NCode))
+					dealerByNumeric.TryAdd(d.NCode, d);
+				if (!string.IsNullOrEmpty(d.DealerCode))
+					dealerByNumeric.TryAdd(d.DealerCode, d);
+			}
 
             // ── Error tracking ─────────────────────────────────────────
             var groupedErrors = new Dictionary<string, List<string>>(
@@ -192,45 +194,53 @@ namespace SpicAPI.Controllers
                             // ── UPDATE: add the new company code to existing record ──
                             bool changed = false;
 
-                            if (isSpic)
-                            {
-                                // D prefix → store full code (e.g. "D41089157") in SPICCode
-                                if (string.IsNullOrEmpty(existingDealer.SPICCode))
-                                {
-                                    existingDealer.SPICCode = customer;
-                                    existingDealer.InSpic = true;
-                                    changed = true;
-                                }
-                                else
-                                {
-                                    AddGrouped("SPICCode already set, skipped",
-                                        $"{numericCode} — {customerName}");
-                                }
-                            }
-                            else // isGreenStar: Z, N, T
-                            {
-                                // Z/N/T prefix → store full code in GreenStarCode
-                                if (string.IsNullOrEmpty(existingDealer.GreenStarCode))
-                                {
-                                    existingDealer.GreenStarCode = customer;
-                                    existingDealer.InGreenStar = true;
-                                    changed = true;
-                                }
-                                else
-                                {
-                                    AddGrouped("GreenStarCode already set, skipped",
-                                        $"{numericCode} — {customerName}");
-                                }
+							// Each prefix routes to its own dedicated code field.
+							if (prefix == 'D' || prefix == ' ')
+							{
+								if (string.IsNullOrEmpty(existingDealer.SPICCode))
+								{
+									existingDealer.SPICCode = customer;
+									existingDealer.InSpic = true;
+									changed = true;
+								}
+								else
+									AddGrouped("SPICCode already set, skipped", $"{numericCode} — {customerName}");
+							}
+							else if (prefix == 'Z')
+							{
+								if (string.IsNullOrEmpty(existingDealer.GreenStarCode))
+								{
+									existingDealer.GreenStarCode = customer;
+									existingDealer.InGreenStar = true;
+									changed = true;
+								}
+								else
+									AddGrouped("GreenStarCode already set, skipped", $"{numericCode} — {customerName}");
+							}
+							else if (prefix == 'T')
+							{
+								if (string.IsNullOrEmpty(existingDealer.TnCode))
+								{
+									existingDealer.TnCode = customer;
+									existingDealer.InGreenStar = true;
+									changed = true;
+								}
+								else
+									AddGrouped("TnCode already set, skipped", $"{numericCode} — {customerName}");
+							}
+							else if (prefix == 'N')
+							{
+								if (string.IsNullOrEmpty(existingDealer.NCode))
+								{
+									existingDealer.NCode = customer;
+									existingDealer.InGreenStar = true;
+									changed = true;
+								}
+								else
+									AddGrouped("NCode already set, skipped", $"{numericCode} — {customerName}");
+							}
 
-                                // T prefix also populates TnCode
-                                if (prefix == 'T' && string.IsNullOrEmpty(existingDealer.TnCode))
-                                {
-                                    existingDealer.TnCode = customer;
-                                    changed = true;
-                                }
-                            }
-
-                            if (changed)
+							if (changed)
                             {
                                 existingDealer.UpdatedAt = now;
                                 existingDealer.UpdatedBy = userId;
@@ -260,16 +270,13 @@ namespace SpicAPI.Controllers
                                 // DealerCode always = numeric part only (no prefix)
                                 DealerCode = numericCode,
 
-                                // SPICCode = full code for D prefix, null otherwise
-                                SPICCode = isSpic ? customer : null,
+								// Each prefix routes to its own dedicated code field
+								SPICCode = (prefix == 'D' || prefix == ' ') ? customer : null,
+								GreenStarCode = prefix == 'Z' ? customer : null,
+								TnCode = prefix == 'T' ? customer : null,
+								NCode = prefix == 'N' ? customer : null,
 
-                                // GreenStarCode = full code for Z/N/T prefix, null otherwise
-                                GreenStarCode = isGreenStar ? customer : null,
-
-                                // TnCode = full code only for T prefix
-                                TnCode = prefix == 'T' ? customer : null,
-
-                                FirmName = customerName?.ToUpperInvariant() ?? string.Empty,
+								FirmName = customerName?.ToUpperInvariant() ?? string.Empty,
                                 StateId = stateId,
                                 DealerStateId = stateId,
                                 InSpic = isSpic,
@@ -342,10 +349,165 @@ namespace SpicAPI.Controllers
                 TotalSkipped = totalSkipped
             });
         }
-        // GET /api/dealerbulkupload/sample-template
-        [HttpGet("sample-template")]
-        public IActionResult SampleTemplate()
-        {
+		// POST /api/dealerbulkupload/manual-entry
+		// Single-dealer version of Import: same prefix routing (D→SPICCode, Z→GreenStarCode,
+		// T→TnCode, N→NCode), same "merge into existing dealer by numeric code" behaviour.
+		// Only saves the dealer record — does NOT run the full registration wizard flow.
+		public class ManualDealerRequest
+		{
+			public string Customer { get; set; } = string.Empty;      // e.g. "D41089157"
+			public string? CustomerName { get; set; }
+			public int StateId { get; set; }                          // 0 = not provided
+		}
+
+		[HttpPost("manual-entry")]
+		public async Task<IActionResult> ManualEntry([FromBody] ManualDealerRequest req)
+		{
+			if (req == null || string.IsNullOrWhiteSpace(req.Customer))
+				return BadRequest(new { Success = false, Message = "CUSTOMER code is required" });
+
+			var customer = req.Customer.Trim();
+			var customerName = req.CustomerName?.Trim() ?? string.Empty;
+
+			var numericCode = Regex.Replace(customer, @"[^0-9]", "");
+			if (string.IsNullOrEmpty(numericCode))
+				return BadRequest(new { Success = false, Message = $"No numeric digits in CUSTOMER '{customer}'" });
+
+			var prefix = char.IsLetter(customer[0])
+				? char.ToUpperInvariant(customer[0])
+				: ' ';
+
+			bool isSpic = prefix == 'D' || prefix == ' ';
+			bool isGreenStar = prefix == 'Z' || prefix == 'N' || prefix == 'T';
+
+			if (!isSpic && !isGreenStar)
+				return BadRequest(new { Success = false, Message = $"Unknown prefix '{prefix}' in CUSTOMER '{customer}'. Allowed: D, Z, T, N." });
+
+			int stateId = req.StateId;
+
+			var now = DateTime.UtcNow;
+			var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+
+			using var tx = await _db.Database.BeginTransactionAsync();
+			try
+			{
+				// Find an existing dealer by the numeric part across every code field.
+				var existingDealer = await _db.DealerRegistrations
+					.FirstOrDefaultAsync(d =>
+						d.SPICCode == numericCode || d.SPICCode == customer ||
+						d.GreenStarCode == numericCode || d.GreenStarCode == customer ||
+						d.TnCode == numericCode || d.TnCode == customer ||
+						d.NCode == numericCode || d.NCode == customer ||
+						d.DealerCode == numericCode);
+
+				bool inserted = false;
+
+				if (existingDealer != null)
+				{
+					bool changed = false;
+
+					if (prefix == 'D' || prefix == ' ')
+					{
+						if (string.IsNullOrEmpty(existingDealer.SPICCode))
+						{ existingDealer.SPICCode = customer; existingDealer.InSpic = true; changed = true; }
+						else
+							return Conflict(new { Success = false, Message = $"SPICCode already set for dealer {numericCode}." });
+					}
+					else if (prefix == 'Z')
+					{
+						if (string.IsNullOrEmpty(existingDealer.GreenStarCode))
+						{ existingDealer.GreenStarCode = customer; existingDealer.InGreenStar = true; changed = true; }
+						else
+							return Conflict(new { Success = false, Message = $"GreenStarCode already set for dealer {numericCode}." });
+					}
+					else if (prefix == 'T')
+					{
+						if (string.IsNullOrEmpty(existingDealer.TnCode))
+						{ existingDealer.TnCode = customer; existingDealer.InGreenStar = true; changed = true; }
+						else
+							return Conflict(new { Success = false, Message = $"TnCode already set for dealer {numericCode}." });
+					}
+					else if (prefix == 'N')
+					{
+						if (string.IsNullOrEmpty(existingDealer.NCode))
+						{ existingDealer.NCode = customer; existingDealer.InGreenStar = true; changed = true; }
+						else
+							return Conflict(new { Success = false, Message = $"NCode already set for dealer {numericCode}." });
+					}
+
+					if (changed)
+					{
+						existingDealer.UpdatedAt = now;
+						existingDealer.UpdatedBy = userId;
+						if (existingDealer.StateId == 0 && stateId > 0)
+						{
+							existingDealer.StateId = stateId;
+							existingDealer.DealerStateId = stateId;
+						}
+						if (string.IsNullOrWhiteSpace(existingDealer.FirmName) && !string.IsNullOrWhiteSpace(customerName))
+							existingDealer.FirmName = customerName.ToUpperInvariant();
+					}
+				}
+				else
+				{
+					var dealer = new DealerRegistration
+					{
+						DealerCode = numericCode,
+						SPICCode = (prefix == 'D' || prefix == ' ') ? customer : null,
+						GreenStarCode = prefix == 'Z' ? customer : null,
+						TnCode = prefix == 'T' ? customer : null,
+						NCode = prefix == 'N' ? customer : null,
+						FirmName = customerName?.ToUpperInvariant() ?? string.Empty,
+						StateId = stateId,
+						DealerStateId = stateId,
+						InSpic = isSpic,
+						InGreenStar = isGreenStar,
+						IsDealer = true,
+						Status = DealerStatus.Active,
+						CreatedAt = now,
+						UpdatedAt = now,
+						CreatedBy = userId,
+						UpdatedBy = userId,
+						UserTableId = string.Empty,
+						ShopNoORRoomNoOrBlockNo = string.Empty,
+						Village = string.Empty,
+						PinCode = string.Empty,
+						OfficialContactNumber = string.Empty,
+						WhatsAppNumber = string.Empty,
+						AccountHolderName = string.Empty,
+						AccountNumber = string.Empty,
+						Branch = string.Empty,
+						IFSC = string.Empty,
+					};
+					_db.DealerRegistrations.Add(dealer);
+					inserted = true;
+				}
+
+				await _db.SaveChangesAsync();
+				await tx.CommitAsync();
+
+				return Ok(new
+				{
+					Success = true,
+					Inserted = inserted,
+					Updated = !inserted,
+					Message = inserted
+						? $"Dealer {customer} added successfully."
+						: $"Dealer {numericCode} updated with {customer}."
+				});
+			}
+			catch (Exception ex)
+			{
+				await tx.RollbackAsync();
+				_logger.LogError(ex, "Manual dealer entry failed");
+				return StatusCode(500, new { Success = false, Message = "Manual entry failed", Error = ex.Message });
+			}
+		}
+
+		// GET /api/dealerbulkupload/sample-template
+		[HttpGet("sample-template")]
+		public IActionResult SampleTemplate()
+		{
             var headers = new[] { "CUSTOMER", "CUSTOMER NAME", "State" };
 
             var sampleRows = new[]
