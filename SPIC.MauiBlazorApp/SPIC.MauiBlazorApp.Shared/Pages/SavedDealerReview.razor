@@ -1712,12 +1712,33 @@ private async Task ApproveDealer()
         </div>
     </div>
 
-    <h4 class="sent-title">Action History</h4>
+   <h4 class="sent-title">Action History</h4>
 
-    @if (_approvalHistory != null && _approvalHistory.Any())
+    <div class="row g-4 mb-1">
+        <div class="col-12 col-lg-6">
+            <div class="detail-box">
+                <h5>Action Details</h5>
+                <div class="info-row"><span>Action</span><strong>Submitted</strong></div>
+                <div class="info-row"><span>Action By</span><strong>@(_submittedByName ?? _dealer?.CreatedBy ?? "-")</strong></div>
+                <div class="info-row"><span>Role</span><strong>MO</strong></div>
+                <div class="info-row"><span>Date & Time</span><strong>@(_dealer != null ? _dealer.CreatedAt.ToString("dd-MMM-yyyy, hh:mm tt") : "-")</strong></div>
+                <div class="info-row"><span>Stage</span><strong>MO Review</strong></div>
+                <div class="info-row"><span>MO Recommended Credit Limit (SPIC)</span><strong>₹ @GetSpicMoRecommendedLimit().ToString("N2")</strong></div>
+                <div class="info-row"><span>MO Recommended Credit Limit (GFL)</span><strong>₹ @GetGflMoRecommendedLimit().ToString("N2")</strong></div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-6">
+            <div class="detail-box">
+                <h5>Remarks</h5>
+                <ul class="remarks"><li>Application submitted by MO for review.</li></ul>
+            </div>
+        </div>
+    </div>
+
+   @if (_approvalHistory != null && _approvalHistory.Any())
     {
         <div class="row g-4">
-            @foreach (var action in _approvalHistory)
+            @foreach (var action in _approvalHistory.OrderBy(h => h.ApprovedAt))
             {
                 <div class="col-12 col-lg-6">
                     <div class="detail-box">
@@ -1752,16 +1773,42 @@ private async Task ApproveDealer()
                             <strong>@(action.Role != null ? $"{action.Role} Review" : "-")</strong>
                         </div>
                         @{
-                            var creditLimitLabel = "";
-                            var creditLimitValue = "";
-                            if (action.RmCreditLimit.HasValue) { creditLimitLabel = "RM Credit Limit"; creditLimitValue = action.RmCreditLimit.Value.ToString("N2"); }
-                            else if (action.SmCreditLimit.HasValue) { creditLimitLabel = "SM Credit Limit"; creditLimitValue = action.SmCreditLimit.Value.ToString("N2"); }
-                            else if (action.AvpCreditLimit.HasValue) { creditLimitLabel = "AVP Credit Limit"; creditLimitValue = action.AvpCreditLimit.Value.ToString("N2"); }
-                            if (!string.IsNullOrEmpty(creditLimitLabel))
+                            string rolePrefix = "";
+                            decimal? spicLimit = null;
+                            decimal? gflLimit = null;
+
+                            if (action.RmCreditLimit.HasValue || action.RmCreditLimitGfl.HasValue)
+                            {
+                                rolePrefix = "RM";
+                                spicLimit = action.RmCreditLimit;
+                                gflLimit = action.RmCreditLimitGfl;
+                            }
+                            else if (action.SmCreditLimit.HasValue || action.SmCreditLimitGfl.HasValue)
+                            {
+                                rolePrefix = "SM";
+                                spicLimit = action.SmCreditLimit;
+                                gflLimit = action.SmCreditLimitGfl;
+                            }
+                            else if (action.AvpCreditLimit.HasValue || action.AvpCreditLimitGfl.HasValue)
+                            {
+                                rolePrefix = "AVP";
+                                spicLimit = action.AvpCreditLimit;
+                                gflLimit = action.AvpCreditLimitGfl;
+                            }
+
+                         var limitWord = rolePrefix == "AVP" ? "Approved" : "Recommended";
+                            if (spicLimit.HasValue)
                             {
                                 <div class="info-row">
-                                    <span>@creditLimitLabel</span>
-                                    <strong>₹ @creditLimitValue</strong>
+                                    <span>@rolePrefix @limitWord Credit Limit (SPIC)</span>
+                                    <strong>₹ @spicLimit.Value.ToString("N2")</strong>
+                                </div>
+                            }
+                            if (gflLimit.HasValue)
+                            {
+                                <div class="info-row">
+                                    <span>@rolePrefix @limitWord Credit Limit (GFL)</span>
+                                    <strong>₹ @gflLimit.Value.ToString("N2")</strong>
                                 </div>
                             }
                         }
@@ -3025,7 +3072,7 @@ private async Task ApproveDealer()
                         </div>
                     </div> *@
 
-                    <div class="col-md-6">
+                  @*   <div class="col-md-6">
                         <div class="detail-card">
                             <div class="detail-card-header">
                                 <h4 class="detail-card-title"><i class="bi bi-bank2"></i> Greenstar Securities</h4>
@@ -3046,7 +3093,7 @@ private async Task ApproveDealer()
                                 <div class="data-row"><div class="data-label">Trade Deposit Amount:</div><div class="data-value">₹@_creditProposal.GreenstarTradeDepositAmount.ToString("N2")</div></div>
                             </div>
                         </div>
-                    </div>
+                    </div> *@
 
                     @if (_creditSales != null && _creditSales.Any())
                     {
