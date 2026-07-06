@@ -76,8 +76,19 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             Token = null; // triggers ParseClaims(null) + OnChange
         }
 
+        // Returns the page part of a token: "Register.View" -> "Register".
+        // A bare legacy token ("Register") returns itself.
+        private static string PagePart(string token)
+        {
+            var dot = token.IndexOf('.');
+            return dot < 0 ? token : token.Substring(0, dot);
+        }
+
         public bool CanAccess(PagePermission page) => CanAccess(page.ToString());
 
+        // Page-level: can the user REACH this page at all?
+        // True if they hold any permission token for that page (any action, or a
+        // legacy bare page token). Used by the route guard and menu visibility.
         public bool CanAccess(string pageKey)
         {
             // Admin group bypasses everything
@@ -85,7 +96,23 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             // No designation assigned => access ONLY the Welcome page (nothing else)
             if (AllowedPages.Count == 0)
                 return string.Equals(pageKey, "Welcome", StringComparison.OrdinalIgnoreCase);
-            return AllowedPages.Contains(pageKey);
+
+            return AllowedPages.Any(t =>
+                string.Equals(PagePart(t), pageKey, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Action-level: can the user perform a specific action on a page?
+        // Use inside pages to show/hide Add / Edit / Delete buttons.
+        // e.g. LoginState.Can("Register", "Update")
+        public bool Can(PagePermission page, string action) => Can(page.ToString(), action);
+
+        public bool Can(string pageKey, string action)
+        {
+            if (IsAdmin) return true;
+            if (AllowedPages.Count == 0) return false;
+            // Legacy bare page token => full access to that page
+            if (AllowedPages.Contains(pageKey)) return true;
+            return AllowedPages.Contains($"{pageKey}.{action}");
         }
 
         // -------------------------------------------------------------------------------------
