@@ -14,7 +14,8 @@
         "error",
         "notfound",
         "forbidden",
-        "Dashboard"
+        "Dashboard",
+        "Welcome"
     };
 
     private bool _restored;
@@ -57,10 +58,6 @@
         // Admin group bypasses everything
         if (LoginState.IsAdmin) return;
 
-        // Users with NO designation assigned -> full access fallback.
-        // We only trust this AFTER sessionStorage restore has run.
-        if (LoginState.AllowedPages.Count == 0) return;
-
         var path = (new Uri(url, UriKind.RelativeOrAbsolute).IsAbsoluteUri
                 ? new Uri(url).AbsolutePath
                 : url)
@@ -73,6 +70,23 @@
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault() ?? "";
 
+        // Users with NO designation assigned (no allowed pages) can ONLY see the
+        // Welcome page. Infrastructure pages (login / AccountSelector / error /
+        // notfound / forbidden) stay reachable so the login and multi-role flows
+        // still work, but Dashboard and every feature page are blocked.
+        if (LoginState.AllowedPages.Count == 0)
+        {
+            bool isWelcome = firstSegment.Equals("Welcome", StringComparison.OrdinalIgnoreCase);
+            bool isInfra = _alwaysOpen.Contains(firstSegment)
+                           && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase);
+
+            if (!isWelcome && !isInfra)
+            {
+                Nav.NavigateTo("/Welcome", replace: true);
+            }
+            return;
+        }
+
         if (_alwaysOpen.Contains(firstSegment)) return;
 
         if (!LoginState.AllowedPages.Contains(firstSegment))
@@ -80,7 +94,6 @@
             Nav.NavigateTo("/Dashboard", replace: true);
         }
     }
-
     public void Dispose()
     {
         Nav.LocationChanged -= OnLocationChanged;
