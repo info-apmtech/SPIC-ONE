@@ -52,8 +52,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         // ---------------- Page-level permissions (from Designation.RoleAccess) ----------------
 
-        // Empty set => no restriction (treated as full access).
-        // Preserves behaviour for users without an assigned designation.
+        // Empty set => user has no designation => Welcome page only (no feature pages).
         public HashSet<string> AllowedPages { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
         public void SetAllowedPages(string? roleAccessCsv)
@@ -71,14 +70,21 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             OnChange?.Invoke();
         }
 
+        public void Logout()
+        {
+            ClearAllowedPages();
+            Token = null; // triggers ParseClaims(null) + OnChange
+        }
+
         public bool CanAccess(PagePermission page) => CanAccess(page.ToString());
 
         public bool CanAccess(string pageKey)
         {
             // Admin group bypasses everything
             if (IsAdmin) return true;
-            // No designation assigned => no restriction
-            if (AllowedPages.Count == 0) return true;
+            // No designation assigned => access ONLY the Welcome page (nothing else)
+            if (AllowedPages.Count == 0)
+                return string.Equals(pageKey, "Welcome", StringComparison.OrdinalIgnoreCase);
             return AllowedPages.Contains(pageKey);
         }
 

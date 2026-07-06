@@ -1,0 +1,155 @@
+﻿@page "/Welcome"
+@layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
+@inject NavigationManager Nav
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
+
+
+<div class="welcome-wrap">
+    <div class="welcome-card">
+        <div class="welcome-logo">
+            <span class="welcome-logo-badge">S</span>
+            SPIC / GreenStar
+        </div>
+
+        <div class="welcome-icon">👋</div>
+
+        <h1 class="welcome-title">Welcome</h1>
+        <p class="welcome-sub">
+            Your account is active, but no designation has been assigned yet.
+            Page access is controlled by your designation, so there is nothing to
+            show here right now.
+        </p>
+
+        <div class="welcome-note">
+            <i class="bi bi-info-circle"></i>
+            Please contact your administrator to get a designation assigned.
+            Once assigned, your pages will appear automatically the next time you sign in.
+        </div>
+
+        <button type="button" class="welcome-btn" @onclick="SignOut">
+            <i class="bi bi-box-arrow-right"></i> Sign Out
+        </button>
+    </div>
+</div>
+
+<style>
+    .welcome-wrap {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: linear-gradient(135deg, #0a6b3d 0%, #1f3b2d 100%);
+        font-family: 'Segoe UI', Arial, sans-serif;
+    }
+
+    .welcome-card {
+        width: 100%;
+        max-width: 460px;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(244, 216, 0, 0.35);
+        border-radius: 18px;
+        padding: 40px 32px;
+        text-align: center;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(8px);
+    }
+
+    .welcome-logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 700;
+        color: #1f3b2d;
+        font-size: 0.95rem;
+        letter-spacing: 0.5px;
+        margin-bottom: 24px;
+    }
+
+    .welcome-logo-badge {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: #f4d800;
+        color: #0a6b3d;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 0.9rem;
+    }
+
+    .welcome-icon {
+        font-size: 3rem;
+        margin-bottom: 8px;
+    }
+
+    .welcome-title {
+        color: #1f3b2d;
+        font-size: 1.6rem;
+        font-weight: 700;
+        margin: 0 0 10px 0;
+    }
+
+    .welcome-sub {
+        color: #4b5563;
+        font-size: 0.92rem;
+        line-height: 1.55;
+        margin: 0 0 20px 0;
+    }
+
+    .welcome-note {
+        background: #fefdf0;
+        border: 1px solid #f4d800;
+        color: #6b5900;
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        text-align: left;
+        margin-bottom: 24px;
+    }
+
+        .welcome-note i {
+            margin-right: 6px;
+            color: #b48600;
+        }
+
+    .welcome-btn {
+        width: 100%;
+        border: none;
+        background: #0a6b3d;
+        color: #fff;
+        font-weight: 600;
+        font-size: 0.95rem;
+        padding: 12px 18px;
+        border-radius: 10px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: background 0.15s ease;
+    }
+
+        .welcome-btn:hover {
+            background: #085a33;
+        }
+</style>
+
+@code {
+    private async Task SignOut()
+    {
+        LoginState.Logout();
+
+        // Clear persisted role access so the next login doesn't restore stale pages
+        try
+        {
+            await JS.InvokeVoidAsync("sessionStorage.removeItem", "spic_role_access");
+        }
+        catch { /* JS interop may be unavailable — token is already cleared */ }
+
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+}
