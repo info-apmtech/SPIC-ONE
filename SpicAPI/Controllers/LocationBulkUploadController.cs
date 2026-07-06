@@ -1,4 +1,5 @@
 ﻿using ClosedXML.Excel;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
@@ -7,6 +8,7 @@ using System.IO;
 
 namespace SpicAPI.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class LocationBulkUploadController : ControllerBase

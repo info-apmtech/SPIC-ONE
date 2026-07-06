@@ -1,4 +1,5 @@
 using ClosedXML.Excel;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
@@ -8,6 +9,7 @@ using System.Text.RegularExpressions;
 
 namespace SpicAPI.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class DealerBulkUploadController : ControllerBase

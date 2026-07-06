@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SkiaSharp;
 using Tesseract;
@@ -5,6 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace SpicAPI.Controllers
 {
+	[Authorize]
 	[ApiController]
 	[Route("api/DealerFile")]
 	public class DealerFileUploadController : ControllerBase

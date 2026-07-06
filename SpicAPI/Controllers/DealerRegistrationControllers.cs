@@ -75,6 +75,55 @@ namespace SpicAPI.Controllers
             _docsRepo = docsRepo;
             _designationRepo = designationRepo;
         }
+        private static readonly HashSet<string> _writeRoles = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Admin", "CorporateAdmin", "Director", "AVP", "SMD", "SMM", "RM", "RMD", "MDO", "JMDO", "MO"
+        };
+
+        private static readonly HashSet<string> _adminRoles = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Admin", "CorporateAdmin"
+        };
+
+        private static readonly HashSet<string> _hqCreatorRoles = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "MDO", "JMDO", "MO"
+        };
+
+        private bool IsWriteRole(string role) => _writeRoles.Contains(role);
+        private bool IsAdminRole(string role) => _adminRoles.Contains(role);
+        private bool IsHqCreatorRole(string role) => _hqCreatorRoles.Contains(role);
+
+        [HttpPost]
+        public override async Task<IActionResult> Create([FromBody] DealerRegistration entity)
+        {
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (!IsWriteRole(role))
+                return Forbid();
+
+            return await base.Create(entity);
+        }
+
+        [HttpPut("{id}")]
+        public override async Task<IActionResult> Update(int id, [FromBody] DealerRegistration entity)
+        {
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (!IsWriteRole(role))
+                return Forbid();
+
+            return await base.Update(id, entity);
+        }
+
+        [HttpDelete("{id}")]
+        public override async Task<IActionResult> Delete(int id)
+        {
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (!IsAdminRole(role))
+                return Forbid();
+
+            return await base.Delete(id);
+        }
+
         [HttpGet("all")]
         public override async Task<IActionResult> GetAllWithInactive()
         {
@@ -240,6 +289,10 @@ namespace SpicAPI.Controllers
         [HttpPut("update-with-user/{id}")]
         public async Task<IActionResult> UpdateDealerWithUser(int id, [FromBody] DealerRegistration dealer)
         {
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (!IsWriteRole(role))
+                return Forbid();
+
             if (id != dealer.Id) return BadRequest("ID mismatch");
 
             if (string.IsNullOrEmpty(dealer.UserTableId) && !string.IsNullOrEmpty(dealer.DealerCode))
