@@ -21,8 +21,9 @@ namespace SPIC.Core.Entities
         public string? SPICCode { get; set; }
         public string? GreenStarCode { get; set; }
         public string? TnCode { get; set; }
+		public string? NCode { get; set; }
 
-        [Display(Name = "State")]
+		[Display(Name = "State")]
         public int StateId { get; set; }
         public int Region { get; set; }
         public int HQ { get; set; }
