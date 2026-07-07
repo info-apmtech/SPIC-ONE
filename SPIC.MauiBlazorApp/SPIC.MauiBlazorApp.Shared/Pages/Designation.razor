@@ -335,6 +335,10 @@
         _message = message;
         _isError = isError;
     }
+
+    private bool CanAddDesignation => LoginState.Can("Designation", "Entry");
+    private bool CanEditDesignation => LoginState.Can("Designation", "Update");
+    private bool CanDeleteDesignation => LoginState.Can("Designation", "Delete");
 }
 
 <style>
@@ -444,7 +448,9 @@
     }
 
     <!-- ============ Add / Edit Designation ============ -->
-    <div class="desig-form-card">
+    @if (CanAddDesignation || _isEditMode)
+    {
+        <div class="desig-form-card">
         <div class="desig-form-header">
             <h3 class="desig-form-title">@(_isEditMode ? $"Edit Designation — {_model.Name}" : "Add New Designation")</h3>
         </div>
@@ -518,7 +524,8 @@
                 <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : (_isEditMode ? "Update" : "Save"))
             </button>
         </div>
-    </div>
+        </div>
+    }
 
     <!-- ============ Stat Cards ============ -->
     <div class="desig-stats-row">
@@ -583,13 +590,22 @@
                                     <div class="desig-action-icons">
                                         @if (d.IsActive)
                                         {
-                                            <i class="bi bi-slash-circle desig-icon-delete" title="Deactivate" @onclick="() => OpenDeleteModal(d)"></i>
+                                            @if (CanDeleteDesignation)
+                                            {
+                                                <i class="bi bi-slash-circle desig-icon-delete" title="Deactivate" @onclick="() => OpenDeleteModal(d)"></i>
+                                            }
                                         }
                                         else
                                         {
-                                            <i class="bi bi-arrow-counterclockwise desig-icon-restore" title="Activate" @onclick="() => ReactivateDesignation(d)"></i>
+                                            @if (CanEditDesignation)
+                                            {
+                                                <i class="bi bi-arrow-counterclockwise desig-icon-restore" title="Activate" @onclick="() => ReactivateDesignation(d)"></i>
+                                            }
                                         }
-                                        <i class="bi bi-pencil-square desig-icon-edit" title="Edit" @onclick="() => EditDesignation(d)"></i>
+                                        @if (CanEditDesignation)
+                                        {
+                                            <i class="bi bi-pencil-square desig-icon-edit" title="Edit" @onclick="() => EditDesignation(d)"></i>
+                                        }
                                     </div>
                                 </td>
                             </tr>

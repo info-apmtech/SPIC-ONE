@@ -7,6 +7,7 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject LoginState LoginState
 <style>
 	fieldset:disabled .action-link {
 		display: none !important;
@@ -179,14 +180,17 @@
 					Cancel
 				</button>
 			}
-			<button class="btn btn-add" @onclick="SaveExperience" disabled="@_isSaving">
-				@if (_isSaving)
-				{
-					<span class="spinner-border spinner-border-sm me-1"></span>
-				}
-				<i class="bi bi-plus-lg"></i>
-				@(_isEditMode ? "Update Experience" : "Add Experience")
-			</button>
+			@if (CanAdd || CanEdit)
+			{
+				<button class="btn btn-add" @onclick="SaveExperience" disabled="@_isSaving">
+					@if (_isSaving)
+					{
+						<span class="spinner-border spinner-border-sm me-1"></span>
+					}
+					<i class="bi bi-plus-lg"></i>
+					@(_isEditMode ? "Update Experience" : "Add Experience")
+				</button>
+			}
 		</div>
 	</div>
 
@@ -224,8 +228,14 @@
 									{
 										<span class="badge-active" style="background:#dc3545;">Inactive</span>
 									}
-									<a class="action-link" href="#" @onclick="() => EditExperience(exp)" @onclick:preventDefault><i class="bi bi-pencil-square"></i></a>
-									<a class="action-link delete" href="#" @onclick="() => ConfirmDelete(exp)" @onclick:preventDefault><i class="bi bi-trash"></i></a>
+									@if (CanEdit)
+									{
+										<a class="action-link" href="#" @onclick="() => EditExperience(exp)" @onclick:preventDefault><i class="bi bi-pencil-square"></i></a>
+									}
+									@if (CanDelete)
+									{
+										<a class="action-link delete" href="#" @onclick="() => ConfirmDelete(exp)" @onclick:preventDefault><i class="bi bi-trash"></i></a>
+									}
 								</div>
 							</div>
 
@@ -535,4 +545,7 @@
 		StateHasChanged();
 	}
 
-	}
+	private bool CanAdd => LoginState.Can("Experience", "Entry");
+	private bool CanEdit => LoginState.Can("Experience", "Update");
+	private bool CanDelete => LoginState.Can("Experience", "Delete");
+}

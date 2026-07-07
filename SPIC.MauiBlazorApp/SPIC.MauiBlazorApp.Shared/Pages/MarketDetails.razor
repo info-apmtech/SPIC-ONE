@@ -5,6 +5,7 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject LoginState LoginState
 <style>
     fieldset:disabled .icon-delete {
         display: none !important;
@@ -242,12 +243,15 @@
             </div>
 
             <div class="d-flex justify-content-end mt-3 add-block-btn-wrap">
-                <button class="btn btn-add add-block-btn"
-                        @onclick="AddOrUpdateBlock"
-                        disabled="@IsAddButtonDisabled">
-                    <i class="bi bi-plus-lg"></i>
-                    @(_editingId > 0 ? "Update" : "Add") Blocks/ Villages
-                </button>
+                @if (CanAdd)
+                {
+                    <button class="btn btn-add add-block-btn"
+                            @onclick="AddOrUpdateBlock"
+                            disabled="@IsAddButtonDisabled">
+                        <i class="bi bi-plus-lg"></i>
+                        @(_editingId > 0 ? "Update" : "Add") Blocks/ Villages
+                    </button>
+                }
             </div>
         </div>
     </div>
@@ -290,11 +294,16 @@
                             </h3>
 
                             <div class="action-icons">
-                                <i class="bi bi-pencil-square icon-edit"
-                                   @onclick="() => EditBlock(block)"></i>
-
-                                <i class="bi bi-trash icon-delete"
-                                   @onclick="() => ConfirmDelete(block)"></i>
+                                @if (CanEdit)
+                                {
+                                    <i class="bi bi-pencil-square icon-edit"
+                                       @onclick="() => EditBlock(block)"></i>
+                                }
+                                @if (CanDelete)
+                                {
+                                    <i class="bi bi-trash icon-delete"
+                                       @onclick="() => ConfirmDelete(block)"></i>
+                                }
                             </div>
                         </div>
 
@@ -787,4 +796,8 @@
     {
         public string? WholeSaleFertilizerLicenseNumber { get; set; }
     }
+
+    private bool CanAdd => LoginState.Can("MarketDetails", "Entry");
+    private bool CanEdit => LoginState.Can("MarketDetails", "Update");
+    private bool CanDelete => LoginState.Can("MarketDetails", "Delete");
 }

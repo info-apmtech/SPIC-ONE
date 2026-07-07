@@ -8,6 +8,7 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject LoginState LoginState
 <style>
 	fieldset:disabled .icon-delete {
 		display: none !important;
@@ -449,9 +450,12 @@
 			</div>
 		</div>
 		<div class="d-flex justify-content-end mt-2">
+			@if (CanAdd)
+			{
 			<button class="btn-blue-action-Proprietor" type="button" @onclick="AddOrUpdateFamily">
 				@(_editingFamilyIndex >= 0 ? "Update Family" : "Add Details")
 			</button>
+			}
 			@if (_editingFamilyIndex >= 0)
 			{
 				<button class="btn btn-outline-secondary ms-2 rounded-pill px-4" type="button" @onclick="CancelFamilyEdit">Cancel</button>
@@ -488,8 +492,14 @@
 									</div>
 								</div>
 								<div class="card-actions">
+									@if (CanEdit)
+									{
 									<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditFamily(idx)"></i>
+									}
+									@if (CanDelete)
+									{
 									<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => RemoveFamily(idx)"></i>
+									}
 								</div>
 							</div>
 							<div class="detail-grid">
@@ -556,9 +566,12 @@
 		@if (_hasOtherOccupation)
 		{
 			<div class="d-flex justify-content-end mt-2">
+				@if (CanAdd)
+				{
 				<button class="btn-blue-action-Proprietor" type="button" @onclick="AddOrUpdateOccupation">
 					@(_editingOccupationIndex >= 0 ? "Update Occupation" : "Add Details")
 				</button>
+				}
 				@if (_editingOccupationIndex >= 0)
 				{
 					<button class="btn btn-outline-secondary ms-2 rounded-pill px-4" type="button" @onclick="CancelOccupationEdit">Cancel</button>
@@ -596,8 +609,14 @@
 									</div>
 								</div>
 								<div class="card-actions">
+									@if (CanEdit)
+									{
 									<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditOccupation(idx)"></i>
+									}
+									@if (CanDelete)
+									{
 									<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => RemoveOccupation(idx)"></i>
+									}
 								</div>
 							</div>
 							<div class="detail-grid">
@@ -619,6 +638,8 @@
 
 	<div class="main-section">
 		<div class="d-flex justify-content-end pt-2">
+			@if (CanAdd)
+			{
 			<button class="btn-blue-action-Proprietor" type="button" @onclick="SavePartnerDetails" disabled="@_isSavingPartner">
 				@if (_isSavingPartner)
 				{
@@ -629,6 +650,7 @@
 			@if (_isEditingPartner)
 			{
 				<button class="btn btn-outline-secondary ms-2 rounded-pill px-4" type="button" @onclick="CancelPartnerEdit">Cancel</button>
+			}
 			}
 		</div>
 	</div>
@@ -671,8 +693,14 @@
 									<a href="javascript:void(0);" title="View Details" @onclick="() => OpenPopup(p.Id)">
 										<i class="bi bi-eye icon-view"></i>
 									</a>
+									@if (CanEdit)
+									{
 									<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditPartner(p)"></i>
+									}
+									@if (CanDelete)
+									{
 									<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeletePartner(p)"></i>
+									}
 								</div>
 							</div>
 							<div class="saved-stats">
@@ -706,6 +734,8 @@
 					</p>
 					<div class="d-flex justify-content-center gap-3">
 						<button class="btn btn-outline-secondary rounded-pill px-4" @onclick="CancelDeletePartner" disabled="@_isDeleting">Cancel</button>
+						@if (CanDelete)
+						{
 						<button class="btn btn-danger rounded-pill px-4" @onclick="ExecuteDeletePartner" disabled="@_isDeleting">
 							@if (_isDeleting)
 							{
@@ -713,6 +743,7 @@
 							}
 							Delete
 						</button>
+						}
 					</div>
 				</div>
 			</div>
@@ -1971,4 +2002,8 @@ return;
 		public string Division { get; set; } = "";
 		public string Region { get; set; } = "";
 	}
+
+	private bool CanAdd => LoginState.Can("Proprietor", "Entry");
+	private bool CanEdit => LoginState.Can("Proprietor", "Update");
+	private bool CanDelete => LoginState.Can("Proprietor", "Delete");
 }
