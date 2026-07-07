@@ -6,12 +6,16 @@
 @inject HttpClient Http
 @inject LoadingService Loading
 @inject LoginState LoginState
+@inject IJSRuntime JS
 
 @code {
     private List<DR.Designation> _designations = new();
     private List<DR.Designation> _filtered = new();
     private DR.Designation _model = new() { Name = "", IsActive = true };
-    private HashSet<string> _selectedRoles = new();
+
+    // Selected permission tokens in "Page.Action" form, e.g. "Register.View"
+    private HashSet<string> _selectedTokens = new(StringComparer.OrdinalIgnoreCase);
+
     private bool _isEditMode;
     private bool _isSaving;
     private string _searchText = "";
@@ -24,22 +28,58 @@
     private int _deleteId;
     private string _deleteName = "";
 
-private static readonly string[] _allRoles = Enum.GetNames(typeof(DR.PagePermission));
+    private ElementReference _firstInputRef;
 
-// Prettifies "AnnualSales" -> "Annual Sales" for display only.
-// Stored value remains the enum name.
-private static string DisplayFor(string key)
-{
-    var sb = new System.Text.StringBuilder();
-    for (int i = 0; i < key.Length; i++)
+    private static readonly string[] _allPages = Enum.GetNames(typeof(DR.PagePermission));
+    private static readonly string[] _actions = { "View", "Entry", "Update", "Delete" };
+
+    // Prettifies "AnnualSales" -> "Annual Sales" for display only.
+    private static string DisplayFor(string key)
     {
-        if (i > 0 && char.IsUpper(key[i]) && !char.IsUpper(key[i - 1])) sb.Append(' ');
-        sb.Append(key[i]);
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < key.Length; i++)
+        {
+            if (i > 0 && char.IsUpper(key[i]) && !char.IsUpper(key[i - 1])) sb.Append(' ');
+            sb.Append(key[i]);
+        }
+        return sb.ToString();
     }
-    return sb.ToString();
-}
 
-    private bool IsAllSelected => _selectedRoles.Count == _allRoles.Length;
+    // ---- Permission grid helpers ----
+    private bool HasAction(string page, string action) => _selectedTokens.Contains($"{page}.{action}");
+
+    private void ToggleAction(string page, string action)
+    {
+        var token = $"{page}.{action}";
+        if (!_selectedTokens.Add(token)) _selectedTokens.Remove(token);
+    }
+
+    private bool IsRowAll(string page) => _actions.All(a => _selectedTokens.Contains($"{page}.{a}"));
+
+    private void ToggleRowAll(string page)
+    {
+        if (IsRowAll(page))
+            foreach (var a in _actions) _selectedTokens.Remove($"{page}.{a}");
+        else
+            foreach (var a in _actions) _selectedTokens.Add($"{page}.{a}");
+    }
+
+    private bool IsAllSelected => _allPages.All(IsRowAll);
+
+    private void ToggleAllRoles()
+    {
+        if (IsAllSelected)
+        {
+            _selectedTokens.Clear();
+        }
+        else
+        {
+            _selectedTokens.Clear();
+            foreach (var p in _allPages)
+                foreach (var a in _actions)
+                    _selectedTokens.Add($"{p}.{a}");
+        }
+    }
 
     private int TotalCount => _designations.Count;
     private int ActiveCount => _designations.Count(d => d.IsActive);
@@ -84,21 +124,7 @@ private static string DisplayFor(string key)
         _filtered = query.OrderBy(d => d.Name).ToList();
     }
 
-    private void ToggleRole(string role)
-    {
-        if (!_selectedRoles.Add(role))
-            _selectedRoles.Remove(role);
-    }
-
-    private void ToggleAllRoles()
-    {
-        if (IsAllSelected)
-            _selectedRoles.Clear();
-        else
-            _selectedRoles = _allRoles.ToHashSet();
-    }
-
-    private void EditDesignation(DR.Designation d)
+    private async Task EditDesignation(DR.Designation d)
     {
         _model = new DR.Designation
         {
@@ -109,17 +135,38 @@ private static string DisplayFor(string key)
             CreatedBy = d.CreatedBy,
             CreatedAt = d.CreatedAt
         };
-        _selectedRoles = string.IsNullOrWhiteSpace(d.RoleAccess)
-            ? new HashSet<string>()
-            : d.RoleAccess.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+
+        // Parse RoleAccess. Supports new "Page.Action" tokens AND legacy bare
+        // page names (which meant full access) so old saved data still loads.
+        _selectedTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(d.RoleAccess))
+        {
+            foreach (var raw in d.RoleAccess.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (raw.Contains('.'))
+                {
+                    _selectedTokens.Add(raw);
+                }
+                else
+                {
+                    // legacy bare page name => grant all actions (re-saves as dotted)
+                    foreach (var a in _actions) _selectedTokens.Add($"{raw}.{a}");
+                }
+            }
+        }
+
         _isEditMode = true;
         _message = null;
+
+        // Scroll/focus the first input after a render
+        await Task.Yield();
+        await _firstInputRef.FocusAsync();
     }
 
     private void ResetForm()
     {
         _model = new DR.Designation { Name = "", IsActive = true };
-        _selectedRoles.Clear();
+        _selectedTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         _isEditMode = false;
         _message = null;
     }
@@ -131,9 +178,9 @@ private static string DisplayFor(string key)
             ShowMessage("Designation Name is required", true);
             return;
         }
-        if (_selectedRoles.Count == 0)
+        if (_selectedTokens.Count == 0)
         {
-            ShowMessage("Select at least one role permission", true);
+            ShowMessage("Select at least one permission", true);
             return;
         }
 
@@ -151,7 +198,13 @@ private static string DisplayFor(string key)
         try
         {
             _model.Name = _model.Name.Trim();
-            _model.RoleAccess = string.Join(",", _allRoles.Where(r => _selectedRoles.Contains(r)));
+
+            // Build RoleAccess in a stable order: page order, then action order.
+            _model.RoleAccess = string.Join(",",
+                _allPages.SelectMany(p => _actions
+                    .Where(a => _selectedTokens.Contains($"{p}.{a}"))
+                    .Select(a => $"{p}.{a}")));
+
             _model.UpdatedBy = LoginState.UserId ?? "System";
             _model.UpdatedAt = DateTime.Now;
 
@@ -282,6 +335,10 @@ private static string DisplayFor(string key)
         _message = message;
         _isError = isError;
     }
+
+    private bool CanAddDesignation => LoginState.Can("Designation", "Entry");
+    private bool CanEditDesignation => LoginState.Can("Designation", "Update");
+    private bool CanDeleteDesignation => LoginState.Can("Designation", "Delete");
 }
 
 <style>
@@ -307,13 +364,21 @@ private static string DisplayFor(string key)
     .desig-switch::after { content: ''; position: absolute; top: 2px; left: 22px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
     .desig-toggle-pill.inactive .desig-switch::after { left: 2px; }
 
-    /* --- Roles Permission --- */
+    /* --- Roles Permission (grid) --- */
     .desig-roles-box { border: 1px solid #E5E7EB; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; background: #F8FAFC; }
-    .desig-roles-title { font-size: 0.88rem; font-weight: 700; color: #1F2937; margin-bottom: 12px; }
-    .desig-role-all { display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; font-weight: 700; color: #065F46; cursor: pointer; user-select: none; margin-bottom: 12px; }
-    .desig-roles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 16px; }
-    .desig-role-item { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #4B5563; cursor: pointer; user-select: none; padding: 4px 0; }
-    .desig-role-item input, .desig-role-all input { accent-color: #059669; width: 15px; height: 15px; cursor: pointer; }
+    .desig-roles-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .desig-roles-title { font-size: 0.88rem; font-weight: 700; color: #1F2937; }
+    .desig-role-all { display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; font-weight: 700; color: #065F46; cursor: pointer; user-select: none; }
+    .desig-role-all input { accent-color: #059669; width: 15px; height: 15px; cursor: pointer; }
+
+    .desig-perm-scroll { max-height: 460px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 8px; background: #fff; }
+    .desig-perm-table { width: 100%; border-collapse: collapse; }
+    .desig-perm-table thead th { position: sticky; top: 0; z-index: 1; background: #F1F5F9; color: #374151; font-weight: 700; font-size: 0.74rem; padding: 10px 8px; border-bottom: 1px solid #E5E7EB; text-align: center; }
+    .desig-perm-table td { padding: 8px; font-size: 0.8rem; color: #4B5563; border-bottom: 1px solid #F3F4F6; text-align: center; }
+    .desig-perm-table tr:last-child td { border-bottom: none; }
+    .desig-perm-table tbody tr:hover td { background: #F9FAFB; }
+    .desig-perm-table input[type="checkbox"] { accent-color: #059669; width: 16px; height: 16px; cursor: pointer; }
+    .desig-perm-page { text-align: left !important; font-weight: 600; color: #1F2937; }
 
     /* Form buttons */
     .desig-form-actions { display: flex; justify-content: flex-end; gap: 12px; }
@@ -383,7 +448,9 @@ private static string DisplayFor(string key)
     }
 
     <!-- ============ Add / Edit Designation ============ -->
-    <div class="desig-form-card">
+    @if (CanAddDesignation || _isEditMode)
+    {
+        <div class="desig-form-card">
         <div class="desig-form-header">
             <h3 class="desig-form-title">@(_isEditMode ? $"Edit Designation — {_model.Name}" : "Add New Designation")</h3>
         </div>
@@ -391,7 +458,7 @@ private static string DisplayFor(string key)
         <div class="desig-form-row">
             <div class="desig-field">
                 <label>Designation Name</label>
-                <input type="text" @bind="_model.Name" placeholder="Enter Designation Name" maxlength="100" />
+                <input type="text" @bind="_model.Name" placeholder="Enter Designation Name" maxlength="100" @ref="_firstInputRef" />
             </div>
 
             <div class="desig-toggle-pill @(_model.IsActive ? "" : "inactive")" @onclick="() => _model.IsActive = !_model.IsActive">
@@ -400,24 +467,53 @@ private static string DisplayFor(string key)
             </div>
         </div>
 
-        <!-- Roles Permission -->
+        <!-- Role Access grid -->
         <div class="desig-roles-box">
-            <div class="desig-roles-title">Roles Permission</div>
+            <div class="desig-roles-head">
+                <div class="desig-roles-title">Role Access</div>
+                <label class="desig-role-all">
+                    <input type="checkbox" checked="@IsAllSelected" @onchange="ToggleAllRoles" />
+                    Select All
+                </label>
+            </div>
 
-            <label class="desig-role-all">
-                <input type="checkbox" checked="@IsAllSelected" @onchange="ToggleAllRoles" />
-                Access All Pages
-            </label>
-
-            <div class="desig-roles-grid">
-    @foreach (var role in _allRoles)
-    {
-        <label class="desig-role-item">
-            <input type="checkbox" checked="@_selectedRoles.Contains(role)" @onchange="() => ToggleRole(role)" />
-            @DisplayFor(role)
-        </label>
-    }
-</div>
+            <div class="desig-perm-scroll">
+                <table class="desig-perm-table">
+                    <thead>
+                        <tr>
+                            <th style="width:60px;">S.No</th>
+                            <th style="text-align:left;">Page Name</th>
+                            <th style="width:70px;">ALL</th>
+                            <th style="width:70px;">View</th>
+                            <th style="width:70px;">Entry</th>
+                            <th style="width:70px;">Update</th>
+                            <th style="width:70px;">Delete</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ var pno = 1; }
+                        @foreach (var page in _allPages)
+                        {
+                            <tr>
+                                <td>@pno</td>
+                                <td class="desig-perm-page">@DisplayFor(page)</td>
+                                <td>
+                                    <input type="checkbox" checked="@IsRowAll(page)"
+                                           @onchange="() => ToggleRowAll(page)" />
+                                </td>
+                                @foreach (var action in _actions)
+                                {
+                                    <td>
+                                        <input type="checkbox" checked="@HasAction(page, action)"
+                                               @onchange="() => ToggleAction(page, action)" />
+                                    </td>
+                                }
+                            </tr>
+                            pno++;
+                        }
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="desig-form-actions">
@@ -428,7 +524,8 @@ private static string DisplayFor(string key)
                 <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : (_isEditMode ? "Update" : "Save"))
             </button>
         </div>
-    </div>
+        </div>
+    }
 
     <!-- ============ Stat Cards ============ -->
     <div class="desig-stats-row">
@@ -493,13 +590,22 @@ private static string DisplayFor(string key)
                                     <div class="desig-action-icons">
                                         @if (d.IsActive)
                                         {
-                                            <i class="bi bi-slash-circle desig-icon-delete" title="Deactivate" @onclick="() => OpenDeleteModal(d)"></i>
+                                            @if (CanDeleteDesignation)
+                                            {
+                                                <i class="bi bi-slash-circle desig-icon-delete" title="Deactivate" @onclick="() => OpenDeleteModal(d)"></i>
+                                            }
                                         }
                                         else
                                         {
-                                            <i class="bi bi-arrow-counterclockwise desig-icon-restore" title="Activate" @onclick="() => ReactivateDesignation(d)"></i>
+                                            @if (CanEditDesignation)
+                                            {
+                                                <i class="bi bi-arrow-counterclockwise desig-icon-restore" title="Activate" @onclick="() => ReactivateDesignation(d)"></i>
+                                            }
                                         }
-                                        <i class="bi bi-pencil-square desig-icon-edit" title="Edit" @onclick="() => EditDesignation(d)"></i>
+                                        @if (CanEditDesignation)
+                                        {
+                                            <i class="bi bi-pencil-square desig-icon-edit" title="Edit" @onclick="() => EditDesignation(d)"></i>
+                                        }
                                     </div>
                                 </td>
                             </tr>

@@ -9,6 +9,7 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject LoginState LoginState
 <style>
 	fieldset:disabled .icon-delete {
 		display: none !important;
@@ -120,9 +121,12 @@
 						</div>
 
 						<div class="mt-auto">
-							<button class="btn-add-action" @onclick="AddWarehouse" disabled="@(_selectedWarehouseId == 0 || _isCalculatingWhDistance)">
-								<i class="bi bi-plus-lg"></i> @(_editingWhId > 0 ? "Update" : "Add") Warehouse
-							</button>
+							@if (CanAdd || CanEdit)
+							{
+								<button class="btn-add-action" @onclick="AddWarehouse" disabled="@(_selectedWarehouseId == 0 || _isCalculatingWhDistance)">
+									<i class="bi bi-plus-lg"></i> @(_editingWhId > 0 ? "Update" : "Add") Warehouse
+								</button>
+							}
 						</div>
 					</div>
 				</div>
@@ -185,9 +189,12 @@
 						</div>
 
 						<div class="mt-auto">
-							<button class="btn-add-action" @onclick="AddRailHead" disabled="@(_selectedRailId == 0 || _isCalculatingRailDistance)">
-								<i class="bi bi-plus-lg"></i> @(_editingRailId > 0 ? "Update" : "Add") Rail Head
-							</button>
+							@if (CanAdd || CanEdit)
+							{
+								<button class="btn-add-action" @onclick="AddRailHead" disabled="@(_selectedRailId == 0 || _isCalculatingRailDistance)">
+									<i class="bi bi-plus-lg"></i> @(_editingRailId > 0 ? "Update" : "Add") Rail Head
+								</button>
+							}
 						</div>
 					</div>
 				</div>
@@ -250,9 +257,12 @@
 						</div>
 
 						<div class="mt-auto">
-							<button class="btn-add-action" @onclick="AddPort" disabled="@(_selectedPortId == 0 || _isCalculatingPortDistance)">
-								<i class="bi bi-plus-lg"></i> @(_editingPortId > 0 ? "Update" : "Add") Port
-							</button>
+							@if (CanAdd || CanEdit)
+							{
+								<button class="btn-add-action" @onclick="AddPort" disabled="@(_selectedPortId == 0 || _isCalculatingPortDistance)">
+									<i class="bi bi-plus-lg"></i> @(_editingPortId > 0 ? "Update" : "Add") Port
+								</button>
+							}
 						</div>
 					</div>
 				</div>
@@ -291,8 +301,14 @@
 									</div>
 								</div>
 								<div class="action-icons">
-									<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditWarehouse(wh)"></i>
-									<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeleteWarehouse(wh)"></i>
+									@if (CanEdit)
+									{
+										<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditWarehouse(wh)"></i>
+									}
+									@if (CanDelete)
+									{
+										<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeleteWarehouse(wh)"></i>
+									}
 								</div>
 							</div>
 
@@ -330,8 +346,14 @@
 									</div>
 								</div>
 								<div class="action-icons">
-									<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditRailHead(rail)"></i>
-									<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeleteRail(rail)"></i>
+									@if (CanEdit)
+									{
+										<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditRailHead(rail)"></i>
+									}
+									@if (CanDelete)
+									{
+										<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeleteRail(rail)"></i>
+									}
 								</div>
 							</div>
 
@@ -370,8 +392,14 @@
 									</div>
 								</div>
 								<div class="action-icons">
-									<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditPort(port)"></i>
-									<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeletePort(port)"></i>
+									@if (CanEdit)
+									{
+										<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditPort(port)"></i>
+									}
+									@if (CanDelete)
+									{
+										<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeletePort(port)"></i>
+									}
 								</div>
 							</div>
 
@@ -1168,4 +1196,8 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		public double Distance { get; set; }
 		public double Duration { get; set; }
 	}
+
+	private bool CanAdd => LoginState.Can("Warehouse", "Entry");
+	private bool CanEdit => LoginState.Can("Warehouse", "Update");
+	private bool CanDelete => LoginState.Can("Warehouse", "Delete");
 }
