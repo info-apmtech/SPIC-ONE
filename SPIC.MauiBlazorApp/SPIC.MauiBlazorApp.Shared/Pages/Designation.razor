@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components
+@using System.Reflection
 @using DR = SPIC.Core.Entities
 @inject HttpClient Http
 @inject LoadingService Loading
@@ -33,6 +34,48 @@
     private static readonly string[] _allPages = Enum.GetNames(typeof(DR.PagePermission));
     private static readonly string[] _actions = { "View", "Entry", "Update", "Delete" };
 
+    private static bool IsParent(string page) => _parentPages.Contains(page);
+    private static bool IsChild(string page) => _childSet.Contains(page);
+    private static string[] GetChildren(string page) => _childMap.TryGetValue(page, out var c) ? c : Array.Empty<string>();
+
+    private static readonly HashSet<string> _parentPages;
+    private static readonly Dictionary<string, string[]> _childMap = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> _childSet = new(StringComparer.OrdinalIgnoreCase);
+
+    static Designation()
+    {
+        var groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in _allPages)
+        {
+            var field = typeof(DR.PagePermission).GetField(name);
+            var attr = field?.GetCustomAttribute<DR.PageModuleAttribute>();
+            if (attr != null)
+            {
+                if (!groups.ContainsKey(attr.Module))
+                    groups[attr.Module] = new List<string>();
+                groups[attr.Module].Add(name);
+            }
+        }
+        _parentPages = new(groups.Select(g => g.Value[0]), StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in groups)
+        {
+            var children = kv.Value.Skip(1).ToArray();
+            _childMap[kv.Value[0]] = children;
+            foreach (var c in children) _childSet.Add(c);
+        }
+    }
+
+    private IEnumerable<(string Page, bool IsParent, int Indent)> GetDisplayPages()
+    {
+        foreach (var page in _allPages)
+        {
+            if (IsParent(page))
+                yield return (page, true, 0);
+            else if (!IsChild(page))
+                yield return (page, false, 0);
+        }
+    }
+
     // Prettifies "AnnualSales" -> "Annual Sales" for display only.
     private static string DisplayFor(string key)
     {
@@ -46,22 +89,75 @@
     }
 
     // ---- Permission grid helpers ----
-    private bool HasAction(string page, string action) => _selectedTokens.Contains($"{page}.{action}");
+    private bool HasAction(string page, string action)
+    {
+        if (IsParent(page))
+        {
+            var children = GetChildren(page);
+            return children.Length > 0 && children.All(c => _selectedTokens.Contains($"{c}.{action}"));
+        }
+        return _selectedTokens.Contains($"{page}.{action}");
+    }
 
     private void ToggleAction(string page, string action)
     {
         var token = $"{page}.{action}";
-        if (!_selectedTokens.Add(token)) _selectedTokens.Remove(token);
+        var isAdding = !_selectedTokens.Contains(token);
+
+        if (isAdding)
+            _selectedTokens.Add(token);
+        else
+            _selectedTokens.Remove(token);
+
+        if (IsParent(page))
+        {
+            foreach (var child in GetChildren(page))
+            {
+                var childToken = $"{child}.{action}";
+                if (isAdding)
+                    _selectedTokens.Add(childToken);
+                else
+                    _selectedTokens.Remove(childToken);
+            }
+        }
     }
 
-    private bool IsRowAll(string page) => _actions.All(a => _selectedTokens.Contains($"{page}.{a}"));
+    private bool IsRowAll(string page)
+    {
+        if (IsParent(page))
+        {
+            var children = GetChildren(page);
+            return children.Length > 0 && children.All(c => _actions.All(a => _selectedTokens.Contains($"{c}.{a}")));
+        }
+        return _actions.All(a => _selectedTokens.Contains($"{page}.{a}"));
+    }
 
     private void ToggleRowAll(string page)
     {
-        if (IsRowAll(page))
-            foreach (var a in _actions) _selectedTokens.Remove($"{page}.{a}");
-        else
-            foreach (var a in _actions) _selectedTokens.Add($"{page}.{a}");
+        var isSelecting = !IsRowAll(page);
+
+        foreach (var a in _actions)
+        {
+            if (isSelecting)
+                _selectedTokens.Add($"{page}.{a}");
+            else
+                _selectedTokens.Remove($"{page}.{a}");
+        }
+
+        if (IsParent(page))
+        {
+            foreach (var child in GetChildren(page))
+            {
+                foreach (var a in _actions)
+                {
+                    var childToken = $"{child}.{a}";
+                    if (isSelecting)
+                        _selectedTokens.Add(childToken);
+                    else
+                        _selectedTokens.Remove(childToken);
+                }
+            }
+        }
     }
 
     private bool IsAllSelected => _allPages.All(IsRowAll);
@@ -451,21 +547,21 @@
     @if (CanAddDesignation || _isEditMode)
     {
         <div class="desig-form-card">
-        <div class="desig-form-header">
-            <h3 class="desig-form-title">@(_isEditMode ? $"Edit Designation — {_model.Name}" : "Add New Designation")</h3>
-        </div>
-
-        <div class="desig-form-row">
-            <div class="desig-field">
-                <label>Designation Name</label>
-                <input type="text" @bind="_model.Name" placeholder="Enter Designation Name" maxlength="100" @ref="_firstInputRef" />
+            <div class="desig-form-header">
+                <h3 class="desig-form-title">@(_isEditMode ? $"Edit Designation — {_model.Name}" : "Add New Designation")</h3>
             </div>
 
-            <div class="desig-toggle-pill @(_model.IsActive ? "" : "inactive")" @onclick="() => _model.IsActive = !_model.IsActive">
-                <span class="desig-toggle-label">@(_model.IsActive ? "Active" : "Inactive")</span>
-                <span class="desig-switch"></span>
+            <div class="desig-form-row">
+                <div class="desig-field">
+                    <label>Designation Name</label>
+                    <input type="text" @bind="_model.Name" placeholder="Enter Designation Name" maxlength="100" @ref="_firstInputRef" />
+                </div>
+
+                <div class="desig-toggle-pill @(_model.IsActive ? "" : "inactive")" @onclick="() => _model.IsActive = !_model.IsActive">
+                    <span class="desig-toggle-label">@(_model.IsActive ? "Active" : "Inactive")</span>
+                    <span class="desig-switch"></span>
+                </div>
             </div>
-        </div>
 
         <!-- Role Access grid -->
         <div class="desig-roles-box">
@@ -492,11 +588,13 @@
                     </thead>
                     <tbody>
                         @{ var pno = 1; }
-                        @foreach (var page in _allPages)
+                        @foreach (var (page, _, _) in GetDisplayPages())
                         {
                             <tr>
                                 <td>@pno</td>
-                                <td class="desig-perm-page">@DisplayFor(page)</td>
+                                <td class="desig-perm-page">
+                                    @DisplayFor(page)
+                                </td>
                                 <td>
                                     <input type="checkbox" checked="@IsRowAll(page)"
                                            @onchange="() => ToggleRowAll(page)" />
