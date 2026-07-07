@@ -6,6 +6,7 @@
 @inject HttpClient Http
 @inject LoadingService Loading
 @inject LoginState LoginState
+@inject IJSRuntime JS
 
 @code {
     private List<DR.Designation> _designations = new();
@@ -26,6 +27,8 @@
     private bool _showDeleteModal;
     private int _deleteId;
     private string _deleteName = "";
+
+    private ElementReference _firstInputRef;
 
     private static readonly string[] _allPages = Enum.GetNames(typeof(DR.PagePermission));
     private static readonly string[] _actions = { "View", "Entry", "Update", "Delete" };
@@ -121,7 +124,7 @@
         _filtered = query.OrderBy(d => d.Name).ToList();
     }
 
-    private void EditDesignation(DR.Designation d)
+    private async Task EditDesignation(DR.Designation d)
     {
         _model = new DR.Designation
         {
@@ -154,6 +157,10 @@
 
         _isEditMode = true;
         _message = null;
+
+        // Scroll/focus the first input after a render
+        await Task.Yield();
+        await _firstInputRef.FocusAsync();
     }
 
     private void ResetForm()
@@ -445,7 +452,7 @@
         <div class="desig-form-row">
             <div class="desig-field">
                 <label>Designation Name</label>
-                <input type="text" @bind="_model.Name" placeholder="Enter Designation Name" maxlength="100" />
+                <input type="text" @bind="_model.Name" placeholder="Enter Designation Name" maxlength="100" @ref="_firstInputRef" />
             </div>
 
             <div class="desig-toggle-pill @(_model.IsActive ? "" : "inactive")" @onclick="() => _model.IsActive = !_model.IsActive">
