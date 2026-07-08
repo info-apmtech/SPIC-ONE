@@ -227,8 +227,8 @@
 
                 // Terminated-specific display flags — do NOT affect GetApprovalStatus, filters,
                 // KPI counts, or IsDealerComplete/CanShowReviewButton logic used elsewhere.
-                var isTerminatedDealer = dealer.Status == 2;
-                var isTerminatedSubmitted = dealer.Status == 2 && dealer.IsSubmittedForReview == true;
+                var isTerminatedDealer = dealer.Status == 2 || (dealer.Status == 1 && dealer.InactiveProposal == FutureBusinessProposal.Terminated);
+                var isTerminatedSubmitted = (dealer.Status == 2 || (dealer.Status == 1 && dealer.InactiveProposal == FutureBusinessProposal.Terminated)) && dealer.IsSubmittedForReview == true;
 
                 <div class="col-12 col-sm-12 col-md-6 col-xl-4">
                     <div class="reg-card @(isPendingForMe ? "border-primary shadow-sm" : "")">
@@ -361,18 +361,21 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
 
                                     <button class="btn-view" @onclick="() => ViewDealer(dealer.Id)"><i class="bi bi-eye"></i></button>
 
-                                    @if (dealer.InSpic)
+                                    @if (dealer.Status != 2)
                                     {
-                                        <a class="btn-view text-decoration-none" href="@($"/DealershipPDF/{dealer.Id}?company=SPIC")">
-                                            <i class="bi bi-file-earmark-pdf me-1"></i> SPIC
-                                        </a>
-                                    }
+                                        @if (dealer.InSpic)
+                                        {
+                                            <a class="btn-view text-decoration-none" href="@($"/DealershipPDF/{dealer.Id}?company=SPIC")">
+                                                <i class="bi bi-file-earmark-pdf me-1"></i> SPIC
+                                            </a>
+                                        }
 
-                                    @if (dealer.InGreenStar)
-                                    {
-                                        <a class="btn-view text-decoration-none" href="@($"/DealershipPDF/{dealer.Id}?company=GreenStar")">
-                                            <i class="bi bi-file-earmark-pdf me-1"></i> GFL
-                                        </a>
+                                        @if (dealer.InGreenStar)
+                                        {
+                                            <a class="btn-view text-decoration-none" href="@($"/DealershipPDF/{dealer.Id}?company=GreenStar")">
+                                                <i class="bi bi-file-earmark-pdf me-1"></i> GFL
+                                            </a>
+                                        }
                                     }
 
                                     @if (CanDeleteDealer)
@@ -1530,6 +1533,7 @@ private string GetStatusName(int status) => status switch
         public int Region { get; set; }
         public int HQ { get; set; }
         public int Status { get; set; }
+        public FutureBusinessProposal? InactiveProposal { get; set; }
         public string? FirmName { get; set; }
         public string? BusinessEntityType { get; set; }
         public int? EntityType { get; set; }
