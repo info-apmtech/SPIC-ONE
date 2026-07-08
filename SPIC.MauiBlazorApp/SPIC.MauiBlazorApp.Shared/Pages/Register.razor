@@ -85,7 +85,7 @@
         }
 </style>
 <div class="container-fluid py-4 px-0">
-    <FormLoader />
+    <FormLoader IsSingleStep="IsRestrictedNavFlow" />
 
    
     <fieldset disabled="@IsViewOnly" style="@(IsViewOnly ? "border:0;padding:0;margin:0;" : "border:0;padding:0;margin:0;")">
@@ -1099,7 +1099,7 @@
         </form>
     </fieldset>
 
-    <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+    <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" NextButtonText="@(IsRestrictedNavFlow ? "Submit" : null)" />
 </div>
 
 @if (_showDeleteModal)
@@ -2057,9 +2057,20 @@ _model.Status = status switch
     {
         if (IsViewOnly)
         {
+            if (IsRestrictedNavFlow)
+                return;
+
             Loading.Show();
-            var viewNext = IsRestrictedNavFlow ? "/Proprietor" : "/Experience";
+            var viewNext = "/Experience";
             Nav.NavigateTo($"{viewNext}?dealerId={_model.Id}&mode=view");
+            return;
+        }
+
+        if (IsRestrictedNavFlow)
+        {
+            var deptSaved = await SaveDealer();
+            if (deptSaved)
+                Nav.NavigateTo("/Dashboard");
             return;
         }
 
@@ -2068,10 +2079,7 @@ _model.Status = status switch
         {
             SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, false);
             Loading.Show();
-            if (IsRestrictedNavFlow)
-                Nav.NavigateTo($"/Proprietor?dealerId={_model.Id}&flow=restricted");
-            else
-                Nav.NavigateTo($"/Experience?dealerId={_model.Id}");
+            Nav.NavigateTo($"/Experience?dealerId={_model.Id}");
         }
         else
         {
