@@ -2607,7 +2607,6 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                         </div>
                     }
                 }
-              }
                 else
                 {
                     <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Scoring Data Available</div>
@@ -2627,13 +2626,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
             if (!string.IsNullOrWhiteSpace(path)) enclosures.Add((label, path!));
         }
 
-        // Specimen signatures (company-gated)
-        if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
-            Add("SPIC Specimen Signature", _docs?.SpecimanFilePath);
-        if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
-            Add("Greenstar Specimen Signature", _docs?.GreenstarSpecimanFilePath);
-
-        // Core dealer documents
+        // Core dealer documents (always shown from Register page)
         Add("GST Certificate", _model?.GSTFilePath);
         Add("PAN", _model?.PANFilePath);
         Add("Aadhaar", _model?.AadhaarFilePath);
@@ -2671,17 +2664,25 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
             }
         }
 
-        // Additional documents
-        Add("IT Returns for Last Year", _docs?.FY1ITReturnFilePath);
-        Add("IT Returns for Last 2nd Year", _docs?.FY2ITReturnFilePath);
-        Add("Valuation Certificate", _docs?.ValuationCertificateFilePath);
-        Add("List of Retailers", _docs?.RetailerListFilePath);
-        if (_showPartnershipDeed) Add("Partnership Deed", _docs?.PartnershipDeadFilePath);
-        if (_showBoardResolution) Add("Board Resolution", _docs?.BoardReasolutionFilePath);
-        Add("Bank Guarantee Certificate", _docs?.BankGauranteeFilePath);
-        Add("Affidavit", _docs?.AffidavitFilePath);
-        Add("Deed of Guarantee", _docs?.DeedOfGuaranteeFilePath);
-        if (_showAuthorizationLetter) Add("Authorization Letter", _docs?.AuthorizationLetterFilePath);
+        // Additional documents (only when not terminated-restricted)
+        if (!_isTerminatedRestricted)
+        {
+            if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
+                Add("SPIC Specimen Signature", _docs?.SpecimanFilePath);
+            if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
+                Add("Greenstar Specimen Signature", _docs?.GreenstarSpecimanFilePath);
+
+            Add("IT Returns for Last Year", _docs?.FY1ITReturnFilePath);
+            Add("IT Returns for Last 2nd Year", _docs?.FY2ITReturnFilePath);
+            Add("Valuation Certificate", _docs?.ValuationCertificateFilePath);
+            Add("List of Retailers", _docs?.RetailerListFilePath);
+            if (_showPartnershipDeed) Add("Partnership Deed", _docs?.PartnershipDeadFilePath);
+            if (_showBoardResolution) Add("Board Resolution", _docs?.BoardReasolutionFilePath);
+            Add("Bank Guarantee Certificate", _docs?.BankGauranteeFilePath);
+            Add("Affidavit", _docs?.AffidavitFilePath);
+            Add("Deed of Guarantee", _docs?.DeedOfGuaranteeFilePath);
+            if (_showAuthorizationLetter) Add("Authorization Letter", _docs?.AuthorizationLetterFilePath);
+        }
     }
 
 @if (enclosures.Any())
@@ -2786,10 +2787,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                             }
                         }
 
-                        // Call the helper for all possible paths
-                        if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC") RenderDocViewer("SPIC Specimen Signature", _docs?.SpecimanFilePath);
-                        if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar") RenderDocViewer("Greenstar Specimen Signature", _docs?.GreenstarSpecimanFilePath);
-                        
+                        // Only documents from Register, Proprietor, and Investment pages
                         RenderDocViewer("GST Certificate", _model?.GSTFilePath);
                         RenderDocViewer("PAN", _model?.PANFilePath);
                         RenderDocViewer("Aadhaar", _model?.AadhaarFilePath);
@@ -2829,19 +2827,26 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                             }
                         }
 
-                        RenderDocViewer("IT Returns for Last Year", _docs?.FY1ITReturnFilePath);
-                        RenderDocViewer("IT Returns for Last 2nd Year", _docs?.FY2ITReturnFilePath);
-                        RenderDocViewer("Valuation Certificate", _docs?.ValuationCertificateFilePath);
-                        RenderDocViewer("List of Retailers", _docs?.RetailerListFilePath);
-                        
-                        if (_showPartnershipDeed) RenderDocViewer("Partnership Deed", _docs?.PartnershipDeadFilePath);
-                        if (_showBoardResolution) RenderDocViewer("Board Resolution", _docs?.BoardReasolutionFilePath);
-                        
-                        RenderDocViewer("Bank Guarantee Certificate", _docs?.BankGauranteeFilePath);
-                        RenderDocViewer("Affidavit", _docs?.AffidavitFilePath);
-                        RenderDocViewer("Deed of Guarantee", _docs?.DeedOfGuaranteeFilePath);
-                        
-                        if (_showAuthorizationLetter) RenderDocViewer("Authorization Letter", _docs?.AuthorizationLetterFilePath);
+                        // Additional documents (only when not terminated-restricted)
+                        if (!_isTerminatedRestricted)
+                        {
+                            if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC") RenderDocViewer("SPIC Specimen Signature", _docs?.SpecimanFilePath);
+                            if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar") RenderDocViewer("Greenstar Specimen Signature", _docs?.GreenstarSpecimanFilePath);
+
+                            RenderDocViewer("IT Returns for Last Year", _docs?.FY1ITReturnFilePath);
+                            RenderDocViewer("IT Returns for Last 2nd Year", _docs?.FY2ITReturnFilePath);
+                            RenderDocViewer("Valuation Certificate", _docs?.ValuationCertificateFilePath);
+                            RenderDocViewer("List of Retailers", _docs?.RetailerListFilePath);
+                            
+                            if (_showPartnershipDeed) RenderDocViewer("Partnership Deed", _docs?.PartnershipDeadFilePath);
+                            if (_showBoardResolution) RenderDocViewer("Board Resolution", _docs?.BoardReasolutionFilePath);
+                            
+                            RenderDocViewer("Bank Guarantee Certificate", _docs?.BankGauranteeFilePath);
+                            RenderDocViewer("Affidavit", _docs?.AffidavitFilePath);
+                            RenderDocViewer("Deed of Guarantee", _docs?.DeedOfGuaranteeFilePath);
+                            
+                            if (_showAuthorizationLetter) RenderDocViewer("Authorization Letter", _docs?.AuthorizationLetterFilePath);
+                        }
                     }
                 </div>
                 }
@@ -3021,17 +3026,20 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
 
     private bool HasAnyDocuments()
     {
-        if (!string.IsNullOrWhiteSpace(_docs?.SpecimanFilePath)) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.GreenstarSpecimanFilePath)) return true;
+        // Register page docs
         if (!string.IsNullOrWhiteSpace(_model?.GSTFilePath)) return true;
         if (!string.IsNullOrWhiteSpace(_model?.PANFilePath)) return true;
         if (!string.IsNullOrWhiteSpace(_model?.AadhaarFilePath)) return true;
         if (!string.IsNullOrWhiteSpace(_model?.WholesaleLicenseFilePath)) return true;
         if (!string.IsNullOrWhiteSpace(_model?.RetailLicenseFilePath)) return true;
+
+        // Proprietor page docs
         if (_savedPartners != null && _savedPartners.Any(p =>
             !string.IsNullOrWhiteSpace(p.ProprietorImagePath) ||
             !string.IsNullOrWhiteSpace(p.PANFilePath) ||
             !string.IsNullOrWhiteSpace(p.AadhaarFilePath))) return true;
+
+        // Investment page docs
         if (_landAssets != null && _landAssets.Any(l =>
             !string.IsNullOrWhiteSpace(l.UploadedECDocumentPath) ||
             !string.IsNullOrWhiteSpace(l.UploadedLandDocumentPath) ||
@@ -3040,16 +3048,24 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
             !string.IsNullOrWhiteSpace(b.UploadedECDocumentPath) ||
             !string.IsNullOrWhiteSpace(b.UploadedBuildingDocumentPath) ||
             !string.IsNullOrWhiteSpace(b.UploadedValuationCertificatePath))) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.FY1ITReturnFilePath)) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.FY2ITReturnFilePath)) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.ValuationCertificateFilePath)) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.RetailerListFilePath)) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.PartnershipDeadFilePath)) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.BoardReasolutionFilePath)) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.BankGauranteeFilePath)) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.AffidavitFilePath)) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.DeedOfGuaranteeFilePath)) return true;
-        if (!string.IsNullOrWhiteSpace(_docs?.AuthorizationLetterFilePath)) return true;
+
+        // Additional docs (only when not terminated-restricted)
+        if (!_isTerminatedRestricted)
+        {
+            if (!string.IsNullOrWhiteSpace(_docs?.SpecimanFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.GreenstarSpecimanFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.FY1ITReturnFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.FY2ITReturnFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.ValuationCertificateFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.RetailerListFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.PartnershipDeadFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.BoardReasolutionFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.BankGauranteeFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.AffidavitFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.DeedOfGuaranteeFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.AuthorizationLetterFilePath)) return true;
+        }
+
         return false;
     }
     private bool _showBoardResolution => _model.EntityType == (int)EntityType.PvtLtd || _model.EntityType == (int)EntityType.PubLtd;
@@ -4021,8 +4037,8 @@ public class ProductGroup
 
     public enum FutureBusinessProposalPdf
     {
-        FutureBusiness = 0,
-        Terminated = 1
+        FutureBusiness = 1,
+        Terminated = 2
     }
 
     public enum Gender { Male, Female, Other }
