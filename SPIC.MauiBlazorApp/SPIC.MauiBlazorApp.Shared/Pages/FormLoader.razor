@@ -50,9 +50,14 @@
 	private List<FormStepModel> _visibleSteps = FormStepData.GetVisibleSteps(false);
 	private bool _isRestrictedFlow;
 
-	private List<FormStepModel> StepsList => _visibleSteps;
+	[Parameter]
+	public bool IsSingleStep { get; set; }
 
-	private int TotalSteps => StepsList.Count;
+	private List<FormStepModel> StepsList => IsSingleStep
+		? _visibleSteps.Where(s => s.Route.Contains("/Register", StringComparison.OrdinalIgnoreCase)).Take(1).ToList()
+		: _visibleSteps;
+
+	private int TotalSteps => IsSingleStep ? 1 : StepsList.Count;
 
 	private int CurrentIndex
 	{
