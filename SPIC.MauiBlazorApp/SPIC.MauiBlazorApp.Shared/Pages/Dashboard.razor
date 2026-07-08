@@ -47,28 +47,32 @@
             <p class="page-subtitle">Manage all draft, in-progress, submitted, and approved dealer applications</p>
         </div>
         <div class="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2 page-header-actions">
-            @if (CanCreateDealer)
-            {
-                <NavLink href="/Register" class="btn-create-new text-decoration-none">
-                    <i class="bi bi-plus-lg"></i> Create New Registration
-                </NavLink>
+           
+            @if (CanShowcreatebutton && CanCreateDealer)
+                {
+                    <NavLink href="/Register" class="btn-create-new text-decoration-none">
+                        <i class="bi bi-plus-lg"></i> Create New Registration
+                    </NavLink>
+                }
+            @if (CanShowHeaderActions)
+            { 
+                <button class="btn-create-new" @onclick="DownloadSampleTemplate"
+                        style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
+                    <i class="bi bi-file-earmark-excel"></i> Sample Format
+                </button>
+                <button class="btn-create-new" @onclick="() => _showImportModal = true"
+                        style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
+                    <i class="bi bi-cloud-arrow-up"></i> Import from Excel
+                </button>
+                <button class="btn-create-new" @onclick="OpenManualModal"
+                        style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
+                    <i class="bi bi-person-plus"></i> Add Dealer
+                </button>
+                <button class="btn-create-new" @onclick="ExportDealers"
+                        style="background: #fff; color: #2563eb; border: 1.5px solid #2563eb;">
+                    <i class="bi bi-download"></i> Export Dealers
+                </button>
             }
-            <button class="btn-create-new" @onclick="DownloadSampleTemplate"
-                    style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
-                <i class="bi bi-file-earmark-excel"></i> Sample Format
-            </button>
-           <button class="btn-create-new" @onclick="() => _showImportModal = true"
-                    style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
-                <i class="bi bi-cloud-arrow-up"></i> Import from Excel
-            </button>
-            <button class="btn-create-new" @onclick="OpenManualModal"
-                    style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
-                <i class="bi bi-person-plus"></i> Add Dealer
-            </button>
-            <button class="btn-create-new" @onclick="ExportDealers"
-                    style="background: #fff; color: #2563eb; border: 1.5px solid #2563eb;">
-                <i class="bi bi-download"></i> Export Dealers
-            </button>
         </div>
     </div>
 
@@ -858,8 +862,12 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     private List<Category> _allCategories = new();
     private List<Product> _allProducts = new();
     private List<DealerApprovalHistory> _allApprovalHistory = new();
-    private bool CanCreateDealer => LoginState.Can("Dashboard", "Entry");
+   private bool CanCreateDealer => LoginState.Can("Dashboard", "Entry");
     private bool CanDeleteDealer => LoginState.Can("Dashboard", "Delete");
+
+    // Header action buttons (Create/Import/Add/Export) — Admin and AVP only
+    private bool CanShowHeaderActions => LoginState.UserRole == AppRole.Admin || LoginState.UserRole == AppRole.AVP;
+    private bool CanShowcreatebutton => LoginState.UserRole == AppRole.MO || LoginState.UserRole == AppRole.MDO || LoginState.UserRole == AppRole.JMDO|| LoginState.IsAdmin;
 
     private async Task<List<TItem>> SafeGet<TItem>(string url)
     {
