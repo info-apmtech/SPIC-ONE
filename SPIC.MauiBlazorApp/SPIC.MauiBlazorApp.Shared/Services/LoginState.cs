@@ -1,4 +1,4 @@
-﻿using SPIC.Core.Entities;
+using SPIC.Core.Entities;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
@@ -91,8 +91,8 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         // legacy bare page token). Used by the route guard and menu visibility.
         public bool CanAccess(string pageKey)
         {
-            // Admin group bypasses everything
-            if (IsAdmin) return true;
+            // Admin and CorporateAdmin bypass everything
+            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin) return true;
             // No designation assigned => access ONLY the Welcome page (nothing else)
             if (AllowedPages.Count == 0)
                 return string.Equals(pageKey, "Welcome", StringComparison.OrdinalIgnoreCase);
@@ -108,7 +108,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         public bool Can(string pageKey, string action)
         {
-            if (IsAdmin) return true;
+            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin) return true;
             if (AllowedPages.Count == 0) return false;
             // Legacy bare page token => full access to that page
             if (AllowedPages.Contains(pageKey)) return true;
