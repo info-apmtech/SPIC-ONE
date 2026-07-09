@@ -1597,23 +1597,53 @@
 
             var postOffice = result.PostOffice[0];
 
-            var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
-            var matchedDistrict = _DistrictAll.FirstOrDefault(d =>
-                d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
-            if (matchedDistrict != null) _model.DistrictId = matchedDistrict.Id;
-
             var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
             var matchedState = _statesAll.FirstOrDefault(s =>
                 s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
-            if (matchedState != null) _model.DealerStateId = matchedState.Id;
+            if (matchedState != null)
+            {
+                _model.DealerStateId = matchedState.Id;
+                _stateSearchText = matchedState.StateName;
+            }
+
+            var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
+            var matchedDistrict = _DistrictAll.FirstOrDefault(d =>
+                d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+            if (matchedDistrict != null)
+            {
+                _model.DistrictId = matchedDistrict.Id;
+                _districtSearchText = matchedDistrict.DistrictName;
+            }
 
             if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+            {
                 _model.Block = postOffice.Block;
-            if (!string.IsNullOrWhiteSpace(postOffice.Division)) _model.Taluk = postOffice.Division;
-            if (!string.IsNullOrWhiteSpace(postOffice.Name)) _model.Village = postOffice.Name;
+                _model.Taluk = postOffice.Block;
+            }
+            else if (!string.IsNullOrWhiteSpace(postOffice.Division))
+            {
+                _model.Taluk = postOffice.Division;
+            }
+
+            if (!string.IsNullOrWhiteSpace(postOffice.Name))
+            {
+                _model.Village = postOffice.Name;
+            }
+
+            var details = new List<string>();
+            if (!string.IsNullOrWhiteSpace(postOffice.Name))
+                details.Add($"Village: {postOffice.Name}");
+            if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+                details.Add($"Block: {postOffice.Block}");
+            if (!string.IsNullOrWhiteSpace(_model.Taluk))
+                details.Add($"Taluk: {_model.Taluk}");
+            if (matchedDistrict != null)
+                details.Add($"District: {matchedDistrict.DistrictName}");
+            if (matchedState != null)
+                details.Add($"State: {matchedState.StateName}");
 
             _pincodeSuccess = true;
-            _pincodeMessage = $"Auto-filled: {postOffice.District}, {postOffice.State}";
+            _pincodeMessage = "Auto-filled: " + string.Join(", ", details);
         }
         catch (HttpRequestException httpEx)
         {
