@@ -1,9 +1,10 @@
-﻿@page "/CreditLimitSales"
+@page "/CreditLimitSales"
 
 @using System.Net.Http.Json
 @using System.Text.Json
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 <div class="container-fluid">
 
@@ -21,12 +22,15 @@
         <div class="section-header">
     <h3 class="section-title">@(_isEditing ? "Edit Credit Limit Sales" : "Add New Credit Limit Sales")</h3>
     <div class="d-flex gap-2">
-        <button class="btn-outline-green" @onclick="DownloadSampleTemplate">
-            <i class="bi bi-file-earmark-excel"></i> Sample Format
-        </button>
-        <button class="btn-outline-green" @onclick="() => _showUploadModal = true">
-            <i class="bi bi-cloud-arrow-up"></i> Bulk Upload
-        </button>
+        @if (LoginState.Can(SPIC.Core.Entities.PagePermission.CreditLimitSales, "Entry"))
+        {
+            <button class="btn-outline-green" @onclick="DownloadSampleTemplate">
+                <i class="bi bi-file-earmark-excel"></i> Sample Format
+            </button>
+            <button class="btn-outline-green" @onclick="() => _showUploadModal = true">
+                <i class="bi bi-cloud-arrow-up"></i> Bulk Upload
+            </button>
+        }
     </div>
 </div>
 
@@ -121,9 +125,12 @@
 
         <div class="d-flex justify-content-end pt-2 mt-4">
             <button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
-            <button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
-                <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
-            </button>
+            @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.CreditLimitSales, "Entry")) || (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.CreditLimitSales, "Update")))
+            {
+                <button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+                    <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+                </button>
+            }
         </div>
     </div>
 
@@ -166,7 +173,10 @@
 <th>Category</th>
         <th>Quantity</th>
         <th>Gross Amount</th>
-        <th>Action</th>
+        @if (LoginState.Can(SPIC.Core.Entities.PagePermission.CreditLimitSales, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.CreditLimitSales, "Delete"))
+        {
+            <th>Action</th>
+        }
     </TableHeader>
 
     <TableRow Context="item">
@@ -179,12 +189,21 @@
 <td>@GetCategoryName(item.CategoryId)</td>
         <td>@item.Quantity</td>
         <td>@item.GrossAmount.ToString("F2")</td>
-        <td>
-            <div class="action-icons">
-                <i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
-                <i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
-            </div>
-        </td>
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.CreditLimitSales, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.CreditLimitSales, "Delete"))
+            {
+                <td>
+                    <div class="action-icons">
+                        @if (LoginState.Can(SPIC.Core.Entities.PagePermission.CreditLimitSales, "Delete"))
+                        {
+                            <i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+                        }
+                        @if (LoginState.Can(SPIC.Core.Entities.PagePermission.CreditLimitSales, "Update"))
+                        {
+                            <i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+                        }
+                    </div>
+                </td>
+            }
     </TableRow>
 </SpicDataTable>
 </div>

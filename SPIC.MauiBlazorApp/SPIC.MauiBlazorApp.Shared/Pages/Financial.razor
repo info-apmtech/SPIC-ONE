@@ -1,8 +1,9 @@
-﻿@page "/Financial"
+@page "/Financial"
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components.Forms
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 <div class="container-fluid">
 
@@ -30,9 +31,12 @@
 	<div class="main-card">
 		<div class="section-header">
 			<h3 class="section-title">@(_isEditing ? $"Edit {ActiveTab}" : $"Add New {ActiveTab}")</h3>
-			<button class="btn-outline-green" style="width: 12%;">
-				<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
-			</button>
+			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Entry"))
+			{
+				<button class="btn-outline-green" style="width: 12%;">
+					<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
+				</button>
+			}
 		</div>
 
 		<div class="row g-3 mb-4">
@@ -107,9 +111,12 @@
 
 				<div class="d-flex justify-content-end pt-2 mt-4">
 					<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
-					<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
-						<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
-					</button>
+					@if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Entry")) || (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Update")))
+					{
+						<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+							<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+						</button>
+					}
 				</div>
 			</div>
 
@@ -206,8 +213,14 @@
 												Added ON <strong>@item.CreatedAt.ToString("dd/MM/yyyy")</strong>
 											</div>
 											<div class="action-icons">
-												<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
-												<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+												@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Delete"))
+												{
+													<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+												}
+												@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Update"))
+												{
+													<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+												}
 											</div>
 										</div>
 									</div>
@@ -228,7 +241,10 @@
 											<th>End Date</th>
 											<th>Status</th>
 											<th>Created At</th>
-											<th>Action</th>
+											@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Delete"))
+											{
+												<th>Action</th>
+											}
 										</tr>
 									</thead>
 									<tbody>
@@ -261,12 +277,21 @@
 														</span>
 													</td>
 													<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
-													<td>
-														<div class="action-icons">
-															<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
-															<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
-														</div>
-													</td>
+													@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Delete"))
+													{
+														<td>
+															<div class="action-icons">
+																@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Delete"))
+																{
+																	<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+																}
+																@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Financial, "Update"))
+																{
+																	<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+																}
+															</div>
+														</td>
+													}
 												</tr>
 											}
 										}
