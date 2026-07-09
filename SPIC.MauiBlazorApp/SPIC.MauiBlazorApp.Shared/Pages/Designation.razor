@@ -432,6 +432,79 @@
         _isError = isError;
     }
 
+// Shows each granted page WITH its actions in the list, e.g.
+    // "DashboardAll, RegisterView, RegisterEntry, DesignationUpdate".
+    // "All" is used when every action (View/Entry/Update/Delete) is granted.
+    private string CompressRoleAccessForDisplay(string roleAccess)
+    {
+        if (string.IsNullOrWhiteSpace(roleAccess)) return "-";
+
+        // page -> actions held. A legacy bare "Page" token means full access.
+        var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in roleAccess.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var dot = raw.IndexOf('.');
+            var page = dot < 0 ? raw : raw.Substring(0, dot);
+            if (!map.TryGetValue(page, out var set))
+                map[page] = set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (dot < 0)
+                foreach (var a in _actions) set.Add(a);        // legacy bare => all
+            else
+                set.Add(raw.Substring(dot + 1));
+        }
+
+        string Format(string page, HashSet<string> actions)
+        {
+            var held = _actions.Where(actions.Contains).ToList();
+            if (held.Count == 0) return "";
+            return held.Count == _actions.Length
+                ? $"{page}All"
+                : string.Join(", ", held.Select(a => $"{page}{a}"));
+        }
+
+        var parts = new List<string>();
+        var displayed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Pass 1: collapse a module to its parent row when every child holds the
+        // same actions (mirrors the single parent row shown in the grid).
+        foreach (var page in _allPages)
+        {
+            if (displayed.Contains(page) || !map.ContainsKey(page)) continue;
+
+            if (IsParent(page))
+            {
+                var children = GetChildren(page);
+                var childSets = children.Where(map.ContainsKey).Select(c => map[c]).ToList();
+                bool uniform = children.Length > 0
+                    && childSets.Count == children.Length
+                    && childSets.All(s => s.SetEquals(childSets[0]));
+
+                if (uniform)
+                {
+                    var text = Format(page, childSets[0]);
+                    if (text.Length > 0) parts.Add(text);
+                    displayed.Add(page);
+                    foreach (var c in children) displayed.Add(c);
+                    continue;
+                }
+            }
+
+            var self = Format(page, map[page]);
+            if (self.Length > 0) parts.Add(self);
+            displayed.Add(page);
+        }
+
+        // Pass 2: any child pages left over (non-uniform module) listed individually.
+        foreach (var page in _allPages)
+        {
+            if (displayed.Contains(page) || !map.ContainsKey(page)) continue;
+            var self = Format(page, map[page]);
+            if (self.Length > 0) parts.Add(self);
+            displayed.Add(page);
+        }
+
+        return parts.Count == 0 ? "-" : string.Join(", ", parts);
+    }
     private bool CanAddDesignation => LoginState.Can("Designation", "Entry");
     private bool CanEditDesignation => LoginState.Can("Designation", "Update");
     private bool CanDeleteDesignation => LoginState.Can("Designation", "Delete");
@@ -677,7 +750,7 @@
                             <tr>
                                 <td>@sno</td>
                                 <td>@d.Name</td>
-                                <td class="desig-roles-cell">@(string.IsNullOrWhiteSpace(d.RoleAccess) ? "-" : d.RoleAccess)</td>
+                                <td class="desig-roles-cell">@CompressRoleAccessForDisplay(d.RoleAccess)</td>
                                 <td>
                                     <span class="desig-badge @(d.IsActive ? "desig-badge-active" : "desig-badge-inactive")">
                                         @(d.IsActive ? "Active" : "Inactive")
