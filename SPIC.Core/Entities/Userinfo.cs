@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -54,7 +54,10 @@ namespace SPIC.Core.Entities
         [PageModule("DealerRegistration")] FinalSubmission,
         [PageModule("DealerRegistration")] DealershipPDF,
         [PageModule("DealerRegistration")] SavedDealerReview,
-        Designation, Employee, dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
+        Designation, 
+        [PageModule("Employee Management")] EmployeeManagement, 
+        [PageModule("Employee Management")] EmployeeRegistration, 
+        dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
         CompanySales, SalesReport, AgeingReport, Acknowledgement, LiquidationCycle, BudgetSubmissions, WelfareSchemes, Purchases, Rewards, CropAdvice, YieldPrediction, DiseaseDetection,
         Community, Notifications, Profile, CSR1Create, CSR1Management,
 

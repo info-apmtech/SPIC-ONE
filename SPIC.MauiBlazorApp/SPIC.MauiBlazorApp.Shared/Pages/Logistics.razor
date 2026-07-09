@@ -1,7 +1,8 @@
-﻿@page "/Logistics"
+@page "/Logistics"
 @using System.Net.Http.Json
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 <style>
 	.searchable-select-input {
@@ -65,9 +66,12 @@
 	<div class="main-card">
 		<div class="section-header">
 			<h3 class="section-title">@(_isEditing ? $"Edit {ActiveTab}" : $"Add New {ActiveTab}")</h3>
-			<button class="btn-outline-green" style="width: 12%;">
-				<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
-			</button>
+			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry"))
+			{
+				<button class="btn-outline-green" style="width: 12%;">
+					<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
+				</button>
+			}>
 		</div>
 
 		<div class="row g-3 mb-4">
@@ -247,9 +251,12 @@
 
 					<div class="d-flex justify-content-end pt-2 mt-4">
 						<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
-						<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
-							<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
-						</button>
+						@if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) || (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update")))
+						{
+							<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+								<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+							</button>
+						}
 					</div>
 				</div>
 
@@ -320,7 +327,10 @@
 							}
 							<th>Status</th>
 							<th>Created At</th>
-							<th>Action</th>
+							@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+							{
+								<th>Action</th>
+							}
 						</TableHeader>
 
 						<TableRow Context="item">
@@ -329,13 +339,6 @@
 							@if (ActiveTab == "Warehouse")
 							{
 								<td>@item.WarehouseCode</td>
-					@* 			<td class="url-cell">
-									@if (!string.IsNullOrEmpty(item.GoogleURL))
-									{
-										<i class="bi bi-geo-alt-fill map-icon"></i>
-										@item.GoogleURL
-									}
-								</td> *@
 							}
 							else if (ActiveTab == "Rake Point")
 							{
@@ -357,12 +360,21 @@
 								</span>
 							</td>
 							<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
-							<td>
-								<div class="action-icons">
-									<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
-									<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
-								</div>
-							</td>
+							@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+							{
+								<td>
+									<div class="action-icons">
+										@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+										{
+											<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+										}
+										@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update"))
+										{
+											<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+										}
+									</div>
+								</td>
+							}
 						</TableRow>
 					</SpicDataTable>
 
