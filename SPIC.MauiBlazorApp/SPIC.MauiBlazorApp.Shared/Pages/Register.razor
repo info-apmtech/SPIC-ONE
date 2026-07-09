@@ -85,7 +85,7 @@
         }
 </style>
 <div class="container-fluid py-4 px-0">
-    <FormLoader IsSingleStep="IsRestrictedNavFlow" />
+    <FormLoader IsSingleStep="IsRestrictedNavFlow || IsDepartmentSelected" />
 
    
     <fieldset disabled="@IsViewOnly" style="@(IsViewOnly ? "border:0;padding:0;margin:0;" : "border:0;padding:0;margin:0;")">
@@ -1099,7 +1099,7 @@
         </form>
     </fieldset>
 
-    <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" NextButtonText="@(IsRestrictedNavFlow ? "Submit" : null)" />
+    <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" NextButtonText="@(IsRestrictedNavFlow || IsDepartmentSelected ? "Submit" : null)" />
 </div>
 
 @if (_showDeleteModal)
@@ -1845,7 +1845,9 @@
             if (_model.SettlementDate == null)
                 _errors["SettlementDate"] = "Settlement Date is required";
         }
-        if (ShowFullRegistrationSections)
+        bool isDept = IsDepartmentSelected;
+
+        if (ShowFullRegistrationSections && !isDept)
         {
             if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
             if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";
@@ -2066,7 +2068,7 @@ _model.Status = status switch
             return;
         }
 
-        if (IsRestrictedNavFlow)
+        if (IsRestrictedNavFlow || IsDepartmentSelected)
         {
             var deptSaved = await SaveDealer();
             if (deptSaved)

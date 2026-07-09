@@ -437,11 +437,13 @@ namespace SpicAPI.Controllers
             // A dealer counts as "submitted" if either:
             //  - it went through the full registration flow (PinCode collected), OR
             //  - it's a Terminated / Inactive-Terminated (restricted) flow, which
-            //    intentionally skips Primary Location / PinCode collection.
+            //    intentionally skips Primary Location / PinCode collection, OR
+            //  - it's a Department (entity type), which skips the full registration flow.
             var query = _repo.GetAllWithInactive()
                 .Where(x => (x.PinCode != null && x.PinCode != "")
                     || x.Status == DealerStatus.Terminated
-                    || (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.Terminated));
+                    || (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.Terminated)
+                    || x.DealerType == DealerType.Department);
 
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
