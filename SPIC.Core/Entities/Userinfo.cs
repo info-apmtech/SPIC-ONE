@@ -54,7 +54,7 @@ namespace SPIC.Core.Entities
         [PageModule("DealerRegistration")] FinalSubmission,
         [PageModule("DealerRegistration")] DealershipPDF,
         [PageModule("DealerRegistration")] SavedDealerReview,
-        Designation, Employee, dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
+        Designation, EmployeeManagement, EmployeeRegistration, dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
         CompanySales, SalesReport, AgeingReport, Acknowledgement, LiquidationCycle, BudgetSubmissions, WelfareSchemes, Purchases, Rewards, CropAdvice, YieldPrediction, DiseaseDetection,
         Community, Notifications, Profile, CSR1Create, CSR1Management,
 
