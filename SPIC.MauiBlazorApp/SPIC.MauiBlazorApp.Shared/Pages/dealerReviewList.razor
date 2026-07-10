@@ -1,0 +1,938 @@
+﻿@page "/DealerReviewList"
+@using System.Net.Http.Json
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject HttpClient Http
+@inject NavigationManager NavManager
+@inject LoginState LoginState
+
+<main class="drl-wrapper d-flex flex-column gap-3">
+
+    <!-- ── Header Section ── -->
+    <section class="drl-header">
+        <div class="drl-header-row">
+            <div style="flex:1; min-width:0;">
+                <h1 class="drl-header-title">Dealer Applications Review</h1>
+                <p class="drl-header-desc">Review and approve dealer registration</p>
+            </div>
+            <span class="drl-badge-role">@(LoginState?.UserRole.ToString() ?? "User")</span>
+        </div>
+    </section>
+
+    <!-- ── Dashboard Section ── -->
+    <section>
+
+        <!-- Summary Cards -->
+        <div class="drl-summary-grid mb-4">
+            <div class="drl-summary-card drl-card-total">
+                <svg class="drl-summary-card-icon" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="56" height="56" rx="12" fill="#ECF5FF"/>
+                    <path d="M20 20h16v16H20V20z" stroke="#3b82f6" stroke-width="1.5" stroke-linejoin="round"/>
+                    <path d="M24 24h8M24 28h8M24 32h4" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <div>
+                    <p class="drl-summary-card-title">Total Applications</p>
+                    <p class="drl-summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id))</p>
+                </div>
+            </div>
+
+            <div class="drl-summary-card drl-card-pending">
+                <svg class="drl-summary-card-icon" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="56" height="56" rx="12" fill="#FFFBE8"/>
+                    <circle cx="28" cy="28" r="10" stroke="#e17100" stroke-width="1.5"/>
+                    <path d="M28 23v6l3 3" stroke="#e17100" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <div>
+                    <p class="drl-summary-card-title">Pending Review</p>
+                    <p class="drl-summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id) && (d.RMApproved == null || d.SMApproved == null || d.AVPApproved == null))</p>
+                </div>
+            </div>
+
+            <div class="drl-summary-card drl-card-verified">
+                <svg class="drl-summary-card-icon" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="56" height="56" rx="12" fill="#F1FFF8"/>
+                    <path d="M20 28l6 6 10-12" stroke="#28a66c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div>
+                    <p class="drl-summary-card-title">Verified</p>
+                    <p class="drl-summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id) && d.AVPApproved == true)</p>
+                </div>
+            </div>
+
+            <div class="drl-summary-card drl-card-sentback">
+                <svg class="drl-summary-card-icon" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="56" height="56" rx="12" fill="#FFE8E8"/>
+                    <path d="M34 22l-12 12M22 22l12 12" stroke="#a62828" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <div>
+                    <p class="drl-summary-card-title">Sent Back</p>
+                    <p class="drl-summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id) && (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false))</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Applications Table Card -->
+        <div class="drl-applications-card">
+            <div class="drl-applications-header">
+                <h2 class="drl-applications-title">Applications</h2>
+                <div class="drl-table-controls">
+                    <div class="drl-search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Search applications..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
+                    </div>
+                    <select class="drl-filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+                        <option value="All">All Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Verified">Verified</option>
+                        <option value="Sent Back">Sent Back</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="drl-table-container">
+                @if (_isLoading)
+                {
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="text-muted mt-2">Loading applications...</p>
+                    </div>
+                }
+                else if (!PagedItems.Any())
+                {
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                        <p class="text-muted mt-2">No applications found.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="drl-table-responsive">
+                        <table class="drl-app-table">
+                            <thead>
+                                <tr>
+                                    <th>S.No</th>
+                                    <th>Application ID</th>
+                                    <th>Dealer Name</th>
+                                    <th>Current Stage</th>
+                                    <th>Status</th>
+                                    <th>Credit Limit</th>
+                                    <th>Last Updated</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in PagedItems.Select((d, i) => new { Dealer = d, Index = (_currentPage - 1) * _pageSize + i + 1 }))
+                                {
+                                    <tr>
+                                        <td><span style="font-weight:500;">@item.Index</span></td>
+                                        <td>@(item.Dealer.DealerCode ?? $"APP-{DateTime.Now.Year}-{item.Dealer.Id:D3}")</td>
+                                        <td>
+                                            <div class="drl-dealer-cell">
+                                                <div class="drl-dealer-avatar">@GetInitials(item.Dealer.FirmName)</div>
+                                                <span>@(item.Dealer.FirmName ?? "Unnamed Firm")</span>
+                                            </div>
+                                        </td>
+                                        <td><span class="@GetBadgeStageClass(item.Dealer)">@GetBadgeStageText(item.Dealer)</span></td>
+                                        <td><span class="@GetBadgeStatusClass(item.Dealer)">@GetBadgeStatusText(item.Dealer)</span></td>
+                                        <td>@(item.Dealer.CashCreditLimit > 0 ? $"&#8377;{item.Dealer.CashCreditLimit.ToString("N2")}" : "-")</td>
+                                        <td>@item.Dealer.UpdatedAt.ToString("dd MMM yyyy")</td>
+                                        <td>
+                                            <button class="drl-btn-action" aria-label="View application @(item.Dealer.DealerCode ?? item.Dealer.Id.ToString())" @onclick="() => ReviewDealer(item.Dealer.Id)">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
+                                                </svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+
+            <!-- Footer: Items Per Page + Pagination -->
+            <div class="drl-table-footer">
+                <div class="drl-items-per-page">
+                    <span class="drl-items-per-page-label">Items Per Page</span>
+                    <select @bind="_pageSize" @bind:after="ApplyFilter">
+                        <option value="16">16</option>
+                        <option value="32">32</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+
+                <nav aria-label="Page navigation">
+                    <div class="drl-pagination-wrapper">
+                        <button class="drl-page-nav-btn @(_currentPage <= 1 ? "drl-disabled" : "")" aria-label="Previous page" @onclick="PreviousPage">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m15 18-6-6 6-6"/>
+                            </svg>
+                        </button>
+
+                        @foreach (var thispage in PageNumbers)
+                        {
+                            @if (thispage == -1)
+                            {
+                                <div class="drl-page-number-btn" style="cursor:default;">...</div>
+                            }
+                            else
+                            {
+                                <button class="drl-page-number-btn @(thispage == _currentPage ? "drl-active" : "")" aria-current="@(thispage == _currentPage ? "page" : null)" @onclick="() => GoToPage(thispage)">@thispage</button>
+                            }
+                        }
+
+                        <button class="drl-page-nav-btn @(_currentPage >= TotalPages ? "drl-disabled" : "")" aria-label="Next page" @onclick="NextPage">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m9 18 6-6-6-6"/>
+                            </svg>
+                        </button>
+                    </div>
+                </nav>
+            </div>
+        </div>
+    </section>
+</main>
+
+@code {
+    private List<DealerDto> _allDealers = new();
+    private List<DealerDto> _filteredDealers = new();
+    private bool _isLoading = true;
+    private HashSet<int> _completeDealerIds = new();
+
+    // Search & filter
+    private string _searchText = "";
+    private string _statusFilter = "All";
+
+    // Pagination
+    private int _currentPage = 1;
+    private int _pageSize = 16;
+
+    private Dictionary<int, int> _dealerStepCounts = new();
+
+    // Related data for 12-step completeness check
+    private List<DealerExperience> _allExperiences = new();
+    private List<AnnualSaleDataLastFYofDealerRegistration> _allAnnualSales = new();
+    private List<DealerWarehouseFacilities> _allWarehouses = new();
+    private List<DealerRailFacilities> _allRails = new();
+    private List<DealerPortFacilities> _allPorts = new();
+    private List<DealerMarketDetail> _allMarketDetails = new();
+    private List<DealerCompaniesOperatingInArea> _allCompaniesOperating = new();
+    private List<DealerOwnershipInfo> _allOwnerships = new();
+    private List<PartnerFamilyDetails> _allPartners = new();
+    private List<PartnerOccupation> _allOccupations = new();
+    private List<SalesPlanningInDealerRegistration> _allSalesPlanning = new();
+    private List<DealerAssetBank> _allAssetBanks = new();
+    private List<DealerAssetLand> _allAssetLands = new();
+    private List<DealerAssetBuilding> _allAssetBuildings = new();
+    private List<DealerLoanLiabilities> _allLoans = new();
+    private List<DealerCreditLimitProposal> _allCreditProposals = new();
+    private List<DealerCreditLimitSalesPerformance> _allCreditSales = new();
+    private List<DealerRegistrationDocuments> _allDocuments = new();
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_filteredDealers.Count / (double)_pageSize));
+    private IEnumerable<DealerDto> PagedItems => _filteredDealers
+        .Skip((_currentPage - 1) * _pageSize)
+        .Take(_pageSize);
+
+    private IEnumerable<int> PageNumbers
+    {
+        get
+        {
+            var total = TotalPages;
+            if (total <= 7)
+                return Enumerable.Range(1, total);
+
+            var pages = new List<int> { 1 };
+            var start = Math.Max(2, _currentPage - 1);
+            var end = Math.Min(total - 1, _currentPage + 1);
+
+            if (start > 2) pages.Add(-1);
+            for (var i = start; i <= end; i++) pages.Add(i);
+            if (end < total - 1) pages.Add(-1);
+            pages.Add(total);
+
+            return pages;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        try
+        {
+            _allDealers = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/submitted") ?? new();
+
+            // Load related entities for 12-step completeness check
+            try { _allExperiences = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience") ?? new(); } catch { _allExperiences = new(); }
+            try { _allAnnualSales = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFYofDealerRegistration") ?? new(); } catch { _allAnnualSales = new(); }
+            try { _allWarehouses = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities") ?? new(); } catch { _allWarehouses = new(); }
+            try { _allRails = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities") ?? new(); } catch { _allRails = new(); }
+            try { _allPorts = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities") ?? new(); } catch { _allPorts = new(); }
+            try { _allMarketDetails = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail") ?? new(); } catch { _allMarketDetails = new(); }
+            try { _allCompaniesOperating = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea") ?? new(); } catch { _allCompaniesOperating = new(); }
+            try { _allOwnerships = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo") ?? new(); } catch { _allOwnerships = new(); }
+            try { _allPartners = await Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails") ?? new(); } catch { _allPartners = new(); }
+            try { _allOccupations = await Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation") ?? new(); } catch { _allOccupations = new(); }
+            try { _allSalesPlanning = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning") ?? new(); } catch { _allSalesPlanning = new(); }
+            try { _allAssetBanks = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank") ?? new(); } catch { _allAssetBanks = new(); }
+            try { _allAssetLands = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand") ?? new(); } catch { _allAssetLands = new(); }
+            try { _allAssetBuildings = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding") ?? new(); } catch { _allAssetBuildings = new(); }
+            try { _allLoans = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>("api/DealerLoanLiabilities") ?? new(); } catch { _allLoans = new(); }
+            try { _allCreditProposals = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal") ?? new(); } catch { _allCreditProposals = new(); }
+            try { _allCreditSales = await Http.GetFromJsonAsync<List<DealerCreditLimitSalesPerformance>>("api/DealerCreditLimitSalesPerformance") ?? new(); } catch { _allCreditSales = new(); }
+            try { _allDocuments = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments") ?? new(); } catch { _allDocuments = new(); }
+
+            BuildCompletionSet();
+            ApplyRoleFilter();
+            ApplyFilter();
+        }
+        catch { }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void BuildCompletionSet()
+    {
+        _dealerStepCounts.Clear();
+        foreach (var d in _allDealers)
+        {
+            int count = 0;
+            if (!string.IsNullOrWhiteSpace(d.PinCode)) count++;
+            if (_allExperiences.Any(x => x.DealerId == d.Id)) count++;
+            if (_allAnnualSales.Any(x => x.DealerId == d.Id)) count++;
+            if (_allWarehouses.Any(x => x.DealerId == d.Id) || _allRails.Any(x => x.DealerId == d.Id) || _allPorts.Any(x => x.DealerId == d.Id)) count++;
+            if (_allMarketDetails.Any(x => x.DealerId == d.Id)) count++;
+            if (_allCompaniesOperating.Any(x => x.DealerId == d.Id)) count++;
+            if (_allOwnerships.Any(x => x.DealerId == d.Id)) count++;
+            bool hasPartner = _allPartners.Any(p => _allOwnerships.Any(o => o.Id == p.OwnershipPartnerId && o.DealerId == d.Id));
+            bool hasOccupation = _allOccupations.Any(o => _allOwnerships.Any(own => own.Id == o.OwnershipPartnerId && own.DealerId == d.Id));
+            if (hasPartner || hasOccupation) count++;
+            if (_allSalesPlanning.Any(x => x.DealerId == d.Id)) count++;
+            if (_allAssetBanks.Any(x => x.DealerId == d.Id) || _allAssetLands.Any(x => x.DealerId == d.Id) || _allAssetBuildings.Any(x => x.DealerId == d.Id)) count++;
+            if (_allLoans.Any(x => x.DealerId == d.Id)) count++;
+            bool hasCreditProposal = _allCreditProposals.Any(cp => cp.DealerId == d.Id);
+            bool hasCreditSales = _allCreditSales.Any(s => _allCreditProposals.Any(cp => cp.Id == s.CreditLimitId && cp.DealerId == d.Id));
+            if (hasCreditProposal || hasCreditSales) count++;
+            if (_allDocuments.Any(x => x.DealerId == d.Id)) count++;
+
+            _dealerStepCounts[d.Id] = count;
+        }
+
+        _completeDealerIds = _dealerStepCounts.Where(kv => kv.Value >= 11).Select(kv => kv.Key).ToHashSet();
+    }
+
+    private void ApplyRoleFilter()
+    {
+        if (LoginState.IsStateRole)
+            _allDealers = _allDealers.Where(d => d.StateId == LoginState.StateId).ToList();
+        else if (LoginState.IsRegionRole)
+            _allDealers = _allDealers.Where(d => d.Region == LoginState.RegionId).ToList();
+        else if (LoginState.IsHQRole)
+            _allDealers = _allDealers.Where(d => d.HQ == LoginState.HQId).ToList();
+    }
+
+    private void ApplyFilter()
+    {
+        _filteredDealers = _allDealers
+            .Where(d => IsDealerComplete(d.Id))
+            .Where(d =>
+                string.IsNullOrEmpty(_searchText) ||
+                (d.DealerCode?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (d.FirmName?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false))
+            .Where(d =>
+                _statusFilter switch
+                {
+                    "Pending" => GetApprovalStatus(d) == "In RM" || GetApprovalStatus(d) == "In SMM" || GetApprovalStatus(d) == "In AVP",
+                    "Verified" => GetApprovalStatus(d) == "Approved",
+                    "Sent Back" => GetApprovalStatus(d) == "Rejected",
+                    _ => true
+                })
+            .OrderByDescending(d => IsPendingForMe(d))
+            .ThenByDescending(d => d.UpdatedAt)
+            .ToList();
+
+        if (_currentPage > TotalPages) _currentPage = 1;
+    }
+
+    private bool IsDealerComplete(int dealerId) => _completeDealerIds.Contains(dealerId);
+
+    private string GetApprovalStatus(DealerDto d)
+    {
+        if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)
+            return "Rejected";
+        if (d.AVPApproved == true)
+            return "Approved";
+        if (!IsDealerComplete(d.Id))
+            return "Draft";
+        if (d.RMApproved == null)
+            return "In RM";
+        if (d.RMApproved == true && d.SMApproved == null)
+            return "In SMM";
+        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
+            return "In AVP";
+        return "Submitted";
+    }
+
+    private bool IsPendingForMe(DealerDto d)
+    {
+        if (!IsDealerComplete(d.Id)) return false;
+        if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false) return false;
+        if (d.AVPApproved == true) return false;
+
+        if (LoginState.IsRegionRole && d.RMApproved == null) return true;
+        if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == null) return true;
+        if (LoginState.IsAdmin && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return true;
+        return false;
+    }
+
+    private string GetBadgeStageClass(DealerDto d)
+    {
+        var status = GetApprovalStatus(d);
+        return status switch
+        {
+            "In RM" => "drl-badge-stage drl-badge-stage-rm",
+            "In SMM" => "drl-badge-stage drl-badge-stage-mo",
+            _ => "drl-badge-stage"
+        };
+    }
+
+    private string GetBadgeStageText(DealerDto d)
+    {
+        var status = GetApprovalStatus(d);
+        return status switch
+        {
+            "In RM" => "Regional Manager (RM)",
+            "In SMM" => "State Marketing Manager (SMM)",
+            "In AVP" => "AVP",
+            _ => status
+        };
+    }
+
+    private string GetBadgeStatusClass(DealerDto d)
+    {
+        var status = GetApprovalStatus(d);
+        return status switch
+        {
+            "Pending" or "In RM" or "In SMM" or "In AVP" => "drl-badge-status drl-badge-status-pending rounded-pill",
+            "Approved" => "drl-badge-status drl-badge-status-verified rounded-pill",
+            "Rejected" or "Sent Back" => "drl-badge-status drl-badge-status-sentback rounded-pill",
+            _ => "drl-badge-status rounded-pill"
+        };
+    }
+
+    private string GetBadgeStatusText(DealerDto d)
+    {
+        var status = GetApprovalStatus(d);
+        return status switch
+        {
+            "In RM" or "In SMM" or "In AVP" => "Pending",
+            "Approved" => "Verified",
+            "Rejected" => "Sent Back",
+            _ => status
+        };
+    }
+
+    private string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length > 0 ? parts[0][0].ToString().ToUpper() : "?";
+    }
+
+    private void ReviewDealer(int dealerId)
+    {
+        NavManager.NavigateTo($"/SavedDealerReview?dealerId={dealerId}");
+    }
+
+    // Pagination helpers
+    private void GoToPage(int page) { _currentPage = page; }
+    private void PreviousPage() { if (_currentPage > 1) _currentPage--; }
+    private void NextPage() { if (_currentPage < TotalPages) _currentPage++; }
+
+    public class DealerDto
+    {
+        public int Id { get; set; }
+        public string? DealerCode { get; set; }
+        public string? FirmName { get; set; }
+        public int StateId { get; set; }
+        public int Region { get; set; }
+        public int HQ { get; set; }
+        public string? BusinessEntityType { get; set; }
+        public string? PinCode { get; set; }
+        public bool? RMApproved { get; set; }
+        public bool? SMApproved { get; set; }
+        public bool? AVPApproved { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public decimal CashCreditLimit { get; set; }
+    }
+}
+
+<style>
+    .drl-wrapper {
+        max-width: 1660px;
+        margin: 0 auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    /* ── Header ── */
+    .drl-header {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .drl-header-row {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .drl-header-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #47443f;
+        letter-spacing: -0.4px;
+        line-height: 1.3;
+        margin: 0;
+    }
+
+    .drl-header-desc {
+        font-size: 13px;
+        font-weight: 400;
+        color: #364153;
+        line-height: 1.4;
+        margin: 4px 0 0;
+    }
+
+    .drl-badge-role {
+        display: inline-flex;
+        align-items: center;
+        background-color: #dbfdfe;
+        color: #3cb8ad;
+        border: 1px solid #bef8ff;
+        border-radius: 7px;
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 400;
+        line-height: 20px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    /* ── Summary Cards ── */
+    .drl-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(1, 1fr);
+        gap: 12px;
+    }
+
+    @@media (min-width: 768px) {
+        .drl-summary-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @@media (min-width: 1200px) {
+        .drl-summary-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+
+    .drl-summary-card {
+        border-radius: 12px;
+        border-width: 0.8px;
+        border-style: solid;
+        padding: 30px 14px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .drl-summary-card.drl-card-total {
+        border-color: #d8d2e0;
+        background: linear-gradient(135deg, rgba(236,245,255,1) 0%, rgba(255,254,255,1) 100%);
+    }
+
+    .drl-summary-card.drl-card-pending {
+        border-color: #d2dee0;
+        background: linear-gradient(135deg, rgba(255,251,232,1) 0%, rgba(255,254,255,1) 100%);
+    }
+
+    .drl-summary-card.drl-card-verified {
+        border-color: #d2dee0;
+        background: linear-gradient(135deg, rgba(241,255,248,1) 0%, rgba(255,254,255,1) 100%);
+    }
+
+    .drl-summary-card.drl-card-sentback {
+        border-color: #e0d2d2;
+        background: linear-gradient(135deg, rgba(255,232,232,1) 0%, rgba(255,254,255,1) 100%);
+    }
+
+    .drl-summary-card-icon {
+        width: 40px;
+        height: 40px;
+        flex-shrink: 0;
+        object-fit: contain;
+    }
+
+    .drl-summary-card-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: #395a45;
+        line-height: 1.3;
+        margin: 0 0 2px 0;
+    }
+
+    .drl-summary-card-value {
+        font-size: 22px;
+        font-weight: 600;
+        color: #085726;
+        line-height: 1.2;
+        margin: 0;
+    }
+
+    /* ── Main Applications Card ── */
+    .drl-applications-card {
+        background: #ffffff;
+        border: 1px solid #e6ece9;
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 3px 3px 10px rgba(233,233,233,0.2), -3px -3px 10px rgba(231,231,231,0.2);
+    }
+
+    .drl-applications-header {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    @@media (min-width: 768px) {
+        .drl-applications-header {
+            flex-direction: row;
+            align-items: center;
+        }
+    }
+
+    .drl-applications-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #36483d;
+        line-height: 1.3;
+        margin: 0;
+    }
+
+    /* ── Table Controls (Search + Filter) ── */
+    .drl-table-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .drl-search-box {
+        position: relative;
+        width: 100%;
+        max-width: 260px;
+    }
+
+    @@media (min-width: 768px) {
+        .drl-search-box { width: 260px; }
+    }
+
+    .drl-search-box i {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #bebebe;
+        font-size: 13px;
+    }
+
+    .drl-search-box input {
+        width: 100%;
+        height: 36px;
+        border: none;
+        border-radius: 8px;
+        background-color: #f3f3f3;
+        padding: 0 10px 0 32px;
+        font-size: 12px;
+        font-weight: 400;
+        color: #191c1d;
+        font-family: 'Inter', Helvetica, sans-serif;
+        outline: none;
+        box-sizing: border-box;
+    }
+
+    .drl-search-box input::placeholder { color: #bebebe; }
+
+    .drl-filter-select {
+        height: 36px;
+        border: 1px solid #c6c6c6;
+        border-radius: 7px;
+        padding: 0 10px;
+        background: #ffffff;
+        font-size: 13px;
+        color: #44494d;
+        cursor: pointer;
+        font-family: 'Inter', Helvetica, sans-serif;
+    }
+
+    /* ── Table ── */
+    .drl-table-container {
+        border: 1px solid #d8ebe1;
+        border-radius: 7px;
+        overflow-x: auto;
+        background: #ffffff;
+    }
+
+    .drl-table-responsive {
+        min-width: 100%;
+    }
+
+    .drl-app-table {
+        width: 100%;
+        min-width: 900px;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin: 0;
+    }
+
+    .drl-app-table thead tr th {
+        background-color: #f2f3f3;
+        border-bottom: 1px solid #d0dfd8;
+        padding: 11px 16px;
+        text-align: center;
+        vertical-align: middle;
+        font-size: 12px;
+        font-weight: 600;
+        color: #40493d;
+        white-space: nowrap;
+        font-family: 'Inter', Helvetica, sans-serif;
+    }
+
+    .drl-app-table tbody tr { background: #ffffff; }
+
+    .drl-app-table tbody tr td {
+        border-bottom: 1px solid #e8eeeb;
+        padding: 12px 16px;
+        text-align: center;
+        vertical-align: middle;
+        font-size: 12px;
+        font-weight: 400;
+        color: #191c1d;
+        white-space: nowrap;
+        font-family: 'Inter', Helvetica, sans-serif;
+    }
+
+    .drl-app-table tbody tr:last-child td { border-bottom: none; }
+
+    /* ── Dealer Name cell ── */
+    .drl-dealer-cell {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .drl-dealer-avatar {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        overflow: hidden;
+        background-color: #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748b;
+        flex-shrink: 0;
+    }
+
+    .drl-dealer-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    /* ── Stage Badges ── */
+    .drl-badge-stage {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid;
+        border-radius: 7px;
+        padding: 3px 9px;
+        font-size: 12px;
+        font-weight: 400;
+        line-height: 20px;
+        font-family: 'Inter', Helvetica, sans-serif;
+    }
+
+    .drl-badge-stage-rm {
+        background-color: #dbfdfe;
+        color: #3cb8ad;
+        border-color: #bef8ff;
+    }
+
+    .drl-badge-stage-mo {
+        background-color: #fedbfa;
+        color: #b83ca3;
+        border-color: #ffbefa;
+    }
+
+    /* ── Status Badges ── */
+    .drl-badge-status {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid;
+        border-radius: 100px;
+        padding: 4px 12px;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 20px;
+        font-family: 'Inter', Helvetica, sans-serif;
+    }
+
+    .drl-badge-status-pending {
+        background-color: #fffceb;
+        color: #e17100;
+        border-color: #fff6cf;
+    }
+
+    .drl-badge-status-verified {
+        background-color: #f3fff9;
+        color: #28a66c;
+        border-color: #d9fce9;
+    }
+
+    .drl-badge-status-sentback {
+        background-color: #fff3f3;
+        color: #a62828;
+        border-color: #fcd9d9;
+    }
+
+    /* ── Eye Action Button ── */
+    .drl-btn-action {
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        color: #6da7d9;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .drl-btn-action:hover { color: #6da7d9; opacity: 0.8; }
+
+    .drl-btn-action svg { width: 15px; height: 15px; }
+
+    /* ── Footer: Items Per Page + Pagination ── */
+    .drl-table-footer {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-top: 20px;
+    }
+
+    @@media (min-width: 768px) {
+        .drl-table-footer {
+            flex-direction: row;
+            align-items: center;
+        }
+    }
+
+    .drl-items-per-page {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .drl-items-per-page-label {
+        font-size: 13px;
+        font-weight: 500;
+        color: #44494d;
+        white-space: nowrap;
+        font-family: 'Inter', Helvetica, sans-serif;
+    }
+
+    .drl-items-per-page select {
+        width: 68px;
+        height: 36px;
+        border: 1px solid #c6c6c6;
+        border-radius: 7px;
+        padding: 0 8px;
+        background: #ffffff;
+        font-size: 13px;
+        font-weight: 500;
+        color: #44494d;
+        cursor: pointer;
+        font-family: 'Inter', Helvetica, sans-serif;
+    }
+
+    /* ── Pagination ── */
+    .drl-pagination-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .drl-page-nav-btn {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        border: 1px solid #ededed;
+        border-radius: 7px;
+        color: #484848;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .drl-page-nav-btn.drl-disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    .drl-page-nav-btn svg { width: 14px; height: 14px; }
+    .drl-page-nav-btn:hover:not(.drl-disabled) { background: #f9f9f9; }
+
+    .drl-page-number-btn {
+        min-width: 28px;
+        height: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 7px;
+        padding: 5px 9px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #484848;
+        cursor: pointer;
+        font-family: 'Inter', Helvetica, sans-serif;
+        border: 1px solid #ededed;
+        background: #ffffff;
+    }
+
+    .drl-page-number-btn.drl-active {
+        background: #ececec;
+        border-color: #ececec;
+    }
+
+    .drl-page-number-btn:hover:not(.drl-active) { background: #f9f9f9; }
+</style>

@@ -1,0 +1,464 @@
+@page "/Relationship"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+<div class="container-fluid">
+
+	<h2 class="page-title">Relationship Master</h2>
+
+	@if (!string.IsNullOrEmpty(_message))
+	{
+		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+			@_message
+			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
+		</div>
+	}
+
+	<div class="main-card">
+		<div class="section-header">
+			<h3 class="section-title">@(_isEditing ? "Edit Relationship" : "Add New Relationship")</h3>
+			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Entry"))
+			{
+				<button class="btn-outline-green" style="width: 12%;">
+					<i class="bi bi-cloud-arrow-up"></i> Bulk Upload
+				</button>
+			}
+		</div>
+
+		<div class="row g-3 mb-4">
+			<div class="col-md-5">
+				<label class="form-label-custom">Relationship Name</label>
+				<input type="text" class="form-control-custom w-100" placeholder="Enter Relationship Name"
+					   @bind="_formModel.Name" @ref="_firstInputRef" />
+			</div>
+
+			<div class="col-md-2">
+				<div class="status-toggle-box @(_formModel.IsActive ? "" : "status-toggle-inactive")">
+					<span>@(_formModel.IsActive ? "Active" : "Inactive")</span>
+					<label class="switch">
+						<input type="checkbox" @bind="_formModel.IsActive">
+						<span class="slider"></span>
+					</label>
+				</div>
+			</div>
+		</div>
+
+		<div class="d-flex justify-content-end pt-2 mt-4">
+			<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
+			@if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Entry")) || (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Update")))
+			{
+				<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+					<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+				</button>
+			}
+		</div>
+	</div>
+
+	<div class="row g-3 mb-4">
+		<div class="col-md-4">
+			<div class="metric-card bg-blue-light">
+				<div class="metric-header">
+					<h4 class="metric-title">Total Count</h4>
+				</div>
+				<div class="metric-val">@_allItems.Count</div>
+			</div>
+		</div>
+		<div class="col-md-4">
+			<div class="metric-card bg-mint-light">
+				<div class="metric-header">
+					<h4 class="metric-title">Active</h4>
+				</div>
+				<div class="metric-val">@_allItems.Count(x => x.IsActive)</div>
+			</div>
+		</div>
+		<div class="col-md-4">
+			<div class="metric-card bg-gray-light">
+				<div class="metric-header">
+					<h4 class="metric-title">Inactive</h4>
+				</div>
+				<div class="metric-val">@_allItems.Count(x => !x.IsActive)</div>
+			</div>
+		</div>
+	</div>
+
+	<SpicDataTable Items="_filteredItems"
+				   IsLoading="_isLoading"
+				   Title="Existing Relationships"
+				   FileName="Relationships"
+				   ExportColumns="GetExportColumns()"
+				   SearchText="@_searchText">
+
+		<FilterControls>
+			<div class="search-box">
+				<i class="bi bi-search"></i>
+				<input type="text" placeholder="Search relationships..."
+					   @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+			</div>
+			<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+				<option value="All">All Status</option>
+				<option value="Active">Active</option>
+				<option value="Inactive">Inactive</option>
+			</select>
+		</FilterControls>
+
+		<TableHeader>
+			<th>Relationship Name</th>
+			<th>Status</th>
+			<th>Created At</th>
+			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Delete"))
+			{
+				<th>Action</th>
+			}
+		</TableHeader>
+
+		<TableRow Context="item">
+			<td>@item.Name</td>
+			<td>
+				<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+					  style="cursor:pointer"
+					  @onclick="() => ToggleStatus(item)">
+					@(item.IsActive ? "Active" : "Inactive")
+				</span>
+			</td>
+			<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
+			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Delete"))
+			{
+				<td>
+					<div class="action-icons">
+						@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Delete"))
+						{
+							<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+						}
+						@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Update"))
+						{
+							<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+						}
+					</div>
+				</td>
+			}
+		</TableRow>
+	</SpicDataTable>
+
+</div>
+
+@if (_showDeleteConfirm)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Confirm Delete</h5>
+					<button type="button" class="btn-close" @onclick="CancelDelete"></button>
+				</div>
+				<div class="modal-body">
+					<p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
+					<p class="text-muted mb-0">This action cannot be undone.</p>
+				</div>
+				<div class="modal-footer">
+					<button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+					<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+						@(_isDeleting ? "Deleting..." : "Delete")
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+@code {
+	private const string ApiBase = "api/Relationship";
+
+	// Element reference for focusing
+	private ElementReference _firstInputRef;
+
+	// Data
+	private List<RelationshipDto> _allItems = new();
+	private List<RelationshipDto> _filteredItems = new();
+
+	// Form
+	private RelationshipFormModel _formModel = new();
+	private bool _isEditing;
+	private int? _editingId;
+
+	// UI state
+	private bool _isLoading = true;
+	private bool _isSaving;
+	private string? _message;
+	private bool _isError;
+
+	// Delete confirmation
+	private bool _showDeleteConfirm;
+	private bool _isDeleting;
+	private RelationshipDto? _deleteTarget;
+
+	// Search & filter
+	private string _searchText = "";
+	private string _statusFilter = "All";
+
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+			if (!string.IsNullOrEmpty(token))
+			{
+				_currentUserId = GetUserIdFromToken(token);
+			}
+		}
+		catch { }
+
+		await LoadData();
+	}
+
+	private async Task LoadData()
+	{
+		try
+		{
+			_isLoading = true;
+			_allItems = await Http.GetFromJsonAsync<List<RelationshipDto>>($"{ApiBase}/all") ?? new();
+			ApplyFilter();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load: {ex.Message}", true);
+		}
+		finally
+		{
+			_isLoading = false;
+		}
+	}
+
+	private List<ExportColumn<RelationshipDto>> GetExportColumns()
+	{
+		return new List<ExportColumn<RelationshipDto>>
+		{
+			new ExportColumn<RelationshipDto> { Header = "S:No", ValueSelector = item => (_filteredItems.IndexOf(item) + 1).ToString() },
+			new ExportColumn<RelationshipDto> { Header = "Relationship Name", ValueSelector = item => item.Name },
+			new ExportColumn<RelationshipDto> { Header = "Status", ValueSelector = item => item.IsActive ? "Active" : "Inactive" },
+			new ExportColumn<RelationshipDto> { Header = "Created At", ValueSelector = item => item.CreatedAt.ToString("yyyy-MM-dd") }
+		};
+	}
+
+	private void ApplyFilter()
+	{
+		_filteredItems = _allItems
+			.Where(x => _statusFilter switch
+			{
+				"Active" => x.IsActive,
+				"Inactive" => !x.IsActive,
+				_ => true
+			})
+			.OrderByDescending(x => x.CreatedAt)
+			.ToList();
+	}
+
+	private async Task HandleSave()
+	{
+		if (string.IsNullOrWhiteSpace(_formModel.Name))
+		{
+			ShowMessage("Relationship name is required.", true);
+			return;
+		}
+
+		try
+		{
+			_isSaving = true;
+
+			if (_isEditing && _editingId.HasValue)
+			{
+				var response = await Http.PutAsJsonAsync($"{ApiBase}/{_editingId.Value}", new
+				{
+					Id = _editingId.Value,
+					Name = _formModel.Name,
+					IsActive = _formModel.IsActive,
+					UpdatedBy = (_currentUserId ?? "current-user")
+				});
+
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Update failed: {error}", true);
+					return;
+				}
+
+				ShowMessage("Relationship updated successfully.", false);
+			}
+			else
+			{
+				var response = await Http.PostAsJsonAsync(ApiBase, new
+				{
+					Name = _formModel.Name,
+					IsActive = _formModel.IsActive,
+					CreatedAt = DateTime.Now,
+					UpdatedAt = DateTime.Now,
+					CreatedBy = (_currentUserId ?? "current-user"),
+					UpdatedBy = (_currentUserId ?? "current-user")
+				});
+
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Create failed: {error}", true);
+					return;
+				}
+
+				ShowMessage("Relationship created successfully.", false);
+			}
+
+			ResetForm();
+			await LoadData();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private async Task EditItem(RelationshipDto item)
+	{
+		_isEditing = true;
+		_editingId = item.Id;
+		_formModel = new RelationshipFormModel
+		{
+			Name = item.Name,
+			IsActive = item.IsActive
+		};
+
+		try
+		{
+			await _firstInputRef.FocusAsync();
+		}
+		catch { }
+	}
+
+	private void DeleteItem(RelationshipDto item)
+	{
+		_deleteTarget = item;
+		_showDeleteConfirm = true;
+	}
+
+	private async Task ConfirmDelete()
+	{
+		if (_deleteTarget is null) return;
+
+		try
+		{
+			_isDeleting = true;
+			var response = await Http.DeleteAsync($"{ApiBase}/{_deleteTarget.Id}");
+			if (response.IsSuccessStatusCode)
+			{
+				ShowMessage($"'{_deleteTarget.Name}' deleted successfully.", false);
+				await LoadData();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Delete failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isDeleting = false;
+			CancelDelete();
+		}
+	}
+
+	private void CancelDelete()
+	{
+		_showDeleteConfirm = false;
+		_deleteTarget = null;
+	}
+
+	private async Task ToggleStatus(RelationshipDto item)
+	{
+		try
+		{
+			var newStatus = !item.IsActive;
+			var response = await Http.PatchAsync($"{ApiBase}/{item.Id}/status?isActive={newStatus}", null);
+
+			if (response.IsSuccessStatusCode)
+			{
+				item.IsActive = newStatus;
+				ApplyFilter();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Status change failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+	}
+
+	private void ResetForm()
+	{
+		_formModel = new RelationshipFormModel { IsActive = true };
+		_isEditing = false;
+		_editingId = null;
+	}
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	private string? _currentUserId;
+
+	private string? GetUserIdFromToken(string token)
+	{
+		try
+		{
+			if (string.IsNullOrWhiteSpace(token)) return null;
+			var raw = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+			var parts = raw.Split('.');
+			if (parts.Length < 2) return null;
+			var payload = parts[1];
+			switch (payload.Length % 4)
+			{
+				case 2: payload += "=="; break;
+				case 3: payload += "="; break;
+			}
+			payload = payload.Replace('-', '+').Replace('_', '/');
+			var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+			using var doc = System.Text.Json.JsonDocument.Parse(json);
+			var root = doc.RootElement;
+			if (root.TryGetProperty("sub", out var sub)) return sub.GetString();
+			if (root.TryGetProperty("nameid", out var nid)) return nid.GetString();
+			if (root.TryGetProperty("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", out var id2)) return id2.GetString();
+			if (root.TryGetProperty("spic:user_id", out var sup)) return sup.GetString();
+		}
+		catch { }
+		return null;
+	}
+
+	public class RelationshipDto
+	{
+		public int Id { get; set; }
+		public string Name { get; set; } = "";
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public string UpdatedBy { get; set; } = "";
+	}
+
+	public class RelationshipFormModel
+	{
+		public string Name { get; set; } = "";
+		public bool IsActive { get; set; } = true;
+	}
+}

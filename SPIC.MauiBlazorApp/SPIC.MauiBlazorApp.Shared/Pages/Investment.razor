@@ -1,0 +1,1467 @@
+@page "/Investment"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Forms
+@using SPIC.Core.Entities
+@using DealerReg = SPIC.Core.Entities.DealerRegistration
+@using SPIC.MauiBlazorApp.Shared.FormFlow
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LoadingService Loading
+<style>
+    fieldset:disabled .doc-remove-x {
+        display: none !important;
+    }
+
+    fieldset:disabled .edit {
+        display: none !important;
+    }
+
+    fieldset:disabled .delete {
+        display: none !important;
+    }
+    /* Searchable Dropdown Styles */
+    .searchable-select-input {
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 32px;
+    }
+    .searchable-dropdown-container {
+        position: absolute;
+        width: 100%;
+        background: #ffffff;
+        border: 1px solid #059669;
+        border-radius: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+        z-index: 1050;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        margin-top: 4px;
+    }
+    .searchable-dropdown-item {
+        padding: 10px 14px;
+        font-size: 0.85rem;
+        color: #374151;
+        cursor: pointer;
+        border-bottom: 1px solid #F3F4F6;
+        transition: background-color 0.1s ease;
+    }
+    .searchable-dropdown-item:last-child {
+        border-bottom: none;
+    }
+    .searchable-dropdown-item:hover {
+        background-color: #DCFCE7;
+        color: #059669;
+    }
+</style>
+<div class="container-fluid py-4 px-0">
+    <FormLoader />
+                	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+            @_message
+            <button type="button" class="btn-close" @onclick='() => _message = null'></button>
+        </div>
+    }
+
+    <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <h3 class="fw-bold m-0 company-title">Investment</h3>
+    </div>
+
+    <!-- Assets (Banking & Properties) Section -->
+    <div class="main-section">
+        <div class="section-header inv-section-header">
+            <h3 class="section-title">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Banking.svg" class="inv-section-icon" />
+                Assets (Banking & Properties)
+            </h3>
+            <div class="d-flex gap-2 flex-wrap inv-section-pills">
+                <div class="val-pill">Assets Added <span>@(_bankAssets.Count + _landAssets.Count + _buildingAssets.Count)</span></div>
+                <div class="val-pill">Total Capital Value <span>₹@((_bankAssets.Sum(b => b.Value) + _landAssets.Sum(l => l.PropertyValue) + _buildingAssets.Sum(b => b.PropertyValue)).ToString("N0"))</span></div>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+
+            <!-- Banking Sub-Card -->
+            <div class="col-12 col-lg-6">
+                <div class="sub-card">
+                    <div class="sub-card-title"><i class="bi bi-bank icon-blue"></i> Banking</div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
+                            <label class="custom-label">Bank Name</label>
+                            <div class="position-relative">
+                                <input type="text" class="form-select-custom searchable-select-input w-100"
+                                       placeholder="-- Select Bank Name --"
+                                       @bind="_bankSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showBankDropdown = true"
+                                       @onblur="HideBankDropdown" />
+                                @if (_showBankDropdown)
+                                {
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(0, "")'>
+                                            -- Select Bank Name --
+                                        </div>
+                                        @foreach (var bank in _banks.Where(b => string.IsNullOrWhiteSpace(_bankSearchText) ||
+                                            b.Name.Contains(_bankSearchText, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(bank.Id, bank.Name)'>
+                                                @bank.Name
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-sm-6">
+                            <label class="custom-label">Bank Branch</label>
+                            <input type="text" class="custom-input" placeholder="Enter Branch" @bind="_bankForm.BankBranch" />
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <label class="custom-label">OD Limit (₹) Lakhs</label>
+                            <input type="number" class="custom-input" placeholder="0.0" @bind="_bankForm.Value" />
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-12">
+                            <label class="custom-label">Remarks</label>
+                            <input type="text" class="custom-input" placeholder="" @bind="_bankForm.Remarks" />
+                        </div>
+                    </div>
+                    <div class="mt-auto">
+                        <button class="btn-blue-action" @onclick="SaveBankAsset"><i class="bi bi-plus"></i> @(_bankForm.Id > 0 ? "Update" : "Add") Banking</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Land Sub-Card -->
+            <div class="col-12 col-lg-6">
+                <div class="sub-card">
+                    <div class="sub-card-title">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Land.svg" class="inv-card-icon" />
+                        Land
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-sm-6">
+                            <label class="custom-label">Owner Of The Land As per The Title Deed</label>
+                            <input type="text" class="custom-input" placeholder="Enter Land Name" @bind="_landForm.LandName" />
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <label class="custom-label">Survey Number</label>
+                            <input type="text" class="custom-input" placeholder="Enter Survey Number" @bind="_landForm.SurvayNumber" />
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-12 col-sm-6">
+                            <label class="custom-label">Land Size (In Cent)</label>
+                            <input type="number" class="custom-input" placeholder="Enter In Cent" @bind="_landForm.LandSize" />
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <label class="custom-label">Market Value (₹) (In Lakhs)</label>
+                            <input type="number" class="custom-input" placeholder="Enter Value" @bind="_landForm.PropertyValue" />
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-12 col-sm-6">
+                            <label class="custom-label">EC (Encumbrance Certificate)</label>
+                            <label for="landEcUpload" class="btn-upload-dashed btn-upload-attach-Enclosure w-100 mb-0 mt-2 upload-clickable">
+                                <i class="bi bi-upload"></i>
+                                @(string.IsNullOrEmpty(_landForm.UploadedECDocumentPath) ? "Upload EC" : "Replace EC")
+                            </label>
+                            <InputFile id="landEcUpload" hidden OnChange="OnLandECSelected" accept=".pdf,.jpg,.jpeg,.png" />
+                            @if (!string.IsNullOrEmpty(_landForm.UploadedECDocumentPath))
+                            {
+                                <div class="small text-success mt-1 file-name-text"><i class="bi bi-check-circle"></i> @GetFileName(_landForm.UploadedECDocumentPath)</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <label class="custom-label">Property Document</label>
+                            <label for="landPropertyUpload" class="btn-upload-dashed btn-upload-attach-Enclosure w-100 mb-0 mt-2 upload-clickable">
+                                <i class="bi bi-upload"></i>
+                                @(string.IsNullOrEmpty(_landForm.UploadedLandDocumentPath) ? "Upload Property Doc" : "Replace Property Doc")
+                            </label>
+                            <InputFile id="landPropertyUpload" hidden OnChange="OnLandPropertyDocSelected" accept=".pdf,.jpg,.jpeg,.png" />
+                            @if (!string.IsNullOrEmpty(_landForm.UploadedLandDocumentPath))
+                            {
+                                <div class="small text-success mt-1 file-name-text"><i class="bi bi-check-circle"></i> @GetFileName(_landForm.UploadedLandDocumentPath)</div>
+                            }
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-12 col-sm-6">
+                            <label class="custom-label">Valuation Certificate</label>
+                            <label for="landValuationUpload" class="btn-upload-dashed btn-upload-attach-Enclosure w-100 mb-0 mt-2 upload-clickable">
+                                <i class="bi bi-upload"></i>
+                                @(string.IsNullOrEmpty(_landForm.UploadedValuationCertificatePath) ? "Upload Valuation Cert" : "Replace Valuation Cert")
+                            </label>
+                            <InputFile id="landValuationUpload" hidden OnChange="OnLandValuationCertSelected" accept=".pdf,.jpg,.jpeg,.png" />
+                            @if (!string.IsNullOrEmpty(_landForm.UploadedValuationCertificatePath))
+                            {
+                                <div class="small text-success mt-1 file-name-text"><i class="bi bi-check-circle"></i> @GetFileName(_landForm.UploadedValuationCertificatePath)</div>
+                            }
+                        </div>
+                    </div>
+                    <div class="mt-auto">
+                        <button class="btn-blue-action" @onclick="SaveLandAsset"><i class="bi bi-plus"></i> @(_landForm.Id > 0 ? "Update" : "Add") Land</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Building Sub-Card -->
+        <div class="sub-card mb-4">
+            <div class="sub-card-title">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Home.svg" class="inv-card-icon" />
+                Building
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Name Of The Owner As Per The Title Deed</label>
+                    <input type="text" class="custom-input" placeholder="Enter Building Name" @bind="_buildingForm.BuildingName" />
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Market Value (₹) In Lakhs</label>
+                    <input type="number" class="custom-input" placeholder="Enter Value" @bind="_buildingForm.PropertyValue" />
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Survey Number</label>
+                    <input type="text" class="custom-input" placeholder="Enter Survey Number" @bind="_buildingForm.SurveyNumber" />
+                </div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Land Size (In Square Ft)</label>
+                    <input type="number" class="custom-input" placeholder="Enter In Square Ft" @bind="_buildingForm.LandSize" />
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Remarks</label>
+                    <input type="text" class="custom-input" placeholder="" @bind="_buildingForm.Remarks" />
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Shop No / Room No / Block No</label>
+                    <input type="text" class="custom-input" placeholder="Enter Shop/Room/Block No" @bind="_buildingForm.ShopNoORRoomNoOrBlockNo" />
+                </div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Street</label>
+                    <input type="text" class="custom-input" placeholder="Enter Street" @bind="_buildingForm.Street" />
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Sub Village</label>
+                    <input type="text" class="custom-input" placeholder="Enter Sub Village" @bind="_buildingForm.SubVillage" />
+                </div>
+               <div class="col-12 col-sm-6 col-md-4">
+    <label class="custom-label">Pin Code</label>
+    <input type="text" class="custom-input"
+           placeholder="Enter Pincode"
+           maxlength="6"
+           inputmode="numeric"
+           @bind="_buildingForm.PinCode"
+           @bind:event="oninput"
+           @bind:after="OnBuildingPincodeChanged" />
+    @if (_isBuildingPincodeLookup)
+    {
+        <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
+    }
+    @if (!string.IsNullOrEmpty(_buildingPincodeMessage))
+    {
+        <div class="small @(_buildingPincodeSuccess ? "text-success" : "text-warning") mt-1">@_buildingPincodeMessage</div>
+    }
+</div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Village</label>
+                    <input type="text" class="custom-input" placeholder="Enter Village" @bind="_buildingForm.Village" />
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Block</label>
+                    <input type="text" class="custom-input" placeholder="Enter Block" @bind="_buildingForm.Block" />
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Taluk</label>
+                    <input type="text" class="custom-input" placeholder="Enter Taluk" @bind="_buildingForm.Taluk" />
+                </div>
+            </div>
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">District</label>
+                    <div class="position-relative">
+                        <input type="text" class="form-select-custom searchable-select-input w-100"
+                               placeholder="-- Select District --"
+                               @bind="_districtSearchText"
+                               @bind:event="oninput"
+                               @onfocus="() => _showDistrictDropdown = true"
+                               @onblur="HideDistrictDropdown" />
+                        @if (_showDistrictDropdown)
+                        {
+                            <div class="searchable-dropdown-container">
+                                <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(0, "")'>
+                                    -- Select District --
+                                </div>
+                                @foreach (var d in _districts.Where(d => d.StateId == _buildingForm.StateId)
+                                    .Where(d => string.IsNullOrWhiteSpace(_districtSearchText) ||
+                                        d.DistrictName.Contains(_districtSearchText, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(d.Id, d.DistrictName)'>
+                                        @d.DistrictName
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">State</label>
+                    <div class="position-relative">
+                        <input type="text" class="form-select-custom searchable-select-input w-100"
+                               placeholder="-- Select State --"
+                               @bind="_stateSearchText"
+                               @bind:event="oninput"
+                               @onfocus="() => _showStateDropdown = true"
+                               @onblur="HideStateDropdown" />
+                        @if (_showStateDropdown)
+                        {
+                            <div class="searchable-dropdown-container">
+                                <div class="searchable-dropdown-item" @onmousedown='() => SelectState(0, "")'>
+                                    -- Select State --
+                                </div>
+                                @foreach (var s in _states.Where(s => string.IsNullOrWhiteSpace(_stateSearchText) ||
+                                    s.StateName.Contains(_stateSearchText, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    <div class="searchable-dropdown-item" @onmousedown='() => SelectState(s.Id, s.StateName)'>
+                                        @s.StateName
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">EC (Encumbrance Certificate)</label>
+                    <label for="buildingEcUpload" class="btn-upload-dashed btn-upload-attach-Enclosure w-100 mb-0 mt-2 upload-clickable">
+                        <i class="bi bi-upload"></i>
+                        @(string.IsNullOrEmpty(_buildingForm.UploadedECDocumentPath) ? "Upload EC" : "Replace EC")
+                    </label>
+                    <InputFile id="buildingEcUpload" hidden OnChange="OnBuildingECSelected" accept=".pdf,.jpg,.jpeg,.png" />
+
+                    @if (!string.IsNullOrEmpty(_buildingForm.UploadedECDocumentPath))
+                    {
+                        <div class="small text-success mt-1 file-name-text">
+                            <i class="bi bi-check-circle"></i> @GetFileName(_buildingForm.UploadedECDocumentPath)
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="row g-3 mb-3 align-items-end">
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Property Document</label>
+                    <label for="buildingPropertyUpload" class="btn-upload-dashed btn-upload-attach-Enclosure w-100 mb-0 mt-2 upload-clickable">
+                        <i class="bi bi-upload"></i>
+                        @(string.IsNullOrEmpty(_buildingForm.UploadedBuildingDocumentPath) ? "Upload Property Doc" : "Replace Property Doc")
+                    </label>
+                    <InputFile id="buildingPropertyUpload" hidden OnChange="OnBuildingPropertyDocSelected" accept=".pdf,.jpg,.jpeg,.png" />
+
+                    @if (!string.IsNullOrEmpty(_buildingForm.UploadedBuildingDocumentPath))
+                    {
+                        <div class="small text-success mt-1 file-name-text">
+                            <i class="bi bi-check-circle"></i> @GetFileName(_buildingForm.UploadedBuildingDocumentPath)
+                        </div>
+                    }
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <label class="custom-label">Valuation Certificate</label>
+                    <label for="buildingValuationUpload" class="btn-upload-dashed btn-upload-attach-Enclosure w-100 mb-0 mt-2 upload-clickable">
+                        <i class="bi bi-upload"></i>
+                        @(string.IsNullOrEmpty(_buildingForm.UploadedValuationCertificatePath) ? "Upload Valuation Cert" : "Replace Valuation Cert")
+                    </label>
+                    <InputFile id="buildingValuationUpload" hidden OnChange="OnBuildingValuationCertSelected" accept=".pdf,.jpg,.jpeg,.png" />
+
+                    @if (!string.IsNullOrEmpty(_buildingForm.UploadedValuationCertificatePath))
+                    {
+                        <div class="small text-success mt-1 file-name-text">
+                            <i class="bi bi-check-circle"></i> @GetFileName(_buildingForm.UploadedValuationCertificatePath)
+                        </div>
+                    }
+                </div>
+                <div class="col-12 col-md-4">
+                    <button class="btn-blue-action w-100" @onclick="SaveBuildingAsset"><i class="bi bi-plus"></i> @(_buildingForm.Id > 0 ? "Update" : "Add") Building</button>
+                </div>
+            </div>
+        </div>
+
+        <h4 class="list-header">Your Added Assets</h4>
+
+        @foreach (var item in _bankAssets)
+        {
+            var bankName = _banks.FirstOrDefault(b => b.Id == item.BankId)?.Name ?? "Bank";
+            var bankType = "bank";
+            <div class="asset-row">
+                <div class="asset-icon asset-icon-blue"><i class="bi bi-bank"></i></div>
+                <div class="asset-detail"><div class="asset-lbl">Bank Name</div><div class="asset-val">@bankName</div></div>
+                <div class="asset-detail"><div class="asset-lbl">Bank Branch</div><div class="asset-val">@item.BankBranch</div></div>
+                <div class="asset-detail"><div class="asset-lbl">Value (₹)</div><div class="asset-val">₹ @item.Value.ToString("N0")</div></div>
+                <div class="asset-detail"><div class="asset-lbl">Remarks</div><div class="asset-val text-muted">@item.Remarks</div></div>
+                <div class="asset-actions">
+                    <i class="bi bi-pencil-square edit" @onclick="() => EditBankAsset(item)"></i>
+                    <i class="bi bi-trash delete" @onclick="() => ConfirmDelete(item.Id, bankType)"></i>
+                </div>
+            </div>
+        }
+
+        @foreach (var item in _landAssets)
+        {
+            var landType = "land";
+            <div class="asset-row">
+                <div class="asset-icon asset-icon-green"><i class="bi bi-geo-alt"></i></div>
+                <div class="asset-detail"><div class="asset-lbl">Land Name</div><div class="asset-val">@item.LandName</div></div>
+                <div class="asset-detail"><div class="asset-lbl">Survey No</div><div class="asset-val">@item.SurvayNumber</div></div>
+                <div class="asset-detail"><div class="asset-lbl">Size (Cent)</div><div class="asset-val">@item.LandSize</div></div>
+                <div class="asset-detail"><div class="asset-lbl">Value (₹)</div><div class="asset-val">₹ @item.PropertyValue.ToString("N0")</div></div>
+                <div class="asset-detail">
+                    <div class="asset-lbl">Documents</div>
+                    <div class="asset-val d-flex align-items-center flex-wrap gap-2">
+                        @if (!string.IsNullOrEmpty(item.UploadedECDocumentPath))
+                        {
+                            <span class="doc-chip">
+                                <a href="@GetFileUrl(item.UploadedECDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> EC</span></a>
+                                <i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveLandECFile(item)"></i>
+                            </span>
+                        }
+                        @if (!string.IsNullOrEmpty(item.UploadedLandDocumentPath))
+                        {
+                            <span class="doc-chip">
+                                <a href="@GetFileUrl(item.UploadedLandDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> Property</span></a>
+                                <i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveLandPropertyDocFile(item)"></i>
+                            </span>
+                        }
+                        @if (!string.IsNullOrEmpty(item.UploadedValuationCertificatePath))
+                        {
+                            <span class="doc-chip">
+                                <a href="@GetFileUrl(item.UploadedValuationCertificatePath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> Valuation</span></a>
+                                <i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveLandValuationFile(item)"></i>
+                            </span>
+                        }
+                    </div>
+                </div>
+                <div class="asset-actions">
+                    <i class="bi bi-pencil-square edit" @onclick="() => EditLandAsset(item)"></i>
+                    <i class="bi bi-trash delete" @onclick="() => ConfirmDelete(item.Id, landType)"></i>
+                </div>
+            </div>
+        }
+
+        @foreach (var item in _buildingAssets)
+        {
+            var buildingType = "building";
+            <div class="asset-row">
+                <div class="asset-icon asset-icon-pink"><i class="bi bi-building"></i></div>
+                <div class="asset-detail"><div class="asset-lbl">Building</div><div class="asset-val">@item.BuildingName</div></div>
+                <div class="asset-detail"><div class="asset-lbl">Value (₹)</div><div class="asset-val">₹ @item.PropertyValue.ToString("N0")</div></div>
+                <div class="asset-detail"><div class="asset-lbl">Size (Sq Ft)</div><div class="asset-val">@item.LandSize</div></div>
+                <div class="asset-detail">
+                    <div class="asset-lbl">Documents</div>
+                    <div class="asset-val d-flex align-items-center flex-wrap gap-2">
+                        @if (!string.IsNullOrEmpty(item.UploadedECDocumentPath))
+                        {
+                            <span class="doc-chip">
+                                <a href="@GetFileUrl(item.UploadedECDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> EC</span></a>
+                                <i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveBuildingECFile(item)"></i>
+                            </span>
+                        }
+                        @if (!string.IsNullOrEmpty(item.UploadedBuildingDocumentPath))
+                        {
+                            <span class="doc-chip">
+                                <a href="@GetFileUrl(item.UploadedBuildingDocumentPath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> Property</span></a>
+                                <i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveBuildingPropertyDocFile(item)"></i>
+                            </span>
+                        }
+                        @if (!string.IsNullOrEmpty(item.UploadedValuationCertificatePath))
+                        {
+                            <span class="doc-chip">
+                                <a href="@GetFileUrl(item.UploadedValuationCertificatePath)" class="btn-action-text btn-view text-decoration-none"><span class="badge bg-success"><i class="bi bi-eye"></i> Valuation</span></a>
+                                <i class="bi bi-x-circle-fill text-danger doc-remove-x" @onclick="() => RemoveBuildingValuationFile(item)"></i>
+                            </span>
+                        }
+                    </div>
+                </div>
+                <div class="asset-actions">
+                    <i class="bi bi-pencil-square edit" @onclick="() => EditBuildingAsset(item)"></i>
+                    <i class="bi bi-trash delete" @onclick="() => ConfirmDelete(item.Id, buildingType)"></i>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Movable Section -->
+    <div class="main-section">
+        <div class="section-header border-0 mb-0 pb-0">
+            <h3 class="section-title">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/MovableAsset.svg" class="inv-section-icon" />
+                Movable
+            </h3>
+        </div>
+        <div class="row g-3 mt-1">
+            <div class="col-12 col-md-6">
+                <label class="custom-label">Movable Assets Value(₹ in Lakhs)</label>
+                <input type="number" class="custom-input" placeholder="Enter Value" @bind="_dealer.AssetValue" />
+            </div>
+            <div class="col-12 col-md-6">
+                <label class="custom-label">Remarks (Assets car,bike,gold,silver,diamond,etc)</label>
+                <input type="text" class="custom-input" placeholder="" @bind="_dealer.Remarks" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Infrastructure Section -->
+    <div class="main-section">
+        <div class="section-header border-0 mb-0 pb-0">
+            <h3 class="section-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Infrastructure.svg" class="inv-section-icon" /> Infrastructure</h3>
+        </div>
+        <div class="row g-4 mt-1">
+            <div class="col-12 col-md-6">
+                <div class="sub-card">
+                    <div class="sub-card-title">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/OwnGodown.svg" class="inv-card-icon" />
+                        Own Godown Capacity
+                    </div>
+                    <label class="custom-label">MT</label>
+                    <input type="number" class="custom-input" placeholder="Enter The Value" @bind="_dealer.OwnGodownCapacity" />
+                </div>
+            </div>
+            <div class="col-12 col-md-6">
+                <div class="sub-card">
+                    <div class="sub-card-title">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/RentGodown.svg" class="inv-card-icon" />
+                        Rent Godown Capacity
+                    </div>
+                    <label class="custom-label">MT</label>
+                    <input type="number" class="custom-input" placeholder="Enter The Value" @bind="_dealer.RentGodownCapacity" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loan Liabilities Section -->
+    <div class="main-section">
+        <div class="section-header border-0 mb-2 inv-section-header">
+            <h3 class="section-title">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LoanLiabilities .svg" class="inv-section-icon" />
+                <i class="bi bi-cash-stack inv-fallback-icon"></i>
+                Loan Liabilities List
+            </h3>
+            <div class="val-pill pill-light-blue">Total Liabilities Value <span class="ms-1">₹@_loanLiabilities.Sum(l => l.LoanValue).ToString("N0")</span></div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-md-4">
+                <label class="custom-label">Loan Source / Institution *</label>
+                <input type="text" class="custom-input" placeholder="e.g., State Bank Of India" @bind="_loanForm.LoanSource" />
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="custom-label">Loan Value (₹) In Lakhs *</label>
+                <input type="number" class="custom-input" placeholder="₹ 0.00" @bind="_loanForm.LoanValue" />
+            </div>
+            <div class="col-12 col-md-4 d-flex align-items-end">
+                <input type="text" class="custom-input" placeholder="Remarks..." @bind="_loanForm.Remarks" />
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end mb-4 inv-add-loan-wrap">
+            <button class="btn-blue-action inv-add-loan-btn" @onclick="SaveLoan">
+                <i class="bi bi-plus-lg"></i> @(_loanForm.Id > 0 ? "Update" : "Add") Loan
+            </button>
+        </div>
+
+        <div class="loan-list-container">
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                <h4 class="list-header m-0 d-flex align-items-center gap-2">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LoanLiabilities .svg" class="inv-loan-list-icon" />
+                    Loan Liabilities List
+                </h4>
+                <div class="fw-bold text-dark fs-5">@_loanLiabilities.Count</div>
+            </div>
+
+            <div class="row g-3">
+                @foreach (var loan in _loanLiabilities)
+                {
+                    var loanType = "loan";
+                    <div class="col-12 col-sm-6 col-lg-4">
+                        <div class="loan-card-white">
+                            <div class="loan-header">
+                                <div class="loan-bank-name">
+                                    <i class="bi bi-bank"></i> @loan.LoanSource
+                                </div>
+                                <div class="asset-actions ms-auto">
+                                    <i class="bi bi-pencil-square edit" @onclick="() => EditLoan(loan)"></i>
+                                    <i class="bi bi-trash delete" @onclick="() => ConfirmDelete(loan.Id, loanType)"></i>
+                                </div>
+                            </div>
+                            <div class="loan-detail-box">
+                                <div class="asset-lbl">Loan Value</div>
+                                <div class="asset-val">₹ @loan.LoanValue.ToString("N0")</div>
+                            </div>
+                            <div class="loan-detail-box">
+                                <div class="asset-lbl">Remarks</div>
+                                <div class="asset-val asset-val-remarks">@(string.IsNullOrEmpty(loan.Remarks) ? "-" : loan.Remarks)</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Summary Footer -->
+    <div class="financial-footer">
+        <div class="fin-top-row">
+            <div class="fin-title">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LoanLiabilities .svg" class="inv-section-icon" />
+                Net Financial Position
+            </div>
+            <div class="d-flex align-items-center gap-3 flex-wrap justify-content-end">
+                @if (NetFinancial >= 0)
+                {
+                    <div class="badge-outline-green"><i class="bi bi-check-circle-fill"></i> Positive Financial Position</div>
+                }
+                else
+                {
+                    <div class="badge-outline-red"><i class="bi bi-exclamation-triangle-fill"></i> Negative Financial Position</div>
+                }
+            </div>
+        </div>
+
+        <div class="fin-pill-grid">
+            <div class="fin-card-white fin-green">
+                <div class="fin-card-header">
+                    <div class="fin-icon-bg"><i class="bi bi-bank"></i></div>
+                    Fixed Assets
+                </div>
+                <div class="fin-card-val">₹ @AssetsTotal.ToString("N0")</div>
+                <div class="fin-card-sub">Banking, Land, Building & Movable</div>
+            </div>
+
+            <div class="fin-card-white fin-red">
+                <div class="fin-card-header">
+                    <div class="fin-icon-bg"><i class="bi bi-dash-circle"></i></div>
+                    Total Liabilities
+                </div>
+                <div class="fin-card-val">₹ @LoansTotal.ToString("N0")</div>
+                <div class="fin-card-sub">Loan obligations</div>
+            </div>
+
+            <div class="fin-card-highlight @(NetFinancial >= 0 ? "fin-net-positive" : "fin-net-negative")">
+                <div class="fin-card-header">
+                    <div class="fin-icon-bg"><i class="bi bi-wallet2"></i></div>
+                    Net Financial Value
+                </div>
+                <div class="fin-card-val">₹ @NetFinancial.ToString("N0")</div>
+            @*     <div class="fin-card-formula">₹@AssetsTotal.ToString("N0") − ₹@LoansTotal.ToString("N0")</div> *@
+            </div>
+        </div>
+    </div>
+    </fieldset>
+    <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+</div>
+
+<!-- Delete Confirmation Modal -->
+@if (_showDeleteModal)
+{
+    <div class="modal fade show d-block inv-delete-modal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                    <button type="button" class="btn-close" @onclick="() => _showDeleteModal = false"></button>
+                </div>
+                <div class="modal-body">Are you sure you want to delete this item?</div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _showDeleteModal = false">Cancel</button>
+                    <button class="btn btn-danger" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showDocDeleteModal)
+{
+    <div class="del-modal-backdrop" @onclick="CancelDocDelete">
+        <div class="del-modal" @onclick:stopPropagation="true">
+            <div class="del-modal-icon">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+            </div>
+            <h3 class="del-modal-title">Delete @_docDeleteDisplayName?</h3>
+            <p class="del-modal-body">
+                You are about to delete <strong>@_docDeleteFileName</strong>
+            </p>
+            <p class="del-modal-warning">This action cannot be undone.</p>
+            <div class="del-modal-actions">
+                <button type="button" class="del-btn del-btn-cancel" @onclick="CancelDocDelete">
+                    Cancel
+                </button>
+                <button type="button" class="del-btn del-btn-delete" @onclick="ConfirmDocDelete">
+                    <i class="bi bi-trash3-fill"></i> Delete
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "dealerId")]
+    public int? DealerId { get; set; }
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+    [SupplyParameterFromQuery(Name = "flow")]
+    public string? Flow { get; set; }
+
+    private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+    private DealerReg _dealer = new();
+    private List<Bank> _banks = new();
+    private List<DealerAssetBank> _bankAssets = new();
+    private List<DealerAssetLand> _landAssets = new();
+    private List<DealerAssetBuilding> _buildingAssets = new();
+    private List<DealerLoanLiabilities> _loanLiabilities = new();
+
+    private DealerAssetBank _bankForm = new();
+    private DealerAssetLand _landForm = new();
+    private DealerAssetBuilding _buildingForm = new();
+    private DealerLoanLiabilities _loanForm = new();
+
+    private List<LocationItemDto> _states = new();
+    private List<LocationItemDto> _districts = new();
+
+    private string _bankSearchText = "";
+    private bool _showBankDropdown;
+    private string _stateSearchText = "";
+    private bool _showStateDropdown;
+    private string _districtSearchText = "";
+    private bool _showDistrictDropdown;
+
+    private bool _isBuildingPincodeLookup;
+    private string? _buildingPincodeMessage;
+    private bool _buildingPincodeSuccess;
+
+    private bool _isSaving;
+    private string? _message;
+    private bool _isError;
+
+    private bool _showDeleteModal;
+    private int _deleteId;
+    private string _deleteType = "";
+
+    private decimal AssetsTotal => _bankAssets.Sum(b => b.Value) + _landAssets.Sum(l => l.PropertyValue) + _buildingAssets.Sum(b => b.PropertyValue) + _dealer.AssetValue;
+    private decimal LoansTotal => _loanLiabilities.Sum(l => l.LoanValue);
+    private decimal NetFinancial => AssetsTotal - LoansTotal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Loading.Show();
+        try
+        {
+            var tasks = new List<Task> { LoadBanks(), LoadStates(), LoadDistricts() };
+
+            if (DealerId.HasValue && DealerId.Value > 0)
+            {
+                tasks.Add(LoadDealer());
+                tasks.Add(LoadBankAssets());
+                tasks.Add(LoadLandAssets());
+                tasks.Add(LoadBuildingAssets());
+                tasks.Add(LoadLoanLiabilities());
+            }
+
+            await Task.WhenAll(tasks);
+        }
+        finally
+        {
+            Loading.Hide();
+        }
+    }
+
+    private async Task LoadDealer()
+    {
+        try { _dealer = await Http.GetFromJsonAsync<DealerReg>($"api/DealerRegistration/{DealerId}") ?? new(); }
+        catch (Exception ex) { ShowMessage($"Failed to load dealer: {ex.Message}", true); }
+    }
+
+    private async Task LoadBanks()
+    {
+        try { _banks = await Http.GetFromJsonAsync<List<Bank>>("api/Bank") ?? new(); }
+        catch (Exception ex) { ShowMessage($"Failed to load banks: {ex.Message}", true); }
+    }
+
+    private async Task LoadStates()
+    {
+        try { _states = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new(); }
+        catch { }
+    }
+
+    private async Task LoadDistricts()
+    {
+        try { _districts = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/District/all") ?? new(); }
+        catch { }
+    }
+
+    private async Task LoadBankAssets()
+    {
+        try
+        {
+            _bankAssets = await Http.GetFromJsonAsync<List<DealerAssetBank>>(
+                $"api/DealerAssetBank/byDealer/{DealerId!.Value}") ?? new();
+        }
+        catch (Exception ex) { ShowMessage($"Failed to load bank assets: {ex.Message}", true); }
+    }
+
+    private async Task LoadLandAssets()
+    {
+        try
+        {
+            _landAssets = await Http.GetFromJsonAsync<List<DealerAssetLand>>(
+                $"api/DealerAssetLand/byDealer/{DealerId!.Value}") ?? new();
+        }
+        catch (Exception ex) { ShowMessage($"Failed to load land assets: {ex.Message}", true); }
+    }
+
+    private async Task LoadBuildingAssets()
+    {
+        try
+        {
+            _buildingAssets = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>(
+                $"api/DealerAssetBuilding/byDealer/{DealerId!.Value}") ?? new();
+        }
+        catch (Exception ex) { ShowMessage($"Failed to load building assets: {ex.Message}", true); }
+    }
+
+    private async Task LoadLoanLiabilities()
+    {
+        try
+        {
+            _loanLiabilities = await Http.GetFromJsonAsync<List<DealerLoanLiabilities>>(
+                $"api/DealerLoanLiabilities/byDealer/{DealerId!.Value}") ?? new();
+        }
+        catch (Exception ex) { ShowMessage($"Failed to load loans: {ex.Message}", true); }
+    }
+
+    private async Task SaveBankAsset()
+    {
+        _bankForm.DealerId = DealerId ?? 0;
+        if (_bankForm.Id > 0)
+        {
+            await Http.PutAsJsonAsync($"api/DealerAssetBank/{_bankForm.Id}", _bankForm);
+            var idx = _bankAssets.FindIndex(b => b.Id == _bankForm.Id);
+            if (idx >= 0) _bankAssets[idx] = _bankForm;
+        }
+        else
+        {
+            var resp = await Http.PostAsJsonAsync("api/DealerAssetBank", _bankForm);
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerAssetBank>>();
+                if (result?.Data != null) { _bankForm.Id = result.Data.Id; _bankAssets.Add(_bankForm); }
+            }
+        }
+        _bankForm = new();
+        _bankSearchText = "";
+    }
+
+    private void EditBankAsset(DealerAssetBank item)
+    {
+        _bankForm = new DealerAssetBank
+        {
+            Id = item.Id,
+            DealerId = item.DealerId,
+            BankId = item.BankId,
+            BankBranch = item.BankBranch,
+            Value = item.Value,
+            Remarks = item.Remarks
+        };
+        _bankSearchText = _banks.FirstOrDefault(b => b.Id == item.BankId)?.Name ?? "";
+    }
+
+    private async Task SaveLandAsset()
+    {
+        _landForm.DealerId = DealerId ?? 0;
+        if (_landForm.Id > 0)
+        {
+            await Http.PutAsJsonAsync($"api/DealerAssetLand/{_landForm.Id}", _landForm);
+            var idx = _landAssets.FindIndex(l => l.Id == _landForm.Id);
+            if (idx >= 0) _landAssets[idx] = _landForm;
+        }
+        else
+        {
+            var resp = await Http.PostAsJsonAsync("api/DealerAssetLand", _landForm);
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerAssetLand>>();
+                if (result?.Data != null) { _landForm.Id = result.Data.Id; _landAssets.Add(_landForm); }
+            }
+        }
+        _landForm = new();
+    }
+
+    private void EditLandAsset(DealerAssetLand item)
+    {
+        _landForm = new DealerAssetLand
+        {
+            Id = item.Id,
+            DealerId = item.DealerId,
+            LandName = item.LandName,
+            SurvayNumber = item.SurvayNumber,
+            LandSize = item.LandSize,
+            PropertyValue = item.PropertyValue,
+            UploadedECDocumentPath = item.UploadedECDocumentPath,
+            UploadedLandDocumentPath = item.UploadedLandDocumentPath,
+            UploadedValuationCertificatePath = item.UploadedValuationCertificatePath
+        };
+    }
+
+    private async Task SaveBuildingAsset()
+    {
+        _buildingForm.DealerId = DealerId ?? 0;
+        if (_buildingForm.Id > 0)
+        {
+            await Http.PutAsJsonAsync($"api/DealerAssetBuilding/{_buildingForm.Id}", _buildingForm);
+            var idx = _buildingAssets.FindIndex(b => b.Id == _buildingForm.Id);
+            if (idx >= 0) _buildingAssets[idx] = _buildingForm;
+        }
+        else
+        {
+            var resp = await Http.PostAsJsonAsync("api/DealerAssetBuilding", _buildingForm);
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerAssetBuilding>>();
+                if (result?.Data != null) { _buildingForm.Id = result.Data.Id; _buildingAssets.Add(_buildingForm); }
+            }
+        }
+        _buildingForm = new();
+        _stateSearchText = "";
+        _districtSearchText = "";
+    }
+
+    private void EditBuildingAsset(DealerAssetBuilding item)
+    {
+        _buildingForm = new DealerAssetBuilding
+        {
+            Id = item.Id,
+            DealerId = item.DealerId,
+            BuildingName = item.BuildingName,
+            PropertyValue = item.PropertyValue,
+            SurveyNumber = item.SurveyNumber,
+            LandSize = item.LandSize,
+            Remarks = item.Remarks,
+            ShopNoORRoomNoOrBlockNo = item.ShopNoORRoomNoOrBlockNo,
+            Street = item.Street,
+            SubVillage = item.SubVillage,
+            Village = item.Village,
+            PinCode = item.PinCode,
+            Block = item.Block,
+            Taluk = item.Taluk,
+            DistrictId = item.DistrictId,
+            StateId = item.StateId,
+            UploadedECDocumentPath = item.UploadedECDocumentPath,
+            UploadedBuildingDocumentPath = item.UploadedBuildingDocumentPath,
+            UploadedValuationCertificatePath = item.UploadedValuationCertificatePath
+        };
+        _stateSearchText = _states.FirstOrDefault(s => s.Id == item.StateId)?.StateName ?? "";
+        _districtSearchText = _districts.FirstOrDefault(d => d.Id == item.DistrictId)?.DistrictName ?? "";
+    }
+
+    private async Task SaveLoan()
+    {
+        _loanForm.DealerId = DealerId ?? 0;
+        if (_loanForm.Id > 0)
+        {
+            await Http.PutAsJsonAsync($"api/DealerLoanLiabilities/{_loanForm.Id}", _loanForm);
+            var idx = _loanLiabilities.FindIndex(l => l.Id == _loanForm.Id);
+            if (idx >= 0) _loanLiabilities[idx] = _loanForm;
+        }
+        else
+        {
+            var resp = await Http.PostAsJsonAsync("api/DealerLoanLiabilities", _loanForm);
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerLoanLiabilities>>();
+                if (result?.Data != null) { _loanForm.Id = result.Data.Id; _loanLiabilities.Add(_loanForm); }
+            }
+        }
+        _loanForm = new();
+    }
+
+    private void EditLoan(DealerLoanLiabilities item)
+    {
+        _loanForm = new DealerLoanLiabilities
+        {
+            Id = item.Id,
+            DealerId = item.DealerId,
+            LoanSource = item.LoanSource,
+            LoanValue = item.LoanValue,
+            Remarks = item.Remarks
+        };
+    }
+
+    private void ConfirmDelete(int id, string type)
+    {
+        _deleteId = id;
+        _deleteType = type;
+        _showDeleteModal = true;
+    }
+
+    private async Task ExecuteDelete()
+    {
+        _showDeleteModal = false;
+        try
+        {
+            switch (_deleteType)
+            {
+                case "bank":
+                    await Http.DeleteAsync($"api/DealerAssetBank/{_deleteId}");
+                    _bankAssets.RemoveAll(b => b.Id == _deleteId);
+                    break;
+                case "land":
+                    await Http.DeleteAsync($"api/DealerAssetLand/{_deleteId}");
+                    _landAssets.RemoveAll(l => l.Id == _deleteId);
+                    break;
+                case "building":
+                    await Http.DeleteAsync($"api/DealerAssetBuilding/{_deleteId}");
+                    _buildingAssets.RemoveAll(b => b.Id == _deleteId);
+                    break;
+                case "loan":
+                    await Http.DeleteAsync($"api/DealerLoanLiabilities/{_deleteId}");
+                    _loanLiabilities.RemoveAll(l => l.Id == _deleteId);
+                    break;
+            }
+        }
+        catch (Exception ex) { ShowMessage($"Failed to delete: {ex.Message}", true); }
+    }
+
+    private async Task HandleNext()
+    {
+        if (IsViewOnly)
+        {
+            Loading.Show();
+            var viewNext = string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase) ? "/Dashboard" : "/CreditLimit";
+            Nav.NavigateTo($"{viewNext}?dealerId={DealerId}&mode=view");
+            return;
+        }
+        if (!DealerId.HasValue || DealerId.Value <= 0)
+        {
+            ShowMessage("Dealer ID is required.", true);
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", _dealer);
+            response.EnsureSuccessStatusCode();
+            FormStepData.MarkStepError(9, false);
+            if (string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase))
+                Nav.NavigateTo($"/Dashboard?dealerId={DealerId}");
+            else
+                Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to save: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void SelectBank(int id, string displayText)
+    {
+        _bankSearchText = displayText;
+        _showBankDropdown = false;
+        _bankForm.BankId = id;
+    }
+
+    private void SelectState(int id, string displayText)
+    {
+        _stateSearchText = displayText;
+        _showStateDropdown = false;
+        _buildingForm.StateId = id;
+        _districtSearchText = "";
+        OnBuildingStateChanged();
+    }
+
+    private void SelectDistrict(int id, string displayText)
+    {
+        _districtSearchText = displayText;
+        _showDistrictDropdown = false;
+        _buildingForm.DistrictId = id;
+    }
+
+    private async Task HideBankDropdown() { await Task.Delay(200); _showBankDropdown = false; StateHasChanged(); }
+    private async Task HideStateDropdown() { await Task.Delay(200); _showStateDropdown = false; StateHasChanged(); }
+    private async Task HideDistrictDropdown() { await Task.Delay(200); _showDistrictDropdown = false; StateHasChanged(); }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+  private async Task OnBuildingPincodeChanged()
+{
+    _buildingPincodeMessage = null;
+    _buildingPincodeSuccess = false;
+
+    // Strip non-digit characters
+    if (!string.IsNullOrEmpty(_buildingForm.PinCode))
+    {
+        var digitsOnly = new string(_buildingForm.PinCode.Where(char.IsDigit).ToArray());
+        if (digitsOnly != _buildingForm.PinCode)
+            _buildingForm.PinCode = digitsOnly;
+    }
+
+    if (string.IsNullOrWhiteSpace(_buildingForm.PinCode) || _buildingForm.PinCode.Length != 6)
+        return;
+
+    _isBuildingPincodeLookup = true;
+    StateHasChanged();
+
+    try
+    {
+        using var response = await Http.GetAsync($"api/PincodeLookup/{_buildingForm.PinCode}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            _buildingPincodeMessage = $"Lookup failed (HTTP {(int)response.StatusCode}): {body}";
+            return;
+        }
+
+        var results = await response.Content.ReadFromJsonAsync<List<PincodeApiResponse>>();
+        var result = results?.FirstOrDefault();
+
+        if (result == null
+            || !string.Equals(result.Status, "Success", StringComparison.OrdinalIgnoreCase)
+            || result.PostOffice == null
+            || result.PostOffice.Count == 0)
+        {
+            _buildingPincodeMessage = $"No data found for pincode {_buildingForm.PinCode}";
+            return;
+        }
+
+        var po = result.PostOffice[0];
+
+        var apiState = po.State?.Trim().Replace(" ", "") ?? "";
+        var matchedState = _states.FirstOrDefault(s =>
+            s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
+        if (matchedState != null)
+        {
+            _buildingForm.StateId = matchedState.Id;
+            _stateSearchText = matchedState.StateName;
+        }
+
+        var apiDistrict = po.District?.Trim().Replace(" ", "") ?? "";
+        var matchedDistrict = _districts.FirstOrDefault(d =>
+            d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+        if (matchedDistrict != null)
+        {
+            _buildingForm.DistrictId = matchedDistrict.Id;
+            _districtSearchText = matchedDistrict.DistrictName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(po.Block) && po.Block != "NA")
+        {
+            _buildingForm.Block = po.Block;
+            _buildingForm.Taluk = po.Block;
+        }
+        else if (!string.IsNullOrWhiteSpace(po.Division))
+        {
+            _buildingForm.Taluk = po.Division;
+        }
+
+        if (!string.IsNullOrWhiteSpace(po.Name))
+        {
+            _buildingForm.Village = po.Name;
+        }
+
+        var details = new List<string>();
+        if (!string.IsNullOrWhiteSpace(po.Name))
+            details.Add($"Village: {po.Name}");
+        if (!string.IsNullOrWhiteSpace(po.Block) && po.Block != "NA")
+            details.Add($"Block: {po.Block}");
+        if (!string.IsNullOrWhiteSpace(_buildingForm.Taluk))
+            details.Add($"Taluk: {_buildingForm.Taluk}");
+        if (matchedDistrict != null)
+            details.Add($"District: {matchedDistrict.DistrictName}");
+        if (matchedState != null)
+            details.Add($"State: {matchedState.StateName}");
+
+        _buildingPincodeSuccess = true;
+        _buildingPincodeMessage = "Auto-filled: " + string.Join(", ", details);
+    }
+    catch (HttpRequestException httpEx)
+    {
+        _buildingPincodeMessage = $"Network error: {httpEx.Message}";
+    }
+    catch (TaskCanceledException)
+    {
+        _buildingPincodeMessage = "Lookup timed out — try again.";
+    }
+    catch (Exception ex)
+    {
+        _buildingPincodeMessage = $"{ex.GetType().Name}: {ex.Message}";
+    }
+    finally
+    {
+        _isBuildingPincodeLookup = false;
+    }
+}
+
+    private async Task OnLandECSelected(InputFileChangeEventArgs e)
+    {
+        var path = await UploadFileToServer(DealerId ?? 0, "LandEC", e.File);
+        if (path != null) _landForm.UploadedECDocumentPath = path;
+    }
+
+    private async Task OnLandPropertyDocSelected(InputFileChangeEventArgs e)
+    {
+        var path = await UploadFileToServer(DealerId ?? 0, "LandPropertyDoc", e.File);
+        if (path != null) _landForm.UploadedLandDocumentPath = path;
+    }
+
+    private async Task OnLandValuationCertSelected(InputFileChangeEventArgs e)
+    {
+        var path = await UploadFileToServer(DealerId ?? 0, "LandValuationCert", e.File);
+        if (path != null) _landForm.UploadedValuationCertificatePath = path;
+    }
+
+    private async Task OnBuildingECSelected(InputFileChangeEventArgs e)
+    {
+        var path = await UploadFileToServer(DealerId ?? 0, "BuildingEC", e.File);
+        if (path != null) _buildingForm.UploadedECDocumentPath = path;
+    }
+
+    private async Task OnBuildingPropertyDocSelected(InputFileChangeEventArgs e)
+    {
+        var path = await UploadFileToServer(DealerId ?? 0, "BuildingPropertyDoc", e.File);
+        if (path != null) _buildingForm.UploadedBuildingDocumentPath = path;
+    }
+
+    private async Task OnBuildingValuationCertSelected(InputFileChangeEventArgs e)
+    {
+        var path = await UploadFileToServer(DealerId ?? 0, "BuildingValuationCert", e.File);
+        if (path != null) _buildingForm.UploadedValuationCertificatePath = path;
+    }
+
+    private async Task<string?> UploadFileToServer(int dealerId, string docType, IBrowserFile file)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(10 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync($"api/DealerFile/upload/{dealerId}/{docType}", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<FileUploadResponse>();
+                return result?.FilePath;
+            }
+            else
+            {
+                ShowMessage($"Upload failed: {await response.Content.ReadAsStringAsync()}", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Upload error: {ex.Message}", true);
+        }
+        return null;
+    }
+
+    private bool _showDocDeleteModal = false;
+    private string _docDeleteDisplayName = "";
+    private string _docDeleteFileName = "";
+    private Func<Task>? _docDeleteAction;
+
+    private void OpenDocDeleteModal(string displayName, string filePath, Func<Task> onConfirm)
+    {
+        if (string.IsNullOrEmpty(filePath)) return;
+        _docDeleteDisplayName = displayName;
+        _docDeleteFileName = GetFileName(filePath);
+        _docDeleteAction = onConfirm;
+        _showDocDeleteModal = true;
+    }
+
+    private void CancelDocDelete()
+    {
+        _showDocDeleteModal = false;
+        _docDeleteAction = null;
+        _docDeleteDisplayName = "";
+        _docDeleteFileName = "";
+    }
+
+    private async Task ConfirmDocDelete()
+    {
+        try
+        {
+            if (_docDeleteAction != null)
+                await _docDeleteAction.Invoke();
+            ShowMessage($"{_docDeleteDisplayName} deleted successfully", false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to delete: {ex.Message}", true);
+        }
+        finally
+        {
+            CancelDocDelete();
+        }
+    }
+
+    private async Task DeleteFileFromServer(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath) || !filePath.Contains("/")) return;
+        try
+        {
+            await Http.DeleteAsync($"api/DealerFile/delete?filePath={Uri.EscapeDataString(filePath)}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to delete file from server: {ex.Message}");
+        }
+    }
+
+    private void RemoveLandECFile(DealerAssetLand land)
+    {
+        var l = land;
+        OpenDocDeleteModal($"EC Document ({l.LandName})", l.UploadedECDocumentPath ?? "", async () =>
+        {
+            var path = l.UploadedECDocumentPath!;
+            l.UploadedECDocumentPath = null;
+            await Http.PutAsJsonAsync($"api/DealerAssetLand/{l.Id}", l);
+            await DeleteFileFromServer(path);
+        });
+    }
+
+    private void RemoveLandPropertyDocFile(DealerAssetLand land)
+    {
+        var l = land;
+        OpenDocDeleteModal($"Property Document ({l.LandName})", l.UploadedLandDocumentPath ?? "", async () =>
+        {
+            var path = l.UploadedLandDocumentPath!;
+            l.UploadedLandDocumentPath = null;
+            await Http.PutAsJsonAsync($"api/DealerAssetLand/{l.Id}", l);
+            await DeleteFileFromServer(path);
+        });
+    }
+
+    private void RemoveLandValuationFile(DealerAssetLand land)
+    {
+        var l = land;
+        OpenDocDeleteModal($"Valuation Certificate ({l.LandName})", l.UploadedValuationCertificatePath ?? "", async () =>
+        {
+            var path = l.UploadedValuationCertificatePath!;
+            l.UploadedValuationCertificatePath = null;
+            await Http.PutAsJsonAsync($"api/DealerAssetLand/{l.Id}", l);
+            await DeleteFileFromServer(path);
+        });
+    }
+
+    private void RemoveBuildingECFile(DealerAssetBuilding building)
+    {
+        var b = building;
+        OpenDocDeleteModal($"EC Document ({b.BuildingName})", b.UploadedECDocumentPath ?? "", async () =>
+        {
+            var path = b.UploadedECDocumentPath!;
+            b.UploadedECDocumentPath = null;
+            await Http.PutAsJsonAsync($"api/DealerAssetBuilding/{b.Id}", b);
+            await DeleteFileFromServer(path);
+        });
+    }
+
+    private void RemoveBuildingPropertyDocFile(DealerAssetBuilding building)
+    {
+        var b = building;
+        OpenDocDeleteModal($"Property Document ({b.BuildingName})", b.UploadedBuildingDocumentPath ?? "", async () =>
+        {
+            var path = b.UploadedBuildingDocumentPath!;
+            b.UploadedBuildingDocumentPath = null;
+            await Http.PutAsJsonAsync($"api/DealerAssetBuilding/{b.Id}", b);
+            await DeleteFileFromServer(path);
+        });
+    }
+
+    private void RemoveBuildingValuationFile(DealerAssetBuilding building)
+    {
+        var b = building;
+        OpenDocDeleteModal($"Valuation Certificate ({b.BuildingName})", b.UploadedValuationCertificatePath ?? "", async () =>
+        {
+            var path = b.UploadedValuationCertificatePath!;
+            b.UploadedValuationCertificatePath = null;
+            await Http.PutAsJsonAsync($"api/DealerAssetBuilding/{b.Id}", b);
+            await DeleteFileFromServer(path);
+        });
+    }
+
+    private string GetFileName(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return "";
+        var idx = path.LastIndexOf('/');
+        return idx >= 0 ? path[(idx + 1)..] : path;
+    }
+
+    private string GetFileUrl(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return "";
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        return $"{baseUrl}/api/DealerFile/view/{path}";
+    }
+    private void OnBuildingStateChanged()
+    {
+        if (_buildingForm.DistrictId > 0 &&
+            !_districts.Any(d => d.Id == _buildingForm.DistrictId && d.StateId == _buildingForm.StateId))
+        {
+            _buildingForm.DistrictId = 0;
+            _districtSearchText = "";
+        }
+    }
+    private class CreateResponse<T>
+    {
+        public string? Message { get; set; }
+        public T? Data { get; set; }
+    }
+
+    private class LocationItemDto
+    {
+        public int Id { get; set; }
+        public int StateId { get; set; }  // <-- Add this
+        public string StateName { get; set; } = "";
+        public string DistrictName { get; set; } = "";
+    }
+
+    private class PincodeApiResponse
+    {
+        public string Status { get; set; } = "";
+        public string Message { get; set; } = "";
+        public List<PostOfficeDto>? PostOffice { get; set; }
+    }
+
+    private class PostOfficeDto
+    {
+        public string Name { get; set; } = "";
+        public string District { get; set; } = "";
+        public string State { get; set; } = "";
+        public string Block { get; set; } = "";
+        public string Division { get; set; } = "";
+        public string Region { get; set; } = "";
+    }
+
+    private class FileUploadResponse
+    {
+        public string? FilePath { get; set; }
+    }
+}

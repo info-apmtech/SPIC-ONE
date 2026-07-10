@@ -1,0 +1,247 @@
+﻿@using System.Net.Http.Json
+@using SPIC.MauiBlazorApp.Shared.FormFlow
+@using SPIC.Core.Entities
+@inject NavigationManager Nav
+@inject LoadingService Loading
+@inject HttpClient Http
+
+@if (CurrentStep is FormStepModel step)
+{
+    <div class="footer-nav">
+        <div>
+            @if (CurrentIndex > 0)
+            {
+                <button type="button" class="btn btn-prev" @onclick="GoToPrevious">
+                    <i class="bi bi-chevron-left"></i>
+                    Previous Step
+                </button>
+            }
+        </div>
+
+        <div>
+            @if (CurrentIndex < TotalSteps - 1)
+            {
+                @if (OnNextClick.HasDelegate)
+                {
+                    <button type="button"
+                            class="btn btn-next"
+                            @onclick="OnNextClick"
+                            disabled="@IsNextDisabled">
+                        @if (IsNextDisabled)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+
+                        @(NextButtonText ?? "Next")
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                }
+                else
+                {
+                    <button type="button"
+                            class="btn btn-next"
+                            @onclick="GoToNext">
+                        @(NextButtonText ?? "Next")
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                }
+            }
+            else
+            {
+                @if (OnNextClick.HasDelegate)
+                {
+                    <button type="button"
+                            class="btn btn-next"
+                            @onclick="OnNextClick"
+                            disabled="@IsNextDisabled">
+                        @if (IsNextDisabled)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SendIcon.svg"
+                             class="verifyicon"
+                             alt="sendicon" />
+                        Submit Registration
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-next">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SendIcon.svg"
+                             class="verifyicon"
+                             alt="sendicon" />
+                        Submit Registration
+                    </button>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public EventCallback OnNextClick { get; set; }
+    [Parameter] public bool IsNextDisabled { get; set; }
+    [Parameter] public string? NextButtonText { get; set; }
+
+    private FormStepModel? CurrentStep;
+    private List<FormStepModel> VisibleSteps = new();
+
+    private int TotalSteps => VisibleSteps.Count;
+
+    private int CurrentIndex
+    {
+        get
+        {
+            if (CurrentStep is null)
+                return 0;
+
+            var idx = VisibleSteps.FindIndex(x =>
+                x.Route.Equals(CurrentStep.Route, StringComparison.OrdinalIgnoreCase));
+
+            return idx >= 0 ? idx : 0;
+        }
+    }
+
+    private string _queryString = string.Empty;
+    private bool _hasGreenStar;
+    private bool _isRestrictedFlow;
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoadQueryString();
+        SetCurrentStep();
+        _isRestrictedFlow = GetFlowRestricted();
+
+        var dealerId = GetDealerIdFromQuery();
+
+        if (dealerId > 0)
+        {
+            try
+            {
+                var dealer = await Http.GetFromJsonAsync<DealerRegistration>($"api/DealerRegistration/{dealerId}");
+                _hasGreenStar = dealer?.InGreenStar ?? false;
+            }
+            catch
+            {
+                _hasGreenStar = false;
+            }
+        }
+        else
+        {
+            // Create mode / no dealerId
+            // Default should be 12 steps
+            _hasGreenStar = false;
+        }
+
+        VisibleSteps = FormStepData.GetVisibleSteps(_hasGreenStar, _isRestrictedFlow);
+    }
+
+    private bool GetFlowRestricted()
+    {
+        var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+        var qIndex = baseRelative.IndexOf('?');
+
+        if (qIndex < 0)
+            return false;
+
+        var queryString = baseRelative[(qIndex + 1)..];
+
+        var parts = queryString.Split('&')
+            .Select(p => p.Split('=', 2))
+            .Where(p => p.Length == 2)
+            .ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
+
+        return parts.TryGetValue("flow", out var flow) &&
+            string.Equals(flow, "restricted", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void LoadQueryString()
+    {
+        var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+        var qIndex = baseRelative.IndexOf('?');
+
+        _queryString = qIndex >= 0
+            ? baseRelative[qIndex..]
+            : string.Empty;
+    }
+
+    private void SetCurrentStep()
+    {
+        var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+        var relativePath = "/" + baseRelative.Split('?')[0];
+
+        CurrentStep = FormStepData.GetStepByRoute(relativePath);
+    }
+
+    private int GetDealerIdFromQuery()
+    {
+        var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+        var qIndex = baseRelative.IndexOf('?');
+
+        if (qIndex < 0)
+            return 0;
+
+        var queryString = baseRelative[(qIndex + 1)..];
+
+        var parts = queryString.Split('&')
+            .Select(p => p.Split('=', 2))
+            .Where(p => p.Length == 2)
+            .ToDictionary(
+                p => p[0],
+                p => p[1],
+                StringComparer.OrdinalIgnoreCase);
+
+        if (parts.TryGetValue("dealerId", out var idStr) &&
+            int.TryParse(idStr, out var id) &&
+            id > 0)
+        {
+            return id;
+        }
+
+        return 0;
+    }
+
+    private async Task<bool> HasGreenStarCompany(int dealerId)
+    {
+        try
+        {
+            return await Http.GetFromJsonAsync<bool>(
+                $"api/DealerCompaniesOperatingInArea/dealer/{dealerId}/has-greenstar");
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void GoToPrevious()
+    {
+        if (CurrentStep is null)
+            return;
+
+        Loading.Show();
+
+        var previousRoute = FormStepData.GetPreviousRoute(
+            CurrentStep.Route,
+            _hasGreenStar,
+            _isRestrictedFlow);
+
+        Nav.NavigateTo(previousRoute + _queryString);
+    }
+
+    private void GoToNext()
+    {
+        if (CurrentStep is null)
+            return;
+
+        Loading.Show();
+
+        var nextRoute = FormStepData.GetNextRoute(
+            CurrentStep.Route,
+            _hasGreenStar,
+            _isRestrictedFlow);
+
+        Nav.NavigateTo(nextRoute + _queryString);
+    }
+}

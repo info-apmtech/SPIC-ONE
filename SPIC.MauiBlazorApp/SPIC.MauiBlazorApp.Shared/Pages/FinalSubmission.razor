@@ -1,0 +1,1026 @@
+﻿@page "/FinalSubmission"
+@using System.Net.Http.Json
+@using DealerReg = SPIC.Core.Entities.DealerRegistration
+@using SPIC.Core.Entities
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject LoadingService Loading
+@inject LoginState LoginState
+<style>
+    fieldset:disabled .fs-edit-icon {
+        display: none !important;
+    }
+</style>
+<div class="container-fluid py-4 px-0">
+
+    <FormLoader />
+    	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+            @_message
+            <button type="button" class="btn-close" @onclick="() => _message = null"></button>
+        </div>
+    }
+
+    <div class="page-header-row">
+        <h1 class="fs-page-title">Final Submission</h1>
+    </div>
+
+    <!-- Progress Section -->
+    <div class="fs-progress-card @(_progressPercent == 100 ? "fs-ready" : "")">
+        @if (_progressPercent == 100)
+        {
+            <div class="fs-ready-content">
+                <div class="fs-ready-text">
+                    <div class="fs-ready-title">Application Ready for Submission</div>
+                    <div class="fs-ready-desc">All required sections completed • All mandatory documents uploaded • Ready for review</div>
+                </div>
+                <div class="fs-ready-right">
+                    <div class="fs-ready-percent">100%<small>Complete</small></div>
+                    <i class="bi bi-patch-check-fill fs-ready-badge"></i>
+                </div>
+            </div>
+            <div class="fs-progress-bar">
+                <div class="fs-progress-fill" style="width: 100%;"></div>
+            </div>
+        }
+        else
+        {
+            <div class="fs-progress-header">
+                <div>
+                    <div class="fs-progress-title">Completion Progress</div>
+                    <div class="fs-progress-desc">@_completedSections of @_totalSections sections completed</div>
+                </div>
+                <div class="fs-progress-percent">
+                    @_progressPercent%<small>Complete</small>
+                </div>
+            </div>
+            <div class="fs-progress-bar">
+                <div class="fs-progress-fill" style="width: @_progressPercent%;"></div>
+            </div>
+        }
+    </div>
+
+@*
+    <!-- Section Completion Status -->
+    <div class="fs-main-card">
+        <h3 class="fs-section-title">Section Completion Status</h3>
+        <p class="fs-section-subtitle">Review all sections before final submission</p>
+
+        <div class="fs-completion-grid">
+
+            <!-- 1. Company Details (Step 1) -->
+            <div class="fs-ticket-card @(_stepStatus[0] ? "fs-bg-tint-green" : "fs-bg-tint-orange")">
+                <div class="fs-ticket-header">
+                    <div class="fs-ticket-title-wrap @(_stepStatus[0] ? "fs-theme-green" : "fs-theme-orange")">
+                        <div class="fs-ticket-icon"><i class="bi bi-buildings"></i></div>
+                        <h4 class="fs-ticket-title">Company Details</h4>
+                    </div>
+                    <a href="/Register?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                </div>
+                <div class="fs-ticket-data">
+                    <div class="fs-data-row"><span class="fs-data-lbl">Firm Name:</span> <span class="fs-data-val">@(_dealer.FirmName ?? "—")</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Business Type:</span> <span class="fs-data-val">@(_dealer.BusinessEntityType ?? "—")</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">GST Number:</span> <span class="fs-data-val">@(MaskValue(_dealer.GSTNumber))</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">PAN Number:</span> <span class="fs-data-val">@(MaskValue(_dealer.PANNumber))</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Aadhaar Number:</span> <span class="fs-data-val">@(MaskValue(_dealer.AadhaarNumber))</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Contact:</span> <span class="fs-data-val">@(_dealer.OfficialContactNumber ?? "—")</span></div>
+                    <div class="fs-data-row">
+                        <span class="fs-data-lbl">Status:</span>
+                        <span class="fs-data-val">
+                            @if (_stepStatus[0])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2 & 6 column: Office Automation + Companies Operating -->
+            <div class="d-flex flex-column gap-3">
+                <div class="fs-ticket-card @(_stepStatus[0] ? "fs-bg-tint-green" : "fs-bg-tint-orange")" style="margin-bottom:0;">
+                    <div class="fs-ticket-header">
+                        <div class="fs-ticket-title-wrap @(_stepStatus[0] ? "fs-theme-green" : "fs-theme-orange")">
+                            <div class="fs-ticket-icon"><i class="bi bi-wifi"></i></div>
+                            <h4 class="fs-ticket-title">Office Automation</h4>
+                        </div>
+                        <a href="/Register?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                    </div>
+                    <div class="fs-ticket-data">
+                        <div class="fs-data-row"><span class="fs-data-lbl">Office Automation:</span> <span class="fs-data-val">@(_dealer.IsOfficeAutomation ? "Yes" : "No")</span></div>
+                        @if (_dealer.ExpectedOfficeAutomationDate.HasValue)
+                        {
+                            <div class="fs-data-row"><span class="fs-data-lbl">Expected Date:</span> <span class="fs-data-val">@_dealer.ExpectedOfficeAutomationDate.Value.ToString("dd-MM-yyyy")</span></div>
+                        }
+                    </div>
+                </div>
+
+                <div class="fs-ticket-card flex-grow-1 @(_stepStatus[5] ? "fs-bg-tint-green" : "fs-bg-tint-orange")">
+                    <div class="fs-ticket-header">
+                        <div class="fs-ticket-title-wrap @(_stepStatus[5] ? "fs-theme-green" : "fs-theme-orange")">
+                            <div class="fs-ticket-icon"><i class="bi bi-building"></i></div>
+                            <h4 class="fs-ticket-title">Companies Operating</h4>
+                        </div>
+                        <a href="/Companies?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                    </div>
+                    <div class="fs-ticket-data">
+                        <div class="fs-data-row">
+                            <span class="fs-data-lbl" style="flex: 0 0 100px;">Companies:</span>
+                            <span class="fs-data-val">
+                                @if (_companies.Count > 0)
+                                {
+                                    @foreach (var c in _companies)
+                                    {
+                                        <span class="fs-tag-pill">@(c.CompaniesOperating ?? "—")</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span style="color:#D97706;">No companies added</span>
+                                }
+                            </span>
+                        </div>
+                        <div class="fs-data-row">
+                            <span class="fs-data-lbl">Status:</span>
+                            <span class="fs-data-val">
+                                @if (_stepStatus[5])
+                                {
+                                    <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                                }
+                                else
+                                {
+                                    <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                                }
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Warehouse Details (Step 4) -->
+            <div class="fs-ticket-card @(_stepStatus[3] ? "fs-bg-tint-green" : "fs-bg-tint-orange")">
+                <div class="fs-ticket-header">
+                    <div class="fs-ticket-title-wrap @(_stepStatus[3] ? "fs-theme-green" : "fs-theme-orange")">
+                        <div class="fs-ticket-icon"><i class="bi bi-box-seam"></i></div>
+                        <h4 class="fs-ticket-title">Warehouse Details</h4>
+                    </div>
+                    <a href="/Warehouse?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                </div>
+                <div class="fs-ticket-data">
+                    <div class="fs-data-row"><span class="fs-data-lbl">Warehouses:</span> <span class="fs-data-val">@_warehouses.Count record(s)</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Rail Facilities:</span> <span class="fs-data-val">@_railFacilities.Count record(s)</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Port Facilities:</span> <span class="fs-data-val">@_portFacilities.Count record(s)</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Own Godown:</span> <span class="fs-data-val">@_dealer.OwnGodownCapacity MT</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Rent Godown:</span> <span class="fs-data-val">@_dealer.RentGodownCapacity MT</span></div>
+                    <div class="fs-data-row">
+                        <span class="fs-data-lbl">Status:</span>
+                        <span class="fs-data-val">
+                            @if (_stepStatus[3])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Experience (Step 2) -->
+            <div class="fs-ticket-card @(_stepStatus[1] ? "fs-bg-tint-green" : "fs-bg-tint-orange")">
+                <div class="fs-ticket-header">
+                    <div class="fs-ticket-title-wrap @(_stepStatus[1] ? "fs-theme-green" : "fs-theme-orange")">
+                        <div class="fs-ticket-icon"><i class="bi bi-award"></i></div>
+                        <h4 class="fs-ticket-title">Experience</h4>
+                    </div>
+                    <a href="/Experience?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                </div>
+                <div class="fs-ticket-data">
+                    <div class="fs-data-row"><span class="fs-data-lbl">Total Companies:</span> <span class="fs-data-val">@_experiences.Count record(s)</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Years of Experience:</span> <span class="fs-data-val">@_dealer.YearsofExperiance Years</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Total Turnover:</span> <span class="fs-data-val">₹@_experiences.Sum(e => e.TurnOver).ToString("N2")</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Total Quantity:</span> <span class="fs-data-val">@_experiences.Sum(e => e.Quantity).ToString("N2") MT</span></div>
+                    <div class="fs-data-row">
+                        <span class="fs-data-lbl">Status:</span>
+                        <span class="fs-data-val">
+                            @if (_stepStatus[1])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. Annual Sales (Step 3) -->
+            <div class="fs-ticket-card @(_stepStatus[2] ? "fs-bg-tint-green" : "fs-bg-tint-orange")">
+                <div class="fs-ticket-header">
+                    <div class="fs-ticket-title-wrap @(_stepStatus[2] ? "fs-theme-green" : "fs-theme-orange")">
+                        <div class="fs-ticket-icon"><i class="bi bi-graph-up-arrow"></i></div>
+                        <h4 class="fs-ticket-title">Annual Sales</h4>
+                    </div>
+                    <a href="/AnnualSales?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                </div>
+                <div class="fs-ticket-data">
+                    <div class="fs-data-row"><span class="fs-data-lbl">Products:</span> <span class="fs-data-val">@_annualSales.Count record(s)</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Total Retail Sales:</span> <span class="fs-data-val">₹@_annualSales.Sum(a => a.OwnRetailsSaleQty).ToString("N2")</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Total Dealer Sales:</span> <span class="fs-data-val">₹@_annualSales.Sum(a => a.SaleToDealerQty).ToString("N2")</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Overall Total:</span> <span class="fs-data-val">₹@_annualSales.Sum(a => a.OwnRetailsSaleQty + a.SaleToDealerQty).ToString("N2")</span></div>
+                    <div class="fs-data-row">
+                        <span class="fs-data-lbl">Status:</span>
+                        <span class="fs-data-val">
+                            @if (_stepStatus[2])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. Investment (Step 9) -->
+            <div class="fs-ticket-card @(_stepStatus[8] ? "fs-bg-tint-green" : "fs-bg-tint-orange")">
+                <div class="fs-ticket-header">
+                    <div class="fs-ticket-title-wrap @(_stepStatus[8] ? "fs-theme-green" : "fs-theme-orange")">
+                        <div class="fs-ticket-icon"><i class="bi bi-currency-dollar"></i></div>
+                        <h4 class="fs-ticket-title">Investment</h4>
+                    </div>
+                    <a href="/Investment?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                </div>
+                <div class="fs-ticket-data">
+                    <div class="fs-data-row"><span class="fs-data-lbl">Asset Value:</span> <span class="fs-data-val">₹@_dealer.AssetValue.ToString("N2")</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Bank Assets:</span> <span class="fs-data-val">@_assetBanks.Count record(s)</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Land Assets:</span> <span class="fs-data-val">@_assetLands.Count record(s)</span></div>
+                    <div class="fs-data-row">
+                        <span class="fs-data-lbl">Status:</span>
+                        <span class="fs-data-val">
+                            @if (_stepStatus[8])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. Sales Planning (Step 8) -->
+            <div class="fs-ticket-card @(_stepStatus[7] ? "fs-bg-tint-green" : "fs-bg-tint-orange")">
+                <div class="fs-ticket-header">
+                    <div class="fs-ticket-title-wrap @(_stepStatus[7] ? "fs-theme-green" : "fs-theme-orange")">
+                        <div class="fs-ticket-icon"><i class="bi bi-calendar2-check"></i></div>
+                        <h4 class="fs-ticket-title">Sales Planning</h4>
+                    </div>
+                    <a href="/SalesPlaning?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                </div>
+                <div class="fs-ticket-data">
+                    <div class="fs-data-row"><span class="fs-data-lbl">Products Planned:</span> <span class="fs-data-val">@_salesPlans.Count record(s)</span></div>
+                    @{
+                        var totalPlanAmt = _salesPlans.Sum(s => s.AprilAmount + s.MayAmount + s.JuneAmount + s.JulyAmount + s.AugustAmount + s.SeptemberAmount + s.OctoberAmount + s.NovemberAmount + s.DecemberAmount + s.JanuaryAmount + s.FebruaryAmount + s.MarchAmount);
+                    }
+                    <div class="fs-data-row"><span class="fs-data-lbl">Total Planned Value:</span> <span class="fs-data-val">₹@totalPlanAmt.ToString("N2")</span></div>
+                    <div class="fs-data-row">
+                        <span class="fs-data-lbl">Status:</span>
+                        <span class="fs-data-val">
+                            @if (_stepStatus[7])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 8. Market Details (Step 5) -->
+            <div class="fs-ticket-card @(_stepStatus[4] ? "fs-bg-tint-green" : "fs-bg-tint-orange")">
+                <div class="fs-ticket-header">
+                    <div class="fs-ticket-title-wrap @(_stepStatus[4] ? "fs-theme-green" : "fs-theme-orange")">
+                        <div class="fs-ticket-icon"><i class="bi bi-geo-alt"></i></div>
+                        <h4 class="fs-ticket-title">Market Details</h4>
+                    </div>
+                    <a href="/MarketDetails?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                </div>
+                <div class="fs-ticket-data">
+                    <div class="fs-data-row"><span class="fs-data-lbl">Blocks Covered:</span> <span class="fs-data-val">@_marketDetails.Count block(s)</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Total Farmers:</span> <span class="fs-data-val">@_marketDetails.Sum(m => m.NoOfFarmer)</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Total Dealers:</span> <span class="fs-data-val">@_marketDetails.Sum(m => m.NoOfDealer)</span></div>
+                    <div class="fs-data-row">
+                        <span class="fs-data-lbl">Status:</span>
+                        <span class="fs-data-val">
+                            @if (_stepStatus[4])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 9. Proprietor Details (Step 7) -->
+            <div class="fs-ticket-card @(_stepStatus[6] ? "fs-bg-tint-green" : "fs-bg-tint-orange")">
+                <div class="fs-ticket-header">
+                    <div class="fs-ticket-title-wrap @(_stepStatus[6] ? "fs-theme-green" : "fs-theme-orange")">
+                        <div class="fs-ticket-icon"><i class="bi bi-people"></i></div>
+                        <h4 class="fs-ticket-title">Proprietor Details</h4>
+                    </div>
+                    <a href="/Proprietor?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                </div>
+                <div class="fs-ticket-data">
+                    <div class="fs-data-row"><span class="fs-data-lbl">Entity Type:</span> <span class="fs-data-val">@(_dealer.EntityType.ToString() ?? "—")</span></div>
+                    <div class="fs-data-row"><span class="fs-data-lbl">Total Members:</span> <span class="fs-data-val">@_partners.Count partner(s)</span></div>
+                    @foreach (var p in _partners.Take(3))
+                    {
+                        <div class="fs-data-row"><span class="fs-data-lbl">@(p.Name):</span> <span class="fs-data-val">S/o or D/o @(p.FatherName)</span></div>
+                    }
+                    @if (_partners.Count > 3)
+                    {
+                        <div class="fs-data-row"><span class="fs-data-lbl"></span> <span class="fs-data-val">+@(_partners.Count - 3) more...</span></div>
+                    }
+                    <div class="fs-data-row">
+                        <span class="fs-data-lbl">Status:</span>
+                        <span class="fs-data-val">
+                            @if (_stepStatus[6])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 10. Credit Limit Proposal (Step 10) -->
+            <div class="fs-ticket-card @(_stepStatus[9] ? "fs-bg-tint-green" : "fs-bg-tint-orange")">
+                <div class="fs-ticket-header">
+                    <div class="fs-ticket-title-wrap @(_stepStatus[9] ? "fs-theme-green" : "fs-theme-orange")">
+                        <div class="fs-ticket-icon"><i class="bi bi-person-badge"></i></div>
+                        <h4 class="fs-ticket-title">Credit Limit Proposal</h4>
+                    </div>
+                    <a href="/CreditLimit?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+                </div>
+                <div class="fs-ticket-data">
+                    @if (_creditLimit != null)
+                    {
+                        var totalScore = _creditLimit.Q1Mark + _creditLimit.Q2Mark + _creditLimit.Q3Mark + _creditLimit.Q4Mark + _creditLimit.Q5Mark + _creditLimit.Q6Mark + _creditLimit.Q7Mark + _creditLimit.Q8Mark + _creditLimit.Q9Mark + _creditLimit.Q10Mark + _creditLimit.Q11Mark;
+                        <div class="fs-data-row"><span class="fs-data-lbl">Dealer Score:</span> <span class="fs-data-val">@totalScore.ToString("N1") / 100</span></div>
+                        <div class="fs-data-row"><span class="fs-data-lbl">Additional Credit Limit:</span> <span class="fs-data-val">₹@_creditLimit.AdditionalCreditLimit.ToString("N2")</span></div>
+                    }
+                    else
+                    {
+                        <div class="fs-data-row"><span class="fs-data-lbl">Data:</span> <span class="fs-data-val" style="color:#D97706;">Not submitted yet</span></div>
+                    }
+                    <div class="fs-data-row">
+                        <span class="fs-data-lbl">Status:</span>
+                        <span class="fs-data-val">
+                            @if (_stepStatus[9])
+                            {
+                                <span style="color:#059669;"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                            }
+                            else
+                            {
+                                <span style="color:#D97706;"><i class="bi bi-exclamation-circle-fill"></i> Incomplete</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+*@
+
+    <!-- Section Completion Status -->
+    <div class="fs-main-card">
+        <h3 class="fs-section-title">Section Completion Status</h3>
+        <p class="fs-section-subtitle">Review all sections before final submission</p>
+        <div class="fs-completion-grid" style="gap:8px;">
+            @foreach (var s in _finalSubmissionSections)
+            {
+                var done = s.IsComplete();
+                <div class="fs-ticket-card @(done ? "fs-bg-tint-green" : "fs-bg-tint-orange")" style="padding:0.5rem 0.75rem;gap:0;">
+                    <div class="fs-ticket-header">
+                        <div class="fs-ticket-title-wrap @(done ? "fs-theme-green" : "fs-theme-orange")" style="gap:6px;">
+                            <div class="fs-ticket-icon" style="width:1.5rem;height:1.5rem;min-width:1.5rem;"><i class="@s.Icon" style="font-size:0.8rem;"></i></div>
+                            <h4 class="fs-ticket-title" style="font-size:0.8rem;font-weight:600;margin:0;line-height:1.3;">@s.Name</h4>
+                        </div>
+                        <div class="d-flex align-items-center gap-1">
+                            <i class="bi @(done ? "bi-check-circle-fill text-success" : "bi-exclamation-circle-fill text-warning")" style="font-size:0.75rem;"></i>
+                            <a href="@s.Route?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square" style="color:#6B7280;font-size:0.7rem;"></i></a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Enclosures Card -->
+    <div class="fs-ticket-card fs-span-3 @(_stepStatus[10] ? "fs-theme-green fs-bg-tint-green" : "fs-theme-orange fs-bg-tint-orange") mt-3">
+        <div class="fs-ticket-header border-bottom pb-3 mb-3" style="border-color:@(_stepStatus[10] ? "#D1FAE5" : "#FED7AA")!important;">
+            <div class="fs-ticket-title-wrap">
+                <div class="fs-ticket-icon bg-white border"><i class="bi bi-paperclip"></i></div>
+                <h4 class="fs-ticket-title">Enclosures</h4>
+            </div>
+            <a href="/Enclosures?dealerId=@DealerId" class="text-decoration-none"><i class="bi bi-pencil-square fs-edit-icon"></i></a>
+        </div>
+
+        <div class="fs-enclosure-header">
+            <div>Documents Uploaded: <strong>@_docUploadedCount of @_docTotalCount Required Documents</strong></div>
+            <div>Missing Documents: <strong>@(_docMissingCount == 0 ? "None" : $"{_docMissingCount} document(s)")</strong></div>
+        </div>
+
+        <div class="fs-enclosure-grid">
+            @foreach (var doc in _enclosureItems)
+            {
+                <div class="fs-enclosure-pill" style="@(doc.Uploaded ? "" : "color:#D97706; border-color:#FED7AA;")">
+                    <i class="bi @(doc.Uploaded ? "bi-check-circle" : "bi-x-circle")"></i> @doc.Name
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Terms and Conditions -->
+    <div class="fs-main-card">
+        <h3 class="fs-section-title mb-4">Terms and Conditions</h3>
+
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="fs-tc-box">
+                    <div class="form-check fs-tc-check-header">
+                        <input class="form-check-input fs-custom-check" type="checkbox" checked disabled />
+                        <label class="form-check-label">I accept the Terms and Conditions</label>
+                    </div>
+                    <ul class="fs-tc-list">
+                        <li>All information provided in this application is true and accurate to the best of my knowledge.</li>
+                        <li>I understand that providing false information may result in rejection of the application.</li>
+                        <li>I agree to comply with all company policies, guidelines, and regulations.</li>
+                        <li>I authorize the company to verify all information and documents provided.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="fs-tc-box">
+                    <div class="form-check fs-tc-check-header">
+                        <input class="form-check-input fs-custom-check" type="checkbox" checked disabled />
+                        <label class="form-check-label">I hereby declare</label>
+                    </div>
+                    <ul class="fs-tc-list">
+                        <li>That I am the authorized person to submit this dealer registration application.</li>
+                        <li>That all documents uploaded are genuine and authentic.</li>
+                        <li>That I will be responsible for any legal implications arising from incorrect information.</li>
+                        <li>That I consent to the company verifying all submitted documents and records.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (_incompleteSections > 0)
+    {
+        <div class="fs-alert mb-5">
+            <strong>Warning</strong> You have @_incompleteSections incomplete section(s). Please complete all sections before submitting.
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-success mb-5" role="alert">
+            <strong><i class="bi bi-check-circle-fill"></i> All sections completed!</strong> You are ready to submit your registration.
+        </div>
+    }
+
+    </fieldset>
+    <CommanFooter OnNextClick="HandleSubmit" IsNextDisabled="@_isSubmitting" />
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "dealerId")]
+    public int DealerId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
+    private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+    private DealerReg _dealer = new();
+    private DealerRegistrationDocuments? _docs;
+
+    private List<DealerOwnershipInfo> _partners = new();
+    private List<DealerExperience> _experiences = new();
+    private List<AnnualSaleDataLastFYofDealerRegistration> _annualSales = new();
+    private List<DealerWarehouseFacilities> _warehouses = new();
+    private List<DealerRailFacilities> _railFacilities = new();
+    private List<DealerPortFacilities> _portFacilities = new();
+    private List<DealerMarketDetail> _marketDetails = new();
+    private List<DealerCompaniesOperatingInArea> _companies = new();
+    private List<SalesPlanningInDealerRegistration> _salesPlans = new();
+    private List<DealerAssetBank> _assetBanks = new();
+    private List<DealerAssetLand> _assetLands = new();
+    private List<DealerAssetBuilding> _assetBuildings = new();
+    private DealerCreditLimitProposal? _creditLimit;
+
+    private bool[] _stepStatus = new bool[11];
+
+    private List<SectionItem> _finalSubmissionSections
+    {
+        get
+        {
+            var list = new List<SectionItem>
+            {
+                new SectionItem("Dealer Registration", "/Register", "bi bi-person-plus", () => _stepStatus[0]),
+                new SectionItem("Experience", "/Experience", "bi bi-award", () => _stepStatus[1]),
+                new SectionItem("Annual Sales", "/AnnualSales", "bi bi-graph-up-arrow", () => _stepStatus[2]),
+                new SectionItem("Warehouse Details", "/Warehouse", "bi bi-box-seam", () => _stepStatus[3]),
+                new SectionItem("Market Details", "/MarketDetails", "bi bi-geo-alt", () => _stepStatus[4]),
+                new SectionItem("Companies Operating", "/Companies", "bi bi-building", () => _stepStatus[5]),
+                new SectionItem("Proprietor Details", "/Proprietor", "bi bi-people", () => _stepStatus[6]),
+                new SectionItem("Sales Planning", "/SalesPlaning", "bi bi-calendar2-check", () => _stepStatus[7]),
+                new SectionItem("Investment", "/Investment", "bi bi-currency-dollar", () => _stepStatus[8]),
+            };
+
+            if (_dealer.InSpic)
+                list.Add(new SectionItem("Credit Limit — SPIC", "/CreditLimit", "bi bi-credit-card", () => _stepStatus[9]));
+
+            if (_dealer.InGreenStar)
+                list.Add(new SectionItem("Credit Limit — GreenStar", "/CreditLimitForGreenStar", "bi bi-star", () => !_dealer.InGreenStar || _creditLimit != null));
+
+            return list;
+        }
+    }
+
+    private List<EnclosureItem> _enclosureItems = new();
+
+    private int _docUploadedCount;
+    private int _docTotalCount;
+    private int _docMissingCount;
+
+    private string? _message;
+    private bool _isError;
+    private bool _isSubmitting;
+
+    private int _completedSections;
+    private int _totalSections = 11;
+    private int _incompleteSections;
+    private int _progressPercent;
+
+    private bool _isSoleProprietor => _dealer.EntityType == EntityType.soleProprietor;
+
+    private bool _hasWholesaleLicense =>
+        !string.IsNullOrEmpty(_dealer.WholeSaleFertilizerLicenseNumber);
+
+    private bool _hasRetailLicense =>
+        !string.IsNullOrEmpty(_dealer.RetailFertilizerLicenseNumber);
+
+    private bool _isRetailerListRequired =>
+        !_hasRetailLicense || _hasWholesaleLicense;
+
+    // Deed of Guarantee optional for all business types
+    private bool _isDeedOfGuaranteeRequired => false;
+
+    // Partnership Deed mandatory only for Partnership firm
+    private bool _showPartnershipDeed =>
+        _dealer.EntityType == EntityType.Partnership;
+
+    // Keep old Authorization Letter flow unchanged
+    private bool _showAuthorizationLetter
+    {
+        get
+        {
+            var t = _dealer.BusinessEntityType?.Trim();
+            if (string.IsNullOrEmpty(t)) return false;
+
+            if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
+                t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return true;
+        }
+    }
+
+    // Keep old Board Resolution flow unchanged
+    private bool _showBoardResolution
+    {
+        get
+        {
+            var t = _dealer.BusinessEntityType?.Trim();
+            if (string.IsNullOrEmpty(t)) return false;
+
+            if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
+                t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (t.Contains("Partnership", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (t.Equals("LLP", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return true;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Loading.Show();
+
+        try
+        {
+            await Task.WhenAll(
+                LoadDealer(),
+                LoadExperiences(),
+                LoadAnnualSales(),
+                LoadWarehouses(),
+                LoadRailFacilities(),
+                LoadPortFacilities(),
+                LoadMarketDetails(),
+                LoadCompanies(),
+                LoadPartners(),
+                LoadSalesPlans(),
+                LoadAssetBanks(),
+                LoadAssetLands(),
+                LoadAssetBuildings(),
+                LoadCreditLimit(),
+                LoadDocuments()
+            );
+
+            BuildEnclosureItems();
+            CalculateStepStatus();
+            CalculateProgress();
+        }
+        finally
+        {
+            Loading.Hide();
+        }
+    }
+
+    private async Task LoadDealer()
+    {
+        try
+        {
+            var d = await Http.GetFromJsonAsync<DealerReg>($"api/DealerRegistration/{DealerId}");
+            if (d != null) _dealer = d;
+        }
+        catch { }
+    }
+
+    private async Task LoadExperiences()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerExperience>>("api/DealerExperience/all") ?? new();
+            _experiences = all.Where(e => e.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadAnnualSales()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>("api/AnnualSaleDataLastFY/all") ?? new();
+            _annualSales = all.Where(a => a.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadWarehouses()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>("api/DealerWarehouseFacilities/all") ?? new();
+            _warehouses = all.Where(w => w.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadRailFacilities()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerRailFacilities>>("api/DealerRailFacilities/all") ?? new();
+            _railFacilities = all.Where(r => r.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadPortFacilities()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerPortFacilities>>("api/DealerPortFacilities/all") ?? new();
+            _portFacilities = all.Where(p => p.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadMarketDetails()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerMarketDetail>>("api/DealerMarketDetail/all") ?? new();
+            _marketDetails = all.Where(m => m.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadCompanies()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new();
+            _companies = all.Where(c => c.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadPartners()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all") ?? new();
+            _partners = all.Where(p => p.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadSalesPlans()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<SalesPlanningInDealerRegistration>>("api/SalesPlanning/all") ?? new();
+            _salesPlans = all.Where(s => s.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadAssetBanks()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerAssetBank>>("api/DealerAssetBank/all") ?? new();
+            _assetBanks = all.Where(a => a.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadAssetLands()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerAssetLand>>("api/DealerAssetLand/all") ?? new();
+            _assetLands = all.Where(a => a.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadAssetBuildings()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>("api/DealerAssetBuilding/all") ?? new();
+            _assetBuildings = all.Where(a => a.DealerId == DealerId).ToList();
+        }
+        catch { }
+    }
+
+    private async Task LoadCreditLimit()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerCreditLimitProposal>>("api/DealerCreditLimitProposal/all") ?? new();
+            _creditLimit = all.FirstOrDefault(c => c.DealerId == DealerId);
+        }
+        catch { }
+    }
+
+    private async Task LoadDocuments()
+    {
+        try
+        {
+            var all = await Http.GetFromJsonAsync<List<DealerRegistrationDocuments>>("api/DealerRegistrationDocuments/all") ?? new();
+            _docs = all.FirstOrDefault(d => d.DealerId == DealerId);
+        }
+        catch { }
+    }
+
+    private void CalculateStepStatus()
+    {
+        _stepStatus[0] =
+            !string.IsNullOrEmpty(_dealer.FirmName) &&
+            _dealer.StateId > 0 &&
+            !string.IsNullOrEmpty(_dealer.OfficialContactNumber) &&
+            _dealer.BankId > 0;
+
+        _stepStatus[1] = _experiences.Count > 0;
+        _stepStatus[2] = _annualSales.Count > 0;
+        _stepStatus[3] = _warehouses.Count > 0 || _railFacilities.Count > 0 || _portFacilities.Count > 0;
+        _stepStatus[4] = _marketDetails.Count > 0;
+        _stepStatus[5] = _companies.Count > 0;
+        _stepStatus[6] = _partners.Count > 0;
+        _stepStatus[7] = _salesPlans.Count > 0;
+        _stepStatus[8] = _assetBanks.Count > 0 || _assetLands.Count > 0 || _assetBuildings.Count > 0;
+        _stepStatus[9] = _creditLimit != null;
+
+        // Enclosure complete based on required document list.
+        // Deed of Guarantee is optional, so it is not counted as missing.
+        var enclosureStepComplete = _docs != null && _docMissingCount == 0;
+
+        _stepStatus[10] = enclosureStepComplete;
+    }
+
+    private void BuildEnclosureItems()
+    {
+        _enclosureItems = new List<EnclosureItem>
+        {
+            new("GST Certificate", !string.IsNullOrEmpty(_dealer.GSTFilePath)),
+            new("PAN Copy", !string.IsNullOrEmpty(_dealer.PANFilePath)),
+            new("Aadhaar Copy", !string.IsNullOrEmpty(_dealer.AadhaarFilePath)),
+            new("Bank Guarantee Certificate", _docs != null && !string.IsNullOrEmpty(_docs.BankGauranteeFilePath)),
+            new("IT Returns (FY1)", _docs != null && !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath)),
+            new("IT Returns (FY2)", _docs != null && !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath)),
+        };
+
+        if (_dealer.InSpic)
+            _enclosureItems.Add(new("SPIC Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.SpecimanFilePath)));
+
+        if (_dealer.InGreenStar)
+            _enclosureItems.Add(new("Greenstar Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath)));
+
+        if (_isRetailerListRequired)
+            _enclosureItems.Add(new("List of Retailers with Complete Details", _docs != null && !string.IsNullOrEmpty(_docs.RetailerListFilePath)));
+
+        if (_hasWholesaleLicense)
+            _enclosureItems.Add(new("Wholesale Fertilizers License", !string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath)));
+
+        if (_hasRetailLicense)
+            _enclosureItems.Add(new("Retail Fertilizers License", !string.IsNullOrEmpty(_dealer.RetailLicenseFilePath)));
+
+        // Partnership Deed mandatory only for Partnership firms
+        if (_showPartnershipDeed)
+        {
+            _enclosureItems.Add(new("Partnership Deed",
+                _docs != null && !string.IsNullOrEmpty(_docs.PartnershipDeadFilePath)));
+        }
+        else if (_docs != null && !string.IsNullOrEmpty(_docs.PartnershipDeadFilePath))
+        {
+            _enclosureItems.Add(new("Partnership Deed", true));
+        }
+
+        // Board Resolution old flow unchanged
+        if (_showBoardResolution)
+        {
+            _enclosureItems.Add(new("Board Resolution",
+                _docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath)));
+        }
+
+        // Authorization Letter old flow unchanged
+        if (_showAuthorizationLetter)
+        {
+            _enclosureItems.Add(new("Authorization Letter",
+                _docs != null && !string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath)));
+        }
+
+        // Optional documents: show only if uploaded
+        if (_docs != null && !string.IsNullOrEmpty(_docs.AffidavitFilePath))
+            _enclosureItems.Add(new("Affidavit", true));
+
+        if (_docs != null && !string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath))
+            _enclosureItems.Add(new("Deed of Guarantee", true));
+
+        foreach (var p in _partners)
+        {
+            _enclosureItems.Add(new($"Photo — {p.Name}", !string.IsNullOrEmpty(p.ProprietorImagePath)));
+
+            if (!_isSoleProprietor)
+            {
+                _enclosureItems.Add(new($"Aadhaar — {p.Name}", !string.IsNullOrEmpty(p.AadhaarFilePath)));
+                _enclosureItems.Add(new($"PAN — {p.Name}", !string.IsNullOrEmpty(p.PANFilePath)));
+            }
+        }
+
+        foreach (var l in _assetLands)
+        {
+            _enclosureItems.Add(new($"EC — Land: {l.LandName}", !string.IsNullOrEmpty(l.UploadedECDocumentPath)));
+            _enclosureItems.Add(new($"Property Doc — Land: {l.LandName}", !string.IsNullOrEmpty(l.UploadedLandDocumentPath)));
+            _enclosureItems.Add(new($"Valuation — Land: {l.LandName}", !string.IsNullOrEmpty(l.UploadedValuationCertificatePath)));
+        }
+
+        foreach (var b in _assetBuildings)
+        {
+            _enclosureItems.Add(new($"EC — Building: {b.BuildingName}", !string.IsNullOrEmpty(b.UploadedECDocumentPath)));
+            _enclosureItems.Add(new($"Property Doc — Building: {b.BuildingName}", !string.IsNullOrEmpty(b.UploadedBuildingDocumentPath)));
+            _enclosureItems.Add(new($"Valuation — Building: {b.BuildingName}", !string.IsNullOrEmpty(b.UploadedValuationCertificatePath)));
+        }
+
+        _docTotalCount = _enclosureItems.Count;
+        _docUploadedCount = _enclosureItems.Count(d => d.Uploaded);
+        _docMissingCount = _docTotalCount - _docUploadedCount;
+    }
+
+    private void CalculateProgress()
+    {
+        _completedSections = _stepStatus.Count(s => s);
+        _incompleteSections = _totalSections - _completedSections;
+
+        _progressPercent = _totalSections > 0
+            ? (int)Math.Round((double)_completedSections / _totalSections * 100)
+            : 0;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (_incompleteSections > 0)
+        {
+            SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(13, true);
+            ShowMessage($"Please complete all {_incompleteSections} incomplete section(s) before submitting.", true);
+            return;
+        }
+
+        _isSubmitting = true;
+        _message = null;
+
+        try
+        {
+            if (_dealer.RMApproved == false || _dealer.SMApproved == false || _dealer.AVPApproved == false)
+            {
+                _dealer.RMApproved = null;
+                _dealer.SMApproved = null;
+                _dealer.AVPApproved = null;
+            }
+
+            _dealer.Status = DealerStatus.Active;
+            _dealer.IsSubmittedForReview = true; // Only true from here — this is the explicit "Submit Registration" click
+
+            var resp = await Http.PutAsJsonAsync($"api/DealerRegistration/{_dealer.Id}", _dealer);
+            resp.EnsureSuccessStatusCode();
+
+            SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(13, false);
+            ShowMessage("Registration submitted successfully!", false);
+
+            await Task.Delay(1500);
+            Nav.NavigateTo("/Dashboard");
+        }
+        catch (Exception ex)
+        {
+            SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(12, true);
+            ShowMessage($"Error submitting registration: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private string MaskValue(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "—";
+        if (value.Length <= 4) return value;
+
+        return new string('*', value.Length - 4) + value[^4..];
+    }
+
+    private void ShowMessage(string msg, bool isError)
+    {
+        _message = msg;
+        _isError = isError;
+    }
+
+    private record EnclosureItem(string Name, bool Uploaded);
+
+    private record SectionItem(string Name, string Route, string Icon, Func<bool> IsComplete);
+
+    private bool CanAdd => LoginState.Can("FinalSubmission", "Entry");
+    private bool CanEdit => LoginState.Can("FinalSubmission", "Update");
+    private bool CanDelete => LoginState.Can("FinalSubmission", "Delete");
+}

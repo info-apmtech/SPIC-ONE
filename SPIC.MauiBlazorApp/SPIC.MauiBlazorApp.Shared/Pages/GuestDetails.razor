@@ -1,0 +1,380 @@
+﻿@page "/GuestDetails"
+
+<style>
+    :root {
+        --bg-body: #f4f6f8;
+        --bg-card: #ffffff;
+        --bg-input: #f3f4f6;
+        --text-main: #1f2937;
+        --text-muted: #6b7280;
+        --border-color: #e5e7eb;
+        --primary-blue: #3b82f6;
+        --primary-blue-hover: #2563eb;
+    }
+
+    body {
+        background-color: var(--bg-body);
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        color: var(--text-main);
+    }
+
+    /* --- Page Header --- */
+    .page-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 0.25rem;
+    }
+
+    .page-subtitle {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin-bottom: 1.5rem;
+    }
+
+    /* --- Cards --- */
+    .form-card, .summary-card {
+        background: var(--bg-card);
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+        padding: 1.5rem 2rem;
+        height: 100%;
+    }
+
+    .summary-card {
+        border: 1px solid var(--border-color);
+    }
+
+    /* --- Form Elements --- */
+    .form-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-main);
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+
+    .form-control-custom, .form-select-custom {
+        background-color: var(--bg-input);
+        border: 1px solid transparent;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        color: var(--text-main);
+        padding: 0.75rem 1rem;
+        width: 100%;
+        outline: none;
+        transition: all 0.2s;
+    }
+
+        .form-control-custom::placeholder {
+            color: #9ca3af;
+        }
+
+        .form-control-custom:focus, .form-select-custom:focus {
+            border-color: var(--primary-blue);
+            background-color: #ffffff;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+    /* Custom dropdown arrow for selects */
+    .form-select-custom {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        padding-right: 36px;
+        cursor: pointer;
+    }
+
+    textarea.form-control-custom {
+        resize: none;
+        height: 125px; /* Matches the height of the upload box */
+    }
+
+    /* --- Upload Box --- */
+    .upload-box {
+        border: 2px dashed #86efac;
+        background-color: #f0fdf4; /* Very light green */
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        height: 125px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+        .upload-box:hover {
+            background-color: #dcfce7;
+        }
+
+    .upload-icon-circle {
+        width: 32px;
+        height: 32px;
+        background-color: #10b981;
+        color: #ffffff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 8px;
+        font-size: 1rem;
+    }
+
+    .upload-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #16a34a;
+        margin: 0 0 4px 0;
+    }
+
+    .upload-subtitle {
+        font-size: 0.7rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    /* --- Booking Summary --- */
+    .summary-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 1.5rem;
+    }
+
+    .summary-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.9rem;
+        color: #4b5563;
+        margin-bottom: 1.25rem;
+    }
+
+        .summary-row.bold-val .val {
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+    .summary-divider {
+        height: 1px;
+        background-color: var(--border-color);
+        margin: 1.25rem 0;
+    }
+
+    .summary-total {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 1.5rem;
+    }
+
+        .summary-total .lbl {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .summary-total .val {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--primary-blue);
+        }
+
+    /* --- Buttons --- */
+    .btn-action-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 1.5rem;
+    }
+
+    .btn-outline-back {
+        background-color: #ffffff;
+        border: 1px solid var(--border-color);
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+
+        .btn-outline-back:hover {
+            background-color: #f9fafb;
+        }
+
+    .btn-primary-continue {
+        background-color: var(--primary-blue);
+        border: 1px solid var(--primary-blue);
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+
+        .btn-primary-continue:hover {
+            background-color: var(--primary-blue-hover);
+        }
+</style>
+
+<div class="container-fluid py-4 px-0">
+    
+    <div class="mb-4">
+        <h1 class="page-title">Guest Details</h1>
+        <p class="page-subtitle">Please provide your information to complete the booking</p>
+    </div>
+
+    <div class="row g-4">
+        
+        <div class="col-lg-8">
+            <div class="form-card">
+                <div class="row g-4">
+                    
+                    <div class="col-md-6">
+                        <label class="form-label">Employee ID / Dealer Code</label>
+                        <input type="text" class="form-control-custom" placeholder="Enter Employee ID / Dealer Code">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Guest Name</label>
+                        <input type="text" class="form-control-custom" placeholder="Enter Guest Name">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Company Name</label>
+                        <input type="text" class="form-control-custom" placeholder="Enter Company Name">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Phone Number</label>
+                        <input type="text" class="form-control-custom" placeholder="Enter Phone Number">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Email ID</label>
+                        <input type="email" class="form-control-custom" placeholder="Enter Email ID">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Aadhaar / Passport Number</label>
+                        <input type="text" class="form-control-custom" placeholder="Enter Aadhaar / Passport Number">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Nationality</label>
+                        <select class="form-select-custom">
+                            <option value="" disabled selected>Select Nationality</option>
+                            <option value="indian">Indian</option>
+                            <option value="nri">NRI</option>
+                            <option value="foreigner">Foreigner</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Number of Persons</label>
+                        <select class="form-select-custom">
+                            <option value="" disabled selected>Select Number of Persons</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Number of Adults</label>
+                        <select class="form-select-custom">
+                            <option value="" disabled selected>Select Number of Adults</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Number of Children (below 12 years)</label>
+                        <select class="form-select-custom">
+                            <option value="" disabled selected>Select Number of Children</option>
+                            <option value="0">0</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Address</label>
+                        <textarea class="form-control-custom" placeholder="Enter Address"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Upload ID Proof (Optional)</label>
+                        <div class="upload-box">
+                            <div class="upload-icon-circle">
+                                <i class="bi bi-upload"></i>
+                            </div>
+                            <p class="upload-title">Drag & drop files here or click to browse</p>
+                            <p class="upload-subtitle">Accepted: PDF, JPG, PNG - Max 5MB per file</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="summary-card">
+                <h3 class="summary-title">Booking Summary</h3>
+                
+                <div class="summary-row bold-val mt-4">
+                    <span class="lbl">Room Type</span>
+                    <span class="val">AC Deluxe Room</span>
+                </div>
+                
+                <div class="summary-row bold-val">
+                    <span class="lbl">Room Price</span>
+                    <span class="val">₹999.00</span>
+                </div>
+                
+                <div class="summary-row bold-val">
+                    <span class="lbl">Number of nights</span>
+                    <span class="val">3</span>
+                </div>
+                
+                <div class="summary-row bold-val">
+                    <span class="lbl">Extra Cot × 1</span>
+                    <span class="val">₹250.00</span>
+                </div>
+
+                <div class="summary-divider"></div>
+
+                <div class="summary-row bold-val">
+                    <span class="lbl">Subtotal</span>
+                    <span class="val">₹3247.00</span>
+                </div>
+                
+                <div class="summary-row bold-val">
+                    <span class="lbl">Taxes (12%)</span>
+                    <span class="val">₹120.00</span>
+                </div>
+
+                <div class="summary-divider"></div>
+
+                <div class="summary-total">
+                    <span class="lbl">Total</span>
+                    <span class="val">₹3367.00</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="btn-action-row">
+        <button class="btn-outline-back">Back</button>
+        <button class="btn-primary-continue">Continue Review</button>
+    </div>
+
+</div>
+
+@code {
+
+}

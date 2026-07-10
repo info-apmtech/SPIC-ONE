@@ -1,58 +1,368 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
+@using System.Net.Http.Headers
+@using SPIC.Core.Entities
+@inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject SPIC.MauiBlazorApp.Shared.Services.AppSearchState SearchState
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageGuard />
 
 <div class="app-shell">
-    <aside class="sidebar">
-        <NavMenu />
-    </aside>
+	<LoadingOverlay />
+	<aside class="sidebar">
+		<NavMenu />
+	</aside>
 
-    <main class="content-wrap">
-        <div class="mobile-topbar">
-            <div class="brand p-0 m-0" style="font-size: 1.7rem;">SPIC</div>
-            <button class="btn btn-outline-secondary"
-                    type="button"
-                    data-bs-toggle="offcanvas"
-                    data-bs-target="#mobileSidebar"
-                    aria-controls="mobileSidebar">
-                <i class="bi bi-list"></i>
-            </button>
-        </div>
+	<main class="content-wrap">
+		<div class="mobile-topbar">
+			<div class="brand p-0 m-0" style="font-size: 1.7rem;">SPIC</div>
+			<button class="btn btn-outline-secondary"
+					type="button"
+					data-bs-toggle="offcanvas"
+					data-bs-target="#mobileSidebar"
+					aria-controls="mobileSidebar">
+				<i class="bi bi-list"></i>
+			</button>
+		</div>
 
-        <div class="topbar">
-            <div class="search-box">
-                <i class="bi bi-search"></i>
-                <input type="text" class="form-control" placeholder="Search something here">
-            </div>
+		<div class="topbar">
+			<div class="search-box">
+				<i class="bi bi-search"></i>
+				<input type="text" class="form-control"
+					   placeholder="Search something here"
+					   value="@SearchState.Query"
+					   @oninput="OnGlobalSearchInput"
+					   @onkeydown="HandleSearchKeyDown" />
+				@if (SearchState.HasQuery)
+				{
+					<i class="bi bi-x-circle-fill global-search-clear"
+					   title="Clear search"
+					   @onclick="() => SearchState.Clear()"></i>
+				}
+			</div>
 
-            <div class="top-actions">
-                <button class="icon-btn"><i class="bi bi-bell"></i></button>
-                <div class="profile">A</div>
-                <i class="bi bi-chevron-down text-secondary"></i>
-            </div>
-        </div>
+			<div class="top-actions">
+				<button class="icon-btn"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationBell.svg" alt="Notification" class="iconimg" /></button>
+				<div class="profile">
+					<button class="btn btn-link nav-link p-0" @onclick="Logout">
+						<i class="bi bi-box-arrow-right"></i>
+					</button>
+				</div>
+				<i class="bi bi-chevron-down text-secondary"></i>
+			</div>
+		</div>
 
-        <div class="main-content">
-            @Body
-        </div>
-    </main>
+		<div class="main-content">
+			@if (_isReady)
+			{
+				@Body
+			}
+			else
+			{
+				<div class="d-flex justify-content-center align-items-center" style="height: 60vh;">
+					<div class="spinner-border text-success" role="status">
+						<span class="visually-hidden">Loading...</span>
+					</div>
+				</div>
+			}
+		</div>
+	</main>
 </div>
 
 <div class="offcanvas offcanvas-start" tabindex="-1" id="mobileSidebar" aria-labelledby="mobileSidebarLabel">
-    <div class="offcanvas-header">
-        <h5 class="offcanvas-title brand p-0 m-0" id="mobileSidebarLabel" style="font-size:1.6rem;">SPIC</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-    </div>
-    <div class="offcanvas-body">
-        <nav class="nav nav-pills flex-column nav-section">
-            <a class="nav-link" href="#"><i class="bi bi-grid"></i> Dashboard</a>
-            <a class="nav-link active" href="#"><i class="bi bi-bag"></i> Purchases</a>
-            <a class="nav-link" href="#"><i class="bi bi-gift"></i> Rewards</a>
-            <a class="nav-link" href="#"><i class="bi bi-tree"></i> Crop Advice</a>
-            <a class="nav-link" href="#"><i class="bi bi-graph-up-arrow"></i> Yield Prediction</a>
-            <a class="nav-link" href="#"><i class="bi bi-virus"></i> Disease Detection</a>
-            <a class="nav-link" href="#"><i class="bi bi-people"></i> Community</a>
-            <a class="nav-link" href="#"><i class="bi bi-bell"></i> Notifications</a>
-            <a class="nav-link" href="#"><i class="bi bi-person"></i> Profile</a>
-            <a class="nav-link" href="#"><i class="bi bi-gear"></i> Settings</a>
-        </nav>
-    </div>
+	<div class="offcanvas-header">
+		<h5 class="offcanvas-title brand p-0 m-0" id="mobileSidebarLabel" style="font-size:1.6rem;">SPIC</h5>
+		<button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+	</div>
+	<div class="offcanvas-body">
+		<nav class="nav nav-pills flex-column nav-section">
+			@if (LoginState.CanAccess(PagePermission.Dashboard))
+			{
+				<NavLink class="nav-link" href="/Dashboard" Match="NavLinkMatch.All">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
+					Register
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Purchases))
+			{
+				<NavLink class="nav-link" href="/Purchases">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+					Purchases
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Rewards))
+			{
+				<NavLink class="nav-link" href="/Rewards">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg" class="SideBariconimg" />
+					Rewards
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.CropAdvice))
+			{
+				<NavLink class="nav-link" href="/CropAdvice">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg" class="SideBariconimg" />
+					Crop Advice
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.YieldPrediction))
+			{
+				<NavLink class="nav-link" href="/YieldPrediction">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg" class="SideBariconimg" />
+					Yield Prediction
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.DiseaseDetection))
+			{
+				<NavLink class="nav-link" href="/DiseaseDetection">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg" class="SideBariconimg" />
+					Disease Detection
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Community))
+			{
+				<NavLink class="nav-link" href="/Community">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg" class="SideBariconimg" />
+					Community
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Notifications))
+			{
+				<NavLink class="nav-link" href="/Notifications">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg" class="SideBariconimg" />
+					Notifications
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.Profile))
+			{
+				<NavLink class="nav-link" href="/Profile">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+					Profile
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.EmployeeManagement))
+			{
+				<NavLink class="nav-link" href="/EmployeeManagement">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+					Employee
+				</NavLink>
+			}
+			@if (LoginState.CanAccess(PagePermission.dealerreviewlist))
+			{
+				<NavLink class="nav-link" href="/DealerApplicationReview">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+					Dealer Application Review
+				</NavLink>
+			}
+
+			@if (LoginState.CanAccess(PagePermission.LocationMaster)
+				 || LoginState.CanAccess(PagePermission.Agriculture)
+				 || LoginState.CanAccess(PagePermission.Logistics)
+				 || LoginState.CanAccess(PagePermission.Financial)
+				 || LoginState.CanAccess(PagePermission.Relationship))
+			{
+				<div class="settings-menu-wrapper">
+					<a href="javascript:void(0);"
+						   class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
+						   @onclick="ToggleSettingsMenu">
+						<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
+						Settings
+						<i class="bi @(isSettingsOpen ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+					</a>
+
+					@if (isSettingsOpen)
+					{
+						<ul class="submenu-list">
+							@if (LoginState.CanAccess(PagePermission.LocationMaster))
+							{
+								<li class="submenu-item">
+									<NavLink href="/LocationMaster" class="submenu-link" Match="NavLinkMatch.All">Location Master</NavLink>
+								</li>
+							}
+							@if (LoginState.CanAccess(PagePermission.Agriculture))
+							{
+								<li class="submenu-item">
+									<NavLink href="/Agriculture" class="submenu-link" Match="NavLinkMatch.All">Agriculture & Prod...</NavLink>
+								</li>
+							}
+							@if (LoginState.CanAccess(PagePermission.Logistics))
+							{
+								<li class="submenu-item">
+									<NavLink href="/Logistics" class="submenu-link" Match="NavLinkMatch.All">Logistics Master</NavLink>
+								</li>
+							}
+							@if (LoginState.CanAccess(PagePermission.Financial))
+							{
+								<li class="submenu-item">
+									<NavLink href="/Financial" class="submenu-link" Match="NavLinkMatch.All">Financial Master</NavLink>
+								</li>
+							}
+							@if (LoginState.CanAccess(PagePermission.Relationship))
+							{
+								<li class="submenu-item">
+									<NavLink href="/Relationship" class="submenu-link" Match="NavLinkMatch.All">Relationship Master</NavLink>
+								</li>
+							}
+						</ul>
+					}
+				</div>
+			}
+		</nav>
+	</div>
 </div>
+<style>
+	.search-box {
+		position: relative;
+	}
+
+	.global-search-clear {
+		position: absolute;
+		right: 12px;
+		top: 50%;
+		transform: translateY(-50%);
+		color: #9CA3AF;
+		cursor: pointer;
+		font-size: 0.95rem;
+		transition: color 0.15s;
+	}
+
+		.global-search-clear:hover {
+			color: #EF4444;
+		}
+</style>
+@code {
+	private bool _isReady;
+	private bool isSettingsOpen = false;
+	private Timer? _tokenExpiryTimer;
+
+	protected override void OnInitialized()
+	{
+		isSettingsOpen = IsSettingsSectionActive();
+		StartExpiryCheck();
+
+		if (Http.DefaultRequestHeaders.Authorization != null)
+		{
+			_isReady = true;
+		}
+		else if (!string.IsNullOrWhiteSpace(LoginState.Token))
+		{
+			Http.DefaultRequestHeaders.Authorization =
+				new AuthenticationHeaderValue("Bearer", LoginState.Token);
+			_isReady = true;
+		}
+	}
+	private void OnGlobalSearchInput(ChangeEventArgs e)
+	{
+		SearchState.Query = e.Value?.ToString() ?? "";
+	}
+	private void ToggleSettingsMenu()
+	{
+		isSettingsOpen = !isSettingsOpen;
+	}
+
+	private async Task Logout()
+	{
+		try
+		{
+			await Http.PostAsync("api/authentication/logout", null);
+		}
+		catch { }
+
+		LoginState.Token = null;
+		LoginState.ClearAllowedPages();
+		Http.DefaultRequestHeaders.Authorization = null;
+		await JS.InvokeVoidAsync("sessionStorage.removeItem", "jwt_token");
+		await JS.InvokeVoidAsync("sessionStorage.removeItem", "spic_role_access");
+		Navigation.NavigateTo("/login", forceLoad: true);
+	}
+
+	private bool IsSettingsSectionActive()
+	{
+		var uri = Navigation.ToBaseRelativePath(Navigation.Uri).ToLower();
+
+		return uri == "locationmaster"
+			|| uri == "agriculture"
+			|| uri == "logistics"
+			|| uri == "financial"
+			|| uri == "relationship";
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender && !_isReady)
+		{
+			// Page refresh: restore token + page permissions from sessionStorage
+			var token = await JS.InvokeAsync<string?>("sessionStorage.getItem", "jwt_token");
+
+			if (!string.IsNullOrWhiteSpace(token))
+			{
+				Http.DefaultRequestHeaders.Authorization =
+					new AuthenticationHeaderValue("Bearer", token);
+				LoginState.Token = token;
+
+				var roleAccess = await JS.InvokeAsync<string?>("sessionStorage.getItem", "spic_role_access");
+				LoginState.SetAllowedPages(roleAccess);
+
+				var expStr = await JS.InvokeAsync<string?>("sessionStorage.getItem", "jwt_expiration");
+				if (!string.IsNullOrWhiteSpace(expStr) && DateTime.TryParse(expStr, out var exp))
+					LoginState.Expiration = exp;
+
+				_isReady = true;
+				StateHasChanged();
+			}
+			else
+			{
+				Navigation.NavigateTo("/login");
+			}
+		}
+	}
+
+	private void StartExpiryCheck()
+	{
+		_tokenExpiryTimer?.Dispose();
+		_tokenExpiryTimer = new Timer(async _ =>
+		{
+			if (LoginState.IsTokenExpired)
+			{
+				await InvokeAsync(async () => await AutoLogout());
+			}
+		}, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+	}
+
+	private async Task AutoLogout()
+	{
+		_tokenExpiryTimer?.Dispose();
+		_tokenExpiryTimer = null;
+		LoginState.Token = null;
+		LoginState.Expiration = default;
+		LoginState.ClearAllowedPages();
+		Http.DefaultRequestHeaders.Authorization = null;
+		try
+		{
+			await JS.InvokeVoidAsync("sessionStorage.removeItem", "jwt_token");
+			await JS.InvokeVoidAsync("sessionStorage.removeItem", "jwt_expiration");
+			await JS.InvokeVoidAsync("sessionStorage.removeItem", "spic_role_access");
+		}
+		catch { }
+		Navigation.NavigateTo("/login", forceLoad: true);
+	}
+
+	public void Dispose()
+	{
+		_tokenExpiryTimer?.Dispose();
+	}
+
+	private async Task HandleSearchKeyDown(KeyboardEventArgs e)
+	{
+		if (e.Key == "Enter")
+		{
+			try
+			{
+				await JS.InvokeVoidAsync("navSearch.clickMatch");
+			}
+			catch { }
+		}
+	}
+}

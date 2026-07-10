@@ -1,0 +1,1203 @@
+﻿@page "/Warehouse"
+@using System.Net.Http.Json
+@using System.Text.RegularExpressions
+@using System.Globalization
+@using SPIC.Core.Entities
+@using WarehouseEntity = SPIC.Core.Entities.Warehouse
+@using DealerReg = SPIC.Core.Entities.DealerRegistration
+@using SPIC.MauiBlazorApp.Shared.FormFlow
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LoadingService Loading
+@inject LoginState LoginState
+<style>
+	fieldset:disabled .icon-delete {
+		display: none !important;
+	}
+
+	fieldset:disabled .icon-edit {
+		display: none !important;
+	}
+</style>
+<div class="container-fluid py-4 px-0">
+	<FormLoader />
+	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
+
+		@if (!string.IsNullOrEmpty(_message))
+		{
+			<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+				@_message
+				<button type="button" class="btn-close" @onclick='() => _message = null'></button>
+			</div>
+		}
+
+		<div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+			<h3 class="fw-bold m-0 company-title">Warehouse & Logistics</h3>
+		</div>
+
+		<div class="logistics-note mb-4">
+			<div class="note-header">
+				<i class="bi bi-exclamation-circle"></i> Logistics Note Information
+			</div>
+			<p class="note-text">
+				A minimum of two Warehouses, two Rail Head, and two Port must be configured to proceed further
+			</p>
+		</div>
+
+		<div class="form-card">
+			<!-- Header -->
+			<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+				<div class="card-header-title mb-0">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WarehouseHeader.svg"
+						 class="formicon" />
+					Nearest Facilities
+				</div>
+
+				<button class="btn-verified">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Verifiedicon.svg"
+						 class="verifyicon" />
+					Active Entry
+				</button>
+			</div>
+
+			<div class="row g-4">
+
+				<!-- Warehouse Card -->
+				<div class="col-md-4">
+					<div class="facility-card">
+						<div class="d-flex align-items-center mb-4">
+							<div class="facility-icon-wrapper bg-soft-green text-green">
+								<i class="bi bi-shop"></i>
+							</div>
+							<h3 class="facility-card-title">Warehouse</h3>
+						</div>
+
+						<!-- SEARCHABLE DROPDOWN FOR WAREHOUSE -->
+						<div class="mb-3 position-relative">
+							<label class="custom-label">Facility Name</label>
+							<input type="text" class="custom-input custom-select"
+								   placeholder="Search and Select Facility..."
+								   @bind="_warehouseSearchText"
+								   @bind:event="oninput"
+								   @onfocus="() => _showWarehouseDropdown = true"
+								   @onblur="HideWarehouseDropdownDelay" />
+
+							@if (_showWarehouseDropdown)
+							{
+								<div class="dropdown-list-container">
+									<div class="dropdown-item-custom text-muted" @onmousedown='() => SelectWarehouse(0, "")'>
+										-- Select Facility Name --
+									</div>
+									@foreach (var w in _warehouses.Where(x => string.IsNullOrWhiteSpace(_warehouseSearchText) ||
+																			  $"{x.WarehouseCode} - {x.Name}".Contains(_warehouseSearchText, StringComparison.OrdinalIgnoreCase)))
+									{
+										<div class="dropdown-item-custom" @onmousedown='() => SelectWarehouse(w.Id, $"{w.WarehouseCode} - {w.Name}")'>
+											@w.WarehouseCode - @w.Name
+										</div>
+									}
+								</div>
+							}
+						</div>
+
+						<div class="row g-2 mb-4">
+							<div class="col-6">
+								<label class="custom-label">Distance (KM)</label>
+								<div class="input-icon-wrapper">
+									<input type="text" class="custom-input" placeholder="0.0" value="@WhDistanceDisplay" readonly>
+									@if (_isCalculatingWhDistance)
+									{
+										<i class="bi bi-arrow-repeat spin"></i>
+									}
+									else
+									{
+										<i class="bi bi-map"></i>
+									}
+								</div>
+							</div>
+							<div class="col-6">
+								<label class="custom-label">Freight (₹/ton/Km) </label>
+								<input type="number" class="custom-input" placeholder="0.0" @bind="_whFreight" step="0.01">
+							</div>
+						</div>
+
+						<div class="mt-auto">
+							@if (CanAdd || CanEdit)
+							{
+								<button class="btn-add-action" @onclick="AddWarehouse" disabled="@(_selectedWarehouseId == 0 || _isCalculatingWhDistance)">
+									<i class="bi bi-plus-lg"></i> @(_editingWhId > 0 ? "Update" : "Add") Warehouse
+								</button>
+							}
+						</div>
+					</div>
+				</div>
+
+				<!-- Rail Head Card -->
+				<div class="col-md-4">
+					<div class="facility-card">
+						<div class="d-flex align-items-center mb-4">
+							<div class="facility-icon-wrapper bg-soft-blue text-blue">
+								<i class="bi bi-train-front"></i>
+							</div>
+							<h3 class="facility-card-title">Rail Head</h3>
+						</div>
+
+						<div class="mb-3 position-relative">
+							<label class="custom-label">Facility Name</label>
+							<input type="text" class="custom-input custom-select"
+								   placeholder="Search and Select Facility..."
+								   @bind="_railSearchText"
+								   @bind:event="oninput"
+								   @onfocus="() => _showRailDropdown = true"
+								   @onblur="HideRailDropdownDelay" />
+
+							@if (_showRailDropdown)
+							{
+								<div class="dropdown-list-container">
+									<div class="dropdown-item-custom text-muted" @onmousedown='() => SelectRail(0, "")'>
+										-- Select Facility Name --
+									</div>
+									@foreach (var r in _rackPoints.Where(x => string.IsNullOrWhiteSpace(_railSearchText) ||
+																			  x.Name.Contains(_railSearchText, StringComparison.OrdinalIgnoreCase)))
+									{
+										<div class="dropdown-item-custom" @onmousedown='() => SelectRail(r.Id, r.Name)'>
+											@r.Name
+										</div>
+									}
+								</div>
+							}
+						</div>
+
+						<div class="row g-2 mb-4">
+							<div class="col-6">
+								<label class="custom-label">Distance (KM)</label>
+								<div class="input-icon-wrapper">
+									<input type="text" class="custom-input" placeholder="0.0" value="@RailDistanceDisplay" readonly>
+									@if (_isCalculatingRailDistance)
+									{
+										<i class="bi bi-arrow-repeat spin"></i>
+									}
+									else
+									{
+										<i class="bi bi-map"></i>
+									}
+								</div>
+							</div>
+							<div class="col-6">
+								<label class="custom-label">Freight (₹/ton/Km)</label>
+								<input type="number" class="custom-input" placeholder="0.0" @bind="_railFreight" step="0.01">
+							</div>
+						</div>
+
+						<div class="mt-auto">
+							@if (CanAdd || CanEdit)
+							{
+								<button class="btn-add-action" @onclick="AddRailHead" disabled="@(_selectedRailId == 0 || _isCalculatingRailDistance)">
+									<i class="bi bi-plus-lg"></i> @(_editingRailId > 0 ? "Update" : "Add") Rail Head
+								</button>
+							}
+						</div>
+					</div>
+				</div>
+
+				<!-- Port Card -->
+				<div class="col-md-4">
+					<div class="facility-card">
+						<div class="d-flex align-items-center mb-4">
+							<div class="facility-icon-wrapper bg-soft-pink text-pink">
+								<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/PortIcon.svg" class="formicon" />
+							</div>
+							<h3 class="facility-card-title">Port</h3>
+						</div>
+
+						<div class="mb-3 position-relative">
+							<label class="custom-label">Facility Name</label>
+							<input type="text" class="custom-input custom-select"
+								   placeholder="Search and Select Facility..."
+								   @bind="_portSearchText"
+								   @bind:event="oninput"
+								   @onfocus="() => _showPortDropdown = true"
+								   @onblur="HidePortDropdownDelay" />
+
+							@if (_showPortDropdown)
+							{
+								<div class="dropdown-list-container">
+									<div class="dropdown-item-custom text-muted" @onmousedown='() => SelectPort(0, "")'>
+										-- Select Facility Name --
+									</div>
+									@foreach (var p in _ports.Where(x => string.IsNullOrWhiteSpace(_portSearchText) ||
+																		 x.Name.Contains(_portSearchText, StringComparison.OrdinalIgnoreCase)))
+									{
+										<div class="dropdown-item-custom" @onmousedown='() => SelectPort(p.Id, p.Name)'>
+											@p.Name
+										</div>
+									}
+								</div>
+							}
+						</div>
+
+						<div class="row g-2 mb-4">
+							<div class="col-6">
+								<label class="custom-label">Distance (KM)</label>
+								<div class="input-icon-wrapper">
+									<input type="text" class="custom-input" placeholder="0.0" value="@PortDistanceDisplay" readonly>
+									@if (_isCalculatingPortDistance)
+									{
+										<i class="bi bi-arrow-repeat spin"></i>
+									}
+									else
+									{
+										<i class="bi bi-map"></i>
+									}
+								</div>
+							</div>
+							<div class="col-6">
+								<label class="custom-label">Freight (₹/ton/Km)</label>
+								<input type="number" class="custom-input" placeholder="0.0" @bind="_portFreight" step="0.01">
+							</div>
+						</div>
+
+						<div class="mt-auto">
+							@if (CanAdd || CanEdit)
+							{
+								<button class="btn-add-action" @onclick="AddPort" disabled="@(_selectedPortId == 0 || _isCalculatingPortDistance)">
+									<i class="bi bi-plus-lg"></i> @(_editingPortId > 0 ? "Update" : "Add") Port
+								</button>
+							}
+						</div>
+					</div>
+				</div>
+
+			</div>
+		</div>
+
+		<!-- Selected Nearest Facilities -->
+		@{
+			var totalCount = _savedWarehouses.Count + _savedRails.Count + _savedPorts.Count;
+		}
+		<div class="form-card">
+			<div class="d-flex justify-content-between align-items-center mb-4">
+				<div class="card-header-title mb-0">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Active .svg"
+						 class="formicon" /> Selected Nearest Facilities
+				</div>
+				<div class="fw-bold fs-5 text-dark">@totalCount</div>
+			</div>
+
+			<div class="row g-4">
+
+				@foreach (var wh in _savedWarehouses)
+				{
+					var whName = _warehouses.FirstOrDefault(w => w.Id == wh.WarehouseId)?.Name ?? "Warehouse";
+					<div class="col-md-4">
+						<div class="active-infra-card">
+							<div class="d-flex justify-content-between align-items-start">
+								<div class="d-flex gap-3">
+									<div class="facility-icon-wrapper bg-soft-green text-green m-0">
+										<i class="bi bi-shop"></i>
+									</div>
+									<div>
+										<div class="infra-type-label">WAREHOUSE</div>
+										<h4 class="infra-name">@whName</h4>
+									</div>
+								</div>
+								<div class="action-icons">
+									@if (CanEdit)
+									{
+										<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditWarehouse(wh)"></i>
+									}
+									@if (CanDelete)
+									{
+										<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeleteWarehouse(wh)"></i>
+									}
+								</div>
+							</div>
+
+							<div class="row g-2 mt-2">
+								<div class="col-6">
+									<div class="stat-box green">
+										<div class="stat-label">Distance</div>
+										<div class="stat-value">@wh.Distance.ToString("F1") <span class="stat-unit">KM</span></div>
+									</div>
+								</div>
+								<div class="col-6">
+									<div class="stat-box green">
+										<div class="stat-label">Freight Cost</div>
+										<div class="stat-value">₹ @wh.Freight.ToString("N0") <span class="stat-unit">/ton/KM</span></div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				}
+
+				@foreach (var rail in _savedRails)
+				{
+					var railName = _rackPoints.FirstOrDefault(r => r.Id == rail.RailFacilitiesId)?.Name ?? "Rail Head";
+					<div class="col-md-4">
+						<div class="active-infra-card">
+							<div class="d-flex justify-content-between align-items-start">
+								<div class="d-flex gap-3">
+									<div class="facility-icon-wrapper bg-soft-blue text-blue m-0">
+										<i class="bi bi-train-front"></i>
+									</div>
+									<div>
+										<div class="infra-type-label">RAIL HEAD</div>
+										<h4 class="infra-name">@railName</h4>
+									</div>
+								</div>
+								<div class="action-icons">
+									@if (CanEdit)
+									{
+										<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditRailHead(rail)"></i>
+									}
+									@if (CanDelete)
+									{
+										<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeleteRail(rail)"></i>
+									}
+								</div>
+							</div>
+
+							<div class="row g-2 mt-2">
+								<div class="col-6">
+									<div class="stat-box blue">
+										<div class="stat-label">Distance</div>
+										<div class="stat-value">@rail.Distance.ToString("F1") <span class="stat-unit">KM</span></div>
+									</div>
+								</div>
+								<div class="col-6">
+									<div class="stat-box blue">
+										<div class="stat-label">Freight Cost</div>
+										<div class="stat-value">₹ @rail.Freight.ToString("N0") <span class="stat-unit">/ton/KM</span></div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				}
+
+				@foreach (var port in _savedPorts)
+				{
+					var portName = _ports.FirstOrDefault(p => p.Id == port.PortId)?.Name ?? "Port";
+					<div class="col-md-4">
+						<div class="active-infra-card">
+							<div class="d-flex justify-content-between align-items-start">
+								<div class="d-flex gap-3">
+									<div class="facility-icon-wrapper bg-soft-pink text-pink m-0">
+										<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/PortIcon.svg"
+											 class="formicon" />
+									</div>
+									<div>
+										<div class="infra-type-label">PORT</div>
+										<h4 class="infra-name">@portName</h4>
+									</div>
+								</div>
+								<div class="action-icons">
+									@if (CanEdit)
+									{
+										<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditPort(port)"></i>
+									}
+									@if (CanDelete)
+									{
+										<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeletePort(port)"></i>
+									}
+								</div>
+							</div>
+
+							<div class="row g-2 mt-2">
+								<div class="col-6">
+									<div class="stat-box pink">
+										<div class="stat-label">Distance</div>
+										<div class="stat-value">@port.Distance.ToString("F1") <span class="stat-unit">KM</span></div>
+									</div>
+								</div>
+								<div class="col-6">
+									<div class="stat-box pink">
+										<div class="stat-label">Freight Cost</div>
+										<div class="stat-value">₹ @port.Freight.ToString("N0") <span class="stat-unit">/ton/KM</span></div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				}
+
+				@if (totalCount == 0)
+				{
+					<div class="col-12 text-center text-muted py-4">
+						<i class="bi bi-inbox fs-1"></i>
+						<p class="mt-2">No facilities added yet. Use the cards above to add facilities.</p>
+					</div>
+				}
+
+			</div>
+		</div>
+	</fieldset>
+	
+	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+</div>
+
+@if (_showDeleteConfirm)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
+				<div class="modal-body text-center p-4">
+					<div class="mb-3">
+						<i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 3rem;"></i>
+					</div>
+					<h5 class="fw-bold mb-2">Delete Facility?</h5>
+					<p class="text-muted mb-1">
+						You are about to delete <strong>@_deleteItemName</strong>
+					</p>
+					<p class="text-muted small mb-3">
+						Type: <strong>@_deleteItemType</strong>
+					</p>
+					<p class="text-danger small mb-4">This action cannot be undone.</p>
+					<div class="d-flex justify-content-center gap-3">
+						<button class="btn btn-outline-secondary rounded-pill px-4" @onclick="CancelDelete" disabled="@_isDeleting">
+							Cancel
+						</button>
+						<button class="btn btn-danger rounded-pill px-4" @onclick="ExecuteDelete" disabled="@_isDeleting">
+							@if (_isDeleting)
+							{
+								<span class="spinner-border spinner-border-sm me-1"></span> <span>Deleting...</span>
+							}
+							else
+							{
+								<i class="bi bi-trash me-1"></i> <span>Delete</span>
+							}
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+@code {
+	[SupplyParameterFromQuery(Name = "dealerId")]
+	public int? DealerId { get; set; }
+	[SupplyParameterFromQuery(Name = "mode")]
+	public string? Mode { get; set; }
+
+	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+	// Lookup lists
+	private List<WarehouseEntity> _warehouses = new();
+	private List<RackPoint> _rackPoints = new();
+	private List<Port> _ports = new();
+
+	// Dealer location
+	private double? _dealerLat;
+	private double? _dealerLng;
+
+	// Saved dealer facility entries
+	private List<DealerWarehouseFacilities> _savedWarehouses = new();
+	private List<DealerRailFacilities> _savedRails = new();
+	private List<DealerPortFacilities> _savedPorts = new();
+
+	// Warehouse form fields
+	private int _selectedWarehouseId;
+	private double _whDistance;
+	private double _whFreight;
+	private double _warehousecode;
+	private int _editingWhId;
+	private bool _isCalculatingWhDistance;
+
+	// Rail form fields
+	private int _selectedRailId;
+	private double _railDistance;
+	private double _railFreight;
+	private int _editingRailId;
+	private bool _isCalculatingRailDistance;
+
+	// Port form fields
+	private int _selectedPortId;
+	private double _portDistance;
+	private double _portFreight;
+	private int _editingPortId;
+	private bool _isCalculatingPortDistance;
+
+	// UI state
+	private bool _isSaving;
+	private string? _message;
+	private bool _isError;
+
+	// Delete confirmation state
+	private bool _showDeleteConfirm;
+	private bool _isDeleting;
+	private string _deleteItemName = "";
+	private string _deleteItemType = "";
+	private DealerWarehouseFacilities? _whToDelete;
+	private DealerRailFacilities? _railToDelete;
+	private DealerPortFacilities? _portToDelete;
+
+	// Computed distance display strings
+	private string WhDistanceDisplay => _isCalculatingWhDistance ? "..." : (_whDistance > 0 ? _whDistance.ToString("F1") : "");
+	private string RailDistanceDisplay => _isCalculatingRailDistance ? "..." : (_railDistance > 0 ? _railDistance.ToString("F1") : "");
+	private string PortDistanceDisplay => _isCalculatingPortDistance ? "..." : (_portDistance > 0 ? _portDistance.ToString("F1") : "");
+
+	private string _warehouseSearchText = "";
+	private bool _showWarehouseDropdown = false;
+
+	private string _railSearchText = "";
+	private bool _showRailDropdown = false;
+
+	private string _portSearchText = "";
+	private bool _showPortDropdown = false;
+
+	protected override async Task OnInitializedAsync()
+{
+    Loading.Show();
+    try
+    {
+        await Task.WhenAll(
+            LoadLookups(),
+            LoadDealerLocation(),
+            LoadSavedFacilities());
+    }
+    finally
+    {
+        Loading.Hide();
+    }
+}
+
+	private async Task LoadLookups()
+{
+    try
+    {
+        var whTask   = Http.GetFromJsonAsync<List<WarehouseEntity>>("api/Warehouse");
+        var rackTask = Http.GetFromJsonAsync<List<RackPoint>>("api/RackPoint");
+        var portTask = Http.GetFromJsonAsync<List<Port>>("api/Port");
+
+        await Task.WhenAll(whTask, rackTask, portTask);
+
+        _warehouses = whTask.Result   ?? new();
+        _rackPoints = rackTask.Result ?? new();
+        _ports      = portTask.Result ?? new();
+    }
+    catch (Exception ex)
+    {
+        ShowMessage($"Failed to load facilities: {ex.Message}", true);
+    }
+}
+
+	private async Task LoadDealerLocation()
+	{
+		if (!DealerId.HasValue || DealerId.Value <= 0) return;
+		try
+		{
+			var dealer = await Http.GetFromJsonAsync<DealerReg>($"api/DealerRegistration/{DealerId.Value}");
+			if (dealer != null)
+			{
+				_dealerLat = dealer.Latitude;
+				_dealerLng = dealer.Longitude;
+
+				if (!_dealerLat.HasValue || !_dealerLng.HasValue)
+				{
+					ShowMessage("Dealer location (Latitude/Longitude) is not set. Distance cannot be calculated automatically. Please update dealer registration with Google Map URL first.", true);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load dealer location: {ex.Message}", true);
+		}
+	}
+
+	private async Task LoadSavedFacilities()
+{
+    if (!DealerId.HasValue || DealerId.Value <= 0) return;
+    try
+    {
+        var whTask   = Http.GetFromJsonAsync<List<DealerWarehouseFacilities>>($"api/DealerWarehouseFacilities/byDealer/{DealerId.Value}");
+        var railTask = Http.GetFromJsonAsync<List<DealerRailFacilities>>($"api/DealerRailFacilities/byDealer/{DealerId.Value}");
+        var portTask = Http.GetFromJsonAsync<List<DealerPortFacilities>>($"api/DealerPortFacilities/byDealer/{DealerId.Value}");
+
+        await Task.WhenAll(whTask, railTask, portTask);
+
+        _savedWarehouses = whTask.Result   ?? new();
+        _savedRails      = railTask.Result ?? new();
+        _savedPorts      = portTask.Result ?? new();
+    }
+    catch (Exception ex)
+    {
+        ShowMessage($"Failed to load saved facilities: {ex.Message}", true);
+    }
+
+    var hasErrorAfterLoad = _savedWarehouses.Count < 1 || _savedRails.Count < 1 || _savedPorts.Count < 1;
+    FormStepData.MarkStepError(4, hasErrorAfterLoad);
+}
+
+	// ── Google Maps URL → lat/lng extraction ──
+	private (double lat, double lng)? ParseGoogleUrl(string? url)
+	{
+		if (string.IsNullOrWhiteSpace(url)) return null;
+
+		var match = Regex.Match(url, @"@(-?\d+\.\d+),(-?\d+\.\d+)");
+		if (!match.Success)
+			match = Regex.Match(url, @"[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)");
+		if (!match.Success)
+			match = Regex.Match(url, @"[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)");
+		if (!match.Success)
+			match = Regex.Match(url, @"/dir//(-?\d+\.\d+),(-?\d+\.\d+)");
+		if (!match.Success)
+			match = Regex.Match(url, @"(-?\d+\.\d+),\s*(-?\d+\.\d+)");
+
+		if (match.Success
+			&& double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var lat)
+			&& double.TryParse(match.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var lng))
+		{
+			return (lat, lng);
+		}
+		return null;
+	}
+
+	// ── Haversine fallback (used when OSRM is unreachable) ──
+	private double CalculateDistanceKm(double lat1, double lng1, double lat2, double lng2)
+	{
+		const double R = 6371.0;
+		var dLat = (lat2 - lat1) * Math.PI / 180.0;
+		var dLng = (lng2 - lng1) * Math.PI / 180.0;
+		var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+				+ Math.Cos(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0)
+				* Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+		return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+	}
+
+	// ── OSRM road distance with Haversine fallback ──
+	// ── OSRM road distance with Haversine fallback ──
+private async Task<double> ComputeDistanceAsync(string? googleUrl)
+{
+    if (!_dealerLat.HasValue || !_dealerLng.HasValue) return 0;
+    var coords = ParseGoogleUrl(googleUrl);
+    if (coords == null) return 0;
+
+    var destLat = coords.Value.lat;
+    var destLng = coords.Value.lng;
+    var originLat = _dealerLat.Value;
+    var originLng = _dealerLng.Value;
+
+    // Try OSRM (driving route via roads) first — use a PLAIN client,
+    // not the authed app HttpClient (avoids AuthHttpMessageHandler + TLS handshake issues)
+    try
+    {
+        var url = $"https://router.project-osrm.org/route/v1/driving/" +
+                  $"{originLng.ToString(CultureInfo.InvariantCulture)},{originLat.ToString(CultureInfo.InvariantCulture)};" +
+                  $"{destLng.ToString(CultureInfo.InvariantCulture)},{destLat.ToString(CultureInfo.InvariantCulture)}" +
+                  $"?overview=false";
+
+        using var osrmClient = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        var osrm = await osrmClient.GetFromJsonAsync<OsrmResponse>(url);
+
+        if (osrm != null
+            && string.Equals(osrm.Code, "Ok", StringComparison.OrdinalIgnoreCase)
+            && osrm.Routes != null
+            && osrm.Routes.Count > 0)
+        {
+            return Math.Round(osrm.Routes[0].Distance / 1000.0, 1);
+        }
+    }
+    catch
+    {
+        // Network / TLS / rate-limit issue — fall back to Haversine below
+    }
+
+    // Fallback: straight-line distance
+    return Math.Round(CalculateDistanceKm(originLat, originLng, destLat, destLng), 1);
+}
+
+	// ── Warehouse ──
+	private async Task OnWarehouseSelected(ChangeEventArgs e)
+	{
+		_selectedWarehouseId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+		if (_selectedWarehouseId > 0)
+		{
+			var wh = _warehouses.FirstOrDefault(w => w.Id == _selectedWarehouseId);
+			_isCalculatingWhDistance = true;
+			StateHasChanged();
+			try
+			{
+				_whDistance = await ComputeDistanceAsync(wh?.GoogleURL);
+			}
+			finally
+			{
+				_isCalculatingWhDistance = false;
+			}
+		}
+		else
+		{
+			_whDistance = 0;
+		}
+		_whFreight = 0;
+		_editingWhId = 0;
+	}
+
+	private async Task AddWarehouse()
+	{
+		if (_selectedWarehouseId == 0 || !DealerId.HasValue) return;
+
+		var entry = new DealerWarehouseFacilities
+		{
+			Id = _editingWhId,
+			DealerId = DealerId.Value,
+			WarehouseId = _selectedWarehouseId,
+			Distance = _whDistance,
+			Freight = _whFreight
+		};
+
+		try
+		{
+			if (_editingWhId > 0)
+			{
+				await Http.PutAsJsonAsync($"api/DealerWarehouseFacilities/{_editingWhId}", entry);
+				var existing = _savedWarehouses.FirstOrDefault(w => w.Id == _editingWhId);
+				if (existing != null)
+				{
+					existing.WarehouseId = entry.WarehouseId;
+					existing.Distance = entry.Distance;
+					existing.Freight = entry.Freight;
+				}
+			}
+			else
+			{
+				var response = await Http.PostAsJsonAsync("api/DealerWarehouseFacilities", entry);
+				if (response.IsSuccessStatusCode)
+				{
+					var result = await response.Content.ReadFromJsonAsync<CreateResponse<DealerWarehouseFacilities>>();
+					if (result?.Data != null)
+						_savedWarehouses.Add(result.Data);
+				}
+			}
+			ResetWarehouseForm();
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to save warehouse: {ex.Message}", true);
+		}
+	}
+
+	private async Task SelectWarehouse(int id, string displayText)
+	{
+		_warehouseSearchText = displayText;
+		_showWarehouseDropdown = false;
+		var e = new ChangeEventArgs { Value = id };
+		await OnWarehouseSelected(e);
+	}
+
+	private async Task HideWarehouseDropdownDelay()
+	{
+		await Task.Delay(200);
+		_showWarehouseDropdown = false;
+		StateHasChanged();
+	}
+
+	private void EditWarehouse(DealerWarehouseFacilities wh)
+	{
+		_selectedWarehouseId = wh.WarehouseId;
+		_whDistance = wh.Distance;
+		_whFreight = wh.Freight;
+		_editingWhId = wh.Id;
+		var selectedWh = _warehouses.FirstOrDefault(w => w.Id == _selectedWarehouseId);
+		if (selectedWh != null)
+		{
+			_warehouseSearchText = $"{selectedWh.WarehouseCode} - {selectedWh.Name}";
+		}
+	}
+
+	private void ConfirmDeleteWarehouse(DealerWarehouseFacilities wh)
+	{
+		_whToDelete = wh;
+		_railToDelete = null;
+		_portToDelete = null;
+		_deleteItemName = _warehouses.FirstOrDefault(w => w.Id == wh.WarehouseId)?.Name ?? "Warehouse";
+		_deleteItemType = "Warehouse";
+		_showDeleteConfirm = true;
+	}
+
+	private async Task DeleteWarehouse(DealerWarehouseFacilities wh)
+	{
+		try
+		{
+			await Http.DeleteAsync($"api/DealerWarehouseFacilities/{wh.Id}");
+			_savedWarehouses.Remove(wh);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to delete: {ex.Message}", true);
+		}
+	}
+
+	private void ResetWarehouseForm()
+	{
+		_selectedWarehouseId = 0;
+		_whDistance = 0;
+		_whFreight = 0;
+		_editingWhId = 0;
+		_warehouseSearchText = "";
+	}
+
+	// ── Rail Head ──
+	private async Task OnRailSelected(ChangeEventArgs e)
+	{
+		_selectedRailId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+		if (_selectedRailId > 0)
+		{
+			var rp = _rackPoints.FirstOrDefault(r => r.Id == _selectedRailId);
+			_isCalculatingRailDistance = true;
+			StateHasChanged();
+			try
+			{
+				_railDistance = await ComputeDistanceAsync(rp?.GoogleURL);
+			}
+			finally
+			{
+				_isCalculatingRailDistance = false;
+			}
+		}
+		else
+		{
+			_railDistance = 0;
+		}
+		_railFreight = 0;
+		_editingRailId = 0;
+	}
+
+	private async Task AddRailHead()
+	{
+		if (_selectedRailId == 0 || !DealerId.HasValue) return;
+
+		var entry = new DealerRailFacilities
+		{
+			Id = _editingRailId,
+			DealerId = DealerId.Value,
+			RailFacilitiesId = _selectedRailId,
+			Distance = _railDistance,
+			Freight = _railFreight
+		};
+
+		try
+		{
+			if (_editingRailId > 0)
+			{
+				await Http.PutAsJsonAsync($"api/DealerRailFacilities/{_editingRailId}", entry);
+				var existing = _savedRails.FirstOrDefault(r => r.Id == _editingRailId);
+				if (existing != null)
+				{
+					existing.RailFacilitiesId = entry.RailFacilitiesId;
+					existing.Distance = entry.Distance;
+					existing.Freight = entry.Freight;
+				}
+			}
+			else
+			{
+				var response = await Http.PostAsJsonAsync("api/DealerRailFacilities", entry);
+				if (response.IsSuccessStatusCode)
+				{
+					var result = await response.Content.ReadFromJsonAsync<CreateResponse<DealerRailFacilities>>();
+					if (result?.Data != null)
+						_savedRails.Add(result.Data);
+				}
+			}
+			ResetRailForm();
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to save rail head: {ex.Message}", true);
+		}
+	}
+
+	private async Task SelectRail(int id, string displayText)
+	{
+		_railSearchText = displayText;
+		_showRailDropdown = false;
+		var e = new ChangeEventArgs { Value = id };
+		await OnRailSelected(e);
+	}
+
+	private async Task HideRailDropdownDelay()
+	{
+		await Task.Delay(200);
+		_showRailDropdown = false;
+		StateHasChanged();
+	}
+
+	private async Task SelectPort(int id, string displayText)
+	{
+		_portSearchText = displayText;
+		_showPortDropdown = false;
+		var e = new ChangeEventArgs { Value = id };
+		await OnPortSelected(e);
+	}
+
+	private async Task HidePortDropdownDelay()
+	{
+		await Task.Delay(200);
+		_showPortDropdown = false;
+		StateHasChanged();
+	}
+
+	private void EditRailHead(DealerRailFacilities rail)
+	{
+		_selectedRailId = rail.RailFacilitiesId;
+		_railDistance = rail.Distance;
+		_railFreight = rail.Freight;
+		_editingRailId = rail.Id;
+		var selectedRail = _rackPoints.FirstOrDefault(r => r.Id == _selectedRailId);
+		if (selectedRail != null)
+		{
+			_railSearchText = selectedRail.Name;
+		}
+	}
+
+	private void ConfirmDeleteRail(DealerRailFacilities rail)
+	{
+		_whToDelete = null;
+		_railToDelete = rail;
+		_portToDelete = null;
+		_deleteItemName = _rackPoints.FirstOrDefault(r => r.Id == rail.RailFacilitiesId)?.Name ?? "Rail Head";
+		_deleteItemType = "Rail Head";
+		_showDeleteConfirm = true;
+	}
+
+	private async Task DeleteRailHead(DealerRailFacilities rail)
+	{
+		try
+		{
+			await Http.DeleteAsync($"api/DealerRailFacilities/{rail.Id}");
+			_savedRails.Remove(rail);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to delete: {ex.Message}", true);
+		}
+	}
+
+	private void ResetRailForm()
+	{
+		_selectedRailId = 0;
+		_railDistance = 0;
+		_railFreight = 0;
+		_editingRailId = 0;
+		_railSearchText = "";
+	}
+
+	// ── Port ──
+	private async Task OnPortSelected(ChangeEventArgs e)
+	{
+		_selectedPortId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+		if (_selectedPortId > 0)
+		{
+			var p = _ports.FirstOrDefault(x => x.Id == _selectedPortId);
+			_isCalculatingPortDistance = true;
+			StateHasChanged();
+			try
+			{
+				_portDistance = await ComputeDistanceAsync(p?.GoogleURL);
+			}
+			finally
+			{
+				_isCalculatingPortDistance = false;
+			}
+		}
+		else
+		{
+			_portDistance = 0;
+		}
+		_portFreight = 0;
+		_editingPortId = 0;
+	}
+
+	private async Task AddPort()
+	{
+		if (_selectedPortId == 0 || !DealerId.HasValue) return;
+
+		var entry = new DealerPortFacilities
+		{
+			Id = _editingPortId,
+			DealerId = DealerId.Value,
+			PortId = _selectedPortId,
+			Distance = _portDistance,
+			Freight = _portFreight
+		};
+
+		try
+		{
+			if (_editingPortId > 0)
+			{
+				await Http.PutAsJsonAsync($"api/DealerPortFacilities/{_editingPortId}", entry);
+				var existing = _savedPorts.FirstOrDefault(p => p.Id == _editingPortId);
+				if (existing != null)
+				{
+					existing.PortId = entry.PortId;
+					existing.Distance = entry.Distance;
+					existing.Freight = entry.Freight;
+				}
+			}
+			else
+			{
+				var response = await Http.PostAsJsonAsync("api/DealerPortFacilities", entry);
+				if (response.IsSuccessStatusCode)
+				{
+					var result = await response.Content.ReadFromJsonAsync<CreateResponse<DealerPortFacilities>>();
+					if (result?.Data != null)
+						_savedPorts.Add(result.Data);
+				}
+			}
+			ResetPortForm();
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to save port: {ex.Message}", true);
+		}
+	}
+
+	private void EditPort(DealerPortFacilities port)
+	{
+		_selectedPortId = port.PortId;
+		_portDistance = port.Distance;
+		_portFreight = port.Freight;
+		_editingPortId = port.Id;
+		var selectedPort = _ports.FirstOrDefault(p => p.Id == _selectedPortId);
+		if (selectedPort != null)
+		{
+			_portSearchText = selectedPort.Name;
+		}
+	}
+
+	private void ConfirmDeletePort(DealerPortFacilities port)
+	{
+		_whToDelete = null;
+		_railToDelete = null;
+		_portToDelete = port;
+		_deleteItemName = _ports.FirstOrDefault(p => p.Id == port.PortId)?.Name ?? "Port";
+		_deleteItemType = "Port";
+		_showDeleteConfirm = true;
+	}
+
+	private async Task DeletePort(DealerPortFacilities port)
+	{
+		try
+		{
+			await Http.DeleteAsync($"api/DealerPortFacilities/{port.Id}");
+			_savedPorts.Remove(port);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to delete: {ex.Message}", true);
+		}
+	}
+
+	private void ResetPortForm()
+	{
+		_selectedPortId = 0;
+		_portDistance = 0;
+		_portFreight = 0;
+		_editingPortId = 0;
+		_portSearchText = "";
+	}
+
+	// ── Delete Confirmation ──
+	private void CancelDelete()
+	{
+		ResetDeleteState();
+	}
+
+	private async Task ExecuteDelete()
+	{
+		_isDeleting = true;
+		try
+		{
+			if (_whToDelete != null)
+				await DeleteWarehouse(_whToDelete);
+			else if (_railToDelete != null)
+				await DeleteRailHead(_railToDelete);
+			else if (_portToDelete != null)
+				await DeletePort(_portToDelete);
+		}
+		finally
+		{
+			_isDeleting = false;
+			ResetDeleteState();
+		}
+	}
+
+	private void ResetDeleteState()
+	{
+		_showDeleteConfirm = false;
+		_whToDelete = null;
+		_railToDelete = null;
+		_portToDelete = null;
+		_deleteItemName = "";
+		_deleteItemType = "";
+	}
+
+	// ── Handle Next ──
+	private async Task HandleNext()
+	{
+		if (IsViewOnly)
+		{
+			Loading.Show();
+			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}&mode=view");
+			return;
+		}
+		if (!DealerId.HasValue || DealerId.Value <= 0)
+		{
+			ShowMessage("Dealer ID is required.", true);
+			return;
+		}
+
+		_isSaving = true;
+		try
+		{
+			var hasError = _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1;
+			FormStepData.MarkStepError(4, hasError);
+			Loading.Show();
+			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}");
+		}
+		catch (Exception ex)
+		{
+			Loading.Hide();
+			ShowMessage($"Failed: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	private class CreateResponse<T>
+	{
+		public string? Message { get; set; }
+		public T? Data { get; set; }
+	}
+
+	private class OsrmResponse
+	{
+		public string Code { get; set; } = "";
+		public List<OsrmRoute>? Routes { get; set; }
+	}
+
+	private class OsrmRoute
+	{
+		public double Distance { get; set; }
+		public double Duration { get; set; }
+	}
+
+	private bool CanAdd => LoginState.Can("Warehouse", "Entry");
+	private bool CanEdit => LoginState.Can("Warehouse", "Update");
+	private bool CanDelete => LoginState.Can("Warehouse", "Delete");
+}

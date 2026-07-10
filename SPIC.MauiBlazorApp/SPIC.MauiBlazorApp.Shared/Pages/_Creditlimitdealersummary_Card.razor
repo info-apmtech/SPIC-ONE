@@ -1,0 +1,118 @@
+﻿@using DealerReg = SPIC.Core.Entities.DealerRegistration
+
+<div class="form-card">
+    <div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+        <div class="card-header-title mb-0">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/DealerSummary.svg"
+                 class="formicon" />
+            Dealer Summary
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-3">
+            <div class="info-box">
+                <div class="info-label">Firm Name</div>
+                <div class="info-value">@(Dealer.FirmName ?? "-")</div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="info-box">
+                <div class="info-label">
+                    Total Fixed Assets
+                    <span class="text-muted" style="font-size:0.75rem;">
+                        (Land + Building)
+                    </span>
+                </div>
+                <div class="info-value">
+                    ₹ @((LandTotal + BuildingTotal).ToString("N0"))
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="info-box">
+                <div class="info-label">Godown Capacity</div>
+                <div class="info-value">
+                    @((Dealer.OwnGodownCapacity + Dealer.RentGodownCapacity).ToString("N0")) MT
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="info-box">
+                <div class="info-label">Experience</div>
+                <div class="info-value">
+                    @Dealer.YearsofExperiance years
+                    <div style="font-size: 0.85rem; color: #6B7280; margin-top: 4px;">
+                        (in SPIC @* @Dealer.DateOfAppointment.ToString("dd/MM/yyyy") - *@ @GetSpicTenure())
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public DealerReg Dealer { get; set; } = new();
+    [Parameter] public decimal LandTotal { get; set; }
+    [Parameter] public decimal BuildingTotal { get; set; }
+
+    private string GetSpicTenure()
+    {
+        if (Dealer.DateOfAppointment == default || Dealer.DateOfAppointment > DateTime.Now)
+            return "0 days";
+
+        var today = DateTime.Now;
+        var appointmentDate = Dealer.DateOfAppointment;
+        var totalDays = (today - appointmentDate).Days;
+
+        // Calculate years, months, days
+        var years = today.Year - appointmentDate.Year;
+        var months = today.Month - appointmentDate.Month;
+        var days = today.Day - appointmentDate.Day;
+
+        // Adjust for negative days
+        if (days < 0)
+        {
+            months--;
+            days += DateTime.DaysInMonth(today.Year, today.Month == 1 ? 12 : today.Month - 1);
+        }
+
+        // Adjust for negative months
+        if (months < 0)
+        {
+            years--;
+            months += 12;
+        }
+
+        // Format the output based on tenure length
+        if (years > 0)
+        {
+            if (months > 0 && days > 0)
+                return $"{years}y {months}m {days}d";
+            else if (months > 0)
+                return $"{years}y {months}m";
+            else if (days > 0)
+                return $"{years}y {days}d";
+            else
+                return $"{years}y";
+        }
+        else if (months > 0)
+        {
+            if (days > 0)
+                return $"{months}m {days}d";
+            else
+                return $"{months}m";
+        }
+        else if (days > 0)
+        {
+            return $"{days}d";
+        }
+        else
+        {
+            return "0 days";
+        }
+    }
+}

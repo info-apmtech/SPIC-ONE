@@ -1,0 +1,401 @@
+﻿@page "/GuestBooking"
+
+<style>
+    :root {
+        --bg-body: #f4f6f8;
+        --bg-card: #ffffff;
+        --text-main: #1f2937;
+        --text-muted: #6b7280;
+        --border-light: #e5e7eb;
+        --primary-blue: #3b82f6;
+        
+        /* Card Theme Colors */
+        --header-bg-green: #eaf0e5; /* Soft green from design */
+        --header-text-green: #3f4e42;
+        --bg-pink-alert: #fbecec; /* Soft pink for cancellation */
+    }
+
+    
+
+    /* --- Page Header --- */
+    .page-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 0.25rem;
+    }
+    .page-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-bottom: 1.5rem;
+    }
+
+    /* --- Review Card Base --- */
+    .review-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        margin-bottom: 1.25rem;
+        overflow: hidden; /* Keeps the rounded corners with the header */
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .review-card-header {
+        background-color: var(--header-bg-green);
+        padding: 12px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #dce4d6;
+    }
+
+    .review-card-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--header-text-green);
+        margin: 0;
+    }
+
+    .review-card-body {
+        padding: 20px;
+    }
+
+    /* --- Edit Button --- */
+    .btn-edit {
+        background-color: #374151;
+        color: #ffffff;
+        border: none;
+        border-radius: 6px;
+        padding: 4px 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .btn-edit:hover { background-color: #1f2937; color: #ffffff;}
+    .btn-edit i { font-size: 0.8rem; }
+
+    /* --- Key Value Pairs --- */
+    .kv-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+    .kv-row:last-child {
+        margin-bottom: 0;
+    }
+    .kv-label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        flex-shrink: 0;
+    }
+    .kv-value {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-main);
+        text-align: right;
+        max-width: 60%;
+        line-height: 1.4;
+    }
+
+    /* --- Specific Card Layouts --- */
+    
+    /* Room Details */
+    .room-details-container {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+    }
+    .room-image {
+        width: 100px;
+        height: 65px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid var(--border-light);
+        flex-shrink: 0;
+    }
+    .room-info {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    /* Check In / Out */
+    .check-box-col {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .check-lbl {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-muted);
+    }
+    .check-val {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+    .check-val i {
+        color: var(--text-muted);
+        font-size: 1rem;
+    }
+
+    /* Booking Summary Modifiers */
+    .summary-divider {
+        height: 1px;
+        background-color: var(--border-light);
+        margin: 16px 0;
+    }
+    .total-val {
+        color: var(--primary-blue) !important;
+        font-size: 1.1rem !important;
+        font-weight: 700 !important;
+    }
+    .total-lbl {
+        font-size: 1rem !important;
+        font-weight: 700 !important;
+        color: var(--text-main);
+    }
+
+    /* Cancellation Policy */
+    .cancellation-card {
+        background-color: var(--bg-pink-alert);
+        border: 1px solid #f6dada;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 1.25rem;
+    }
+    .cancellation-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 12px;
+    }
+    .cancellation-list {
+        margin: 0;
+        padding-left: 16px;
+        color: #6b7280;
+        font-size: 0.85rem;
+        line-height: 1.6;
+    }
+    .cancellation-list li {
+        margin-bottom: 6px;
+    }
+    .cancellation-list li:last-child {
+        margin-bottom: 0;
+    }
+
+    /* --- Bottom Actions --- */
+    .bottom-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 1rem;
+        padding-bottom: 2rem;
+    }
+    .btn-outline-back {
+        background-color: #ffffff;
+        border: 1px solid var(--border-light);
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-outline-back:hover { background-color: #f9fafb; }
+
+    .btn-primary-continue {
+        background-color: var(--primary-blue);
+        border: 1px solid var(--primary-blue);
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-primary-continue:hover { background-color: #2563eb; }
+</style>
+
+<div class="container-fluid py-4 px-0">
+    
+    <div class="mb-4">
+        <h1 class="page-title">Review Your Booking</h1>
+        <p class="page-subtitle">Please verify all details before proceeding to payment</p>
+    </div>
+
+    <div class="row g-4">
+        
+        <div class="col-lg-5">
+            
+            <div class="review-card">
+                <div class="review-card-header">
+                    <h3 class="review-card-title">Room Details</h3>
+                    <button class="btn-edit">Edit <i class="bi bi-pencil-square"></i></button>
+                </div>
+                <div class="review-card-body">
+                    <div class="room-details-container">
+                        <img src="https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=200&q=80" alt="Room Image" class="room-image">
+                        <div class="room-info">
+                            <div class="kv-row">
+                                <span class="kv-label">Guest House</span>
+                                <span class="kv-value">T-Nagar</span>
+                            </div>
+                            <div class="kv-row">
+                                <span class="kv-label">Room Type</span>
+                                <span class="kv-value">AC Deluxe Room</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="review-card">
+                <div class="review-card-header">
+                    <h3 class="review-card-title">Check-in & Check-out</h3>
+                    <button class="btn-edit">Edit <i class="bi bi-pencil-square"></i></button>
+                </div>
+                <div class="review-card-body">
+                    <div class="row">
+                        <div class="col-6 check-box-col">
+                            <div class="check-lbl">Check-in</div>
+                            <div class="check-val"><i class="bi bi-calendar"></i> May 26, 2026</div>
+                            <div class="check-val"><i class="bi bi-clock"></i> 2 PM</div>
+                        </div>
+                        <div class="col-6 check-box-col">
+                            <div class="check-lbl">Check-out</div>
+                            <div class="check-val"><i class="bi bi-calendar"></i> May 29, 2026</div>
+                            <div class="check-val"><i class="bi bi-clock"></i> 12 AM</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="review-card">
+                <div class="review-card-header">
+                    <h3 class="review-card-title">Booking Summary</h3>
+                </div>
+                <div class="review-card-body">
+                    <div class="kv-row">
+                        <span class="kv-label">Room Type</span>
+                        <span class="kv-value">AC Deluxe Room</span>
+                    </div>
+                    
+                    <div class="summary-divider"></div>
+                    
+                    <div class="kv-row">
+                        <span class="kv-label">Room Price</span>
+                        <span class="kv-value">₹999.00</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Number of nights</span>
+                        <span class="kv-value">3</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Extra Cot × 1</span>
+                        <span class="kv-value">₹250.00</span>
+                    </div>
+
+                    <div class="summary-divider"></div>
+
+                    <div class="kv-row">
+                        <span class="kv-label">Subtotal</span>
+                        <span class="kv-value">₹3247.00</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Taxes (12%)</span>
+                        <span class="kv-value">₹120.00</span>
+                    </div>
+
+                    <div class="summary-divider"></div>
+
+                    <div class="kv-row mt-3">
+                        <span class="kv-label total-lbl">Total</span>
+                        <span class="kv-value total-val">₹3367.00</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="col-lg-7">
+            
+            <div class="review-card">
+                <div class="review-card-header">
+                    <h3 class="review-card-title">Guest Information</h3>
+                    <button class="btn-edit">Edit <i class="bi bi-pencil-square"></i></button>
+                </div>
+                <div class="review-card-body">
+                    <div class="kv-row">
+                        <span class="kv-label">Employee ID / Dealer Code</span>
+                        <span class="kv-value">DL-1234</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Guest Name</span>
+                        <span class="kv-value">Rajesh</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Company Name</span>
+                        <span class="kv-value">SPIC Pvt. ltd.,</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Phone Number</span>
+                        <span class="kv-value">9876543210</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Email ID</span>
+                        <span class="kv-value">hi@gmail.com</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Number of Persons</span>
+                        <span class="kv-value">2 persons</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Nationality</span>
+                        <span class="kv-value">Indian</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Aadhaar / Passport Number</span>
+                        <span class="kv-value">098 765 432 109</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Address</span>
+                        <span class="kv-value text-wrap">No.5, SPIC House, Guindy, Chennai-600022.</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cancellation-card">
+                <h3 class="cancellation-title">Cancellation Policy</h3>
+                <ul class="cancellation-list">
+                    <li>Free cancellation up to 24 hours before check-in</li>
+                    <li>50% refund for cancellations within 24-48 hours</li>
+                    <li>No refund for cancellations within 24 hours of check-in</li>
+                </ul>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="bottom-actions">
+        <button class="btn-outline-back">Edit Details</button>
+        <button class="btn-primary-continue">Proceed to Payment</button>
+    </div>
+
+</div>
+
+@code {
+
+}

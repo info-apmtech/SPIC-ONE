@@ -1,0 +1,477 @@
+@page "/EmployeeManagement"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using SPIC.Core.Entities
+@using System.Text
+@using System.IO
+@using static SPIC.Core.Entities.EmployeeRegistration
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LoadingService Loading
+@inject IJSRuntime JSRuntime
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+<div class="container-fluid py-4 px-0">
+
+    <div class="page-header-row">
+        <div>
+            <h1 class="page-title">Employee Management</h1>
+            <div class="page-subtitle">Manage employees, roles, and location-based login assignments</div>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <button class="btn-outline-green emp-action-btn" @onclick="DownloadSampleTemplate">
+                <i class="bi bi-file-earmark-excel"></i> Sample Format
+            </button>
+            @if (LoginState.Can(PagePermission.EmployeeRegistration, "Entry"))
+            {
+                <button class="btn-outline-green emp-action-btn" @onclick="() => _showUploadModal = true">
+                    <i class="bi bi-cloud-arrow-up"></i> Bulk Upload
+                </button>
+                <NavLink class="btn-register text-decoration-none emp-action-btn" href="/EmployeeRegistration">
+                    <i class="bi bi-plus-lg"></i> Register Employee
+                </NavLink>
+            }
+        </div>
+    </div>
+
+    @if (_showUploadModal)
+    {
+        <div class="modal-backdrop fade show"></div>
+        <div class="modal fade show d-block" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-cloud-arrow-up me-2"></i>Bulk Upload Employees</h5>
+                        <button type="button" class="btn-close" @onclick="CloseUploadModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3">
+                            Excel columns: <strong>EmployeeID, EmpName, UserName, Permission, State, Region, HQ, PhoneNumber, EmailID, Designation</strong><br />
+                            Designation is optional — leave blank for full access. Must match an existing active designation name.<br />
+                            Phone number is used as the login password.<br />
+                            Allowed roles: <strong>SMD, SMM</strong> (State) · <strong>RM, RMD</strong> (State + Region) · <strong>MDO, MO, JMDO</strong> (HQ)
+                        </p>
+                        <InputFile OnChange="OnEmployeeFileSelected" accept=".xlsx,.xls" />
+
+                        @if (_isUploading)
+                        {
+                            <div class="mt-3 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Uploading...</div>
+                        }
+                        else if (_uploadInserted > 0 || _uploadSkipped > 0)
+                        {
+                            <div class="mt-3 alert @(_uploadSkipped == 0 ? "alert-success" : "alert-warning") py-2">
+                                <strong>Inserted:</strong> @_uploadInserted &nbsp;&nbsp;
+                                <strong>Skipped:</strong> @_uploadSkipped
+                            </div>
+                        }
+                        else if (!string.IsNullOrEmpty(_uploadResult))
+                        {
+                            <div class="mt-3 alert alert-danger py-2">@_uploadResult</div>
+                        }
+
+                        @if (_uploadGroupedErrors.Count > 0)
+                        {
+                            <div class="mt-3">
+                                <strong class="text-danger">Issues found:</strong>
+                                @foreach (var grp in _uploadGroupedErrors)
+                                {
+                                    <div class="mt-2">
+                                        <span class="badge bg-danger me-2">@grp.Key</span>
+                                        <span class="badge bg-secondary">@grp.Value.Count</span>
+                                        <ul class="mb-1 mt-1" style="font-size:0.82rem;">
+                                            @foreach (var msg in grp.Value)
+                                            {
+                                                <li>@msg</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm rounded-pill px-4" @onclick="CloseUploadModal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- SPIC DATA TABLE -->
+    <SpicDataTable Items="FilteredItems" 
+                   IsLoading="_isLoading" 
+                   Title="Employee List" 
+                   FileName="Employees" 
+                   ExportColumns="GetExportColumns()">
+                   
+        <FilterControls>
+            <div class="search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" placeholder="Search employees..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
+            </div>
+
+            <select class="form-inp" @bind="_roleFilter" @bind:after="ApplyFilter">
+                <option value="All">All Role</option>
+                @foreach (var role in Enum.GetValues<AppRole>())
+                {
+                    <option value="@role">@role</option>
+                }
+            </select>
+
+            <select class="form-inp" @bind="_stateFilter" @bind:after="ApplyFilter">
+                <option value="All">All States</option>
+                @foreach (var s in states)
+                {
+                    <option value="@s.Id">@(!string.IsNullOrWhiteSpace(s.StateName) ? s.StateName : s.ZoneName)</option>
+                }
+            </select>
+        </FilterControls>
+
+        <TableHeader>
+            <th>Employee ID</th>
+            <th>Name</th>
+            <th>User Name</th>
+            <th>Password</th>
+            <th>Role</th>
+            <th>State</th>
+            @if (LoginState.Can(PagePermission.EmployeeRegistration, "Update") || LoginState.Can(PagePermission.EmployeeRegistration, "Delete"))
+            {
+                <th>Action</th>
+            }
+        </TableHeader>
+
+        <TableRow Context="item">
+            <td>@item.EmployeeCode</td>
+            <td>@item.Name</td>
+            <td class="text-muted">@item.UserName</td>
+            <td class="text-muted">@item.Password</td>
+            <td><span class="role-badge">@item.Role</span></td>
+            <td>@item.StateName</td>
+            @if (LoginState.Can(PagePermission.EmployeeRegistration, "Update") || LoginState.Can(PagePermission.EmployeeRegistration, "Delete"))
+            {
+                <td>
+                    <div class="action-icons">
+                        @if (LoginState.Can(PagePermission.EmployeeRegistration, "Update"))
+                        {
+                            <i class="bi bi-pencil-square text-primary icon-edit me-2" style="cursor:pointer;" title="Edit Employee" @onclick="() => EditEmployee(item.LoginId)"></i>
+                        }
+                        @if (LoginState.Can(PagePermission.EmployeeRegistration, "Delete"))
+                        {
+                            <i class="bi bi-trash text-danger icon-del" style="cursor:pointer;" title="Delete Role" @onclick="() => DeleteEmployee(item.LoginId)"></i>
+                        }
+                    </div>
+                </td>
+            }
+        </TableRow>
+    </SpicDataTable>
+
+</div>
+
+@code {
+    private List<EmployeeInformation> employees = new();
+    private List<Employeelogin> logins = new();
+    private List<UserInfoDto> users = new();
+    private List<LocationItemDto> states = new();
+
+    private Dictionary<string, UserInfoDto> userById = new();
+    private Dictionary<int, string> stateNameById = new();
+    private Dictionary<string, UserInfoDto> userByGuid = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool _isLoading = true;
+    private string _searchText = string.Empty;
+    private string _roleFilter = "All";
+    private string _stateFilter = "All";
+
+    private bool _showUploadModal = false;
+    private bool _isUploading = false;
+    private string _uploadResult = string.Empty;
+    private int _uploadInserted = 0;
+    private int _uploadSkipped = 0;
+    private Dictionary<string, List<string>> _uploadGroupedErrors = new();
+
+    private List<EmployeeGridItem> FilteredItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+
+        employees = await Http.GetFromJsonAsync<List<EmployeeInformation>>("api/EmployeeRegistration/all") ?? new();
+        logins = await Http.GetFromJsonAsync<List<Employeelogin>>("api/Employeelogin/all") ?? new();
+        users = await Http.GetFromJsonAsync<List<UserInfoDto>>("api/UserInfo/all") ?? new();
+        states = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
+
+        userById = users.Where(u => !string.IsNullOrWhiteSpace(u.UserName)).ToDictionary(u => u.UserName!, u => u, StringComparer.OrdinalIgnoreCase);
+        userByGuid = users.Where(u => !string.IsNullOrWhiteSpace(u.Id)).ToDictionary(u => u.Id, u => u, StringComparer.OrdinalIgnoreCase);
+        stateNameById = states.ToDictionary(s => s.Id, s => string.IsNullOrWhiteSpace(s.StateName) ? "-" : s.StateName);
+
+        ApplyFilter();
+        _isLoading = false;
+    }
+
+    private string GetUserName(string? userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId)) return "-";
+        if (userByGuid.TryGetValue(userId, out var user)) return user.UserName;
+        return userId;
+    }
+
+    private string GetPassword(int empId, string? userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId)) return "-";
+        if (userByGuid.TryGetValue(userId, out var user) || userById.TryGetValue(userId, out user))
+        {
+            if (!string.IsNullOrWhiteSpace(user.Password)) return user.Password;
+        }
+        var emp = employees.FirstOrDefault(e => e.Id == empId);
+        return emp?.PersonalPhoneNumber ?? "-";
+    }
+
+    private string GetStateName(int? stateId)
+        => stateId == null ? "-" : stateNameById.TryGetValue(stateId.Value, out var v) ? v : "-";
+
+    private List<ExportColumn<EmployeeGridItem>> GetExportColumns()
+    {
+        return new List<ExportColumn<EmployeeGridItem>>
+        {
+            new ExportColumn<EmployeeGridItem> { Header = "S:No", ValueSelector = item => (FilteredItems.IndexOf(item) + 1).ToString() },
+            new ExportColumn<EmployeeGridItem> { Header = "Employee ID", ValueSelector = item => item.EmployeeCode },
+            new ExportColumn<EmployeeGridItem> { Header = "Name", ValueSelector = item => item.Name },
+            new ExportColumn<EmployeeGridItem> { Header = "User Name", ValueSelector = item => item.UserName },
+            new ExportColumn<EmployeeGridItem> { Header = "Password", ValueSelector = item => item.Password },
+            new ExportColumn<EmployeeGridItem> { Header = "Role", ValueSelector = item => item.Role },
+            new ExportColumn<EmployeeGridItem> { Header = "State", ValueSelector = item => item.StateName }
+        };
+    }
+    private async Task DownloadSampleTemplate()
+    {
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync("api/EmployeeBulkUpload/sample-template");
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBytes",
+                "Employee_Sample_Template.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                base64);
+        }
+        catch (Exception ex)
+        {
+            _uploadResult = $"Failed to download sample template: {ex.Message}";
+        }
+    }
+    private void ApplyFilter()
+    {
+        var q = (_searchText ?? string.Empty).Trim();
+        var allItems = new List<EmployeeGridItem>();
+
+        // 1. Flatten the Data: One row per login
+        foreach (var emp in employees)
+        {
+            var empLogins = logins.Where(l => l.EmployeeInformationID == emp.Id).ToList();
+
+            if (empLogins.Any())
+            {
+                foreach (var login in empLogins)
+                {
+                    allItems.Add(new EmployeeGridItem
+                    {
+                        EmployeeId = emp.Id,
+                        LoginId = login.Id,
+                        EmployeeCode = emp.EmployeeCode ?? "",
+                        Name = emp.Name ?? "",
+                        UserName = GetUserName(login.UserId),
+                        Password = GetPassword(emp.Id, login.UserId),
+                        Role = login.Role.ToString(),
+                        StateId = login.StateId,
+                        StateName = GetStateName(login.StateId)
+                    });
+                }
+            }
+            else
+            {
+                // Employee exists but has no login assigned yet
+                allItems.Add(new EmployeeGridItem
+                {
+                    EmployeeId = emp.Id,
+                    LoginId = 0,
+                    EmployeeCode = emp.EmployeeCode ?? "",
+                    Name = emp.Name ?? "",
+                    UserName = "-",
+                    Password = GetPassword(emp.Id, null),
+                    Role = "-",
+                    StateId = 0,
+                    StateName = "-"
+                });
+            }
+        }
+
+        // 2. Apply text and dropdown filters
+        IEnumerable<EmployeeGridItem> query = allItems;
+
+        if (!string.IsNullOrEmpty(q))
+        {
+            query = query.Where(e =>
+                e.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || e.EmployeeCode.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || e.UserName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || e.Password.Contains(q, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.Equals(_roleFilter, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(e => string.Equals(e.Role, _roleFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.Equals(_stateFilter, "All", StringComparison.OrdinalIgnoreCase) && int.TryParse(_stateFilter, out var sid))
+        {
+            query = query.Where(e => e.StateId == sid);
+        }
+
+        FilteredItems = query.ToList();
+    }
+
+    private void EditEmployee(int loginId)
+    {
+        Nav.NavigateTo($"/EmployeeRegistration?editLoginId={loginId}");
+    }
+
+    private async Task DeleteEmployee(int loginId)
+    {
+        bool isConfirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this role? This action cannot be undone.");
+
+        if (isConfirmed)
+        {
+            var response = await Http.DeleteAsync($"api/EmployeeLoginSetup/login/{loginId}");
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadData();
+            }
+        }
+    }
+
+    private void CloseUploadModal()
+    {
+        _showUploadModal = false;
+        _uploadResult = string.Empty;
+        _uploadInserted = 0;
+        _uploadSkipped = 0;
+        _uploadGroupedErrors.Clear();
+    }
+
+    private async Task OnEmployeeFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        _isUploading = true;
+        _uploadResult = string.Empty;
+        _uploadInserted = 0;
+        _uploadSkipped = 0;
+        _uploadGroupedErrors.Clear();
+
+        try
+        {
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(20 * 1024 * 1024).CopyToAsync(ms);
+            ms.Position = 0;
+
+            using var content = new MultipartFormDataContent();
+            var fileContent = new StreamContent(ms);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+            content.Add(fileContent, "file", file.Name);
+
+            var resp = await Http.PostAsync("api/EmployeeBulkUpload/bulk-upload", content);
+            var body = await resp.Content.ReadAsStringAsync();
+
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = System.Text.Json.JsonSerializer.Deserialize<BulkUploadResult>(body,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (result != null)
+                {
+                    _uploadInserted = result.Inserted;
+                    _uploadSkipped = result.Skipped;
+                    _uploadGroupedErrors = result.GroupedErrors ?? new();
+                }
+                await LoadData();
+            }
+            else
+            {
+                _uploadResult = "Upload failed: " + body;
+            }
+        }
+        catch (Exception ex)
+        {
+            _uploadResult = "Upload error: " + ex.Message;
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+
+    // New DTO class strictly for holding flattened grid data
+    private class EmployeeGridItem
+    {
+        public int EmployeeId { get; set; }
+        public int LoginId { get; set; }
+        public string EmployeeCode { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string UserName { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string Role { get; set; } = "-";
+        public int StateId { get; set; }
+        public string StateName { get; set; } = "-";
+    }
+
+    private class BulkUploadResult
+    {
+        public bool Success { get; set; }
+        public int Inserted { get; set; }
+        public int Skipped { get; set; }
+        public Dictionary<string, List<string>>? GroupedErrors { get; set; }
+    }
+
+    public class UserInfoDto
+    {
+        public string Id { get; set; } = "";
+        public string UserName { get; set; } = "";
+        public string? Email { get; set; }
+        public string? Name { get; set; }
+        public bool IsActive { get; set; }
+        public string? Password { get; set; }
+    }
+
+    public class LocationItemDto
+    {
+        public int Id { get; set; }
+        public string ZoneName { get; set; } = "";
+        public string StateName { get; set; } = "";
+        public string DistrictName { get; set; } = "";
+        public string SubDistrictName { get; set; } = "";
+        public string RegionName { get; set; } = "";
+        public string HeadquarterName { get; set; } = "";
+        public string? ZoneCode { get; set; }
+        public string? ZoneColorCode { get; set; }
+        public int ZoneId { get; set; }
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public int RegionId { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+
+        public string Name =>
+            !string.IsNullOrEmpty(ZoneName) ? ZoneName :
+            !string.IsNullOrEmpty(StateName) ? StateName :
+            !string.IsNullOrEmpty(DistrictName) ? DistrictName :
+            !string.IsNullOrEmpty(SubDistrictName) ? SubDistrictName :
+            !string.IsNullOrEmpty(RegionName) ? RegionName :
+            HeadquarterName;
+    }
+}

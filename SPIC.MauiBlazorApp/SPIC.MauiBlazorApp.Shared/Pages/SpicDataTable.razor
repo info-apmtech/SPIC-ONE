@@ -1,0 +1,276 @@
+﻿@typeparam TItem
+@using System.Text
+@using System.IO
+@using ClosedXML.Excel
+@using QuestPDF.Fluent
+@using QuestPDF.Helpers
+@using QuestPDF.Infrastructure
+@inject IJSRuntime JSRuntime
+
+<div class="main-card">
+    <div class="section-header">
+        <h3 class="section-title">@Title</h3>
+
+        @if (FilterControls != null)
+        {
+            <div class="table-controls">
+                @FilterControls
+            </div>
+        }
+    </div>
+
+    <!-- Export Buttons (unchanged layout) -->
+    <div class="export-buttons mb-3 d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportCopy"><i class="bi bi-front"></i> Copy</button>
+        <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportCsv"><i class="bi bi-filetype-csv"></i> CSV</button>
+        <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportExcel"><i class="bi bi-file-earmark-excel"></i> Excel</button>
+        <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportPdf"><i class="bi bi-filetype-pdf"></i> PDF</button>
+        <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportPrint"><i class="bi bi-printer"></i> Print</button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrapper">
+        <div class="table-responsive">
+            <table class="spic-table">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">S:No</th>
+                        @TableHeader
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (IsLoading)
+                    {
+                        <tr>
+                            <td colspan="100%" class="text-center text-muted">Loading...</td>
+                        </tr>
+                    }
+                    else if (!PagedItems.Any())
+                    {
+                        <tr>
+                            <td colspan="100%" class="text-center text-muted">
+                                @if (!string.IsNullOrEmpty(SearchText))
+                                {
+                                    <span>No results found for "<strong>@SearchText</strong>".</span>
+                                }
+                                else
+                                {
+                                    <span>No data found.</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
+                        {
+                            <tr>
+                                <td class="text-muted">@(((CurrentPage - 1) * PageSize) + index + 1)</td>
+                                @TableRow(item)
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination-container">
+        <div class="items-per-page">
+            Items Per Page
+            <select @bind="PageSize" @bind:after="ResetPage">
+                <option value="16">16</option>
+                <option value="32">32</option>
+                <option value="50">50</option>
+            </select>
+        </div>
+
+        <div class="pagination-controls">
+            <div class="page-btn @(CurrentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage">
+                <i class="bi bi-chevron-left"></i>
+            </div>
+            @foreach (var thispage in PageNumbers)
+            {
+                if (thispage == -1)
+                {
+                    <div class="page-btn ellipsis">...</div>
+                }
+                else
+                {
+                    <div class="page-btn @(thispage == CurrentPage ? "active" : "")" @onclick="() => GoToPage(thispage)">@(thispage)</div>
+                }
+            }
+            <div class="page-btn @(CurrentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage">
+                <i class="bi bi-chevron-right"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Existing Records";
+    [Parameter] public string FileName { get; set; } = "Export";
+    [Parameter] public bool IsLoading { get; set; }
+
+    // Data & Columns
+    [Parameter] public IEnumerable<TItem> Items { get; set; } = Enumerable.Empty<TItem>();
+    [Parameter] public List<ExportColumn<TItem>> ExportColumns { get; set; } = new();
+
+    // UI Templates
+    [Parameter] public RenderFragment? FilterControls { get; set; }
+    [Parameter] public RenderFragment? TableHeader { get; set; }
+    [Parameter] public RenderFragment<TItem>? TableRow { get; set; }
+
+    // Universal Search — parent binds its existing search textbox to this
+    [Parameter] public string SearchText { get; set; } = "";
+
+    // Pagination State
+    public int CurrentPage { get; set; } = 1;
+    public int PageSize { get; set; } = 16;
+
+    /// <summary>
+    /// Filters Items by the current SearchText across every ExportColumn (except S:No).
+    /// This gives universal multi-column search without any UI inside the component.
+    /// </summary>
+    private IEnumerable<TItem> SearchedItems
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchText) || ExportColumns == null || ExportColumns.Count == 0)
+                return Items;
+
+            var query = SearchText.Trim();
+
+            return Items.Where(item =>
+                ExportColumns
+                    .Where(c => !string.Equals(c.Header, "S:No", StringComparison.OrdinalIgnoreCase))
+                    .Any(c =>
+                    {
+                        var val = c.ValueSelector?.Invoke(item) ?? "";
+                        return val.Contains(query, StringComparison.OrdinalIgnoreCase);
+                    }));
+        }
+    }
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(SearchedItems.Count() / (double)PageSize));
+    private IEnumerable<TItem> PagedItems => SearchedItems.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
+
+    protected override void OnParametersSet()
+    {
+        // If parent filter/search shrinks the dataset, jump back to page 1
+        if (CurrentPage > TotalPages && TotalPages > 0) CurrentPage = 1;
+    }
+
+    private void ResetPage() { CurrentPage = 1; }
+    private void GoToPage(int page) { CurrentPage = page; }
+    private void PreviousPage() { if (CurrentPage > 1) CurrentPage--; }
+    private void NextPage() { if (CurrentPage < TotalPages) CurrentPage++; }
+
+    private IEnumerable<int> PageNumbers
+    {
+        get
+        {
+            var total = TotalPages;
+            if (total <= 7) return Enumerable.Range(1, total);
+
+            var pages = new List<int> { 1 };
+            var start = Math.Max(2, CurrentPage - 1);
+            var end = Math.Min(total - 1, CurrentPage + 1);
+
+            if (start > 2) pages.Add(-1);
+            for (var i = start; i <= end; i++) pages.Add(i);
+            if (end < total - 1) pages.Add(-1);
+            pages.Add(total);
+
+            return pages;
+        }
+    }
+
+    // ==========================================
+    // EXPORT LOGIC — exports respect current search filter
+    // ==========================================
+    private async Task DownloadFile(string dataUri, string fileName)
+    {
+        var js = $@"var a = document.createElement('a'); a.href = '{dataUri}'; a.download = '{fileName}'; document.body.appendChild(a); a.click(); document.body.removeChild(a);";
+        await JSRuntime.InvokeVoidAsync("eval", js);
+    }
+
+    private async Task ExportCopy()
+    {
+        var data = SearchedItems.ToList();
+        if (!data.Any()) return;
+        var sb = new StringBuilder();
+        sb.AppendLine(string.Join("\t", ExportColumns.Select(c => c.Header)));
+        foreach (var item in data) sb.AppendLine(string.Join("\t", ExportColumns.Select(c => c.ValueSelector(item))));
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", sb.ToString());
+        await JSRuntime.InvokeVoidAsync("alert", "Table data copied to clipboard!");
+    }
+
+    private async Task ExportCsv()
+    {
+        var data = SearchedItems.ToList();
+        if (!data.Any()) return;
+        var sb = new StringBuilder();
+        sb.AppendLine(string.Join(",", ExportColumns.Select(c => $"\"{c.Header.Replace("\"", "\"\"")}\"")));
+        foreach (var item in data) sb.AppendLine(string.Join(",", ExportColumns.Select(c => $"\"{c.ValueSelector(item)?.Replace("\"", "\"\"")}\"")));
+        var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+        await DownloadFile($"data:text/csv;base64,{Convert.ToBase64String(bytes)}", $"{FileName}_{DateTime.Now:yyyyMMdd}.csv");
+    }
+
+    private async Task ExportExcel()
+    {
+        var data = SearchedItems.ToList();
+        if (!data.Any()) return;
+        using var workbook = new XLWorkbook();
+        var worksheet = workbook.Worksheets.Add(FileName.Length > 31 ? FileName.Substring(0, 31) : FileName);
+        for (int c = 0; c < ExportColumns.Count; c++) worksheet.Cell(1, c + 1).Value = ExportColumns[c].Header;
+        for (int r = 0; r < data.Count; r++)
+            for (int c = 0; c < ExportColumns.Count; c++) worksheet.Cell(r + 2, c + 1).Value = ExportColumns[c].ValueSelector(data[r]);
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        await DownloadFile($"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{Convert.ToBase64String(stream.ToArray())}", $"{FileName}_{DateTime.Now:yyyyMMdd}.xlsx");
+    }
+
+    private async Task ExportPdf()
+    {
+        var data = SearchedItems.ToList();
+        if (!data.Any()) return;
+        QuestPDF.Settings.License = LicenseType.Community;
+        var pdfBytes = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4.Landscape());
+                page.Margin(1, Unit.Centimetre);
+                page.Header().Text(FileName).SemiBold().FontSize(18);
+                page.Content().Table(table =>
+                {
+                    table.ColumnsDefinition(colDef => { foreach (var _ in ExportColumns) colDef.RelativeColumn(); });
+                    table.Header(header => { foreach (var col in ExportColumns) header.Cell().BorderBottom(1).PaddingBottom(5).Text(col.Header).Bold(); });
+                    foreach (var item in data) foreach (var col in ExportColumns) table.Cell().PaddingVertical(2).Text(col.ValueSelector(item));
+                });
+            });
+        }).GeneratePdf();
+        await DownloadFile($"data:application/pdf;base64,{Convert.ToBase64String(pdfBytes)}", $"{FileName}_{DateTime.Now:yyyyMMdd}.pdf");
+    }
+
+    private async Task ExportPrint()
+    {
+        var data = SearchedItems.ToList();
+        if (!data.Any()) return;
+        var sb = new StringBuilder();
+        sb.Append("<table><thead><tr>");
+        foreach (var col in ExportColumns) sb.Append($"<th>{col.Header}</th>");
+        sb.Append("</tr></thead><tbody>");
+        foreach (var item in data)
+        {
+            sb.Append("<tr>");
+            foreach (var col in ExportColumns) sb.Append($"<td>{col.ValueSelector(item)}</td>");
+            sb.Append("</tr>");
+        }
+        sb.Append("</tbody></table>");
+        var js = $@"var printWindow = window.open('', '', 'height=600,width=800'); printWindow.document.write('<html><head><title>{FileName}</title><style>body{{font-family:Arial,sans-serif;}} table{{border-collapse:collapse;width:100%;margin-top:20px;}} th,td{{border:1px solid #ddd;padding:8px;text-align:left;}} th{{background-color:#f2f2f2;}} h2{{text-align:center;}}</style></head><body><h2>{FileName}</h2>{sb.ToString()}</body></html>'); printWindow.document.close(); printWindow.focus(); setTimeout(function() {{ printWindow.print(); printWindow.close(); }}, 250);";
+        await JSRuntime.InvokeVoidAsync("eval", js);
+    }
+}

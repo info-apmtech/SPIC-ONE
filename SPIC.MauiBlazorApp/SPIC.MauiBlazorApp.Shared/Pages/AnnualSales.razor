@@ -1,0 +1,939 @@
+﻿@page "/AnnualSales"
+@using System.Net.Http.Json
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.FormFlow
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LoadingService Loading
+@inject LoginState LoginState
+<style>
+	/* Replace your annual-table-responsive and annual-spic-table styles with these */
+
+	.annual-table-wrapper {
+		overflow-x: auto;
+	}
+
+	.annual-table-responsive {
+		overflow-x: auto;
+		width: 100%;
+	}
+
+	.annual-spic-table {
+		width: auto; /* KEY FIX: don't force 100% width */
+		min-width: 100%; /* still fill container when enough columns */
+		border-collapse: collapse;
+		table-layout: auto; /* let columns size to their content */
+	}
+
+		/* Give columns natural, content-appropriate widths */
+		.annual-spic-table th:first-child,
+		.annual-spic-table td:first-child {
+			min-width: 180px; /* Product Name */
+			width: 220px;
+		}
+
+		.annual-spic-table th:not(:first-child):not(:last-child),
+		.annual-spic-table td:not(:first-child):not(:last-child) {
+			min-width: 140px; /* Qty / Amount columns */
+			width: 160px;
+		}
+
+		.annual-spic-table th:last-child,
+		.annual-spic-table td:last-child {
+			min-width: 160px; /* Total column */
+			width: 180px;
+		}
+
+		/* Group row styling */
+		.group-row {
+			cursor: pointer;
+			font-weight: 600;
+		}
+
+			.group-row td {
+				border-top: 2px solid #dee2e6;
+			}
+
+		.expand-icon {
+			margin-right: 8px;
+			font-size: 0.8em;
+			display: inline-block;
+			width: 12px;
+		}
+
+		.table-value {
+			display: inline-block;
+			padding: 6px 8px;
+			min-height: 32px;
+			line-height: 1.5;
+		}
+</style>
+<div class="container-fluid py-4 px-0">
+	<FormLoader />
+		<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
+
+	@if (!string.IsNullOrEmpty(_message))
+	{
+		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+			@_message
+			<button type="button" class="btn-close" @onclick='() => _message = null'></button>
+		</div>
+	}
+
+	<div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+		<h3 class="fw-bold m-0 company-title">Annual Sales Data For All Companies</h3>
+	</div>
+
+	<div class="form-card">
+
+		<!-- Header -->
+		<div class="annual-card-header d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+			<div class="card-header-title mb-0">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/AddUserIcon.svg"
+					 class="formicon" />
+				Last Financial Year
+			</div>
+
+			<div class="d-flex gap-2 align-items-center">
+			@if (CanAdd)
+			{
+				<button class="btn btn-sm btn-outline-primary" @onclick="OpenProductPopup" title="Add New Product">
+					<i class="bi bi-plus-lg"></i> Add Product
+				</button>
+			}
+				<button class="btn-verified">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Verifiedicon.svg"
+						 class="verifyicon" />
+					Verified Units
+				</button>
+			</div>
+		</div>
+
+		<!-- Dynamic Category Tabs -->
+		<div class="custom-tabs mb-3 annual-custom-tabs">
+			@foreach (var cat in _categories)
+			{
+				var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
+				<div class="tab-btn @(cat.Id == _selectedCategoryId ? "active" : "")"
+					 @onclick="() => SelectCategory(cat.Id)">
+					@cat.Name (@unitName/Value)
+				</div>
+			}
+		</div>
+
+		<!-- Table with X and Y Scroll -->
+		<div class="table-wrapper annual-table-wrapper">
+			<div class="table-responsive annual-table-responsive">
+				<table class="spic-table annual-spic-table">
+					<thead>
+						<tr>
+							<!-- FIRST REPEAT -->
+							<th>Product Name</th>
+							@if (LoginState.IsAdmin)
+							{
+								<th>RPU (₹)</th>
+							}
+							<th>Own Retail Qty (@_selectedUnitName)</th>
+							<th>TO (₹)in Lakhs</th>
+							@if (_hasWholesaleLicense)
+							{
+								<th>Sale to Dealer Qty (@_selectedUnitName)</th>
+								<th>TO (₹)in Lakhs</th>
+							}
+
+							@*                             <!-- SECOND REPEAT -->
+                            <th>Product Name</th>
+                            <th>Own Retail Qty (@_selectedUnitName)</th>
+                            <th>TO (₹)in Lakhs</th>
+                            @if (_hasWholesaleLicense)
+                            {
+                                <th>Sale to Dealer Qty (@_selectedUnitName)</th>
+                                <th>TO (₹)in Lakhs</th>
+                            } *@
+
+							<!-- TOTALS COMBINED -->
+							<th>Total</th>
+						</tr>
+					</thead>
+					@foreach (var group in _groupedRows)
+					{
+						<tbody>
+							<tr class="group-row" @onclick="() => ToggleGroup(group.ProductGroupId)">
+								<td data-label="Product Name">
+									<span class="expand-icon">@(IsExpanded(group.ProductGroupId) ? "▼" : "▶")</span>
+									@group.GroupName
+								</td>
+								@if (LoginState.IsAdmin)
+								{
+									<td data-label="RPU (₹)"></td>
+								}
+								<td data-label="Own Retail Qty (@_selectedUnitName)">
+									@Fmt(group.Rows.Sum(r => r.OwnRetailsSaleQty))
+								</td>
+								<td data-label="TO (₹)in Lakhs">
+									@Fmt(group.Rows.Sum(r => r.OwnRetailsSaleAmount))
+								</td>
+								@if (_hasWholesaleLicense)
+								{
+									<td data-label="Sale to Dealer Qty (@_selectedUnitName)">
+										@Fmt(group.Rows.Sum(r => r.SaleToDealerQty))
+									</td>
+									<td data-label="TO (₹)in Lakhs">
+										@Fmt(group.Rows.Sum(r => r.SaleToDealerAmount))
+									</td>
+								}
+								<td class="text-value annual-total-cell" data-label="Total">
+									@Fmt(group.Rows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty)) /
+									@Fmt(group.Rows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount))
+								</td>
+							</tr>
+							@if (IsExpanded(group.ProductGroupId))
+							{
+								@foreach (var row in group.Rows)
+								{
+									var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+									<tr>
+										<td data-label="Product Name">
+											<div class="product-title" style="padding-left: 24px;">@(product?.Name ?? "Unknown")</div>
+										</td>
+										@if (LoginState.IsAdmin)
+										{
+											<td data-label="RPU (₹)" class="text-value">
+												@(product?.RPU?.ToString("N2") ?? "-")
+											</td>
+										}
+										<td data-label="Own Retail Qty (@_selectedUnitName)">
+											<input class="table-input" type="number" step="0.01"
+												   value="@row.OwnRetailsSaleQty"
+												   @onchange="(e) => UpdateRetailQty(row, e)" />
+										</td>
+										<td data-label="TO (₹)in Lakhs">
+											<span class="table-value">@Fmt(row.OwnRetailsSaleAmount)</span>
+										</td>
+										@if (_hasWholesaleLicense)
+										{
+											<td data-label="Sale to Dealer Qty (@_selectedUnitName)">
+												<input class="table-input" type="number" step="0.01"
+													   value="@row.SaleToDealerQty"
+													   @onchange="(e) => UpdateDealerQty(row, e)" />
+											</td>
+											<td data-label="TO (₹)in Lakhs">
+												<span class="table-value">@Fmt(row.SaleToDealerAmount)</span>
+											</td>
+										}
+										<td class="text-value annual-total-cell" data-label="Total">
+											@Fmt(row.OwnRetailsSaleQty + row.SaleToDealerQty) / @Fmt(row.OwnRetailsSaleAmount + row.SaleToDealerAmount)
+										</td>
+									</tr>
+								}
+							}
+						</tbody>
+					}
+					<tfoot>
+						<tr>
+							<!-- FIRST REPEAT -->
+							<td>Grand Total</td>
+							@if (LoginState.IsAdmin)
+							{
+								<td></td>
+							}
+							<td>@Fmt(_currentRows.Sum(r => r.OwnRetailsSaleQty))</td>
+							<td>@Fmt(_currentRows.Sum(r => r.OwnRetailsSaleAmount))</td>
+							@if (_hasWholesaleLicense)
+							{
+								<td>@Fmt(_currentRows.Sum(r => r.SaleToDealerQty))</td>
+								<td>@Fmt(_currentRows.Sum(r => r.SaleToDealerAmount))</td>
+							}
+
+							@*  <!-- SECOND REPEAT -->
+                            <td class="annual-second-repeat">Grand Total</td>
+                            <td class="annual-second-repeat">@_currentRows.Sum(r => r.OwnRetailsSaleQty).ToString("N2")</td>
+                            <td class="annual-second-repeat">@_currentRows.Sum(r => r.OwnRetailsSaleAmount).ToString("N2")</td>
+                            @if (_hasWholesaleLicense)
+                            {
+                                <td class="annual-second-repeat">@_currentRows.Sum(r => r.SaleToDealerQty).ToString("N2")</td>
+                                <td class="annual-second-repeat">@_currentRows.Sum(r => r.SaleToDealerAmount).ToString("N2")</td>
+                            } *@
+
+							<!-- TOTALS COMBINED -->
+							<td>
+								@Fmt(_currentRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty)) MT / @Fmt(_currentRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount)) Lakhs
+							</td>
+						</tr>
+					</tfoot>
+				</table>
+			</div>
+		</div>
+
+	</div>
+
+	<div class="row g-3 mb-3">
+		@foreach (var cat in _categories)
+		{
+			var catRows = _allSalesData.Where(s => s.CategoryId == cat.Id).ToList();
+			var catTotalQty = catRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
+			var catTotalAmt = catRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+			var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+			var retailAmt = catRows.Sum(r => r.OwnRetailsSaleAmount);
+			var dealerAmt = catRows.Sum(r => r.SaleToDealerAmount);
+			var ratio = catTotalAmt > 0 ? (dealerAmt / catTotalAmt * 100) : 0;
+
+			<div class="col-12 col-sm-6 col-md-4">
+				<div class="total-value-card total-value-card-bgimg category-summary-card">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+						 class="total-card-bg"
+						 alt="GrowthForecast" />
+					<div class="total-value-title category-summary-title">@cat.Name</div>
+					<div class="total-value-amount category-summary-amount">
+						₹ @(catTotalAmt == 0 ? "-" : catTotalAmt.ToString("N0")) <span class="total-value-unit">Lakhs</span>
+					</div>
+					<div class="category-summary-meta">
+						@Fmt(catTotalQty) @unitName &nbsp;|&nbsp; Dealer Ratio: @(ratio == 0 ? "-" : ratio.ToString("N1"))%
+					</div>
+				</div>
+			</div>
+		}
+
+	</div>
+	<div class="row g-4">
+		<!-- Card 1: Urea Product - By Category -->
+		<div class="col-12 col-md-3">
+			<div class="total-value-card total-value-card-bgimg">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+					 class="total-card-bg"
+					 alt="Urea" />
+
+				<div class="total-value-title">Urea - Fertilizer</div>
+
+				@{
+						var ureaProduct = _products.FirstOrDefault(p => IsUreaProduct(p));
+
+					decimal ureaTotalQty = 0;
+					decimal ureaTotalAmt = 0;
+
+					if (ureaProduct != null)
+					{
+						var ureaRows = _allSalesData
+							.Where(s => s.ProductId == ureaProduct.Id)
+							.ToList();
+
+						ureaTotalQty = ureaRows.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
+						ureaTotalAmt = ureaRows.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+					}
+				}
+
+				<div class="category-summary-meta mt-3">
+					@Fmt(ureaTotalQty) MT / ₹ @Fmt(ureaTotalAmt) Lakhs
+				</div>
+			</div>
+		</div>
+
+		<!-- Card 2: All Other Products Total -->
+		<div class="col-12 col-md-3">
+			<div class="total-value-card total-value-card-bgimg">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+					 class="total-card-bg"
+					 alt="Other Products" />
+
+				<div class="total-value-title">Other Products - Fertilizer</div>
+
+				@{
+					var otherTotalQty = GetOtherFertilizerTotalQty();
+					var otherTotalAmt = GetOtherFertilizerTotalAmount();
+				}
+
+				<div class="category-summary-meta mt-3">
+					@Fmt(otherTotalQty) MT / ₹ @Fmt(otherTotalAmt) Lakhs
+				</div>
+			</div>
+		</div>
+			<!-- Card: Combined Total of Specialty Products (Amount only) -->
+			<div class="col-12 col-md-3">
+				<div class="total-value-card total-value-card-bgimg">
+					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+						 class="total-card-bg"
+						 alt="Specialty Products Total" />
+					<div class="total-value-title">Specialty Products Total</div>
+					@{
+						var specialtyIds = SpecialtyCategoryIds;
+						var combinedAmt = _allSalesData
+							.Where(r => specialtyIds.Contains(r.CategoryId))
+							.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+					}
+					<div class="category-summary-meta mt-3">
+						₹ @Fmt(combinedAmt) Lakhs
+					</div>
+				</div>
+			</div>
+		<!-- Card 3: Grand Total -->
+		<div class="col-12 col-md-3">
+			<div class="total-value-card total-value-card-bgimg">
+				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+					 class="total-card-bg"
+					 alt="GrowthForecast" />
+
+				<div class="total-value-title">Grand Total</div>
+
+				@{
+					//var grandTotalQty = _allSalesData.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
+					var grandTotalAmt = _allSalesData.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+				}
+
+				<div class="category-summary-meta mt-3">
+					@* @grandTotalQty.ToString("N2") MT / *@ ₹ @Fmt(grandTotalAmt) Lakhs
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="row g-4 mt-2">
+		<div class="col-12 col-md-12">
+			<div class="insights-card">
+				<div class="insights-title">Automated Insights</div>
+				<p class="insights-text">
+					@if (_allSalesData.Count > 0)
+					{
+						var totalRetail = _allSalesData.Sum(r => r.OwnRetailsSaleAmount);
+						var totalDealer = _allSalesData.Sum(r => r.SaleToDealerAmount);
+						var grandTotal = totalRetail + totalDealer;
+						var ratio = grandTotal > 0 ? (totalDealer / grandTotal * 100) : 0;
+						<span>Based on your entries, your overall dealer-to-retail ratio is <strong>@(ratio == 0 ? "-" : ratio.ToString("N1"))%</strong>.</span>
+					}
+					else
+					{
+						<span>Enter your sales data to see automated insights.</span>
+					}
+				</p>
+			</div>
+		</div>		
+	</div>
+	</fieldset>
+
+	@if (_showProductPopup)
+	{
+		<div class="modal-backdrop fade show"></div>
+		<div class="modal fade show d-block" tabindex="-1" role="dialog">
+			<div class="modal-dialog modal-dialog-centered" role="document">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h5 class="modal-title">Add New Product</h5>
+						<button type="button" class="btn-close" @onclick="CloseProductPopup"></button>
+					</div>
+					<div class="modal-body">
+						<div class="mb-3">
+							<label class="form-label-custom">Category</label>
+							<select class="form-control-custom w-100" @bind="_popupProduct.CategoryId">
+								<option value="0">Select Category</option>
+								@foreach (var c in _categories)
+								{
+									<option value="@c.Id">@c.Name (@(_units.FirstOrDefault(u => u.Id == c.UnitId)?.Name ?? ""))</option>
+								}
+							</select>
+						</div>
+						<div class="mb-3">
+							<label class="form-label-custom">Product Group</label>
+							<select class="form-control-custom w-100" @bind="_popupProduct.ProductGroupId">
+								<option value="">Select Product Group</option>
+								@foreach (var pg in _productGroups)
+								{
+									<option value="@pg.Id">@pg.Name</option>
+								}
+							</select>
+						</div>
+						<div class="mb-3">
+							<label class="form-label-custom">Product Name</label>
+							<input type="text" class="form-control-custom w-100" placeholder="Enter Product Name" @bind="_popupProduct.Name" />
+						</div>
+						<div class="mb-3">
+							<label class="form-label-custom">Rate Per Unit (RPU)</label>
+							<input type="number" step="any" class="form-control-custom w-100" placeholder="Enter Rate Per Unit" @bind="_popupProduct.RPU" />
+						</div>
+					</div>
+					<div class="modal-footer">
+						<button class="btn btn-secondary" @onclick="CloseProductPopup">Cancel</button>
+						<button class="btn btn-primary" @onclick="HandleCreateProduct" disabled="@_isCreatingProduct">
+							@(_isCreatingProduct ? "Saving..." : "Save")
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+
+	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+</div>
+
+@code {
+	[SupplyParameterFromQuery(Name = "dealerId")]
+	public int? DealerId { get; set; }
+	[SupplyParameterFromQuery(Name = "mode")]
+	public string? Mode { get; set; }
+
+	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+	private bool CanAdd => LoginState.Can("AnnualSales", "Entry");
+	private List<Category> _categories = new();
+	private List<Unit> _units = new();
+	private List<Product> _products = new();
+	private List<AnnualSaleDataLastFYofDealerRegistration> _allSalesData = new();
+	private List<AnnualSaleDataLastFYofDealerRegistration> _currentRows = new();
+
+	private int _selectedCategoryId;
+	private string _selectedUnitName = "MT";
+	private bool _isSaving;
+	private string? _message;
+	private bool _isError;
+	private bool _hasWholesaleLicense;
+	private List<ProductGroup> _productGroups = new();
+	private HashSet<int?> _expandedGroups = new();
+	// Replace both SpecialtyMTCategoryId and SpecialtyLtrCategoryId with one helper set:
+	private HashSet<int> SpecialtyCategoryIds => _categories
+		.Where(c => c.Name != null &&
+			   c.Name.Contains("Specialty", StringComparison.OrdinalIgnoreCase))
+		.Select(c => c.Id)
+		.ToHashSet();
+
+	protected override async Task OnInitializedAsync()
+	{
+		Loading.Show();
+		try
+		{
+			var tasks = new List<Task>
+		{
+			LoadCategories(),
+			LoadUnits(),
+			LoadProducts(),
+		LoadProductGroups()
+		};
+
+			if (DealerId.HasValue && DealerId.Value > 0)
+			{
+				tasks.Add(LoadDealerInfo());
+				tasks.Add(LoadSalesData());
+			}
+
+			await Task.WhenAll(tasks);
+
+			if (_categories.Count > 0)
+			{
+				_selectedCategoryId = _categories.First().Id;
+				UpdateSelectedUnit();
+			}
+
+			BuildCurrentRows();
+		}
+		finally
+		{
+			Loading.Hide();
+		}
+	}
+
+	private async Task LoadCategories()
+	{
+		try
+		{
+			_categories = await Http.GetFromJsonAsync<List<Category>>("api/Category") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load categories: {ex.Message}", true);
+		}
+	}
+
+	private async Task LoadUnits()
+	{
+		try
+		{
+			_units = await Http.GetFromJsonAsync<List<Unit>>("api/Unit") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load units: {ex.Message}", true);
+		}
+	}
+
+	private async Task LoadProducts()
+	{
+		try
+		{
+			_products = await Http.GetFromJsonAsync<List<Product>>("api/Product") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load products: {ex.Message}", true);
+		}
+	}
+
+	private async Task LoadProductGroups()
+	{
+		try
+		{
+			_productGroups = await Http.GetFromJsonAsync<List<ProductGroup>>("api/ProductGroup") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load product groups: {ex.Message}", true);
+		}
+	}
+
+	private async Task LoadDealerInfo()
+	{
+		try
+		{
+			var dealer = await Http.GetFromJsonAsync<DealerBasicInfo>($"api/DealerRegistration/{DealerId!.Value}");
+			if (dealer != null)
+				_hasWholesaleLicense = !string.IsNullOrWhiteSpace(dealer.WholeSaleFertilizerLicenseNumber);
+		}
+		catch { }
+	}
+
+	private async Task LoadSalesData()
+	{
+		try
+		{
+			_allSalesData = await Http.GetFromJsonAsync<List<AnnualSaleDataLastFYofDealerRegistration>>(
+				$"api/AnnualSaleDataLastFY/byDealer/{DealerId!.Value}") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load sales data: {ex.Message}", true);
+		}
+	}
+
+	private void SelectCategory(int categoryId)
+	{
+		_selectedCategoryId = categoryId;
+		UpdateSelectedUnit();
+		BuildCurrentRows();
+	}
+
+	private void UpdateSelectedUnit()
+	{
+		var cat = _categories.FirstOrDefault(c => c.Id == _selectedCategoryId);
+		if (cat != null)
+			_selectedUnitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "MT";
+	}
+
+	private void BuildCurrentRows()
+	{
+		var categoryProducts = _products.Where(p => p.CategoryId == _selectedCategoryId).ToList();
+		_currentRows = new();
+
+		foreach (var product in categoryProducts)
+		{
+			var existing = _allSalesData.FirstOrDefault(s => s.ProductId == product.Id && s.CategoryId == _selectedCategoryId);
+			if (existing != null)
+			{
+				_currentRows.Add(existing);
+			}
+			else
+			{
+				var newRow = new AnnualSaleDataLastFYofDealerRegistration
+				{
+					DealerId = DealerId ?? 0,
+					CategoryId = _selectedCategoryId,
+					ProductId = product.Id,
+					OwnRetailsSaleQty = 0,
+					OwnRetailsSaleAmount = 0,
+					SaleToDealerQty = 0,
+					SaleToDealerAmount = 0
+				};
+				_currentRows.Add(newRow);
+				_allSalesData.Add(newRow);
+			}
+		}
+	}
+
+	private class GroupData
+	{
+		public int? ProductGroupId { get; set; }
+		public string GroupName { get; set; } = "";
+		public List<AnnualSaleDataLastFYofDealerRegistration> Rows { get; set; } = new();
+	}
+
+	private IEnumerable<GroupData> _groupedRows
+	{
+		get
+		{
+			var selectedCategory = _categories.FirstOrDefault(c => c.Id == _selectedCategoryId);
+
+			// Fertilizer category -> only two buckets: Urea vs Other Products
+			if (IsFertilizerCategory(selectedCategory))
+			{
+				return _currentRows
+					.GroupBy(r =>
+					{
+						var product = _products.FirstOrDefault(p => p.Id == r.ProductId);
+						return IsUreaProduct(product); // true = Urea, false = Other
+					})
+					.OrderByDescending(g => g.Key) // Urea first (optional)
+					.Select(g => new GroupData
+					{
+						ProductGroupId = g.Key ? -1 : -2, // sentinel keys for expand/collapse
+						GroupName = g.Key ? "Fertilizer - Urea" : "Fertilizer - Other Products",
+						Rows = g.ToList()
+					});
+			}
+
+			// Default: group by ProductGroupId (Specialty, etc.)
+			return _currentRows
+				.GroupBy(r =>
+				{
+					var product = _products.FirstOrDefault(p => p.Id == r.ProductId);
+					return product?.ProductGroupId;
+				})
+				.OrderBy(g =>
+				{
+					if (g.Key == null) return "";
+					var pg = _productGroups.FirstOrDefault(p => p.Id == g.Key);
+					return pg?.Name ?? "";
+				})
+				.Select(g =>
+				{
+					var pg = g.Key.HasValue ? _productGroups.FirstOrDefault(p => p.Id == g.Key.Value) : null;
+					return new GroupData
+					{
+						ProductGroupId = g.Key,
+						GroupName = pg?.Name ?? "Uncategorized",
+						Rows = g.ToList()
+					};
+				});
+		}
+	}
+
+	private void ToggleGroup(int? productGroupId)
+	{
+		if (_expandedGroups.Contains(productGroupId))
+			_expandedGroups.Remove(productGroupId);
+		else
+			_expandedGroups.Add(productGroupId);
+	}
+
+	private bool IsExpanded(int? productGroupId) => _expandedGroups.Contains(productGroupId);
+
+	private static string Fmt(decimal value) => value == 0 ? "-" : value.ToString("N2");
+
+	private void UpdateField(AnnualSaleDataLastFYofDealerRegistration row, ChangeEventArgs e, Func<AnnualSaleDataLastFYofDealerRegistration, decimal> getter, Action<AnnualSaleDataLastFYofDealerRegistration, decimal> setter)
+	{
+		if (decimal.TryParse(e.Value?.ToString(), out var val))
+			setter(row, val);
+	}
+
+	private void UpdateRetailQty(AnnualSaleDataLastFYofDealerRegistration row, ChangeEventArgs e)
+	{
+		if (!decimal.TryParse(e.Value?.ToString(), out var qty)) return;
+		row.OwnRetailsSaleQty = qty;
+
+		var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+		if (product?.RPU.HasValue == true)
+		{
+			row.OwnRetailsSaleAmount = (product.RPU.Value * qty) / 100000m;
+		}
+	}
+
+	private void UpdateDealerQty(AnnualSaleDataLastFYofDealerRegistration row, ChangeEventArgs e)
+	{
+		if (!decimal.TryParse(e.Value?.ToString(), out var qty)) return;
+		row.SaleToDealerQty = qty;
+
+		var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+		if (product?.RPU.HasValue == true)
+		{
+			row.SaleToDealerAmount = (product.RPU.Value * qty) / 100000m;
+		}
+	}
+
+	private async Task HandleNext()
+	{
+		if (IsViewOnly)
+		{
+			Loading.Show();
+			Nav.NavigateTo($"/Warehouse?dealerId={DealerId}&mode=view");
+			return;
+		}
+		if (!DealerId.HasValue || DealerId.Value <= 0)
+		{
+			ShowMessage("Dealer ID is required.", true);
+			return;
+		}
+
+		_isSaving = true;
+		try
+		{
+			foreach (var row in _allSalesData)
+			{
+				if (row.OwnRetailsSaleQty == 0 && row.OwnRetailsSaleAmount == 0 && row.SaleToDealerQty == 0 && row.SaleToDealerAmount == 0 && row.Id == 0)
+					continue;
+
+				row.DealerId = DealerId.Value;
+
+				if (row.Id > 0)
+				{
+					await Http.PutAsJsonAsync($"api/AnnualSaleDataLastFY/{row.Id}", row);
+				}
+				else
+				{
+					var response = await Http.PostAsJsonAsync("api/AnnualSaleDataLastFY", row);
+					if (response.IsSuccessStatusCode)
+					{
+						var result = await response.Content.ReadFromJsonAsync<CreateResponse>();
+						if (result?.Data != null)
+							row.Id = result.Data.Id;
+					}
+				}
+			}
+			var hasError = _allSalesData.All(r => r.OwnRetailsSaleQty == 0 && r.OwnRetailsSaleAmount == 0 && r.SaleToDealerQty == 0 && r.SaleToDealerAmount == 0);
+			FormStepData.MarkStepError(3, hasError);
+			Loading.Show();
+			Nav.NavigateTo($"/Warehouse?dealerId={DealerId}");
+		}
+		catch (Exception ex)
+		{
+			Loading.Hide();
+			ShowMessage($"Failed to save: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	private class CreateResponse
+	{
+		public string? Message { get; set; }
+		public AnnualSaleDataLastFYofDealerRegistration? Data { get; set; }
+	}
+
+	private class DealerBasicInfo
+	{
+		public string? WholeSaleFertilizerLicenseNumber { get; set; }
+	}
+	private bool IsUreaProduct(Product? product)
+	{
+		return product?.Name != null &&
+			   product.Name.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private bool IsFertilizerCategory(Category? category)
+	{
+		return category?.Name != null &&
+			   category.Name.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private bool IsOtherFertilizerRow(AnnualSaleDataLastFYofDealerRegistration row)
+	{
+		var product = _products.FirstOrDefault(p => p.Id == row.ProductId);
+		var category = _categories.FirstOrDefault(c => c.Id == row.CategoryId);
+
+		return IsFertilizerCategory(category) && !IsUreaProduct(product);
+	}
+
+	private decimal GetOtherFertilizerTotalQty()
+	{
+		return _allSalesData
+			.Where(IsOtherFertilizerRow)
+			.Sum(r => r.OwnRetailsSaleQty + r.SaleToDealerQty);
+	}
+
+	private decimal GetOtherFertilizerTotalAmount()
+	{
+		return _allSalesData
+			.Where(IsOtherFertilizerRow)
+			.Sum(r => r.OwnRetailsSaleAmount + r.SaleToDealerAmount);
+	}
+
+	private bool _showProductPopup;
+	private bool _isCreatingProduct;
+	private ProductPopupModel _popupProduct = new();
+
+	private void OpenProductPopup()
+	{
+		_popupProduct = new ProductPopupModel();
+		_showProductPopup = true;
+	}
+
+	private void CloseProductPopup()
+	{
+		_showProductPopup = false;
+		_popupProduct = new ProductPopupModel();
+	}
+
+	private async Task HandleCreateProduct()
+	{
+		if (string.IsNullOrWhiteSpace(_popupProduct.Name))
+		{
+			ShowMessage("Product name is required.", true);
+			return;
+		}
+
+		var trimmedName = _popupProduct.Name.Trim();
+
+		if (_popupProduct.CategoryId == 0)
+		{
+			ShowMessage("Category is required.", true);
+			return;
+		}
+
+		var isDuplicate = _products.Any(p =>
+			p.Name.Equals(trimmedName, StringComparison.OrdinalIgnoreCase) &&
+			p.CategoryId == _popupProduct.CategoryId);
+
+		if (isDuplicate)
+		{
+			ShowMessage($"A Product with the name '{trimmedName}' already exists in this Category.", true);
+			return;
+		}
+
+		try
+		{
+			_isCreatingProduct = true;
+			var payload = new
+			{
+				Name = trimmedName,
+				CategoryId = _popupProduct.CategoryId,
+				RPU = _popupProduct.RPU,
+				ProductGroupId = _popupProduct.ProductGroupId,
+				IsActive = true,
+				CreatedAt = DateTime.Now,
+				UpdatedAt = DateTime.Now,
+				CreatedBy = LoginState.UserId ?? "current-user",
+				UpdatedBy = LoginState.UserId ?? "current-user"
+			};
+
+			var response = await Http.PostAsJsonAsync("api/Product", payload);
+			if (response.IsSuccessStatusCode)
+			{
+				ShowMessage("Product created successfully.", false);
+				CloseProductPopup();
+				await LoadProducts();
+				BuildCurrentRows();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Create failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isCreatingProduct = false;
+		}
+	}
+
+	private class ProductPopupModel
+	{
+		public int CategoryId { get; set; }
+		public string Name { get; set; } = "";
+		public decimal? RPU { get; set; }
+		public int? ProductGroupId { get; set; }
+	}
+}

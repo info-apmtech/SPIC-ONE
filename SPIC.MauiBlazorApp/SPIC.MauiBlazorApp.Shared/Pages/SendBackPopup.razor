@@ -1,0 +1,298 @@
+﻿@using System.Net.Http.Json
+@using DR = SPIC.Core.Entities
+@inject HttpClient Http
+
+
+<div class="modal-backdrop-custom" @onclick="ClosePopup">
+    <div class="modal-content-custom" @onclick:stopPropagation="true"> 
+        
+        <header class="d-flex justify-content-between align-items-start">
+            <div>
+                <h1 class="sb-title">Send Back Application</h1>
+                <div class="sb-subtitle">@ApplicationText</div>
+            </div>
+            <button type="button" class="btn-close-custom" @onclick="ClosePopup" aria-label="Close">
+                <i class="bi bi-x" style="font-size: 1.2rem;"></i>
+            </button>
+        </header>
+
+        <div class="alert-red">
+            <div class="icon-circle-red">
+                <i class="bi bi-exclamation-circle" style="font-size: 1.1rem; color: #dc2626;"></i>
+            </div>
+            <div>
+                <p class="alert-title-red">This action will send the application back to @GetRoleTargetText()</p>
+                <p class="alert-body-red">Please provide the reason and select sections that require correction.</p>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="section-title mt-0">Reason for sending back</h3>
+            <textarea class="reason-textarea"
+                      placeholder="Please provide the reason and select sections that require correction."
+                      maxlength="500"
+                      rows="4"
+                      @bind="Reason"
+                      @bind:event="oninput">
+            </textarea>
+            <div class="d-flex justify-content-end mt-1">
+                <span class="char-count">@Reason.Length/500</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+            {
+                <div class="text-danger small mt-2 fw-bold">@ErrorMessage</div>
+            }
+        </div>
+
+        <div>
+            <h3 class="section-title">What needs to be corrected? (Select all that apply)</h3>
+            <div class="corrections-grid">
+                @foreach (var sec in CorrectionSections)
+                {
+                    bool isSelected = SelectedSections.Contains(sec);
+                    <label class="correction-item @(isSelected ? "selected" : "")">
+                        <input type="checkbox"
+                               class="d-none"
+                               checked="@isSelected"
+                               @onchange="e => ToggleSection(sec, e)" />
+                        <div class="custom-checkbox"></div>
+                        <span class="correction-label">@sec</span>
+                    </label>
+                }
+            </div>
+        </div>
+
+        <div>
+            <h3 class="section-title">Priority Level</h3>
+            <div class="priority-group">
+                @foreach (var priority in Priorities)
+                {
+                    <label class="priority-item">
+                        <input type="radio"
+                               name="priority"
+                               value="@priority"
+                               checked="@(Priority == priority)"
+                               @onchange="() => Priority = priority" />
+                        <span>@priority</span>
+                    </label>
+                }
+            </div>
+        </div>
+
+        <div class="alert-yellow">
+            <div class="icon-circle-yellow">
+                <i class="bi bi-exclamation-circle" style="font-size: 1rem; color: #ca8a04;"></i>
+            </div>
+            <div>
+                <p class="alert-title-yellow">Please Note:</p>
+                <p class="alert-body-yellow">
+                    The application will be moved back to @GetRoleTargetText(). They will be notified to make the required corrections and resubmit.
+                </p>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button type="button" class="btn-cancel" @onclick="ClosePopup" disabled="@IsSubmitting">
+                <i class="bi bi-x-lg"></i>
+                Cancel
+            </button>
+            <button type="button" class="btn-send-back" @onclick="RejectDealer" disabled="@IsSubmitting">
+                <i class="bi bi-send"></i>
+                @(IsSubmitting ? "Sending..." : SendBackButtonText())
+            </button>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    [Parameter] public DR.DealerRegistration? Dealer { get; set; } = default!;
+    [Parameter] public LoginState LoginState { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnRejected { get; set; }
+
+    private string Reason { get; set; } = "";
+    private string Priority { get; set; } = "High";
+    private bool IsSubmitting { get; set; }
+    private string? ErrorMessage { get; set; }
+
+    private HashSet<string> SelectedSections { get; set; } = new();
+
+    private readonly string[] Priorities =
+    {
+        "High",
+        "Medium",
+        "Low"
+    };
+
+    private readonly List<string> CorrectionSections = new()
+    {
+        "Tax & Compliance",
+        "Ownership Information",
+        "Loan Liabilities",
+        "Primary Location",
+        "Sales Planning & Forecast",
+        "Investment",
+        "Enclosures",
+        "Retail Fertilizer Details",
+        "Sales Performance Review",
+        "Other (Please specify in remarks)"
+    };
+
+    private string SendBackButtonText()
+    {
+        if (LoginState == null) return "Send Back";
+
+        if (LoginState.IsRegionRole)
+            return "Send Back to MO";
+
+        if (LoginState.IsStateRole)
+            return "Send Back to RM";
+
+        if (LoginState.IsAdmin)
+            return "Send Back to SM";
+
+        return "Send Back";
+    }
+
+    private string ApplicationText =>
+    Dealer == null
+        ? "Dealer Application"
+        : $"{Dealer.DealerCode ?? $"DL-{Dealer.Id}"} - {Dealer.FirmName ?? "Dealer Application"}";
+
+    protected override void OnInitialized()
+    {
+        // Removed the pre-populated default values so checkboxes start unchecked.
+        SelectedSections = new HashSet<string>();
+    }
+
+    private void ToggleSection(string section, ChangeEventArgs e)
+    {
+        var isChecked = e.Value as bool? ?? false;
+
+        if (isChecked)
+            SelectedSections.Add(section);
+        else
+            SelectedSections.Remove(section);
+    }
+
+    private async Task RejectDealer()
+    {
+        ErrorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(Reason))
+        {
+            ErrorMessage = "Reason is required.";
+            return;
+        }
+
+        if (!SelectedSections.Any())
+        {
+            ErrorMessage = "Please select at least one correction section.";
+            return;
+        }
+
+        IsSubmitting = true;
+
+        try
+        {
+            var request = new DealerSendBackRequest
+            {
+                DealerId = Dealer.Id,
+                Reason = Reason.Trim(),
+                Priority = Priority,
+                Sections = SelectedSections.ToList(),
+                TargetRole = GetTargetRoleCode()
+            };
+
+            var sendBackResponse = await Http.PostAsJsonAsync(
+                $"api/DealerRegistration/{Dealer.Id}/send-back",
+                request
+            );
+
+            if (!sendBackResponse.IsSuccessStatusCode)
+            {
+                ErrorMessage = "Unable to send back dealer application.";
+                return;
+            }
+
+            // Local state update, same style as approve process
+            if (LoginState.IsRegionRole)
+            {
+                Dealer.RMApproved = false;
+            }
+            else if (LoginState.IsStateRole)
+            {
+                Dealer.SMApproved = false;
+            }
+            else if (LoginState.IsAdmin)
+            {
+                Dealer.AVPApproved = false;
+            }
+
+            var updateResponse = await Http.PutAsJsonAsync(
+                $"api/DealerRegistration/{Dealer.Id}",
+                Dealer
+            );
+
+            if (updateResponse.IsSuccessStatusCode)
+            {
+                await OnRejected.InvokeAsync();
+            }
+            else
+            {
+                ErrorMessage = "Send back saved, but dealer status update failed.";
+            }
+        }
+        finally
+        {
+            IsSubmitting = false;
+        }
+    }
+
+    private async Task ClosePopup()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    private string GetRoleTargetText()
+    {
+        if (LoginState == null) return "the previous role";
+
+        if (LoginState.IsRegionRole)
+            return "Marketing Officer (MO)";
+
+        if (LoginState.IsStateRole)
+            return "Regional Manager (RM)";
+
+        if (LoginState.IsAdmin)
+            return "State Manager (SM)";
+
+        return "the previous role";
+    }
+
+    private string? GetTargetRoleCode()
+    {
+        if (LoginState == null) return null;
+
+        if (LoginState.IsRegionRole)
+            return "MO";
+
+        if (LoginState.IsStateRole)
+            return "RM";
+
+        if (LoginState.IsAdmin)
+            return "SM";
+
+        return null;
+    }
+
+    public class DealerSendBackRequest
+    {
+        public int DealerId { get; set; }
+        public string Reason { get; set; } = "";
+        public string Priority { get; set; } = "High";
+        public List<string> Sections { get; set; } = new();
+        public string? TargetRole { get; set; }
+    }
+}

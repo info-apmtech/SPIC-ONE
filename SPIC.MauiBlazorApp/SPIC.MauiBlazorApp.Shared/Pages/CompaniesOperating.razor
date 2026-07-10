@@ -1,0 +1,243 @@
+﻿@page "/Companies"
+@using System.Net.Http.Json
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.FormFlow
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LoadingService Loading
+@inject LoginState LoginState
+
+<style>
+    .companies-view-only .logo-card,
+    .companies-view-only .selectable-card {
+        pointer-events: none;
+        cursor: default;
+    }
+</style>
+
+<div class="companies-operating-wrapper">
+    <div class="container-fluid">
+
+        <FormLoader />
+
+        
+
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+                @_message
+                <button type="button" class="btn-close" @onclick='() => _message = null'></button>
+            </div>
+        }
+
+        <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <h3 class="fw-bold m-0 company-title">Companies Operating In Your Place <span>(Please Mark)</span></h3>
+        </div>
+
+        <div class="companies-operating-grid mb-5 @(IsViewOnly ? "companies-view-only" : "")">
+
+            <div class="span-2-rows">
+                <div class="logo-card spic @(isSpic ? "active" : "")"
+                     @onclick="ToggleSpic">
+                    <div class="card-checkbox">
+                        <i class="bi bi-check-lg"></i>
+                    </div>
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" />
+                    <span>SPIC</span>
+                </div>
+            </div>
+
+            <div class="span-2-rows">
+                <div class="logo-card green-star @(isGreenStar ? "active" : "")"
+                     @onclick="ToggleGreenStar">
+                    <div class="card-checkbox">
+                        <i class="bi bi-check-lg"></i>
+                    </div>
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" />
+                    <span>GREEN STAR</span>
+                </div>
+            </div>
+
+            @foreach (var comp in _competitors)
+            {
+                <div>
+                    <div class="companies-operating-card selectable-card @(_selectedNames.Contains(comp.Name) ? "selected" : "")"
+                         @onclick="() => ToggleCompany(comp.Name)">
+                        <div class="companies-operating-name">@comp.Name</div>
+                        <div class="check-box"><i class="bi bi-check-lg"></i></div>
+                    </div>
+                </div>
+            }
+
+        </div>
+
+        <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "dealerId")]
+    public int? DealerId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
+    private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+    private bool isSpic;
+    private bool isGreenStar;
+
+    private List<Competitor> _competitors = new();
+    private HashSet<string> _selectedNames = new();
+    private List<DealerCompaniesOperatingInArea> _savedEntries = new();
+
+    private bool _isSaving;
+    private string? _message;
+    private bool _isError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Loading.Show();
+        try
+        {
+            await Task.WhenAll(
+                LoadCompetitors(),
+                LoadSavedSelections());
+        }
+        finally
+        {
+            Loading.Hide();
+        }
+    }
+
+    private async Task LoadCompetitors()
+    {
+        try
+        {
+            _competitors = await Http.GetFromJsonAsync<List<Competitor>>("api/Competitor") ?? new();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load competitors: {ex.Message}", true);
+        }
+    }
+
+    private async Task LoadSavedSelections()
+    {
+        if (!DealerId.HasValue || DealerId.Value <= 0) return;
+        try
+        {
+            _savedEntries = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>(
+                $"api/DealerCompaniesOperatingInArea/byDealer/{DealerId.Value}") ?? new();
+
+            var savedNames = _savedEntries
+                .Where(e => !string.IsNullOrEmpty(e.CompaniesOperating))
+                .Select(e => e.CompaniesOperating!)
+                .ToHashSet();
+
+            isSpic = savedNames.Contains("SPIC");
+            isGreenStar = savedNames.Contains("GREEN STAR");
+
+            savedNames.Remove("SPIC");
+            savedNames.Remove("GREEN STAR");
+            _selectedNames = savedNames;
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load saved selections: {ex.Message}", true);
+        }
+    }
+
+    private void ToggleSpic()
+    {
+        if (IsViewOnly) return;
+        isSpic = !isSpic;
+    }
+
+    private void ToggleGreenStar()
+    {
+        if (IsViewOnly) return;
+        isGreenStar = !isGreenStar;
+    }
+
+    private void ToggleCompany(string name)
+    {
+        if (IsViewOnly) return;
+        if (!_selectedNames.Remove(name))
+            _selectedNames.Add(name);
+    }
+
+    private async Task HandleNext()
+    {
+        if (!DealerId.HasValue || DealerId.Value <= 0)
+        {
+            ShowMessage("Dealer ID is required.", true);
+            return;
+        }
+
+        if (IsViewOnly)
+        {
+            Loading.Show();
+            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}&mode=view");
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            // Build full list including SPIC / GREEN STAR
+            var allSelected = new List<string>(_selectedNames);
+            if (isSpic) allSelected.Add("SPIC");
+            if (isGreenStar) allSelected.Add("GREEN STAR");
+
+            // Delete entries that are no longer selected
+            foreach (var existing in _savedEntries)
+            {
+                if (existing.CompaniesOperating == null || !allSelected.Contains(existing.CompaniesOperating))
+                {
+                    await Http.DeleteAsync($"api/DealerCompaniesOperatingInArea/{existing.Id}");
+                }
+            }
+
+            // Add new entries that don't already exist
+            var existingNames = _savedEntries.Where(e => e.CompaniesOperating != null).Select(e => e.CompaniesOperating!).ToHashSet();
+            foreach (var name in allSelected)
+            {
+                if (!existingNames.Contains(name))
+                {
+                    var entry = new DealerCompaniesOperatingInArea
+                    {
+                        DealerId = DealerId.Value,
+                        CompaniesOperating = name
+                    };
+                    await Http.PostAsJsonAsync("api/DealerCompaniesOperatingInArea", entry);
+                }
+            }
+
+            var hasError = _selectedNames.Count == 0;
+            FormStepData.MarkStepError(6, hasError);
+
+            Loading.Show();
+            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}");
+        }
+        catch (Exception ex)
+        {
+            Loading.Hide();
+            ShowMessage($"Failed to save: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+    private bool CanAdd => LoginState.Can("Companies", "Entry");
+    private bool CanEdit => LoginState.Can("Companies", "Update");
+    private bool CanDelete => LoginState.Can("Companies", "Delete");
+}

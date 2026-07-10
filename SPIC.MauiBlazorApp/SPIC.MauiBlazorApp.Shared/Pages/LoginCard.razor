@@ -1,4 +1,11 @@
 ﻿@using System.ComponentModel.DataAnnotations
+@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@using System.Net
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
 
 <div class="login-card">
 	<h5>Login To Your Account</h5>
@@ -8,10 +15,10 @@
 		<ValidationSummary />
 
 		<div class="input-group-custom custom-with-icon">
-			<input @bind="_model.Username"
+			<input @bind="_model.UserName"
 				   type="text"
 				   class="form-control-custom"
-				   placeholder="User name or Email" />
+				   placeholder="User Name" />
 			<span class="input-icon">
 				<svg width="16" height="21" viewBox="0 0 16 21" fill="none" xmlns="http://www.w3.org/2000/svg">
 					<path d="M7.749 9.501C5.13 9.501 3 7.371 3 4.752C3 2.133 5.13 0 7.749 0C10.368 0 12.498 2.13 12.498 4.749C12.498 7.368 10.368 9.501 7.749 9.501ZM7.749 1.5C5.958 1.5 4.5 2.958 4.5 4.749C4.5 6.54 5.958 8.001 7.749 8.001C9.54 8.001 10.998 6.543 10.998 4.752C10.998 2.961 9.54 1.5 7.749 1.5ZM7.749 20.502C5.751 20.502 3.861 20.052 2.427 19.233C0.861 18.339 0 17.103 0 15.753C0 14.403 0.861 13.167 2.427 12.273C3.861 11.451 5.751 11.001 7.749 11.001C9.747 11.001 11.637 11.451 13.071 12.27C14.637 13.164 15.498 14.4 15.498 15.75C15.498 17.1 14.637 18.336 13.071 19.23C11.637 20.049 9.747 20.502 7.749 20.502ZM7.749 12.501C6.009 12.501 4.383 12.882 3.171 13.575C2.547 13.932 1.5 14.688 1.5 15.753C1.5 16.815 2.547 17.574 3.171 17.931C4.383 18.621 6.009 19.002 7.749 19.002C9.489 19.002 11.115 18.621 12.327 17.928C12.951 17.571 13.998 16.815 13.998 15.75C13.998 14.688 12.951 13.929 12.327 13.572C11.115 12.882 9.489 12.501 7.749 12.501Z" fill="#B2B8BF" />
@@ -40,7 +47,13 @@
 			<a href="#" class="forgot-link">Forgot Password?</a>
 		</div>
 
-		<button type="submit" class="btn-login">Login</button>
+		<button type="submit" class="btn-login" disabled="@_isLoading">
+			@(_isLoading ? "Logging in..." : "Login")
+		</button>
+		@if (!string.IsNullOrWhiteSpace(_errorMessage))
+		{
+			<div style="color:red">@_errorMessage</div>
+		}
 	</EditForm>
 
 	<div class="auth-icons">
@@ -56,32 +69,112 @@
 	</div>
 
 	<div class="register-text">
-		New to the platform? <a href="#">Submit an Access Request</a>
+		New to the platform?
+		<a href="/AccountSelector">Submit an Access Request</a>
 	</div>
 </div>
 
 @code {
 	private LoginModel _model = new();
 	private bool _showPassword;
+	private bool _isLoading;
+	private string? _errorMessage;
 
 	private void TogglePassword()
 	{
 		_showPassword = !_showPassword;
 	}
-
-	private void HandleLogin()
+	private async Task HandleLogin()
 	{
-		// TODO: add your login logic here
+		try
+		{
+			_isLoading = true;
+			_errorMessage = null;
+
+			var request = new LoginRequestDto
+			{
+				UserName = _model.UserName ?? string.Empty,
+				Password = _model.Password ?? string.Empty
+			};
+
+			var response = await Http.PostAsJsonAsync("api/Authentication/login", request);
+
+			if (!response.IsSuccessStatusCode)
+			{
+				_errorMessage = response.StatusCode switch
+				{
+					HttpStatusCode.Unauthorized => "Invalid username or password.",
+					_ => "Something went wrong. Please try again later."
+				};
+				return;
+			}
+
+			var result = await response.Content.ReadFromJsonAsync<LoginResponseDto>();
+
+			if (result is null || string.IsNullOrWhiteSpace(result.Token))
+			{
+				_errorMessage = "Something went wrong. Please try again later.";
+				return;
+			}
+
+			var rawToken = result.Token.StartsWith("Bearer ")
+				? result.Token.Substring("Bearer ".Length)
+				: result.Token;
+
+			Http.DefaultRequestHeaders.Authorization =
+				new AuthenticationHeaderValue("Bearer", rawToken);
+
+			// Persist token + page permissions for refreshes and other pages
+			LoginState.Token = rawToken;
+			LoginState.Expiration = result.Expiration;
+			LoginState.SetAllowedPages(result.RoleAccess);
+
+			await JS.InvokeVoidAsync("sessionStorage.setItem", "jwt_token", rawToken);
+			await JS.InvokeVoidAsync("sessionStorage.setItem", "jwt_expiration", result.Expiration.ToString("O"));
+			await JS.InvokeVoidAsync("sessionStorage.setItem", "spic_role_access", result.RoleAccess ?? "");
+
+			Navigation.NavigateTo("/Dashboard");
+		}
+		catch (HttpRequestException)
+		{
+			_errorMessage = "Unable to connect to the server. Please check your internet connection and try again.";
+		}
+		catch (TaskCanceledException)
+		{
+			_errorMessage = "The service is temporarily unavailable. Please try again after some time.";
+		}
+		catch (Exception)
+		{
+			_errorMessage = "Something went wrong. Please try again later.";
+		}
+		finally
+		{
+			_isLoading = false;
+		}
 	}
 
 	public class LoginModel
 	{
 		[Required]
-		public string? Username { get; set; }
+		public string? UserName { get; set; }
 
 		[Required]
 		public string? Password { get; set; }
 
 		public bool RememberMe { get; set; }
+	}
+
+	public class LoginRequestDto
+	{
+		public string UserName { get; set; } = string.Empty;
+		public string Password { get; set; } = string.Empty;
+	}
+
+	public class LoginResponseDto
+	{
+		public string? Token { get; set; }
+		public object? User { get; set; }
+		public DateTime Expiration { get; set; }
+		public string? RoleAccess { get; set; }
 	}
 }

@@ -1,0 +1,618 @@
+﻿@page "/Payment"
+
+<style>
+    :root {
+        --bg-body: #f4f6f8;
+        --bg-card: #ffffff;
+        --text-main: #1f2937;
+        --text-muted: #6b7280;
+        --border-light: #e5e7eb;
+        --primary-blue: #3b82f6;
+        
+        /* Card Theme Colors */
+        --header-bg-green: #eef4ea; 
+        --header-text-green: #3f4e42;
+    }
+
+    body {
+        background-color: var(--bg-body);
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        color: var(--text-main);
+    }
+
+    /* --- Page Header --- */
+    .page-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 0.25rem;
+    }
+    .page-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-bottom: 1.5rem;
+    }
+
+    /* --- Custom Card Base --- */
+    .payment-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        margin-bottom: 1.25rem;
+        overflow: hidden; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .payment-card-header {
+        background-color: var(--header-bg-green);
+        padding: 14px 20px;
+        border-bottom: 1px solid #dce4d6;
+    }
+
+    .payment-card-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--header-text-green);
+        margin: 0;
+    }
+
+    .payment-card-body {
+        padding: 20px;
+    }
+
+    /* --- Payment Options List --- */
+    .payment-option {
+        display: flex;
+        align-items: center;
+        border: 1px solid var(--border-light);
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+        background-color: #ffffff;
+    }
+    .payment-option:last-child {
+        margin-bottom: 0;
+    }
+    .payment-option:hover {
+        border-color: #d1d5db;
+        background-color: #f9fafb;
+    }
+    .payment-option.active {
+        border-color: var(--primary-blue);
+        background-color: #f8fafc;
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.05);
+    }
+
+    /* Option Icons */
+    .pay-icon-box {
+        width: 46px;
+        height: 46px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        margin-right: 16px;
+        flex-shrink: 0;
+    }
+    .icon-razorpay { background-color: #eff6ff; color: #3b82f6; }
+    .icon-upi { background-color: #eff6ff; color: #3b82f6; }
+    .icon-card { background-color: #faf5ff; color: #a855f7; }
+    .icon-bank { background-color: #f0fdf4; color: #22c55e; }
+
+    /* Option Text */
+    .pay-details {
+        flex-grow: 1;
+    }
+    .pay-name {
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: var(--text-main);
+        margin-bottom: 2px;
+    }
+    .pay-desc {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin: 0;
+    }
+
+    /* Custom Radio Button */
+    .custom-radio {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2px solid #cbd5e1;
+        position: relative;
+        flex-shrink: 0;
+        transition: all 0.2s;
+    }
+    .payment-option.active .custom-radio {
+        border-color: var(--primary-blue);
+    }
+    .payment-option.active .custom-radio::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: var(--primary-blue);
+    }
+
+    /* --- Form Elements --- */
+    .form-label {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    .form-control-custom {
+        background-color: #f3f4f6;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        color: var(--text-main);
+        padding: 0.75rem 1rem;
+        width: 100%;
+        outline: none;
+        transition: all 0.2s;
+    }
+    .form-control-custom::placeholder { color: #9ca3af; }
+    .form-control-custom:focus {
+        border-color: var(--primary-blue);
+        background-color: #ffffff;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    /* --- Booking Summary Key Value Pairs --- */
+    .kv-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+    .kv-row:last-child { margin-bottom: 0; }
+    
+    .kv-label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #4b5563;
+        flex-shrink: 0;
+    }
+    .kv-value {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--text-main);
+        text-align: right;
+    }
+
+    .summary-divider {
+        height: 1px;
+        background-color: var(--border-light);
+        margin: 16px 0;
+    }
+
+    .total-lbl {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+    .total-val {
+        color: var(--primary-blue);
+        font-size: 1.1rem;
+        font-weight: 700;
+    }
+
+    /* --- Bottom Actions --- */
+    .bottom-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 1rem;
+        padding-bottom: 2rem;
+    }
+    .btn-outline-back {
+        background-color: #ffffff;
+        border: 1px solid var(--border-light);
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-outline-back:hover { background-color: #f9fafb; }
+
+    .btn-primary-continue {
+        background-color: var(--primary-blue);
+        border: 1px solid var(--primary-blue);
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-primary-continue:hover { background-color: #2563eb; }
+
+    /* --- Popup Modal CSS --- */
+    .modal-overlay {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(2px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1050;
+    }
+
+    .modal-card {
+        background-color: #ffffff;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 500px;
+        padding: 24px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        max-height: 95vh;
+        overflow-y: auto;
+        animation: scaleIn 0.3s ease-out;
+    }
+
+    @@keyframes scaleIn {
+        from { transform: scale(0.95); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+
+    /* Modal Success Header */
+    .modal-success-header {
+        border: 1px solid #e5e7eb;
+        border-bottom: 5px solid #166534; /* Dark green shadow/border effect */
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    .success-icon-circle {
+        width: 48px;
+        height: 48px;
+        background-color: #22c55e;
+        color: #ffffff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        flex-shrink: 0;
+    }
+    .success-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 4px 0;
+    }
+    .success-subtitle {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    /* Modal Boxes */
+    .modal-box {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+
+    .status-pill-paid {
+        background-color: #dcfce7;
+        color: #16a34a;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    /* Modal Alerts */
+    .modal-alert {
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        display: flex;
+        gap: 12px;
+        margin-bottom: 12px;
+        line-height: 1.5;
+    }
+    .modal-alert i { font-size: 1.1rem; }
+    .modal-alert-green {
+        background-color: #f0fdf4;
+        border: 1px solid #dcfce7;
+        color: #16a34a;
+    }
+    .modal-alert-orange {
+        background-color: #fff7ed;
+        border: 1px solid #ffedd5;
+        color: #c2410c;
+    }
+
+    /* Modal Footer Buttons */
+    .modal-actions {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 24px;
+    }
+    .btn-modal-outline {
+        background-color: #ffffff;
+        border: 1px solid #d1d5db;
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.8rem;
+        padding: 8px 16px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-modal-outline:hover { background-color: #f9fafb; }
+    
+    .btn-modal-solid {
+        background-color: #2563eb;
+        border: 1px solid #2563eb;
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.8rem;
+        padding: 8px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-modal-solid:hover { background-color: #1d4ed8; }
+
+    /* Tiny details for modal rows */
+    .m-lbl { font-size: 0.8rem; color: #6b7280; font-weight: 500; }
+    .m-val { font-size: 0.85rem; color: #1f2937; font-weight: 500; text-align: right; }
+    .m-row { display: flex; justify-content: space-between; margin-bottom: 12px; }
+    .m-row:last-child { margin-bottom: 0; }
+</style>
+
+<div class="container-fluid py-4 px-0">
+    
+    <div class="mb-4">
+        <h1 class="page-title">Payment</h1>
+        <p class="page-subtitle">Complete your booking by making the payment</p>
+    </div>
+
+    <div class="row g-4">
+        
+        <div class="col-lg-6">
+            
+            <div class="payment-card">
+                <div class="payment-card-header">
+                    <h3 class="payment-card-title">Select Payment Method</h3>
+                </div>
+                <div class="payment-card-body">
+                    
+                    <div class="payment-option active" @onclick='() => SelectPaymentMethod("Razorpay")'>
+                        <div class="pay-icon-box icon-razorpay">
+                            <i class="bi bi-shield-check"></i>
+                        </div>
+                        <div class="pay-details">
+                            <div class="pay-name">Razorpay</div>
+                            <div class="pay-desc">Pay securely using Razorpay</div>
+                        </div>
+                        <div class="custom-radio"></div>
+                    </div>
+
+                    <div class="payment-option" @onclick='() => SelectPaymentMethod("UPI")'>
+                        <div class="pay-icon-box icon-upi">
+                            <i class="bi bi-qr-code-scan"></i>
+                        </div>
+                        <div class="pay-details">
+                            <div class="pay-name">UPI</div>
+                            <div class="pay-desc">Pay using UPI ID or QR code</div>
+                        </div>
+                        <div class="custom-radio"></div>
+                    </div>
+
+                    <div class="payment-option" @onclick='() => SelectPaymentMethod("Card")'>
+                        <div class="pay-icon-box icon-card">
+                            <i class="bi bi-credit-card"></i>
+                        </div>
+                        <div class="pay-details">
+                            <div class="pay-name">Credit / Debit Card</div>
+                            <div class="pay-desc">Visa, Mastercard, Rupay</div>
+                        </div>
+                        <div class="custom-radio"></div>
+                    </div>
+
+                    <div class="payment-option" @onclick='() => SelectPaymentMethod("NetBanking")'>
+                        <div class="pay-icon-box icon-bank">
+                            <i class="bi bi-bank"></i>
+                        </div>
+                        <div class="pay-details">
+                            <div class="pay-name">Net Banking</div>
+                            <div class="pay-desc">All major banks supported</div>
+                        </div>
+                        <div class="custom-radio"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="payment-card">
+                <div class="payment-card-header">
+                    <h3 class="payment-card-title">Security Verification</h3>
+                </div>
+                <div class="payment-card-body" style="min-height: 80px;">
+                    </div>
+            </div>
+
+        </div>
+
+        <div class="col-lg-6">
+            
+            <div class="payment-card">
+                <div class="payment-card-header">
+                    <h3 class="payment-card-title">UPI Details</h3>
+                </div>
+                <div class="payment-card-body">
+                    <label class="form-label">UPI ID</label>
+                    <input type="text" class="form-control-custom" placeholder="username@upi">
+                </div>
+            </div>
+
+            <div class="payment-card">
+                <div class="payment-card-header">
+                    <h3 class="payment-card-title">Booking Summary</h3>
+                </div>
+                <div class="payment-card-body">
+                    
+                    <div class="kv-row">
+                        <span class="kv-label">Room Type</span>
+                        <span class="kv-value">AC Deluxe Room</span>
+                    </div>
+                    
+                    <div class="summary-divider"></div>
+                    
+                    <div class="kv-row">
+                        <span class="kv-label">Room Price</span>
+                        <span class="kv-value">₹999.00</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Number of nights</span>
+                        <span class="kv-value">3</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Extra Cot × 1</span>
+                        <span class="kv-value">₹250.00</span>
+                    </div>
+
+                    <div class="summary-divider"></div>
+
+                    <div class="kv-row">
+                        <span class="kv-label">Subtotal</span>
+                        <span class="kv-value">₹3247.00</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Taxes (12%)</span>
+                        <span class="kv-value">₹120.00</span>
+                    </div>
+
+                    <div class="summary-divider"></div>
+
+                    <div class="kv-row mt-3">
+                        <span class="kv-label total-lbl">Total</span>
+                        <span class="kv-value total-val">₹3367.00</span>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="bottom-actions">
+        <button class="btn-outline-back">Back</button>
+        <button class="btn-primary-continue" @onclick="CompleteBooking">Complete Booking</button>
+    </div>
+
+</div>
+
+@if (isBookingConfirmed)
+{
+    <div class="modal-overlay" @onclick="ClosePopup">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            
+            <div class="modal-success-header">
+                <div class="success-icon-circle">
+                    <i class="bi bi-check-lg"></i>
+                </div>
+                <div>
+                    <h2 class="success-title">Booking Confirmed!</h2>
+                    <p class="success-subtitle">Your reservation has been successfully completed</p>
+                </div>
+            </div>
+
+            <div class="modal-box d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="m-lbl mb-1">Booking ID</div>
+                    <div class="m-val fs-6 text-start">BK12345678</div>
+                </div>
+                <div>
+                    <div class="m-lbl mb-1 text-end">Payment Status</div>
+                    <div class="status-pill-paid">Paid</div>
+                </div>
+            </div>
+
+            <div class="modal-box">
+                <div class="m-row">
+                    <span class="m-lbl">Guest Name</span>
+                    <span class="m-val">Rajesh</span>
+                </div>
+                <div class="m-row">
+                    <span class="m-lbl">Room Type</span>
+                    <span class="m-val">AC Deluxe Room</span>
+                </div>
+                <div class="m-row">
+                    <span class="m-lbl">Check-in</span>
+                    <span class="m-val">May 26, 2026 at 2:00 PM</span>
+                </div>
+                <div class="m-row">
+                    <span class="m-lbl">Check-out</span>
+                    <span class="m-val">May 29, 2026 at 12:00 AM</span>
+                </div>
+                <div class="m-row">
+                    <span class="m-lbl">Guest House</span>
+                    <span class="m-val">T-Nagar Guest House</span>
+                </div>
+            </div>
+
+            <div class="modal-alert modal-alert-green">
+                <i class="bi bi-info-circle"></i>
+                <div>A confirmation email has been sent to hi@gmail.com with your booking details and receipt.</div>
+            </div>
+
+            <div class="modal-alert modal-alert-orange">
+                <i class="bi bi-exclamation-circle"></i>
+                <div>Please carry a valid ID proof (Aadhaar/Passport) at the time of check-in.<br/>Check-in time: 2:00 PM</div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-modal-outline">Download Receipt</button>
+                <button class="btn-modal-outline">View Booking</button>
+                <button class="btn-modal-solid" @onclick="ClosePopup">New Booking</button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    private string selectedMethod = "Razorpay";
+    private bool isBookingConfirmed = false;
+
+    private void SelectPaymentMethod(string method)
+    {
+        selectedMethod = method;
+    }
+
+    private void CompleteBooking()
+    {
+        // Add actual payment processing logic here if needed
+        isBookingConfirmed = true;
+    }
+
+    private void ClosePopup()
+    {
+        isBookingConfirmed = false;
+        // Navigation or form reset logic can go here for "New Booking"
+    }
+}
