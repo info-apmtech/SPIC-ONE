@@ -7,6 +7,7 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject LoginState LoginState
 <style>
     fieldset:disabled .doc-remove-x {
         display: none !important;
@@ -1418,6 +1419,14 @@
     {
         if (string.IsNullOrEmpty(path)) return "";
         var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        
+        var token = LoginState?.Token;
+        if (!string.IsNullOrEmpty(token))
+        {
+            var rawToken = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+            return $"{baseUrl}/api/DealerFile/view/{path}?access_token={rawToken}";
+        }
+        
         return $"{baseUrl}/api/DealerFile/view/{path}";
     }
     private void OnBuildingStateChanged()

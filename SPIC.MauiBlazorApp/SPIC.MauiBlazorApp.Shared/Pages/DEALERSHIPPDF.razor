@@ -1,4 +1,4 @@
-﻿@page "/DealershipPDF/{dealerId:int?}"
+@page "/DealershipPDF/{dealerId:int?}"
 @layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
 @using Microsoft.AspNetCore.Components
 @using System.Net.Http.Json
@@ -6,6 +6,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.PlatformService Platform
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject NavigationManager NavManager
+@inject LoginState LoginState
 
 <!DOCTYPE html>
 <html lang="en">
@@ -1895,7 +1896,7 @@ else
        </div>
 }
 
-<div class="dpdf-section">
+@* <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
         <div class="dpdf-section-icon">💰</div>  <div class="dpdf-section-text">Investment Details</div>
     </div>
@@ -1918,7 +1919,7 @@ else
         </div>
     </div>
 </div>
-
+ *@
 <div class="dpdf-section">
            <div class="dpdf-section-title mb-2">
                <div class="dpdf-section-icon">🚚</div>  <div class="dpdf-section-text">Movable</div>
@@ -3491,6 +3492,14 @@ private (decimal qty, decimal amount) GetPerfCell(int productId, int fyId)
 
         var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
         var relative = path.TrimStart('/');
+        
+        var token = LoginState?.Token;
+        if (!string.IsNullOrEmpty(token))
+        {
+            var rawToken = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+            return $"{baseUrl}/api/DealerFile/view/{relative}?access_token={rawToken}";
+        }
+        
         return $"{baseUrl}/api/DealerFile/view/{relative}";
     }
     private string GetFileKindIcon(string? path)

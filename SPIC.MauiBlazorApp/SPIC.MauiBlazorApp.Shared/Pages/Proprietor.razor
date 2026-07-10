@@ -1644,7 +1644,16 @@ return;
 	{
 		if (string.IsNullOrEmpty(path)) return "";
 		var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
-		return $"{baseUrl}/api/DealerFile/view/{Uri.EscapeDataString(path).Replace("%2F", "/")}";
+		
+		var urlPath = Uri.EscapeDataString(path).Replace("%2F", "/");
+		var token = LoginState?.Token;
+		if (!string.IsNullOrEmpty(token))
+		{
+			var rawToken = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+			return $"{baseUrl}/api/DealerFile/view/{urlPath}?access_token={rawToken}";
+		}
+		
+		return $"{baseUrl}/api/DealerFile/view/{urlPath}";
 	}
 	// --- Delete Partner ---
 	private void ConfirmDeletePartner(DealerOwnershipInfo partner)
@@ -1937,12 +1946,34 @@ return;
         }
 
         if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+        {
             _partnerForm.Block = postOffice.Block;
-        if (!string.IsNullOrWhiteSpace(postOffice.Division)) _partnerForm.Taluk = postOffice.Division;
-        if (!string.IsNullOrWhiteSpace(postOffice.Name)) _partnerForm.Village = postOffice.Name;
+            _partnerForm.Taluk = postOffice.Block;
+        }
+        else if (!string.IsNullOrWhiteSpace(postOffice.Division))
+        {
+            _partnerForm.Taluk = postOffice.Division;
+        }
+
+        if (!string.IsNullOrWhiteSpace(postOffice.Name))
+        {
+            _partnerForm.Village = postOffice.Name;
+        }
+
+        var details = new List<string>();
+        if (!string.IsNullOrWhiteSpace(postOffice.Name))
+            details.Add($"Village: {postOffice.Name}");
+        if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+            details.Add($"Block: {postOffice.Block}");
+        if (!string.IsNullOrWhiteSpace(_partnerForm.Taluk))
+            details.Add($"Taluk: {_partnerForm.Taluk}");
+        if (matchedDistrict != null)
+            details.Add($"District: {matchedDistrict.DistrictName}");
+        if (matchedState != null)
+            details.Add($"State: {matchedState.StateName}");
 
         _pincodeSuccess = true;
-        _pincodeMessage = $"Auto-filled: {postOffice.District}, {postOffice.State}";
+        _pincodeMessage = "Auto-filled: " + string.Join(", ", details);
     }
     catch (HttpRequestException httpEx)
     {
