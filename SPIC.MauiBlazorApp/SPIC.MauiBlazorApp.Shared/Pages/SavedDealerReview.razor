@@ -1,4 +1,4 @@
-﻿@page "/SavedDealerReview"
+@page "/SavedDealerReview"
 @rendermode InteractiveServer
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components
@@ -323,7 +323,16 @@
         if (string.IsNullOrEmpty(path)) return "";
         var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
         var segments = path.Split('/').Select(Uri.EscapeDataString);
-        return $"{baseUrl}/api/DealerFile/view/{string.Join("/", segments)}";
+        var urlPath = string.Join("/", segments);
+        
+        var token = LoginState?.Token;
+        if (!string.IsNullOrEmpty(token))
+        {
+            var rawToken = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+            return $"{baseUrl}/api/DealerFile/view/{urlPath}?access_token={rawToken}";
+        }
+        
+        return $"{baseUrl}/api/DealerFile/view/{urlPath}";
     }
 
     private string GetShortFileName(string? path)

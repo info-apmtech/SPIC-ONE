@@ -3172,7 +3172,16 @@
 	{
 		if (string.IsNullOrEmpty(path)) return "";
 		var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
-		return $"{baseUrl}/api/DealerFile/view/{Uri.EscapeDataString(path).Replace("%2F", "/")}";
+		
+		var urlPath = Uri.EscapeDataString(path).Replace("%2F", "/");
+		var token = LoginState?.Token;
+		if (!string.IsNullOrEmpty(token))
+		{
+			var rawToken = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+			return $"{baseUrl}/api/DealerFile/view/{urlPath}?access_token={rawToken}";
+		}
+		
+		return $"{baseUrl}/api/DealerFile/view/{urlPath}";
 	}
 
 	private void ShowMessage(string msg, bool isError)
