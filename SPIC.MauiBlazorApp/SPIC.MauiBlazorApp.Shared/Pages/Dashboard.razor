@@ -231,8 +231,21 @@
 
                 // Terminated-specific display flags — do NOT affect GetApprovalStatus, filters,
                 // KPI counts, or IsDealerComplete/CanShowReviewButton logic used elsewhere.
-                var isTerminatedDealer = dealer.Status == 2 || (dealer.Status == 1 && dealer.InactiveProposal == FutureBusinessProposal.Terminated);
-                var isTerminatedSubmitted = (dealer.Status == 2 || (dealer.Status == 1 && dealer.InactiveProposal == FutureBusinessProposal.Terminated)) && dealer.IsSubmittedForReview == true;
+               // Two distinct terminated cases, handled differently on the dashboard:
+                //  • Pure Terminated (Status==2): single-page flow, submit and done →
+                //    ALWAYS treated as completed. No Edit, no Draft.
+                //  • Inactive + to-be-Terminated (Status==1, InactiveProposal==Terminated):
+                //    3-page flow → Edit/Draft until IsSubmittedForReview==true, then completed.
+                var isPureTerminated = dealer.Status == 2;
+                var isInactiveToBeTerminated = dealer.Status == 1 && dealer.InactiveProposal == FutureBusinessProposal.Terminated;
+                var isTerminatedDealer = isPureTerminated || isInactiveToBeTerminated;
+               // Terminated dealers use a single-page submit flow — on the dashboard they
+                // must never appear as Draft or be editable. Treat any terminated dealer as
+                // already submitted/completed for display. (Does NOT affect KPIs/filters.)
+                // Terminated "Completed" shows ONLY after the 3-page restricted flow was
+                // actually submitted (IsSubmittedForReview == true). Until then it stays
+                // Draft + Edit. (Does NOT affect KPIs/filters.)
+               var isTerminatedSubmitted = isPureTerminated ||(isInactiveToBeTerminated && dealer.IsSubmittedForReview == true);
 
                 <div class="col-12 col-sm-12 col-md-6 col-xl-4">
                     <div class="reg-card @(isPendingForMe ? "border-primary shadow-sm" : "")">
@@ -286,9 +299,14 @@
                             <div class="d-flex flex-column align-items-end gap-2 card-top-right">
                                 <div class="badge-group">
 
-                                    @if (isTerminatedSubmitted)
+                                   @if (isTerminatedSubmitted)
                                     {
-                                        <span class="badge-custom badge-status-terminated">Terminated</span>
+                                        @* status==2 already shows "Terminated" via the statusName badge,
+                                           so add an explicit one only for the Inactive + Terminated case *@
+                                        @if (statusName != "Terminated")
+                                        {
+                                            <span class="badge-custom badge-status-terminated">Terminated</span>
+                                        }
                                     }
                                     else if (isPendingForMe)
                                     {
