@@ -443,7 +443,7 @@ namespace SpicAPI.Controllers
                 .Where(x => (x.PinCode != null && x.PinCode != "")
                     || x.Status == DealerStatus.Terminated
                     || (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.Terminated)
-                    || x.DealerType == DealerType.Department);
+                    || x.DealerType == RegistrationDealerType.Department);
 
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

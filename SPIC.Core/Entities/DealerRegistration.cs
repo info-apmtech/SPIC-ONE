@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
@@ -13,7 +13,7 @@ namespace SPIC.Core.Entities
         [Display(Name = "Dealar / Department")]
         public bool IsDealer { get; set; }
         // NEW: Keep old IsDealer for backward compatibility. Add DealerType enum to support Institution.
-        public DealerType? DealerType { get; set; }
+        public RegistrationDealerType? DealerType { get; set; }
         public bool InSpic { get; set; }
         public bool InGreenStar { get; set; }
 
@@ -204,7 +204,7 @@ namespace SPIC.Core.Entities
         CANAL, TANK, WELL
     }
 
-    public enum DealerType
+    public enum RegistrationDealerType
     {
         Dealer, Department, Institution
     }

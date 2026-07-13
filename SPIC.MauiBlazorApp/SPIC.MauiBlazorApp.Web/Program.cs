@@ -5,10 +5,8 @@ using Microsoft.AspNetCore.DataProtection;
 using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
-// ✅ ADD THIS HERE
+
 builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(
-        Path.Combine(builder.Environment.ContentRootPath, "keys")))
     .SetApplicationName("SPIC");
 
 // Add services to the container.
