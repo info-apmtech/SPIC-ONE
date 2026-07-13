@@ -595,6 +595,9 @@
     private int _progressPercent;
 
     private bool _isSoleProprietor => _dealer.EntityType == EntityType.soleProprietor;
+ 
+    
+    private bool _isInstitution => _dealer.DealerType == DealerType.Institution;
 
     private bool _hasWholesaleLicense =>
         !string.IsNullOrEmpty(_dealer.WholeSaleFertilizerLicenseNumber);
@@ -849,7 +852,17 @@
         _stepStatus[5] = _companies.Count > 0;
         _stepStatus[6] = _partners.Count > 0;
         _stepStatus[7] = _salesPlans.Count > 0;
-        _stepStatus[8] = _assetBanks.Count > 0 || _assetLands.Count > 0 || _assetBuildings.Count > 0;
+        // Investment is complete if ANY investment data exists — not only a bank/land/building
+        // asset card. A dealer may fill just Movable Asset Value or Godown Capacity on the
+        // Investment page without adding a bank/land/building card, and that must still count
+        // as complete so Final Submission isn't falsely blocked.
+        // Institution dealers don't fill the Investment page, so its section must never
+        // block Final Submission — treat it as complete for Institution regardless of data.
+        // All other types (Dealer) keep the real check (any bank/land/building asset).
+        _stepStatus[8] = _isInstitution
+            || _assetBanks.Count > 0
+            || _assetLands.Count > 0
+            || _assetBuildings.Count > 0;
         _stepStatus[9] = _creditLimit != null;
 
         // Enclosure complete based on required document list.
