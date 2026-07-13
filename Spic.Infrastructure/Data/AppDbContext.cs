@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SPIC.Core.Entities;
@@ -57,12 +57,23 @@ namespace Spic.Infrastructure.Data
         public DbSet<ProductGroup> ProductGroups { get; set; }
         public DbSet<Product> Products { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
+        public DbSet<WarehouseDistrictWiseDetailsGlobalStock> WarehouseDistrictWiseDetailsGlobalStocks { get; set; }
+        public DbSet<StateWiseGlobalStockReconciliation> StateWiseGlobalStockReconciliations { get; set; }
+        public DbSet<SalesWholesaler> SalesWholesalers { get; set; }
+        public DbSet<SalesAndReceipt> SalesAndReceipts { get; set; }
+        public DbSet<SalesCompanySale> SalesCompanySales { get; set; }
+        public DbSet<DptReport> DptReports { get; set; }
+        public DbSet<WholesalerStockAsOnToday> WholesalerStockAsOnTodays { get; set; }
         public DbSet<RackPoint> RackPoints { get; set; }
         public DbSet<Port> Ports { get; set; }
         public DbSet<Bank> Banks { get; set; }
         public DbSet<FinancialYear> FinancialYears { get; set; }
         public DbSet<Relationship> Relationships { get; set; }
         public DbSet<DealerRegistration> DealerRegistrations { get; set; }
+        public DbSet<Plant> Plants { get; set; }
+        public DbSet<DealerType> DealerTypes { get; set; }
+        public DbSet<Status> Statuses { get; set; }
+        public DbSet<IfmsDealer> IfmsDealers { get; set; }
 
         // Dealer Registration Sub-Entities
         public DbSet<DealerExperience> DealerExperiences { get; set; }
