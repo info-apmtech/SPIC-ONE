@@ -1061,10 +1061,19 @@
         _isSaving = true;
         try
         {
+            // Restricted flow = Terminated OR Inactive+To-Be-Terminated. For these
+            // (dealer & institution), Investment is the FINAL page — clicking Submit here
+            // completes the registration, so mark it submitted. Active/full-flow dealers
+            // continue to CreditLimit and must NOT be marked submitted here.
+            var isRestricted = string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase);
+            if (isRestricted)
+                _dealer.IsSubmittedForReview = true;
+
             var response = await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", _dealer);
             response.EnsureSuccessStatusCode();
             FormStepData.MarkStepError(9, false);
-            if (string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase))
+
+            if (isRestricted)
                 Nav.NavigateTo($"/Dashboard?dealerId={DealerId}");
             else
                 Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}");

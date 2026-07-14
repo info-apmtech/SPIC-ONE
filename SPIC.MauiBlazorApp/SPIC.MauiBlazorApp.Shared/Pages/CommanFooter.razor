@@ -111,7 +111,13 @@
     {
         LoadQueryString();
         SetCurrentStep();
-        _isRestrictedFlow = GetFlowRestricted();
+
+        // URL ?flow=restricted still honored, BUT a dealer whose status is
+        // Terminated (2) OR Inactive (1) + InactiveProposal == Terminated must
+        // ALWAYS use the restricted flow for navigation — even when the query
+        // string has no flow=restricted. Same rule the dashboard uses.
+        var urlRestricted = GetFlowRestricted();
+        var statusRestricted = false;
 
         var dealerId = GetDealerIdFromQuery();
 
@@ -121,6 +127,14 @@
             {
                 var dealer = await Http.GetFromJsonAsync<DealerRegistration>($"api/DealerRegistration/{dealerId}");
                 _hasGreenStar = dealer?.InGreenStar ?? false;
+
+                if (dealer != null)
+                {
+                    // (int) cast works whether Status is an int or an int-backed enum.
+                    statusRestricted =
+                        (int)dealer.Status == 2 ||
+                        ((int)dealer.Status == 1 && dealer.InactiveProposal == FutureBusinessProposal.Terminated);
+                }
             }
             catch
             {
@@ -129,10 +143,11 @@
         }
         else
         {
-            // Create mode / no dealerId
-            // Default should be 12 steps
+            // Create mode / no dealerId — default full flow
             _hasGreenStar = false;
         }
+
+        _isRestrictedFlow = urlRestricted || statusRestricted;
 
         VisibleSteps = FormStepData.GetVisibleSteps(_hasGreenStar, _isRestrictedFlow);
     }

@@ -1142,10 +1142,16 @@
     // Only pure Terminated status hides these — Inactive+Terminated still shows the full page.
     private bool IsRestrictedFlow => status == "Terminated";
 
-    // Controls NAVIGATION only: both pure Terminated AND Inactive+Terminated use the
-    // restricted 3-step flow (Register -> Proprietor -> Investment), and both show the
-    // "Terminated Status" card + require Final Approval/Settlement dates.
+   // Controls NAVIGATION + submit for the PURE Terminated case ONLY:
+    // single Register page, "Terminated Status" card, submit straight to Dashboard.
     private bool IsRestrictedNavFlow => status == "Terminated";
+
+    // Inactive dealer whose Future Business Proposal is "To Be Terminated".
+    // Uses a restricted 3-PAGE flow (Register -> Proprietor -> Investment):
+    // Next on Register goes to Proprietor (NOT Experience), and IsSubmittedForReview
+    // is set only on the FINAL restricted page — so this stays Draft/Editable here.
+    private bool IsInactiveToBeTerminated =>
+        status == "Inactive" && _inactiveProposal == FutureBusinessProposal.Terminated;
 
     private DealerFormModel _model = new()
     {
@@ -2094,12 +2100,22 @@ _model.Status = status switch
                 return;
 
             Loading.Show();
-            var viewNext = "/Experience";
-            Nav.NavigateTo($"{viewNext}?dealerId={_model.Id}&mode=view");
+
+            // Inactive + To-Be-Terminated uses the restricted flow even in view mode.
+            if (IsInactiveToBeTerminated)
+            {
+                var viewNextRestricted = SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData
+                    .GetNextRoute("/Register", _model.InGreenStar, true);
+                Nav.NavigateTo($"{viewNextRestricted}?dealerId={_model.Id}&mode=view&flow=restricted");
+                return;
+            }
+
+            Nav.NavigateTo($"/Experience?dealerId={_model.Id}&mode=view");
             return;
         }
 
-       if (IsRestrictedNavFlow || IsDepartmentSelected)
+        // Pure Terminated + Department: single step, submit straight to Dashboard.
+        if (IsRestrictedNavFlow || IsDepartmentSelected)
         {
             if (IsDepartmentSelected)
                 _model.IsSubmittedForReview = true;
@@ -2107,6 +2123,27 @@ _model.Status = status switch
             var deptSaved = await SaveDealer();
             if (deptSaved)
                 Nav.NavigateTo("/Dashboard");
+            return;
+        }
+
+        // Inactive + To-Be-Terminated: restricted 3-page flow. Save this page then move
+        // to the next restricted step (Proprietor) instead of Experience. Do NOT set
+        // IsSubmittedForReview here — that happens on the final restricted page.
+        if (IsInactiveToBeTerminated)
+        {
+            var termSaved = await SaveDealer();
+            if (termSaved)
+            {
+                SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, false);
+                Loading.Show();
+                var nextRestricted = SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData
+                    .GetNextRoute("/Register", _model.InGreenStar, true);
+                Nav.NavigateTo($"{nextRestricted}?dealerId={_model.Id}&flow=restricted");
+            }
+            else
+            {
+                SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, _errors.Count > 0);
+            }
             return;
         }
 
