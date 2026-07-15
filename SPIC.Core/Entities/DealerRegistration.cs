@@ -211,7 +211,8 @@ namespace SPIC.Core.Entities
     public enum FutureBusinessProposal
     {
         FutureBusiness = 1,
-        Terminated = 2
+        Terminated = 2,
+        NotTraceable = 3
     }
     public class DealerExperience
     {

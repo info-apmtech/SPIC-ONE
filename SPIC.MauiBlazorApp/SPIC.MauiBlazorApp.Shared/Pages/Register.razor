@@ -85,7 +85,7 @@
         }
 </style>
 <div class="container-fluid py-4 px-0">
-    <FormLoader IsSingleStep="IsRestrictedNavFlow || IsDepartmentSelected" />
+    <FormLoader IsSingleStep="IsRestrictedNavFlow || IsDepartmentSelected" IsRestrictedFlow="IsInactiveToBeTerminated" />
 
    
     <fieldset disabled="@IsViewOnly" style="@(IsViewOnly ? "border:0;padding:0;margin:0;" : "border:0;padding:0;margin:0;")">
@@ -241,7 +241,7 @@
                 </div>
             }
 
-         @if (IsRestrictedNavFlow)
+         @if (ShowTerminatedStatus)
             {
                 <div class="basic-info-card">
                     <div class="card-header-title mb-2">
@@ -438,6 +438,7 @@
                                     @bind="_inactiveProposal">
                                 <option value="@FutureBusinessProposal.FutureBusiness">Future Business</option>
                                 <option value="@FutureBusinessProposal.Terminated">To Be Terminated</option>
+                                <option value="@FutureBusinessProposal.NotTraceable">Not Traceable</option>
                             </select>
                         </div>
                     </div>
@@ -1144,7 +1145,7 @@
 
    // Controls NAVIGATION + submit for the PURE Terminated case ONLY:
     // single Register page, "Terminated Status" card, submit straight to Dashboard.
-    private bool IsRestrictedNavFlow => status == "Terminated";
+    private bool IsRestrictedNavFlow => status == "Terminated" || IsInactiveNotTraceable;
 
     // Inactive dealer whose Future Business Proposal is "To Be Terminated".
     // Uses a restricted 3-PAGE flow (Register -> Proprietor -> Investment):
@@ -1152,6 +1153,9 @@
     // is set only on the FINAL restricted page — so this stays Draft/Editable here.
     private bool IsInactiveToBeTerminated =>
         status == "Inactive" && _inactiveProposal == FutureBusinessProposal.Terminated;
+
+    private bool IsInactiveNotTraceable =>
+        status == "Inactive" && _inactiveProposal == FutureBusinessProposal.NotTraceable;
 
     private DealerFormModel _model = new()
     {
@@ -1874,7 +1878,7 @@
         {
             if (_model.LastTransactionDate == null) _errors["LastTransactionDate"] = "Last Transaction Date is required";
         }
-     if (IsRestrictedNavFlow)
+     if (ShowTerminatedStatus)
         {
             if (_model.FinalApprovalDate == null)
                 _errors["FinalApprovalDate"] = "Final Approval Date is required";
@@ -1884,7 +1888,7 @@
         }
         bool isDept = IsDepartmentSelected;
 
-        if (ShowFullRegistrationSections && !isDept)
+        if (ShowFullRegistrationSections && !isDept && !IsInactiveNotTraceable)
         {
             if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
             if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";

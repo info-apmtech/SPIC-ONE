@@ -1,4 +1,4 @@
-﻿@using System.Net.Http.Json
+@using System.Net.Http.Json
 @using SPIC.MauiBlazorApp.Shared.FormFlow
 @using SPIC.Core.Entities
 @inject NavigationManager Nav
@@ -49,9 +49,13 @@
 
 	private List<FormStepModel> _visibleSteps = FormStepData.GetVisibleSteps(false);
 	private bool _isRestrictedFlow;
+	private bool _hasGreenStar;
 
 	[Parameter]
 	public bool IsSingleStep { get; set; }
+
+	[Parameter]
+	public bool IsRestrictedFlow { get; set; }
 
 	private List<FormStepModel> StepsList => IsSingleStep
 		? _visibleSteps.Where(s => s.Route.Contains("/Register", StringComparison.OrdinalIgnoreCase)).Take(1).ToList()
@@ -84,6 +88,12 @@
 		await EvaluateFromQuery();
 	}
 
+	protected override void OnParametersSet()
+	{
+		_visibleSteps = FormStepData.GetVisibleSteps(_hasGreenStar, _isRestrictedFlow || IsRestrictedFlow);
+		SetCurrentStep();
+	}
+
 	private async Task LoadVisibleSteps()
 	{
 		var dealerId = GetDealerIdFromQuery();
@@ -99,7 +109,7 @@
 		}
 
 		var dealer = await GetDealer(dealerId);
-		var hasGreenStar = dealer?.InGreenStar ?? false;
+		_hasGreenStar = dealer?.InGreenStar ?? false;
 
 		// Even if the URL doesn't carry "flow=restricted" (e.g. opening an
 		// existing dealer straight from the Dashboard), a Terminated or
@@ -110,7 +120,7 @@
 				(dealer.Status == DealerStatus.InActive && dealer.InactiveProposal == FutureBusinessProposal.Terminated);
 		}
 
-		_visibleSteps = FormStepData.GetVisibleSteps(hasGreenStar, _isRestrictedFlow);
+		_visibleSteps = FormStepData.GetVisibleSteps(_hasGreenStar, _isRestrictedFlow || IsRestrictedFlow);
 
 		SetCurrentStep();
 	}
