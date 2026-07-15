@@ -792,10 +792,20 @@
                             <label>Business Type</label>
                             <div class="inline-val">@GetEntityTypeName(_model.EntityType)</div>
                         </div>
-                        <div class="inline-field">
-                            <label>Date of Appointment</label>
-                            <div class="inline-val">@(_model.DateOfAppointment?.ToString("dd MMMM yyyy") ?? "-")</div>
-                        </div>
+                        @if (_model.InSpic && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
+                        {
+                            <div class="inline-field">
+                                <label>Date of Appointment (SPIC)</label>
+                                <div class="inline-val">@(_model.DateOfAppointment?.ToString("dd MMMM yyyy") ?? "-")</div>
+                            </div>
+                        }
+                        @if (_model.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
+                        {
+                            <div class="inline-field">
+                                <label>Date of Appointment (Greenstar)</label>
+                                <div class="inline-val">@(_model.GreenstarDateOfAppointment?.ToString("dd MMMM yyyy") ?? "-")</div>
+                            </div>
+                        }
                         <div class="inline-field">
                             <label>Experience in Industry</label>
                             <div class="inline-val">@(_model.YearsofExperiance > 0 ? $"{_model.YearsofExperiance} Years" : "-")</div>
@@ -867,24 +877,49 @@
                 </div>
 
                 <div class="dpdf-section">
-    <div class="dpdf-section-title mb-2">
-        <div class="dpdf-section-icon">📋</div> <div class="dpdf-section-text">Trade Deposit Details</div>
-    </div>
-                    
-    <div class="grid-2" style="row-gap: 12px;">
-        <div class="inline-field">
-            <label>Trade Deposit Amount (₹ in lakhs)</label>
-            <div class="inline-val">@(_model.TradeDepositAmount.ToString("N2") ?? "-")</div>
+    @if (_model.InSpic && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
+    {
+        <div class="dpdf-section-title mb-2">
+            <div class="dpdf-section-icon">📋</div> <div class="dpdf-section-text">Trade Deposit Details for SPIC</div>
         </div>
-        <div class="inline-field">
-            <label>Receipt No</label>
-            <div class="inline-val">@(_model.TradeDepositReceiptNo ?? "-")</div>
+                        
+        <div class="grid-2" style="row-gap: 12px; margin-bottom: 20px;">
+            <div class="inline-field">
+                <label>Trade Deposit Amount (₹ in lakhs)</label>
+                <div class="inline-val">@(_model.TradeDepositAmount.ToString("N2") ?? "-")</div>
+            </div>
+            <div class="inline-field">
+                <label>Receipt No</label>
+                <div class="inline-val">@(_model.TradeDepositReceiptNo ?? "-")</div>
+            </div>
+            <div class="inline-field">
+                <label>Deposit Date</label>
+                <div class="inline-val">@(_model.TradeDepositDate?.ToString("dd MMMM yyyy") ?? "-")</div>
+            </div>
         </div>
-        <div class="inline-field">
-            <label>Deposit Date</label>
-            <div class="inline-val">@(_model.TradeDepositDate?.ToString("dd MMMM yyyy") ?? "-")</div>
+    }
+
+    @if (_model.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
+    {
+        <div class="dpdf-section-title mb-2">
+            <div class="dpdf-section-icon">📋</div> <div class="dpdf-section-text">Trade Deposit Details for Greenstar</div>
         </div>
-    </div>
+                        
+        <div class="grid-2" style="row-gap: 12px;">
+            <div class="inline-field">
+                <label>Trade Deposit Amount (₹ in lakhs)</label>
+                <div class="inline-val">@(_model.GreenstarTradeDepositAmountReg?.ToString("N2") ?? "-")</div>
+            </div>
+            <div class="inline-field">
+                <label>Receipt No</label>
+                <div class="inline-val">@(_model.GreenstarTradeDepositReceiptNoReg ?? "-")</div>
+            </div>
+            <div class="inline-field">
+                <label>Deposit Date</label>
+                <div class="inline-val">@(_model.GreenstarTradeDepositDateReg?.ToString("dd MMMM yyyy") ?? "-")</div>
+            </div>
+        </div>
+    }
 </div>
 
 <div class="dpdf-section">
@@ -3866,6 +3901,7 @@ private decimal GetMoRecommendedLimit()
         public int ParentDealer { get; set; }
         public string? FirmName { get; set; }
         public DateTime? DateOfAppointment { get; set; }
+        public DateTime? GreenstarDateOfAppointment { get; set; }
         public string? BusinessEntityType { get; set; }
         public DateTime? LastTransactionDate { get; set; }
         public bool? IsLastTransactionIsSale { get; set; }
@@ -3938,6 +3974,9 @@ private decimal GetMoRecommendedLimit()
         public decimal TradeDepositAmount { get; set; }
         public string? TradeDepositReceiptNo { get; set; }
         public DateTime? TradeDepositDate { get; set; }
+        public decimal? GreenstarTradeDepositAmountReg { get; set; }
+        public string? GreenstarTradeDepositReceiptNoReg { get; set; }
+        public DateTime? GreenstarTradeDepositDateReg { get; set; }
     }
 
     public class LocationItemDto

@@ -21,9 +21,9 @@ namespace SPIC.Core.Entities
         public string? SPICCode { get; set; }
         public string? GreenStarCode { get; set; }
         public string? TnCode { get; set; }
-		public string? NCode { get; set; }
+        public string? NCode { get; set; }
 
-		[Display(Name = "State")]
+        [Display(Name = "State")]
         public int StateId { get; set; }
         public int Region { get; set; }
         public int HQ { get; set; }
@@ -32,8 +32,10 @@ namespace SPIC.Core.Entities
         public int ParentDealer { get; set; }
         [Display(Name = "Firm Name")]
         public string FirmName { get; set; }
-        [Display(Name = "Date Of Appointment")]
+        [Display(Name = "Spic Date Of Appointment")]
         public DateTime DateOfAppointment { get; set; }
+        [Display(Name = "Greenstar Date Of Appointment")]
+        public DateTime? GreenstarDateOfAppointment { get; set; }
         [Display(Name = "Business Type")]
         public string? BusinessEntityType { get; set; }
         //In Active Status
@@ -94,6 +96,11 @@ namespace SPIC.Core.Entities
         public decimal TradeDepositAmount { get; set; }
         public string? TradeDepositReceiptNo { get; set; }
         public DateTime TradeDepositDate { get; set; }
+
+        //Trade Deposit Details - Greenstar
+        public decimal? GreenstarTradeDepositAmountReg { get; set; }
+        public string? GreenstarTradeDepositReceiptNoReg { get; set; }
+        public DateTime? GreenstarTradeDepositDateReg { get; set; }
 
         //Wholesale Fertilizer
         [Display(Name = "WholeSale Fertilizer License")]
@@ -164,17 +171,17 @@ namespace SPIC.Core.Entities
         //infra
         public decimal OwnGodownCapacity { get; set; }
         public decimal RentGodownCapacity { get; set; }
-		[Display(Name = "Legal Name")]
-		public string? GSTLegalName { get; set; }
-		[Display(Name = "Trade Name")]
-		public string? GSTTradeName { get; set; }
-		[Display(Name = "Constitution of Business")]
-		public string? GSTConstitutionofBusiness { get; set; }
-		[Display(Name = "Inactive Proposal")]
-		public FutureBusinessProposal? InactiveProposal { get; set; }
+        [Display(Name = "Legal Name")]
+        public string? GSTLegalName { get; set; }
+        [Display(Name = "Trade Name")]
+        public string? GSTTradeName { get; set; }
+        [Display(Name = "Constitution of Business")]
+        public string? GSTConstitutionofBusiness { get; set; }
+        [Display(Name = "Inactive Proposal")]
+        public FutureBusinessProposal? InactiveProposal { get; set; }
         public bool? IsSubmittedForReview { get; set; } = false;
 
-	}
+    }
     public class DealerApprovalHistory
     {
         public int Id { get; set; }

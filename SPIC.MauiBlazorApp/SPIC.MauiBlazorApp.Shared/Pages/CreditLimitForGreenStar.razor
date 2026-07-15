@@ -1,4 +1,4 @@
-﻿@page "/CreditLimitForGreenStar"
+@page "/CreditLimitForGreenStar"
 @using System.Net.Http.Json
 @using SPIC.Core.Entities
 @using DealerReg = SPIC.Core.Entities.DealerRegistration
@@ -133,7 +133,7 @@
 			</div>
 		}
 		<!-- Dealer Summary -->
-		<_Creditlimitdealersummary_Card Dealer="_dealer" LandTotal="LandTotal" BuildingTotal="BuildingTotal" />
+		<_Creditlimitdealersummary_Card Dealer="_dealer" LandTotal="LandTotal" BuildingTotal="BuildingTotal" SelectedCompany="GreenStar" />
 
 		<!-- Existing Credit Limit -->
 		<div class="form-card">
@@ -1900,13 +1900,14 @@ private List<int> GetCompletedFYIds()
 	{
 		return GetReviewFinancialYears().Select(fy => fy.Id).ToList();
 	}
-	private double GetDealerTenureYearMonthValue()
+private double GetDealerTenureYearMonthValue()
 {
-    if (_dealer.DateOfAppointment == default || _dealer.DateOfAppointment > DateTime.Now)
+    var dateToCheck = _dealer.GreenstarDateOfAppointment ?? _dealer.DateOfAppointment;
+    if (dateToCheck == default || dateToCheck > DateTime.Now)
         return 0;
 
     var today = DateTime.Now;
-    var appointmentDate = _dealer.DateOfAppointment;
+    var appointmentDate = dateToCheck;
 
     var years = today.Year - appointmentDate.Year;
     var months = today.Month - appointmentDate.Month;
