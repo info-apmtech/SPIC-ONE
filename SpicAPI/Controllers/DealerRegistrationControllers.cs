@@ -28,6 +28,9 @@ namespace SpicAPI.Controllers
         private readonly IGenericRepository<DealerCreditLimitProposal>? _creditRepo;
         private readonly IGenericRepository<DealerRegistrationDocuments>? _docsRepo;
         private readonly IGenericRepository<Designation>? _designationRepo;
+        private readonly IGenericRepository<PartnerFamilyDetails>? _partnerRepo;
+        private readonly IGenericRepository<PartnerOccupation>? _occRepo;
+        private readonly IGenericRepository<DealerLoanLiabilities>? _loanRepo;
         private readonly IGenericRepository<UserInfo> _userInfoRepo;
         private readonly UserManager<UserInfo> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
@@ -52,7 +55,10 @@ namespace SpicAPI.Controllers
             IGenericRepository<DealerAssetBuilding>? buildingRepo = null,
             IGenericRepository<DealerCreditLimitProposal>? creditRepo = null,
             IGenericRepository<DealerRegistrationDocuments>? docsRepo = null,
-            IGenericRepository<Designation>? designationRepo = null
+            IGenericRepository<Designation>? designationRepo = null,
+            IGenericRepository<PartnerFamilyDetails>? partnerRepo = null,
+            IGenericRepository<PartnerOccupation>? occRepo = null,
+            IGenericRepository<DealerLoanLiabilities>? loanRepo = null
             ) : base(repo)
         {
             _historyRepo = historyRepo;
@@ -74,6 +80,9 @@ namespace SpicAPI.Controllers
             _creditRepo = creditRepo;
             _docsRepo = docsRepo;
             _designationRepo = designationRepo;
+            _partnerRepo = partnerRepo;
+            _occRepo = occRepo;
+            _loanRepo = loanRepo;
         }
         private static readonly HashSet<string> _writeRoles = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -425,6 +434,127 @@ namespace SpicAPI.Controllers
             public string Priority { get; set; } = "High";
             public List<string> Sections { get; set; } = new List<string>();
             public string? TargetRole { get; set; }
+        }
+
+        [HttpGet("dashboard-sap-counts")]
+        public async Task<IActionResult> GetDashboardSapCounts()
+        {
+            var query = _repo.GetAllWithInactive();
+
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var regionClaim = User.FindFirst("spic:region_id")?.Value;
+            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+            var hqClaim = User.FindFirst("spic:hq_id")?.Value;
+
+            if (role != "Admin" && role != "CorporateAdmin" && role != "Director" && role != "AVP")
+            {
+                if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
+                    query = query.Where(x => x.StateId == stateId);
+                else if ((role == "RM" || role == "RMD") && int.TryParse(regionClaim, out var regionId) && regionId > 0)
+                    query = query.Where(x => x.Region == regionId);
+                else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId) && hqId > 0)
+                    query = query.Where(x => x.HQ == hqId);
+                else
+                    query = query.Where(x => x.CreatedBy == userId);
+            }
+
+            var sapCounts = await query.Select(d => new { d.Id, d.StateId, d.InSpic, d.InGreenStar }).ToListAsync();
+
+            var sapSpicByState = sapCounts.Where(d => d.InSpic).GroupBy(d => d.StateId).ToDictionary(g => g.Key, g => g.Count());
+            var sapGflByState = sapCounts.Where(d => d.InGreenStar).GroupBy(d => d.StateId).ToDictionary(g => g.Key, g => g.Count());
+            var allStateIds = sapCounts.Select(d => d.StateId).Distinct().ToList();
+
+            return Ok(new {
+                TotalDealers = sapCounts.Count,
+                SpicByState = sapSpicByState,
+                GflByState = sapGflByState,
+                AllStateIds = allStateIds
+            });
+        }
+
+        [HttpGet("dashboard-completion-counts")]
+        public async Task<IActionResult> GetDashboardCompletionCounts()
+        {
+            var counts = new Dictionary<int, int>();
+
+            var query = _repo.GetAllWithInactive()
+                .Where(x => (x.PinCode != null && x.PinCode != "")
+                    || x.Status == DealerStatus.Terminated
+                    || (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.Terminated)
+                    || x.DealerType == RegistrationDealerType.Department);
+            
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var regionClaim = User.FindFirst("spic:region_id")?.Value;
+            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+            var hqClaim = User.FindFirst("spic:hq_id")?.Value;
+
+            if (role != "Admin" && role != "CorporateAdmin" && role != "Director" && role != "AVP")
+            {
+                if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
+                    query = query.Where(x => x.StateId == stateId);
+                else if ((role == "RM" || role == "RMD") && int.TryParse(regionClaim, out var regionId) && regionId > 0)
+                    query = query.Where(x => x.Region == regionId);
+                else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId) && hqId > 0)
+                    query = query.Where(x => x.HQ == hqId);
+                else
+                    query = query.Where(x => x.CreatedBy == userId);
+            }
+
+            var dealers = await query.Select(x => new { x.Id, x.PinCode }).ToListAsync();
+
+            foreach(var d in dealers) 
+            {
+                counts[d.Id] = 0;
+                if (!string.IsNullOrWhiteSpace(d.PinCode))
+                {
+                    counts[d.Id] = 1; // Step 1
+                }
+            }
+
+            if (_expRepo != null) foreach(var id in await _expRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync()) if(counts.ContainsKey(id)) counts[id]++;
+            if (_annualRepo != null) foreach(var id in await _annualRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync()) if(counts.ContainsKey(id)) counts[id]++;
+            
+            var whIds = _whRepo != null ? await _whRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync() : new List<int>();
+            var railIds = _railRepo != null ? await _railRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync() : new List<int>();
+            var portIds = _portRepo != null ? await _portRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync() : new List<int>();
+            foreach(var id in whIds.Concat(railIds).Concat(portIds).Distinct()) if(counts.ContainsKey(id)) counts[id]++;
+
+            if (_marketRepo != null) foreach(var id in await _marketRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync()) if(counts.ContainsKey(id)) counts[id]++;
+            if (_compRepo != null) foreach(var id in await _compRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync()) if(counts.ContainsKey(id)) counts[id]++;
+            if (_ownerRepo != null) foreach(var id in await _ownerRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync()) if(counts.ContainsKey(id)) counts[id]++;
+            
+            if (_ownerRepo != null)
+            {
+                var ownerPartners = _partnerRepo != null ? await _partnerRepo.GetAll().Select(x => EF.Property<int>(x, "OwnershipPartnerId")).Distinct().ToListAsync() : new List<int>();
+                var ownerOccs = _occRepo != null ? await _occRepo.GetAll().Select(x => EF.Property<int>(x, "OwnershipPartnerId")).Distinct().ToListAsync() : new List<int>();
+                var step8Owners = ownerPartners.Concat(ownerOccs).Distinct().ToList();
+                if (step8Owners.Any())
+                {
+                    var step8Dealers = await _ownerRepo.GetAll().Where(o => step8Owners.Contains(o.Id)).Select(o => EF.Property<int>(o, "DealerId")).Distinct().ToListAsync();
+                    foreach(var id in step8Dealers) if(counts.ContainsKey(id)) counts[id]++;
+                }
+            }
+
+            if (_salesPlanRepo != null) foreach(var id in await _salesPlanRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync()) if(counts.ContainsKey(id)) counts[id]++;
+
+            var bankIds = _bankRepo != null ? await _bankRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync() : new List<int>();
+            var landIds = _landRepo != null ? await _landRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync() : new List<int>();
+            var buildIds = _buildingRepo != null ? await _buildingRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync() : new List<int>();
+            foreach(var id in bankIds.Concat(landIds).Concat(buildIds).Distinct()) if(counts.ContainsKey(id)) counts[id]++;
+
+            if (_loanRepo != null) foreach(var id in await _loanRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync()) if(counts.ContainsKey(id)) counts[id]++;
+            
+            if (_creditRepo != null) 
+            {
+                var creditIds = await _creditRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync();
+                foreach(var id in creditIds) if(counts.ContainsKey(id)) counts[id]++;
+            }
+
+            if (_docsRepo != null) foreach(var id in await _docsRepo.GetAll().Select(x => EF.Property<int>(x, "DealerId")).Distinct().ToListAsync()) if(counts.ContainsKey(id)) counts[id]++;
+
+            return Ok(counts);
         }
 
         /// <summary>

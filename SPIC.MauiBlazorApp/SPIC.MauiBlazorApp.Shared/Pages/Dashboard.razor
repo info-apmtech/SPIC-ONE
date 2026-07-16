@@ -754,7 +754,7 @@
     private List<HeadquarterDto> _headquartersAll = new();
     private List<StateDto> _statesAll = new();
     private int _trueTotalDealerCount = 0;
-    private List<DealerDto> _allDealersFull = new();
+    private SapCountsResponse _sapCounts = new();
     private List<StateWiseSummary> _stateWiseSummaryCache = new();
 
     // Pagination for the state-wise table
@@ -909,71 +909,28 @@
         _isLoading = true;
         try
         {
-            // Kick off every request at once (no awaits yet)
             var dealersTask   = SafeGet<DealerDto>("api/DealerRegistration/submitted");
             var regionsTask   = SafeGet<RegionDto>("api/Region/all");
             var hqTask        = SafeGet<HeadquarterDto>("api/Headquarter/all");
-           var statesTask    = SafeGet<StateDto>("api/State/all");
-            var allDealersCountTask = SafeGet<DealerDto>("api/DealerRegistration/all");
-            var expTask       = SafeGet<DealerExperience>("api/DealerExperience");
-            var annualTask    = SafeGet<AnnualSaleDataLastFYofDealerRegistration>("api/AnnualSaleDataLastFYofDealerRegistration");
-            var whTask        = SafeGet<DealerWarehouseFacilities>("api/DealerWarehouseFacilities");
-            var railTask      = SafeGet<DealerRailFacilities>("api/DealerRailFacilities");
-            var portTask      = SafeGet<DealerPortFacilities>("api/DealerPortFacilities");
-            var marketTask    = SafeGet<DealerMarketDetail>("api/DealerMarketDetail");
-            var compTask      = SafeGet<DealerCompaniesOperatingInArea>("api/DealerCompaniesOperatingInArea");
-            var ownerTask     = SafeGet<DealerOwnershipInfo>("api/DealerOwnershipInfo");
-            var partnerTask   = SafeGet<PartnerFamilyDetails>("api/PartnerFamilyDetails");
-            var occTask       = SafeGet<PartnerOccupation>("api/PartnerOccupation");
-            var salesPlanTask = SafeGet<SalesPlanningInDealerRegistration>("api/SalesPlanning");
-            var bankTask      = SafeGet<DealerAssetBank>("api/DealerAssetBank");
-            var landTask      = SafeGet<DealerAssetLand>("api/DealerAssetLand");
-            var buildingTask  = SafeGet<DealerAssetBuilding>("api/DealerAssetBuilding");
-            var loanTask      = SafeGet<DealerLoanLiabilities>("api/DealerLoanLiabilities");
-            var creditTask    = SafeGet<DealerCreditLimitProposal>("api/DealerCreditLimitProposal");
-            var creditSalesTask = SafeGet<DealerCreditLimitSalesPerformance>("api/DealerCreditLimitSalesPerformance");
-           var docsTask      = SafeGet<DealerRegistrationDocuments>("api/DealerRegistrationDocuments");
-          var categoriesTask = SafeGet<Category>("api/Category");
-            var productsTask   = SafeGet<Product>("api/Product");
-           var approvalHistoryTask = SafeGet<DealerApprovalHistory>("api/DealerApprovalHistory");
+            var statesTask    = SafeGet<StateDto>("api/State/all");
+            var sapCountsTask = Http.GetFromJsonAsync<SapCountsResponse>("api/DealerRegistration/dashboard-sap-counts");
+            
+            // New optimized endpoint for step counts
+            var countsTask    = Http.GetFromJsonAsync<Dictionary<int, int>>("api/DealerRegistration/dashboard-completion-counts");
 
-            // Wait for all of them in parallel
-            await Task.WhenAll(
-                dealersTask, regionsTask, hqTask, expTask, annualTask, whTask, railTask,
-                portTask, marketTask, compTask, ownerTask, partnerTask, occTask,
-                salesPlanTask, bankTask, landTask, buildingTask, loanTask,
-            creditTask, creditSalesTask, docsTask, categoriesTask, productsTask, approvalHistoryTask, statesTask, allDealersCountTask);
+            await Task.WhenAll(dealersTask, regionsTask, hqTask, statesTask, sapCountsTask, countsTask);
 
-            // Assign results
             _allDealers          = await dealersTask;
             _regionsAll          = await regionsTask;
             _headquartersAll     = await hqTask;
-           _statesAll           = await statesTask;
-            _allDealersFull       = await allDealersCountTask;
-            _trueTotalDealerCount = _allDealersFull.Count;
-            _allExperiences      = await expTask;
-            _allAnnualSales      = await annualTask;
-            _allWarehouses       = await whTask;
-            _allRails            = await railTask;
-            _allPorts            = await portTask;
-            _allMarketDetails    = await marketTask;
-            _allCompaniesOperating = await compTask;
-            _allOwnerships       = await ownerTask;
-            _allPartners         = await partnerTask;
-            _allOccupations      = await occTask;
-            _allSalesPlanning    = await salesPlanTask;
-            _allAssetBanks       = await bankTask;
-            _allAssetLands       = await landTask;
-            _allAssetBuildings   = await buildingTask;
-            _allLoans            = await loanTask;
-            _allCreditProposals  = await creditTask;
-            _allCreditSales      = await creditSalesTask;
-           _allDocuments        = await docsTask;
-            _allCategories       = await categoriesTask;
-            _allProducts         = await productsTask;
-          _allApprovalHistory  = await approvalHistoryTask;
+            _statesAll           = await statesTask;
+            
+            _sapCounts           = await sapCountsTask ?? new SapCountsResponse();
+            _trueTotalDealerCount = _sapCounts.TotalDealers;
 
-         BuildCompletionSet();
+            _dealerStepCounts = await countsTask ?? new Dictionary<int, int>();
+            _completeDealerIds = _dealerStepCounts.Where(kv => kv.Value >= 11).Select(kv => kv.Key).ToHashSet();
+
             ApplyRoleFilter();
             ApplyFilters();
             _stateWiseSummaryCache = new();
@@ -996,35 +953,7 @@
             _allDealers = _allDealers.Where(d => d.HQ == LoginState.HQId).ToList();
     }
 
-    private void BuildCompletionSet()
-    {
-        _dealerStepCounts.Clear();
-        foreach (var d in _allDealers)
-        {
-            int count = 0;
-            if (!string.IsNullOrWhiteSpace(d.PinCode)) count++;
-            if (_allExperiences.Any(x => x.DealerId == d.Id)) count++;
-            if (_allAnnualSales.Any(x => x.DealerId == d.Id)) count++;
-            if (_allWarehouses.Any(x => x.DealerId == d.Id) || _allRails.Any(x => x.DealerId == d.Id) || _allPorts.Any(x => x.DealerId == d.Id)) count++;
-            if (_allMarketDetails.Any(x => x.DealerId == d.Id)) count++;
-            if (_allCompaniesOperating.Any(x => x.DealerId == d.Id)) count++;
-            if (_allOwnerships.Any(x => x.DealerId == d.Id)) count++;
-            bool hasPartner = _allPartners.Any(p => _allOwnerships.Any(o => o.Id == p.OwnershipPartnerId && o.DealerId == d.Id));
-            bool hasOccupation = _allOccupations.Any(o => _allOwnerships.Any(own => own.Id == o.OwnershipPartnerId && own.DealerId == d.Id));
-            if (hasPartner || hasOccupation) count++;
-            if (_allSalesPlanning.Any(x => x.DealerId == d.Id)) count++;
-            if (_allAssetBanks.Any(x => x.DealerId == d.Id) || _allAssetLands.Any(x => x.DealerId == d.Id) || _allAssetBuildings.Any(x => x.DealerId == d.Id)) count++;
-            if (_allLoans.Any(x => x.DealerId == d.Id)) count++;
-            bool hasCreditProposal = _allCreditProposals.Any(cp => cp.DealerId == d.Id);
-            bool hasCreditSales = _allCreditSales.Any(s => _allCreditProposals.Any(cp => cp.Id == s.CreditLimitId && cp.DealerId == d.Id));
-            if (hasCreditProposal || hasCreditSales) count++;
-            if (_allDocuments.Any(x => x.DealerId == d.Id)) count++;
 
-            _dealerStepCounts[d.Id] = count;
-        }
-
-        _completeDealerIds = _dealerStepCounts.Where(kv => kv.Value >= 11).Select(kv => kv.Key).ToHashSet();
-    }
 
     private bool IsDealerComplete(int dealerId) => _dealerStepCounts.TryGetValue(dealerId, out var c) && c >= 11;
 
@@ -1234,16 +1163,10 @@
   private List<StateWiseSummary> GetStateWiseSummary()
     {
         // SAP counts (from full dealer table) split by company.
-        var sapSpicByState = _allDealersFull
-            .Where(d => d.InSpic)
-            .GroupBy(d => d.StateId)
-            .ToDictionary(g => g.Key, g => g.Count());
-        var sapGflByState = _allDealersFull
-            .Where(d => d.InGreenStar)
-            .GroupBy(d => d.StateId)
-            .ToDictionary(g => g.Key, g => g.Count());
+        var sapSpicByState = _sapCounts.SpicByState;
+        var sapGflByState = _sapCounts.GflByState;
 
-        var allSapStateIds = _allDealersFull.Select(d => d.StateId).Distinct().ToHashSet();
+        var allSapStateIds = _sapCounts.AllStateIds.ToHashSet();
 
         var savedByState = _allDealers
             .GroupBy(d => d.StateId)
@@ -1532,8 +1455,19 @@ private string GetStatusName(int status) => status switch
 
     private async Task ExportDealers()
     {
-        var data = _filteredDealers.ToList();
-        if (!data.Any()) return;
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            if (!_allCreditProposals.Any()) _allCreditProposals = await SafeGet<DealerCreditLimitProposal>("api/DealerCreditLimitProposal");
+            if (!_allCreditSales.Any()) _allCreditSales = await SafeGet<DealerCreditLimitSalesPerformance>("api/DealerCreditLimitSalesPerformance");
+            if (!_allCategories.Any()) _allCategories = await SafeGet<Category>("api/Category");
+            if (!_allProducts.Any()) _allProducts = await SafeGet<Product>("api/Product");
+            if (!_allApprovalHistory.Any()) _allApprovalHistory = await SafeGet<DealerApprovalHistory>("api/DealerApprovalHistory");
+
+            var data = _filteredDealers.ToList();
+            if (!data.Any()) return;
 
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Dealers");
@@ -1594,6 +1528,17 @@ private string GetStatusName(int status) => status switch
         var dataUri = $"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{Convert.ToBase64String(stream.ToArray())}";
         var js = $@"var a = document.createElement('a'); a.href = '{dataUri}'; a.download = '{fileName}'; document.body.appendChild(a); a.click(); document.body.removeChild(a);";
         await JSRuntime.InvokeVoidAsync("eval", js);
+        
+        }
+        catch (Exception ex)
+        {
+            // Log or handle error if necessary
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
     }
 
     public class DealerDto
@@ -1659,5 +1604,13 @@ private string GetStatusName(int status) => status switch
         public int AvpGfl { get; set; }
         public int CompletedSpic { get; set; }
         public int CompletedGfl { get; set; }
+    }
+
+    public class SapCountsResponse
+    {
+        public int TotalDealers { get; set; }
+        public Dictionary<int, int> SpicByState { get; set; } = new();
+        public Dictionary<int, int> GflByState { get; set; } = new();
+        public List<int> AllStateIds { get; set; } = new();
     }
 }
