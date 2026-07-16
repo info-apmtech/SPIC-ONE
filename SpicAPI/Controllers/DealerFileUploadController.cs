@@ -200,7 +200,16 @@ namespace SpicAPI.Controllers
 
 			foreach (var page in pdf.GetPages())
 			{
-				sb.Append(page.Text);
+				// page.Text often jams words together with no spaces, which breaks
+				// GSTIN word boundaries and makes each field swallow the next label.
+				// GetWords() gives one token per visual word — join with a space so
+				// the label/value regexes have real separators to work with.
+				var words = page.GetWords();
+				if (words != null && words.Any())
+					sb.Append(string.Join(" ", words.Select(w => w.Text)));
+				else
+					sb.Append(page.Text);   // fallback if no word layer
+
 				sb.Append(' ');
 			}
 
@@ -853,10 +862,15 @@ namespace SpicAPI.Controllers
 		}
 
 		// Extract the value following a GST-certificate field label, stopping at the next known label.
+		// Extract the value following a GST-certificate field label, stopping at the next known label.
+		// Works across REG-06 layout variants (with or without the "Additional trade names" row)
+		// because it keys off label text, not the printed row number.
 		private static string? ExtractGstFieldValue(string text, string labelPattern)
 		{
+			// Order matters: longer / more-specific labels must appear BEFORE shorter ones
+			// in the alternation, so "Additional trade names" is caught before "Trade Name".
 			var stopWords =
-				@"GSTIN|Legal\s*Name|Trade\s*Name|Constitution\s*of\s*Business|Address|Date\s*of\s*Registration|Date\s*of\s*Liability|Date\s*of\s*Validity|Taxpayer\s*Type|Type\s*of\s*Registration|Status|Centre\s*Jurisdiction|State\s*Jurisdiction|Principal\s*Place|Particulars\s*of\s*Approving";
+				@"GSTIN|Legal\s*Name|Additional\s*trade\s*names|Trade\s*Name|Constitution\s*of\s*Business|Address|Date\s*of\s*Liability|Date\s*of\s*Registration|Date\s*of\s*Validity|Taxpayer\s*Type|Type\s*of\s*Registration|Status|Centre\s*Jurisdiction|State\s*Jurisdiction|Principal\s*Place|Particulars\s*of\s*Approving";
 
 			var pattern = $@"(?:{labelPattern})\s*[:\-]?\s*(.+?)(?=\s+(?:\d+\s*[\.\)]\s+)?(?:{stopWords})\b|$)";
 
@@ -865,7 +879,8 @@ namespace SpicAPI.Controllers
 				return null;
 
 			var value = Regex.Replace(match.Groups[1].Value, @"\s+", " ").Trim();
-			value = Regex.Replace(value, @"^\d+\s*[\.\)]\s*", "");   // leading row number
+			value = Regex.Replace(value, @"^\d+\s*[\.\)]\s*", "");        // strip leading row number
+			value = Regex.Replace(value, @"\s+\d+\s*[\.\)]?\s*$", "");    // strip trailing row number ("... 3.")
 			value = value.Trim(':', '-', '.', ',', ';');
 			value = value.TrimEnd();
 
