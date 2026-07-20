@@ -43,7 +43,14 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             {
             }
 
-            _navigation.NavigateTo("/login", forceLoad: true);
+            try
+            {
+                _navigation.NavigateTo("/login", forceLoad: true);
+            }
+            catch (NavigationException)
+            {
+                // Expected exception when navigating
+            }
         }
     }
 }

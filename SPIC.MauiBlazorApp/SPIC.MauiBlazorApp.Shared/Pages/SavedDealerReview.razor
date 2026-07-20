@@ -16,6 +16,9 @@
 
     private DR.DealerRegistration? _dealer;
     private bool _isLoading = false;
+    private bool _isTerminatedRestricted => 
+        _dealer?.Status == DR.DealerStatus.Terminated || 
+        (_dealer?.Status == DR.DealerStatus.InActive && _dealer?.InactiveProposal == DR.FutureBusinessProposal.Terminated);
 
     // Related data
     private List<DR.DealerExperience> _experiences = new();
@@ -1410,14 +1413,17 @@ private async Task ApproveDealer()
                                     <span class="cp-summary-label">Dealer Name</span>
                                     <span class="cp-summary-value">@(_dealer?.FirmName ?? "-")</span>
                                 </div>
-                                <div class="cp-summary-item">
-                                    <span class="cp-summary-label">MO Recommended CreditLimit  (SPIC)</span>
-                                    <span class="cp-summary-value">₹ @GetSpicMoRecommendedLimit().ToString("N2")</span>
-                                </div>
-                                <div class="cp-summary-item">
-                                    <span class="cp-summary-label">MO Recommended CreditLimit (GFL)</span>
-                                    <span class="cp-summary-value">₹ @GetGflMoRecommendedLimit().ToString("N2")</span>
-                                </div>
+                                @if (!_isTerminatedRestricted)
+                                {
+                                    <div class="cp-summary-item">
+                                        <span class="cp-summary-label">MO Recommended CreditLimit  (SPIC)</span>
+                                        <span class="cp-summary-value">₹ @GetSpicMoRecommendedLimit().ToString("N2")</span>
+                                    </div>
+                                    <div class="cp-summary-item">
+                                        <span class="cp-summary-label">MO Recommended CreditLimit (GFL)</span>
+                                        <span class="cp-summary-value">₹ @GetGflMoRecommendedLimit().ToString("N2")</span>
+                                    </div>
+                                }
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Current Stage</span>
                                     <span class="cp-summary-value">@GetCurrentStageTarget()</span>
@@ -1434,7 +1440,9 @@ private async Task ApproveDealer()
                             <textarea class="cp-remarks-input" @bind="ConfirmRemarks" placeholder="Enter Remarks Optional"></textarea>
                         </section>
 
-                       @if (LoginState.IsRMGroup)
+                       @if (!_isTerminatedRestricted)
+                       {
+                           @if (LoginState.IsRMGroup)
 {
     <section class="cp-credit-section">
         <div class="cp-credit-field">
@@ -1524,6 +1532,7 @@ private async Task ApproveDealer()
             <input type="number" step="0.01" @bind="_avpCreditLimitGfl" placeholder="Enter AVP Credit Limit (GFL)" />
         </div>
     </section>
+}
 }
 
                         <div class="cp-info-alert">
@@ -1732,8 +1741,11 @@ private async Task ApproveDealer()
                 <div class="info-row"><span>Role</span><strong>MO</strong></div>
                 <div class="info-row"><span>Date & Time</span><strong>@(_dealer != null ? _dealer.CreatedAt.ToString("dd-MMM-yyyy, hh:mm tt") : "-")</strong></div>
                 <div class="info-row"><span>Stage</span><strong>MO Review</strong></div>
-                <div class="info-row"><span>MO Recommended Credit Limit (SPIC)</span><strong>₹ @GetSpicMoRecommendedLimit().ToString("N2")</strong></div>
-                <div class="info-row"><span>MO Recommended Credit Limit (GFL)</span><strong>₹ @GetGflMoRecommendedLimit().ToString("N2")</strong></div>
+                @if (!_isTerminatedRestricted)
+                {
+                    <div class="info-row"><span>MO Recommended Credit Limit (SPIC)</span><strong>₹ @GetSpicMoRecommendedLimit().ToString("N2")</strong></div>
+                    <div class="info-row"><span>MO Recommended Credit Limit (GFL)</span><strong>₹ @GetGflMoRecommendedLimit().ToString("N2")</strong></div>
+                }
             </div>
         </div>
         <div class="col-12 col-lg-6">
@@ -1868,25 +1880,25 @@ private async Task ApproveDealer()
         </div>
         <div class="accordion-body">
             <div class="row g-4">
-@*                 <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-activity"></i> Status Details</h4>
-                            <i class="bi bi-pencil-square edit-icon" @onclick="EditRegister" role="button" title="Edit"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Status</div><div class="data-value">@(_dealer?.Status.ToString() ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">Last Transaction Date</div><div class="data-value">@(_dealer?.LastTransactionDate.HasValue == true && _dealer.LastTransactionDate.Value != DateTime.MinValue ? _dealer.LastTransactionDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Is Last Transaction Sale</div><div class="data-value">@(_dealer != null ? (_dealer.IsLastTransactionIsSale.HasValue && _dealer.IsLastTransactionIsSale.Value ? "Yes" : "No") : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Debtor Balance</div><div class="data-value">₹@(_dealer?.DebitorBalance.ToString("N2") ?? "0")</div></div>
-                            <div class="data-row"><div class="data-label">Final Amount Settled</div><div class="data-value">@(_dealer != null ? (_dealer.IsFinalAmountSettled.HasValue && _dealer.IsFinalAmountSettled.Value ? "Yes" : "No") : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Final Approval Date</div><div class="data-value">@(_dealer?.FinalApprovalDate.HasValue == true && _dealer.FinalApprovalDate.Value != DateTime.MinValue ? _dealer.FinalApprovalDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Settlement Date</div><div class="data-value">@(_dealer?.SettlementDate.HasValue == true && _dealer.SettlementDate.Value != DateTime.MinValue ? _dealer.SettlementDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Settlement Amount</div><div class="data-value">₹@(_dealer?.SettlementAmount.ToString("N2") ?? "0")</div></div>
+                @if (_isTerminatedRestricted)
+                {
+                    <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-activity"></i> Terminated Status</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="EditRegister" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Final Amount Settled</div><div class="data-value">@(_dealer != null ? (_dealer.IsFinalAmountSettled.HasValue && _dealer.IsFinalAmountSettled.Value ? "Yes" : "No") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Final Approval Date</div><div class="data-value">@(_dealer?.FinalApprovalDate.HasValue == true && _dealer.FinalApprovalDate.Value != DateTime.MinValue ? _dealer.FinalApprovalDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Settlement Date</div><div class="data-value">@(_dealer?.SettlementDate.HasValue == true && _dealer.SettlementDate.Value != DateTime.MinValue ? _dealer.SettlementDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Settlement Amount</div><div class="data-value">₹@(_dealer?.SettlementAmount.ToString("N2") ?? "0")</div></div>
+                            </div>
                         </div>
                     </div>
-                </div>
- *@                <div class="col-md-6">
+                }
+
+                <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
                             <h4 class="detail-card-title"><i class="bi bi-briefcase"></i> Business Information</h4>
@@ -1904,8 +1916,11 @@ private async Task ApproveDealer()
                                 <div class="data-row"><div class="data-label">Date of Appointment (Greenstar)</div><div class="data-value">@(_dealer?.GreenstarDateOfAppointment?.ToString("dd MMM yyyy") ?? "-")</div></div>
                             }
                             @* <div class="data-row"><div class="data-label">Business Type</div><div class="data-value">@(_dealer?.BusinessEntityType ?? "-")</div></div> *@
-                            <div class="data-row"><div class="data-label">Years of Experience</div><div class="data-value">@(_dealer?.YearsofExperiance > 0 ? $"{_dealer.YearsofExperiance} Years" : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Entity Type</div><div class="data-value">@GetEntityTypeName(_dealer?.EntityType)</div></div>                        </div>
+                            @if (!_isTerminatedRestricted)
+                            {
+                                <div class="data-row"><div class="data-label">Years of Experience</div><div class="data-value">@(_dealer?.YearsofExperiance > 0 ? $"{_dealer.YearsofExperiance} Years" : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Entity Type</div><div class="data-value">@GetEntityTypeName(_dealer?.EntityType)</div></div>                        
+                            }</div>
                     </div>
                 </div>
 @*                 <div class="col-md-6">
@@ -1923,6 +1938,8 @@ private async Task ApproveDealer()
                     </div>
                 </div>
  *@
+                @if (!_isTerminatedRestricted)
+                {
                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
@@ -2023,10 +2040,13 @@ private async Task ApproveDealer()
                         </div>
                     </div>
                 </div>
+                }
             </div>
         </div>
     </div>
 
+    @if (!_isTerminatedRestricted)
+    {
     <div class="custom-accordion @(IsExperienceOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsExperienceOpen = !IsExperienceOpen">
             Experience In Fertilizer Trade
@@ -3194,6 +3214,7 @@ private async Task ApproveDealer()
             </div>
         </div>
     </div>
+    }
 
 
 

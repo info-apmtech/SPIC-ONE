@@ -1219,6 +1219,7 @@
 
     private string selected = "Dealer";
     private string status = "Active";
+    private DealerStatus _originalStatus = DealerStatus.Active;
     private FutureBusinessProposal _inactiveProposal = FutureBusinessProposal.FutureBusiness;
 
     private bool _entityTypeManuallySet;
@@ -1402,6 +1403,7 @@
         SyncDateBuffersFromModel();
 
         _isEditMode = true;
+        _originalStatus = _model.Status;
 
         int? entityCode = null;
 
@@ -2031,13 +2033,20 @@
     ? _inactiveProposal
     : null;
 
-_model.Status = status switch
-{
-    "Active" => DealerStatus.Active,
-    "Inactive" => DealerStatus.InActive,
-    "Terminated" => DealerStatus.Terminated,
-    _ => DealerStatus.Active
-};
+            _model.Status = status switch
+            {
+                "Active" => DealerStatus.Active,
+                "Inactive" => DealerStatus.InActive,
+                "Terminated" => DealerStatus.Terminated,
+                _ => DealerStatus.Active
+            };
+
+            if (_isEditMode && _originalStatus != DealerStatus.Terminated && _model.Status == DealerStatus.Terminated)
+            {
+                _model.RMApproved = null;
+                _model.SMApproved = null;
+                _model.AVPApproved = null;
+            }
 
             _model.FirmName ??= "";
             _model.ShopNoORRoomNoOrBlockNo ??= "";
@@ -2177,7 +2186,7 @@ _model.Status = status switch
         // Pure Terminated + Department: single step, submit straight to Dashboard.
         if (IsRestrictedNavFlow || IsDepartmentSelected)
         {
-            if (IsDepartmentSelected)
+            if (IsDepartmentSelected || IsRestrictedNavFlow)
                 _model.IsSubmittedForReview = true;
 
             var deptSaved = await SaveDealer();
