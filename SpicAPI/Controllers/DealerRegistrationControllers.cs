@@ -573,6 +573,7 @@ namespace SpicAPI.Controllers
                 .Where(x => (x.PinCode != null && x.PinCode != "")
                     || x.Status == DealerStatus.Terminated
                     || (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.Terminated)
+                    || (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.NotTraceable)
                     || x.DealerType == RegistrationDealerType.Department);
 
             var role = User.FindFirst(ClaimTypes.Role)?.Value;

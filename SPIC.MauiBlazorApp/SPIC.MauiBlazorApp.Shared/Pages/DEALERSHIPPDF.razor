@@ -789,7 +789,7 @@
                             <label>Parent Dealer Code & Name</label>
                             <div class="inline-val">@GetDealerCodeAndName(_model.ParentDealer)</div>
                         </div>
-                        @if (!_isTerminatedRestricted)
+                        @if (_showBusinessInfo)
                         {
                             <div class="inline-field">
                                 <label>Business Type</label>
@@ -810,7 +810,7 @@
                                 <div class="inline-val">@(_model.GreenstarDateOfAppointment?.ToString("dd MMMM yyyy") ?? "-")</div>
                             </div>
                         }
-                        @if (!_isTerminatedRestricted)
+                        @if (_showBusinessInfo)
                         {
                             <div class="inline-field">
                                 <label>Experience in Industry</label>
@@ -846,6 +846,33 @@
                             <div class="inline-field">
                                 <label>Settlement Amount</label>
                                 <div class="inline-val">₹@(_model.SettlementAmount.ToString("N2"))</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (_model.Status == 1)
+                {
+                    <div class="dpdf-section">
+                        <div class="dpdf-section-title mb-2">
+                            <div class="dpdf-section-icon">⏸️</div> <div class="dpdf-section-text">Inactive Status</div>
+                        </div>
+                        <div class="grid-2" style="row-gap: 12px;">
+                            <div class="inline-field">
+                                <label>Last Transaction Date</label>
+                                <div class="inline-val">@(_model.LastTransactionDate?.ToString("dd MMMM yyyy") ?? "-")</div>
+                            </div>
+                            <div class="inline-field">
+                                <label>Is Last Transaction a Sale?</label>
+                                <div class="inline-val">@(_model.IsLastTransactionIsSale == true ? "Yes" : "No")</div>
+                            </div>
+                            <div class="inline-field">
+                                <label>Debtor Balance</label>
+                                <div class="inline-val">₹@(_model.DebitorBalance.ToString("N2"))</div>
+                            </div>
+                            <div class="inline-field">
+                                <label>Future Business Proposal</label>
+                                <div class="inline-val">@GetInactiveProposalDisplay()</div>
                             </div>
                         </div>
                     </div>
@@ -1049,7 +1076,7 @@
    </div>
 }
 }
-@if (!_isTerminatedRestricted)
+@if (_showBusinessInfo)
 {
 <div class="dpdf-section">
        <div class="dpdf-section-title mb-2">
@@ -1342,7 +1369,7 @@
 }
 
 @* ===================== PROPRIETOR / PARTNER DETAILS ===================== *@
-@if (!_isTerminatedRestricted)
+@if (_showProprietorAndInvestment)
 {
 @if (_savedPartners != null && _savedPartners.Any())
 {
@@ -1533,7 +1560,7 @@ else
     }
 </div>
 }
-@if (!_isTerminatedRestricted)
+@if (_showBusinessInfo)
 {
 @* <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
@@ -1995,7 +2022,7 @@ else
     </div>
 </div>
  *@
-@if (!_isTerminatedRestricted)
+@if (_showProprietorAndInvestment)
 {
 <div class="dpdf-section">
            <div class="dpdf-section-title mb-2">
@@ -2013,7 +2040,7 @@ else
            </div>
        </div>
 }
-@if (!_isTerminatedRestricted)
+@if (_showProprietorAndInvestment)
 {
       <div class="dpdf-section">
            <div class="dpdf-section-title mb-2">
@@ -2032,7 +2059,7 @@ else
        </div>
 }
 
-@if (!_isTerminatedRestricted)
+@if (_showProprietorAndInvestment)
 {
 <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
@@ -2135,6 +2162,8 @@ else
                         </div>
                     </div>
                 </div>
+                @if (_model.Status != 1 && _showBusinessInfo)
+                {
                 @if (!string.IsNullOrEmpty(_creditSalesError))
 {
     <div style="background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B;padding:10px 14px;margin:10px 40px;border-radius:6px;font-size:12px;">
@@ -2256,6 +2285,9 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         (cat, prod) => (IsFertilizerCategory(cat) && !IsUreaProduct(prod)) || IsSpecialityCategory(cat));
 }
 }
+}
+@if (_model.Status != 1 && _showBusinessInfo)
+{
 @if (_proposal != null && _proposal.Id > 0 && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
 {
     <div class="dpdf-section">
@@ -2722,6 +2754,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                     <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Scoring Data Available</div>
                 }
 }
+}
 
 @if (!_isTerminatedRestricted)
 {
@@ -2746,7 +2779,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         if (_hasRetailLicense) Add("Retail Fertilizers License", _model?.RetailLicenseFilePath);
 
         // Partner / proprietor documents
-        if (_savedPartners != null)
+        if (_savedPartners != null && _showProprietorAndInvestment)
         {
             foreach (var p in _savedPartners)
             {
@@ -2757,7 +2790,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         }
 
         // Property documents
-        if (_landAssets != null)
+        if (_landAssets != null && _showProprietorAndInvestment)
         {
             foreach (var l in _landAssets)
             {
@@ -2766,7 +2799,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                 Add($"Land: {l.LandName} - Valuation Certificate", l.UploadedValuationCertificatePath);
             }
         }
-        if (_buildingAssets != null)
+        if (_buildingAssets != null && _showProprietorAndInvestment)
         {
             foreach (var b in _buildingAssets)
             {
@@ -2777,7 +2810,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         }
 
         // Additional documents (only when not terminated-restricted)
-        if (!_isTerminatedRestricted)
+        if (_showBusinessInfo)
         {
             if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
                 Add("SPIC Specimen Signature", _docs?.SpecimanFilePath);
@@ -2836,7 +2869,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
     }</div>
 }
 
-@if (!_isTerminatedRestricted)
+@if (_showBusinessInfo)
 {
 <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
@@ -2907,7 +2940,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                         RenderDocViewer("Wholesale Fertilizers License", _model?.WholesaleLicenseFilePath);
                         RenderDocViewer("Retail Fertilizers License", _model?.RetailLicenseFilePath);
 
-                        if (_savedPartners != null && _savedPartners.Any())
+                        if (_savedPartners != null && _savedPartners.Any() && _showProprietorAndInvestment)
                         {
                             foreach(var p in _savedPartners)
                             {
@@ -2920,7 +2953,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                             }
                         }
 
-                        if (_landAssets != null)
+                        if (_landAssets != null && _showProprietorAndInvestment)
                         {
                             foreach(var l in _landAssets)
                             {
@@ -2930,7 +2963,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                             }
                         }
 
-                        if (_buildingAssets != null)
+                        if (_buildingAssets != null && _showProprietorAndInvestment)
                         {
                             foreach(var b in _buildingAssets)
                             {
@@ -2941,7 +2974,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                         }
 
                         // Additional documents (only when not terminated-restricted)
-                        if (!_isTerminatedRestricted)
+                        if (_showBusinessInfo)
                         {
                             if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC") RenderDocViewer("SPIC Specimen Signature", _docs?.SpecimanFilePath);
                             if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar") RenderDocViewer("Greenstar Specimen Signature", _docs?.GreenstarSpecimanFilePath);
@@ -3120,12 +3153,27 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
     // Checks if the user actually has a retail license number filled out
   private bool _hasRetailLicense => !string.IsNullOrWhiteSpace(_model.RetailFertilizerLicenseNumber);
 
-    // Restricted flow: Terminated status, or Inactive + Future Business Proposal = Terminated.
-    // These dealers only go through Register -> Proprietor -> Investment, so the PDF should
-    // only show data from those 3 pages and hide everything else.
+    // Restricted flow: Terminated status, or Inactive + Future Business Proposal = Terminated (but NOT for Dealer).
     private bool _isTerminatedRestricted =>
         _model.Status == 2 ||
-        (_model.Status == 1 && _model.InactiveProposal == FutureBusinessProposalPdf.Terminated);
+        (_model.Status == 1 && _model.InactiveProposal == FutureBusinessProposalPdf.Terminated && !_model.IsDealer);
+
+    // Restricted flow: Inactive + Future Business Proposal = Not Traceable
+    private bool _isNotTraceableRestricted =>
+        _model.Status == 1 && _model.InactiveProposal == FutureBusinessProposalPdf.NotTraceable;
+
+    // Restricted flow: Inactive + Future Business Proposal = Terminated (only for Dealer).
+    // In this case, show Register, Proprietor, Investment, and Inactive Status. Hide Business Info.
+    private bool _isInactiveTerminatedRestricted =>
+        _model.Status == 1 && _model.InactiveProposal == FutureBusinessProposalPdf.Terminated && _model.IsDealer;
+
+    // Helper property to determine if Business Info, Experience, Sales Planning, etc. should be shown.
+    private bool _showBusinessInfo =>
+        !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isInactiveTerminatedRestricted;
+
+    // Helper property to determine if Proprietor and Investment should be shown.
+    private bool _showProprietorAndInvestment =>
+        !_isTerminatedRestricted && !_isNotTraceableRestricted;
 
     // Safely gets the file name from a full path
     private string GetFileName(string? path)
@@ -3461,6 +3509,17 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
     private string GetRelationshipName(int id) => _relationshipsAll.FirstOrDefault(r => r.Id == id)?.Name ?? "—";
 
     private string GetSectorName(int id) => _sectorsAll.FirstOrDefault(s => s.Id == id)?.Name ?? "—";
+
+    private string GetInactiveProposalDisplay()
+    {
+        return _model.InactiveProposal switch
+        {
+            FutureBusinessProposalPdf.FutureBusiness => "Future Business",
+            FutureBusinessProposalPdf.Terminated => "Terminated",
+            FutureBusinessProposalPdf.NotTraceable => "Not Traceable",
+            _ => "-"
+        };
+    }
 
     private string GetEntityTypeName(int? entityType)
     {
@@ -4164,7 +4223,8 @@ public class ProductGroup
     public enum FutureBusinessProposalPdf
     {
         FutureBusiness = 1,
-        Terminated = 2
+        Terminated = 2,
+        NotTraceable = 3
     }
 
     public enum Gender { Male, Female, Other }

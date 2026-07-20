@@ -1,4 +1,4 @@
-﻿@page "/FinalSubmission"
+@page "/FinalSubmission"
 @using System.Net.Http.Json
 @using DealerReg = SPIC.Core.Entities.DealerRegistration
 @using SPIC.Core.Entities
@@ -653,6 +653,21 @@
         }
     }
 
+    private bool _isTerminatedRestricted =>
+        _dealer.Status == DealerStatus.Terminated;
+
+    private bool _isNotTraceableRestricted =>
+        _dealer.Status == DealerStatus.InActive && _dealer.InactiveProposal == FutureBusinessProposal.NotTraceable;
+
+    private bool _isInactiveTerminatedRestricted =>
+        _dealer.Status == DealerStatus.InActive && _dealer.InactiveProposal == FutureBusinessProposal.Terminated && _dealer.IsDealer;
+
+    private bool _showBusinessInfo =>
+        !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isInactiveTerminatedRestricted;
+
+    private bool _showProprietorAndInvestment =>
+        !_isTerminatedRestricted && !_isNotTraceableRestricted;
+
     protected override async Task OnInitializedAsync()
     {
         Loading.Show();
@@ -845,13 +860,13 @@
             !string.IsNullOrEmpty(_dealer.OfficialContactNumber) &&
             _dealer.BankId > 0;
 
-        _stepStatus[1] = _experiences.Count > 0;
-        _stepStatus[2] = _annualSales.Count > 0;
-        _stepStatus[3] = _warehouses.Count > 0 || _railFacilities.Count > 0 || _portFacilities.Count > 0;
-        _stepStatus[4] = _marketDetails.Count > 0;
-        _stepStatus[5] = _companies.Count > 0;
-        _stepStatus[6] = _partners.Count > 0;
-        _stepStatus[7] = _salesPlans.Count > 0;
+        _stepStatus[1] = !_showBusinessInfo || _experiences.Count > 0;
+        _stepStatus[2] = !_showBusinessInfo || _annualSales.Count > 0;
+        _stepStatus[3] = !_showBusinessInfo || _warehouses.Count > 0 || _railFacilities.Count > 0 || _portFacilities.Count > 0;
+        _stepStatus[4] = !_showBusinessInfo || _marketDetails.Count > 0;
+        _stepStatus[5] = !_showBusinessInfo || _companies.Count > 0;
+        _stepStatus[6] = !_showProprietorAndInvestment || _partners.Count > 0;
+        _stepStatus[7] = !_showBusinessInfo || _salesPlans.Count > 0;
         // Investment is complete if ANY investment data exists — not only a bank/land/building
         // asset card. A dealer may fill just Movable Asset Value or Godown Capacity on the
         // Investment page without adding a bank/land/building card, and that must still count
@@ -859,11 +874,12 @@
         // Institution dealers don't fill the Investment page, so its section must never
         // block Final Submission — treat it as complete for Institution regardless of data.
         // All other types (Dealer) keep the real check (any bank/land/building asset).
-        _stepStatus[8] = _isInstitution
+        _stepStatus[8] = !_showProprietorAndInvestment
+            || _isInstitution
             || _assetBanks.Count > 0
             || _assetLands.Count > 0
             || _assetBuildings.Count > 0;
-        _stepStatus[9] = _creditLimit != null;
+        _stepStatus[9] = !_showBusinessInfo || _creditLimit != null;
 
         // Enclosure complete based on required document list.
         // Deed of Guarantee is optional, so it is not counted as missing.
@@ -992,7 +1008,10 @@
                 _dealer.AVPApproved = null;
             }
 
-            _dealer.Status = DealerStatus.Active;
+            if (_dealer.Status != DealerStatus.InActive && _dealer.Status != DealerStatus.Terminated)
+            {
+                _dealer.Status = DealerStatus.Active;
+            }
             _dealer.IsSubmittedForReview = true; // Only true from here — this is the explicit "Submit Registration" click
 
             var resp = await Http.PutAsJsonAsync($"api/DealerRegistration/{_dealer.Id}", _dealer);
