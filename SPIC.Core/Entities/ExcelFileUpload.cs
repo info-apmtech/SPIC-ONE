@@ -266,16 +266,15 @@ namespace SPIC.Core.Entities
 
         public int? SubDistrictId { get; set; }
 
-        public string? RetailerId { get; set; }
         public string? RetailerName { get; set; }
 
         public int? DealerRegistrationId { get; set; }
         public int? IfmsDealerId { get; set; }
 
         public string? MobileNo { get; set; }
-        public string? DealershipNature { get; set; }
+        public int? DealershipNatureId { get; set; }
 
-        public string? Company { get; set; }
+        public int? CompanyId { get; set; }
         public int? PlantId { get; set; }
 
         public int? ProductId { get; set; }

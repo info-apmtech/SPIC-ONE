@@ -23,13 +23,21 @@ namespace Spic.Infrastructure.Services
             _logger = logger;
         }
 
-        public async Task<ExcelBulkUploadResult> ImportAsync(Stream fileStream, string currentUserId, string fileExtension)
+        public async Task<ExcelBulkUploadResult> ImportAsync(Stream fileStream, string currentUserId, string fileExtension, string categoryId)
         {
             var now = DateTime.UtcNow;
             var records = new List<Dictionary<string, string>>();
 
-            var requiredCols = new[] { "state", "district", "dealerid", "agencyname", "dealertype", "dealershipnature", "company", "plant", "product", "stock", "stockdate" };
+            var requiredCols = categoryId == "One" 
+                ? new[] { "statename", "districtname", "retailerid", "retailername" }
+                : new[] { "state", "district", "dealerid", "agencyname", "dealertype", "dealershipnature", "company", "plant", "product", "stock", "stockdate" };
             
+            bool IsHeaderRow(List<string> rowValues)
+            {
+                if (categoryId == "One") return rowValues.Contains("statename") && rowValues.Contains("retailerid");
+                return rowValues.Contains("state") && rowValues.Contains("dealerid");
+            }
+
             try
             {
                 if (fileExtension == ".csv")
@@ -44,14 +52,13 @@ namespace Spic.Infrastructure.Services
                     {
                         if (!headerFound)
                         {
-                            // Try to find the header row
                             var rowValues = new List<string>();
                             for (int i = 0; csv.TryGetField<string>(i, out var field); i++)
                             {
                                 rowValues.Add(field?.Trim('\uFEFF', '\u200B', ' ', '"').Replace(" ", "").ToLowerInvariant() ?? "");
                             }
 
-                            if (rowValues.Contains("state") && rowValues.Contains("dealerid"))
+                            if (IsHeaderRow(rowValues))
                             {
                                 headerFound = true;
                                 for (int i = 0; i < rowValues.Count; i++)
@@ -63,14 +70,12 @@ namespace Spic.Infrastructure.Services
                             continue;
                         }
 
-                        // Parse data row
                         var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                         foreach (var kvp in headerMap)
                         {
                             dict[kvp.Key] = csv.GetField(kvp.Value)?.Trim() ?? string.Empty;
                         }
                         
-                        // Skip completely empty rows
                         if (dict.Values.Any(v => !string.IsNullOrWhiteSpace(v)))
                         {
                             records.Add(dict);
@@ -85,7 +90,6 @@ namespace Spic.Infrastructure.Services
                     var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                     int headerRowIndex = -1;
 
-                    // Scan first 10 rows for the header
                     var rows = ws.RowsUsed().Take(10).ToList();
                     foreach (var row in rows)
                     {
@@ -96,7 +100,7 @@ namespace Spic.Infrastructure.Services
                             rowValues.Add(row.Cell(c).GetString().Trim('\uFEFF', '\u200B', ' ', '"').Replace(" ", "").ToLowerInvariant());
                         }
 
-                        if (rowValues.Contains("state") && rowValues.Contains("dealerid"))
+                        if (IsHeaderRow(rowValues))
                         {
                             headerRowIndex = row.RowNumber();
                             for (int c = 1; c <= lastCol; c++)
@@ -135,7 +139,7 @@ namespace Spic.Infrastructure.Services
 
             if (records.Count == 0)
             {
-                return new ExcelBulkUploadResult { Success = false, Message = "No data rows found. Please ensure the file contains valid headers (e.g., State, Dealer Id) and data." };
+                return new ExcelBulkUploadResult { Success = false, Message = "No data rows found. Please ensure the file contains valid headers and data." };
             }
 
             foreach (var rc in requiredCols)
@@ -155,9 +159,9 @@ namespace Spic.Infrastructure.Services
             {
                 var result = new ExcelBulkUploadResult { Success = true, Message = "Upload successful" };
 
-                // Dictionaries for fast lookup / deduplication within this upload
                 var stateDict = await _db.States.ToDictionaryAsync(s => s.StateName.Trim().ToLowerInvariant(), s => s.Id);
                 var districtDict = await _db.Districts.ToDictionaryAsync(d => $"{d.DistrictName.Trim().ToLowerInvariant()}_{d.StateId}", d => d.Id);
+                var subDistrictDict = await _db.SubDistricts.ToDictionaryAsync(sd => $"{sd.SubDistrictName.Trim().ToLowerInvariant()}_{sd.DistrictId}", sd => sd.Id);
                 
                 var rawRegDealers = await _db.DealerRegistrations
                     .Where(d => d.FirmName != null)
@@ -186,48 +190,24 @@ namespace Spic.Infrastructure.Services
                 for (int i = 0; i < records.Count; i++)
                 {
                     var row = records[i];
-                    int rowNumber = i + 2; // For error reporting
+                    int rowNumber = i + 2;
                     
-                    var stateStr = GetCell(row, "state");
-                    var districtStr = GetCell(row, "district");
-                    var dealerIdStr = GetCell(row, "dealerid");
-                    var agencyNameStr = GetCell(row, "agencyname");
-                    var dealerTypeStr = GetCell(row, "dealertype");
+                    var stateStr = categoryId == "One" ? GetCell(row, "statename") : GetCell(row, "state");
+                    var districtStr = categoryId == "One" ? GetCell(row, "districtname") : GetCell(row, "district");
+                    var dealerIdStr = categoryId == "One" ? GetCell(row, "retailerid") : GetCell(row, "dealerid");
+                    var agencyNameStr = categoryId == "One" ? GetCell(row, "retailername") : GetCell(row, "agencyname");
+                    var dealerTypeStr = categoryId == "One" ? "" : GetCell(row, "dealertype");
                     var natureStr = GetCell(row, "dealershipnature");
                     var companyStr = GetCell(row, "company");
                     var plantStr = GetCell(row, "plant");
                     var productStr = GetCell(row, "product");
-                    var stockStr = GetCell(row, "stock");
-                    var stockDateStr = GetCell(row, "stockdate");
 
-                    // Skip empty rows
-                    if (string.IsNullOrEmpty(stateStr) && string.IsNullOrEmpty(districtStr) && string.IsNullOrEmpty(dealerIdStr))
+                    if (string.IsNullOrEmpty(stateStr) && string.IsNullOrEmpty(districtStr) && string.IsNullOrEmpty(dealerIdStr) && string.IsNullOrEmpty(agencyNameStr))
                     {
                         result.RowsSkipped++;
                         continue;
                     }
 
-                    // Parse Stock and StockDate
-                    if (!decimal.TryParse(stockStr, out var stockValue))
-                    {
-                        throw new Exception($"Row {rowNumber}: Invalid stock value '{stockStr}'.");
-                    }
-
-                    DateTime stockDate;
-                    if (DateTime.TryParseExact(stockDateStr, "dd-MM-yyyy", null, System.Globalization.DateTimeStyles.None, out var parsedDate))
-                    {
-                        stockDate = parsedDate;
-                    }
-                    else if (DateTime.TryParse(stockDateStr, out parsedDate))
-                    {
-                        stockDate = parsedDate; // fallback
-                    }
-                    else
-                    {
-                        throw new Exception($"Row {rowNumber}: Invalid stock date '{stockDateStr}'. Expected format dd-MM-yyyy.");
-                    }
-
-                    // 1. State
                     int? stateId = null;
                     if (!string.IsNullOrEmpty(stateStr))
                     {
@@ -244,7 +224,6 @@ namespace Spic.Infrastructure.Services
                         stateId = id;
                     }
 
-                    // 2. District
                     int? districtId = null;
                     if (!string.IsNullOrEmpty(districtStr) && stateId.HasValue)
                     {
@@ -261,7 +240,26 @@ namespace Spic.Infrastructure.Services
                         districtId = id;
                     }
 
-                    // 3. Dealer Type
+                    int? subDistrictId = null;
+                    if (categoryId == "One")
+                    {
+                        var subDistrictStr = GetCell(row, "subdistrict");
+                        if (!string.IsNullOrEmpty(subDistrictStr) && districtId.HasValue)
+                        {
+                            var key = $"{subDistrictStr.ToLowerInvariant()}_{districtId.Value}";
+                            if (!subDistrictDict.TryGetValue(key, out var id))
+                            {
+                                var newSubDistrict = new SubDistrict { SubDistrictName = subDistrictStr, DistrictId = districtId.Value, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
+                                _db.SubDistricts.Add(newSubDistrict);
+                                await _db.SaveChangesAsync();
+                                id = newSubDistrict.Id;
+                                subDistrictDict[key] = id;
+                                result.NewMastersCreated.SubDistricts++;
+                            }
+                            subDistrictId = id;
+                        }
+                    }
+
                     int? dealerTypeId = null;
                     if (!string.IsNullOrEmpty(dealerTypeStr))
                     {
@@ -278,7 +276,6 @@ namespace Spic.Infrastructure.Services
                         dealerTypeId = id;
                     }
 
-                    // 4. Dealership Nature
                     int? natureId = null;
                     if (!string.IsNullOrEmpty(natureStr))
                     {
@@ -295,7 +292,6 @@ namespace Spic.Infrastructure.Services
                         natureId = id;
                     }
 
-                    // 5. Dealer (DealerRegistration or IfmsDealer)
                     int? dealerRegistrationId = null;
                     int? ifmsDealerId = null;
                     bool dealerFoundInRegistration = false;
@@ -313,30 +309,18 @@ namespace Spic.Infrastructure.Services
                     if (!dealerFoundInRegistration && !string.IsNullOrEmpty(agencyNameStr))
                     {
                         var keyName = agencyNameStr.ToLowerInvariant();
-
-                        bool found = false;
-                        int id = 0;
-
-                        if (ifmsDealerByNameDict.TryGetValue(keyName, out id))
-                        {
-                            found = true;
-                        }
-
-                        if (!found)
+                        if (!ifmsDealerByNameDict.TryGetValue(keyName, out int id))
                         {
                             var newDealer = new IfmsDealer { Name = agencyNameStr, StateId = stateId, DistrictId = districtId, DealerTypeId = dealerTypeId, DealershipNatureId = natureId, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
                             _db.IfmsDealers.Add(newDealer);
                             await _db.SaveChangesAsync();
                             id = newDealer.Id;
-                            
                             ifmsDealerByNameDict[keyName] = id;
-                            
                             result.NewMastersCreated.IfmsDealers++;
                         }
                         ifmsDealerId = id;
                     }
 
-                    // 6. Company
                     int? companyId = null;
                     if (!string.IsNullOrEmpty(companyStr))
                     {
@@ -353,7 +337,6 @@ namespace Spic.Infrastructure.Services
                         companyId = id;
                     }
 
-                    // 7. Plant
                     int? plantId = null;
                     if (!string.IsNullOrEmpty(plantStr))
                     {
@@ -370,7 +353,6 @@ namespace Spic.Infrastructure.Services
                         plantId = id;
                     }
 
-                    // 8. Product
                     int? productId = null;
                     if (!string.IsNullOrEmpty(productStr))
                     {
@@ -387,27 +369,92 @@ namespace Spic.Infrastructure.Services
                         productId = id;
                     }
 
-                    var stockRecord = new WholesalerStockAsOnToday
+                    if (categoryId == "One")
                     {
-                        StateId = stateId,
-                        DistrictId = districtId,
-                        DealerRegistrationId = dealerRegistrationId,
-                        IfmsDealerId = ifmsDealerId,
-                        AgencyName = agencyNameStr,
-                        DealerTypeId = dealerTypeId,
-                        DealershipNatureId = natureId,
-                        CompanyId = companyId,
-                        PlantId = plantId,
-                        ProductId = productId,
-                        Stock = stockValue,
-                        StockDate = stockDate.ToUniversalTime(),
-                        CreatedAt = now,
-                        UpdatedAt = now,
-                        UpdatedBy = currentUserId
-                    };
+                        var mobileNoStr = GetCell(row, "mobileno.");
+                        var openBalStr = GetCell(row, "openingbalance");
+                        var recvQtyStr = GetCell(row, "receivedquantity");
+                        var soldQtyStr = GetCell(row, "soldquantity");
+                        var availStr = GetCell(row, "availabilty");
+                        var closeBalStr = GetCell(row, "closingbalance");
 
-                    _db.WholesalerStockAsOnTodays.Add(stockRecord);
-                    result.RowsInserted++;
+                        decimal.TryParse(openBalStr, out var openBal);
+                        decimal.TryParse(recvQtyStr, out var recvQty);
+                        decimal.TryParse(soldQtyStr, out var soldQty);
+                        decimal.TryParse(availStr, out var avail);
+                        decimal.TryParse(closeBalStr, out var closeBal);
+
+                        var dptRecord = new DptReport
+                        {
+                            StateId = stateId,
+                            DistrictId = districtId,
+                            SubDistrictId = subDistrictId,
+                            RetailerName = agencyNameStr,
+                            DealerRegistrationId = dealerRegistrationId,
+                            IfmsDealerId = ifmsDealerId,
+                            MobileNo = mobileNoStr,
+                            DealershipNatureId = natureId,
+                            CompanyId = companyId,
+                            PlantId = plantId,
+                            ProductId = productId,
+                            OpeningBalance = openBal,
+                            ReceivedQuantity = recvQty,
+                            SoldQuantity = soldQty,
+                            Availability = avail,
+                            ClosingBalance = closeBal,
+                            CreatedAt = now,
+                            UpdatedAt = now,
+                            UpdatedBy = currentUserId
+                        };
+                        _db.DptReports.Add(dptRecord);
+                        result.RowsInserted++;
+                    }
+                    else if (categoryId == "Five")
+                    {
+                        var stockStr = GetCell(row, "stock");
+                        var stockDateStr = GetCell(row, "stockdate");
+
+                        if (!decimal.TryParse(stockStr, out var stockValue))
+                        {
+                            throw new Exception($"Row {rowNumber}: Invalid stock value '{stockStr}'.");
+                        }
+
+                        DateTime stockDate;
+                        if (DateTime.TryParseExact(stockDateStr, "dd-MM-yyyy", null, System.Globalization.DateTimeStyles.None, out var parsedDate))
+                        {
+                            stockDate = parsedDate;
+                        }
+                        else if (DateTime.TryParse(stockDateStr, out parsedDate))
+                        {
+                            stockDate = parsedDate;
+                        }
+                        else
+                        {
+                            throw new Exception($"Row {rowNumber}: Invalid stock date '{stockDateStr}'. Expected format dd-MM-yyyy.");
+                        }
+
+                        var stockRecord = new WholesalerStockAsOnToday
+                        {
+                            StateId = stateId,
+                            DistrictId = districtId,
+                            DealerRegistrationId = dealerRegistrationId,
+                            IfmsDealerId = ifmsDealerId,
+                            AgencyName = agencyNameStr,
+                            DealerTypeId = dealerTypeId,
+                            DealershipNatureId = natureId,
+                            CompanyId = companyId,
+                            PlantId = plantId,
+                            ProductId = productId,
+                            Stock = stockValue,
+                            StockDate = stockDate.ToUniversalTime(),
+                            CreatedAt = now,
+                            UpdatedAt = now,
+                            UpdatedBy = currentUserId
+                        };
+
+                        _db.WholesalerStockAsOnTodays.Add(stockRecord);
+                        result.RowsInserted++;
+                    }
                 }
 
                 await _db.SaveChangesAsync();
@@ -419,7 +466,8 @@ namespace Spic.Infrastructure.Services
             {
                 await transaction.RollbackAsync();
                 _logger.LogError(ex, "Error processing bulk upload");
-                return new ExcelBulkUploadResult { Success = false, Message = $"Upload failed: {ex.Message}" };
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return new ExcelBulkUploadResult { Success = false, Message = $"Upload failed: {ex.Message} | Inner: {errorMsg}" };
             }
         }
     }

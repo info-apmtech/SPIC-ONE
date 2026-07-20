@@ -146,7 +146,7 @@
         align-items: center;
         justify-content: center;
         gap: 8px;
-        padding: 10px 16px;
+        padding: 12px 16px;
         border-radius: 6px;
         font-size: 14px;
         font-weight: 500;
@@ -155,7 +155,7 @@
         color: #ffffff;
         border: none;
         transition: background-color 0.2s ease;
-        align-self: flex-start;
+        align-self: flex-end;
     }
 
     .fu-btn-primary:hover {
@@ -185,21 +185,17 @@
                 </div>
                 
                 <div class="fu-card-body">
-                    <div class="fu-form-row">
+                    <div class="fu-form-row" style="align-items: flex-end;">
                         <div class="fu-form-group">
                             <label class="fu-form-label">Excel File</label>
                             <InputFile class="fu-form-control" accept=".xlsx,.xls,.csv" OnChange="@(e => HandleFileSelected(e, item.Id))" />
                         </div>
-                        <div class="fu-form-group date-group">
-                            <label class="fu-form-label">Date (Optional)</label>
-                            <input type="date" class="fu-form-control" />
-                        </div>
+                        
+                        <button class="fu-btn-primary" @onclick="@(() => UploadFile(item.Id))" disabled="@(uploadingCategoryId != null)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            @(uploadingCategoryId == item.Id ? "Uploading..." : "Upload")
+                        </button>
                     </div>
-                    
-                    <button class="fu-btn-primary" @onclick="@(() => UploadFile(item.Id))" disabled="@(uploadingCategoryId != null)">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                        @(uploadingCategoryId == item.Id ? "Uploading..." : "Upload")
-                    </button>
                 </div>
             </div>
         }
@@ -240,8 +236,8 @@
             return;
         }
 
-        // For now, only the Wholesale Stock is implemented
-        if (categoryId != "Five")
+        // For now, only the Wholesale Stock and DPT Report are implemented
+        if (categoryId != "Five" && categoryId != "One")
         {
             await JS.InvokeVoidAsync("alert", "This category upload is not implemented yet.");
             return;
@@ -256,6 +252,7 @@
             var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 10485760)); // 10MB
             fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
             content.Add(fileContent, "file", file.Name);
+            content.Add(new StringContent(categoryId), "categoryId");
 
             var response = await Http.PostAsync("api/ExcelBulkUpload/import", content);
             var result = await response.Content.ReadAsStringAsync();
@@ -273,6 +270,7 @@
                               $"New Masters Automatically Created:\n" +
                               $" • States: {parsed.NewMastersCreated?.States ?? 0}\n" +
                               $" • Districts: {parsed.NewMastersCreated?.Districts ?? 0}\n" +
+                              $" • Sub-Districts: {parsed.NewMastersCreated?.SubDistricts ?? 0}\n" +
                               $" • Dealers: {parsed.NewMastersCreated?.IfmsDealers ?? 0}\n" +
                               $" • Dealer Types: {parsed.NewMastersCreated?.DealerTypes ?? 0}\n" +
                               $" • Dealership Natures: {parsed.NewMastersCreated?.DealershipNatures ?? 0}\n" +
@@ -326,6 +324,7 @@
     {
         public int States { get; set; }
         public int Districts { get; set; }
+        public int SubDistricts { get; set; }
         public int IfmsDealers { get; set; }
         public int DealerTypes { get; set; }
         public int DealershipNatures { get; set; }

@@ -18,7 +18,7 @@ namespace SpicAPI.Controllers
         }
 
         [HttpPost("import")]
-        public async Task<IActionResult> Import(IFormFile file)
+        public async Task<IActionResult> Import(IFormFile file, [FromForm] string categoryId)
         {
             if (file == null || file.Length == 0)
                 return BadRequest(new { Success = false, Message = "No file uploaded" });
@@ -30,7 +30,7 @@ namespace SpicAPI.Controllers
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System";
             using var stream = file.OpenReadStream();
 
-            var result = await _uploadService.ImportAsync(stream, currentUserId, ext);
+            var result = await _uploadService.ImportAsync(stream, currentUserId, ext, categoryId);
 
             if (result.Success)
             {
