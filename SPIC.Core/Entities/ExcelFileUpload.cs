@@ -19,8 +19,8 @@ namespace SPIC.Core.Entities
 
         public string? AgencyName { get; set; }
         public int? DealerTypeId { get; set; }
-        public string? DealershipNature { get; set; }
-        public int? CompetitorId { get; set; }
+        public int? DealershipNatureId { get; set; }
+        public int? CompanyId { get; set; }
         public int? PlantId { get; set; }
 
         public int? ProductId { get; set; }

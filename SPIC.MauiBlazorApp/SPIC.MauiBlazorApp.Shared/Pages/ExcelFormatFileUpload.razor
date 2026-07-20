@@ -1,5 +1,6 @@
 @page "/ExcelFormatFileUpload"
-
+@inject HttpClient Http
+@inject IJSRuntime JS
 <PageTitle>Excel Format File Upload</PageTitle>
 
 <style>
@@ -187,7 +188,7 @@
                     <div class="fu-form-row">
                         <div class="fu-form-group">
                             <label class="fu-form-label">Excel File</label>
-                            <InputFile class="fu-form-control" accept=".xlsx,.xls" />
+                            <InputFile class="fu-form-control" accept=".xlsx,.xls,.csv" OnChange="@(e => HandleFileSelected(e, item.Id))" />
                         </div>
                         <div class="fu-form-group date-group">
                             <label class="fu-form-label">Date (Optional)</label>
@@ -195,9 +196,9 @@
                         </div>
                     </div>
                     
-                    <button class="fu-btn-primary">
+                    <button class="fu-btn-primary" @onclick="@(() => UploadFile(item.Id))" disabled="@(uploadingCategoryId != null)">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                        Upload
+                        @(uploadingCategoryId == item.Id ? "Uploading..." : "Upload")
                     </button>
                 </div>
             </div>
@@ -222,5 +223,115 @@
         new UploadCategory { Id = "Six", Title = "State Wise Global Stock Reconciliation" },
         new UploadCategory { Id = "Seven", Title = "Warehouse District Wise Details Global Stock" }
     };
+
+    private Dictionary<string, IBrowserFile> selectedFiles = new();
+    private string uploadingCategoryId = null;
+
+    private void HandleFileSelected(InputFileChangeEventArgs e, string categoryId)
+    {
+        selectedFiles[categoryId] = e.File;
+    }
+
+    private async Task UploadFile(string categoryId)
+    {
+        if (!selectedFiles.TryGetValue(categoryId, out var file) || file == null)
+        {
+            await JS.InvokeVoidAsync("alert", "Please select a file first.");
+            return;
+        }
+
+        // For now, only the Wholesale Stock is implemented
+        if (categoryId != "Five")
+        {
+            await JS.InvokeVoidAsync("alert", "This category upload is not implemented yet.");
+            return;
+        }
+
+        try
+        {
+            uploadingCategoryId = categoryId;
+            StateHasChanged();
+            
+            using var content = new MultipartFormDataContent();
+            var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 10485760)); // 10MB
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+            content.Add(fileContent, "file", file.Name);
+
+            var response = await Http.PostAsync("api/ExcelBulkUpload/import", content);
+            var result = await response.Content.ReadAsStringAsync();
+
+            try 
+            {
+                var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var parsed = System.Text.Json.JsonSerializer.Deserialize<UploadResult>(result, options);
+                
+                if (response.IsSuccessStatusCode && parsed != null && parsed.Success)
+                {
+                    var msg = $"Upload Successful!\n\n" +
+                              $"Rows Saved: {parsed.RowsInserted}\n" +
+                              $"Rows Skipped (Empty): {parsed.RowsSkipped}\n\n" +
+                              $"New Masters Automatically Created:\n" +
+                              $" • States: {parsed.NewMastersCreated?.States ?? 0}\n" +
+                              $" • Districts: {parsed.NewMastersCreated?.Districts ?? 0}\n" +
+                              $" • Dealers: {parsed.NewMastersCreated?.IfmsDealers ?? 0}\n" +
+                              $" • Dealer Types: {parsed.NewMastersCreated?.DealerTypes ?? 0}\n" +
+                              $" • Dealership Natures: {parsed.NewMastersCreated?.DealershipNatures ?? 0}\n" +
+                              $" • Companies: {parsed.NewMastersCreated?.Companies ?? 0}\n" +
+                              $" • Plants: {parsed.NewMastersCreated?.Plants ?? 0}\n" +
+                              $" • Products: {parsed.NewMastersCreated?.Products ?? 0}";
+                    
+                    await JS.InvokeVoidAsync("alert", msg);
+                    selectedFiles.Remove(categoryId);
+                }
+                else
+                {
+                    await JS.InvokeVoidAsync("alert", $"Upload Failed:\n{parsed?.Message ?? result}");
+                }
+            }
+            catch
+            {
+                // Fallback if parsing fails
+                if (response.IsSuccessStatusCode)
+                {
+                    await JS.InvokeVoidAsync("alert", "Upload Successful!\n" + result);
+                    selectedFiles.Remove(categoryId);
+                }
+                else
+                {
+                    await JS.InvokeVoidAsync("alert", "Upload Failed:\n" + result);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", "Error during upload: " + ex.Message);
+        }
+        finally
+        {
+            uploadingCategoryId = null;
+            StateHasChanged();
+        }
+    }
+
+    public class UploadResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public int RowsInserted { get; set; }
+        public int RowsSkipped { get; set; }
+        public UploadResultMasters NewMastersCreated { get; set; }
+    }
+
+    public class UploadResultMasters
+    {
+        public int States { get; set; }
+        public int Districts { get; set; }
+        public int IfmsDealers { get; set; }
+        public int DealerTypes { get; set; }
+        public int DealershipNatures { get; set; }
+        public int Companies { get; set; }
+        public int Plants { get; set; }
+        public int Products { get; set; }
+    }
 }
 
