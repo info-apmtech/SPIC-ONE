@@ -75,6 +75,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<IfmsDealer> IfmsDealers { get; set; }
         public DbSet<Company> Companies { get; set; }
         public DbSet<DealershipNature> DealershipNatures { get; set; }
+        public DbSet<TxnType> TxnTypes { get; set; }
+        public DbSet<AckThrough> AckThroughs { get; set; }
 
         // Dealer Registration Sub-Entities
         public DbSet<DealerExperience> DealerExperiences { get; set; }
