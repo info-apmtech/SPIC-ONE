@@ -34,38 +34,6 @@ namespace SPIC.Core.Entities
         public string UpdatedBy { get; set; }
     }
 
-    public class StateWiseGlobalStockReconciliation
-    {
-        [Key]
-        public int Id { get; set; }
-
-        public int? StateId { get; set; }
-
-        public decimal OpeningStock { get; set; }
-
-        public decimal OpeningGIT { get; set; }
-
-        public decimal ProductionImports { get; set; }
-
-        public decimal Receipt { get; set; }
-
-        public decimal Dispatches { get; set; }
-
-        public decimal Sales { get; set; }
-
-        public decimal SalesReturn { get; set; }
-
-        public decimal StockAdjustment { get; set; }
-
-        public decimal ClosingGIT { get; set; }
-
-        public decimal ClosingStock { get; set; }
-
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
-        public string UpdatedBy { get; set; }
-    }
-
     public class SalesWholesaler
     {
         [Key]
@@ -286,6 +254,31 @@ namespace SPIC.Core.Entities
         public decimal Availability { get; set; }
 
         public decimal ClosingBalance { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string UpdatedBy { get; set; }
+    }
+    public class StateGlobalStockReconciliation
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public int? PlantId { get; set; }
+        public int? ProductId { get; set; }
+
+        public int? StateId { get; set; }
+
+        public decimal OpeningStock { get; set; }
+        public decimal OpeningGIT { get; set; }
+        public decimal ProductionImports { get; set; }
+        public decimal Receipt { get; set; }
+        public decimal Dispatches { get; set; }
+        public decimal Sales { get; set; }
+        public decimal SalesReturn { get; set; }
+        public decimal StockAdjustment { get; set; }
+        public decimal ClosingGIT { get; set; }
+        public decimal ClosingStock { get; set; }
 
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

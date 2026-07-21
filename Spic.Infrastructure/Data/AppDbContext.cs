@@ -57,7 +57,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<ProductGroup> ProductGroups { get; set; }
         public DbSet<Product> Products { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
-        public DbSet<StateWiseGlobalStockReconciliation> StateWiseGlobalStockReconciliations { get; set; }
+
         public DbSet<SalesWholesaler> SalesWholesalers { get; set; }
         public DbSet<SalesAndReceipt> SalesAndReceipts { get; set; }
         public DbSet<SalesCompanySale> SalesCompanySales { get; set; }
@@ -77,6 +77,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<DealershipNature> DealershipNatures { get; set; }
         public DbSet<TxnType> TxnTypes { get; set; }
         public DbSet<AckThrough> AckThroughs { get; set; }
+        public DbSet<StateGlobalStockReconciliation> StateGlobalStockReconciliations { get; set; }
 
         // Dealer Registration Sub-Entities
         public DbSet<DealerExperience> DealerExperiences { get; set; }

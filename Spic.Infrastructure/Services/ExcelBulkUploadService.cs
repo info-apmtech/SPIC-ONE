@@ -36,6 +36,8 @@ namespace Spic.Infrastructure.Services
                 ? new[] { "company", "plant", "product", "state", "district", "agencyname" }
                 : categoryId == "Four"
                 ? new[] { "transactionid", "marketer", "wholesalerid", "wholesaleragencyname" }
+                : categoryId == "Six"
+                ? new[] { "state", "openingstock", "openinggit", "production/imports", "receipt", "dispatches", "sales", "salesreturn", "stockadjustment", "closinggit", "closingstock" }
                 : new[] { "state", "district", "dealerid", "agencyname", "dealertype", "dealershipnature", "company", "plant", "product", "stock", "stockdate" };
             
             bool IsHeaderRow(List<string> rowValues)
@@ -44,7 +46,28 @@ namespace Spic.Infrastructure.Services
                 if (categoryId == "Two") return rowValues.Contains("transactionid") && rowValues.Contains("dealername");
                 if (categoryId == "Three") return rowValues.Contains("serialnumber") && rowValues.Contains("agencyname");
                 if (categoryId == "Four") return rowValues.Contains("transactionid") && rowValues.Contains("marketer");
+                if (categoryId == "Six") return rowValues.Contains("state") && rowValues.Contains("openingstock");
                 return rowValues.Contains("state") && rowValues.Contains("dealerid");
+            }
+
+            string globalPlantStr = null;
+            string globalProductStr = null;
+            void ExtractCategorySixTitle(string cellText)
+            {
+                if (categoryId == "Six" && !string.IsNullOrWhiteSpace(cellText) && cellText.StartsWith("State-Wise Global Stock Reconciliation", StringComparison.OrdinalIgnoreCase))
+                {
+                    // State-Wise Global Stock Reconciliation for GFL for DAP
+                    var parts = cellText.Split(new[] { " for " }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 3)
+                    {
+                        globalPlantStr = parts[1].Trim();
+                        if (globalPlantStr.Equals("GFL", StringComparison.OrdinalIgnoreCase))
+                        {
+                            globalPlantStr = "Green Star";
+                        }
+                        globalProductStr = parts[2].Trim();
+                    }
+                }
             }
 
             try
@@ -64,7 +87,9 @@ namespace Spic.Infrastructure.Services
                             var rowValues = new List<string>();
                             for (int i = 0; csv.TryGetField<string>(i, out var field); i++)
                             {
-                                rowValues.Add(field?.Trim('\uFEFF', '\u200B', ' ', '"').Replace(" ", "").ToLowerInvariant() ?? "");
+                                var text = field?.Trim() ?? "";
+                                ExtractCategorySixTitle(text);
+                                rowValues.Add(text.Trim('\uFEFF', '\u200B', ' ', '"').Replace(" ", "").ToLowerInvariant());
                             }
 
                             if (IsHeaderRow(rowValues))
@@ -108,7 +133,9 @@ namespace Spic.Infrastructure.Services
                         int lastCol = row.LastCellUsed()?.Address.ColumnNumber ?? 0;
                         for (int c = 1; c <= lastCol; c++)
                         {
-                            rowValues.Add(row.Cell(c).GetString().Trim('\uFEFF', '\u200B', ' ', '"').Replace(" ", "").ToLowerInvariant());
+                            var text = row.Cell(c).GetString().Trim();
+                            ExtractCategorySixTitle(text);
+                            rowValues.Add(text.Trim('\uFEFF', '\u200B', ' ', '"').Replace(" ", "").ToLowerInvariant());
                         }
 
                         if (IsHeaderRow(rowValues))
@@ -225,21 +252,28 @@ namespace Spic.Infrastructure.Services
                         result.RowsSkipped++;
                         continue;
                     }
+                    if (categoryId == "Six" && string.Equals(stateStr, "total", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
 
                     int? stateId = null;
-                    if (!string.IsNullOrEmpty(stateStr))
+                    if (categoryId != "Six" || !string.Equals(stateStr, "plant", StringComparison.OrdinalIgnoreCase))
                     {
-                        var key = stateStr.ToLowerInvariant();
-                        if (!stateDict.TryGetValue(key, out var id))
+                        if (!string.IsNullOrEmpty(stateStr))
                         {
-                            var newState = new State { StateName = stateStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId, ZoneId = 1 };
-                            _db.States.Add(newState);
-                            await _db.SaveChangesAsync();
-                            id = newState.Id;
-                            stateDict[key] = id;
-                            result.NewMastersCreated.States++;
+                            var key = stateStr.ToLowerInvariant();
+                            if (!stateDict.TryGetValue(key, out var id))
+                            {
+                                var newState = new State { StateName = stateStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId, ZoneId = 1 };
+                                _db.States.Add(newState);
+                                await _db.SaveChangesAsync();
+                                id = newState.Id;
+                                stateDict[key] = id;
+                                result.NewMastersCreated.States++;
+                            }
+                            stateId = id;
                         }
-                        stateId = id;
                     }
 
                     int? districtId = null;
@@ -884,6 +918,96 @@ namespace Spic.Infrastructure.Services
                         };
 
                         _db.SalesCompanySales.Add(salesCompany);
+                        result.RowsInserted++;
+                    }
+                    else if (categoryId == "Six")
+                    {
+                        if (string.Equals(stateStr, "total", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue; // Skip the Total row
+                        }
+
+                        if (!string.IsNullOrEmpty(globalPlantStr))
+                        {
+                            var key = globalPlantStr.ToLowerInvariant();
+                            if (!plantDict.TryGetValue(key, out var id))
+                            {
+                                var newPlant = new Plant { Name = globalPlantStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
+                                _db.Plants.Add(newPlant);
+                                await _db.SaveChangesAsync();
+                                id = newPlant.Id;
+                                plantDict[key] = id;
+                                result.NewMastersCreated.Plants++;
+                            }
+                            plantId = id;
+                        }
+
+                        if (!string.IsNullOrEmpty(globalProductStr))
+                        {
+                            var key = globalProductStr.ToLowerInvariant();
+                            if (!productDict.TryGetValue(key, out var id))
+                            {
+                                var newProd = new Product { Name = globalProductStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
+                                _db.Products.Add(newProd);
+                                await _db.SaveChangesAsync();
+                                id = newProd.Id;
+                                productDict[key] = id;
+                                result.NewMastersCreated.Products++;
+                            }
+                            productId = id;
+                        }
+
+                        if (string.Equals(stateStr, "plant", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Keep stateId as null for "PLANT" row
+                        }
+                        else if (!string.IsNullOrEmpty(stateStr))
+                        {
+                            var stateKey = stateStr.ToLowerInvariant();
+                            if (!stateDict.TryGetValue(stateKey, out var id))
+                            {
+                                var newState = new State { StateName = stateStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
+                                _db.States.Add(newState);
+                                await _db.SaveChangesAsync();
+                                id = newState.Id;
+                                stateDict[stateKey] = id;
+                                result.NewMastersCreated.States++;
+                            }
+                            stateId = id;
+                        }
+
+                        decimal.TryParse(GetCell(row, "openingstock"), out var openingStock);
+                        decimal.TryParse(GetCell(row, "openinggit"), out var openingGit);
+                        decimal.TryParse(GetCell(row, "production/imports"), out var production);
+                        decimal.TryParse(GetCell(row, "receipt"), out var receipt);
+                        decimal.TryParse(GetCell(row, "dispatches"), out var dispatches);
+                        decimal.TryParse(GetCell(row, "sales"), out var sales);
+                        decimal.TryParse(GetCell(row, "salesreturn"), out var salesReturn);
+                        decimal.TryParse(GetCell(row, "stockadjustment"), out var stockAdj);
+                        decimal.TryParse(GetCell(row, "closinggit"), out var closingGit);
+                        decimal.TryParse(GetCell(row, "closingstock"), out var closingStock);
+
+                        var recon = new StateGlobalStockReconciliation
+                        {
+                            PlantId = plantId,
+                            ProductId = productId,
+                            StateId = stateId,
+                            OpeningStock = openingStock,
+                            OpeningGIT = openingGit,
+                            ProductionImports = production,
+                            Receipt = receipt,
+                            Dispatches = dispatches,
+                            Sales = sales,
+                            SalesReturn = salesReturn,
+                            StockAdjustment = stockAdj,
+                            ClosingGIT = closingGit,
+                            ClosingStock = closingStock,
+                            CreatedAt = now,
+                            UpdatedAt = now,
+                            UpdatedBy = currentUserId
+                        };
+
+                        _db.StateGlobalStockReconciliations.Add(recon);
                         result.RowsInserted++;
                     }
                 }
