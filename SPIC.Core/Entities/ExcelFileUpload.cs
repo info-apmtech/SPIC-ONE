@@ -143,7 +143,7 @@ namespace SPIC.Core.Entities
         [Key]
         public int Id { get; set; }
 
-        public string? Company { get; set; }
+        public int? CompanyId { get; set; }
         public int? PlantId { get; set; }
 
         public int? ProductId { get; set; }
@@ -152,8 +152,7 @@ namespace SPIC.Core.Entities
 
         public int? DistrictId { get; set; }
 
-        public string? DealerId { get; set; }
-        public string? DealerNature { get; set; }
+        public int? DealershipNatureId { get; set; }
         public string? AgencyName { get; set; }
 
         public int? DealerRegistrationId { get; set; }

@@ -30,11 +30,14 @@ namespace Spic.Infrastructure.Services
 
             var requiredCols = categoryId == "One" 
                 ? new[] { "statename", "districtname", "retailerid", "retailername" }
+                : categoryId == "Three"
+                ? new[] { "company", "plant", "product", "state", "district", "agencyname" }
                 : new[] { "state", "district", "dealerid", "agencyname", "dealertype", "dealershipnature", "company", "plant", "product", "stock", "stockdate" };
             
             bool IsHeaderRow(List<string> rowValues)
             {
                 if (categoryId == "One") return rowValues.Contains("statename") && rowValues.Contains("retailerid");
+                if (categoryId == "Three") return rowValues.Contains("serialnumber") && rowValues.Contains("agencyname");
                 return rowValues.Contains("state") && rowValues.Contains("dealerid");
             }
 
@@ -63,8 +66,10 @@ namespace Spic.Infrastructure.Services
                                 headerFound = true;
                                 for (int i = 0; i < rowValues.Count; i++)
                                 {
-                                    if (!string.IsNullOrEmpty(rowValues[i]) && !headerMap.ContainsKey(rowValues[i]))
-                                        headerMap[rowValues[i]] = i;
+                                    var h = rowValues[i];
+                                    if (categoryId == "Three" && h.StartsWith("wholesalerob")) h = "wholesalerob";
+                                    if (!string.IsNullOrEmpty(h) && !headerMap.ContainsKey(h))
+                                        headerMap[h] = i;
                                 }
                             }
                             continue;
@@ -106,6 +111,7 @@ namespace Spic.Infrastructure.Services
                             for (int c = 1; c <= lastCol; c++)
                             {
                                 var h = rowValues[c - 1];
+                                if (categoryId == "Three" && h.StartsWith("wholesalerob")) h = "wholesalerob";
                                 if (!string.IsNullOrEmpty(h) && !headerMap.ContainsKey(h))
                                     headerMap[h] = c;
                             }
@@ -197,7 +203,7 @@ namespace Spic.Infrastructure.Services
                     var dealerIdStr = categoryId == "One" ? GetCell(row, "retailerid") : GetCell(row, "dealerid");
                     var agencyNameStr = categoryId == "One" ? GetCell(row, "retailername") : GetCell(row, "agencyname");
                     var dealerTypeStr = categoryId == "One" ? "" : GetCell(row, "dealertype");
-                    var natureStr = GetCell(row, "dealershipnature");
+                    var natureStr = categoryId == "Three" ? GetCell(row, "dealernature") : GetCell(row, "dealershipnature");
                     var companyStr = GetCell(row, "company");
                     var plantStr = GetCell(row, "plant");
                     var productStr = GetCell(row, "product");
@@ -453,6 +459,55 @@ namespace Spic.Infrastructure.Services
                         };
 
                         _db.WholesalerStockAsOnTodays.Add(stockRecord);
+                        result.RowsInserted++;
+                    }
+                    else if (categoryId == "Three")
+                    {
+                        decimal.TryParse(GetCell(row, "wholesalerob"), out var openingBalance);
+                        decimal.TryParse(GetCell(row, "comp-wssale"), out var compWsSale);
+                        decimal.TryParse(GetCell(row, "comp-wssalercpt"), out var compWsSaleRcpt);
+                        decimal.TryParse(GetCell(row, "receivedfromws"), out var receivedFromWs);
+                        decimal.TryParse(GetCell(row, "receivedfromwsack"), out var receivedFromWsAck);
+                        decimal.TryParse(GetCell(row, "ws-rtsale"), out var wsRtSale);
+                        decimal.TryParse(GetCell(row, "ws-rtsalercpt"), out var wsRtSaleRcpt);
+                        decimal.TryParse(GetCell(row, "ws-wssale"), out var wsWsSale);
+                        decimal.TryParse(GetCell(row, "ws-wssalercpt"), out var wsWsSaleRcpt);
+                        decimal.TryParse(GetCell(row, "totalsalesbyws"), out var totalSalesByWs);
+                        decimal.TryParse(GetCell(row, "stocktransferfromwstoretailer"), out var stockTransferWsToRetailer);
+                        decimal.TryParse(GetCell(row, "stocktransferfromwstoretailerack"), out var stockTransferWsToRetailerAck);
+                        decimal.TryParse(GetCell(row, "balancewithws"), out var balanceWithWs);
+                        decimal.TryParse(GetCell(row, "totalacktows"), out var totalAckToWs);
+
+                        var srRecord = new SalesAndReceipt
+                        {
+                            CompanyId = companyId,
+                            PlantId = plantId,
+                            ProductId = productId,
+                            StateId = stateId,
+                            DistrictId = districtId,
+                            DealershipNatureId = natureId,
+                            AgencyName = agencyNameStr,
+                            DealerRegistrationId = dealerRegistrationId,
+                            IfmsDealerId = ifmsDealerId,
+                            OpeningBalance = openingBalance,
+                            CompWsSale = compWsSale,
+                            CompWsSaleRcpt = compWsSaleRcpt,
+                            ReceivedFromWs = receivedFromWs,
+                            ReceivedFromWsAck = receivedFromWsAck,
+                            WsRtSale = wsRtSale,
+                            WsRtSaleRcpt = wsRtSaleRcpt,
+                            WsWsSale = wsWsSale,
+                            WsWsSaleRcpt = wsWsSaleRcpt,
+                            TotalSalesByWs = totalSalesByWs,
+                            StockTransferWsToRetailer = stockTransferWsToRetailer,
+                            StockTransferWsToRetailerAck = stockTransferWsToRetailerAck,
+                            BalanceWithWs = balanceWithWs,
+                            TotalAckToWs = totalAckToWs,
+                            CreatedAt = now,
+                            UpdatedAt = now,
+                            UpdatedBy = currentUserId
+                        };
+                        _db.SalesAndReceipts.Add(srRecord);
                         result.RowsInserted++;
                     }
                 }
