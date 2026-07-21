@@ -160,6 +160,7 @@
                 border-collapse: collapse;
                 font-size: 9.5px;
                 background: #fff;
+                min-width: 0 !important; /* Overrides min-width: max-content from Form.css */
             }
 
             .dpdf-valuation .spic-table th,
@@ -788,10 +789,13 @@
                             <label>Parent Dealer Code & Name</label>
                             <div class="inline-val">@GetDealerCodeAndName(_model.ParentDealer)</div>
                         </div>
-                        <div class="inline-field">
-                            <label>Business Type</label>
-                            <div class="inline-val">@GetEntityTypeName(_model.EntityType)</div>
-                        </div>
+                        @if (_showBusinessInfo)
+                        {
+                            <div class="inline-field">
+                                <label>Business Type</label>
+                                <div class="inline-val">@GetEntityTypeName(_model.EntityType)</div>
+                            </div>
+                        }
                         @if (_model.InSpic && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
                         {
                             <div class="inline-field">
@@ -806,10 +810,13 @@
                                 <div class="inline-val">@(_model.GreenstarDateOfAppointment?.ToString("dd MMMM yyyy") ?? "-")</div>
                             </div>
                         }
-                        <div class="inline-field">
-                            <label>Experience in Industry</label>
-                            <div class="inline-val">@(_model.YearsofExperiance > 0 ? $"{_model.YearsofExperiance} Years" : "-")</div>
-                        </div>
+                        @if (_showBusinessInfo)
+                        {
+                            <div class="inline-field">
+                                <label>Experience in Industry</label>
+                                <div class="inline-val">@(_model.YearsofExperiance > 0 ? $"{_model.YearsofExperiance} Years" : "-")</div>
+                            </div>
+                        }
                         <div class="inline-field">
     <label>Experience in @ExperienceCompanyLabel</label>
     <div class="inline-val">@GetSpicExperienceDisplay()</div>
@@ -817,6 +824,62 @@
                     </div>
                 </div>
 
+                @if (_isTerminatedRestricted)
+                {
+                    <div class="dpdf-section">
+                        <div class="dpdf-section-title mb-2">
+                            <div class="dpdf-section-icon">🛑</div> <div class="dpdf-section-text">Terminated Status</div>
+                        </div>
+                        <div class="grid-2" style="row-gap: 12px;">
+                            <div class="inline-field">
+                                <label>Final Amount Settled</label>
+                                <div class="inline-val">@(_model.IsFinalAmountSettled == true ? "Yes" : "No")</div>
+                            </div>
+                            <div class="inline-field">
+                                <label>Final Approval Date</label>
+                                <div class="inline-val">@(_model.FinalApprovalDate?.ToString("dd MMMM yyyy") ?? "-")</div>
+                            </div>
+                            <div class="inline-field">
+                                <label>Settlement Date</label>
+                                <div class="inline-val">@(_model.SettlementDate?.ToString("dd MMMM yyyy") ?? "-")</div>
+                            </div>
+                            <div class="inline-field">
+                                <label>Settlement Amount</label>
+                                <div class="inline-val">₹@(_model.SettlementAmount.ToString("N2"))</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (_model.Status == 1)
+                {
+                    <div class="dpdf-section">
+                        <div class="dpdf-section-title mb-2">
+                            <div class="dpdf-section-icon">⏸️</div> <div class="dpdf-section-text">Inactive Status</div>
+                        </div>
+                        <div class="grid-2" style="row-gap: 12px;">
+                            <div class="inline-field">
+                                <label>Last Transaction Date</label>
+                                <div class="inline-val">@(_model.LastTransactionDate?.ToString("dd MMMM yyyy") ?? "-")</div>
+                            </div>
+                            <div class="inline-field">
+                                <label>Is Last Transaction a Sale?</label>
+                                <div class="inline-val">@(_model.IsLastTransactionIsSale == true ? "Yes" : "No")</div>
+                            </div>
+                            <div class="inline-field">
+                                <label>Debtor Balance</label>
+                                <div class="inline-val">₹@(_model.DebitorBalance.ToString("N2"))</div>
+                            </div>
+                            <div class="inline-field">
+                                <label>Future Business Proposal</label>
+                                <div class="inline-val">@GetInactiveProposalDisplay()</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (!_isTerminatedRestricted)
+                {
                <div class="dpdf-section">
                     <div class="dpdf-section-title mb-2">
                         <div class="dpdf-section-icon">📍</div>  <div class="dpdf-section-text"> Location Information</div>
@@ -1012,7 +1075,8 @@
         </table>
    </div>
 }
-@if (!_isTerminatedRestricted)
+}
+@if (_showBusinessInfo)
 {
 <div class="dpdf-section">
        <div class="dpdf-section-title mb-2">
@@ -1305,6 +1369,8 @@
 }
 
 @* ===================== PROPRIETOR / PARTNER DETAILS ===================== *@
+@if (_showProprietorAndInvestment)
+{
 @if (_savedPartners != null && _savedPartners.Any())
 {
     <div class="dpdf-section">
@@ -1493,7 +1559,8 @@ else
         <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Company Details Available</div>
     }
 </div>
-@if (!_isTerminatedRestricted)
+}
+@if (_showBusinessInfo)
 {
 @* <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
@@ -1955,6 +2022,8 @@ else
     </div>
 </div>
  *@
+@if (_showProprietorAndInvestment)
+{
 <div class="dpdf-section">
            <div class="dpdf-section-title mb-2">
                <div class="dpdf-section-icon">🚚</div>  <div class="dpdf-section-text">Movable</div>
@@ -1970,6 +2039,9 @@ else
                </div>
            </div>
        </div>
+}
+@if (_showProprietorAndInvestment)
+{
       <div class="dpdf-section">
            <div class="dpdf-section-title mb-2">
                <div class="dpdf-section-icon">🏢</div>  <div class="dpdf-section-text">Infrastructure</div>
@@ -1985,8 +2057,9 @@ else
                </div>
            </div>
        </div>
+}
 
-@if (!_isTerminatedRestricted)
+@if (_showProprietorAndInvestment)
 {
 <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
@@ -2089,6 +2162,8 @@ else
                         </div>
                     </div>
                 </div>
+                @if (_model.Status != 1 && _showBusinessInfo)
+                {
                 @if (!string.IsNullOrEmpty(_creditSalesError))
 {
     <div style="background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B;padding:10px 14px;margin:10px 40px;border-radius:6px;font-size:12px;">
@@ -2210,6 +2285,9 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         (cat, prod) => (IsFertilizerCategory(cat) && !IsUreaProduct(prod)) || IsSpecialityCategory(cat));
 }
 }
+}
+@if (_model.Status != 1 && _showBusinessInfo)
+{
 @if (_proposal != null && _proposal.Id > 0 && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
 {
     <div class="dpdf-section">
@@ -2337,13 +2415,27 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                             <div class="table-wrapper">
                                 <div class="table-responsive">
                                     <table class="spic-table">
+                                        <colgroup>
+                                            <col style="width: 4%;">
+                                            <col style="width: 17%;">
+                                            <col style="width: 10%;">
+                                            <col style="width: 7%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 6%;">
+                                        </colgroup>
                                         <thead>
                                             <tr>
-                                                <th rowspan="2" style="width:4%;">S.No</th>
+                                                <th rowspan="2">S.No</th>
                                                 <th rowspan="2">Critical Parameter</th>
-                                                <th rowspan="2" style="width:10%;">Measure</th>
-                                                <th rowspan="2" style="width:7%;">Weightage (%)</th>
-                                                <th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+                                                <th rowspan="2">Measure</th>
+                                                <th rowspan="2">Weightage (%)</th>
+                                                <th rowspan="2">Unit &amp; Marks</th>
                                                 <th colspan="5" class="text-center">Norms / Marks</th>
                                                 <th colspan="2" class="text-center">Dealer Score</th>
                                             </tr>
@@ -2353,8 +2445,8 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                                                 <th class="text-center">3</th>
                                                 <th class="text-center">4</th>
                                                 <th class="text-center">5</th>
-                                                <th class="text-center" style="width:8%;">Value</th>
-                                                <th class="text-center" style="width:6%;">Marks</th>
+                                                <th class="text-center">Value</th>
+                                                <th class="text-center">Marks</th>
                                             </tr>
                                         </thead>
 <tbody>
@@ -2489,13 +2581,27 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                             <div class="table-wrapper">
                                 <div class="table-responsive">
                                     <table class="spic-table">
+                                        <colgroup>
+                                            <col style="width: 4%;">
+                                            <col style="width: 17%;">
+                                            <col style="width: 10%;">
+                                            <col style="width: 7%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 8%;">
+                                            <col style="width: 6%;">
+                                        </colgroup>
                                         <thead>
                                             <tr>
-                                                <th rowspan="2" style="width:4%;">S.No</th>
+                                                <th rowspan="2">S.No</th>
                                                 <th rowspan="2">Critical Parameter</th>
-                                                <th rowspan="2" style="width:10%;">Measure</th>
-                                                <th rowspan="2" style="width:7%;">Weightage (%)</th>
-                                                <th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+                                                <th rowspan="2">Measure</th>
+                                                <th rowspan="2">Weightage (%)</th>
+                                                <th rowspan="2">Unit &amp; Marks</th>
                                                 <th colspan="5" class="text-center">Norms / Marks</th>
                                                 <th colspan="2" class="text-center">Dealer Score</th>
                                             </tr>
@@ -2505,8 +2611,8 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                                                 <th class="text-center">3</th>
                                                 <th class="text-center">4</th>
                                                 <th class="text-center">5</th>
-                                                <th class="text-center" style="width:8%;">Value</th>
-                                                <th class="text-center" style="width:6%;">Marks</th>
+                                                <th class="text-center">Value</th>
+                                                <th class="text-center">Marks</th>
                                             </tr>
                                         </thead>
 <tbody>
@@ -2648,7 +2754,10 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                     <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Scoring Data Available</div>
                 }
 }
+}
 
+@if (!_isTerminatedRestricted)
+{
 <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
         <div class="dpdf-section-icon"><i class="bi bi-file-earmark-text"></i></div>
@@ -2670,7 +2779,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         if (_hasRetailLicense) Add("Retail Fertilizers License", _model?.RetailLicenseFilePath);
 
         // Partner / proprietor documents
-        if (_savedPartners != null)
+        if (_savedPartners != null && _showProprietorAndInvestment)
         {
             foreach (var p in _savedPartners)
             {
@@ -2681,7 +2790,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         }
 
         // Property documents
-        if (_landAssets != null)
+        if (_landAssets != null && _showProprietorAndInvestment)
         {
             foreach (var l in _landAssets)
             {
@@ -2690,7 +2799,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                 Add($"Land: {l.LandName} - Valuation Certificate", l.UploadedValuationCertificatePath);
             }
         }
-        if (_buildingAssets != null)
+        if (_buildingAssets != null && _showProprietorAndInvestment)
         {
             foreach (var b in _buildingAssets)
             {
@@ -2701,7 +2810,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         }
 
         // Additional documents (only when not terminated-restricted)
-        if (!_isTerminatedRestricted)
+        if (_showBusinessInfo)
         {
             if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC")
                 Add("SPIC Specimen Signature", _docs?.SpecimanFilePath);
@@ -2758,8 +2867,9 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
     {
         <div class="value" style="padding: 20px; text-align: center; color: var(--label-color);">No Documents Uploaded</div>
     }</div>
+}
 
-@if (!_isTerminatedRestricted)
+@if (_showBusinessInfo)
 {
 <div class="dpdf-section">
     <div class="dpdf-section-title mb-2">
@@ -2794,7 +2904,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
 </div>
 }
     
-                @if (HasAnyDocuments())
+                @if (!_isTerminatedRestricted && HasAnyDocuments())
                 {
                     <div class="section mt-5" style="page-break-before: always;">
                         <div class="dpdf-section-title mb-4">
@@ -2830,7 +2940,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                         RenderDocViewer("Wholesale Fertilizers License", _model?.WholesaleLicenseFilePath);
                         RenderDocViewer("Retail Fertilizers License", _model?.RetailLicenseFilePath);
 
-                        if (_savedPartners != null && _savedPartners.Any())
+                        if (_savedPartners != null && _savedPartners.Any() && _showProprietorAndInvestment)
                         {
                             foreach(var p in _savedPartners)
                             {
@@ -2843,7 +2953,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                             }
                         }
 
-                        if (_landAssets != null)
+                        if (_landAssets != null && _showProprietorAndInvestment)
                         {
                             foreach(var l in _landAssets)
                             {
@@ -2853,7 +2963,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                             }
                         }
 
-                        if (_buildingAssets != null)
+                        if (_buildingAssets != null && _showProprietorAndInvestment)
                         {
                             foreach(var b in _buildingAssets)
                             {
@@ -2864,7 +2974,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                         }
 
                         // Additional documents (only when not terminated-restricted)
-                        if (!_isTerminatedRestricted)
+                        if (_showBusinessInfo)
                         {
                             if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC") RenderDocViewer("SPIC Specimen Signature", _docs?.SpecimanFilePath);
                             if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar") RenderDocViewer("Greenstar Specimen Signature", _docs?.GreenstarSpecimanFilePath);
@@ -2886,7 +2996,7 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
                     }
                 </div>
                 }
-                else
+                else if (!_isTerminatedRestricted)
                 {
                     <div class="section mt-5" style="page-break-before: always;">
                         <div class="dpdf-section-title mb-4">
@@ -3043,12 +3153,27 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
     // Checks if the user actually has a retail license number filled out
   private bool _hasRetailLicense => !string.IsNullOrWhiteSpace(_model.RetailFertilizerLicenseNumber);
 
-    // Restricted flow: Terminated status, or Inactive + Future Business Proposal = Terminated.
-    // These dealers only go through Register -> Proprietor -> Investment, so the PDF should
-    // only show data from those 3 pages and hide everything else.
+    // Restricted flow: Terminated status, or Inactive + Future Business Proposal = Terminated (but NOT for Dealer).
     private bool _isTerminatedRestricted =>
         _model.Status == 2 ||
-        (_model.Status == 1 && _model.InactiveProposal == FutureBusinessProposalPdf.Terminated);
+        (_model.Status == 1 && _model.InactiveProposal == FutureBusinessProposalPdf.Terminated && !_model.IsDealer);
+
+    // Restricted flow: Inactive + Future Business Proposal = Not Traceable
+    private bool _isNotTraceableRestricted =>
+        _model.Status == 1 && _model.InactiveProposal == FutureBusinessProposalPdf.NotTraceable;
+
+    // Restricted flow: Inactive + Future Business Proposal = Terminated (only for Dealer).
+    // In this case, show Register, Proprietor, Investment, and Inactive Status. Hide Business Info.
+    private bool _isInactiveTerminatedRestricted =>
+        _model.Status == 1 && _model.InactiveProposal == FutureBusinessProposalPdf.Terminated && _model.IsDealer;
+
+    // Helper property to determine if Business Info, Experience, Sales Planning, etc. should be shown.
+    private bool _showBusinessInfo =>
+        !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isInactiveTerminatedRestricted;
+
+    // Helper property to determine if Proprietor and Investment should be shown.
+    private bool _showProprietorAndInvestment =>
+        !_isTerminatedRestricted && !_isNotTraceableRestricted;
 
     // Safely gets the file name from a full path
     private string GetFileName(string? path)
@@ -3315,16 +3440,17 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
     _savedRails = railTask.Result ?? new();
     _savedPorts = portTask.Result ?? new();
 }
-    private string GetStateName(int id) => _statesAll.FirstOrDefault(x => x.Id == id)?.StateName ?? "-";
-    private string GetDistrictName(int id) => _DistrictAll.FirstOrDefault(x => x.Id == id)?.DistrictName ?? "-";
-    private string GetRegionName(int id) => _regionsAll.FirstOrDefault(x => x.Id == id)?.RegionName ?? "-";
-    private string GetHqName(int id) => _headquartersAll.FirstOrDefault(x => x.Id == id)?.HeadquarterName ?? "-";
-    private string GetBankName(int id) => _banksAll.FirstOrDefault(x => x.Id == id)?.Name ?? "-";
-    private string GetDealerName(int id) => _dealersAll.FirstOrDefault(x => x.Id == id)?.FirmName ?? "-";
+    private string GetStateName(int? id) => id.HasValue ? _statesAll.FirstOrDefault(x => x.Id == id.Value)?.StateName ?? "-" : "-";
+    private string GetDistrictName(int? id) => id.HasValue ? _DistrictAll.FirstOrDefault(x => x.Id == id.Value)?.DistrictName ?? "-" : "-";
+    private string GetRegionName(int? id) => id.HasValue ? _regionsAll.FirstOrDefault(x => x.Id == id.Value)?.RegionName ?? "-" : "-";
+    private string GetHqName(int? id) => id.HasValue ? _headquartersAll.FirstOrDefault(x => x.Id == id.Value)?.HeadquarterName ?? "-" : "-";
+    private string GetBankName(int? id) => id.HasValue ? _banksAll.FirstOrDefault(x => x.Id == id.Value)?.Name ?? "-" : "-";
+    private string GetDealerName(int? id) => id.HasValue ? _dealersAll.FirstOrDefault(x => x.Id == id.Value)?.FirmName ?? "-" : "-";
 
-    private string GetDealerCodeAndName(int id)
+    private string GetDealerCodeAndName(int? id)
     {
-        var d = _dealersAll.FirstOrDefault(x => x.Id == id);
+        if (!id.HasValue) return "-";
+        var d = _dealersAll.FirstOrDefault(x => x.Id == id.Value);
         if (d == null) return "-";
         return !string.IsNullOrWhiteSpace(d.DealerCode) ? $"{d.DealerCode} - {d.FirmName}" : (d.FirmName ?? "-");
     }
@@ -3383,6 +3509,17 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
     private string GetRelationshipName(int id) => _relationshipsAll.FirstOrDefault(r => r.Id == id)?.Name ?? "—";
 
     private string GetSectorName(int id) => _sectorsAll.FirstOrDefault(s => s.Id == id)?.Name ?? "—";
+
+    private string GetInactiveProposalDisplay()
+    {
+        return _model.InactiveProposal switch
+        {
+            FutureBusinessProposalPdf.FutureBusiness => "Future Business",
+            FutureBusinessProposalPdf.Terminated => "Terminated",
+            FutureBusinessProposalPdf.NotTraceable => "Not Traceable",
+            _ => "-"
+        };
+    }
 
     private string GetEntityTypeName(int? entityType)
     {
@@ -3920,14 +4057,14 @@ private decimal GetMoRecommendedLimit()
         public string? PinCode { get; set; }
         public string? Block { get; set; }
         public string? Taluk { get; set; }
-        public int DistrictId { get; set; }
-        public int DealerStateId { get; set; }
+        public int? DistrictId { get; set; }
+        public int? DealerStateId { get; set; }
         public string? OfficialContactNumber { get; set; }
         public string? WhatsAppNumber { get; set; }
         public string? AlternativeNumber { get; set; }
         public string? AccountHolderName { get; set; }
         public string? AccountNumber { get; set; }
-        public int BankId { get; set; }
+        public int? BankId { get; set; }
         public string? Branch { get; set; }
         public string? IFSC { get; set; }
         public string? GSTNumber { get; set; }
@@ -4086,7 +4223,8 @@ public class ProductGroup
     public enum FutureBusinessProposalPdf
     {
         FutureBusiness = 1,
-        Terminated = 2
+        Terminated = 2,
+        NotTraceable = 3
     }
 
     public enum Gender { Male, Female, Other }

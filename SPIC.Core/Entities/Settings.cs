@@ -176,15 +176,31 @@ namespace SPIC.Core.Entities
     public class IfmsDealer
     {
         public int Id { get; set; }
-        public string? IfmsId { get; set; }
         public string? Name { get; set; }
-        public string? MobileNo { get; set; }
         public int? DealerTypeId { get; set; }
-        public string? DealershipNature { get; set; }
+        public int? DealershipNatureId { get; set; }
         public int? StateId { get; set; }
         public int? DistrictId { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public string? UpdatedBy { get; set; }
+    }
+    public class DealershipNature
+    {
+        public int Id { get; set; }
+        public required string Name { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public required string UpdatedBy { get; set; }
+    }
+    public class Company
+    {
+        public int Id { get; set; }
+        public required string Name { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public required string UpdatedBy { get; set; }
     }
 }

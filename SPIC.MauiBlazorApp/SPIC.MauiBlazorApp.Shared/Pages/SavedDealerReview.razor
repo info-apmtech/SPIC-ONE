@@ -16,6 +16,21 @@
 
     private DR.DealerRegistration? _dealer;
     private bool _isLoading = false;
+    private bool _isTerminatedRestricted => 
+        _dealer?.Status == DR.DealerStatus.Terminated || 
+        (_dealer?.Status == DR.DealerStatus.InActive && _dealer?.InactiveProposal == DR.FutureBusinessProposal.Terminated && _dealer?.IsDealer != true);
+
+    private bool _isNotTraceableRestricted =>
+        _dealer?.Status == DR.DealerStatus.InActive && _dealer?.InactiveProposal == DR.FutureBusinessProposal.NotTraceable;
+
+    private bool _isInactiveTerminatedRestricted =>
+        _dealer?.Status == DR.DealerStatus.InActive && _dealer?.InactiveProposal == DR.FutureBusinessProposal.Terminated && _dealer?.IsDealer == true;
+
+    private bool _showBusinessInfo =>
+        !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isInactiveTerminatedRestricted;
+
+    private bool _showProprietorAndInvestment =>
+        !_isTerminatedRestricted && !_isNotTraceableRestricted;
 
     // Related data
     private List<DR.DealerExperience> _experiences = new();
@@ -228,8 +243,9 @@
     {
         try
         {
-            if (_dealer == null || string.IsNullOrWhiteSpace(_dealer.CreatedBy)) return;
-            var id = _dealer.CreatedBy!;
+            if (_dealer == null) return;
+            var id = _dealer.UpdatedBy ?? _dealer.CreatedBy;
+            if (string.IsNullOrWhiteSpace(id)) return;
             // Ensure we have the user list cached (optimization similar to EmployeeManagement page)
             await LoadAllUsersIfNeeded();
 
@@ -384,11 +400,14 @@
         list.Add(("Aadhaar Copy", _dealer?.AadhaarFilePath));
         list.Add(("Wholesale License", _dealer?.WholesaleLicenseFilePath));
         list.Add(("Retail License", _dealer?.RetailLicenseFilePath));
-        list.Add(("Proprietor Photograph", _ownership?.ProprietorImagePath));
-        list.Add(("Proprietor Aadhaar", _ownership?.AadhaarFilePath));
-        list.Add(("Proprietor PAN", _ownership?.PANFilePath));
+        if (_showProprietorAndInvestment)
+        {
+            list.Add(("Proprietor Photograph", _ownership?.ProprietorImagePath));
+            list.Add(("Proprietor Aadhaar", _ownership?.AadhaarFilePath));
+            list.Add(("Proprietor PAN", _ownership?.PANFilePath));
+        }
 
-        if (_documents != null)
+        if (_documents != null && _showBusinessInfo)
         {
             list.Add(("Specimen Signature", _documents.SpecimanFilePath));
             list.Add(("Greenstar Specimen", _documents.GreenstarSpecimanFilePath));
@@ -439,6 +458,17 @@ private string GetEnclosureHtml()
     }
     private decimal GetTotalLoans() => _loans?.Sum(x => x.LoanValue) ?? 0m;
     private decimal GetNetValue() => GetCapitalPosition() + GetTotalAssets() - GetTotalLoans();
+    private string GetInactiveProposalDisplay()
+    {
+        if (!_dealer?.InactiveProposal.HasValue ?? true) return "-";
+        return _dealer.InactiveProposal.Value switch
+        {
+            DR.FutureBusinessProposal.FutureBusiness => "Future Business",
+            DR.FutureBusinessProposal.Terminated => "To be Terminated",
+            DR.FutureBusinessProposal.NotTraceable => "Not Traceable",
+            _ => _dealer.InactiveProposal.Value.ToString()
+        };
+    }
 
      private string GetEntityTypeName(DR.EntityType? entityType)
     {
@@ -661,12 +691,13 @@ private decimal GetGflProposedLimit() =>
         if (_dealer == null) return;
 
         var submitUser = "System";
-        if (!string.IsNullOrEmpty(_dealer.CreatedBy))
+        var submitterId = _dealer.UpdatedBy ?? _dealer.CreatedBy;
+        if (!string.IsNullOrEmpty(submitterId))
         {
-            if (_userNames.ContainsKey(_dealer.CreatedBy)) submitUser = _userNames[_dealer.CreatedBy];
-            else submitUser = _dealer.CreatedBy;
+            if (_userNames.ContainsKey(submitterId)) submitUser = _userNames[submitterId];
+            else submitUser = submitterId;
         }
-        var createdDateText = _dealer.CreatedAt.ToString("dd-MMM-yyyy hh:mm tt");
+        var createdDateText = _dealer.UpdatedAt.Year > 2000 ? _dealer.UpdatedAt.ToString("dd-MMM-yyyy hh:mm tt") : _dealer.CreatedAt.ToString("dd-MMM-yyyy hh:mm tt");
 
         TimelineItems.Add(new TimelineItem("Submitted", "Submitted", submitUser, createdDateText, "dot-green", "bi bi-check-lg", "card-green", "badge-green"));
 
@@ -1410,14 +1441,17 @@ private async Task ApproveDealer()
                                     <span class="cp-summary-label">Dealer Name</span>
                                     <span class="cp-summary-value">@(_dealer?.FirmName ?? "-")</span>
                                 </div>
-                                <div class="cp-summary-item">
-                                    <span class="cp-summary-label">MO Recommended CreditLimit  (SPIC)</span>
-                                    <span class="cp-summary-value">₹ @GetSpicMoRecommendedLimit().ToString("N2")</span>
-                                </div>
-                                <div class="cp-summary-item">
-                                    <span class="cp-summary-label">MO Recommended CreditLimit (GFL)</span>
-                                    <span class="cp-summary-value">₹ @GetGflMoRecommendedLimit().ToString("N2")</span>
-                                </div>
+                                @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo)
+                                {
+                                    <div class="cp-summary-item">
+                                        <span class="cp-summary-label">MO Recommended CreditLimit  (SPIC)</span>
+                                        <span class="cp-summary-value">₹ @GetSpicMoRecommendedLimit().ToString("N2")</span>
+                                    </div>
+                                    <div class="cp-summary-item">
+                                        <span class="cp-summary-label">MO Recommended CreditLimit (GFL)</span>
+                                        <span class="cp-summary-value">₹ @GetGflMoRecommendedLimit().ToString("N2")</span>
+                                    </div>
+                                }
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Current Stage</span>
                                     <span class="cp-summary-value">@GetCurrentStageTarget()</span>
@@ -1434,7 +1468,9 @@ private async Task ApproveDealer()
                             <textarea class="cp-remarks-input" @bind="ConfirmRemarks" placeholder="Enter Remarks Optional"></textarea>
                         </section>
 
-                       @if (LoginState.IsRMGroup)
+                       @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo)
+                       {
+                           @if (LoginState.IsRMGroup)
 {
     <section class="cp-credit-section">
         <div class="cp-credit-field">
@@ -1525,6 +1561,7 @@ private async Task ApproveDealer()
         </div>
     </section>
 }
+}
 
                         <div class="cp-info-alert">
                             <div class="cp-alert-icon">
@@ -1590,7 +1627,7 @@ private async Task ApproveDealer()
             <div class="info-card">
                 <div>
                     <div class="info-label">Submitted By</div>
-                    <div class="info-value">@(_submittedByName ?? _dealer?.CreatedBy ?? "-")</div>
+                    <div class="info-value">@(_submittedByName ?? _dealer?.UpdatedBy ?? _dealer?.CreatedBy ?? "-")</div>
                 </div>
                 <div class="info-icon cyan">
                     <i class="bi bi-person-badge"></i>
@@ -1728,12 +1765,15 @@ private async Task ApproveDealer()
             <div class="detail-box">
                 <h5>Action Details</h5>
                 <div class="info-row"><span>Action</span><strong>Submitted</strong></div>
-                <div class="info-row"><span>Action By</span><strong>@(_submittedByName ?? _dealer?.CreatedBy ?? "-")</strong></div>
+                <div class="info-row"><span>Action By</span><strong>@(_submittedByName ?? _dealer?.UpdatedBy ?? _dealer?.CreatedBy ?? "-")</strong></div>
                 <div class="info-row"><span>Role</span><strong>MO</strong></div>
-                <div class="info-row"><span>Date & Time</span><strong>@(_dealer != null ? _dealer.CreatedAt.ToString("dd-MMM-yyyy, hh:mm tt") : "-")</strong></div>
+                <div class="info-row"><span>Date & Time</span><strong>@(_dealer != null ? (_dealer.UpdatedAt.Year > 2000 ? _dealer.UpdatedAt.ToString("dd-MMM-yyyy, hh:mm tt") : _dealer.CreatedAt.ToString("dd-MMM-yyyy, hh:mm tt")) : "-")</strong></div>
                 <div class="info-row"><span>Stage</span><strong>MO Review</strong></div>
-                <div class="info-row"><span>MO Recommended Credit Limit (SPIC)</span><strong>₹ @GetSpicMoRecommendedLimit().ToString("N2")</strong></div>
-                <div class="info-row"><span>MO Recommended Credit Limit (GFL)</span><strong>₹ @GetGflMoRecommendedLimit().ToString("N2")</strong></div>
+                @if (_showBusinessInfo)
+                {
+                    <div class="info-row"><span>MO Recommended Credit Limit (SPIC)</span><strong>₹ @GetSpicMoRecommendedLimit().ToString("N2")</strong></div>
+                    <div class="info-row"><span>MO Recommended Credit Limit (GFL)</span><strong>₹ @GetGflMoRecommendedLimit().ToString("N2")</strong></div>
+                }
             </div>
         </div>
         <div class="col-12 col-lg-6">
@@ -1868,25 +1908,43 @@ private async Task ApproveDealer()
         </div>
         <div class="accordion-body">
             <div class="row g-4">
-@*                 <div class="col-md-6">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
-                            <h4 class="detail-card-title"><i class="bi bi-activity"></i> Status Details</h4>
-                            <i class="bi bi-pencil-square edit-icon" @onclick="EditRegister" role="button" title="Edit"></i>
-                        </div>
-                        <div class="detail-card-body">
-                            <div class="data-row"><div class="data-label">Status</div><div class="data-value">@(_dealer?.Status.ToString() ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">Last Transaction Date</div><div class="data-value">@(_dealer?.LastTransactionDate.HasValue == true && _dealer.LastTransactionDate.Value != DateTime.MinValue ? _dealer.LastTransactionDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Is Last Transaction Sale</div><div class="data-value">@(_dealer != null ? (_dealer.IsLastTransactionIsSale.HasValue && _dealer.IsLastTransactionIsSale.Value ? "Yes" : "No") : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Debtor Balance</div><div class="data-value">₹@(_dealer?.DebitorBalance.ToString("N2") ?? "0")</div></div>
-                            <div class="data-row"><div class="data-label">Final Amount Settled</div><div class="data-value">@(_dealer != null ? (_dealer.IsFinalAmountSettled.HasValue && _dealer.IsFinalAmountSettled.Value ? "Yes" : "No") : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Final Approval Date</div><div class="data-value">@(_dealer?.FinalApprovalDate.HasValue == true && _dealer.FinalApprovalDate.Value != DateTime.MinValue ? _dealer.FinalApprovalDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Settlement Date</div><div class="data-value">@(_dealer?.SettlementDate.HasValue == true && _dealer.SettlementDate.Value != DateTime.MinValue ? _dealer.SettlementDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Settlement Amount</div><div class="data-value">₹@(_dealer?.SettlementAmount.ToString("N2") ?? "0")</div></div>
+                @if (_isTerminatedRestricted)
+                {
+                    <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-activity"></i> Terminated Status</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="EditRegister" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Final Amount Settled</div><div class="data-value">@(_dealer != null ? (_dealer.IsFinalAmountSettled.HasValue && _dealer.IsFinalAmountSettled.Value ? "Yes" : "No") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Final Approval Date</div><div class="data-value">@(_dealer?.FinalApprovalDate.HasValue == true && _dealer.FinalApprovalDate.Value != DateTime.MinValue ? _dealer.FinalApprovalDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Settlement Date</div><div class="data-value">@(_dealer?.SettlementDate.HasValue == true && _dealer.SettlementDate.Value != DateTime.MinValue ? _dealer.SettlementDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Settlement Amount</div><div class="data-value">₹@(_dealer?.SettlementAmount.ToString("N2") ?? "0")</div></div>
+                            </div>
                         </div>
                     </div>
-                </div>
- *@                <div class="col-md-6">
+                }
+
+                @if (_dealer?.Status == DR.DealerStatus.InActive)
+                {
+                    <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-pause-circle"></i> Inactive Status</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="EditRegister" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Last Transaction Date</div><div class="data-value">@(_dealer?.LastTransactionDate?.ToString("dd MMM yyyy") ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Is Last Transaction a Sale?</div><div class="data-value">@(_dealer?.IsLastTransactionIsSale == true ? "Yes" : "No")</div></div>
+                                <div class="data-row"><div class="data-label">Debtor Balance</div><div class="data-value">₹@(_dealer?.DebitorBalance.ToString("N2") ?? "0")</div></div>
+                                <div class="data-row"><div class="data-label">Future Business Proposal</div><div class="data-value">@GetInactiveProposalDisplay()</div></div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
                             <h4 class="detail-card-title"><i class="bi bi-briefcase"></i> Business Information</h4>
@@ -1904,8 +1962,11 @@ private async Task ApproveDealer()
                                 <div class="data-row"><div class="data-label">Date of Appointment (Greenstar)</div><div class="data-value">@(_dealer?.GreenstarDateOfAppointment?.ToString("dd MMM yyyy") ?? "-")</div></div>
                             }
                             @* <div class="data-row"><div class="data-label">Business Type</div><div class="data-value">@(_dealer?.BusinessEntityType ?? "-")</div></div> *@
-                            <div class="data-row"><div class="data-label">Years of Experience</div><div class="data-value">@(_dealer?.YearsofExperiance > 0 ? $"{_dealer.YearsofExperiance} Years" : "-")</div></div>
-                            <div class="data-row"><div class="data-label">Entity Type</div><div class="data-value">@GetEntityTypeName(_dealer?.EntityType)</div></div>                        </div>
+                            @if (_showBusinessInfo)
+                            {
+                                <div class="data-row"><div class="data-label">Years of Experience</div><div class="data-value">@(_dealer?.YearsofExperiance > 0 ? $"{_dealer.YearsofExperiance} Years" : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Entity Type</div><div class="data-value">@GetEntityTypeName(_dealer?.EntityType)</div></div>                        
+                            }</div>
                     </div>
                 </div>
 @*                 <div class="col-md-6">
@@ -1923,6 +1984,8 @@ private async Task ApproveDealer()
                     </div>
                 </div>
  *@
+                @if (!_isTerminatedRestricted)
+                {
                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
@@ -2023,10 +2086,13 @@ private async Task ApproveDealer()
                         </div>
                     </div>
                 </div>
+                }
             </div>
         </div>
     </div>
 
+    @if (_showBusinessInfo)
+    {
     <div class="custom-accordion @(IsExperienceOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsExperienceOpen = !IsExperienceOpen">
             Experience In Fertilizer Trade
@@ -2248,6 +2314,9 @@ private async Task ApproveDealer()
         </div>
     </div>
 
+    }
+    @if (_showProprietorAndInvestment)
+    {
     <div class="custom-accordion @(IsProprietorDetailsOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsProprietorDetailsOpen = !IsProprietorDetailsOpen">
             Proprietor Details
@@ -2367,6 +2436,9 @@ private async Task ApproveDealer()
         </div>
     </div>
            
+    }
+    @if (_showBusinessInfo)
+    {
     <div class="custom-accordion @(IsCompaniesOperatingOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsCompaniesOperatingOpen = !IsCompaniesOperatingOpen">
             Companies Operating In Your Place
@@ -2482,6 +2554,9 @@ private async Task ApproveDealer()
         </div>
     </div>
 
+    }
+    @if (_showProprietorAndInvestment)
+    {
     <div class="custom-accordion @(IsInvestmentOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsInvestmentOpen = !IsInvestmentOpen">
             Investment
@@ -2662,6 +2737,9 @@ private async Task ApproveDealer()
         </div>
     </div>
 
+    }
+    @if (_showBusinessInfo)
+    {
     <div class="custom-accordion @(IsCreditLimitOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsCreditLimitOpen = !IsCreditLimitOpen">
             Credit Limit Proposal
@@ -3111,7 +3189,7 @@ private async Task ApproveDealer()
                         </div>
                     </div> *@
 
-                    @if (_creditSales != null && _creditSales.Any())
+                    @if (_dealer?.Status != DR.DealerStatus.InActive && _creditSales != null && _creditSales.Any())
                     {
                         <div class="col-12">
                             <div class="detail-card">
@@ -3170,6 +3248,7 @@ private async Task ApproveDealer()
         </div>
     </div>
 
+    }
     <div class="custom-accordion @(IsEnclosuresOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsEnclosuresOpen = !IsEnclosuresOpen">
             Enclosures 
