@@ -78,6 +78,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<TxnType> TxnTypes { get; set; }
         public DbSet<AckThrough> AckThroughs { get; set; }
         public DbSet<StateGlobalStockReconciliation> StateGlobalStockReconciliations { get; set; }
+        public DbSet<WarehouseDistrictGlobalStockReconciliation> WarehouseDistrictGlobalStockReconciliations { get; set; }
 
         // Dealer Registration Sub-Entities
         public DbSet<DealerExperience> DealerExperiences { get; set; }
