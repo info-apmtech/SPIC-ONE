@@ -200,14 +200,13 @@ namespace SPIC.Core.Entities
         public string? InvoiceNo { get; set; }
         public DateTime? InvoiceDate { get; set; }
 
-        public string? Marketer { get; set; }
-        public string? Manufacturer { get; set; }
+        public int? MarketerId { get; set; }
+        public int? ManufacturerId { get; set; }
         public int? PlantId { get; set; }
 
-        public string? DealerId { get; set; }
         public string? DealerName { get; set; }
         public int? DealerTypeId { get; set; }
-        public string? DealershipNature { get; set; }
+        public int? DealershipNatureId { get; set; }
         public string? MobileNo { get; set; }
 
         public int? DealerRegistrationId { get; set; }
@@ -230,7 +229,7 @@ namespace SPIC.Core.Entities
         public int? StatusId { get; set; }
         public DateTime? EntryDate { get; set; }
         public DateTime? LockDate { get; set; }
-        public string? AckThrough { get; set; }
+        public int? AckThroughId { get; set; }
         public string? TxnRemark { get; set; }
 
         public string? SubsidyMonth1 { get; set; }

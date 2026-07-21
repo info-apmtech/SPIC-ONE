@@ -30,6 +30,8 @@ namespace Spic.Infrastructure.Services
 
             var requiredCols = categoryId == "One" 
                 ? new[] { "statename", "districtname", "retailerid", "retailername" }
+                : categoryId == "Two"
+                ? new[] { "transactionid", "invoiceno", "dealername" }
                 : categoryId == "Three"
                 ? new[] { "company", "plant", "product", "state", "district", "agencyname" }
                 : categoryId == "Four"
@@ -39,6 +41,7 @@ namespace Spic.Infrastructure.Services
             bool IsHeaderRow(List<string> rowValues)
             {
                 if (categoryId == "One") return rowValues.Contains("statename") && rowValues.Contains("retailerid");
+                if (categoryId == "Two") return rowValues.Contains("transactionid") && rowValues.Contains("dealername");
                 if (categoryId == "Three") return rowValues.Contains("serialnumber") && rowValues.Contains("agencyname");
                 if (categoryId == "Four") return rowValues.Contains("transactionid") && rowValues.Contains("marketer");
                 return rowValues.Contains("state") && rowValues.Contains("dealerid");
@@ -210,12 +213,12 @@ namespace Spic.Infrastructure.Services
                     var stateStr = categoryId == "One" ? GetCell(row, "statename") : GetCell(row, "state");
                     var districtStr = categoryId == "One" ? GetCell(row, "districtname") : GetCell(row, "district");
                     var dealerIdStr = categoryId == "One" ? GetCell(row, "retailerid") : GetCell(row, "dealerid");
-                    var agencyNameStr = categoryId == "One" ? GetCell(row, "retailername") : GetCell(row, "agencyname");
+                    var agencyNameStr = categoryId == "One" ? GetCell(row, "retailername") : categoryId == "Two" ? GetCell(row, "dealername") : GetCell(row, "agencyname");
                     var dealerTypeStr = categoryId == "One" ? "" : GetCell(row, "dealertype");
                     var natureStr = categoryId == "Three" ? GetCell(row, "dealernature") : GetCell(row, "dealershipnature");
-                    var companyStr = categoryId == "Four" ? GetCell(row, "manufacturer") : GetCell(row, "company");
+                    var companyStr = (categoryId == "Four" || categoryId == "Two") ? GetCell(row, "manufacturer") : GetCell(row, "company");
                     var plantStr = GetCell(row, "plant");
-                    var productStr = categoryId == "Four" ? GetCell(row, "companyproduct") : GetCell(row, "product");
+                    var productStr = (categoryId == "Four" || categoryId == "Two") ? GetCell(row, "companyproduct") : GetCell(row, "product");
 
                     if (string.IsNullOrEmpty(stateStr) && string.IsNullOrEmpty(districtStr) && string.IsNullOrEmpty(dealerIdStr) && string.IsNullOrEmpty(agencyNameStr))
                     {
@@ -756,6 +759,131 @@ namespace Spic.Infrastructure.Services
                         };
 
                         _db.SalesWholesalers.Add(salesWholesaler);
+                        result.RowsInserted++;
+                    }
+                    else if (categoryId == "Two")
+                    {
+                        var marketerStr = GetCell(row, "marketer");
+                        var ackThroughStr = GetCell(row, "ackthrough");
+                        var unitStr = GetCell(row, "unit");
+                        var statusStr = GetCell(row, "status");
+                        var txnTypeStr = GetCell(row, "txntype");
+                        
+                        int? marketerId = null;
+                        if (!string.IsNullOrEmpty(marketerStr))
+                        {
+                            var key = marketerStr.ToLowerInvariant();
+                            if (!companyDict.TryGetValue(key, out var id))
+                            {
+                                var newComp = new Company { Name = marketerStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
+                                _db.Companies.Add(newComp);
+                                await _db.SaveChangesAsync();
+                                id = newComp.Id;
+                                companyDict[key] = id;
+                            }
+                            marketerId = id;
+                        }
+
+                        int? ackThroughId = null;
+                        if (!string.IsNullOrEmpty(ackThroughStr))
+                        {
+                            var key = ackThroughStr.ToLowerInvariant();
+                            if (!ackThroughDict.TryGetValue(key, out var id))
+                            {
+                                var newAck = new AckThrough { Name = ackThroughStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
+                                _db.AckThroughs.Add(newAck);
+                                await _db.SaveChangesAsync();
+                                id = newAck.Id;
+                                ackThroughDict[key] = id;
+                            }
+                            ackThroughId = id;
+                        }
+
+                        int? unitId = null;
+                        if (!string.IsNullOrEmpty(unitStr))
+                        {
+                            var key = unitStr.ToLowerInvariant();
+                            if (!unitDict.TryGetValue(key, out var id))
+                            {
+                                var newU = new Unit { Name = unitStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
+                                _db.Units.Add(newU);
+                                await _db.SaveChangesAsync();
+                                id = newU.Id;
+                                unitDict[key] = id;
+                            }
+                            unitId = id;
+                        }
+
+                        int? statusId = null;
+                        if (!string.IsNullOrEmpty(statusStr))
+                        {
+                            var key = statusStr.ToLowerInvariant();
+                            if (!statusDict.TryGetValue(key, out var id))
+                            {
+                                var newS = new Status { Name = statusStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
+                                _db.Statuses.Add(newS);
+                                await _db.SaveChangesAsync();
+                                id = newS.Id;
+                                statusDict[key] = id;
+                            }
+                            statusId = id;
+                        }
+
+                        DateTime.TryParse(GetCell(row, "invoicedate"), out var invDate);
+                        DateTime.TryParse(GetCell(row, "entrydate"), out var entDate);
+                        DateTime.TryParse(GetCell(row, "lockdate"), out var lckDate);
+                        DateTime.TryParse(GetCell(row, "retailerreceiptdate"), out var rrDate);
+
+                        decimal.TryParse(GetCell(row, "quantity"), out var qty);
+                        decimal.TryParse(GetCell(row, "quantity(mt)"), out var qtymt);
+                        decimal.TryParse(GetCell(row, "receivedquantity"), out var recvQty);
+                        decimal.TryParse(GetCell(row, "month1qty"), out var m1qty);
+                        decimal.TryParse(GetCell(row, "month2qty"), out var m2qty);
+                        decimal.TryParse(GetCell(row, "lorrycapacity"), out var lorryCap);
+
+                        var salesCompany = new SalesCompanySale
+                        {
+                            TransactionId = GetCell(row, "transactionid"),
+                            InvoiceNo = GetCell(row, "invoiceno"),
+                            InvoiceDate = invDate == default ? null : invDate.ToUniversalTime(),
+                            MarketerId = marketerId,
+                            ManufacturerId = companyId,
+                            PlantId = plantId,
+                            DealerName = agencyNameStr,
+                            DealerTypeId = dealerTypeId,
+                            DealershipNatureId = natureId,
+                            MobileNo = GetCell(row, "mobileno"),
+                            DealerRegistrationId = dealerRegistrationId,
+                            IfmsDealerId = ifmsDealerId,
+                            StateId = stateId,
+                            DistrictId = districtId,
+                            ProductId = productId,
+                            UnitId = unitId,
+                            Quantity = qty,
+                            QuantityMT = qtymt,
+                            ReceivedQuantity = recvQty,
+                            StatusId = statusId,
+                            EntryDate = entDate == default ? null : entDate.ToUniversalTime(),
+                            LockDate = lckDate == default ? null : lckDate.ToUniversalTime(),
+                            AckThroughId = ackThroughId,
+                            TxnRemark = GetCell(row, "txnremark"),
+                            SubsidyMonth1 = GetCell(row, "subsidymonth1"),
+                            SubsidyYear1 = GetCell(row, "subsidyyear1"),
+                            Month1Qty = m1qty,
+                            SubsidyMonth2 = GetCell(row, "subsidymonth2"),
+                            SubsidyYear2 = GetCell(row, "subsidyyear2"),
+                            Month2Qty = m2qty,
+                            ChallanNo = GetCell(row, "challanno."),
+                            DdNo = GetCell(row, "ddno."),
+                            LorryNo = GetCell(row, "lorryno."),
+                            LorryCapacity = lorryCap,
+                            RetailerReceiptDate = rrDate == default ? null : rrDate.ToUniversalTime(),
+                            CreatedAt = now,
+                            UpdatedAt = now,
+                            UpdatedBy = currentUserId
+                        };
+
+                        _db.SalesCompanySales.Add(salesCompany);
                         result.RowsInserted++;
                     }
                 }

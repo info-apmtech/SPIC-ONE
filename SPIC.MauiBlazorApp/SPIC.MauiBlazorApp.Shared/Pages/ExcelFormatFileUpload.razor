@@ -236,8 +236,8 @@
             return;
         }
 
-        // For now, only Wholesale Stock (Five), DPT Report (One), Sales and Receipt (Three), and Sales Wholesalers (Four) are implemented
-        if (categoryId != "Five" && categoryId != "One" && categoryId != "Three" && categoryId != "Four")
+        // For now, Wholesale Stock (Five), DPT Report (One), Sales and Receipt (Three), Sales Wholesalers (Four), and Sales Company Sales (Two) are implemented
+        if (categoryId != "Five" && categoryId != "One" && categoryId != "Three" && categoryId != "Four" && categoryId != "Two")
         {
             await JS.InvokeVoidAsync("alert", "This category upload is not implemented yet.");
             return;
@@ -259,8 +259,9 @@
 
             try 
             {
-                var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var parsed = System.Text.Json.JsonSerializer.Deserialize<UploadResult>(result, options);
+                var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true, AllowTrailingCommas = true };
+                var cleanResult = result.Trim('\uFEFF', '\u200B'); // Remove BOM if present
+                var parsed = System.Text.Json.JsonSerializer.Deserialize<UploadResult>(cleanResult, options);
                 
                 if (response.IsSuccessStatusCode && parsed != null && parsed.Success)
                 {
@@ -286,23 +287,30 @@
                     await JS.InvokeVoidAsync("alert", $"Upload Failed:\n{parsed?.Message ?? result}");
                 }
             }
-            catch
+            catch (Exception parseEx)
             {
                 // Fallback if parsing fails
                 if (response.IsSuccessStatusCode)
                 {
-                    await JS.InvokeVoidAsync("alert", "Upload Successful!\n" + result);
+                    await JS.InvokeVoidAsync("alert", $"Upload Successful (Parse Error: {parseEx.Message})!\n" + result);
                     selectedFiles.Remove(categoryId);
                 }
                 else
                 {
-                    await JS.InvokeVoidAsync("alert", "Upload Failed:\n" + result);
+                    await JS.InvokeVoidAsync("alert", $"Upload Failed (Parse Error: {parseEx.Message}):\n" + result);
                 }
             }
         }
+        catch (System.Threading.Tasks.TaskCanceledException)
+        {
+            // Ignore TaskCanceledException (usually happens when alert dialog times out in Blazor Server)
+        }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("alert", "Error during upload: " + ex.Message);
+            if (ex is not System.Threading.Tasks.TaskCanceledException)
+            {
+                await JS.InvokeVoidAsync("alert", "Error during upload: " + ex.Message);
+            }
         }
         finally
         {
