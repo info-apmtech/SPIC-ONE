@@ -1144,13 +1144,25 @@
 	private async Task SelectEntityType(EntityType et)
 	{
 		_selectedEntityType = et;
+		if (DealerId <= 0)
+		{
+			ShowMessage("Dealer ID is missing. Please complete Step 1 first.", true);
+			return;
+		}
 		try
 		{
 			var resp = await Http.PutAsync($"api/DealerRegistration/{DealerId}/entity-type/{(int)et}", null);
 			if (!resp.IsSuccessStatusCode)
 			{
-				var err = await resp.Content.ReadAsStringAsync();
-				ShowMessage($"Failed to save entity type: {err}", true);
+				if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+				{
+					ShowMessage("Dealer registration not found. Please complete Step 1 first.", true);
+				}
+				else
+				{
+					var err = await resp.Content.ReadAsStringAsync();
+					ShowMessage($"Failed to save entity type: {err}", true);
+				}
 			}
 		}
 		catch (Exception ex)
@@ -1426,6 +1438,9 @@
 	private async Task SavePartnerDetails()
 	{
 		var validationErrors = new List<string>();
+
+		if (DealerId <= 0)
+			validationErrors.Add("• <b>Dealer ID</b> is missing. Please complete Step 1 first.");
 
 		if (string.IsNullOrWhiteSpace(_partnerForm.Name))
 			validationErrors.Add("• <b>Authorized Name</b> is required.");
