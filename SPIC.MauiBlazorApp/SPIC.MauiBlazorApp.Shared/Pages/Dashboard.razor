@@ -90,7 +90,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-gray"><i class="bi bi-file-earmark-text"></i></div>
-                    <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && GetApprovalStatus(d) == "Draft")</div>
+                    <div class="kpi-number">@CountDraft()</div>
                 </div>
                 <div class="kpi-label">Draft</div>
             </div>
@@ -99,7 +99,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                   <div class="kpi-number">@_filteredDealers.Count(d => d.IsSubmittedForReview == true && ((d.RMApproved == null) || (d.RMApproved == true && d.SMApproved == false)))</div>
+                   <div class="kpi-number">@CountInRM()</div>
                 </div>
                 <div class="kpi-label">In RM</div>
             </div>
@@ -108,7 +108,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                  <div class="kpi-number">@_filteredDealers.Count(d => ((_completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == null) || (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false)))</div>
+                  <div class="kpi-number">@CountInSMM()</div>
                 </div>
                 <div class="kpi-label">In SMM</div>
             </div>
@@ -117,7 +117,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                  <div class="kpi-number">@_filteredDealers.Count(d => _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)</div>
+                  <div class="kpi-number">@CountInAVP()</div>
                 </div>
                 <div class="kpi-label">In AVP</div>
             </div>
@@ -126,7 +126,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-green"><i class="bi bi-check-circle"></i></div>
-                   <div class="kpi-number">@_filteredDealers.Count(d => d.AVPApproved == true)</div>
+                   <div class="kpi-number">@CountApproved()</div>
                 </div>
                 <div class="kpi-label">Approved</div>
             </div>
@@ -273,27 +273,22 @@
                             <div class="d-flex flex-column align-items-end gap-2 card-top-right">
                                 <div class="badge-group align-items-center">
 
-                                    @{
-                                        var isSubmittedForReview = dealer.IsSubmittedForReview == true;
-                                        var isDraftDealer = dealer.IsSubmittedForReview != true;
-                                        var isApprovedDealer = dealer.AVPApproved == true;
-                                        var isRejectedDealer = dealer.RMApproved == false || dealer.SMApproved == false || dealer.AVPApproved == false;
-                                        var canEditDealer = LoginState.Can("Dashboard", "Update");
-                                    }
-
-                                    @if (canEditDealer && isDraftDealer)
+                                    @* ── Action button routing ──
+                                       Edit   → only for the MO/creator level:
+                                                  • Draft
+                                                  • Rejected by RM  (routed back down to the MO)
+                                       Review → for the approver who currently owns the record:
+                                                  • In RM  / Rejected by SMM  → RM
+                                                  • In SMM / Rejected by AVP  → SMM
+                                                  • In AVP                    → AVP
+                                    *@
+                                    @if (ShowEditButton(dealer))
                                     {
                                         <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
                                             <i class="bi bi-pencil-square me-1"></i> Edit
                                         </button>
                                     }
-                                    else if (canEditDealer && isRejectedDealer && !isApprovedDealer)
-                                    {
-                                        <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
-                                            <i class="bi bi-pencil-square me-1"></i> Edit
-                                        </button>
-                                    }
-                                    else if (isSubmittedForReview && CanShowReviewButton(dealer) && approvalStatus != "Approved")
+                                    else if (CanShowReviewButton(dealer))
                                     {
                                         <button class="btn-continue-blue" @onclick="() => ReviewDealer(dealer.Id)">
                                             <i class="bi bi-search me-1"></i> Review
@@ -917,6 +912,35 @@
     private int CountRejectedBySMM() => _filteredDealers.Count(d => d.SMApproved == false);
     private int CountRejectedByAVP() => _filteredDealers.Count(d => d.AVPApproved == false);
 
+    // ── Stage counts for the KPI cards ──
+    // Driven purely by the approval flags (same logic as GetApprovalStatus) so
+    // they never silently read 0 when the completion-counts endpoint is stale
+    // or fails. Rejections are folded into the level they route back down to,
+    // matching the "In RM / In SMM" card semantics.
+    private int CountDraft() =>
+        _filteredDealers.Count(d => d.Status != 2 && GetApprovalStatus(d) == "Draft");
+
+    private int CountInRM() =>
+        _filteredDealers.Count(d =>
+        {
+            var s = GetApprovalStatus(d);
+            return s == "In RM" || s == "Rejected by SMM";
+        });
+
+    private int CountInSMM() =>
+        _filteredDealers.Count(d =>
+        {
+            var s = GetApprovalStatus(d);
+            return s == "In SMM" || s == "Rejected by AVP";
+        });
+
+    private int CountInAVP() =>
+        _filteredDealers.Count(d => GetApprovalStatus(d) == "In AVP");
+
+    // AVP-approved = fully approved dealers.
+    private int CountApproved() =>
+        _filteredDealers.Count(d => d.AVPApproved == true);
+
     private string GetApprovalStatus(DealerDto d)
     {
         // Nothing counts as "in review" until the user explicitly clicked Submit Registration
@@ -933,44 +957,94 @@
         return "Submitted";
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Ownership / routing — WHO currently owns the record and must act on it.
+    //  This is the single source of truth for which button (Edit vs Review) is
+    //  shown, and does NOT alter the approval/rejection workflow itself.
+    //
+    //  Draft                → MO  (creator edits)
+    //  Rejected by RM       → MO  (routed back down to the creator)
+    //  In RM  / Rej. by SMM → RM  (RM reviews & corrects, or sends back to MO)
+    //  In SMM / Rej. by AVP → SMM (SMM reviews & corrects, or sends back to RM)
+    //  In AVP               → AVP
+    //  Approved             → None
+    // ─────────────────────────────────────────────────────────────────────────
+    private enum OwnerLevel { None, MO, RM, SMM, AVP }
+
+    private OwnerLevel GetCurrentOwnerLevel(DealerDto d)
+    {
+        if (d == null) return OwnerLevel.None;
+
+        // Never submitted → still a draft owned by the MO/creator.
+        if (d.IsSubmittedForReview != true) return OwnerLevel.MO;
+
+        // Fully approved → nobody needs to act.
+        if (d.AVPApproved == true) return OwnerLevel.None;
+
+        // Rejections route BACK DOWN one level (order matters: match GetApprovalStatus).
+        if (d.RMApproved == false) return OwnerLevel.MO;   // Rejected by RM  → MO
+        if (d.SMApproved == false) return OwnerLevel.RM;   // Rejected by SMM → RM
+        if (d.AVPApproved == false) return OwnerLevel.SMM; // Rejected by AVP → SMM
+
+        // Normal forward flow.
+        if (d.RMApproved == null) return OwnerLevel.RM;                                   // In RM
+        if (d.RMApproved == true && d.SMApproved == null) return OwnerLevel.SMM;          // In SMM
+        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return OwnerLevel.AVP; // In AVP
+
+        return OwnerLevel.None;
+    }
+
+    // Edit (full re-registration) is ONLY for the MO/creator level:
+    //   • Draft
+    //   • Rejected by RM  (came back down to the MO)
+    // For SMM/AVP rejections the record is owned by RM/SMM respectively, so
+    // those approvers get the Review button instead — never a raw Edit.
+    private bool ShowEditButton(DealerDto d)
+    {
+        if (d == null) return false;
+        if (!LoginState.Can("Dashboard", "Update")) return false;
+
+        // Edit is only for MO-level records (Draft or Rejected-by-RM) and only
+        // for the maker who owns them — the actual creator or an MO-type role.
+        if (GetCurrentOwnerLevel(d) != OwnerLevel.MO) return false;
+
+        return IsCreatorLevelUser(d);
+    }
+
+    // The maker/creator who owns MO-level records: the user who created the
+    // registration, or an MO / MDO / JMDO role (already scoped to their HQ by
+    // ApplyRoleFilter). Approver roles (RM / SMM / AVP) are NOT creators, so a
+    // draft never shows "Action Required" or Edit to them.
+    private bool IsCreatorLevelUser(DealerDto d)
+    {
+        if (d == null) return false;
+
+        if (!string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy)
+            return true;
+
+        return LoginState.UserRole == AppRole.MO
+            || LoginState.UserRole == AppRole.MDO
+            || LoginState.UserRole == AppRole.JMDO;
+    }
+
+    // "Action Required" lights up only for the exact role that currently owns
+    // the record at its stage:
+    //   Draft   (owner MO)  → MO / creator only
+    //   In RM   (owner RM)  → RM role only
+    //   In SMM  (owner SMM) → SMM role only
+    //   In AVP  (owner AVP) → AVP role only
+    // (Rejections route the ownership back down one level, so the correcting
+    //  role sees "Action Required" there too.)
     private bool IsPendingForMe(DealerDto d)
     {
-
-        var status = GetApprovalStatus(d);
-
-        var showForRejected = false;
-        if (!string.IsNullOrEmpty(status) && status.StartsWith("Rejected"))
+        return GetCurrentOwnerLevel(d) switch
         {
-            if (LoginState.IsRegionRole && d.RMApproved == true && d.SMApproved == false) showForRejected = true;
-            if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false) showForRejected = true;
-        }
-
-      if (d.IsSubmittedForReview != true && !showForRejected) return false;
-        if (d.AVPApproved == true) return false;
-
-        if (LoginState.IsRegionRole)
-        {
-            if (d.RMApproved == null) return true;
-            if (d.RMApproved == true && d.SMApproved == false) return true;
-            if (showForRejected) return true;
-            return false;
-        }
-
-        if (LoginState.IsStateRole)
-        {
-            if (d.RMApproved == true && d.SMApproved == null) return true;
-            if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false) return true;
-            if (showForRejected) return true;
-            return false;
-        }
-
-        if (LoginState.IsAdmin)
-        {
-            if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return true;
-            return false;
-        }
-
-        return false;
+            OwnerLevel.MO  => IsCreatorLevelUser(d),
+            OwnerLevel.RM  => LoginState.IsRegionRole,
+            OwnerLevel.SMM => LoginState.IsStateRole,
+            OwnerLevel.AVP => LoginState.IsAdmin,
+            _              => false
+        };
     }
 
     private void ApplyFilters()
@@ -1350,29 +1424,26 @@ private string GetStatusName(int status) => status switch
         _showDeleteConfirm = true;
     }
 
+    // Review (SavedDealerReview page) is shown to the approver who currently owns
+    // the record. This includes the "back down" rejection cases:
+    //   • Rejected by SMM → owned by RM  → RM sees Review (corrects, then forwards
+    //                                       again or sends back down to the MO)
+    //   • Rejected by AVP → owned by SMM → SMM sees Review
+    // The approval/rejection workflow itself is untouched — this only decides
+    // button visibility.
     private bool CanShowReviewButton(DealerDto d)
     {
         if (d == null) return false;
-        if (LoginState.IsHQCreatorRole) return false;
+        if (d.IsSubmittedForReview != true) return false; // drafts are never "reviewed"
+        if (LoginState.IsHQCreatorRole) return false;      // creators edit, they don't review
 
-        var status = GetApprovalStatus(d);
-
-        var showForRejected = false;
-        if (!string.IsNullOrEmpty(status) && status.StartsWith("Rejected"))
+        return GetCurrentOwnerLevel(d) switch
         {
-            if (LoginState.IsRegionRole && d.RMApproved == true && d.SMApproved == false) showForRejected = true;
-            if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false) showForRejected = true;
-        }
-
-       if (d.IsSubmittedForReview != true && !showForRejected && !(status != null && status.StartsWith("Rejected"))) return false;
-
-        if (!(status == "In RM" || status == "In SMM" || status == "In AVP" || showForRejected || (status != null && status.StartsWith("Rejected")))) return false;
-
-        if (LoginState.IsReviewerRole) return true;
-        if (LoginState.IsHQCreatorRole) return !string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy;
-        if (!string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy) return true;
-
-        return false;
+            OwnerLevel.RM  => LoginState.IsRegionRole,
+            OwnerLevel.SMM => LoginState.IsStateRole,
+            OwnerLevel.AVP => LoginState.IsAdmin,
+            _              => false   // MO / None → no Review button
+        };
     }
 
     private void CancelDelete()

@@ -1001,7 +1001,25 @@
 
         try
         {
-            if (_dealer.RMApproved == false || _dealer.SMApproved == false || _dealer.AVPApproved == false)
+            // ── Resubmission after a rejection ──
+            // Clear ONLY the flag for the level that rejected, so the application
+            // re-enters the approval flow at exactly that same stage rather than
+            // staying stuck as "Rejected by RM/SMM/AVP". Lower-level approvals are
+            // preserved, so "continue from the stage where it was rejected" holds:
+            //   • Rejected by RM  → RMApproved = null  → back into the RM queue
+            //   • Rejected by SMM → SMApproved = null  → back into the SMM queue (RM kept)
+            //   • Rejected by AVP → AVPApproved = null → back into the AVP queue (RM & SM kept)
+            // The approval/rejection workflow itself is untouched.
+            if (_dealer.AVPApproved == false)
+            {
+                _dealer.AVPApproved = null;
+            }
+            else if (_dealer.SMApproved == false)
+            {
+                _dealer.SMApproved = null;
+                _dealer.AVPApproved = null;
+            }
+            else if (_dealer.RMApproved == false)
             {
                 _dealer.RMApproved = null;
                 _dealer.SMApproved = null;
@@ -1012,8 +1030,9 @@
             {
                 _dealer.Status = DealerStatus.Active;
             }
-            _dealer.IsSubmittedForReview = true; // Only true from here — this is the explicit "Submit Registration" click
+           _dealer.IsSubmittedForReview = true; // Only true from here — this is the explicit "Submit Registration" click
 
+            Console.WriteLine($"[Resubmit] Id={_dealer.Id} RM={_dealer.RMApproved} SM={_dealer.SMApproved} AVP={_dealer.AVPApproved}");
             var resp = await Http.PutAsJsonAsync($"api/DealerRegistration/{_dealer.Id}", _dealer);
             resp.EnsureSuccessStatusCode();
 
