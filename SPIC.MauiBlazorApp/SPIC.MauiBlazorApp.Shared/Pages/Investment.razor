@@ -1067,7 +1067,12 @@
             // continue to CreditLimit and must NOT be marked submitted here.
             var isRestricted = string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase);
             if (isRestricted)
+            {
                 _dealer.IsSubmittedForReview = true;
+                if (_dealer.AVPApproved == false) _dealer.AVPApproved = null;
+                else if (_dealer.SMApproved == false) { _dealer.SMApproved = null; _dealer.AVPApproved = null; }
+                else if (_dealer.RMApproved == false) { _dealer.RMApproved = null; _dealer.SMApproved = null; _dealer.AVPApproved = null; }
+            }
 
             var response = await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", _dealer);
             response.EnsureSuccessStatusCode();
