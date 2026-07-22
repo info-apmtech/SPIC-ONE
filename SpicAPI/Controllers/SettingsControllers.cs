@@ -42,4 +42,7 @@ namespace SpicAPI.Controllers
 
     [Route("api/[controller]")]
     public class RelationshipController(IGenericRepository<Relationship> repo) : GenericCrudController<Relationship>(repo);
+
+    [Route("api/[controller]")]
+    public class LyingWithMasterController(IGenericRepository<LyingWithMaster> repo) : GenericCrudController<LyingWithMaster>(repo);
 }

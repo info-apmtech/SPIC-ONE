@@ -35,6 +35,15 @@ namespace Spic.Infrastructure.Data
                 .WithMany()
                 .HasForeignKey(u => u.DesignationId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Seed LyingWithMaster
+            var staticDate = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            builder.Entity<LyingWithMaster>().HasData(
+                new LyingWithMaster { Id = 1, Name = "Retailer", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" },
+                new LyingWithMaster { Id = 2, Name = "Wholesaler", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" },
+                new LyingWithMaster { Id = 3, Name = "Rake Point", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" },
+                new LyingWithMaster { Id = 4, Name = "Warehouse", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" }
+            );
         }
 
         // User related
@@ -57,6 +66,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<ProductGroup> ProductGroups { get; set; }
         public DbSet<Product> Products { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
+        public DbSet<LyingWithMaster> LyingWithMasters { get; set; }
 
         public DbSet<SalesWholesaler> SalesWholesalers { get; set; }
         public DbSet<SalesAndReceipt> SalesAndReceipts { get; set; }
