@@ -34,38 +34,6 @@ namespace SPIC.Core.Entities
         public string UpdatedBy { get; set; }
     }
 
-    public class StateWiseGlobalStockReconciliation
-    {
-        [Key]
-        public int Id { get; set; }
-
-        public int? StateId { get; set; }
-
-        public decimal OpeningStock { get; set; }
-
-        public decimal OpeningGIT { get; set; }
-
-        public decimal ProductionImports { get; set; }
-
-        public decimal Receipt { get; set; }
-
-        public decimal Dispatches { get; set; }
-
-        public decimal Sales { get; set; }
-
-        public decimal SalesReturn { get; set; }
-
-        public decimal StockAdjustment { get; set; }
-
-        public decimal ClosingGIT { get; set; }
-
-        public decimal ClosingStock { get; set; }
-
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
-        public string UpdatedBy { get; set; }
-    }
-
     public class SalesWholesaler
     {
         [Key]
@@ -75,13 +43,14 @@ namespace SPIC.Core.Entities
         public string? InvoiceNo { get; set; }
         public DateTime? InvoiceDate { get; set; }
 
-        public string? Marketer { get; set; }
-        public string? Manufacturer { get; set; }
+        public int? MarketerId { get; set; }
+        public int? ManufacturerId { get; set; }
         public int? PlantId { get; set; }
 
-        public string? WholesalerId { get; set; }
+        public int? WholesalerId { get; set; }
+        public int? IfmsWholesalerId { get; set; }
         public string? WholesalerAgencyName { get; set; }
-        public string? WholesalerNature { get; set; }
+        public int? WholesalerNatureId { get; set; }
 
         public int? StateId { get; set; }
 
@@ -89,14 +58,13 @@ namespace SPIC.Core.Entities
 
         public int? BuyerDistrictId { get; set; }
 
-        public string? DealerId { get; set; }
+        public int? DealerId { get; set; }
         public int? DealerTypeId { get; set; }
 
-        public int? DealerRegistrationId { get; set; }
         public int? IfmsDealerId { get; set; }
 
         public string? AgencyName { get; set; }
-        public string? DealerNature { get; set; }
+        public int? DealerNatureId { get; set; }
         public string? MobileNo { get; set; }
 
         public int? ProductId { get; set; }
@@ -110,12 +78,12 @@ namespace SPIC.Core.Entities
         public decimal ReceivedQuantityMT { get; set; }
 
         public int? StatusId { get; set; }
-        public string? TxnType { get; set; }
+        public int? TxnTypeId { get; set; }
 
         public DateTime? EntryDate { get; set; }
         public DateTime? LockDate { get; set; }
 
-        public string? AckThrough { get; set; }
+        public int? AckThroughId { get; set; }
         public string? TxnRemark { get; set; }
 
         public string? SubsidyMonth1 { get; set; }
@@ -143,7 +111,7 @@ namespace SPIC.Core.Entities
         [Key]
         public int Id { get; set; }
 
-        public string? Company { get; set; }
+        public int? CompanyId { get; set; }
         public int? PlantId { get; set; }
 
         public int? ProductId { get; set; }
@@ -152,8 +120,7 @@ namespace SPIC.Core.Entities
 
         public int? DistrictId { get; set; }
 
-        public string? DealerId { get; set; }
-        public string? DealerNature { get; set; }
+        public int? DealershipNatureId { get; set; }
         public string? AgencyName { get; set; }
 
         public int? DealerRegistrationId { get; set; }
@@ -201,14 +168,13 @@ namespace SPIC.Core.Entities
         public string? InvoiceNo { get; set; }
         public DateTime? InvoiceDate { get; set; }
 
-        public string? Marketer { get; set; }
-        public string? Manufacturer { get; set; }
+        public int? MarketerId { get; set; }
+        public int? ManufacturerId { get; set; }
         public int? PlantId { get; set; }
 
-        public string? DealerId { get; set; }
         public string? DealerName { get; set; }
         public int? DealerTypeId { get; set; }
-        public string? DealershipNature { get; set; }
+        public int? DealershipNatureId { get; set; }
         public string? MobileNo { get; set; }
 
         public int? DealerRegistrationId { get; set; }
@@ -231,7 +197,7 @@ namespace SPIC.Core.Entities
         public int? StatusId { get; set; }
         public DateTime? EntryDate { get; set; }
         public DateTime? LockDate { get; set; }
-        public string? AckThrough { get; set; }
+        public int? AckThroughId { get; set; }
         public string? TxnRemark { get; set; }
 
         public string? SubsidyMonth1 { get; set; }
@@ -288,6 +254,59 @@ namespace SPIC.Core.Entities
         public decimal Availability { get; set; }
 
         public decimal ClosingBalance { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string UpdatedBy { get; set; }
+    }
+    public class StateGlobalStockReconciliation
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public int? PlantId { get; set; }
+        public int? ProductId { get; set; }
+
+        public int? StateId { get; set; }
+
+        public decimal OpeningStock { get; set; }
+        public decimal OpeningGIT { get; set; }
+        public decimal ProductionImports { get; set; }
+        public decimal Receipt { get; set; }
+        public decimal Dispatches { get; set; }
+        public decimal Sales { get; set; }
+        public decimal SalesReturn { get; set; }
+        public decimal StockAdjustment { get; set; }
+        public decimal ClosingGIT { get; set; }
+        public decimal ClosingStock { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string UpdatedBy { get; set; }
+    }
+
+    public class WarehouseDistrictGlobalStockReconciliation
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public int? PlantId { get; set; }
+        public int? ProductId { get; set; }
+
+        public int? StateId { get; set; }
+        public int? DistrictId { get; set; }
+        public int? WarehouseId { get; set; }
+
+        public decimal OpeningStockAtLocation { get; set; }
+        public decimal OpeningStockGIT { get; set; }
+        public decimal ProductionImports { get; set; }
+        public decimal Receipt { get; set; }
+        public decimal Dispatches { get; set; }
+        public decimal Sales { get; set; }
+        public decimal SalesReturn { get; set; }
+        public decimal StockAdjustment { get; set; }
+        public decimal ClosingGIT { get; set; }
+        public decimal ClosingStock { get; set; }
 
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

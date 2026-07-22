@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260721073037_UpdateSalesWholesalersSchemaAckThrough")]
+    partial class UpdateSalesWholesalersSchemaAckThrough
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2306,8 +2309,8 @@ namespace Spic.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("AckThroughId")
-                        .HasColumnType("integer");
+                    b.Property<string>("AckThrough")
+                        .HasColumnType("text");
 
                     b.Property<string>("ChallanNo")
                         .HasColumnType("text");
@@ -2316,6 +2319,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("DdNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DealerId")
                         .HasColumnType("text");
 
                     b.Property<string>("DealerName")
@@ -2327,8 +2333,8 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("DealerTypeId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("DealershipNatureId")
-                        .HasColumnType("integer");
+                    b.Property<string>("DealershipNature")
+                        .HasColumnType("text");
 
                     b.Property<int?>("DistrictId")
                         .HasColumnType("integer");
@@ -2354,11 +2360,11 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("LorryNo")
                         .HasColumnType("text");
 
-                    b.Property<int?>("ManufacturerId")
-                        .HasColumnType("integer");
+                    b.Property<string>("Manufacturer")
+                        .HasColumnType("text");
 
-                    b.Property<int?>("MarketerId")
-                        .HasColumnType("integer");
+                    b.Property<string>("Marketer")
+                        .HasColumnType("text");
 
                     b.Property<string>("MobileNo")
                         .HasColumnType("text");
@@ -2731,7 +2737,7 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("States");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.StateGlobalStockReconciliation", b =>
+            modelBuilder.Entity("SPIC.Core.Entities.StateWiseGlobalStockReconciliation", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -2756,12 +2762,6 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<decimal>("OpeningStock")
                         .HasColumnType("numeric");
-
-                    b.Property<int?>("PlantId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ProductId")
-                        .HasColumnType("integer");
 
                     b.Property<decimal>("ProductionImports")
                         .HasColumnType("numeric");
@@ -2790,7 +2790,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("StateGlobalStockReconciliations");
+                    b.ToTable("StateWiseGlobalStockReconciliations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Status", b =>
@@ -3048,74 +3048,6 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Warehouses");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.WarehouseDistrictGlobalStockReconciliation", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("ClosingGIT")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("ClosingStock")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("Dispatches")
-                        .HasColumnType("numeric");
-
-                    b.Property<int?>("DistrictId")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("OpeningStockAtLocation")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("OpeningStockGIT")
-                        .HasColumnType("numeric");
-
-                    b.Property<int?>("PlantId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ProductId")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("ProductionImports")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("Receipt")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("Sales")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("SalesReturn")
-                        .HasColumnType("numeric");
-
-                    b.Property<int?>("StateId")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("StockAdjustment")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int?>("WarehouseId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("WarehouseDistrictGlobalStockReconciliations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.WholesalerStockAsOnToday", b =>
