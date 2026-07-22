@@ -26,11 +26,17 @@
     private bool _isInactiveTerminatedRestricted =>
         _dealer?.Status == DR.DealerStatus.InActive && _dealer?.InactiveProposal == DR.FutureBusinessProposal.Terminated && _dealer?.IsDealer == true;
 
+    private bool _isDepartmentDealer => 
+        _dealer?.DealerType == DR.RegistrationDealerType.Department;
+
     private bool _showBusinessInfo =>
-        !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isInactiveTerminatedRestricted;
+        !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isInactiveTerminatedRestricted && !_isDepartmentDealer;
 
     private bool _showProprietorAndInvestment =>
-        !_isTerminatedRestricted && !_isNotTraceableRestricted;
+        !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isDepartmentDealer;
+
+    private bool _showEnclosures =>
+        !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isInactiveTerminatedRestricted && !_isDepartmentDealer;
 
     // Related data
     private List<DR.DealerExperience> _experiences = new();
@@ -3249,6 +3255,8 @@ private async Task ApproveDealer()
     </div>
 
     }
+    @if (_showEnclosures)
+    {
     <div class="custom-accordion @(IsEnclosuresOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsEnclosuresOpen = !IsEnclosuresOpen">
             Enclosures 
@@ -3273,6 +3281,7 @@ private async Task ApproveDealer()
             </div>
         </div>
     </div>
+    }
 
 
 
