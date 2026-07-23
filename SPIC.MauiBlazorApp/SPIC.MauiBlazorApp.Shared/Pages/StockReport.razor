@@ -1,6 +1,8 @@
-﻿@page "/StockReport"
-
-
+@page "/StockReport"
+@implements IDisposable
+@inject HttpClient Http
+@inject IJSRuntime JS
+@using System.Text.Json
 
 <div class="spic-sr-container">
     
@@ -42,14 +44,58 @@
         
         <div class="sr-filter-body">
             <div class="sr-filter-grid">
-                <div class="sr-form-group"><label class="sr-form-label">State</label><select class="sr-form-select"><option>All State</option></select></div>
-                <div class="sr-form-group"><label class="sr-form-label">Region</label><select class="sr-form-select"><option>All Region</option></select></div>
-                <div class="sr-form-group"><label class="sr-form-label">Head Quarters</label><select class="sr-form-select"><option>All Head Quarters</option></select></div>
-                <div class="sr-form-group"><label class="sr-form-label">District</label><select class="sr-form-select"><option>All District</option></select></div>
-                <div class="sr-form-group"><label class="sr-form-label">Sub District</label><select class="sr-form-select"><option>All Sub Districts</option></select></div>
-                <div class="sr-form-group"><label class="sr-form-label">Lying With</label><select class="sr-form-select"><option>Select All</option></select></div>
-                <div class="sr-form-group"><label class="sr-form-label">Product</label><select class="sr-form-select"><option>All Products</option></select></div>
-                <div class="sr-form-group"><label class="sr-form-label">Ageing Range (Days)</label><select class="sr-form-select"><option>All Ranges</option></select></div>
+                <div class="sr-form-group">
+                    <label class="sr-form-label">State</label>
+                    <select id="state-select" class="sr-form-select" multiple="multiple">
+                        @foreach (var s in _states) { <option value="@s.Id" selected="@(_selectedStates.Contains(s.Id))">@s.Name</option> }
+                    </select>
+                </div>
+                <div class="sr-form-group">
+                    <label class="sr-form-label">Region</label>
+                    <select id="region-select" class="sr-form-select" multiple="multiple">
+                        @foreach (var r in _regions) { <option value="@r.Id" selected="@(_selectedRegions.Contains(r.Id))">@r.Name</option> }
+                    </select>
+                </div>
+                <div class="sr-form-group">
+                    <label class="sr-form-label">Head Quarters</label>
+                    <select id="hq-select" class="sr-form-select" multiple="multiple">
+                        @foreach (var h in _hq) { <option value="@h.Id" selected="@(_selectedHqs.Contains(h.Id))">@h.Name</option> }
+                    </select>
+                </div>
+                <div class="sr-form-group">
+                    <label class="sr-form-label">District</label>
+                    <select id="district-select" class="sr-form-select" multiple="multiple">
+                        @foreach (var d in _districts) { <option value="@d.Id" selected="@(_selectedDistricts.Contains(d.Id))">@d.Name</option> }
+                    </select>
+                </div>
+                <div class="sr-form-group">
+                    <label class="sr-form-label">Sub District</label>
+                    <select id="subdistrict-select" class="sr-form-select" multiple="multiple">
+                        @foreach (var sd in _subDistricts) { <option value="@sd.Id" selected="@(_selectedSubDistricts.Contains(sd.Id))">@sd.Name</option> }
+                    </select>
+                </div>
+                <div class="sr-form-group">
+                    <label class="sr-form-label">Lying With</label>
+                    <select id="lyingwith-select" class="sr-form-select" multiple="multiple">
+                        @foreach (var lw in _lyingWith) { <option value="@lw.Id" selected="@(_selectedLyingWiths.Contains(lw.Id))">@lw.Name</option> }
+                    </select>
+                </div>
+                <div class="sr-form-group">
+                    <label class="sr-form-label">Product</label>
+                    <select id="product-select" class="sr-form-select" multiple="multiple">
+                        @foreach (var p in _products) { <option value="@p.Id" selected="@(_selectedProducts.Contains(p.Id))">@p.Name</option> }
+                    </select>
+                </div>
+                <div class="sr-form-group">
+                    <label class="sr-form-label">Ageing Range (Days)</label>
+                    <select id="ageing-select" class="sr-form-select" multiple="multiple">
+                        <option value="0-30" selected="@(_selectedAgeings.Contains("0-30"))">0–30 Days</option>
+                        <option value="31-60" selected="@(_selectedAgeings.Contains("31-60"))">31–60 Days</option>
+                        <option value="61-90" selected="@(_selectedAgeings.Contains("61-90"))">61–90 Days</option>
+                        <option value="91-120" selected="@(_selectedAgeings.Contains("91-120"))">91–120 Days</option>
+                        <option value="Above 120" selected="@(_selectedAgeings.Contains("Above 120"))">Above 120 Days</option>
+                    </select>
+                </div>
             </div>
             
             <div class="sr-filter-actions">
@@ -373,8 +419,310 @@
 @code {
     private bool isSalesDetailsOpen = false;
 
+    private List<LocationDto> _allStates = new();
+    private List<LocationDto> _allRegions = new();
+    private List<LocationDto> _allHqs = new();
+    private List<LocationDto> _allDistricts = new();
+    private List<LocationDto> _allSubDistricts = new();
+
+    private List<LocationDto> _states = new();
+    private List<LocationDto> _regions = new();
+    private List<LocationDto> _hq = new();
+    private List<LocationDto> _districts = new();
+    private List<LocationDto> _subDistricts = new();
+    
+    private List<LocationDto> _products = new();
+    private List<LocationDto> _lyingWith = new();
+
+    private List<int> _selectedStates = new();
+    private List<int> _selectedRegions = new();
+    private List<int> _selectedHqs = new();
+    private List<int> _selectedDistricts = new();
+    private List<int> _selectedSubDistricts = new();
+    private List<int> _selectedProducts = new();
+    private List<int> _selectedLyingWiths = new();
+    private List<string> _selectedAgeings = new();
+
+    private DotNetObjectReference<StockReport> _objRef = default!;
+
+    public class LocationDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public int? StateId { get; set; }
+        public int? RegionId { get; set; }
+        public int? DistrictId { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var statesTask = FetchData("api/State/all");
+            var regionsTask = FetchData("api/Region/all");
+            var hqTask = FetchData("api/Headquarter/all");
+            var districtsTask = FetchData("api/District/all");
+            var subDistrictsTask = FetchData("api/SubDistrict/all");
+            var productsTask = FetchData("api/Product/all");
+            var lyingWithTask = FetchData("api/LyingWithMaster/all");
+
+            await Task.WhenAll(statesTask, regionsTask, hqTask, districtsTask, subDistrictsTask, productsTask, lyingWithTask);
+
+            _allStates = statesTask.Result;
+            _allRegions = regionsTask.Result;
+            _allHqs = hqTask.Result;
+            _allDistricts = districtsTask.Result;
+            _allSubDistricts = subDistrictsTask.Result;
+
+            // Map implicit relationships for cross-filtering
+            foreach (var hq in _allHqs)
+            {
+                var p = _allRegions.FirstOrDefault(r => r.Id == hq.RegionId);
+                if (p != null) hq.StateId = p.StateId;
+            }
+            foreach (var sd in _allSubDistricts)
+            {
+                var p = _allDistricts.FirstOrDefault(d => d.Id == sd.DistrictId);
+                if (p != null) sd.StateId = p.StateId;
+            }
+
+            // Initially, options are fully available
+            _states = _allStates;
+            _regions = _allRegions;
+            _hq = _allHqs;
+            _districts = _allDistricts;
+            _subDistricts = _allSubDistricts;
+
+            _products = productsTask.Result;
+            _lyingWith = lyingWithTask.Result;
+        }
+        catch { }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _objRef = DotNetObjectReference.Create(this);
+            await InitSelect2();
+        }
+    }
+
+    private async Task InitSelect2()
+    {
+        var configs = new[]
+        {
+            new { id = "state-select", method = nameof(OnStateChanged) },
+            new { id = "region-select", method = nameof(OnRegionChanged) },
+            new { id = "hq-select", method = nameof(OnHqChanged) },
+            new { id = "district-select", method = nameof(OnDistrictChanged) },
+            new { id = "subdistrict-select", method = nameof(OnSubDistrictChanged) },
+            new { id = "lyingwith-select", method = nameof(OnLyingWithChanged) },
+            new { id = "product-select", method = nameof(OnProductChanged) },
+            new { id = "ageing-select", method = nameof(OnAgeingChanged) }
+        };
+
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    [JSInvokable]
+    public async Task OnStateChanged(List<string> values)
+    {
+        var newSelected = values.Select(int.Parse).ToList();
+        if (_selectedStates.SequenceEqual(newSelected)) return;
+        _selectedStates = newSelected;
+        await ProcessFilterChange("State");
+    }
+
+    [JSInvokable]
+    public async Task OnRegionChanged(List<string> values)
+    {
+        var newSelected = values.Select(int.Parse).ToList();
+        if (_selectedRegions.SequenceEqual(newSelected)) return;
+        _selectedRegions = newSelected;
+        await ProcessFilterChange("Region");
+    }
+
+    [JSInvokable]
+    public async Task OnHqChanged(List<string> values) 
+    { 
+        var newSelected = values.Select(int.Parse).ToList();
+        if (_selectedHqs.SequenceEqual(newSelected)) return;
+        _selectedHqs = newSelected; 
+        await ProcessFilterChange("HQ");
+    }
+
+    [JSInvokable]
+    public async Task OnDistrictChanged(List<string> values)
+    {
+        var newSelected = values.Select(int.Parse).ToList();
+        if (_selectedDistricts.SequenceEqual(newSelected)) return;
+        _selectedDistricts = newSelected;
+        await ProcessFilterChange("District");
+    }
+
+    [JSInvokable]
+    public async Task OnSubDistrictChanged(List<string> values) 
+    { 
+        var newSelected = values.Select(int.Parse).ToList();
+        if (_selectedSubDistricts.SequenceEqual(newSelected)) return;
+        _selectedSubDistricts = newSelected; 
+        await ProcessFilterChange("SubDistrict");
+    }
+
+    [JSInvokable]
+    public void OnLyingWithChanged(List<string> values) { _selectedLyingWiths = values.Select(int.Parse).ToList(); StateHasChanged(); }
+
+    [JSInvokable]
+    public void OnProductChanged(List<string> values) { _selectedProducts = values.Select(int.Parse).ToList(); StateHasChanged(); }
+
+    [JSInvokable]
+    public void OnAgeingChanged(List<string> values) { _selectedAgeings = values; StateHasChanged(); }
+
+    private async Task ProcessFilterChange(string filterType)
+    {
+        if (filterType == "State") 
+        {
+            if (_selectedStates.Any()) {
+                _selectedRegions.RemoveAll(rid => { var r = _allRegions.FirstOrDefault(x => x.Id == rid); return r == null || !_selectedStates.Contains(r.StateId ?? 0); });
+                _selectedHqs.RemoveAll(hid => { var h = _allHqs.FirstOrDefault(x => x.Id == hid); return h == null || !_selectedStates.Contains(h.StateId ?? 0); });
+                _selectedDistricts.RemoveAll(did => { var d = _allDistricts.FirstOrDefault(x => x.Id == did); return d == null || !_selectedStates.Contains(d.StateId ?? 0); });
+                _selectedSubDistricts.RemoveAll(sdid => { var sd = _allSubDistricts.FirstOrDefault(x => x.Id == sdid); return sd == null || !_selectedStates.Contains(sd.StateId ?? 0); });
+            }
+        }
+        else if (filterType == "Region") 
+        {
+            if (_selectedRegions.Any()) {
+                var inferredStates = _allRegions.Where(r => _selectedRegions.Contains(r.Id) && r.StateId.HasValue).Select(r => r.StateId.Value).Distinct().ToList();
+                _selectedStates = _selectedStates.Union(inferredStates).ToList();
+                
+                _selectedDistricts.RemoveAll(did => { var d = _allDistricts.FirstOrDefault(x => x.Id == did); return d == null || !_selectedStates.Contains(d.StateId ?? 0); });
+                _selectedSubDistricts.RemoveAll(sdid => { var sd = _allSubDistricts.FirstOrDefault(x => x.Id == sdid); return sd == null || !_selectedStates.Contains(sd.StateId ?? 0); });
+            }
+            if (_selectedRegions.Any()) {
+                _selectedHqs.RemoveAll(hid => { var h = _allHqs.FirstOrDefault(x => x.Id == hid); return h == null || !_selectedRegions.Contains(h.RegionId ?? 0); });
+            }
+        }
+        else if (filterType == "HQ") 
+        {
+            if (_selectedHqs.Any()) {
+                var inferredRegions = _allHqs.Where(h => _selectedHqs.Contains(h.Id) && h.RegionId.HasValue).Select(h => h.RegionId.Value).Distinct().ToList();
+                _selectedRegions = _selectedRegions.Union(inferredRegions).ToList();
+                var inferredStates = _allHqs.Where(h => _selectedHqs.Contains(h.Id) && h.StateId.HasValue).Select(h => h.StateId.Value).Distinct().ToList();
+                _selectedStates = _selectedStates.Union(inferredStates).ToList();
+
+                _selectedDistricts.RemoveAll(did => { var d = _allDistricts.FirstOrDefault(x => x.Id == did); return d == null || !_selectedStates.Contains(d.StateId ?? 0); });
+                _selectedSubDistricts.RemoveAll(sdid => { var sd = _allSubDistricts.FirstOrDefault(x => x.Id == sdid); return sd == null || !_selectedStates.Contains(sd.StateId ?? 0); });
+            }
+        }
+        else if (filterType == "District") 
+        {
+            if (_selectedDistricts.Any()) {
+                var inferredStates = _allDistricts.Where(d => _selectedDistricts.Contains(d.Id) && d.StateId.HasValue).Select(d => d.StateId.Value).Distinct().ToList();
+                _selectedStates = _selectedStates.Union(inferredStates).ToList();
+
+                _selectedRegions.RemoveAll(rid => { var r = _allRegions.FirstOrDefault(x => x.Id == rid); return r == null || !_selectedStates.Contains(r.StateId ?? 0); });
+                _selectedHqs.RemoveAll(hid => { var h = _allHqs.FirstOrDefault(x => x.Id == hid); return h == null || !_selectedStates.Contains(h.StateId ?? 0); });
+            }
+            if (_selectedDistricts.Any()) {
+                _selectedSubDistricts.RemoveAll(sdid => { var sd = _allSubDistricts.FirstOrDefault(x => x.Id == sdid); return sd == null || !_selectedDistricts.Contains(sd.DistrictId ?? 0); });
+            }
+        }
+        else if (filterType == "SubDistrict") 
+        {
+            if (_selectedSubDistricts.Any()) {
+                var inferredDistricts = _allSubDistricts.Where(sd => _selectedSubDistricts.Contains(sd.Id) && sd.DistrictId.HasValue).Select(sd => sd.DistrictId.Value).Distinct().ToList();
+                _selectedDistricts = _selectedDistricts.Union(inferredDistricts).ToList();
+                var inferredStates = _allSubDistricts.Where(sd => _selectedSubDistricts.Contains(sd.Id) && sd.StateId.HasValue).Select(sd => sd.StateId.Value).Distinct().ToList();
+                _selectedStates = _selectedStates.Union(inferredStates).ToList();
+
+                _selectedRegions.RemoveAll(rid => { var r = _allRegions.FirstOrDefault(x => x.Id == rid); return r == null || !_selectedStates.Contains(r.StateId ?? 0); });
+                _selectedHqs.RemoveAll(hid => { var h = _allHqs.FirstOrDefault(x => x.Id == hid); return h == null || !_selectedStates.Contains(h.StateId ?? 0); });
+            }
+        }
+
+        _states = _allStates;
+        
+        _regions = _selectedStates.Any() 
+            ? _allRegions.Where(r => _selectedStates.Contains(r.StateId ?? 0)).ToList() 
+            : _allRegions;
+
+        _hq = _selectedRegions.Any() 
+            ? _allHqs.Where(h => _selectedRegions.Contains(h.RegionId ?? 0)).ToList()
+            : (_selectedStates.Any() ? _allHqs.Where(h => _selectedStates.Contains(h.StateId ?? 0)).ToList() : _allHqs);
+
+        _districts = _selectedStates.Any() 
+            ? _allDistricts.Where(d => _selectedStates.Contains(d.StateId ?? 0)).ToList() 
+            : _allDistricts;
+
+        _subDistricts = _selectedDistricts.Any()
+            ? _allSubDistricts.Where(sd => _selectedDistricts.Contains(sd.DistrictId ?? 0)).ToList()
+            : (_selectedStates.Any() ? _allSubDistricts.Where(sd => _selectedStates.Contains(sd.StateId ?? 0)).ToList() : _allSubDistricts);
+
+        StateHasChanged();
+        await RefreshSelect2Hierarchy();
+    }
+
+    private async Task RefreshSelect2Hierarchy()
+    {
+        var ids = new[] { "state-select", "region-select", "hq-select", "district-select", "subdistrict-select" };
+        await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", ids);
+
+        await Task.Delay(50);
+        
+        var configs = new[]
+        {
+            new { id = "state-select", method = nameof(OnStateChanged) },
+            new { id = "region-select", method = nameof(OnRegionChanged) },
+            new { id = "hq-select", method = nameof(OnHqChanged) },
+            new { id = "district-select", method = nameof(OnDistrictChanged) },
+            new { id = "subdistrict-select", method = nameof(OnSubDistrictChanged) }
+        };
+
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    private async Task<List<LocationDto>> FetchData(string url)
+    {
+        try
+        {
+            var raw = await Http.GetFromJsonAsync<List<JsonElement>>(url);
+            var list = new List<LocationDto>();
+            if (raw == null) return list;
+            foreach (var item in raw)
+            {
+                var id = item.GetProperty("id").GetInt32();
+                string name = "";
+                if (item.TryGetProperty("name", out var nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("stateName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("regionName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("headquarterName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("districtName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("subDistrictName", out nProp)) name = nProp.GetString() ?? "";
+
+                var dto = new LocationDto { Id = id, Name = name };
+                
+                if (item.TryGetProperty("stateId", out var sProp) && sProp.ValueKind == JsonValueKind.Number)
+                    dto.StateId = sProp.GetInt32();
+                if (item.TryGetProperty("regionId", out var rProp) && rProp.ValueKind == JsonValueKind.Number)
+                    dto.RegionId = rProp.GetInt32();
+                if (item.TryGetProperty("districtId", out var dProp) && dProp.ValueKind == JsonValueKind.Number)
+                    dto.DistrictId = dProp.GetInt32();
+
+                list.Add(dto);
+            }
+            return list;
+        }
+        catch { return new List<LocationDto>(); }
+    }
+
     private void OpenSalesDetails()
     {
         isSalesDetailsOpen = true;
+    }
+    
+    public void Dispose()
+    {
+        _objRef?.Dispose();
     }
 }

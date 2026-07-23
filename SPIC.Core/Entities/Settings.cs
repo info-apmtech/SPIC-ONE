@@ -222,4 +222,14 @@ namespace SPIC.Core.Entities
         public DateTime UpdatedAt { get; set; }
         public required string UpdatedBy { get; set; }
     }
+
+    public class LyingWithMaster
+    {
+        public int Id { get; set; }
+        public required string Name { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public required string UpdatedBy { get; set; }
+    }
 }

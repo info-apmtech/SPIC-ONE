@@ -1395,6 +1395,85 @@
 			</div>
 		</div>
 
+		<div class="col-md-6">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.LlpAgreementFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+						<i class="bi bi-file-earmark-check"></i>
+					</div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">LLP Agreement</div>
+							<div class="doc-desc">Registered LLP agreement document</div>
+						</div>
+						<div class="badge-group">
+							@if (_isLlpAgreementRequired)
+							{
+								<span class="badge-req">Required</span>
+							}
+							else
+							{
+								<span class="badge-opt">Optional</span>
+							}
+							@if (!string.IsNullOrEmpty(_docs.LlpAgreementFilePath))
+							{
+								<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+							}
+							else
+							{
+								<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+							}
+						</div>
+					</div>
+				</div>
+				@if (!string.IsNullOrEmpty(_docs.LlpAgreementFilePath))
+				{
+					<div class="file-uploaded-box">
+						<div class="file-info">
+							<i class="bi bi-file-earmark-pdf"></i>
+							<div>
+								<div class="file-name">@GetFileName(_docs.LlpAgreementFilePath) @if (CanDelete)
+								{
+								<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveLlpAgreement" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+								}
+								</div>
+								<div class="file-meta">LLP Agreement</div>
+							</div>
+						</div>
+						<div class="file-actions">
+							<a href="@GetFileUrl(_docs.LlpAgreementFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+							@if (CanEdit)
+								{
+								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+									<i class="bi bi-arrow-repeat"></i> Replace
+									<InputFile hidden OnChange="OnLlpAgreementSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+								}
+						</div>
+					</div>
+				}
+				else
+				{
+					<div class="file-missing-box">
+						<div class="missing-info">
+							<i class="bi bi-upload" style="color:#059669;"></i>
+							<div>
+								<div class="missing-title" style="color:#059669;">Click to upload</div>
+								<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+							</div>
+						</div>
+						@if (CanAdd)
+							{
+							<label class="btn-green-solid mb-0" style="cursor:pointer;">
+								<i class="bi bi-upload me-1"></i> Upload Document
+								<InputFile hidden OnChange="OnLlpAgreementSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+							}
+					</div>
+				}
+			</div>
+		</div>
+
 		@if (_showBoardResolution)
 		{
 			<div class="col-md-6">
@@ -1691,22 +1770,27 @@
 			</div>
 		</div>
 
-		@if (_showAuthorizationLetter)
-		{
-			<div class="col-md-6">
-				<div class="doc-card">
-					<div class="doc-header">
-						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
-							<i class="bi bi-envelope-open"></i>
+		<div class="col-md-6">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+						<i class="bi bi-envelope-open"></i>
+					</div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">Authorized person in firm letter head</div>
+							<div class="doc-desc">Letter of authorization from the firm</div>
 						</div>
-						<div class="doc-title-row">
-							<div>
-								<div class="doc-title">Authorization Letter</div>
-								<div class="doc-desc">Letter of authorization from the firm</div>
-							</div>
-							<div class="badge-group">
+						<div class="badge-group">
+							@if (_isAuthorizationLetterRequired)
+							{
 								<span class="badge-req">Required</span>
-								@if (!string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath))
+							}
+							else
+							{
+								<span class="badge-opt">Optional</span>
+							}
+							@if (!string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath))
 								{
 									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
 								}
@@ -1728,7 +1812,7 @@
 									<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveAuthorizationLetter" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
 									}
 									</div>
-									<div class="file-meta">Authorization Letter</div>
+									<div class="file-meta">Authorized person in firm letter head</div>
 								</div>
 							</div>
 							<div class="file-actions">
@@ -1764,7 +1848,6 @@
 					}
 				</div>
 			</div>
-		}
 	</div>
 </div>
 
@@ -1965,21 +2048,13 @@
 	// Partnership firms; for every other entity type it renders as Optional.
 	private bool _showPartnershipDeed =>
 		_dealer.EntityType == EntityType.Partnership;
-	// If LLP should also be mandatory, add: || _dealer.EntityType == EntityType.LLP
 
-	// Authorization Letter: shown for all entity types except Sole Proprietor.
-	private bool _showAuthorizationLetter
-	{
-		get
-		{
-			var t = _dealer.BusinessEntityType?.Trim();
-			if (string.IsNullOrEmpty(t)) return false;
-			if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
-				t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
-				return false;
-			return true;
-		}
-	}
+	private bool _isLlpAgreementRequired =>
+		_dealer.EntityType == EntityType.LLP;
+
+	// Authorization Letter: mandatory for all entity types except Sole Proprietor.
+	private bool _isAuthorizationLetterRequired => 
+		_dealer.EntityType != 0 && _dealer.EntityType != EntityType.soleProprietor;
 
 	// Board Resolution: only for companies/societies
 	// (Private Ltd, Public Ltd, Society) — not Sole Proprietor, Partnership, or LLP.
@@ -2101,10 +2176,13 @@
 		if (_showPartnershipDeed)
 			requiredPaths.Add(_docs.PartnershipDeadFilePath);
 
+		if (_isLlpAgreementRequired)
+			requiredPaths.Add(_docs.LlpAgreementFilePath);
+
 		if (_showBoardResolution)
 			requiredPaths.Add(_docs.BoardReasolutionFilePath);
 
-		if (_showAuthorizationLetter)
+		if (_isAuthorizationLetterRequired)
 			requiredPaths.Add(_docs.AuthorizationLetterFilePath);
 
 		foreach (var p in _partners)
@@ -2415,6 +2493,24 @@
 		{
 			var path = _docs.PartnershipDeadFilePath!;
 			_docs.PartnershipDeadFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	private async Task OnLlpAgreementSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId, "LlpAgreement", e.File);
+		if (path != null) { _docs.LlpAgreementFilePath = path; await SaveDocuments(); CalculateProgress(); }
+	}
+
+	private void RemoveLlpAgreement()
+	{
+		OpenDeleteModal("LLP Agreement", _docs.LlpAgreementFilePath ?? "", async () =>
+		{
+			var path = _docs.LlpAgreementFilePath!;
+			_docs.LlpAgreementFilePath = null;
 			await SaveDocuments();
 			await DeleteFileFromServer(path);
 			CalculateProgress();
