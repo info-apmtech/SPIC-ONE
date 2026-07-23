@@ -53,6 +53,7 @@ namespace SpicAPI.Controllers
 
 			var pdfOrImageDocTypes = new[] { "GST", "PAN", "Aadhaar", "Cheque", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN",
 				"Specimen", "GreenstarSpecimen", "BankGuarantee", "DeedOfGuarantee", "ITReturn1", "ITReturn2", "ValuationCertificate", "PartnershipDeed", "BoardResolution", "Affidavit",
+				   "LlpAgreement", "AuthorizationLetter",
 				// Investment / Assets related docs
 				"LandEC", "LandPropertyDoc", "LandValuationCert",
 				"BuildingEC", "BuildingPropertyDoc", "BuildingValuationCert" };
