@@ -615,21 +615,11 @@
     private bool _showPartnershipDeed =>
         _dealer.EntityType == EntityType.Partnership;
 
-    // Keep old Authorization Letter flow unchanged
-    private bool _showAuthorizationLetter
-    {
-        get
-        {
-            var t = _dealer.BusinessEntityType?.Trim();
-            if (string.IsNullOrEmpty(t)) return false;
+    private bool _isLlpAgreementRequired =>
+        _dealer.EntityType == EntityType.LLP;
 
-            if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
-                t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            return true;
-        }
-    }
+    private bool _isAuthorizationLetterRequired => 
+		_dealer.EntityType != 0 && _dealer.EntityType != EntityType.soleProprietor;
 
     // Keep old Board Resolution flow unchanged
     private bool _showBoardResolution
@@ -926,6 +916,17 @@
             _enclosureItems.Add(new("Partnership Deed", true));
         }
 
+        // LLP Agreement mandatory only for LLP firms
+        if (_isLlpAgreementRequired)
+        {
+            _enclosureItems.Add(new("LLP Agreement",
+                _docs != null && !string.IsNullOrEmpty(_docs.LlpAgreementFilePath)));
+        }
+        else if (_docs != null && !string.IsNullOrEmpty(_docs.LlpAgreementFilePath))
+        {
+            _enclosureItems.Add(new("LLP Agreement", true));
+        }
+
         // Board Resolution old flow unchanged
         if (_showBoardResolution)
         {
@@ -933,11 +934,15 @@
                 _docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath)));
         }
 
-        // Authorization Letter old flow unchanged
-        if (_showAuthorizationLetter)
+        // Authorization Letter mandatory for all except Sole Proprietor
+        if (_isAuthorizationLetterRequired)
         {
             _enclosureItems.Add(new("Authorization Letter",
                 _docs != null && !string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath)));
+        }
+        else if (_docs != null && !string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath))
+        {
+            _enclosureItems.Add(new("Authorization Letter", true));
         }
 
         // Optional documents: show only if uploaded

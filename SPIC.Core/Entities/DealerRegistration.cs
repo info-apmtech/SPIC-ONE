@@ -569,7 +569,7 @@ namespace SPIC.Core.Entities
         public string? GreenstarSpecimanFilePath { get; set; }
         public string? AuthorizationLetterFilePath { get; set; }
         public string? DeedOfGuaranteeFilePath { get; set; }
-
+        public string? LlpAgreementFilePath { get; set; }
     }
     public class DealerCreditLimitSales
     {
