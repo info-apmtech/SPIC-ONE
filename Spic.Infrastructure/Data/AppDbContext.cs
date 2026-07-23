@@ -58,30 +58,30 @@ namespace Spic.Infrastructure.Data
         public DbSet<Product> Products { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
 
-        public DbSet<SalesWholesaler> SalesWholesalers { get; set; }
-        public DbSet<SalesAndReceipt> SalesAndReceipts { get; set; }
-        public DbSet<SalesCompanySale> SalesCompanySales { get; set; }
-        public DbSet<DptReport> DptReports { get; set; }
-        public DbSet<WholesalerStockAsOnToday> WholesalerStockAsOnTodays { get; set; }
-        public DbSet<RackPoint> RackPoints { get; set; }
+        public DbSet<SalesWholesaler> SalesWholesalers { get; set; }//  IFMS Wholesaler sales
+		public DbSet<SalesAndReceipt> SalesAndReceipts { get; set; }//  IFMS sales and receipt
+		public DbSet<SalesCompanySale> SalesCompanySales { get; set; }//  IFMS Company sales
+		public DbSet<DptReport> DptReports { get; set; }//  IFMS DPT Report
+		public DbSet<WholesalerStockAsOnToday> WholesalerStockAsOnTodays { get; set; }//  IFMS Wholesaler stock as on today
+		public DbSet<RackPoint> RackPoints { get; set; }
         public DbSet<Port> Ports { get; set; }
         public DbSet<Bank> Banks { get; set; }
         public DbSet<FinancialYear> FinancialYears { get; set; }
         public DbSet<Relationship> Relationships { get; set; }
         public DbSet<DealerRegistration> DealerRegistrations { get; set; }
-        public DbSet<Plant> Plants { get; set; }
-        public DbSet<DealerType> DealerTypes { get; set; }
-        public DbSet<Status> Statuses { get; set; }
-        public DbSet<IfmsDealer> IfmsDealers { get; set; }
-        public DbSet<Company> Companies { get; set; }
-        public DbSet<DealershipNature> DealershipNatures { get; set; }
-        public DbSet<TxnType> TxnTypes { get; set; }
-        public DbSet<AckThrough> AckThroughs { get; set; }
-        public DbSet<StateGlobalStockReconciliation> StateGlobalStockReconciliations { get; set; }
-        public DbSet<WarehouseDistrictGlobalStockReconciliation> WarehouseDistrictGlobalStockReconciliations { get; set; }
+        public DbSet<Plant> Plants { get; set; }//  IFMS Plant Master
+		public DbSet<DealerType> DealerTypes { get; set; }//  IFMS Dealer Type Master
+		public DbSet<Status> Statuses { get; set; }//  IFMS Status Master
+		public DbSet<IfmsDealer> IfmsDealers { get; set; }//  IFMS Dealer Master
+		public DbSet<Company> Companies { get; set; } 
+        public DbSet<DealershipNature> DealershipNatures { get; set; }//  IFMS DealershipNatures 
+		public DbSet<TxnType> TxnTypes { get; set; }//  IFMS TxnTypes
+		public DbSet<AckThrough> AckThroughs { get; set; }//  IFMS AckThroughs
+        public DbSet<StateGlobalStockReconciliation> StateGlobalStockReconciliations { get; set; }//  IFMS State Global Stock Reconciliation
+		public DbSet<WarehouseDistrictGlobalStockReconciliation> WarehouseDistrictGlobalStockReconciliations { get; set; }//  IFMS Warehouse District Global Stock Reconciliation
 
-        // Dealer Registration Sub-Entities
-        public DbSet<DealerExperience> DealerExperiences { get; set; }
+		// Dealer Registration Sub-Entities
+		public DbSet<DealerExperience> DealerExperiences { get; set; }
         public DbSet<AnnualSaleDataLastFYofDealerRegistration> AnnualSaleDataLastFY { get; set; }
         public DbSet<DealerWarehouseFacilities> DealerWarehouseFacilities { get; set; }
         public DbSet<DealerRailFacilities> DealerRailFacilities { get; set; }
