@@ -621,27 +621,14 @@
     private bool _isAuthorizationLetterRequired => 
 		_dealer.EntityType != 0 && _dealer.EntityType != EntityType.soleProprietor;
 
-    // Keep old Board Resolution flow unchanged
-    private bool _showBoardResolution
-    {
-        get
-        {
-            var t = _dealer.BusinessEntityType?.Trim();
-            if (string.IsNullOrEmpty(t)) return false;
+    private bool _isBoardResolutionRequired =>
+        _dealer.EntityType == EntityType.PvtLtd ||
+        _dealer.EntityType == EntityType.PubLtd;
 
-            if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
-                t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            if (t.Contains("Partnership", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            if (t.Equals("LLP", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            return true;
-        }
-    }
+    private bool _showBoardResolution =>
+        _dealer.EntityType == EntityType.PvtLtd ||
+        _dealer.EntityType == EntityType.PubLtd ||
+        (_docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath));
 
     private bool _isTerminatedRestricted =>
         _dealer.Status == DealerStatus.Terminated;
@@ -927,11 +914,15 @@
             _enclosureItems.Add(new("LLP Agreement", true));
         }
 
-        // Board Resolution old flow unchanged
-        if (_showBoardResolution)
+        // Board Resolution mandatory only for Private Ltd and Public Ltd
+        if (_isBoardResolutionRequired)
         {
             _enclosureItems.Add(new("Board Resolution",
                 _docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath)));
+        }
+        else if (_docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath))
+        {
+            _enclosureItems.Add(new("Board Resolution", true));
         }
 
         // Authorization Letter mandatory for all except Sole Proprietor

@@ -134,7 +134,7 @@
 		</div>
 	</div>
 
-	@if (_selectedEntityType != EntityType.soleProprietor || _savedPartners.Count < 1 || _isEditingPartner)
+	@if ((_selectedEntityType != EntityType.soleProprietor && _selectedEntityType != EntityType.Society) || _savedPartners.Count < 1 || _isEditingPartner)
 	{
 	<div class="main-section">
 		<div class="section-header">
@@ -658,7 +658,14 @@
 	else
 	{
 		<div class="alert alert-info" role="alert">
-			<i class="bi bi-info-circle me-2"></i>Sole Proprietor allows only 1 proprietor. You can edit or delete the existing one from the saved details below.
+			@if (_selectedEntityType == EntityType.Society)
+			{
+				<span><i class="bi bi-info-circle me-2"></i>Society allows only 1 authorized person. You can edit or delete the existing one from the saved details below.</span>
+			}
+			else
+			{
+				<span><i class="bi bi-info-circle me-2"></i>Sole Proprietor allows only 1 proprietor. You can edit or delete the existing one from the saved details below.</span>
+			}
 		</div>
 	}
 
@@ -1467,9 +1474,11 @@
 				validationErrors.Add("• <b>PAN Number</b> must be in format ABCDE1234F (e.g. ABCDE1234F).");
 		}
 
-		// Enforce max partners for sole proprietor
+		// Enforce max partners for sole proprietor / society
 		if (_selectedEntityType == EntityType.soleProprietor && !_isEditingPartner && _savedPartners.Count >= 1)
 			validationErrors.Add("• <b>Entity Type</b>: Sole Proprietor can have only 1 partner.");
+		else if (_selectedEntityType == EntityType.Society && !_isEditingPartner && _savedPartners.Count >= 1)
+			validationErrors.Add("• <b>Entity Type</b>: Society can have only 1 authorized person.");
 			if (string.IsNullOrWhiteSpace(_partnerForm.ProprietorImagePath) && _imageFile == null)
     validationErrors.Add("• <b>Proprietor / Managing Partner Image</b> is required.");
 		if (validationErrors.Count > 0)
@@ -1756,7 +1765,14 @@ return;
 			return;
 		}
 
-		if (_selectedEntityType != EntityType.soleProprietor && _savedPartners.Count < 2)
+		if (_selectedEntityType == EntityType.Society && _savedPartners.Count < 1)
+		{
+			FormStepData.MarkStepError(7, true);
+			ShowMessage("Please add at least 1 authorized person for the Society.", true);
+			return;
+		}
+
+		if (_selectedEntityType != EntityType.soleProprietor && _selectedEntityType != EntityType.Society && _savedPartners.Count < 2)
 		{
 			FormStepData.MarkStepError(7, true);
 			ShowMessage("Please add at least 2 partners for the selected entity type.", true);

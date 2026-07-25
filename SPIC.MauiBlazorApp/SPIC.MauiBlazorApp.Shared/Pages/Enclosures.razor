@@ -1488,7 +1488,14 @@
 								<div class="doc-desc">Board resolution document</div>
 							</div>
 							<div class="badge-group">
-								<span class="badge-opt">Optional</span>
+								@if (_isBoardResolutionRequired)
+								{
+									<span class="badge-req">Required</span>
+								}
+								else
+								{
+									<span class="badge-opt">Optional</span>
+								}
 								@if (!string.IsNullOrEmpty(_docs.BoardReasolutionFilePath))
 								{
 									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
@@ -2056,12 +2063,16 @@
 	private bool _isAuthorizationLetterRequired => 
 		_dealer.EntityType != 0 && _dealer.EntityType != EntityType.soleProprietor;
 
-	// Board Resolution: only for companies/societies
-	// (Private Ltd, Public Ltd, Society) — not Sole Proprietor, Partnership, or LLP.
+	// Board Resolution: mandatory only for Private Ltd and Public Ltd
+	private bool _isBoardResolutionRequired =>
+		_dealer.EntityType == EntityType.PvtLtd ||
+		_dealer.EntityType == EntityType.PubLtd;
+
+	// Board Resolution: shown for Private Ltd, Public Ltd, or if uploaded by any other entity type.
 	private bool _showBoardResolution =>
 		_dealer.EntityType == EntityType.PvtLtd ||
 		_dealer.EntityType == EntityType.PubLtd ||
-		_dealer.EntityType == EntityType.Society;
+		!string.IsNullOrEmpty(_docs.BoardReasolutionFilePath);
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -2179,7 +2190,7 @@
 		if (_isLlpAgreementRequired)
 			requiredPaths.Add(_docs.LlpAgreementFilePath);
 
-		if (_showBoardResolution)
+		if (_isBoardResolutionRequired)
 			requiredPaths.Add(_docs.BoardReasolutionFilePath);
 
 		if (_isAuthorizationLetterRequired)
