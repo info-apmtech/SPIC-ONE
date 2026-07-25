@@ -35,8 +35,8 @@ builder.Services.AddScoped(sp =>
     var handler = sp.GetRequiredService<AuthHttpMessageHandler>();
     handler.InnerHandler = new HttpClientHandler();
     var config = sp.GetRequiredService<IConfiguration>();
-    var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
-    //var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
+   // var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
+    var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
     return new HttpClient(handler)
     {
         BaseAddress = new Uri(baseUrl),

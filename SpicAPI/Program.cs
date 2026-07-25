@@ -44,6 +44,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 //builder.Services.AddScoped<ILocationService, LocationImplementation>();
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+builder.Services.AddScoped<IStockReportService, StockReportService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];

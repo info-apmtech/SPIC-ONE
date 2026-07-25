@@ -1,14 +1,16 @@
-﻿@if (IsOpen)
+﻿@using SPIC.Core.DTOs
+
+@if (IsOpen)
 {
     <div class="sd-overlay" @onclick="CloseDrawer">
         <div class="sd-drawer" @onclick:stopPropagation="true">
-            
+
             <div class="sd-header">
                 <div class="sd-header-titles">
                     <h2>Stock Details</h2>
                     <div class="sd-status-badge">
                         <div class="sd-dot"></div>
-                        Fast Moving
+                        @(Row?.Status ?? "—")
                     </div>
                 </div>
                 <button class="sd-close-icon" @onclick="CloseDrawer" aria-label="Close">
@@ -21,20 +23,20 @@
             </div>
 
             <div class="sd-body">
-                
+
                 <div class="sd-section">
                     <h3>Dealer Information</h3>
                     <div class="sd-row">
                         <span class="sd-label">Dealer Name</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> Monsoon Agro Centre</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.DealerName)</span>
                     </div>
                     <div class="sd-row">
                         <span class="sd-label">Dealer ID</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> 223331</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.DealerRegistrationId?.ToString() ?? "—")</span>
                     </div>
                     <div class="sd-row">
                         <span class="sd-label">Mobile No.</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> 8765432109</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(string.IsNullOrWhiteSpace(Row?.MobileNo) ? "—" : Row!.MobileNo)</span>
                     </div>
                 </div>
 
@@ -42,23 +44,11 @@
                     <h3>Location Information</h3>
                     <div class="sd-row">
                         <span class="sd-label">State</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> Tamil Nadu</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.StateName)</span>
                     </div>
                     <div class="sd-row">
-                        <span class="sd-label">Region</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> Southern</span>
-                    </div>
-                    <div class="sd-row">
-                        <span class="sd-label">Head Quarters</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> Coimbatore</span>
-                    </div>
-                    <div class="sd-row">
-                        <span class="sd-label">District</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> Coimbatore</span>
-                    </div>
-                    <div class="sd-row">
-                        <span class="sd-label">Sub-District</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> Sulur</span>
+                        <span class="sd-label">Lying With</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.LyingWith)</span>
                     </div>
                 </div>
 
@@ -66,26 +56,22 @@
                     <h3>Product Information</h3>
                     <div class="sd-row">
                         <span class="sd-label">Product</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> Neem Coated Urea (45 Kg)</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.ProductName)</span>
                     </div>
                     <div class="sd-row">
                         <span class="sd-label">Quantity (MT)</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> 15.3</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.Quantity)</span>
                     </div>
                 </div>
 
                 <div class="sd-section">
                     <h3>Inventory Information</h3>
                     <div class="sd-row">
-                        <span class="sd-label">Entry Date</span>
-                        <span class="sd-value"><span class="sd-colon">:</span> 04/05/2026</span>
-                    </div>
-                    <div class="sd-row">
                         <span class="sd-label">Ageing Days</span>
                         <span class="sd-value sd-val-flex">
-                            <span class="sd-colon">:</span> 3 Days 
+                            <span class="sd-colon">:</span> @(Row?.AgeingDays) Days
                             <div class="sd-status-badge sd-badge-inline">
-                                <div class="sd-dot"></div> Fresh
+                                <div class="sd-dot"></div> @(Row?.Status ?? "—")
                             </div>
                         </span>
                     </div>
@@ -114,6 +100,10 @@
 
     [Parameter]
     public EventCallback<bool> IsOpenChanged { get; set; }
+
+    // The clicked stock row. Nullable so the drawer is safe before a row is chosen.
+    [Parameter]
+    public StockRowDto? Row { get; set; }
 
     private async Task CloseDrawer()
     {
