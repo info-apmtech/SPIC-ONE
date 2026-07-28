@@ -626,7 +626,7 @@
         ShowMessage($"Failed to load saved facilities: {ex.Message}", true);
     }
 
-    var hasErrorAfterLoad = _savedWarehouses.Count < 1 || _savedRails.Count < 1 || _savedPorts.Count < 1;
+    var hasErrorAfterLoad = _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2;
     FormStepData.MarkStepError(4, hasErrorAfterLoad);
 }
 
@@ -771,7 +771,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 				}
 			}
 			ResetWarehouseForm();
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -823,7 +823,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		{
 			await Http.DeleteAsync($"api/DealerWarehouseFacilities/{wh.Id}");
 			_savedWarehouses.Remove(wh);
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -903,7 +903,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 				}
 			}
 			ResetRailForm();
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -970,7 +970,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		{
 			await Http.DeleteAsync($"api/DealerRailFacilities/{rail.Id}");
 			_savedRails.Remove(rail);
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -1050,7 +1050,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 				}
 			}
 			ResetPortForm();
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -1087,7 +1087,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		{
 			await Http.DeleteAsync($"api/DealerPortFacilities/{port.Id}");
 			_savedPorts.Remove(port);
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -1157,8 +1157,16 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		_isSaving = true;
 		try
 		{
-			var hasError = _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1;
+			var hasError = _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2;
 			FormStepData.MarkStepError(4, hasError);
+
+			if (hasError)
+			{
+				ShowMessage("A minimum of two Warehouses, two Rail Heads, and two Ports must be configured to proceed further.", true);
+				_isSaving = false;
+				return;
+			}
+
 			Loading.Show();
 			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}");
 		}

@@ -56,7 +56,9 @@ namespace SpicAPI.Controllers
 				   "LlpAgreement", "AuthorizationLetter",
 				// Investment / Assets related docs
 				"LandEC", "LandPropertyDoc", "LandValuationCert",
-				"BuildingEC", "BuildingPropertyDoc", "BuildingValuationCert" };
+				"BuildingEC", "BuildingPropertyDoc", "BuildingValuationCert",
+				// Company / Society constitution docs
+				"ArticlesOfAssociation", "MemorandumOfAssociation", "ByLaw" };
 			var imageDocTypes = new[] { "ProprietorImage" };
 			var excelCsvDocTypes = new[] { "RetailerList" };
 

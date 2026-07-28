@@ -295,7 +295,8 @@ namespace SPIC.Core.Entities
         public bool IsCanal { get; set; }
         public bool IsTank { get; set; }
         public bool IsWell { get; set; }
-    }
+		public bool IsRainfed { get; set; }
+	}
     public class DealerCompaniesOperatingInArea
     {
         public int Id { get; set; }
@@ -570,7 +571,11 @@ namespace SPIC.Core.Entities
         public string? AuthorizationLetterFilePath { get; set; }
         public string? DeedOfGuaranteeFilePath { get; set; }
         public string? LlpAgreementFilePath { get; set; }
-    }
+		public string? ArticlesOfAssociationFilePath { get; set; }   // AOA
+		public string? MemorandumOfAssociationFilePath { get; set; } // MOA
+		public string? ByLaw { get; set; } 
+
+	}
     public class DealerCreditLimitSales
     {
         public int Id { get; set; }

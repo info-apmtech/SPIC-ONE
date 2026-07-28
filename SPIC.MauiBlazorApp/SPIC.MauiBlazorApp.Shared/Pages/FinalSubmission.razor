@@ -625,6 +625,15 @@
         _dealer.EntityType == EntityType.PvtLtd ||
         _dealer.EntityType == EntityType.PubLtd;
 
+    // AOA + MOA mandatory only for Private Ltd and Public Ltd
+    private bool _isAoaMoaRequired =>
+        _dealer.EntityType == EntityType.PvtLtd ||
+        _dealer.EntityType == EntityType.PubLtd;
+
+    // By-Law mandatory only for Society
+    private bool _isByLawRequired =>
+        _dealer.EntityType == EntityType.Society;
+
     private bool _showBoardResolution =>
         _dealer.EntityType == EntityType.PvtLtd ||
         _dealer.EntityType == EntityType.PubLtd ||
@@ -923,6 +932,39 @@
         else if (_docs != null && !string.IsNullOrEmpty(_docs.BoardReasolutionFilePath))
         {
             _enclosureItems.Add(new("Board Resolution", true));
+        }
+
+        // Articles of Association (AOA) mandatory only for Private Ltd and Public Ltd
+        if (_isAoaMoaRequired)
+        {
+            _enclosureItems.Add(new("Articles of Association (AOA)",
+                _docs != null && !string.IsNullOrEmpty(_docs.ArticlesOfAssociationFilePath)));
+        }
+        else if (_docs != null && !string.IsNullOrEmpty(_docs.ArticlesOfAssociationFilePath))
+        {
+            _enclosureItems.Add(new("Articles of Association (AOA)", true));
+        }
+
+        // Memorandum of Association (MOA) mandatory only for Private Ltd and Public Ltd
+        if (_isAoaMoaRequired)
+        {
+            _enclosureItems.Add(new("Memorandum of Association (MOA)",
+                _docs != null && !string.IsNullOrEmpty(_docs.MemorandumOfAssociationFilePath)));
+        }
+        else if (_docs != null && !string.IsNullOrEmpty(_docs.MemorandumOfAssociationFilePath))
+        {
+            _enclosureItems.Add(new("Memorandum of Association (MOA)", true));
+        }
+
+        // By-Law mandatory only for Society
+        if (_isByLawRequired)
+        {
+            _enclosureItems.Add(new("By Law",
+                _docs != null && !string.IsNullOrEmpty(_docs.ByLaw)));
+        }
+        else if (_docs != null && !string.IsNullOrEmpty(_docs.ByLaw))
+        {
+            _enclosureItems.Add(new("By Law", true));
         }
 
         // Authorization Letter mandatory for all except Sole Proprietor

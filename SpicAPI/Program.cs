@@ -46,6 +46,7 @@ builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IStockReportService, StockReportService>();
 builder.Services.AddScoped<IPendingAckService, PendingAckService>();
+builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];
