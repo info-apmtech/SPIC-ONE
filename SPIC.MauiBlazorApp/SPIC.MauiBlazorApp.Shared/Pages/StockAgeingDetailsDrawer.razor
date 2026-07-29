@@ -1,4 +1,7 @@
-﻿@if (IsOpen)
+﻿@using SPIC.MauiBlazorApp.Shared.Pages
+@using SPIC.Core.DTOs
+
+@if (IsOpen)
 {
     <div class="sad-overlay" @onclick="CloseDrawer">
         <div class="sad-drawer" @onclick:stopPropagation="true">
@@ -8,7 +11,7 @@
                     <h2>Stock Ageing Details</h2>
                     <div class="sad-status-badge">
                         <div class="sad-dot"></div>
-                        Fresh
+                        @Val(Row?.Status)
                     </div>
                 </div>
                 <button class="sad-close-icon" @onclick="CloseDrawer" aria-label="Close">
@@ -26,15 +29,15 @@
                     <h3>Dealer Information</h3>
                     <div class="sad-row">
                         <span class="sad-label">Dealer Name</span>
-                        <span class="sad-value"><span class="sad-colon">:</span> Monsoon Agro Centre</span>
+                        <span class="sad-value"><span class="sad-colon">:</span> @Val(Row?.DealerName)</span>
                     </div>
                     <div class="sad-row">
                         <span class="sad-label">Dealer ID</span>
-                        <span class="sad-value"><span class="sad-colon">:</span> 223331</span>
+                        <span class="sad-value"><span class="sad-colon">:</span> @Val(Row?.DealerCode)</span>
                     </div>
                     <div class="sad-row">
                         <span class="sad-label">Mobile No.</span>
-                        <span class="sad-value"><span class="sad-colon">:</span> 8765432109</span>
+                        <span class="sad-value"><span class="sad-colon">:</span> @Val(Row?.MobileNo)</span>
                     </div>
                 </div>
 
@@ -42,19 +45,19 @@
                     <h3>Location Information</h3>
                     <div class="sad-row">
                         <span class="sad-label">State</span>
-                        <span class="sad-value"><span class="sad-colon">:</span> Tamil Nadu</span>
+                        <span class="sad-value"><span class="sad-colon">:</span> @Val(Row?.StateName)</span>
                     </div>
                     <div class="sad-row">
                         <span class="sad-label">Head Quarters</span>
-                        <span class="sad-value"><span class="sad-colon">:</span> Coimbatore</span>
+                        <span class="sad-value"><span class="sad-colon">:</span> @Val(Row?.HeadQuarterName)</span>
                     </div>
                     <div class="sad-row">
                         <span class="sad-label">District</span>
-                        <span class="sad-value"><span class="sad-colon">:</span> Coimbatore</span>
+                        <span class="sad-value"><span class="sad-colon">:</span> @Val(Row?.DistrictName)</span>
                     </div>
                     <div class="sad-row">
                         <span class="sad-label">Sub-District</span>
-                        <span class="sad-value"><span class="sad-colon">:</span> Sulur</span>
+                        <span class="sad-value"><span class="sad-colon">:</span> @Val(Row?.SubDistrictName)</span>
                     </div>
                 </div>
 
@@ -62,11 +65,11 @@
                     <h3>Product Information</h3>
                     <div class="sad-row">
                         <span class="sad-label">Product</span>
-                        <span class="sad-value"><span class="sad-colon">:</span> Neem Coated Urea (45 Kg)</span>
+                        <span class="sad-value"><span class="sad-colon">:</span> @Val(Row?.ProductName)</span>
                     </div>
                     <div class="sad-row">
                         <span class="sad-label">Quantity (MT)</span>
-                        <span class="sad-value"><span class="sad-colon">:</span> 15.3</span>
+                        <span class="sad-value"><span class="sad-colon">:</span> @Num(Row?.Quantity)</span>
                     </div>
                 </div>
 
@@ -74,14 +77,14 @@
                     <h3>Inventory Information</h3>
                     <div class="sad-row">
                         <span class="sad-label">Entry Date</span>
-                        <span class="sad-value"><span class="sad-colon">:</span> 04/05/2026</span>
+                        <span class="sad-value"><span class="sad-colon">:</span> @Date(Row?.EntryDate)</span>
                     </div>
                     <div class="sad-row">
                         <span class="sad-label">Ageing Days</span>
                         <span class="sad-value sad-val-flex">
-                            <span class="sad-colon">:</span> 3 Days 
+                            <span class="sad-colon">:</span> @(Row?.AgeingDays ?? 0) Days
                             <div class="sad-status-badge sad-badge-inline">
-                                <div class="sad-dot"></div> Fresh
+                                <div class="sad-dot"></div> @Val(Row?.Status)
                             </div>
                         </span>
                     </div>
@@ -103,13 +106,15 @@
     </div>
 }
 
-
 @code {
-    [Parameter]
-    public bool IsOpen { get; set; }
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public AgeingRowDto? Row { get; set; }
 
-    [Parameter]
-    public EventCallback<bool> IsOpenChanged { get; set; }
+    // Safe formatter helpers
+    private static string Val(string? s) => string.IsNullOrWhiteSpace(s) ? "-" : s;
+    private static string Date(DateTime? d) => d?.ToString("dd-MM-yyyy") ?? "-";
+    private static string Num(decimal? n) => (n ?? 0m).ToString("0.###");
 
     private async Task CloseDrawer()
     {

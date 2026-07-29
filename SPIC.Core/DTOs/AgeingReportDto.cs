@@ -77,5 +77,12 @@ namespace SPIC.Core.DTOs
 		public int AgeingDays { get; set; }
 		public string Status { get; set; } = "";      // Fresh / Medium / Slow Moving / Dead Stock
 		public string? MobileNo { get; set; }
+
+		// Add these missing properties:
+		public string? DealerCode { get; set; }
+		public string? HeadQuarterName { get; set; }
+		public string? DistrictName { get; set; }
+		public string? SubDistrictName { get; set; }
+		public DateTime? EntryDate { get; set; }
 	}
 }

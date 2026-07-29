@@ -5,11 +5,13 @@
 //  Register in Program.cs:
 //      builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();
 // ============================================================================
-
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
 using SPIC.Core.DTOs;
 using SPIC.Core.Interfaces;
+using System;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace SpicAPI.Controllers
 {
@@ -32,7 +34,13 @@ namespace SpicAPI.Controllers
 			using var wb = new XLWorkbook();
 			var ws = wb.Worksheets.Add("Ageing Report");
 
-			string[] headers = { "State", "Dealer", "Product", "Quantity (MT)", "Ageing Days", "Status" };
+			// UPDATED: Added the new columns to the Excel headers
+			string[] headers = {
+				"State", "District", "Sub-District", "Head Quarters",
+				"Dealer ID", "Dealer Name", "Mobile No.", "Product",
+				"Quantity (MT)", "Entry Date", "Ageing Days", "Status"
+			};
+
 			for (int c = 0; c < headers.Length; c++)
 			{
 				var cell = ws.Cell(1, c + 1);
@@ -45,12 +53,19 @@ namespace SpicAPI.Controllers
 			int r = 2;
 			foreach (var row in rows)
 			{
+				// UPDATED: Mapped the new properties to the Excel columns
 				ws.Cell(r, 1).Value = row.StateName;
-				ws.Cell(r, 2).Value = row.DealerName;
-				ws.Cell(r, 3).Value = row.ProductName;
-				ws.Cell(r, 4).Value = row.Quantity;
-				ws.Cell(r, 5).Value = row.AgeingDays;
-				ws.Cell(r, 6).Value = row.Status;
+				ws.Cell(r, 2).Value = row.DistrictName;
+				ws.Cell(r, 3).Value = row.SubDistrictName;
+				ws.Cell(r, 4).Value = row.HeadQuarterName;
+				ws.Cell(r, 5).Value = row.DealerCode;
+				ws.Cell(r, 6).Value = row.DealerName;
+				ws.Cell(r, 7).Value = row.MobileNo;
+				ws.Cell(r, 8).Value = row.ProductName;
+				ws.Cell(r, 9).Value = row.Quantity;
+				ws.Cell(r, 10).Value = row.EntryDate?.ToString("dd-MM-yyyy") ?? "";
+				ws.Cell(r, 11).Value = row.AgeingDays;
+				ws.Cell(r, 12).Value = row.Status;
 				r++;
 			}
 			ws.Columns().AdjustToContents();

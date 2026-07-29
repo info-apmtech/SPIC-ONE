@@ -10,6 +10,7 @@
 //  StockReportService, so this should compile against the same entities.
 // ============================================================================
 
+using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
@@ -174,11 +175,22 @@ namespace Spic.Infrastructure.Services
 				from st in stj.DefaultIfEmpty()
 				join p in _db.Set<Product>() on s.ProductId equals p.Id into pj
 				from p in pj.DefaultIfEmpty()
+				join d in _db.Set<District>() on s.DistrictId equals d.Id into dj
+				from d in dj.DefaultIfEmpty()
+				join dr in _db.Set<DealerRegistration>() on s.DealerRegistrationId equals dr.Id into drj
+				from dr in drj.DefaultIfEmpty()
 				select new GridRaw
 				{
 					DealerRegistrationId = s.DealerRegistrationId,
 					StateName = st != null ? st.StateName : "",
-					DealerName = s.AgencyName ?? "",
+					DistrictName = d != null ? d.DistrictName : "",
+					DealerName = !string.IsNullOrWhiteSpace(s.AgencyName)
+						? s.AgencyName
+						: (dr != null ? dr.FirmName : ""),
+					DealerCode = dr != null ? dr.DealerCode : null,
+					MobileNo = null,            // TODO: confirm DealerRegistration.MobileNo
+					HeadquarterId = null,  // TODO: confirm DealerRegistration.HeadquarterId
+										   //SubDistrictId = dr != null ? dr.SubDistrictId : null,  // TODO: confirm DealerRegistration.SubDistrictId
 					ProductName = p != null ? p.Name : "",
 					Quantity = s.Stock,
 					StockDate = s.StockDate
@@ -215,6 +227,20 @@ namespace Spic.Infrastructure.Services
 				.Take(f.PageSize)
 				.ToListAsync();
 
+			// Resolve Head Quarter / Sub-District names for this page (masters are small).
+			// TODO: confirm entity types Headquarter / SubDistrict and their name properties.
+			var hqIds = pageRows.Where(x => x.HeadquarterId.HasValue).Select(x => x.HeadquarterId!.Value).Distinct().ToList();
+			var sdIds = pageRows.Where(x => x.SubDistrictId.HasValue).Select(x => x.SubDistrictId!.Value).Distinct().ToList();
+
+			var hqNames = hqIds.Count == 0
+				? new Dictionary<int, string>()
+				: await _db.Set<Headquarter>().Where(h => hqIds.Contains(h.Id))
+					.ToDictionaryAsync(h => h.Id, h => h.HeadquarterName);
+			var sdNames = sdIds.Count == 0
+				? new Dictionary<int, string>()
+				: await _db.Set<SubDistrict>().Where(x => sdIds.Contains(x.Id))
+					.ToDictionaryAsync(x => x.Id, x => x.SubDistrictName);
+
 			var items = pageRows.Select(x =>
 			{
 				int ageing = (int)Math.Floor((today - x.StockDate.Date).TotalDays);
@@ -223,9 +249,15 @@ namespace Spic.Infrastructure.Services
 				{
 					DealerRegistrationId = x.DealerRegistrationId,
 					StateName = x.StateName,
+					DistrictName = x.DistrictName,
+					HeadQuarterName = x.HeadquarterId.HasValue && hqNames.TryGetValue(x.HeadquarterId.Value, out var hqn) ? hqn : null,
+					SubDistrictName = x.SubDistrictId.HasValue && sdNames.TryGetValue(x.SubDistrictId.Value, out var sdn) ? sdn : null,
 					DealerName = x.DealerName,
+					DealerCode = string.IsNullOrWhiteSpace(x.DealerCode) ? x.DealerRegistrationId?.ToString() : x.DealerCode,
+					MobileNo = x.MobileNo,
 					ProductName = x.ProductName,
 					Quantity = x.Quantity,
+					EntryDate = x.StockDate,
 					AgeingDays = ageing,
 					Status = MapStatus(ageing)
 				};
@@ -276,7 +308,12 @@ namespace Spic.Infrastructure.Services
 		{
 			public int? DealerRegistrationId { get; set; }
 			public string StateName { get; set; } = "";
+			public string DistrictName { get; set; } = "";
 			public string DealerName { get; set; } = "";
+			public string? DealerCode { get; set; }
+			public string? MobileNo { get; set; }
+			public int? HeadquarterId { get; set; }
+			public int? SubDistrictId { get; set; }
 			public string ProductName { get; set; } = "";
 			public decimal Quantity { get; set; }
 			public DateTime StockDate { get; set; }
