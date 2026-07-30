@@ -21,6 +21,25 @@
         appearance: none;
         -webkit-appearance: none;
     }
+
+    /* Toolbar holding the single group-by segmented control above the Top-5 charts */
+    .ac-chart-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .ac-seg-group {
+        display: inline-flex;
+        flex-wrap: wrap;
+        background: #f1f5f9;
+        border-radius: 8px;
+        padding: 3px;
+        gap: 2px;
+    }
 </style>
 
 <div class="container-fluid py-4 px-0">
@@ -237,12 +256,16 @@
                 </div>
             </div>
 
-            <!-- One common toggle controlling BOTH Top-5 charts -->
-            <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
-                <div style="display:inline-flex; background:#f1f5f9; border-radius:8px; padding:3px; gap:2px;">
-                    <button type="button" style="@SegStyle(_filter.Source, "All", true)" @onclick='() => SetSource("All")'>All</button>
-                    <button type="button" style="@SegStyle(_filter.Source, "Company Sales", true)" @onclick='() => SetSource("Company Sales")'>Company Sales</button>
-                    <button type="button" style="@SegStyle(_filter.Source, "Wholesaler Sales", true)" @onclick='() => SetSource("Wholesaler Sales")'>Wholesaler Sales</button>
+            <!-- Toolbar: single group-by control — one active at a time, click regroups both charts -->
+            <div class="ac-chart-toolbar">
+                <div class="ac-seg-group">
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "State", false)" @onclick='() => SetGroupBy("State")'>State</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "Region", false)" @onclick='() => SetGroupBy("Region")'>Region</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "HeadQuarter", false)" @onclick='() => SetGroupBy("HeadQuarter")'>Head Quarters</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "District", false)" @onclick='() => SetGroupBy("District")'>District</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "SubDistrict", false)" @onclick='() => SetGroupBy("SubDistrict")'>Sub District</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "Product", false)" @onclick='() => SetGroupBy("Product")'>Product</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "Dealer", false)" @onclick='() => SetGroupBy("Dealer")'>Dealer Name</button>
                 </div>
             </div>
 
@@ -251,7 +274,7 @@
 
                 <div class="ac-chart-card">
                     <div style="margin-bottom: 24px;">
-                        <h3 style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 4px 0;">Top 5 Fast Performing States by Fast Rate</h3>
+                        <h3 style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 4px 0;">Top 5 Fast Performing @GroupByPlural by Fast Rate</h3>
                         <p style="font-size: 13px; color: #64748b; margin: 0;">Based on Fast (0-2 Days) Total Transaction</p>
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 20px;">
@@ -263,13 +286,13 @@
                         {
                             <div class="ac-chart-row">
                                 <div class="ac-rank-circle">@(i + 1)</div>
-                                <div style="width: 80px; font-size: 13px; color: #475569; white-space: nowrap; flex-shrink: 0;">@s.StateName</div>
+                                <div title="@s.Label" style="width: 80px; font-size: 13px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;">@s.Label</div>
                                 <div style="flex-grow: 1; height: 16px; background: #f1f5f9; border-radius: 4px; position: relative;">
                                     <div style="position: absolute; left: 0; top: 0; height: 100%; width: @(s.Rate.ToString("0.##", Inv))%; background: #34d399; border-radius: 4px;"></div>
                                 </div>
                                 <div style="width: 42px; text-align: right; font-size: 13px; font-weight: 600; color: #334155; flex-shrink: 0;">@s.Rate%</div>
                                 <div class="ac-row-tooltip">
-                                    <div style="font-weight: 600; color: #16a34a; margin-bottom: 12px; font-size: 13px;">@s.StateName</div>
+                                    <div style="font-weight: 600; color: #16a34a; margin-bottom: 12px; font-size: 13px;">@s.Label</div>
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Total Transaction</span><span style="color:#1e293b; font-weight:500;">@s.Total.ToString("N0")</span></div>
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Fast (0-2 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Fast.ToString("N0")</span></div>
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Normal (3-5 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Normal.ToString("N0")</span></div>
@@ -287,7 +310,7 @@
 
                 <div class="ac-chart-card">
                     <div style="margin-bottom: 24px;">
-                        <h3 style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 4px 0;">Top 5 Delayed States by Delay Rate</h3>
+                        <h3 style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 4px 0;">Top 5 Delayed @GroupByPlural by Delay Rate</h3>
                         <p style="font-size: 13px; color: #64748b; margin: 0;">Based on Delayed (6-10 Days) + Critical (&gt;10 Days) Transactions</p>
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 20px;">
@@ -299,13 +322,13 @@
                         {
                             <div class="ac-chart-row">
                                 <div class="ac-rank-circle">@(i + 1)</div>
-                                <div style="width: 80px; font-size: 13px; color: #475569; white-space: nowrap; flex-shrink: 0;">@s.StateName</div>
+                                <div title="@s.Label" style="width: 80px; font-size: 13px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;">@s.Label</div>
                                 <div style="flex-grow: 1; height: 16px; background: #f1f5f9; border-radius: 4px; position: relative;">
                                     <div style="position: absolute; left: 0; top: 0; height: 100%; width: @(s.Rate.ToString("0.##", Inv))%; background: #f87171; border-radius: 4px;"></div>
                                 </div>
                                 <div style="width: 42px; text-align: right; font-size: 13px; font-weight: 600; color: #334155; flex-shrink: 0;">@s.Rate%</div>
                                 <div class="ac-row-tooltip">
-                                    <div style="font-weight: 600; color: #dc2626; margin-bottom: 12px; font-size: 13px;">@s.StateName</div>
+                                    <div style="font-weight: 600; color: #dc2626; margin-bottom: 12px; font-size: 13px;">@s.Label</div>
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Total Transaction</span><span style="color:#1e293b; font-weight:500;">@s.Total.ToString("N0")</span></div>
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Fast (0-2 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Fast.ToString("N0")</span></div>
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Normal (3-5 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Normal.ToString("N0")</span></div>
@@ -536,7 +559,7 @@
     private async Task ApplyFilters() { SyncSelectionsToFilter(); _filter.Page = 1; await LoadDashboard(); }
     private async Task RefreshData() => await LoadDashboard();
 
-    // ---- Shared chart toolbar: channel (All/Company/Wholesaler) + view-by (State/Product/Dealer) ----
+    // ---- Shared chart toolbar: channel (All/Company/Wholesaler) + view-by grouping ----
     private string SegStyle(string? current, string val, bool nullIsAll)
     {
         var cur = nullIsAll && string.IsNullOrWhiteSpace(current) ? "All" : (current ?? "");
@@ -556,12 +579,33 @@
         await LoadDashboard();
     }
 
+    // View-By grouping for the two Top-5 charts. Only affects the charts, so no page reset.
+    private async Task SetGroupBy(string groupBy)
+    {
+        if (_filter.GroupBy == groupBy) return;
+        _filter.GroupBy = groupBy;
+        await LoadDashboard();
+    }
+
+    // Plural chart-title label matching the selected grouping.
+    private string GroupByPlural => _filter.GroupBy switch
+    {
+        "Region" => "Regions",
+        "HeadQuarter" => "Head Quarters",
+        "District" => "Districts",
+        "SubDistrict" => "Sub Districts",
+        "Product" => "Products",
+        "Dealer" => "Dealers",
+        _ => "States"
+    };
+
     private async Task ClearAll()
     {
         _selStates.Clear(); _selRegions.Clear(); _selHqs.Clear(); _selDistricts.Clear(); _selSubDistricts.Clear();
         _selProducts.Clear(); _selDealerKeys.Clear(); _selStatuses.Clear(); _selBuckets.Clear();
         _dateFrom = _dateTo = null;
         _filter.Source = null;
+        _filter.GroupBy = "State";
         _states = _allStates; _regions = _allRegions; _hq = _allHqs; _districts = _allDistricts; _subDistricts = _allSubDistricts;
         SyncSelectionsToFilter(); _filter.Search = null; _filter.Page = 1;
         StateHasChanged();

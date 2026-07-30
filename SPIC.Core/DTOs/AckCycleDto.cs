@@ -33,7 +33,11 @@ namespace SPIC.Core.DTOs
 		public List<string> Buckets { get; set; } = new();
 
 		public string? Search { get; set; }
-		// Top-5 chart grouping dimension: "State" | "Product" | "Dealer".
+		// Top-5 chart grouping dimension:
+		// "State" | "Region" | "HeadQuarter" | "District" | "SubDistrict" | "Product" | "Dealer".
+		// NOTE: State/District/Product/Dealer are groupable directly off the sales rows.
+		// Region/HeadQuarter/SubDistrict require mapping each row through the dealer master
+		// (they are not derivable from a row's State/District alone).
 		public string GroupBy { get; set; } = "State";
 		public string? SortColumn { get; set; }   // dealer|product|invoiceno|invoicedate|receiptdate|cycledays|status
 		public bool SortDesc { get; set; } = true;
@@ -67,10 +71,25 @@ namespace SPIC.Core.DTOs
 		public double CriticalPct => Total == 0 ? 0 : Math.Round(Critical * 100.0 / Total, 1);
 	}
 
-	/// <summary>One row of the Top-5 state lists (with the tooltip breakdown).</summary>
+	/// <summary>
+	/// One row of the Top-5 lists (with the tooltip breakdown).
+	/// Despite the historical "State" name, this now represents whichever dimension
+	/// the caller grouped by (State / Product / Dealer / ...). Set <see cref="Label"/>
+	/// to the display name for that dimension. For backward compatibility, when the
+	/// service only sets <see cref="StateName"/>, <see cref="Label"/> returns it.
+	/// </summary>
 	public class AckCycleStateStatDto
 	{
 		public string StateName { get; set; } = "";
+
+		private string? _label;
+		/// <summary>Display name of the grouped dimension. Falls back to StateName when unset.</summary>
+		public string Label
+		{
+			get => string.IsNullOrEmpty(_label) ? StateName : _label;
+			set => _label = value;
+		}
+
 		public int Total { get; set; }
 		public int Fast { get; set; }
 		public int Normal { get; set; }

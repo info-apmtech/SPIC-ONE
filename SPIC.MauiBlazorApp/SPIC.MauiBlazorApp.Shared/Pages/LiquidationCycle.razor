@@ -50,6 +50,15 @@
         
         <div class="lc-filter-body">
             <div class="lc-filter-grid-top">
+                <!-- Changed ac-form-group to lc-form-group for design consistency -->
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Date From</label>
+                    <input type="date" class="lc-form-input" @bind="_dateFrom" />
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Date To</label>
+                    <input type="date" class="lc-form-input" @bind="_dateTo" />
+                </div>
                 <div class="lc-form-group">
                     <label class="lc-form-label">State</label>
                     <select id="lc-state-select" class="lc-form-select" multiple="multiple">
@@ -77,6 +86,10 @@
                         }
                     </select>
                 </div>
+              
+            </div>
+            
+            <div class="lc-filter-grid-bottom">
                 <div class="lc-form-group">
                     <label class="lc-form-label">District</label>
                     <select id="lc-district-select" class="lc-form-select" multiple="multiple">
@@ -95,8 +108,6 @@
                         }
                     </select>
                 </div>
-            </div>
-            <div class="lc-filter-grid-bottom">
                 <div class="lc-form-group">
                     <label class="lc-form-label">Dealer Name</label>
                     <select id="lc-dealer-select" class="lc-form-select" multiple="multiple">
@@ -115,8 +126,20 @@
                         }
                     </select>
                 </div>
-                <div class="lc-form-group"><label class="lc-form-label">Date From</label><input type="date" class="lc-form-input" @bind="_dateFrom" /></div>
-                <div class="lc-form-group"><label class="lc-form-label">Date To</label><input type="date" class="lc-form-input" @bind="_dateTo" /></div>
+
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Financial Year</label>
+                    <select id="lc-financialyear-select" class="lc-form-select" multiple="multiple">
+                        @if (_financialYears.Count == 0)
+                        {
+                            <option disabled>Loading…</option>
+                        }
+                        @foreach (var fy in _financialYears)
+                        {
+                            <option value="@fy.Id" selected="@(_selFinancialYears.Contains(fy.Id))">@fy.Name</option>
+                        }
+                    </select>
+                </div>
                 
                 <div class="lc-filter-actions">
                     <button class="lc-btn lc-btn-outline" @onclick="ClearAll"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Clear All</button>
@@ -133,6 +156,7 @@
     else if (_dashboard is not null)
     {
         <div style="@(_isLoading ? "opacity:0.6; pointer-events:none; transition:0.2s;" : "transition:0.2s;")">
+            
             <!-- 3-Column Statistics Grid -->
             <div class="lc-stats-grid">
                 <div class="lc-stat-card lc-card-green">
@@ -166,58 +190,103 @@
                 </div>
             </div>
 
-            <!-- WHOLESALER LIQUIDATION SECTION -->
+            <!-- WHOLESALER LIQUIDATION SECTION WITH UNIFIED TOGGLES -->
             <div class="lc-section-header">
                 <h3>Dealer Liquidation Performance</h3>
-                <div class="lc-toggle-wrapper">
-                    <button class="lc-toggle-btn @(_filter.Source == "Company Sales" ? "active" : "")" @onclick='() => SetSource("Company Sales")'>Company Sales</button>
-                    <button class="lc-toggle-btn @(_filter.Source == "Wholesaler Sales" ? "active" : "")" @onclick='() => SetSource("Wholesaler Sales")'>Wholesaler Sales</button>
-                    <button class="lc-toggle-btn @(string.IsNullOrEmpty(_filter.Source) ? "active" : "")" @onclick='() => SetSource(null)'>All</button>
+                
+                <div class="lc-btn-group">
+                    <!-- Single-select toolbar: only one button active at a time -->
+                    <button class="lc-toggle-btn @(_activeFilter == "Top5" ? "active" : "")"
+                            @onclick='() => SelectFilter("Top5")'>
+                        Top 5 Performance
+                    </button>
+                    <button class="lc-toggle-btn @(_activeFilter == "StateWise" ? "active" : "")"
+                            @onclick='() => SelectFilter("StateWise")'>
+                        State-wise
+                    </button>
+                    <button class="lc-toggle-btn @(_activeFilter == "All" ? "active" : "")"
+                            @onclick='() => SelectFilter("All")'>
+                        All
+                    </button>
+                    <button class="lc-toggle-btn @(_activeFilter == "Company Sales" ? "active" : "")"
+                            @onclick='() => SelectFilter("Company Sales")'>
+                        Company Sales
+                    </button>
+                    <button class="lc-toggle-btn @(_activeFilter == "Wholesaler Sales" ? "active" : "")"
+                            @onclick='() => SelectFilter("Wholesaler Sales")'>
+                        Wholesalers
+                    </button>
+                    <button class="lc-toggle-btn @(_activeFilter == "Retailer Sales" ? "active" : "")"
+                            @onclick='() => SelectFilter("Retailer Sales")'>
+                        Retailers
+                    </button>
                 </div>
             </div>
 
+            <!-- Single Row Chart Output — ONE chart format (horizontal bars) for every view -->
             <div class="lc-charts-grid">
-                <!-- Top 5 Fast -->
+
+                <!-- FAST -->
                 <div class="lc-chart-card">
                     <div class="lc-chart-card-header">
-                        <h4>Top 5 Fast Dealers</h4>
-                        <p>High fast liquidation volume</p>
+                        <h4>@(chartView == "Top5" ? "Top 5 Fast Dealers" : "State-wise Fast Liquidation")</h4>
+                        <p>@(chartView == "Top5" ? "High fast liquidation volume" : "States with the highest fast liquidation rate")</p>
                     </div>
                     <div class="lc-chart-scroll-wrapper">
                         <div class="lc-horiz-chart-inner">
-                            @foreach (var (d, i) in _dashboard.TopFastDealers.Select((d, i) => (d, i)))
+                            @{
+                                var fastData = GetFastChartData();
+                            }
+                            @if (fastData.Count == 0)
                             {
-                                <div class="lc-horiz-row">
-                                    <div class="lc-horiz-rank">@(i + 1)</div>
-                                    <div class="lc-horiz-label" style="width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@d.DealerName</div>
-                                    <div class="lc-horiz-track" style="flex:1;">
-                                        <div class="lc-horiz-fill bg-green-400" style="width: @(d.Rate.ToString("0", Inv))%;"></div>
+                                <div style="text-align:center; padding:24px; color:#94a3b8;">No data available.</div>
+                            }
+                            else
+                            {
+                                @foreach (var (item, i) in fastData.Select((d, i) => (d, i)))
+                                {
+                                    <div class="lc-horiz-row">
+                                        <div class="lc-horiz-rank">@(i + 1)</div>
+                                        <div class="lc-horiz-label" style="width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@item.Label</div>
+                                        <div class="lc-horiz-track" style="flex:1;">
+                                            <div class="lc-horiz-fill bg-green-400" style="width: @(item.Rate.ToString("0", Inv))%;"></div>
+                                        </div>
+                                        <div class="lc-horiz-val">@item.Rate.ToString("0.##")%</div>
                                     </div>
-                                    <div class="lc-horiz-val">@d.Rate.ToString("0.##")%</div>
-                                </div>
+                                }
                             }
                         </div>
                     </div>
                 </div>
 
-                <!-- Top 5 Slow -->
+                <!-- SLOW -->
                 <div class="lc-chart-card">
                     <div class="lc-chart-card-header">
-                        <h4>Top 5 Slow Dealers</h4>
-                        <p>High critical / slow volume</p>
+                        <h4>@(chartView == "Top5" ? "Top 5 Slow Dealers" : "State-wise Slow Liquidation")</h4>
+                        <p>@(chartView == "Top5" ? "High critical / slow volume" : "States with the highest delayed / slow liquidation rate")</p>
                     </div>
                     <div class="lc-chart-scroll-wrapper">
                         <div class="lc-horiz-chart-inner">
-                            @foreach (var (d, i) in _dashboard.TopSlowDealers.Select((d, i) => (d, i)))
+                            @{
+                                var slowData = GetSlowChartData();
+                            }
+                            @if (slowData.Count == 0)
                             {
-                                <div class="lc-horiz-row">
-                                    <div class="lc-horiz-rank">@(i + 1)</div>
-                                    <div class="lc-horiz-label" style="width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@d.DealerName</div>
-                                    <div class="lc-horiz-track" style="flex:1;">
-                                        <div class="lc-horiz-fill bg-red-400" style="width: @(d.Rate.ToString("0", Inv))%;"></div>
+                                <div style="text-align:center; padding:24px; color:#94a3b8;">No data available.</div>
+                            }
+                            else
+                            {
+                                @foreach (var (item, i) in slowData.Select((d, i) => (d, i)))
+                                {
+                                    <div class="lc-horiz-row">
+                                        <div class="lc-horiz-rank">@(i + 1)</div>
+                                        <div class="lc-horiz-label" style="width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@item.Label</div>
+                                        <div class="lc-horiz-track" style="flex:1;">
+                                            <div class="lc-horiz-fill bg-red-400" style="width: @(item.Rate.ToString("0", Inv))%;"></div>
+                                        </div>
+                                        <div class="lc-horiz-val">@item.Rate.ToString("0.##")%</div>
                                     </div>
-                                    <div class="lc-horiz-val">@d.Rate.ToString("0.##")%</div>
-                                </div>
+                                }
                             }
                         </div>
                     </div>
@@ -228,69 +297,68 @@
             <div class="lc-table-card">
                 <div class="lc-table-top">
                     <h3>Liquidation Cycle List</h3>
-                    <input type="text" class="lc-search-input" placeholder="Search dealer, product..." @bind="_filter.Search" @bind:event="oninput" @onkeyup="OnSearchKeyUp">
-                    </div>
+                    <input type="text" class="lc-search-input" placeholder="Search dealer, product..." @bind="_filter.Search" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+                </div>
 
-                    <div class="lc-table-wrapper">
-                        <table class="lc-main-table">
-                            <thead>
-                                <tr>
-                                    <th style="text-align: left;">Dealer Name</th>
-                                    <th>Dealer Type</th>
-                                    <th>Product</th>
-                                    <th>Stock (MT)</th>
-                                    <th>Ageing (Days)</th>
-                                    <th>Sales (MT)</th>
-                                    <th>Status</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @if (_dashboard.Grid.Items.Count == 0)
+                <div class="lc-table-wrapper">
+                    <table class="lc-main-table">
+                        <thead>
+                            <tr>
+                                <th style="text-align: left;">Dealer Name</th>
+                                <th>Dealer Type</th>
+                                <th>Product</th>
+                                <th>Stock (MT)</th>
+                                <th>Ageing (Days)</th>
+                                <th>Sales (MT)</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_dashboard.Grid.Items.Count == 0)
+                            {
+                                <tr><td colspan="8" style="text-align:center; padding:24px;">No records found.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _dashboard.Grid.Items)
                                 {
-                                    <tr><td colspan="8" style="text-align:center; padding:24px;">No records found.</td></tr>
+                                    <tr>
+                                        <td style="text-align: left; color: #475569;">@row.DealerName</td>
+                                        <td>@row.DealerType</td>
+                                        <td>@row.ProductName</td>
+                                        <td>@Num(row.Stock)</td>
+                                        <td class="@AgeingClass(row.AgeingDays)">@row.AgeingDays</td>
+                                        <td>@Num(row.Sales)</td>
+                                        <td><div class="lc-status @StatusClass(row.Status)"><div class="dot"></div>@row.Status</div></td>
+                                        <td><button class="lc-action-btn" @onclick="() => OpenDetails(row)"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
+                                    </tr>
                                 }
-                                else
-                                {
-                                    @foreach (var row in _dashboard.Grid.Items)
-                                    {
-                                        <tr>
-                                            <td style="text-align: left; color: #475569;">@row.DealerName</td>
-                                            <td>@row.DealerType</td>
-                                            <td>@row.ProductName</td>
-                                            <td>@Num(row.Stock)</td>
-                                            <td class="@AgeingClass(row.AgeingDays)">@row.AgeingDays</td>
-                                            <td>@Num(row.Sales)</td>
-                                            <td><div class="lc-status @StatusClass(row.Status)"><div class="dot"></div>@row.Status</div></td>
-                                            <td><button class="lc-action-btn" @onclick="() => OpenDetails(row)"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                                        </tr>
-                                    }
-                                }
-                            </tbody>
-                        </table>
-                    </div>
+                            }
+                        </tbody>
+                    </table>
+                </div>
 
-                    <div class="lc-pagination">
-                        <div class="lc-page-size">
-                            <span>Items Per Page</span>
-                            <select class="lc-form-select" style="padding: 6px 32px 6px 12px; width: 65px;" @onchange="OnPageSizeChanged">
-                                <option value="16" selected="@(_filter.PageSize == 16)">16</option>
-                                <option value="50" selected="@(_filter.PageSize == 50)">50</option>
-                            </select>
-                        </div>
-                        <div class="lc-page-controls">
-                            <button class="lc-page-btn" disabled="@(_filter.Page <= 1)" @onclick="() => GoToPage(_filter.Page - 1)">‹</button>
-                            <button class="lc-page-btn active">@_filter.Page</button>
-                            <button class="lc-page-btn" disabled="@(_filter.Page >= TotalPages)" @onclick="() => GoToPage(_filter.Page + 1)">›</button>
-                        </div>
+                <div class="lc-pagination">
+                    <div class="lc-page-size">
+                        <span>Items Per Page</span>
+                        <select class="lc-form-select" style="padding: 6px 32px 6px 12px; width: 65px;" @onchange="OnPageSizeChanged">
+                            <option value="16" selected="@(_filter.PageSize == 16)">16</option>
+                            <option value="50" selected="@(_filter.PageSize == 50)">50</option>
+                        </select>
+                    </div>
+                    <div class="lc-page-controls">
+                        <button class="lc-page-btn" disabled="@(_filter.Page <= 1)" @onclick="() => GoToPage(_filter.Page - 1)">‹</button>
+                        <button class="lc-page-btn active">@_filter.Page</button>
+                        <button class="lc-page-btn" disabled="@(_filter.Page >= TotalPages)" @onclick="() => GoToPage(_filter.Page + 1)">›</button>
                     </div>
                 </div>
             </div>
-        }
-    </div>
+        </div>
+    }
+</div>
 
 <LiquidationDetailsDrawer @bind-IsOpen="isDrawerOpen" Row="_selectedRow" />
-
 
 @code {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -305,13 +373,22 @@
     private LiqCycleRowDto? _selectedRow;
     private System.Timers.Timer? _searchDebounce;
 
+    // View Toggles (content switch only — same chart format is used for both)
+    private string chartView = "Top5";
+
+    // Which single button is currently active in the unified toolbar.
+    // Values: "Top5", "StateWise", "All", "Company Sales", "Wholesaler Sales", "Retailer Sales"
+    private string _activeFilter = "Top5";
+
     // ---- Master Data ----
     private List<LocationDto> _states = new(), _regions = new(), _hq = new(), _districts = new(), _subDistricts = new();
     private List<LocationDto> _products = new();
     private List<AckLookupItemDto> _dealers = new();
+    private List<FinancialYearDto> _financialYears = new();
 
     private List<int> _selStates = new(), _selRegions = new(), _selHqs = new(), _selDistricts = new(), _selSubDistricts = new(), _selProducts = new();
     private List<string> _selDealerKeys = new();
+    private List<int> _selFinancialYears = new();
 
     private DotNetObjectReference<LiquidationCycle>? _objRef;
 
@@ -319,6 +396,54 @@
     {
         public int Id { get; set; }
         public string Name { get; set; } = "";
+    }
+
+    // Local DTO for financial year master returned by api/FinancialYear/all
+    private class FinancialYearDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+    }
+
+    // ---- Unified chart model ----
+    // A single shape feeds the one horizontal-bar chart format for every view.
+    private record ChartBar(string Label, double Rate);
+
+    // TODO: replace these placeholders with real state-wise data once the API/DTO exposes it
+    // (e.g. _dashboard.StateFast / _dashboard.StateSlow). Kept here so the State-wise view
+    // renders in the SAME format as Top 5 without breaking the build.
+    private static readonly List<ChartBar> _stateFastPlaceholder = new()
+    {
+        new("Gujarat", 89),
+        new("Maharashtra", 78),
+        new("Karnataka", 70),
+        new("Punjab", 65),
+    };
+
+    private static readonly List<ChartBar> _stateSlowPlaceholder = new()
+    {
+        new("Gujarat", 89),
+        new("Maharashtra", 78),
+        new("Karnataka", 70),
+        new("Punjab", 65),
+    };
+
+    private List<ChartBar> GetFastChartData()
+    {
+        if (_dashboard is null) return new();
+        return chartView == "Top5"
+            ? _dashboard.TopFastDealers.Select(d => new ChartBar(d.DealerName, d.Rate)).ToList()
+            : _stateFastPlaceholder;
+    }
+
+    private List<ChartBar> GetSlowChartData()
+    {
+        if (_dashboard is null) return new();
+        return chartView == "Top5"
+            ? _dashboard.TopSlowDealers.Select(d => new ChartBar(d.DealerName, d.Rate)).ToList()
+            : _stateSlowPlaceholder;
     }
 
     private int TotalPages => _dashboard is null || _dashboard.Grid.PageSize == 0 ? 1 : (int)Math.Ceiling((double)_dashboard.Grid.TotalCount / _dashboard.Grid.PageSize);
@@ -338,18 +463,16 @@
     {
         try
         {
-            // Reusing endpoints from the Acknowledgement controller architecture
             var statesTask = FetchLocations("api/State/all");
             var regionsTask = FetchLocations("api/Region/all");
             var hqTask = FetchLocations("api/Headquarter/all");
             var districtsTask = FetchLocations("api/District/all");
             var subDistrictsTask = FetchLocations("api/SubDistrict/all");
             var productsTask = FetchLocations("api/Product/all");
-            
-            // Assuming we can reuse the generic dealers lookup
             var dealersTask = Http.GetFromJsonAsync<List<AckLookupItemDto>>("api/AckCycle/dealers");
+            var fyTask = Http.GetFromJsonAsync<List<FinancialYearDto>>("api/FinancialYear/all");
 
-            await Task.WhenAll(statesTask, regionsTask, hqTask, districtsTask, subDistrictsTask, productsTask, dealersTask);
+            await Task.WhenAll(statesTask, regionsTask, hqTask, districtsTask, subDistrictsTask, productsTask, dealersTask, fyTask);
 
             _states = statesTask.Result;
             _regions = regionsTask.Result;
@@ -358,6 +481,7 @@
             _subDistricts = subDistrictsTask.Result;
             _products = productsTask.Result;
             _dealers = dealersTask.Result ?? new();
+            _financialYears = fyTask.Result ?? new();
             
             StateHasChanged();
         }
@@ -422,23 +546,21 @@
     {
         _selStates.Clear(); _selRegions.Clear(); _selHqs.Clear(); _selDistricts.Clear(); _selSubDistricts.Clear();
         _selProducts.Clear(); _selDealerKeys.Clear();
+        _selFinancialYears.Clear();
         _dateFrom = _dateTo = null;
         _filter.Search = null;
         _filter.Source = null;
         _filter.Page = 1;
+        _activeFilter = "Top5";
+        chartView = "Top5";
         
-        // Clear Select2 visually
-        var ids = new[] { "lc-state-select", "lc-region-select", "lc-hq-select", "lc-district-select", "lc-subdistrict-select", "lc-product-select", "lc-dealer-select" };
+        var ids = new[] { "lc-state-select", "lc-region-select", "lc-hq-select", "lc-district-select", "lc-subdistrict-select", "lc-product-select", "lc-dealer-select", "lc-financialyear-select" };
         await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", ids);
         await Task.Delay(50);
         await InitSelect2();
-
         await LoadDashboard();
     }
 
-    // ==========================================================
-    //  Select2 JS Interop Bindings
-    // ==========================================================
     private async Task InitSelect2()
     {
         var configs = new[]
@@ -450,6 +572,7 @@
             new { id = "lc-subdistrict-select", method = nameof(OnSubDistrictChanged) },
             new { id = "lc-product-select",     method = nameof(OnProductChanged) },
             new { id = "lc-dealer-select",      method = nameof(OnDealerChanged) }
+            ,new { id = "lc-financialyear-select", method = nameof(OnFinancialYearChanged) }
         };
         await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
     }
@@ -461,13 +584,53 @@
     [JSInvokable] public void OnSubDistrictChanged(List<string> v) { _selSubDistricts = v.Select(int.Parse).ToList(); }
     [JSInvokable] public void OnProductChanged(List<string> v) { _selProducts = v.Select(int.Parse).ToList(); }
     [JSInvokable] public void OnDealerChanged(List<string> v) { _selDealerKeys = v; }
-
-    // ==========================================================
-    //  Grid & Utilities
-    // ==========================================================
-    private async Task SetSource(string? src)
+    [JSInvokable] public async Task OnFinancialYearChanged(List<string> v)
     {
-        _filter.Source = src;
+        _selFinancialYears = v.Select(int.Parse).ToList();
+        if (_selFinancialYears.Count == 0)
+        {
+            _dateFrom = _dateTo = null;
+        }
+        else
+        {
+            var fyItems = _financialYears.Where(x => _selFinancialYears.Contains(x.Id)).ToList();
+            if (fyItems.Count > 0)
+            {
+                _dateFrom = fyItems.Min(x => x.StartDate);
+                _dateTo = fyItems.Max(x => x.EndDate);
+            }
+            else
+            {
+                _dateFrom = _dateTo = null;
+            }
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SelectFilter(string key)
+    {
+        _activeFilter = key;
+
+        // View buttons change the chart content; source buttons change the data source.
+        // Each click fully defines the chart state so only one button ever stays active.
+        switch (key)
+        {
+            case "Top5":
+                chartView = "Top5";
+                _filter.Source = null;
+                break;
+            case "StateWise":
+                chartView = "StateWise";
+                _filter.Source = null;
+                break;
+            case "All":
+                _filter.Source = null;
+                break;
+            default: // "Company Sales", "Wholesaler Sales", "Retailer Sales"
+                _filter.Source = key;
+                break;
+        }
+
         _filter.Page = 1;
         await LoadDashboard();
     }
