@@ -47,6 +47,8 @@ builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepositor
 builder.Services.AddScoped<IStockReportService, StockReportService>();
 builder.Services.AddScoped<IPendingAckService, PendingAckService>();
 builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();
+builder.Services.AddScoped<IAckCycleService, AckCycleService>();
+builder.Services.AddScoped<ILiquidationCycleService, LiquidationCycleService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];

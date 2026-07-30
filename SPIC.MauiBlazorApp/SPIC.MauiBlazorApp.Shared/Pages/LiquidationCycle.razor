@@ -1,4 +1,26 @@
 ﻿@page "/LiquidationCycle"
+@implements IDisposable
+@inject HttpClient Http
+@inject IJSRuntime JS
+@using System.Globalization
+@using SPIC.Core.DTOs
+@using System.Text.Json
+@using System.Net.Http.Json
+
+<style>
+    select.lc-form-select[multiple]:not(.select2-hidden-accessible) {
+        height: 38px !important;
+        min-height: 38px !important;
+        overflow: hidden !important;
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        color: transparent;
+        pointer-events: none;
+        appearance: none;
+        -webkit-appearance: none;
+    }
+</style>
 
 <div class="container-fluid py-4 px-0">
     
@@ -6,26 +28,13 @@
     <div class="lc-header-container">
         <div class="lc-header-text">
             <h1>Liquidation Cycle</h1>
-            <p>View and monitor company sales transactions from iFMS</p>
+            <p>View and monitor sales transactions and ageing stock</p>
         </div>
         
         <div class="lc-action-buttons">
-            <button class="lc-btn lc-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg>
-                Refresh Data
-            </button>
-            <button class="lc-btn lc-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg>
-                Excel
-            </button>
-            <button class="lc-btn lc-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg>
-                PDF
-            </button>
-            <button class="lc-btn lc-btn-solid">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
-                Send Mail
-            </button>
+            <button class="lc-btn lc-btn-outline" @onclick="RefreshData"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg> Refresh Data</button>
+            <button class="lc-btn lc-btn-outline" @onclick="ExportExcel"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg> Excel</button>
+            <button class="lc-btn lc-btn-solid"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
         </div>
     </div>
 
@@ -41,521 +50,461 @@
         
         <div class="lc-filter-body">
             <div class="lc-filter-grid-top">
-                <div class="lc-form-group"><label class="lc-form-label">State</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Region</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">HQ</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">District</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Sub District</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Lying With</label><select class="lc-form-select"><option>Select All</option></select></div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">State</label>
+                    <select id="lc-state-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var s in _states)
+                        {
+                            <option value="@s.Id" selected="@(_selStates.Contains(s.Id))">@s.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Region</label>
+                    <select id="lc-region-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var r in _regions)
+                        {
+                            <option value="@r.Id" selected="@(_selRegions.Contains(r.Id))">@r.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">HQ</label>
+                    <select id="lc-hq-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var h in _hq)
+                        {
+                            <option value="@h.Id" selected="@(_selHqs.Contains(h.Id))">@h.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">District</label>
+                    <select id="lc-district-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var d in _districts)
+                        {
+                            <option value="@d.Id" selected="@(_selDistricts.Contains(d.Id))">@d.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Sub District</label>
+                    <select id="lc-subdistrict-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var sd in _subDistricts)
+                        {
+                            <option value="@sd.Id" selected="@(_selSubDistricts.Contains(sd.Id))">@sd.Name</option>
+                        }
+                    </select>
+                </div>
             </div>
             <div class="lc-filter-grid-bottom">
-                <div class="lc-form-group"><label class="lc-form-label">Dealer Name</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Product</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Liquidation Status</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Status</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Financial Year</label><select class="lc-form-select"><option>All</option></select></div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Dealer Name</label>
+                    <select id="lc-dealer-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var d in _dealers)
+                        {
+                            <option value="@d.Id" selected="@(_selDealerKeys.Contains(d.Id))">@d.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Product</label>
+                    <select id="lc-product-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var p in _products)
+                        {
+                            <option value="@p.Id" selected="@(_selProducts.Contains(p.Id))">@p.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group"><label class="lc-form-label">Date From</label><input type="date" class="lc-form-input" @bind="_dateFrom" /></div>
+                <div class="lc-form-group"><label class="lc-form-label">Date To</label><input type="date" class="lc-form-input" @bind="_dateTo" /></div>
                 
                 <div class="lc-filter-actions">
-                    <button class="lc-btn lc-btn-outline"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Clear All</button>
-                    <button class="lc-btn lc-btn-solid"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg> Apply Filters</button>
+                    <button class="lc-btn lc-btn-outline" @onclick="ClearAll"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Clear All</button>
+                    <button class="lc-btn lc-btn-solid" @onclick="ApplyFilters"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg> Apply Filters</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 3-Column Statistics Grid (Figma matched colors) -->
-    <div class="lc-stats-grid">
-        <!-- Total Stock -->
-        <div class="lc-stat-card lc-card-green">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Total Stock</span>
-                    <span class="lc-stat-value">4,820</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                </div>
-            </div>
-            <div class="lc-stat-trend lc-text-green">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>12% vs last period</span>
-            </div>
-        </div>
-
-        <!-- Liquidated -->
-        <div class="lc-stat-card lc-card-cyan">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Liquidated (MT)</span>
-                    <span class="lc-stat-value">3,120</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><circle cx="10" cy="13" r="2"></circle><line x1="11.4" y1="14.4" x2="13.4" y2="16.4"></line></svg>
-                </div>
-            </div>
-            <div class="lc-stat-trend lc-text-cyan">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>7.2% vs last period</span>
-            </div>
-        </div>
-
-        <!-- Balance Stock -->
-        <div class="lc-stat-card lc-card-red">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Balance Stock</span>
-                    <span class="lc-stat-value">1,020</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22V12"></path><circle cx="12" cy="12" r="3" fill="currentColor"></circle></svg>
-                </div>
-            </div>
-            <div class="lc-stat-trend lc-text-red">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"></polyline><polyline points="16 17 22 17 22 11"></polyline></svg>
-                <span>6.10% vs last period</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- WHOLESALER LIQUIDATION SECTION -->
-    <div class="lc-section-header">
-        <h3>Wholesaler Liquidation Performance</h3>
-        <div class="lc-toggle-wrapper">
-            <button class="lc-toggle-btn">Company Sales</button>
-            <button class="lc-toggle-btn active">Wholesaler Sales</button>
-        </div>
-    </div>
-
-    <div class="lc-charts-grid">
-        
-        <!-- Left Chart: Top 5 Fast Wholesalers -->
-        <div class="lc-chart-card">
-            <div class="lc-chart-card-header">
-                <h4>Top 5 Fast Wholesalers</h4>
-                <p>Avg Liquidation Cycles (Days)</p>
-            </div>
-            
-            <div class="lc-chart-scroll-wrapper">
-                <div class="lc-horiz-chart-inner">
-                    <div class="lc-horiz-grid-lines">
-                        <div class="lc-horiz-grid-line"></div>
-                        <div class="lc-horiz-grid-line"></div>
-                        <div class="lc-horiz-grid-line"></div>
-                        <div class="lc-horiz-grid-line"></div>
-                        <div class="lc-horiz-grid-line"></div>
-                        <div class="lc-horiz-grid-line" style="border: none;"></div>
-                    </div>
-
-                    <!-- Row 1 -->
-                    <div class="lc-horiz-row">
-                        <div class="lc-horiz-rank" style="background: #fef08a; color: #ca8a04;">👑</div>
-                        <div class="lc-horiz-label">Agri Hub</div>
-                        <div class="lc-horiz-track">
-                            <div class="lc-horiz-fill bg-green-400" style="width: 78%;"></div>
+    @if (_isLoading && _dashboard is null)
+    {
+        <div style="text-align:center; padding:48px; color:#64748b;">Loading dashboard…</div>
+    }
+    else if (_dashboard is not null)
+    {
+        <div style="@(_isLoading ? "opacity:0.6; pointer-events:none; transition:0.2s;" : "transition:0.2s;")">
+            <!-- 3-Column Statistics Grid -->
+            <div class="lc-stats-grid">
+                <div class="lc-stat-card lc-card-green">
+                    <div class="lc-card-top">
+                        <div class="lc-stat-info">
+                            <span class="lc-stat-title">Total Stock (MT)</span>
+                            <span class="lc-stat-value">@Num(_dashboard.Summary.TotalStock)</span>
                         </div>
-                        <div class="lc-horiz-val">78%</div>
+                        <div class="lc-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg></div>
                     </div>
-                    <!-- Row 2 -->
-                    <div class="lc-horiz-row">
-                        <div class="lc-horiz-rank" style="background: #e2e8f0; color: #64748b;">🛡️</div>
-                        <div class="lc-horiz-label">Green Filed</div>
-                        <div class="lc-horiz-track">
-                            <div class="lc-horiz-fill bg-green-400" style="width: 62%;"></div>
-                        </div>
-                        <div class="lc-horiz-val">16%</div>
-                    </div>
-                    <!-- Row 3 with tooltip -->
-                    <div class="lc-horiz-row">
-                        <div class="lc-horiz-rank" style="background: #fed7aa; color: #c2410c;">🥉</div>
-                        <div class="lc-horiz-label">Surya Export</div>
-                        <div class="lc-horiz-track">
-                            <div class="lc-horiz-fill bg-green-400" style="width: 45%;"></div>
-                        </div>
-                        <div class="lc-horiz-val">58%</div>
-                        
-                        <!-- Hover Tooltip -->
-                        <div class="lc-horiz-tooltip">
-                            <div class="lc-tt-title">Surya Export</div>
-                            <div class="lc-tt-row"><span>Total Transaction</span><span class="lc-tt-bold">1,248</span></div>
-                            <div class="lc-tt-row"><span>Fast (0-2 Days)</span><span class="lc-tt-bold">902</span></div>
-                            <div class="lc-tt-row"><span>Normal (3-5 Days)</span><span class="lc-tt-bold">201</span></div>
-                            <div class="lc-tt-row"><span>Delayed (6-7 Days)</span><span class="lc-tt-bold">95</span></div>
-                            <div class="lc-tt-divider"><span>Critical (>7 Days)</span><span class="lc-tt-bold">50</span></div>
-                            <div class="lc-tt-final"><span>Fast Rate</span><span class="lc-tt-bolder">72.3%</span></div>
-                        </div>
-                    </div>
-                    <!-- Row 4 -->
-                    <div class="lc-horiz-row">
-                        <div class="lc-horiz-rank">4</div>
-                        <div class="lc-horiz-label">Bharat Grain</div>
-                        <div class="lc-horiz-track">
-                            <div class="lc-horiz-fill bg-green-400" style="width: 42%;"></div>
-                        </div>
-                        <div class="lc-horiz-val">42%</div>
-                    </div>
-                    <!-- Row 5 -->
-                    <div class="lc-horiz-row">
-                        <div class="lc-horiz-rank">5</div>
-                        <div class="lc-horiz-label">Krishi Mart</div>
-                        <div class="lc-horiz-track">
-                            <div class="lc-horiz-fill bg-green-400" style="width: 35%;"></div>
-                        </div>
-                        <div class="lc-horiz-val">35%</div>
-                    </div>
+                </div>
 
-                    <div class="lc-horiz-x-axis">
-                        <span>0%</span><span>20%</span><span>40%</span><span>60%</span><span>80%</span><span>100%</span>
+                <div class="lc-stat-card lc-card-cyan">
+                    <div class="lc-card-top">
+                        <div class="lc-stat-info">
+                            <span class="lc-stat-title">Liquidated (MT)</span>
+                            <span class="lc-stat-value">@Num(_dashboard.Summary.Liquidated)</span>
+                        </div>
+                        <div class="lc-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="14 2 14 8 20 8"></polyline><circle cx="10" cy="13" r="2"></circle></svg></div>
+                    </div>
+                </div>
+
+                <div class="lc-stat-card lc-card-red">
+                    <div class="lc-card-top">
+                        <div class="lc-stat-info">
+                            <span class="lc-stat-title">Balance Stock (MT)</span>
+                            <span class="lc-stat-value">@Num(_dashboard.Summary.BalanceStock)</span>
+                        </div>
+                        <div class="lc-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3" fill="currentColor"></circle></svg></div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Right Chart: Top 5 Slow Wholesalers -->
-        <div class="lc-chart-card">
-            <div class="lc-chart-card-header">
-                <h4>Top 5 Slow Wholesalers</h4>
-                <p>Avg Liquidation Cycle (Days)</p>
-            </div>
-            
-            <div class="lc-chart-scroll-wrapper">
-                <div class="lc-horiz-chart-inner">
-                    <div class="lc-horiz-grid-lines">
-                        <div class="lc-horiz-grid-line"></div>
-                        <div class="lc-horiz-grid-line"></div>
-                        <div class="lc-horiz-grid-line"></div>
-                        <div class="lc-horiz-grid-line"></div>
-                        <div class="lc-horiz-grid-line"></div>
-                        <div class="lc-horiz-grid-line" style="border: none;"></div>
-                    </div>
-
-                    <!-- Row 1 -->
-                    <div class="lc-horiz-row">
-                        <div class="lc-horiz-rank">1</div>
-                        <div class="lc-horiz-label">Agri Hub</div>
-                        <div class="lc-horiz-track">
-                            <div class="lc-horiz-fill bg-red-400" style="width: 78%;"></div>
-                        </div>
-                        <div class="lc-horiz-val">78%</div>
-                    </div>
-                    <!-- Row 2 -->
-                    <div class="lc-horiz-row">
-                        <div class="lc-horiz-rank">2</div>
-                        <div class="lc-horiz-label">Green Filed</div>
-                        <div class="lc-horiz-track">
-                            <div class="lc-horiz-fill bg-red-400" style="width: 62%;"></div>
-                        </div>
-                        <div class="lc-horiz-val">16%</div>
-                    </div>
-                    <!-- Row 3 -->
-                    <div class="lc-horiz-row">
-                        <div class="lc-horiz-rank">3</div>
-                        <div class="lc-horiz-label">Surya Export</div>
-                        <div class="lc-horiz-track">
-                            <div class="lc-horiz-fill bg-red-400" style="width: 45%;"></div>
-                        </div>
-                        <div class="lc-horiz-val">58%</div>
-                    </div>
-                    <!-- Row 4 -->
-                    <div class="lc-horiz-row">
-                        <div class="lc-horiz-rank">4</div>
-                        <div class="lc-horiz-label">Bharat Grain</div>
-                        <div class="lc-horiz-track">
-                            <div class="lc-horiz-fill bg-red-400" style="width: 42%;"></div>
-                        </div>
-                        <div class="lc-horiz-val">42%</div>
-                    </div>
-                    <!-- Row 5 -->
-                    <div class="lc-horiz-row">
-                        <div class="lc-horiz-rank">5</div>
-                        <div class="lc-horiz-label">Krishi Mart</div>
-                        <div class="lc-horiz-track">
-                            <div class="lc-horiz-fill bg-red-400" style="width: 35%;"></div>
-                        </div>
-                        <div class="lc-horiz-val">35%</div>
-                    </div>
-
-                    <div class="lc-horiz-x-axis">
-                        <span>0%</span><span>20%</span><span>40%</span><span>60%</span><span>80%</span><span>100%</span>
-                    </div>
+            <!-- WHOLESALER LIQUIDATION SECTION -->
+            <div class="lc-section-header">
+                <h3>Dealer Liquidation Performance</h3>
+                <div class="lc-toggle-wrapper">
+                    <button class="lc-toggle-btn @(_filter.Source == "Company Sales" ? "active" : "")" @onclick='() => SetSource("Company Sales")'>Company Sales</button>
+                    <button class="lc-toggle-btn @(_filter.Source == "Wholesaler Sales" ? "active" : "")" @onclick='() => SetSource("Wholesaler Sales")'>Wholesaler Sales</button>
+                    <button class="lc-toggle-btn @(string.IsNullOrEmpty(_filter.Source) ? "active" : "")" @onclick='() => SetSource(null)'>All</button>
                 </div>
             </div>
-        </div>
 
-    </div>
-
-    <!-- STATE-WISE VERTICAL CHARTS SECTION -->
-    <div class="lc-charts-grid">
-        
-        <!-- Left: Fast Liquidation -->
-        <div class="lc-chart-card">
-            <div class="lc-chart-card-header">
-                <h3>State-wise Fast Liquidation</h3>
-                <p>States with the highest fast liquidation rate</p>
-            </div>
-            
-            <div class="lc-chart-scroll-wrapper" style="padding-top: 50px; margin-top: -50px;">
-                <div class="lc-v-chart-inner">
-                    <!-- Y-Axis -->
-                    <div class="lc-v-y-axis">
-                        <span>100%</span><span>90%</span><span>80%</span><span>70%</span><span>50%</span><span>30%</span><span>10%</span><span>0%</span>
+            <div class="lc-charts-grid">
+                <!-- Top 5 Fast -->
+                <div class="lc-chart-card">
+                    <div class="lc-chart-card-header">
+                        <h4>Top 5 Fast Dealers</h4>
+                        <p>High fast liquidation volume</p>
                     </div>
-
-                    <!-- Chart Area -->
-                    <div class="lc-v-chart-area">
-                        <!-- Horizontal Grid Lines -->
-                        <div class="lc-v-grid-lines">
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line solid"></div>
-                        </div>
-
-                        <!-- Bars -->
-                        <div class="lc-v-bars">
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">89%</div>
-                                <div class="lc-v-bar-fill bg-green-400" style="height: 89%;"></div>
-                                <div class="lc-v-bar-label">Gujarat</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-bg"></div>
-                                <div class="lc-v-bar-val">78%</div>
-                                <div class="lc-v-bar-fill bg-green-400" style="height: 78%;"></div>
-                                <div class="lc-v-bar-label">Maharashtra</div>
-                                
-                                <!-- Hover Tooltip -->
-                                <div class="lc-v-tooltip">
-                                    <div class="lc-tt-title">Maharashtra</div>
-                                    <div style="display: flex; justify-content: space-between; color: #16a34a; font-size: 12px;"><span>Fast Rate</span><span style="font-weight:600;">78%</span></div>
+                    <div class="lc-chart-scroll-wrapper">
+                        <div class="lc-horiz-chart-inner">
+                            @foreach (var (d, i) in _dashboard.TopFastDealers.Select((d, i) => (d, i)))
+                            {
+                                <div class="lc-horiz-row">
+                                    <div class="lc-horiz-rank">@(i + 1)</div>
+                                    <div class="lc-horiz-label" style="width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@d.DealerName</div>
+                                    <div class="lc-horiz-track" style="flex:1;">
+                                        <div class="lc-horiz-fill bg-green-400" style="width: @(d.Rate.ToString("0", Inv))%;"></div>
+                                    </div>
+                                    <div class="lc-horiz-val">@d.Rate.ToString("0.##")%</div>
                                 </div>
-                            </div>
+                            }
+                        </div>
+                    </div>
+                </div>
 
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">70%</div>
-                                <div class="lc-v-bar-fill bg-green-400" style="height: 70%;"></div>
-                                <div class="lc-v-bar-label">Karnataka</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">65%</div>
-                                <div class="lc-v-bar-fill bg-green-400" style="height: 65%;"></div>
-                                <div class="lc-v-bar-label">Punjab</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">60%</div>
-                                <div class="lc-v-bar-fill bg-green-400" style="height: 60%;"></div>
-                                <div class="lc-v-bar-label">Mar</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">45%</div>
-                                <div class="lc-v-bar-fill bg-green-400" style="height: 45%;"></div>
-                                <div class="lc-v-bar-label">Tamil Nadu</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">0%</div>
-                                <div class="lc-v-bar-fill bg-green-400" style="height: 25%;"></div>
-                                <div class="lc-v-bar-label">Rajasthan</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">0%</div>
-                                <div class="lc-v-bar-fill bg-green-400" style="height: 20%;"></div>
-                                <div class="lc-v-bar-label">Kerala</div>
-                            </div>
+                <!-- Top 5 Slow -->
+                <div class="lc-chart-card">
+                    <div class="lc-chart-card-header">
+                        <h4>Top 5 Slow Dealers</h4>
+                        <p>High critical / slow volume</p>
+                    </div>
+                    <div class="lc-chart-scroll-wrapper">
+                        <div class="lc-horiz-chart-inner">
+                            @foreach (var (d, i) in _dashboard.TopSlowDealers.Select((d, i) => (d, i)))
+                            {
+                                <div class="lc-horiz-row">
+                                    <div class="lc-horiz-rank">@(i + 1)</div>
+                                    <div class="lc-horiz-label" style="width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@d.DealerName</div>
+                                    <div class="lc-horiz-track" style="flex:1;">
+                                        <div class="lc-horiz-fill bg-red-400" style="width: @(d.Rate.ToString("0", Inv))%;"></div>
+                                    </div>
+                                    <div class="lc-horiz-val">@d.Rate.ToString("0.##")%</div>
+                                </div>
+                            }
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Right: Slow Liquidation -->
-        <div class="lc-chart-card">
-            <div class="lc-chart-card-header">
-                <h3>State-wise Slow Liquidation</h3>
-                <p>States with the highest delayed / slow liquidation rate</p>
-            </div>
-            
-            <div class="lc-chart-scroll-wrapper" style="padding-top: 50px; margin-top: -50px;">
-                <div class="lc-v-chart-inner">
-                    <!-- Y-Axis -->
-                    <div class="lc-v-y-axis">
-                        <span>100%</span><span>90%</span><span>80%</span><span>70%</span><span>50%</span><span>30%</span><span>10%</span><span>0%</span>
+            <!-- Table Section -->
+            <div class="lc-table-card">
+                <div class="lc-table-top">
+                    <h3>Liquidation Cycle List</h3>
+                    <input type="text" class="lc-search-input" placeholder="Search dealer, product..." @bind="_filter.Search" @bind:event="oninput" @onkeyup="OnSearchKeyUp">
                     </div>
 
-                    <!-- Chart Area -->
-                    <div class="lc-v-chart-area">
-                        <!-- Horizontal Grid Lines -->
-                        <div class="lc-v-grid-lines">
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line"></div>
-                            <div class="lc-v-grid-line solid"></div>
+                    <div class="lc-table-wrapper">
+                        <table class="lc-main-table">
+                            <thead>
+                                <tr>
+                                    <th style="text-align: left;">Dealer Name</th>
+                                    <th>Dealer Type</th>
+                                    <th>Product</th>
+                                    <th>Stock (MT)</th>
+                                    <th>Ageing (Days)</th>
+                                    <th>Sales (MT)</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (_dashboard.Grid.Items.Count == 0)
+                                {
+                                    <tr><td colspan="8" style="text-align:center; padding:24px;">No records found.</td></tr>
+                                }
+                                else
+                                {
+                                    @foreach (var row in _dashboard.Grid.Items)
+                                    {
+                                        <tr>
+                                            <td style="text-align: left; color: #475569;">@row.DealerName</td>
+                                            <td>@row.DealerType</td>
+                                            <td>@row.ProductName</td>
+                                            <td>@Num(row.Stock)</td>
+                                            <td class="@AgeingClass(row.AgeingDays)">@row.AgeingDays</td>
+                                            <td>@Num(row.Sales)</td>
+                                            <td><div class="lc-status @StatusClass(row.Status)"><div class="dot"></div>@row.Status</div></td>
+                                            <td><button class="lc-action-btn" @onclick="() => OpenDetails(row)"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="lc-pagination">
+                        <div class="lc-page-size">
+                            <span>Items Per Page</span>
+                            <select class="lc-form-select" style="padding: 6px 32px 6px 12px; width: 65px;" @onchange="OnPageSizeChanged">
+                                <option value="16" selected="@(_filter.PageSize == 16)">16</option>
+                                <option value="50" selected="@(_filter.PageSize == 50)">50</option>
+                            </select>
                         </div>
-
-                        <!-- Bars -->
-                        <div class="lc-v-bars">
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">89%</div>
-                                <div class="lc-v-bar-fill bg-red-400" style="height: 89%;"></div>
-                                <div class="lc-v-bar-label">Gujarat</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">78%</div>
-                                <div class="lc-v-bar-fill bg-red-400" style="height: 78%;"></div>
-                                <div class="lc-v-bar-label">Maharashtra</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">70%</div>
-                                <div class="lc-v-bar-fill bg-red-400" style="height: 70%;"></div>
-                                <div class="lc-v-bar-label">Karnataka</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">65%</div>
-                                <div class="lc-v-bar-fill bg-red-400" style="height: 65%;"></div>
-                                <div class="lc-v-bar-label">Punjab</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">60%</div>
-                                <div class="lc-v-bar-fill bg-red-400" style="height: 60%;"></div>
-                                <div class="lc-v-bar-label">Mar</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">45%</div>
-                                <div class="lc-v-bar-fill bg-red-400" style="height: 45%;"></div>
-                                <div class="lc-v-bar-label">Tamil Nadu</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">0%</div>
-                                <div class="lc-v-bar-fill bg-red-400" style="height: 25%;"></div>
-                                <div class="lc-v-bar-label">Rajasthan</div>
-                            </div>
-
-                            <div class="lc-v-bar-group">
-                                <div class="lc-v-bar-val">0%</div>
-                                <div class="lc-v-bar-fill bg-red-400" style="height: 20%;"></div>
-                                <div class="lc-v-bar-label">Kerala</div>
-                            </div>
+                        <div class="lc-page-controls">
+                            <button class="lc-page-btn" disabled="@(_filter.Page <= 1)" @onclick="() => GoToPage(_filter.Page - 1)">‹</button>
+                            <button class="lc-page-btn active">@_filter.Page</button>
+                            <button class="lc-page-btn" disabled="@(_filter.Page >= TotalPages)" @onclick="() => GoToPage(_filter.Page + 1)">›</button>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-
+        }
     </div>
 
-    <!-- Table Section -->
-    <div class="lc-table-card">
-        <div class="lc-table-top">
-            <h3>Liquidation Cycle List</h3>
-            <input type="text" class="lc-search-input" placeholder="Search zones...">
-        </div>
+<LiquidationDetailsDrawer @bind-IsOpen="isDrawerOpen" Row="_selectedRow" />
 
-        <div class="lc-table-wrapper">
-            <table class="lc-main-table">
-                <thead>
-                    <tr>
-                        <th><input type="checkbox" class="lc-checkbox"></th>
-                        <th style="text-align: left;">Dealer Name</th>
-                        <th>Product</th>
-                        <th>Stock</th>
-                        <th>Ageing in Days</th>
-                        <th>Sales</th>
-                        <th>Liquidation Status</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><input type="checkbox" class="lc-checkbox"></td>
-                        <td style="text-align: left; color: #475569;">Sri Murugan Traders</td>
-                        <td>DAP 50 KG</td>
-                        <td>120.500</td>
-                        <td class="lc-txt-red">28</td>
-                        <td>70.600</td>
-                        <td><span class="lc-outline-badge lc-outline-blue">Under Review</span></td>
-                        <td><div class="lc-status lc-st-red"><div class="dot"></div>Critical</div></td>
-                        <td><button class="lc-action-btn" @onclick="OpenLiquidationDetails"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                    </tr>
-                    <tr>
-                        <td><input type="checkbox" class="lc-checkbox"></td>
-                        <td style="text-align: left; color: #475569;">Sri Murugan Traders</td>
-                        <td>MOP 50 Kg</td>
-                        <td>80.250</td>
-                        <td class="lc-txt-orange">42</td>
-                        <td>62.100</td>
-                        <td><span class="lc-outline-badge lc-outline-pink">In Progress</span></td>
-                        <td><div class="lc-status lc-st-orange"><div class="dot"></div>Monitoring</div></td>
-                        <td><button class="lc-action-btn" @onclick="OpenLiquidationDetails"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                    </tr>
-                    <tr>
-                        <td><input type="checkbox" class="lc-checkbox"></td>
-                        <td style="text-align: left; color: #475569;">Sri Murugan Traders</td>
-                        <td>Mop 50 Kg</td>
-                        <td>70.600</td>
-                        <td class="lc-txt-green">78</td>
-                        <td>18.600</td>
-                        <td><span class="lc-outline-badge lc-outline-green">Liquidated</span></td>
-                        <td><div class="lc-status lc-st-green"><div class="dot"></div>Active</div></td>
-                        <td><button class="lc-action-btn" @onclick="OpenLiquidationDetails"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="lc-pagination">
-            <div class="lc-page-size">
-                <span>Items Per Page</span>
-                <select class="lc-form-select" style="padding: 6px 32px 6px 12px; width: 65px; margin:0; background-position: right 8px center;">
-                    <option>16</option>
-                </select>
-            </div>
-            <div class="lc-page-controls">
-                <button class="lc-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <button class="lc-page-btn active">1</button>
-                <button class="lc-page-btn">2</button>
-                <button class="lc-page-btn">3</button>
-                <button class="lc-page-btn dots">..</button>
-                <button class="lc-page-btn">8</button>
-                <button class="lc-page-btn">9</button>
-                <button class="lc-page-btn">10</button>
-                <button class="lc-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<LiquidationDetailsDrawer @bind-IsOpen="isLiquidationDetailsOpen" />
 
 @code {
-    private string activeTab = "All";
-    private bool isLiquidationDetailsOpen = false;
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+    private LiqCycleDashboardDto? _dashboard;
+    private readonly LiqCycleFilter _filter = new();
+    
+    private bool _isLoading = true;
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+    
+    private bool isDrawerOpen = false;
+    private LiqCycleRowDto? _selectedRow;
+    private System.Timers.Timer? _searchDebounce;
 
-    private void SetActiveTab(string tabName)
+    // ---- Master Data ----
+    private List<LocationDto> _states = new(), _regions = new(), _hq = new(), _districts = new(), _subDistricts = new();
+    private List<LocationDto> _products = new();
+    private List<AckLookupItemDto> _dealers = new();
+
+    private List<int> _selStates = new(), _selRegions = new(), _selHqs = new(), _selDistricts = new(), _selSubDistricts = new(), _selProducts = new();
+    private List<string> _selDealerKeys = new();
+
+    private DotNetObjectReference<LiquidationCycle>? _objRef;
+
+    public class LocationDto
     {
-        activeTab = tabName;
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
     }
 
-    private void OpenLiquidationDetails()
+    private int TotalPages => _dashboard is null || _dashboard.Grid.PageSize == 0 ? 1 : (int)Math.Ceiling((double)_dashboard.Grid.TotalCount / _dashboard.Grid.PageSize);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        isLiquidationDetailsOpen = true;
+        if (firstRender)
+        {
+            _objRef = DotNetObjectReference.Create(this);
+            await LoadMasterData();
+            await InitSelect2();
+            await LoadDashboard();
+        }
+    }
+
+    private async Task LoadMasterData()
+    {
+        try
+        {
+            // Reusing endpoints from the Acknowledgement controller architecture
+            var statesTask = FetchLocations("api/State/all");
+            var regionsTask = FetchLocations("api/Region/all");
+            var hqTask = FetchLocations("api/Headquarter/all");
+            var districtsTask = FetchLocations("api/District/all");
+            var subDistrictsTask = FetchLocations("api/SubDistrict/all");
+            var productsTask = FetchLocations("api/Product/all");
+            
+            // Assuming we can reuse the generic dealers lookup
+            var dealersTask = Http.GetFromJsonAsync<List<AckLookupItemDto>>("api/AckCycle/dealers");
+
+            await Task.WhenAll(statesTask, regionsTask, hqTask, districtsTask, subDistrictsTask, productsTask, dealersTask);
+
+            _states = statesTask.Result;
+            _regions = regionsTask.Result;
+            _hq = hqTask.Result;
+            _districts = districtsTask.Result;
+            _subDistricts = subDistrictsTask.Result;
+            _products = productsTask.Result;
+            _dealers = dealersTask.Result ?? new();
+            
+            StateHasChanged();
+        }
+        catch (Exception ex) { Console.WriteLine($"[Liquidation] Error loading master data: {ex.Message}"); }
+    }
+
+    private async Task<List<LocationDto>> FetchLocations(string url)
+    {
+        try
+        {
+            var raw = await Http.GetFromJsonAsync<List<JsonElement>>(url);
+            var list = new List<LocationDto>();
+            if (raw == null) return list;
+            foreach (var item in raw)
+            {
+                var id = item.GetProperty("id").GetInt32();
+                string name = "";
+                if (item.TryGetProperty("name", out var n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("stateName", out n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("regionName", out n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("headquarterName", out n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("districtName", out n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("subDistrictName", out n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("productName", out n)) name = n.GetString() ?? "";
+
+                list.Add(new LocationDto { Id = id, Name = name });
+            }
+            return list;
+        }
+        catch { return new List<LocationDto>(); }
+    }
+
+    private void SyncSelections()
+    {
+        _filter.StateIds = _selStates.ToList();
+        _filter.DistrictIds = _selDistricts.ToList();
+        _filter.ProductIds = _selProducts.ToList();
+        _filter.DealerKeys = _selDealerKeys.ToList();
+        _filter.DateFrom = _dateFrom;
+        _filter.DateTo = _dateTo;
+    }
+
+    private async Task LoadDashboard()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        SyncSelections();
+
+        var resp = await Http.PostAsJsonAsync("api/LiquidationCycle/dashboard", _filter);
+        if (resp.IsSuccessStatusCode)
+            _dashboard = await resp.Content.ReadFromJsonAsync<LiqCycleDashboardDto>();
+        
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task ApplyFilters() { _filter.Page = 1; await LoadDashboard(); }
+    private async Task RefreshData() => await LoadDashboard();
+
+    private async Task ClearAll()
+    {
+        _selStates.Clear(); _selRegions.Clear(); _selHqs.Clear(); _selDistricts.Clear(); _selSubDistricts.Clear();
+        _selProducts.Clear(); _selDealerKeys.Clear();
+        _dateFrom = _dateTo = null;
+        _filter.Search = null;
+        _filter.Source = null;
+        _filter.Page = 1;
+        
+        // Clear Select2 visually
+        var ids = new[] { "lc-state-select", "lc-region-select", "lc-hq-select", "lc-district-select", "lc-subdistrict-select", "lc-product-select", "lc-dealer-select" };
+        await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", ids);
+        await Task.Delay(50);
+        await InitSelect2();
+
+        await LoadDashboard();
+    }
+
+    // ==========================================================
+    //  Select2 JS Interop Bindings
+    // ==========================================================
+    private async Task InitSelect2()
+    {
+        var configs = new[]
+        {
+            new { id = "lc-state-select",       method = nameof(OnStateChanged) },
+            new { id = "lc-region-select",      method = nameof(OnRegionChanged) },
+            new { id = "lc-hq-select",          method = nameof(OnHqChanged) },
+            new { id = "lc-district-select",    method = nameof(OnDistrictChanged) },
+            new { id = "lc-subdistrict-select", method = nameof(OnSubDistrictChanged) },
+            new { id = "lc-product-select",     method = nameof(OnProductChanged) },
+            new { id = "lc-dealer-select",      method = nameof(OnDealerChanged) }
+        };
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    [JSInvokable] public void OnStateChanged(List<string> v) { _selStates = v.Select(int.Parse).ToList(); }
+    [JSInvokable] public void OnRegionChanged(List<string> v) { _selRegions = v.Select(int.Parse).ToList(); }
+    [JSInvokable] public void OnHqChanged(List<string> v) { _selHqs = v.Select(int.Parse).ToList(); }
+    [JSInvokable] public void OnDistrictChanged(List<string> v) { _selDistricts = v.Select(int.Parse).ToList(); }
+    [JSInvokable] public void OnSubDistrictChanged(List<string> v) { _selSubDistricts = v.Select(int.Parse).ToList(); }
+    [JSInvokable] public void OnProductChanged(List<string> v) { _selProducts = v.Select(int.Parse).ToList(); }
+    [JSInvokable] public void OnDealerChanged(List<string> v) { _selDealerKeys = v; }
+
+    // ==========================================================
+    //  Grid & Utilities
+    // ==========================================================
+    private async Task SetSource(string? src)
+    {
+        _filter.Source = src;
+        _filter.Page = 1;
+        await LoadDashboard();
+    }
+
+    private void OnSearchKeyUp()
+    {
+        _searchDebounce?.Stop(); _searchDebounce?.Dispose();
+        _searchDebounce = new System.Timers.Timer(400) { AutoReset = false };
+        _searchDebounce.Elapsed += async (_, _) => { _filter.Page = 1; await InvokeAsync(LoadDashboard); };
+        _searchDebounce.Start();
+    }
+
+    private async Task GoToPage(int page) { _filter.Page = page; await LoadDashboard(); }
+    private async Task OnPageSizeChanged(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var size)) { _filter.PageSize = size; _filter.Page = 1; await LoadDashboard(); } }
+
+    private void OpenDetails(LiqCycleRowDto row)
+    {
+        _selectedRow = row;
+        isDrawerOpen = true;
+    }
+
+    private async Task ExportExcel() { await JS.InvokeVoidAsync("spicDownload.post", "api/LiquidationCycle/export/excel", _filter, "LiquidationCycle.xlsx"); }
+
+    private string Num(decimal v) => v.ToString("0.###", Inv);
+    private string AgeingClass(int days) => days > 90 ? "lc-txt-red" : days > 60 ? "lc-txt-orange" : "lc-txt-green";
+    
+    private string StatusClass(string st) => st switch
+    {
+        "Critical" => "lc-st-red",
+        "Monitoring" => "lc-st-orange",
+        "Active" => "lc-st-green",
+        _ => "lc-st-green"
+    };
+
+    public void Dispose()
+    {
+        _searchDebounce?.Dispose();
+        _objRef?.Dispose();
     }
 }

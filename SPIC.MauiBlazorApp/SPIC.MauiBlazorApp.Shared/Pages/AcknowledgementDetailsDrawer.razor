@@ -1,15 +1,18 @@
-﻿@if (IsOpen)
+﻿@using SPIC.Core.DTOs
+@using System.Globalization
+
+@if (IsOpen && Row is not null)
 {
     <div class="add-overlay" @onclick="CloseDrawer">
         <div class="add-drawer" @onclick:stopPropagation="true">
-            
+
             <!-- Drawer Header -->
             <div class="add-header">
                 <div class="add-header-titles">
                     <h2>Acknowledgement Details</h2>
-                    <div class="add-status-badge add-st-red">
-                        <div class="add-dot"></div>
-                        Critical
+                    <div class="add-status-badge" style="background:@BadgeBg(); color:@BadgeFg();">
+                        <div class="add-dot" style="background:@BadgeFg();"></div>
+                        @Row.Bucket
                     </div>
                 </div>
                 <button class="add-close-icon" @onclick="CloseDrawer" aria-label="Close">
@@ -23,33 +26,33 @@
 
             <!-- Drawer Body -->
             <div class="add-body">
-                
+
                 <!-- Basic Information -->
                 <div class="add-section">
                     <h3>Basic Information</h3>
                     <div class="add-row">
                         <span class="add-label">Transaction ID</span>
-                        <span class="add-value"><span class="add-colon">:</span> 100185299086</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Dash(Row.TransactionId)</span>
                     </div>
                     <div class="add-row">
                         <span class="add-label">Invoice No</span>
-                        <span class="add-value"><span class="add-colon">:</span> 3326100255</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Dash(Row.InvoiceNo)</span>
                     </div>
                     <div class="add-row">
                         <span class="add-label">Invoice Date</span>
-                        <span class="add-value"><span class="add-colon">:</span> 05-04-2026</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Date(Row.InvoiceDate)</span>
                     </div>
                     <div class="add-row">
                         <span class="add-label">Entry Date</span>
-                        <span class="add-value"><span class="add-colon">:</span> 05-04-2026</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Date(Row.EntryDate)</span>
+                    </div>
+                    <div class="add-row">
+                        <span class="add-label">Receipt Date</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Date(Row.ReceiptDate)</span>
                     </div>
                     <div class="add-row">
                         <span class="add-label">Acknowledgement Cycle</span>
-                        <span class="add-value add-txt-red"><span class="add-colon">:</span> 10 Days</span>
-                    </div>
-                    <div class="add-row">
-                        <span class="add-label">Pending Acknowledgement Age</span>
-                        <span class="add-value add-txt-red"><span class="add-colon">:</span> 10 Days</span>
+                        <span class="add-value" style="color:@BadgeFg();"><span class="add-colon">:</span> @Row.CycleDays Days</span>
                     </div>
                 </div>
 
@@ -58,24 +61,22 @@
                     <h3>Dealer Information</h3>
                     <div class="add-row">
                         <span class="add-label">Dealer Name</span>
-                        <span class="add-value"><span class="add-colon">:</span> Monsoon Agro Centre</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Dash(Row.DealerName)</span>
                     </div>
                     <div class="add-row">
                         <span class="add-label">Dealer ID</span>
-                        <span class="add-value"><span class="add-colon">:</span> 223331</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Dash(Row.DealerCode)</span>
                     </div>
                     <div class="add-row align-items-center">
-                        <span class="add-label">Dealer Type</span>
+                        <span class="add-label">Channel</span>
                         <span class="add-value add-val-flex">
                             <span class="add-colon">:</span>
-                            <div class="add-outline-badge add-outline-blue">
-                                Wholesaler
-                            </div>
+                            <div class="add-outline-badge add-outline-blue">@ChannelLabel()</div>
                         </span>
                     </div>
                     <div class="add-row">
                         <span class="add-label">Mobile No.</span>
-                        <span class="add-value"><span class="add-colon">:</span> 8765432109</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Dash(Row.MobileNo)</span>
                     </div>
                 </div>
 
@@ -84,7 +85,7 @@
                     <h3>Location Information</h3>
                     <div class="add-row">
                         <span class="add-label">State / District</span>
-                        <span class="add-value"><span class="add-colon">:</span> Tamil Nadu / Coimbatore</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Dash(Row.StateName) / @Dash(Row.District)</span>
                     </div>
                 </div>
 
@@ -93,15 +94,15 @@
                     <h3>Product Information</h3>
                     <div class="add-row">
                         <span class="add-label">Product</span>
-                        <span class="add-value"><span class="add-colon">:</span> Neem Coated Urea (45 Kg)</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Dash(Row.ProductName)</span>
                     </div>
                     <div class="add-row">
                         <span class="add-label">Quantity (MT)</span>
-                        <span class="add-value"><span class="add-colon">:</span> 15.3</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Num(Row.QuantityMT)</span>
                     </div>
                     <div class="add-row">
                         <span class="add-label">Received Quantity</span>
-                        <span class="add-value"><span class="add-colon">:</span> 0</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Num(Row.ReceivedQuantity)</span>
                     </div>
                 </div>
 
@@ -109,21 +110,25 @@
                 <div class="add-section">
                     <h3>Payment / Dispatch Information</h3>
                     <div class="add-row">
-                        <span class="add-label">DD No.</span>
-                        <span class="add-value"><span class="add-colon">:</span> 1.00153E+11</span>
+                        <span class="add-label">DD / Dispatch No.</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Dash(Row.DdNo)</span>
+                    </div>
+                    <div class="add-row">
+                        <span class="add-label">Workflow Status</span>
+                        <span class="add-value"><span class="add-colon">:</span> @Dash(Row.WorkflowStatus)</span>
                     </div>
                 </div>
 
                 <!-- Status Information -->
                 <div class="add-section">
                     <h3>Status Information</h3>
-                    <div class="add-alert-box">
+                    <div class="add-alert-box" style="background:@BadgeBg(); border-color:@BadgeFg(); color:@BadgeFg();">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                             <line x1="12" y1="9" x2="12" y2="13"></line>
                             <line x1="12" y1="17" x2="12.01" y2="17"></line>
                         </svg>
-                        Critical
+                        @Row.Bucket cycle — acknowledged in @Row.CycleDays days
                     </div>
                 </div>
 
@@ -160,27 +165,26 @@
 
 <style>
     /* --- SCOPED CSS FOR ACKNOWLEDGEMENT DETAILS DRAWER --- */
-    
+
     .add-overlay {
         position: fixed;
         top: 0;
         left: 0;
         width: 100vw;
         height: 100vh;
-        background-color: rgba(0, 0, 0, 0.4); 
+        background-color: rgba(0, 0, 0, 0.4);
         z-index: 9998;
         display: flex;
         justify-content: flex-end;
     }
 
-    /* Floating Drawer Design */
     .add-drawer {
-        width: 440px; /* Made slightly wider to fit the long labels */
+        width: 440px;
         max-width: calc(100vw - 32px);
-        height: calc(100vh - 32px); 
-        margin: 16px; 
+        height: calc(100vh - 32px);
+        margin: 16px;
         background-color: #ffffff;
-        border-radius: 16px; 
+        border-radius: 16px;
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
         display: flex;
         flex-direction: column;
@@ -195,7 +199,6 @@
         to { transform: translateX(0); opacity: 1; }
     }
 
-    /* Header */
     .add-header {
         display: flex;
         justify-content: space-between;
@@ -206,20 +209,9 @@
         z-index: 10;
     }
 
-    .add-header-titles {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
+    .add-header-titles { display: flex; flex-direction: column; gap: 10px; }
+    .add-header-titles h2 { margin: 0; font-size: 22px; font-weight: 700; color: #334155; }
 
-    .add-header-titles h2 {
-        margin: 0;
-        font-size: 22px;
-        font-weight: 700;
-        color: #334155;
-    }
-
-    /* Header Status Badge */
     .add-status-badge {
         display: inline-flex;
         align-items: center;
@@ -231,230 +223,115 @@
         width: fit-content;
     }
 
-    .add-st-red {
-        background-color: #fee2e2;
-        color: #ef4444;
-    }
-
-    .add-st-red .add-dot {
-        background-color: #ef4444;
-    }
-
-    .add-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-    }
+    .add-dot { width: 6px; height: 6px; border-radius: 50%; }
 
     .add-close-icon {
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 4px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: opacity 0.2s;
+        background: none; border: none; cursor: pointer; padding: 4px;
+        display: flex; align-items: center; justify-content: center; transition: opacity 0.2s;
     }
+    .add-close-icon:hover { opacity: 0.6; }
 
-    .add-close-icon:hover {
-        opacity: 0.6;
-    }
-
-    /* Body & Scrollbar */
     .add-body {
-        padding: 24px 32px;
-        overflow-y: auto;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 20px; 
+        padding: 24px 32px; overflow-y: auto; flex: 1;
+        display: flex; flex-direction: column; gap: 20px;
     }
-
     .add-body::-webkit-scrollbar { width: 6px; }
     .add-body::-webkit-scrollbar-track { background: transparent; }
     .add-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     .add-body::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-    /* Sections WITH Green Dividers */
     .add-section {
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-        padding-bottom: 20px;
-        border-bottom: 1px solid #d1fae5; 
+        display: flex; flex-direction: column; gap: 14px;
+        padding-bottom: 20px; border-bottom: 1px solid #d1fae5;
     }
+    .add-section:last-child { border-bottom: none; padding-bottom: 0; }
+    .add-section h3 { margin: 0 0 4px 0; font-size: 14px; font-weight: 700; color: #059669; }
 
-    .add-section:last-child {
-        border-bottom: none;
-        padding-bottom: 0;
-    }
+    .add-row { display: flex; align-items: flex-start; font-size: 13px; line-height: 1.5; }
+    .add-row.align-items-center { align-items: center; }
 
-    .add-section h3 {
-        margin: 0 0 4px 0;
-        font-size: 14px;
-        font-weight: 700;
-        color: #059669; 
-    }
+    .add-label { width: 200px; flex-shrink: 0; color: #64748b; font-weight: 500; }
+    .add-value { flex: 1; color: #334155; font-weight: 600; display: flex; align-items: flex-start; }
+    .add-val-flex { align-items: center; }
+    .add-colon { margin-right: 12px; color: #64748b; font-weight: 500; }
 
-    .add-row {
-        display: flex;
-        align-items: flex-start;
-        font-size: 13px;
-        line-height: 1.5;
-    }
-
-    .add-row.align-items-center {
-        align-items: center;
-    }
-
-    .add-label {
-        width: 200px; /* Made wider to fit "Pending Acknowledgement Age" perfectly */
-        flex-shrink: 0;
-        color: #64748b;
-        font-weight: 500;
-    }
-
-    .add-value {
-        flex: 1;
-        color: #334155;
-        font-weight: 600;
-        display: flex;
-        align-items: flex-start;
-    }
-
-    .add-txt-red {
-        color: #ef4444 !important;
-    }
-
-    .add-val-flex {
-        align-items: center;
-    }
-
-    .add-colon {
-        margin-right: 12px;
-        color: #64748b;
-        font-weight: 500;
-    }
-
-    /* Outline Badges */
     .add-outline-badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 4px 10px;
-        border-radius: 6px;
-        font-size: 11px;
-        font-weight: 500;
-        white-space: nowrap;
-        border: 1px solid;
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500;
+        white-space: nowrap; border: 1px solid;
     }
-    
-    .add-outline-blue {
-        color: #6366f1;
-        background-color: #ffffff;
-        border-color: #c7d2fe;
-    }
+    .add-outline-blue { color: #6366f1; background-color: #ffffff; border-color: #c7d2fe; }
 
-    /* Full Width Alert Box */
     .add-alert-box {
-        background-color: #fef2f2;
-        border: 1px solid #fecaca;
-        border-radius: 8px;
-        padding: 12px 16px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        color: #ef4444;
-        font-weight: 600;
-        font-size: 13px;
+        border: 1px solid; border-radius: 8px; padding: 12px 16px;
+        display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px;
     }
 
-    /* Footer */
     .add-footer {
-        padding: 20px 32px;
-        border-top: 1px solid #f1f5f9;
-        background-color: #ffffff;
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        gap: 12px;
-        flex-wrap: wrap;
+        padding: 20px 32px; border-top: 1px solid #f1f5f9; background-color: #ffffff;
+        display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap;
     }
-
     .add-btn-solid {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background-color: #14532d; 
-        color: #ffffff;
-        border: none;
-        border-radius: 6px;
-        padding: 10px 16px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background-color 0.2s;
+        display: flex; align-items: center; gap: 8px; background-color: #14532d; color: #ffffff;
+        border: none; border-radius: 6px; padding: 10px 16px; font-size: 13px; font-weight: 600;
+        cursor: pointer; transition: background-color 0.2s;
     }
-
-    .add-btn-solid:hover {
-        background-color: #166534;
-    }
-
+    .add-btn-solid:hover { background-color: #166534; }
     .add-btn-outline {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background-color: #ffffff; 
-        color: #475569;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
-        padding: 9px 16px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
+        display: flex; align-items: center; gap: 8px; background-color: #ffffff; color: #475569;
+        border: 1px solid #cbd5e1; border-radius: 6px; padding: 9px 16px; font-size: 13px;
+        font-weight: 600; cursor: pointer; transition: all 0.2s;
     }
+    .add-btn-outline:hover { background-color: #f8fafc; border-color: #94a3b8; color: #334155; }
 
-    .add-btn-outline:hover {
-        background-color: #f8fafc;
-        border-color: #94a3b8;
-        color: #334155;
-    }
-
-    /* Responsive */
     @@media (max-width: 540px) {
-        .add-drawer {
-            width: 100vw;
-            height: 100vh;
-            max-width: 100vw;
-            margin: 0;
-            border-radius: 0;
-        }
-        .add-label {
-            width: 140px; /* Shrink label on small screens */
-        }
-        .add-footer {
-            flex-direction: column;
-            width: 100%;
-        }
-        .add-footer button {
-            width: 100%;
-            justify-content: center;
-        }
+        .add-drawer { width: 100vw; height: 100vh; max-width: 100vw; margin: 0; border-radius: 0; }
+        .add-label { width: 140px; }
+        .add-footer { flex-direction: column; width: 100%; }
+        .add-footer button { width: 100%; justify-content: center; }
     }
 </style>
 
 @code {
-    [Parameter]
-    public bool IsOpen { get; set; }
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public AckCycleRowDto? Row { get; set; }
 
-    [Parameter]
-    public EventCallback<bool> IsOpenChanged { get; set; }
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     private async Task CloseDrawer()
     {
         IsOpen = false;
         await IsOpenChanged.InvokeAsync(IsOpen);
     }
+
+    private static string Dash(string? v) => string.IsNullOrWhiteSpace(v) ? "-" : v!;
+    private static string Date(DateTime? d) => d?.ToString("dd-MM-yyyy") ?? "-";
+    private static string Num(decimal v) => v.ToString("0.###", Inv);
+
+    private string ChannelLabel() => Row?.Source switch
+    {
+        "Company Sales" => "Company",
+        "Wholesaler Sales" => "Wholesaler",
+        _ => Dash(Row?.Source)
+    };
+
+    // Colour follows the cycle bucket.
+    private string BadgeFg() => Row?.Bucket switch
+    {
+        "Fast" => "#059669",
+        "Normal" => "#ca8a04",
+        "Delayed" => "#ea580c",
+        "Critical" => "#ef4444",
+        _ => "#64748b"
+    };
+
+    private string BadgeBg() => Row?.Bucket switch
+    {
+        "Fast" => "#d1fae5",
+        "Normal" => "#fef9c3",
+        "Delayed" => "#ffedd5",
+        "Critical" => "#fee2e2",
+        _ => "#f1f5f9"
+    };
 }
