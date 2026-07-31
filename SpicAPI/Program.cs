@@ -49,6 +49,8 @@ builder.Services.AddScoped<IPendingAckService, PendingAckService>();
 builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();
 builder.Services.AddScoped<IAckCycleService, AckCycleService>();
 builder.Services.AddScoped<ILiquidationCycleService, LiquidationCycleService>();
+builder.Services.AddScoped<IProductStockAvailabilityService, ProductStockAvailabilityService>();
+builder.Services.AddScoped<IStockDetailsService, StockDetailsService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];

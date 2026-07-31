@@ -8,41 +8,8 @@
 @using SPIC.Core.DTOs
 @using SPIC.MauiBlazorApp.Shared.Pages
 
-<style>
-    select.ac-form-select[multiple]:not(.select2-hidden-accessible) {
-        height: 38px !important;
-        min-height: 38px !important;
-        overflow: hidden !important;
-        background-color: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        color: transparent;
-        pointer-events: none;
-        appearance: none;
-        -webkit-appearance: none;
-    }
 
-    /* Toolbar holding the single group-by segmented control above the Top-5 charts */
-    .ac-chart-toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 12px;
-    }
-
-    .ac-seg-group {
-        display: inline-flex;
-        flex-wrap: wrap;
-        background: #f1f5f9;
-        border-radius: 8px;
-        padding: 3px;
-        gap: 2px;
-    }
-</style>
-
-<div class="container-fluid py-4 px-0">
+<div class="container-fluid py-4 px-0 ac-page-container">
 
     <!-- Header -->
     <div class="ac-header-container">
@@ -51,10 +18,10 @@
             <p>Track and monitor acknowledgement turnaround time</p>
         </div>
         <div class="ac-action-buttons">
-            <button class="ac-btn ac-btn-outline" @onclick="RefreshData"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg> Refresh Data</button>
-            <button class="ac-btn ac-btn-outline" @onclick="ExportExcel"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg> Excel</button>
-            <button class="ac-btn ac-btn-outline" @onclick="ExportPdf"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg> PDF</button>
-            <button class="ac-btn ac-btn-solid" @onclick="SendMail"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
+            <button class="ac-btn ac-btn-outline" @onclick="RefreshData" disabled="@(!_masterDataLoaded || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg> Refresh Data</button>
+            <button class="ac-btn ac-btn-outline" @onclick="ExportExcel" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg> Excel</button>
+            <button class="ac-btn ac-btn-outline" @onclick="ExportPdf" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg> PDF</button>
+            <button class="ac-btn ac-btn-solid" @onclick="SendMail" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
         </div>
     </div>
 
@@ -162,11 +129,11 @@
             </div>
 
             <div class="ac-filter-actions">
-                <button class="ac-btn ac-btn-outline" @onclick="ClearAll">
+                <button class="ac-btn ac-btn-outline" @onclick="ClearAll" disabled="@(!_select2Initialized || _isLoading)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     Clear All
                 </button>
-                <button class="ac-btn ac-btn-solid" @onclick="ApplyFilters">
+                <button class="ac-btn ac-btn-solid" @onclick="ApplyFilters" disabled="@(!_select2Initialized || _isLoading)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg>
                     Apply Filters
                 </button>
@@ -174,29 +141,115 @@
         </div>
     </div>
 
-    @if (_isLoading && _dashboard is null)
+    @if (_dashboard is null && _isLoading)
     {
-        <div style="display:flex; flex-direction:column; align-items:center; gap:12px; padding:48px; color:#64748b;">
-            <div style="width:32px; height:32px; border:3px solid #e2e8f0; border-top-color:#3b82f6; border-radius:50%; animation:ac-spin 0.8s linear infinite;"></div>
-            <span>Loading dashboard…</span>
-        </div>
-        <style>
-                @@keyframes ac-spin {
-                    to {
-                        transform: rotate(360deg);
-                    }
+        <!-- Keep the complete lower-page layout visible during the first request. -->
+        <section class="ac-dashboard-skeleton" aria-busy="true" aria-label="Loading acknowledgement cycle dashboard">
+            <div class="ac-loading-status" role="status">
+                <span class="ac-inline-spinner" aria-hidden="true"></span>
+                <span>Loading dashboard data…</span>
+            </div>
+
+            <div class="ac-stats-grid">
+                @for (var cardIndex = 0; cardIndex < 5; cardIndex++)
+                {
+                    <div class="ac-stat-card ac-skeleton-stat-card">
+                        <div class="ac-skeleton-stat-top">
+                            <div class="ac-skeleton-stat-copy">
+                                <span class="ac-skeleton-block ac-skeleton-title"></span>
+                                <span class="ac-skeleton-block ac-skeleton-value"></span>
+                            </div>
+                            <span class="ac-skeleton-block ac-skeleton-icon"></span>
+                        </div>
+                        <span class="ac-skeleton-block ac-skeleton-trend"></span>
+                    </div>
                 }
-        </style>
+            </div>
+
+            <div class="ac-chart-toolbar ac-skeleton-toolbar">
+                <span class="ac-skeleton-block"></span>
+            </div>
+
+            <div class="ac-top-charts-grid">
+                @for (var chartIndex = 0; chartIndex < 2; chartIndex++)
+                {
+                    <div class="ac-chart-card ac-skeleton-chart-card">
+                        <span class="ac-skeleton-block ac-skeleton-chart-title"></span>
+                        <span class="ac-skeleton-block ac-skeleton-chart-subtitle"></span>
+                        <div class="ac-skeleton-ranking-list">
+                            @for (var rowIndex = 0; rowIndex < 5; rowIndex++)
+                            {
+                                <div class="ac-skeleton-ranking-row">
+                                    <span class="ac-skeleton-block ac-skeleton-rank"></span>
+                                    <span class="ac-skeleton-block ac-skeleton-label"></span>
+                                    <span class="ac-skeleton-block ac-skeleton-bar"></span>
+                                    <span class="ac-skeleton-block ac-skeleton-rate"></span>
+                                </div>
+                            }
+                        </div>
+                        <div class="ac-skeleton-axis">
+                            @for (var tickIndex = 0; tickIndex < 6; tickIndex++)
+                            {
+                                <span class="ac-skeleton-block"></span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="ac-table-card ac-skeleton-table-card">
+                <div class="ac-table-top">
+                    <span class="ac-skeleton-block ac-skeleton-table-title"></span>
+                    <span class="ac-skeleton-block ac-skeleton-search"></span>
+                </div>
+                <div class="ac-skeleton-table-scroll">
+                    <div class="ac-skeleton-table-head">
+                        @for (var columnIndex = 0; columnIndex < 9; columnIndex++)
+                        {
+                            <span class="ac-skeleton-block"></span>
+                        }
+                    </div>
+                    <div class="ac-skeleton-table-body">
+                        @for (var rowIndex = 0; rowIndex < 5; rowIndex++)
+                        {
+                            <div class="ac-skeleton-table-row">
+                                @for (var cellIndex = 0; cellIndex < 9; cellIndex++)
+                                {
+                                    <span class="ac-skeleton-block"></span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="ac-skeleton-pagination">
+                    <span class="ac-skeleton-block"></span>
+                    <span class="ac-skeleton-block"></span>
+                </div>
+            </div>
+        </section>
     }
     else if (_dashboard is null)
     {
-        <div style="padding:48px; text-align:center; color:#94a3b8;">
+        <div class="ac-empty-state" role="alert">
             @(_loadError is null ? "No Data Available" : $"Could not load report: {_loadError}")
         </div>
     }
     else
     {
-        <div style="@(_isLoading ? "opacity:0.6; pointer-events:none; transition:0.2s;" : "transition:0.2s;")">
+        <!-- Preserve the last successful dashboard while filters/search/sort/paging reload. -->
+        <div class="ac-dashboard-content @(_isLoading ? "is-refreshing" : string.Empty)">
+            @if (_isLoading)
+            {
+                <div class="ac-refresh-indicator" role="status">
+                    <span class="ac-inline-spinner" aria-hidden="true"></span>
+                    <span>Updating…</span>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_loadError))
+            {
+                <div class="ac-dashboard-warning" role="alert">@_loadError</div>
+            }
 
             <!-- 5 KPI cards -->
             <div class="ac-stats-grid">
@@ -467,7 +520,7 @@
     private List<string> _selStatuses = new();      // status id as string
     private List<string> _selBuckets = new();       // Fast/Normal/Delayed/Critical
 
-    private DotNetObjectReference<Acknowledgement> _objRef = default!;
+    private DotNetObjectReference<Acknowledgement>? _objRef;
 
     public class LocationDto
     {
@@ -479,16 +532,54 @@
     }
 
     // ---- Lifecycle ----
+    private bool _masterDataLoaded;
+    private bool _select2Initialized;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Start dashboard and master-data requests together. This lets the full
+        // lower-page skeleton render immediately instead of showing a blank gap.
+        _isLoading = true;
+        _loadError = null;
+
+        var dashboardTask = LoadDashboard(renderLoadingState: false);
+
+        try
+        {
+            await LoadMasterData();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Ack] master: {ex}");
+        }
+        finally
+        {
+            // Render all option elements; Select2 is attached after this render.
+            _masterDataLoaded = true;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        await dashboardTask;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
+        if (!_masterDataLoaded || _select2Initialized)
+            return;
 
-        try { await LoadMasterData(); } catch (Exception ex) { Console.WriteLine($"[Ack] master: {ex}"); }
-        await Task.Delay(1);
-        try { _objRef = DotNetObjectReference.Create(this); await InitSelect2(); }
-        catch (Exception ex) { Console.WriteLine($"[Ack] select2: {ex}"); }
-        try { await LoadDashboard(); }
-        catch (Exception ex) { _isLoading = false; _loadError = ex.Message; StateHasChanged(); Console.WriteLine($"[Ack] dashboard: {ex}"); }
+        _select2Initialized = true;
+
+        try
+        {
+            _objRef ??= DotNetObjectReference.Create(this);
+            await InitSelect2();
+        }
+        catch (Exception ex)
+        {
+            // Permit a later render to retry if Select2 was not ready yet.
+            _select2Initialized = false;
+            Console.WriteLine($"[Ack] select2: {ex}");
+        }
     }
 
     private async Task LoadMasterData()
@@ -515,31 +606,73 @@
         _products = productsTask.Result;
         _dealers = dealersTask.Result;
         _statuses = statusesTask.Result;
-        StateHasChanged();
     }
 
     // ---- Dashboard ----
-    private async Task LoadDashboard()
+    private async Task LoadDashboard(bool renderLoadingState = true)
     {
-        _loadCts?.Cancel(); _loadCts?.Dispose();
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        _loadCts = cts; var token = cts.Token;
+        // Cancel any superseded request. The superseded request disposes its own CTS.
+        _loadCts?.Cancel();
 
-        _isLoading = true; _loadError = null; StateHasChanged();
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        _loadCts = cts;
+        var token = cts.Token;
+
+        _isLoading = true;
+        _loadError = null;
+
+        if (renderLoadingState)
+            await InvokeAsync(StateHasChanged);
+
         try
         {
-            var resp = await Http.PostAsJsonAsync("api/AckCycle/dashboard", _filter, token);
-            if (resp.IsSuccessStatusCode)
-                _dashboard = await resp.Content.ReadFromJsonAsync<AckCycleDashboardDto>(cancellationToken: token);
-            else { _dashboard = null; _loadError = $"Server returned {(int)resp.StatusCode} {resp.ReasonPhrase}."; }
+            var response = await Http.PostAsJsonAsync("api/AckCycle/dashboard", _filter, token);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var dashboard = await response.Content.ReadFromJsonAsync<AckCycleDashboardDto>(cancellationToken: token);
+
+                if (dashboard is null)
+                {
+                    if (_dashboard is null)
+                        _loadError = "The server returned an empty dashboard response.";
+                }
+                else
+                {
+                    _dashboard = dashboard;
+                }
+            }
+            else
+            {
+                // Keep the previous successful dashboard visible if a refresh fails.
+                _loadError = $"Server returned {(int)response.StatusCode} {response.ReasonPhrase}.";
+            }
         }
         catch (OperationCanceledException)
         {
-            if (!ReferenceEquals(_loadCts, cts)) return;
-            _dashboard = null; _loadError = "Request timed out — the server took too long to respond.";
+            // A newer request owns the UI, so this request must finish silently.
+            if (!ReferenceEquals(_loadCts, cts))
+                return;
+
+            _loadError = "Request timed out - the server took too long to respond.";
         }
-        catch (Exception ex) { _dashboard = null; _loadError = ex.Message; }
-        finally { if (ReferenceEquals(_loadCts, cts)) { _isLoading = false; StateHasChanged(); } }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+        finally
+        {
+            var isCurrentRequest = ReferenceEquals(_loadCts, cts);
+
+            if (isCurrentRequest)
+            {
+                _isLoading = false;
+                _loadCts = null;
+                await InvokeAsync(StateHasChanged);
+            }
+
+            cts.Dispose();
+        }
     }
 
     private void SyncSelectionsToFilter()
@@ -608,7 +741,7 @@
         _filter.GroupBy = "State";
         _states = _allStates; _regions = _allRegions; _hq = _allHqs; _districts = _allDistricts; _subDistricts = _allSubDistricts;
         SyncSelectionsToFilter(); _filter.Search = null; _filter.Page = 1;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
         await RefreshAllSelect2();
         await LoadDashboard();
     }
@@ -633,9 +766,17 @@
 
     private void OnSearchKeyUp()
     {
-        _searchDebounce?.Stop(); _searchDebounce?.Dispose();
+        _searchDebounce?.Stop();
+        _searchDebounce?.Dispose();
         _searchDebounce = new System.Timers.Timer(400) { AutoReset = false };
-        _searchDebounce.Elapsed += async (_, _) => { _filter.Page = 1; await InvokeAsync(LoadDashboard); };
+        _searchDebounce.Elapsed += async (_, _) =>
+        {
+            await InvokeAsync(async () =>
+            {
+                _filter.Page = 1;
+                await LoadDashboard();
+            });
+        };
         _searchDebounce.Start();
     }
 
@@ -699,15 +840,92 @@
         await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
     }
 
-    [JSInvokable] public async Task OnStateChanged(List<string> v) { var n = v.Select(int.Parse).ToList(); if (_selStates.SequenceEqual(n)) return; _selStates = n; await Cascade("State"); }
-    [JSInvokable] public async Task OnRegionChanged(List<string> v) { var n = v.Select(int.Parse).ToList(); if (_selRegions.SequenceEqual(n)) return; _selRegions = n; await Cascade("Region"); }
-    [JSInvokable] public async Task OnHqChanged(List<string> v) { var n = v.Select(int.Parse).ToList(); if (_selHqs.SequenceEqual(n)) return; _selHqs = n; await Cascade("HQ"); }
-    [JSInvokable] public async Task OnDistrictChanged(List<string> v) { var n = v.Select(int.Parse).ToList(); if (_selDistricts.SequenceEqual(n)) return; _selDistricts = n; await Cascade("District"); }
-    [JSInvokable] public async Task OnSubDistrictChanged(List<string> v) { var n = v.Select(int.Parse).ToList(); if (_selSubDistricts.SequenceEqual(n)) return; _selSubDistricts = n; await Cascade("SubDistrict"); }
-    [JSInvokable] public void OnProductChanged(List<string> v) { _selProducts = v.Select(int.Parse).ToList(); StateHasChanged(); }
-    [JSInvokable] public void OnDealerChanged(List<string> v) { _selDealerKeys = v; StateHasChanged(); }
-    [JSInvokable] public void OnStatusChanged(List<string> v) { _selStatuses = v; StateHasChanged(); }
-    [JSInvokable] public void OnBucketChanged(List<string> v) { _selBuckets = v; StateHasChanged(); }
+    private static List<int> ParseIntValues(IEnumerable<string>? values) =>
+        values?
+            .Select(value => int.TryParse(value, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList() ?? new List<int>();
+
+    private static List<string> NormalizeStringValues(IEnumerable<string>? values) =>
+        values?
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<string>();
+
+    [JSInvokable]
+    public async Task OnStateChanged(List<string>? values)
+    {
+        var selected = ParseIntValues(values);
+        if (_selStates.SequenceEqual(selected)) return;
+        _selStates = selected;
+        await Cascade("State");
+    }
+
+    [JSInvokable]
+    public async Task OnRegionChanged(List<string>? values)
+    {
+        var selected = ParseIntValues(values);
+        if (_selRegions.SequenceEqual(selected)) return;
+        _selRegions = selected;
+        await Cascade("Region");
+    }
+
+    [JSInvokable]
+    public async Task OnHqChanged(List<string>? values)
+    {
+        var selected = ParseIntValues(values);
+        if (_selHqs.SequenceEqual(selected)) return;
+        _selHqs = selected;
+        await Cascade("HQ");
+    }
+
+    [JSInvokable]
+    public async Task OnDistrictChanged(List<string>? values)
+    {
+        var selected = ParseIntValues(values);
+        if (_selDistricts.SequenceEqual(selected)) return;
+        _selDistricts = selected;
+        await Cascade("District");
+    }
+
+    [JSInvokable]
+    public async Task OnSubDistrictChanged(List<string>? values)
+    {
+        var selected = ParseIntValues(values);
+        if (_selSubDistricts.SequenceEqual(selected)) return;
+        _selSubDistricts = selected;
+        await Cascade("SubDistrict");
+    }
+
+    [JSInvokable]
+    public void OnProductChanged(List<string>? values)
+    {
+        _selProducts = ParseIntValues(values);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnDealerChanged(List<string>? values)
+    {
+        _selDealerKeys = NormalizeStringValues(values);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnStatusChanged(List<string>? values)
+    {
+        _selStatuses = NormalizeStringValues(values);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnBucketChanged(List<string>? values)
+    {
+        _selBuckets = NormalizeStringValues(values);
+        StateHasChanged();
+    }
 
     private async Task Cascade(string filterType)
     {

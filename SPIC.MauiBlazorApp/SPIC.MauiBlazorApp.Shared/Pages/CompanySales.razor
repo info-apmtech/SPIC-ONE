@@ -7,23 +7,7 @@
 @using System.Globalization
 @using SPIC.Core.DTOs
 
-<style>
-    /* Make the native multi-select look like a closed Select2 box before JS init */
-    select.cs-form-select[multiple]:not(.select2-hidden-accessible) {
-        height: 38px !important;
-        min-height: 38px !important;
-        overflow: hidden !important;
-        background-color: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        color: transparent;
-        pointer-events: none;
-        appearance: none;
-        -webkit-appearance: none;
-    }
-</style>
-
-<div class="container-fluid py-4 px-0">
+<div class="container-fluid py-4 px-0 cs-page-container">
 
     <!-- Header Section -->
     <div class="cs-header-container">
@@ -32,19 +16,19 @@
             <p>Track and manage pending acknowledgement transactions across all channels</p>
         </div>
         <div class="cs-action-buttons">
-            <button class="cs-btn cs-btn-outline" @onclick="RefreshData">
+            <button class="cs-btn cs-btn-outline" @onclick="RefreshData" disabled="@(!_masterDataLoaded || _isLoading)">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg>
                 Refresh Data
             </button>
-            <button class="cs-btn cs-btn-outline" @onclick="ExportExcel">
+            <button class="cs-btn cs-btn-outline" @onclick="ExportExcel" disabled="@(_dashboard is null || _isLoading)">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg>
                 Excel
             </button>
-            <button class="cs-btn cs-btn-outline" @onclick="ExportPdf">
+            <button class="cs-btn cs-btn-outline" @onclick="ExportPdf" disabled="@(_dashboard is null || _isLoading)">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg>
                 PDF
             </button>
-            <button class="cs-btn cs-btn-solid" @onclick="SendMail">
+            <button class="cs-btn cs-btn-solid" @onclick="SendMail" disabled="@(_dashboard is null || _isLoading)">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
                 Send Mail
             </button>
@@ -130,11 +114,11 @@
             </div>
 
             <div class="cs-filter-actions">
-                <button class="cs-btn cs-btn-outline" @onclick="ClearAll">
+                <button class="cs-btn cs-btn-outline" @onclick="ClearAll" disabled="@(!_select2Initialized || _isLoading)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     Clear All
                 </button>
-                <button class="cs-btn cs-btn-solid" @onclick="ApplyFilters">
+                <button class="cs-btn cs-btn-solid" @onclick="ApplyFilters" disabled="@(!_select2Initialized || _isLoading)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg>
                     Apply Filters
                 </button>
@@ -142,23 +126,102 @@
         </div>
     </div>
 
-    @if (_isLoading && _dashboard is null)
+    @if (_dashboard is null && _isLoading)
     {
-        <div style="display:flex; flex-direction:column; align-items:center; gap:12px; padding:48px; color:#64748b;">
-            <div class="cs-spinner" style="width:32px; height:32px; border:3px solid #e2e8f0; border-top-color:#3b82f6; border-radius:50%; animation:cs-spin 0.8s linear infinite;"></div>
-            <span>Loading dashboard…</span>
-        </div>
-        <style>@@keyframes cs-spin { to { transform: rotate(360deg); } }</style>
+        <!-- Keep the complete lower layout visible during the first API request. -->
+        <section class="cs-dashboard-skeleton" aria-busy="true" aria-label="Loading pending acknowledgement dashboard">
+            <div class="cs-loading-status" role="status">
+                <span class="cs-inline-spinner" aria-hidden="true"></span>
+                <span>Loading dashboard data…</span>
+            </div>
+
+            <div class="cs-stats-grid">
+                @for (var cardIndex = 0; cardIndex < 3; cardIndex++)
+                {
+                    <div class="cs-stat-card cs-skeleton-stat-card">
+                        <div class="cs-skeleton-stat-top">
+                            <div class="cs-skeleton-stat-copy">
+                                <span class="cs-skeleton-block cs-skeleton-title"></span>
+                                <span class="cs-skeleton-block cs-skeleton-value"></span>
+                            </div>
+                            <span class="cs-skeleton-block cs-skeleton-icon"></span>
+                        </div>
+                        <div class="cs-skeleton-stat-bottom">
+                            @for (var itemIndex = 0; itemIndex < 3; itemIndex++)
+                            {
+                                <span class="cs-skeleton-block"></span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="cs-status-section cs-skeleton-chart-card">
+                <span class="cs-skeleton-block cs-skeleton-heading"></span>
+                <div class="cs-skeleton-chart" aria-hidden="true">
+                    @for (var barIndex = 0; barIndex < 12; barIndex++)
+                    {
+                        <span class="cs-skeleton-block"></span>
+                    }
+                </div>
+                <div class="cs-skeleton-legend">
+                    <span class="cs-skeleton-block"></span>
+                    <span class="cs-skeleton-block"></span>
+                    <span class="cs-skeleton-block"></span>
+                </div>
+            </div>
+
+            <div class="cs-table-card cs-skeleton-table-card">
+                <div class="cs-table-header">
+                    <span class="cs-skeleton-block cs-skeleton-tabs"></span>
+                    <span class="cs-skeleton-block cs-skeleton-search"></span>
+                </div>
+                <div class="cs-skeleton-table-head">
+                    @for (var columnIndex = 0; columnIndex < 13; columnIndex++)
+                    {
+                        <span class="cs-skeleton-block"></span>
+                    }
+                </div>
+                <div class="cs-skeleton-table-body">
+                    @for (var rowIndex = 0; rowIndex < 5; rowIndex++)
+                    {
+                        <div class="cs-skeleton-table-row">
+                            @for (var cellIndex = 0; cellIndex < 13; cellIndex++)
+                            {
+                                <span class="cs-skeleton-block"></span>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="cs-skeleton-pagination">
+                    <span class="cs-skeleton-block"></span>
+                    <span class="cs-skeleton-block"></span>
+                </div>
+            </div>
+        </section>
     }
     else if (_dashboard is null)
     {
-        <div style="padding:48px; text-align:center; color:#94a3b8;">
+        <div class="cs-empty-state" role="alert">
             @(_loadError is null ? "No Data Available" : $"Could not load report: {_loadError}")
         </div>
     }
     else
     {
-        <div style="@(_isLoading ? "opacity:0.6; pointer-events:none; filter:grayscale(20%); transition:0.2s;" : "transition:0.2s;")">
+        <!-- Keep the previous dashboard visible during filters, paging and search updates. -->
+        <div class="cs-dashboard-content @(_isLoading ? "is-refreshing" : string.Empty)">
+            @if (_isLoading)
+            {
+                <div class="cs-refresh-indicator" role="status">
+                    <span class="cs-inline-spinner" aria-hidden="true"></span>
+                    <span>Updating…</span>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_loadError))
+            {
+                <div class="cs-dashboard-warning" role="alert">@_loadError</div>
+            }
 
             <!-- KPIs Section -->
             <div class="cs-stats-grid">
@@ -261,7 +324,10 @@
                     <div class="cs-chart-inner-area">
 
                         <div style="display:flex; flex-direction:column; justify-content:space-between; padding-right:16px; text-align:right; height:calc(100% - 24px); width:40px; margin-top:-6px; flex-shrink:0;">
-                            @foreach (var label in AxisLabels()) { <span>@label</span> }
+                            @foreach (var label in AxisLabels())
+                            {
+                                <span>@label</span>
+                            }
                         </div>
 
                         <div style="flex-grow:1; position:relative;">
@@ -278,10 +344,10 @@
                             <div style="position:absolute; top:0; left:0; right:0; bottom:0; display:flex; justify-content:space-around; padding:0 10px; z-index:1;">
                                 @foreach (var b in _dashboard.StateWise)
                                 {
-                                    var barPct        = _axisMax == 0 ? 0 : (b.Total * 100.0 / _axisMax);
-                                    var completedPct  = b.Total == 0 ? 0 : (b.Completed * 100.0 / b.Total);
-                                    var criticalPct   = b.Total == 0 ? 0 : (b.Critical  * 100.0 / b.Total);
-                                    var overduePct    = b.Total == 0 ? 0 : (b.Overdue   * 100.0 / b.Total);
+                                    var barPct = _axisMax == 0 ? 0 : (b.Total * 100.0 / _axisMax);
+                                    var completedPct = b.Total == 0 ? 0 : (b.Completed * 100.0 / b.Total);
+                                    var criticalPct = b.Total == 0 ? 0 : (b.Critical  * 100.0 / b.Total);
+                                    var overduePct = b.Total == 0 ? 0 : (b.Overdue   * 100.0 / b.Total);
 
                                     <div class="cs-bar-group">
                                         <div class="cs-bar-bg"></div>
@@ -471,7 +537,7 @@
     private List<string> _selectedDealers = new();
     private List<string> _selectedAgeStatuses = new();
 
-    private DotNetObjectReference<CompanySales> _objRef = default!;
+    private DotNetObjectReference<CompanySales>? _objRef;
 
     // Local to this view (not part of the shared DTOs).
     public class LocationDto
@@ -489,43 +555,64 @@
     }
 
     // ---------- Lifecycle ----------
-    private bool _initialDataLoaded = false;
+    private bool _masterDataLoaded;
+    private bool _select2Initialized;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnInitializedAsync()
     {
-        if (_initialDataLoaded) return;
-        _initialDataLoaded = true;
+        // Start dashboard and filter master requests together. This allows Blazor
+        // to show the filters and full dashboard skeleton immediately.
+        _isLoading = true;
+        _loadError = null;
 
-        try { await LoadMasterData(); }
-        catch (Exception ex) { Console.WriteLine($"[PendingAck] master: {ex}"); }
-
-        await Task.Delay(1);
+        var dashboardTask = LoadDashboard(renderLoadingState: false);
 
         try
         {
-            _objRef = DotNetObjectReference.Create(this);
-            await InitSelect2();
+            await LoadMasterData();
         }
-        catch (Exception ex) { Console.WriteLine($"[PendingAck] select2: {ex}"); }
-
-        try { await LoadDashboard(); }
         catch (Exception ex)
         {
-            _isLoading = false;
-            _loadError = ex.Message;
-            StateHasChanged();
-            Console.WriteLine($"[PendingAck] dashboard: {ex}");
+            Console.WriteLine($"[PendingAck] master: {ex}");
+        }
+        finally
+        {
+            // The options must be rendered before Select2 is attached.
+            _masterDataLoaded = true;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        await dashboardTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_masterDataLoaded || _select2Initialized)
+            return;
+
+        _select2Initialized = true;
+
+        try
+        {
+            _objRef ??= DotNetObjectReference.Create(this);
+            await InitSelect2();
+        }
+        catch (Exception ex)
+        {
+            // Allow a later render to retry if Select2 was not ready yet.
+            _select2Initialized = false;
+            Console.WriteLine($"[PendingAck] select2: {ex}");
         }
     }
 
     private async Task LoadMasterData()
     {
         // TODO: confirm these master endpoints. Each should return [{ id, name, (stateId for districts) }].
-        var statesTask      = FetchData("api/State/all");
-        var districtsTask   = FetchData("api/District/all");
+        var statesTask = FetchData("api/State/all");
+        var districtsTask = FetchData("api/District/all");
         var dealerTypesTask = FetchData("api/PendingAck/dealer-types");   // from DealerTypes
-        var productsTask    = FetchData("api/Product/all");
-        var dealersTask     = FetchOptions("api/PendingAck/dealers");     // DealerRegistrations + IfmsDealers (keyed ids)
+        var productsTask = FetchData("api/Product/all");
+        var dealersTask = FetchOptions("api/PendingAck/dealers");     // DealerRegistrations + IfmsDealers (keyed ids)
 
         await Task.WhenAll(statesTask, districtsTask, dealerTypesTask, productsTask, dealersTask);
 
@@ -537,15 +624,13 @@
         _dealerTypes = dealerTypesTask.Result;
         _products    = productsTask.Result;
         _dealers     = dealersTask.Result;
-
-        StateHasChanged();
     }
 
     // ---------- Dashboard load ----------
-    private async Task LoadDashboard()
+    private async Task LoadDashboard(bool renderLoadingState = true)
     {
+        // Cancel the previous request. Its own finally block disposes its CTS.
         _loadCts?.Cancel();
-        _loadCts?.Dispose();
 
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         _loadCts = cts;
@@ -553,40 +638,62 @@
 
         _isLoading = true;
         _loadError = null;
-        StateHasChanged();
+
+        if (renderLoadingState)
+            await InvokeAsync(StateHasChanged);
+
         try
         {
-            // TODO: confirm the dashboard endpoint name.
-            var resp = await Http.PostAsJsonAsync("api/PendingAck/dashboard", _filter, token);
-            if (resp.IsSuccessStatusCode)
+            var response = await Http.PostAsJsonAsync("api/PendingAck/dashboard", _filter, token);
+
+            if (response.IsSuccessStatusCode)
             {
-                _dashboard = await resp.Content.ReadFromJsonAsync<PendingAckDashboardDto>(cancellationToken: token);
-                _axisMax = NiceMax(_dashboard?.StateWise.Count > 0 ? _dashboard.StateWise.Max(s => s.Total) : 0);
+                var dashboard = await response.Content.ReadFromJsonAsync<PendingAckDashboardDto>(cancellationToken: token);
+
+                if (dashboard is null)
+                {
+                    if (_dashboard is null)
+                        _loadError = "The server returned an empty dashboard response.";
+                }
+                else
+                {
+                    _dashboard = dashboard;
+                    _axisMax = NiceMax(
+                        dashboard.StateWise.Count > 0
+                            ? dashboard.StateWise.Max(s => s.Total)
+                            : 0);
+                }
             }
             else
             {
-                _dashboard = null;
-                _loadError = $"Server returned {(int)resp.StatusCode} {resp.ReasonPhrase}.";
+                // Keep old content visible during refresh failures.
+                _loadError = $"Server returned {(int)response.StatusCode} {response.ReasonPhrase}.";
             }
         }
         catch (OperationCanceledException)
         {
-            if (!ReferenceEquals(_loadCts, cts)) return;
-            _dashboard = null;
-            _loadError = "Request timed out — the server took too long to respond.";
+            // A newer request owns the screen now.
+            if (!ReferenceEquals(_loadCts, cts))
+                return;
+
+            _loadError = "Request timed out - the server took too long to respond.";
         }
         catch (Exception ex)
         {
-            _dashboard = null;
             _loadError = ex.Message;
         }
         finally
         {
-            if (ReferenceEquals(_loadCts, cts))
+            var isCurrentRequest = ReferenceEquals(_loadCts, cts);
+
+            if (isCurrentRequest)
             {
                 _isLoading = false;
-                StateHasChanged();
+                _loadCts = null;
+                await InvokeAsync(StateHasChanged);
             }
+
+            cts.Dispose();
         }
     }
 
@@ -668,8 +775,11 @@
         _searchDebounce = new System.Timers.Timer(400) { AutoReset = false };
         _searchDebounce.Elapsed += async (_, _) =>
         {
-            _filter.Page = 1;
-            await InvokeAsync(LoadDashboard);
+            await InvokeAsync(async () =>
+            {
+                _filter.Page = 1;
+                await LoadDashboard();
+            });
         };
         _searchDebounce.Start();
     }
@@ -690,7 +800,7 @@
     {
         if (max <= 0) return 60;
         var step = (int)Math.Ceiling(max / 6.0);
-        var mag  = (int)Math.Pow(10, Math.Floor(Math.Log10(step)));
+        var mag = (int)Math.Pow(10, Math.Floor(Math.Log10(step)));
         step = (int)Math.Ceiling(step / (double)mag) * mag;
         return step * 6;
     }
@@ -704,21 +814,21 @@
     // ---------- Presentation helpers -> existing CSS classes ----------
     private (string cssClass, string label) StatusBadge(string s) => s switch
     {
-        "Overdue"   => ("cs-badge-red",    "Overdue"),
-        "Critical"  => ("cs-badge-orange", "Critical"),
-        "Pending"   => ("cs-badge-yellow", "Pending"),
-        "Fresh"     => ("cs-badge-green",  "Fresh"),
-        "Completed" => ("cs-badge-green",  "Completed"),
-        _           => ("cs-badge-green",  s)
+        "Overdue" => ("cs-badge-red", "Overdue"),
+        "Critical" => ("cs-badge-orange", "Critical"),
+        "Pending" => ("cs-badge-yellow", "Pending"),
+        "Fresh" => ("cs-badge-green", "Fresh"),
+        "Completed" => ("cs-badge-green", "Completed"),
+        _ => ("cs-badge-green", s)
     };
 
     private string AgeTextClass(string s) => s switch
     {
-        "Overdue"  => "cs-age-text-red",
+        "Overdue" => "cs-age-text-red",
         "Critical" => "cs-age-text-orange",
-        "Pending"  => "cs-age-text-yellow",
-        "Fresh"    => "cs-age-text-green",
-        _          => "cs-age-text-gray"
+        "Pending" => "cs-age-text-yellow",
+        "Fresh" => "cs-age-text-green",
+        _ => "cs-age-text-gray"
     };
 
     private string SourcePillClass(string source) =>
@@ -732,7 +842,7 @@
     {
         var s = status ?? "";
         if (s.IndexOf("Acknowledg", StringComparison.OrdinalIgnoreCase) >= 0) return "cs-pill-green";
-        if (s.IndexOf("Consent",    StringComparison.OrdinalIgnoreCase) >= 0) return "cs-pill-purple";
+        if (s.IndexOf("Consent", StringComparison.OrdinalIgnoreCase) >= 0) return "cs-pill-purple";
         return "cs-pill-blue";
     }
 
@@ -763,6 +873,14 @@
         await Http.PostAsJsonAsync("api/PendingAck/send-mail", _filter);
     }
 
+    private static List<int> ParseIntValues(IEnumerable<string>? values) =>
+        (values ?? Enumerable.Empty<string>())
+            .Select(value => int.TryParse(value, out var id) ? (int?)id : null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
     // ==========================================================
     //  Select2 cascade logic (State -> District; others independent)
     // ==========================================================
@@ -777,13 +895,13 @@
             new { id = "product-select",    method = nameof(OnProductChanged) },
             new { id = "agestatus-select",  method = nameof(OnAgeStatusChanged) }
         };
-        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef!);
     }
 
     [JSInvokable]
-    public async Task OnStateChanged(List<string> values)
+    public async Task OnStateChanged(List<string>? values)
     {
-        var newSelected = values.Select(int.Parse).ToList();
+        var newSelected = ParseIntValues(values);
         if (_selectedStates.SequenceEqual(newSelected)) return;
         _selectedStates = newSelected;
 
@@ -804,9 +922,9 @@
     }
 
     [JSInvokable]
-    public async Task OnDistrictChanged(List<string> values)
+    public async Task OnDistrictChanged(List<string>? values)
     {
-        var newSelected = values.Select(int.Parse).ToList();
+        var newSelected = ParseIntValues(values);
         if (_selectedDistricts.SequenceEqual(newSelected)) return;
         _selectedDistricts = newSelected;
 
@@ -828,16 +946,16 @@
     }
 
     [JSInvokable]
-    public void OnDealerTypeChanged(List<string> values) { _selectedDealerTypes = values.Select(int.Parse).ToList(); StateHasChanged(); }
+    public void OnDealerTypeChanged(List<string>? values) { _selectedDealerTypes = ParseIntValues(values); StateHasChanged(); }
 
     [JSInvokable]
-    public void OnDealerChanged(List<string> values) { _selectedDealers = values ?? new(); StateHasChanged(); }
+    public void OnDealerChanged(List<string>? values) { _selectedDealers = values ?? new(); StateHasChanged(); }
 
     [JSInvokable]
-    public void OnProductChanged(List<string> values) { _selectedProducts = values.Select(int.Parse).ToList(); StateHasChanged(); }
+    public void OnProductChanged(List<string>? values) { _selectedProducts = ParseIntValues(values); StateHasChanged(); }
 
     [JSInvokable]
-    public void OnAgeStatusChanged(List<string> values) { _selectedAgeStatuses = values; StateHasChanged(); }
+    public void OnAgeStatusChanged(List<string>? values) { _selectedAgeStatuses = values ?? new(); StateHasChanged(); }
 
     private async Task RefreshSelect2Hierarchy()
     {
@@ -850,7 +968,7 @@
             new { id = "state-select",    method = nameof(OnStateChanged) },
             new { id = "district-select", method = nameof(OnDistrictChanged) }
         };
-        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef!);
     }
 
     // Tolerant master-data fetch (same approach as StockReport.FetchData).
