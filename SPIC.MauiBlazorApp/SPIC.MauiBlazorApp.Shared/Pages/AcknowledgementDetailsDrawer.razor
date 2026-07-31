@@ -1,5 +1,6 @@
 ﻿@using SPIC.Core.DTOs
 @using System.Globalization
+@inject IJSRuntime JS
 
 @if (IsOpen && Row is not null)
 {
@@ -74,9 +75,25 @@
                             <div class="add-outline-badge add-outline-blue">@ChannelLabel()</div>
                         </span>
                     </div>
-                    <div class="add-row">
+                    <div class="add-row align-items-center">
                         <span class="add-label">Mobile No.</span>
-                        <span class="add-value"><span class="add-colon">:</span> @Dash(Row.MobileNo)</span>
+                        <span class="add-value add-val-flex">
+                            <span class="add-colon">:</span> @Dash(Row.MobileNo)
+                            @if (!string.IsNullOrWhiteSpace(Row.MobileNo))
+                            {
+                                <span class="add-contact-actions">
+                                    <button class="add-contact-btn add-wa" title="WhatsApp" @onclick="() => OpenWhatsApp(Row.MobileNo!)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                                    </button>
+                                    <button class="add-contact-btn add-call" title="Call" @onclick="() => Call(Row.MobileNo!)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                    </button>
+                                    <button class="add-contact-btn add-sms" title="SMS" @onclick="() => SendSms(Row.MobileNo!)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                    </button>
+                                </span>
+                            }
+                        </span>
                     </div>
                 </div>
 
@@ -255,6 +272,21 @@
     .add-val-flex { align-items: center; }
     .add-colon { margin-right: 12px; color: #64748b; font-weight: 500; }
 
+    /* Contact (WhatsApp / Call / SMS) action buttons */
+    .add-contact-actions { display: inline-flex; gap: 6px; margin-left: 10px; }
+    .add-contact-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 30px; height: 30px; border-radius: 7px; border: 1px solid #e2e8f0;
+        background: #fff; cursor: pointer; transition: all .15s ease;
+    }
+    .add-contact-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+    .add-contact-btn.add-wa   { color: #16a34a; }
+    .add-contact-btn.add-wa:hover   { background: #16a34a; color: #fff; }
+    .add-contact-btn.add-call { color: #2563eb; }
+    .add-contact-btn.add-call:hover { background: #2563eb; color: #fff; }
+    .add-contact-btn.add-sms  { color: #9333ea; }
+    .add-contact-btn.add-sms:hover  { background: #9333ea; color: #fff; }
+
     .add-outline-badge {
         display: inline-flex; align-items: center; justify-content: center;
         padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500;
@@ -334,4 +366,36 @@
         "Critical" => "#fee2e2",
         _ => "#f1f5f9"
     };
+
+    // ---- Contact actions (same convention as the other drawers) ----
+
+    // Opens a WhatsApp chat. Indian 10-digit numbers get the 91 prefix; numbers
+    // that already carry a country code are used as-is.
+    private async Task OpenWhatsApp(string number)
+    {
+        var digits = new string((number ?? "").Where(char.IsDigit).ToArray());
+        if (digits.Length == 0) return;
+
+        var wa = digits.Length == 10 ? "91" + digits : digits;
+        var msg = Uri.EscapeDataString(
+            $"Acknowledgement Cycle\nInvoice: {Row?.InvoiceNo}\nDealer: {Row?.DealerName}\n" +
+            $"State/District: {Row?.StateName} / {Row?.District}\nProduct: {Row?.ProductName}\n" +
+            $"Cycle: {Row?.CycleDays} days ({Row?.Bucket})");
+
+        await JS.InvokeVoidAsync("open", $"https://wa.me/{wa}?text={msg}", "_blank");
+    }
+
+    // Opens the device dialer.
+    private async Task Call(string number)
+    {
+        if (string.IsNullOrWhiteSpace(number)) return;
+        await JS.InvokeVoidAsync("open", $"tel:{number}", "_self");
+    }
+
+    // Opens the device SMS composer.
+    private async Task SendSms(string number)
+    {
+        if (string.IsNullOrWhiteSpace(number)) return;
+        await JS.InvokeVoidAsync("open", $"sms:{number}", "_self");
+    }
 }

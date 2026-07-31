@@ -70,7 +70,10 @@ namespace SPIC.Core.DTOs
 		public string LyingWith { get; set; } = "";
 		public int AgeingDays { get; set; }
 		public string Status { get; set; } = "";
-		public string? MobileNo { get; set; }
+		public string? MobileNo { get; set; }              // primary number (used by grid share button)
+		public string? WhatsAppNumber { get; set; }        // NEW
+		public string? OfficialContactNumber { get; set; } // NEW
+		public string? AlternativeNumber { get; set; }     // NEW
 	}
 
 	public class PagedResult<T>

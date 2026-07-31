@@ -179,6 +179,8 @@ namespace Spic.Infrastructure.Services
 				from d in dj.DefaultIfEmpty()
 				join dr in _db.Set<DealerRegistration>() on s.DealerRegistrationId equals dr.Id into drj
 				from dr in drj.DefaultIfEmpty()
+				join ifd in _db.Set<IfmsDealer>() on s.IfmsDealerId equals ifd.Id into ifdj
+				from ifd in ifdj.DefaultIfEmpty()
 				select new GridRaw
 				{
 					DealerRegistrationId = s.DealerRegistrationId,
@@ -188,7 +190,16 @@ namespace Spic.Infrastructure.Services
 						? s.AgencyName
 						: (dr != null ? dr.FirmName : ""),
 					DealerCode = dr != null ? dr.DealerCode : null,
-					MobileNo = null,            // TODO: confirm DealerRegistration.MobileNo
+
+					// Registered dealer's three numbers (resolved to a primary below).
+					WhatsAppNumber = dr != null ? dr.WhatsAppNumber : null,
+					OfficialContactNumber = dr != null ? dr.OfficialContactNumber : null,
+					AlternativeNumber = dr != null ? dr.AlternativeNumber : null,
+
+					// >>> ASSUMPTION: IfmsDealer's phone column is "MobileNo". Change or
+					//     remove this line if the entity names it differently / has none. <<<
+					//IfmsMobileNo = ifd != null ? ifd.MobileNo : null,
+
 					HeadquarterId = null,  // TODO: confirm DealerRegistration.HeadquarterId
 										   //SubDistrictId = dr != null ? dr.SubDistrictId : null,  // TODO: confirm DealerRegistration.SubDistrictId
 					ProductName = p != null ? p.Name : "",
@@ -254,7 +265,11 @@ namespace Spic.Infrastructure.Services
 					SubDistrictName = x.SubDistrictId.HasValue && sdNames.TryGetValue(x.SubDistrictId.Value, out var sdn) ? sdn : null,
 					DealerName = x.DealerName,
 					DealerCode = string.IsNullOrWhiteSpace(x.DealerCode) ? x.DealerRegistrationId?.ToString() : x.DealerCode,
-					MobileNo = x.MobileNo,
+
+					// Primary number: first registered number, else the IFMS fallback.
+					MobileNo = FirstNonBlank(
+						x.WhatsAppNumber, x.OfficialContactNumber, x.AlternativeNumber, x.IfmsMobileNo),
+
 					ProductName = x.ProductName,
 					Quantity = x.Quantity,
 					EntryDate = x.StockDate,
@@ -304,6 +319,10 @@ namespace Spic.Infrastructure.Services
 			_ => "Dead Stock"
 		};
 
+		// Returns the first non-blank (trimmed) value from the list, else null.
+		private static string? FirstNonBlank(params string?[] values)
+			=> values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
+
 		private class GridRaw
 		{
 			public int? DealerRegistrationId { get; set; }
@@ -311,7 +330,12 @@ namespace Spic.Infrastructure.Services
 			public string DistrictName { get; set; } = "";
 			public string DealerName { get; set; } = "";
 			public string? DealerCode { get; set; }
-			public string? MobileNo { get; set; }
+
+			public string? WhatsAppNumber { get; set; }
+			public string? OfficialContactNumber { get; set; }
+			public string? AlternativeNumber { get; set; }
+			public string? IfmsMobileNo { get; set; }
+
 			public int? HeadquarterId { get; set; }
 			public int? SubDistrictId { get; set; }
 			public string ProductName { get; set; } = "";

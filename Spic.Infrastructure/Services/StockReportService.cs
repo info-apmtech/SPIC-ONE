@@ -10,7 +10,8 @@
 //   2. The `using` lines below to match YOUR namespaces:
 //        - SPIC.Core.DTOs        (where StockReportDtos.cs lives)
 //        - SPIC.Core.Interfaces  (where IStockReportService.cs lives)
-//        - SPIC.Core.Entities    (WholesalerStockAsOnToday, State, Product, DealershipNature)
+//        - SPIC.Core.Entities    (WholesalerStockAsOnToday, State, Product, DealershipNature,
+//                                 DealerRegistration, IfmsDealer)
 //        - the namespace of your DbContext
 //
 //  PostgreSQL / Npgsql notes:
@@ -273,6 +274,11 @@ namespace Spic.Infrastructure.Services
 		private async Task<PagedResult<StockRowDto>> GetGridAsync(
 			IQueryable<WholesalerStockAsOnToday> q, StockReportFilter f, DateTime today)
 		{
+			// Phone numbers are joined in here:
+			//   * DealerRegistration (via DealerRegistrationId) carries three numbers.
+			//   * IfmsDealer (via IfmsDealerId) is the fallback for dealers that were
+			//     never formally registered.
+			// Both joins are LEFT joins, so a missing side just yields null.
 			var projected =
 				from s in q
 				join st in _db.Set<State>() on s.StateId equals st.Id into stj
@@ -281,6 +287,10 @@ namespace Spic.Infrastructure.Services
 				from p in pj.DefaultIfEmpty()
 				join dn in _db.Set<DealershipNature>() on s.DealershipNatureId equals dn.Id into dnj
 				from dn in dnj.DefaultIfEmpty()
+				join reg in _db.Set<DealerRegistration>() on s.DealerRegistrationId equals reg.Id into regj
+				from reg in regj.DefaultIfEmpty()
+				join ifd in _db.Set<IfmsDealer>() on s.IfmsDealerId equals ifd.Id into ifdj
+				from ifd in ifdj.DefaultIfEmpty()
 				select new GridRaw
 				{
 					DealerRegistrationId = s.DealerRegistrationId,
@@ -289,7 +299,18 @@ namespace Spic.Infrastructure.Services
 					ProductName = p != null ? p.Name : "",
 					Quantity = s.Stock,
 					LyingWith = dn != null ? dn.Name : "",
-					StockDate = s.StockDate
+					StockDate = s.StockDate,
+
+					// Registered dealer's three numbers.
+					WhatsAppNumber = reg != null ? reg.WhatsAppNumber : null,
+					OfficialContactNumber = reg != null ? reg.OfficialContactNumber : null,
+					AlternativeNumber = reg != null ? reg.AlternativeNumber : null,
+
+					// >>> ASSUMPTION: IfmsDealer's phone column is "MobileNo". If it is
+					//     named differently (e.g. Mobile / PhoneNo / ContactNo), change it
+					//     here - compile error, not a runtime 500. Remove this line if the
+					//     entity has no phone at all. <<<
+					//IfmsMobileNo = ifd != null ? ifd.MobileNo : null
 				};
 
 			if (!string.IsNullOrWhiteSpace(f.Search))
@@ -327,6 +348,7 @@ namespace Spic.Infrastructure.Services
 			{
 				int ageing = (int)Math.Floor((today - x.StockDate.Date).TotalDays);
 				if (ageing < 0) ageing = 0;
+
 				return new StockRowDto
 				{
 					DealerRegistrationId = x.DealerRegistrationId,
@@ -336,7 +358,17 @@ namespace Spic.Infrastructure.Services
 					Quantity = x.Quantity,
 					LyingWith = x.LyingWith,
 					AgeingDays = ageing,
-					Status = MapStatus(ageing)
+					Status = MapStatus(ageing),
+
+					// Registered dealer numbers (trimmed, null if blank).
+					WhatsAppNumber = Blank(x.WhatsAppNumber),
+					OfficialContactNumber = Blank(x.OfficialContactNumber),
+					AlternativeNumber = Blank(x.AlternativeNumber),
+
+					// Primary number used by the grid's single WhatsApp button:
+					// first registered number, else the IFMS fallback.
+					MobileNo = FirstNonBlank(
+						x.WhatsAppNumber, x.OfficialContactNumber, x.AlternativeNumber, x.IfmsMobileNo)
 				};
 			}).ToList();
 
@@ -381,6 +413,14 @@ namespace Spic.Infrastructure.Services
 			_ => "Dead Stock"
 		};
 
+		// Returns the trimmed value, or null if the string is blank.
+		private static string? Blank(string? value)
+			=> string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+		// Returns the first non-blank (trimmed) value from the list, else null.
+		private static string? FirstNonBlank(params string?[] values)
+			=> values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
+
 		private class GridRaw
 		{
 			public int? DealerRegistrationId { get; set; }
@@ -390,6 +430,11 @@ namespace Spic.Infrastructure.Services
 			public decimal Quantity { get; set; }
 			public string LyingWith { get; set; } = "";
 			public DateTime StockDate { get; set; }
+
+			public string? WhatsAppNumber { get; set; }
+			public string? OfficialContactNumber { get; set; }
+			public string? AlternativeNumber { get; set; }
+			public string? IfmsMobileNo { get; set; }
 		}
 	}
 }
