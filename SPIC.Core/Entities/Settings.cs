@@ -184,7 +184,8 @@ namespace SPIC.Core.Entities
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public string? UpdatedBy { get; set; }
-    }
+		public string? MobileNo { get; set; }
+	}
     public class DealershipNature
     {
         public int Id { get; set; }

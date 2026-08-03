@@ -1,187 +1,458 @@
 ﻿// ============================================================================
-//  ProductStockAvailabilityService (implementation of IProductStockAvailabilityService)
-//  Location: Spic.Infrastructure/Services/
+//  Spic.Infrastructure / Services / ProductStockAvailabilityService.cs
 //
-//  Builds a State x Product availability pivot from WholesalerStockAsOnToday.
+//  Performance-focused implementation that preserves the existing flow:
+//    * Source table      : WholesalerStockAsOnToday only.
+//    * Snapshot rule     : latest StockDate day inside the selected range.
+//    * Cell calculation  : SUM(Stock) grouped by State + Product.
+//    * Search semantics  : filters State rows before cards/grand total/paging.
+//    * Region/HQ filters : resolved into StateIds by the Razor page.
 //
-//  BEFORE IT COMPILES, confirm two things (same as StockReportService):
-//   1. `AppDbContext`  -> your actual DbContext type.
-//   2. The `using` lines match YOUR namespaces (DTOs / Interfaces / Entities).
-//
-//  Entity assumptions (identical to StockReportService, which already compiles):
-//   * WholesalerStockAsOnToday: StateId, ProductId, Stock, StockDate
-//   * State.StateName / State.Id
-//   * Product.Name / Product.Id
-//
-//  ---- The one deliberate design choice ----
-//  Cell value = SUM(WholesalerStockAsOnToday.Stock) for (State, Product).
-//  To source cells from a different table (or a combination), change ONLY the
-//  `agg` query below - everything downstream (columns, rows, KPIs) is generic.
-//  NB: the reconciliation tables (State/Warehouse) hold running balances, so
-//  summing their ClosingStock across dates would double-count - don't just add
-//  them here without a "latest snapshot per state/product" filter.
+//  Main improvements:
+//    * Uses an index-friendly ORDER BY ... LIMIT 1 for latest snapshot lookup.
+//    * Aggregates in SQL and transfers only State x Product totals.
+//    * Builds columns, pivot rows and totals with single-pass dictionaries.
+//    * Supports request cancellation all the way into EF Core.
+//    * Avoids repeated GroupBy/Sum enumeration over the same result set.
 // ============================================================================
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using Spic.Infrastructure.Data;   // <-- your DbContext namespace
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using Spic.Infrastructure.Data;
 
 namespace Spic.Infrastructure.Services
 {
 	public class ProductStockAvailabilityService : IProductStockAvailabilityService
 	{
-		private readonly AppDbContext _db;   // <-- rename to your DbContext type
-
-		public ProductStockAvailabilityService(AppDbContext db) => _db = db;
-
-		// A state is a "low stock alert" when its total availability falls below this (MT).
-		// Move to a config table if you want it editable.
 		private const decimal LowStockThresholdMt = 1000m;
+		private const int DefaultPageSize = 16;
+		private const int MaxInteractivePageSize = 500;
+		private const string DefaultColumnGroup = "Products";
 
-		public async Task<ProductStockAvailabilityDto> GetDashboardAsync(ProductStockAvailabilityFilter f)
+		private readonly AppDbContext _db;
+
+		public ProductStockAvailabilityService(AppDbContext db)
 		{
-			// ---- Base filter on the snapshot ----
-			var q = _db.Set<WholesalerStockAsOnToday>().AsNoTracking()
-				.Where(x => x.Stock > 0 && x.StateId != null && x.ProductId != null);
+			_db = db;
+		}
 
-			if (f.StateIds.Count > 0)
-				q = q.Where(x => f.StateIds.Contains(x.StateId!.Value));
+		public async Task<ProductStockAvailabilityDto> GetDashboardAsync(
+			ProductStockAvailabilityFilter filter,
+			CancellationToken cancellationToken = default)
+		{
+			filter ??= new ProductStockAvailabilityFilter();
+			NormalizeFilter(filter);
 
-			if (f.DateFrom.HasValue)
+			var page = filter.Page;
+			var pageSize = ResolvePageSize(filter.PageSize);
+			var dateFrom = ToUtcStart(filter.DateFrom);
+			var dateToExclusive = ToUtcExclusiveEnd(filter.DateTo);
+
+			var stockQuery = _db.WholesalerStockAsOnTodays
+				.AsNoTracking()
+				.Where(stock =>
+					stock.StateId.HasValue &&
+					stock.ProductId.HasValue);
+
+			if (filter.StateIds.Count > 0)
 			{
-				var df = DateTime.SpecifyKind(f.DateFrom.Value.Date, DateTimeKind.Utc);
-				q = q.Where(x => x.StockDate >= df);
+				stockQuery = stockQuery.Where(stock =>
+					stock.StateId.HasValue &&
+					filter.StateIds.Contains(stock.StateId.Value));
 			}
-			if (f.DateTo.HasValue)
+
+			if (dateFrom.HasValue)
 			{
-				var dt = DateTime.SpecifyKind(f.DateTo.Value.Date, DateTimeKind.Utc);
-				q = q.Where(x => x.StockDate <= dt);
+				stockQuery = stockQuery.Where(stock =>
+					stock.StockDate >= dateFrom.Value);
 			}
 
-			// ---- One grouped round trip: (State, Product) -> summed Stock, with names ----
-			var aggRaw = await (
-				from s in q
-				join st in _db.Set<State>() on s.StateId equals st.Id
-				join p in _db.Set<Product>() on s.ProductId equals p.Id
-				group s by new { s.StateId, st.StateName, s.ProductId, ProductName = p.Name } into g
-				select new
-				{
-					g.Key.StateId,
-					g.Key.StateName,
-					g.Key.ProductId,
-					g.Key.ProductName,
-					Qty = g.Sum(x => x.Stock)
-				}).ToListAsync();
-
-			var agg = aggRaw
-				.Where(a => a.StateId.HasValue && a.ProductId.HasValue)
-				.Select(a => new AggRow
-				{
-					StateId = a.StateId!.Value,
-					StateName = a.StateName ?? "",
-					ProductId = a.ProductId!.Value,
-					ProductName = a.ProductName ?? "",
-					Qty = a.Qty
-				})
-				.ToList();
-
-			// ---- Pivot columns (products present), ordered by group band then name ----
-			var columns = agg
-				.GroupBy(a => a.ProductId)
-				.Select(g => new ProdStockColumnDto
-				{
-					ProductId = g.Key,
-					ProductName = g.First().ProductName,
-					// TODO: set from Product.Category (e.g. "Normal Products"/"Imported Products"/"Others")
-					// when that column exists; leaving it constant keeps a single header band.
-					Group = "Products"
-				})
-				.OrderBy(c => c.Group)
-				.ThenBy(c => c.ProductName)
-				.ToList();
-
-			// ---- One row per state ----
-			var allRows = agg
-				.GroupBy(a => a.StateId)
-				.Select(g => new ProdStockStateRowDto
-				{
-					StateId = g.Key,
-					StateName = g.First().StateName,
-					Quantities = g.GroupBy(x => x.ProductId)
-								  .ToDictionary(x => x.Key, x => x.Sum(y => y.Qty)),
-					Total = g.Sum(x => x.Qty)
-				})
-				.ToList();
-
-			// ---- Search (state name) ----
-			if (!string.IsNullOrWhiteSpace(f.Search))
+			if (dateToExclusive.HasValue)
 			{
-				var term = f.Search.Trim();
-				allRows = allRows
-					.Where(r => r.StateName.Contains(term, StringComparison.OrdinalIgnoreCase))
+				stockQuery = stockQuery.Where(stock =>
+					stock.StockDate < dateToExclusive.Value);
+			}
+
+			// ORDER BY + FirstOrDefault is index-friendly when StockDate is indexed.
+			// We then retain the existing rule: every row from that latest calendar day.
+			var latestStockDate = await stockQuery
+				.OrderByDescending(stock => stock.StockDate)
+				.Select(stock => (DateTime?)stock.StockDate)
+				.FirstOrDefaultAsync(cancellationToken);
+
+			if (!latestStockDate.HasValue)
+			{
+				return EmptyDashboard(page, pageSize);
+			}
+
+			var snapshotStart = ToUtcDate(latestStockDate.Value);
+			var snapshotEnd = snapshotStart.AddDays(1);
+
+			var aggregateRows = await (
+				from stock in stockQuery
+				where stock.StockDate >= snapshotStart &&
+					  stock.StockDate < snapshotEnd
+				join state in _db.Set<State>().AsNoTracking()
+					on stock.StateId equals (int?)state.Id
+				join product in _db.Set<Product>().AsNoTracking()
+					on stock.ProductId equals (int?)product.Id
+				group stock by new
+				{
+					StateId = state.Id,
+					state.StateName,
+					ProductId = product.Id,
+					ProductName = product.Name
+				}
+				into grouped
+				select new AggregateRow
+				{
+					StateId = grouped.Key.StateId,
+					StateName = grouped.Key.StateName ?? "",
+					ProductId = grouped.Key.ProductId,
+					ProductName = grouped.Key.ProductName ?? "",
+					Quantity = grouped.Sum(item => item.Stock)
+				})
+				.ToListAsync(cancellationToken);
+
+			if (aggregateRows.Count == 0)
+			{
+				return EmptyDashboard(page, pageSize);
+			}
+
+			var pivot = BuildPivot(aggregateRows);
+			var columns = pivot.Columns;
+			var rows = pivot.Rows;
+
+			// Preserve the previous behavior: search changes cards and grand total,
+			// while the product-column list remains based on the complete snapshot.
+			if (!string.IsNullOrWhiteSpace(filter.Search))
+			{
+				var search = filter.Search.Trim();
+				rows = rows
+					.Where(row => row.StateName.Contains(
+						search,
+						StringComparison.OrdinalIgnoreCase))
 					.ToList();
 			}
 
-			// ---- Grand total across ALL filtered states (independent of paging) ----
-			var grand = new ProdStockStateRowDto { StateId = 0, StateName = "Grand Total" };
-			foreach (var col in columns)
-				grand.Quantities[col.ProductId] =
-					allRows.Sum(r => r.Quantities.TryGetValue(col.ProductId, out var v) ? v : 0m);
-			grand.Total = allRows.Sum(r => r.Total);
+			var grandTotal = BuildGrandTotal(rows, columns);
+			var summary = BuildSummary(rows, columns.Count, grandTotal.Total);
+			var sortedRows = ApplySorting(rows, filter);
+			var totalCount = sortedRows.Count;
 
-			// ---- KPI cards ----
-			var top = allRows.OrderByDescending(r => r.Total).FirstOrDefault();
-			var summary = new ProdStockSummaryDto
+			List<ProdStockStateRowDto> pageRows;
+
+			if (pageSize == int.MaxValue)
 			{
-				TotalStates = allRows.Count,
-				TotalProducts = columns.Count,
-				TotalQuantity = grand.Total,
-				HighestStockState = top?.StateName ?? "-",
-				HighestStockQuantity = top?.Total ?? 0m,
-				LowStockAlerts = allRows.Count(r => r.Total < LowStockThresholdMt)
-			};
-
-			// ---- Sort ----
-			allRows = (f.SortColumn?.ToLowerInvariant(), (f.SortDir ?? "asc").ToLowerInvariant()) switch
+				pageRows = sortedRows;
+			}
+			else
 			{
-				("total", "desc") => allRows.OrderByDescending(r => r.Total).ToList(),
-				("total", _) => allRows.OrderBy(r => r.Total).ToList(),
-				("state", "desc") => allRows.OrderByDescending(r => r.StateName).ToList(),
-				_ => allRows.OrderBy(r => r.StateName).ToList()
-			};
+				var skipLong = (long)(page - 1) * pageSize;
+				var skip = skipLong > int.MaxValue ? int.MaxValue : (int)skipLong;
 
-			// ---- Page ----
-			var totalCount = allRows.Count;
-			var pageSize = f.PageSize <= 0 ? 16 : f.PageSize;
-			var pageRows = allRows
-				.Skip((Math.Max(1, f.Page) - 1) * pageSize)
-				.Take(pageSize)
-				.ToList();
+				pageRows = sortedRows
+					.Skip(skip)
+					.Take(pageSize)
+					.ToList();
+			}
 
 			return new ProductStockAvailabilityDto
 			{
 				Summary = summary,
 				Columns = columns,
-				GrandTotal = grand,
+				GrandTotal = grandTotal,
 				Grid = new PagedResult<ProdStockStateRowDto>
 				{
 					Items = pageRows,
 					TotalCount = totalCount,
-					Page = f.Page,
+					Page = page,
 					PageSize = pageSize
 				}
 			};
 		}
 
-		private class AggRow
+		private static PivotResult BuildPivot(
+			IReadOnlyCollection<AggregateRow> aggregateRows)
+		{
+			var productNames = new Dictionary<int, string>();
+			var stateBuilders = new Dictionary<int, StateRowBuilder>();
+
+			foreach (var item in aggregateRows)
+			{
+				if (!productNames.ContainsKey(item.ProductId))
+				{
+					productNames[item.ProductId] = NormalizeName(item.ProductName);
+				}
+
+				if (!stateBuilders.TryGetValue(item.StateId, out var state))
+				{
+					state = new StateRowBuilder
+					{
+						StateId = item.StateId,
+						StateName = NormalizeName(item.StateName)
+					};
+
+					stateBuilders[item.StateId] = state;
+				}
+
+				// SQL grouping already produces one row per State + Product.
+				// += keeps this safe if a provider/query change ever emits duplicates.
+				if (state.Quantities.TryGetValue(item.ProductId, out var existing))
+				{
+					state.Quantities[item.ProductId] = existing + item.Quantity;
+				}
+				else
+				{
+					state.Quantities[item.ProductId] = item.Quantity;
+				}
+
+				state.Total += item.Quantity;
+			}
+
+			var columns = productNames
+				.Select(item => new ProdStockColumnDto
+				{
+					ProductId = item.Key,
+					ProductName = item.Value,
+					Group = DefaultColumnGroup
+				})
+				.OrderBy(column => column.Group, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(column => column.ProductName, StringComparer.OrdinalIgnoreCase)
+				.ToList();
+
+			var rows = stateBuilders.Values
+				.Select(state => new ProdStockStateRowDto
+				{
+					StateId = state.StateId,
+					StateName = state.StateName,
+					Quantities = state.Quantities,
+					Total = state.Total
+				})
+				.ToList();
+
+			return new PivotResult(columns, rows);
+		}
+
+		private static ProdStockStateRowDto BuildGrandTotal(
+			IReadOnlyCollection<ProdStockStateRowDto> rows,
+			IReadOnlyCollection<ProdStockColumnDto> columns)
+		{
+			var quantities = new Dictionary<int, decimal>(columns.Count);
+
+			foreach (var column in columns)
+			{
+				quantities[column.ProductId] = 0m;
+			}
+
+			decimal total = 0m;
+
+			foreach (var row in rows)
+			{
+				total += row.Total;
+
+				foreach (var item in row.Quantities)
+				{
+					quantities[item.Key] = quantities.TryGetValue(item.Key, out var current)
+						? current + item.Value
+						: item.Value;
+				}
+			}
+
+			return new ProdStockStateRowDto
+			{
+				StateId = 0,
+				StateName = "Grand Total",
+				Quantities = quantities,
+				Total = total
+			};
+		}
+
+		private static ProdStockSummaryDto BuildSummary(
+			IReadOnlyCollection<ProdStockStateRowDto> rows,
+			int productCount,
+			decimal totalQuantity)
+		{
+			ProdStockStateRowDto? highest = null;
+			var lowStockAlerts = 0;
+
+			foreach (var row in rows)
+			{
+				if (row.Total < LowStockThresholdMt)
+				{
+					lowStockAlerts++;
+				}
+
+				if (highest is null ||
+					row.Total > highest.Total ||
+					(row.Total == highest.Total &&
+					 string.Compare(
+						 row.StateName,
+						 highest.StateName,
+						 StringComparison.OrdinalIgnoreCase) < 0))
+				{
+					highest = row;
+				}
+			}
+
+			return new ProdStockSummaryDto
+			{
+				TotalStates = rows.Count,
+				TotalProducts = productCount,
+				TotalQuantity = totalQuantity,
+				HighestStockState = highest?.StateName ?? "-",
+				HighestStockQuantity = highest?.Total ?? 0m,
+				LowStockAlerts = lowStockAlerts
+			};
+		}
+
+		private static List<ProdStockStateRowDto> ApplySorting(
+			IEnumerable<ProdStockStateRowDto> rows,
+			ProductStockAvailabilityFilter filter)
+		{
+			var sortColumn = filter.SortColumn?.Trim().ToLowerInvariant();
+			var descending = string.Equals(
+				filter.SortDir?.Trim(),
+				"desc",
+				StringComparison.OrdinalIgnoreCase);
+
+			IOrderedEnumerable<ProdStockStateRowDto> sorted = sortColumn switch
+			{
+				"total" when descending => rows
+					.OrderByDescending(row => row.Total)
+					.ThenBy(row => row.StateName, StringComparer.OrdinalIgnoreCase),
+
+				"total" => rows
+					.OrderBy(row => row.Total)
+					.ThenBy(row => row.StateName, StringComparer.OrdinalIgnoreCase),
+
+				"state" when descending => rows
+					.OrderByDescending(row => row.StateName, StringComparer.OrdinalIgnoreCase),
+
+				_ => rows
+					.OrderBy(row => row.StateName, StringComparer.OrdinalIgnoreCase)
+			};
+
+			return sorted.ToList();
+		}
+
+		private static ProductStockAvailabilityDto EmptyDashboard(
+			int page,
+			int pageSize)
+		{
+			return new ProductStockAvailabilityDto
+			{
+				Summary = new ProdStockSummaryDto(),
+				Columns = new List<ProdStockColumnDto>(),
+				GrandTotal = new ProdStockStateRowDto
+				{
+					StateId = 0,
+					StateName = "Grand Total",
+					Quantities = new Dictionary<int, decimal>(),
+					Total = 0m
+				},
+				Grid = new PagedResult<ProdStockStateRowDto>
+				{
+					Items = new List<ProdStockStateRowDto>(),
+					TotalCount = 0,
+					Page = page,
+					PageSize = pageSize
+				}
+			};
+		}
+
+		private static void NormalizeFilter(ProductStockAvailabilityFilter filter)
+		{
+			filter.StateIds ??= new List<int>();
+			filter.RegionIds ??= new List<int>();
+			filter.HeadQuarterIds ??= new List<int>();
+
+			filter.StateIds = filter.StateIds
+				.Where(id => id > 0)
+				.Distinct()
+				.ToList();
+
+			filter.RegionIds = filter.RegionIds
+				.Where(id => id > 0)
+				.Distinct()
+				.ToList();
+
+			filter.HeadQuarterIds = filter.HeadQuarterIds
+				.Where(id => id > 0)
+				.Distinct()
+				.ToList();
+
+			filter.Page = Math.Max(1, filter.Page);
+		}
+
+		private static int ResolvePageSize(int requestedPageSize)
+		{
+			// The controller uses int.MaxValue only for an unpaged Excel export.
+			if (requestedPageSize == int.MaxValue)
+			{
+				return int.MaxValue;
+			}
+
+			if (requestedPageSize <= 0)
+			{
+				return DefaultPageSize;
+			}
+
+			return Math.Min(requestedPageSize, MaxInteractivePageSize);
+		}
+
+		private static DateTime? ToUtcStart(DateTime? value)
+		{
+			return value.HasValue
+				? ToUtcDate(value.Value)
+				: null;
+		}
+
+		private static DateTime? ToUtcExclusiveEnd(DateTime? value)
+		{
+			return value.HasValue
+				? ToUtcDate(value.Value).AddDays(1)
+				: null;
+		}
+
+		private static DateTime ToUtcDate(DateTime value)
+		{
+			return DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
+		}
+
+		private static string NormalizeName(string? value)
+		{
+			return string.IsNullOrWhiteSpace(value)
+				? "-"
+				: value.Trim();
+		}
+
+		private sealed class AggregateRow
 		{
 			public int StateId { get; set; }
 			public string StateName { get; set; } = "";
 			public int ProductId { get; set; }
 			public string ProductName { get; set; } = "";
-			public decimal Qty { get; set; }
+			public decimal Quantity { get; set; }
 		}
+
+		private sealed class StateRowBuilder
+		{
+			public int StateId { get; set; }
+			public string StateName { get; set; } = "";
+			public Dictionary<int, decimal> Quantities { get; } = new();
+			public decimal Total { get; set; }
+		}
+
+		private sealed record PivotResult(
+			List<ProdStockColumnDto> Columns,
+			List<ProdStockStateRowDto> Rows);
 	}
 }

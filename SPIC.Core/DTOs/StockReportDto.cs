@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace SPIC.Core.DTOs
 {
-	// ---- Request ----
 	public class StockReportFilter
 	{
 		public List<int> StateIds { get; set; } = new();
@@ -23,7 +20,6 @@ namespace SPIC.Core.DTOs
 		public int PageSize { get; set; } = 16;
 	}
 
-	// ---- Response ----
 	public class StockDashboardDto
 	{
 		public SummaryDto Summary { get; set; } = new();
@@ -43,37 +39,38 @@ namespace SPIC.Core.DTOs
 		public double AverageAgeingChange { get; set; }
 		public int HighAgeingCount { get; set; }
 		public int HighAgeingChange { get; set; }
+		public decimal HighAgeingStock { get; set; }
 	}
 
 	public class StateStockDto
 	{
-		public string StateName { get; set; } = "";
+		public string StateName { get; set; } = string.Empty;
 		public decimal CurrentYear { get; set; }
 		public decimal PreviousYear { get; set; }
 	}
 
 	public class ProductStockDto
 	{
-		public string ProductName { get; set; } = "";
+		public string ProductName { get; set; } = string.Empty;
 		public decimal Quantity { get; set; }
 		public double Percentage { get; set; }
-		public string Color { get; set; } = "";
+		public string Color { get; set; } = string.Empty;
 	}
 
 	public class StockRowDto
 	{
 		public int? DealerRegistrationId { get; set; }
-		public string StateName { get; set; } = "";
-		public string DealerName { get; set; } = "";
-		public string ProductName { get; set; } = "";
+		public string StateName { get; set; } = string.Empty;
+		public string DealerName { get; set; } = string.Empty;
+		public string ProductName { get; set; } = string.Empty;
 		public decimal Quantity { get; set; }
-		public string LyingWith { get; set; } = "";
+		public string LyingWith { get; set; } = string.Empty;
 		public int AgeingDays { get; set; }
-		public string Status { get; set; } = "";
-		public string? MobileNo { get; set; }              // primary number (used by grid share button)
-		public string? WhatsAppNumber { get; set; }        // NEW
-		public string? OfficialContactNumber { get; set; } // NEW
-		public string? AlternativeNumber { get; set; }     // NEW
+		public string Status { get; set; } = string.Empty;
+		public string? MobileNo { get; set; }
+		public string? WhatsAppNumber { get; set; }
+		public string? OfficialContactNumber { get; set; }
+		public string? AlternativeNumber { get; set; }
 	}
 
 	public class PagedResult<T>
@@ -84,4 +81,3 @@ namespace SPIC.Core.DTOs
 		public int PageSize { get; set; } = 16;
 	}
 }
-

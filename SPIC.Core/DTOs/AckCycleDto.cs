@@ -1,20 +1,10 @@
-﻿// ============================================================================
-//  SPIC.Core / DTOs / AckCycleDtos.cs
-//  DTOs for the Acknowledgement Cycle Report (invoice -> retailer-receipt cycle).
-//  Mirrors the PendingAck DTO conventions and reuses the shared PagedResult<T>.
-// ============================================================================
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace SPIC.Core.DTOs
 {
-	/// <summary>
-	/// Single request object for the dashboard POST. Carries every filter plus
-	/// the grid paging/sort/search state so one round trip drives the whole page.
-	/// </summary>
 	public class AckCycleFilter
 	{
-		// ---- Filters (apply to KPIs, Top-5 lists AND grid) ----
 		public DateTime? DateFrom { get; set; }
 		public DateTime? DateTo { get; set; }
 
@@ -22,24 +12,15 @@ namespace SPIC.Core.DTOs
 		public List<int> DistrictIds { get; set; } = new();
 		public List<int> ProductIds { get; set; } = new();
 		public List<int> StatusIds { get; set; } = new();
-
-		// Keyed dealer scheme, same as everywhere else: "R{id}" = DealerRegistration, "I{id}" = IfmsDealer.
 		public List<string> DealerKeys { get; set; } = new();
 
-		// ---- Grid-only knobs (do NOT affect the KPI cards / charts) ----
-		// "All" | "Company Sales" | "Wholesaler Sales"
+		// Grid-only filters. KPI cards and Top-5 lists intentionally ignore these.
 		public string? Source { get; set; }
-		// Multi-select cycle buckets: any of "Fast" | "Normal" | "Delayed" | "Critical". Empty = all.
 		public List<string> Buckets { get; set; } = new();
 
 		public string? Search { get; set; }
-		// Top-5 chart grouping dimension:
-		// "State" | "Region" | "HeadQuarter" | "District" | "SubDistrict" | "Product" | "Dealer".
-		// NOTE: State/District/Product/Dealer are groupable directly off the sales rows.
-		// Region/HeadQuarter/SubDistrict require mapping each row through the dealer master
-		// (they are not derivable from a row's State/District alone).
 		public string GroupBy { get; set; } = "State";
-		public string? SortColumn { get; set; }   // dealer|product|invoiceno|invoicedate|receiptdate|cycledays|status
+		public string? SortColumn { get; set; }
 		public bool SortDesc { get; set; } = true;
 
 		public int Page { get; set; } = 1;
@@ -54,36 +35,26 @@ namespace SPIC.Core.DTOs
 		public PagedResult<AckCycleRowDto> Grid { get; set; } = new();
 	}
 
-	/// <summary>The five KPI cards.</summary>
 	public class AckCycleSummaryDto
 	{
-		public int Total { get; set; }      // total ACKNOWLEDGED transactions in scope
-		public int Fast { get; set; }       // cycle 0-2 days
-		public int Normal { get; set; }     // cycle 3-5 days
-		public int Delayed { get; set; }    // cycle 6-10 days
-		public int Critical { get; set; }   // cycle > 10 days
+		public int Total { get; set; }
+		public int Fast { get; set; }
+		public int Normal { get; set; }
+		public int Delayed { get; set; }
+		public int Critical { get; set; }
 		public double AverageCycleDays { get; set; }
 
-		// Convenience shares (0-100), useful for the card sub-text.
 		public double FastPct => Total == 0 ? 0 : Math.Round(Fast * 100.0 / Total, 1);
 		public double NormalPct => Total == 0 ? 0 : Math.Round(Normal * 100.0 / Total, 1);
 		public double DelayedPct => Total == 0 ? 0 : Math.Round(Delayed * 100.0 / Total, 1);
 		public double CriticalPct => Total == 0 ? 0 : Math.Round(Critical * 100.0 / Total, 1);
 	}
 
-	/// <summary>
-	/// One row of the Top-5 lists (with the tooltip breakdown).
-	/// Despite the historical "State" name, this now represents whichever dimension
-	/// the caller grouped by (State / Product / Dealer / ...). Set <see cref="Label"/>
-	/// to the display name for that dimension. For backward compatibility, when the
-	/// service only sets <see cref="StateName"/>, <see cref="Label"/> returns it.
-	/// </summary>
 	public class AckCycleStateStatDto
 	{
 		public string StateName { get; set; } = "";
 
 		private string? _label;
-		/// <summary>Display name of the grouped dimension. Falls back to StateName when unset.</summary>
 		public string Label
 		{
 			get => string.IsNullOrEmpty(_label) ? StateName : _label;
@@ -95,14 +66,14 @@ namespace SPIC.Core.DTOs
 		public int Normal { get; set; }
 		public int Delayed { get; set; }
 		public int Critical { get; set; }
-		public double Rate { get; set; }    // 0-100. Fast-rate for the fast list, delay-rate for the delayed list.
+		public double Rate { get; set; }
 	}
 
 	public class AckCycleRowDto
 	{
 		public int SNo { get; set; }
 		public int Id { get; set; }
-		public string Source { get; set; } = "";      // "Company Sales" | "Wholesaler Sales"
+		public string Source { get; set; } = "";
 		public string TransactionId { get; set; } = "";
 		public string DealerName { get; set; } = "";
 		public string DealerCode { get; set; } = "";
@@ -112,7 +83,7 @@ namespace SPIC.Core.DTOs
 		public DateTime? EntryDate { get; set; }
 		public DateTime? ReceiptDate { get; set; }
 		public int CycleDays { get; set; }
-		public string Bucket { get; set; } = "";       // Fast | Normal | Delayed | Critical
+		public string Bucket { get; set; } = "";
 		public string StateName { get; set; } = "";
 		public string District { get; set; } = "";
 		public string WorkflowStatus { get; set; } = "";
@@ -122,7 +93,6 @@ namespace SPIC.Core.DTOs
 		public string? MobileNo { get; set; }
 	}
 
-	/// <summary>Generic {Id,Name} shape for the filter dropdowns (dealer Id is the keyed string).</summary>
 	public class AckLookupItemDto
 	{
 		public string Id { get; set; } = "";

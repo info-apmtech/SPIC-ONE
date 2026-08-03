@@ -1,9 +1,7 @@
-﻿// ============================================================================
-//  SpicAPI / Controllers / AckCycleController.cs
-//  Thin controller -> IAckCycleService. One dashboard POST + master-data GETs
-//  + an Excel export (ClosedXML). PDF / Send-Mail are stubs so they don't 404.
-// ============================================================================
+﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
@@ -13,44 +11,67 @@ using SPIC.Core.Interfaces;
 namespace SpicAPI.Controllers
 {
 	[ApiController]
-	[Route("api/[controller]")]   // -> api/AckCycle
+	[Route("api/[controller]")]
 	public class AckCycleController : ControllerBase
 	{
-		private readonly IAckCycleService _svc;
-		public AckCycleController(IAckCycleService svc) => _svc = svc;
+		private readonly IAckCycleService _service;
+
+		public AckCycleController(IAckCycleService service)
+		{
+			_service = service;
+		}
 
 		[HttpPost("dashboard")]
-		public async Task<ActionResult<AckCycleDashboardDto>> Dashboard([FromBody] AckCycleFilter f)
-			=> Ok(await _svc.GetDashboardAsync(f ?? new AckCycleFilter()));
+		public async Task<ActionResult<AckCycleDashboardDto>> Dashboard(
+			[FromBody] AckCycleFilter? filter,
+			CancellationToken cancellationToken)
+		{
+			var data = await _service.GetDashboardAsync(
+				filter ?? new AckCycleFilter(),
+				cancellationToken);
+
+			return Ok(data);
+		}
 
 		[HttpGet("states")]
-		public async Task<ActionResult<List<AckLookupItemDto>>> States()
-			=> Ok(await _svc.GetStatesAsync());
+		public async Task<ActionResult<List<AckLookupItemDto>>> States(
+			CancellationToken cancellationToken)
+			=> Ok(await _service.GetStatesAsync(cancellationToken));
 
-		// POST so the (possibly multi-value) state selection rides in the body.
 		[HttpPost("districts")]
-		public async Task<ActionResult<List<AckLookupItemDto>>> Districts([FromBody] List<int> stateIds)
-			=> Ok(await _svc.GetDistrictsAsync(stateIds ?? new List<int>()));
+		public async Task<ActionResult<List<AckLookupItemDto>>> Districts(
+			[FromBody] List<int>? stateIds,
+			CancellationToken cancellationToken)
+			=> Ok(await _service.GetDistrictsAsync(
+				stateIds ?? new List<int>(),
+				cancellationToken));
 
 		[HttpGet("products")]
-		public async Task<ActionResult<List<AckLookupItemDto>>> Products()
-			=> Ok(await _svc.GetProductsAsync());
+		public async Task<ActionResult<List<AckLookupItemDto>>> Products(
+			CancellationToken cancellationToken)
+			=> Ok(await _service.GetProductsAsync(cancellationToken));
 
 		[HttpGet("statuses")]
-		public async Task<ActionResult<List<AckLookupItemDto>>> Statuses()
-			=> Ok(await _svc.GetStatusesAsync());
+		public async Task<ActionResult<List<AckLookupItemDto>>> Statuses(
+			CancellationToken cancellationToken)
+			=> Ok(await _service.GetStatusesAsync(cancellationToken));
 
 		[HttpGet("dealers")]
-		public async Task<ActionResult<List<AckLookupItemDto>>> Dealers()
-			=> Ok(await _svc.GetDealersAsync());
+		public async Task<ActionResult<List<AckLookupItemDto>>> Dealers(
+			CancellationToken cancellationToken)
+			=> Ok(await _service.GetDealersAsync(cancellationToken));
 
 		[HttpPost("export/excel")]
-		public async Task<IActionResult> ExportExcel([FromBody] AckCycleFilter f)
+		public async Task<IActionResult> ExportExcel(
+			[FromBody] AckCycleFilter? filter,
+			CancellationToken cancellationToken)
 		{
-			var rows = await _svc.GetAllRowsAsync(f ?? new AckCycleFilter());
+			var rows = await _service.GetAllRowsAsync(
+				filter ?? new AckCycleFilter(),
+				cancellationToken);
 
-			using var wb = new XLWorkbook();
-			var ws = wb.Worksheets.Add("Acknowledgement Cycle");
+			using var workbook = new XLWorkbook();
+			var worksheet = workbook.Worksheets.Add("Acknowledgement Cycle");
 
 			string[] headers =
 			{
@@ -58,42 +79,76 @@ namespace SpicAPI.Controllers
 				"Invoice Date", "Receipt Date", "Ack Cycle (Days)", "Status",
 				"State", "District", "Qty (MT)"
 			};
-			for (var c = 0; c < headers.Length; c++)
-				ws.Cell(1, c + 1).Value = headers[c];
-			ws.Row(1).Style.Font.Bold = true;
 
-			var r = 2;
-			foreach (var x in rows)
+			for (var column = 0; column < headers.Length; column++)
 			{
-				ws.Cell(r, 1).Value = x.SNo;
-				ws.Cell(r, 2).Value = x.Source;
-				ws.Cell(r, 3).Value = x.DealerName;
-				ws.Cell(r, 4).Value = x.ProductName;
-				ws.Cell(r, 5).Value = x.InvoiceNo;
-				ws.Cell(r, 6).Value = x.InvoiceDate?.ToString("dd-MM-yyyy") ?? "";
-				ws.Cell(r, 7).Value = x.ReceiptDate?.ToString("dd-MM-yyyy") ?? "";
-				ws.Cell(r, 8).Value = x.CycleDays;
-				ws.Cell(r, 9).Value = x.Bucket;
-				ws.Cell(r, 10).Value = x.StateName;
-				ws.Cell(r, 11).Value = x.District;
-				ws.Cell(r, 12).Value = x.QuantityMT;
-				r++;
+				worksheet.Cell(1, column + 1).Value = headers[column];
 			}
 
-			ws.Columns().AdjustToContents();
+			var header = worksheet.Range(1, 1, 1, headers.Length);
+			header.Style.Font.Bold = true;
+			header.Style.Fill.BackgroundColor = XLColor.FromHtml("#0f172a");
+			header.Style.Font.FontColor = XLColor.White;
 
-			using var ms = new System.IO.MemoryStream();
-			wb.SaveAs(ms);
-			return File(ms.ToArray(),
+			var rowNumber = 2;
+			foreach (var row in rows)
+			{
+				worksheet.Cell(rowNumber, 1).Value = row.SNo;
+				worksheet.Cell(rowNumber, 2).Value = row.Source;
+				worksheet.Cell(rowNumber, 3).Value = row.DealerName;
+				worksheet.Cell(rowNumber, 4).Value = row.ProductName;
+				worksheet.Cell(rowNumber, 5).Value = row.InvoiceNo;
+
+				if (row.InvoiceDate.HasValue)
+				{
+					worksheet.Cell(rowNumber, 6).Value = row.InvoiceDate.Value;
+					worksheet.Cell(rowNumber, 6).Style.DateFormat.Format = "dd-MM-yyyy";
+				}
+
+				if (row.ReceiptDate.HasValue)
+				{
+					worksheet.Cell(rowNumber, 7).Value = row.ReceiptDate.Value;
+					worksheet.Cell(rowNumber, 7).Style.DateFormat.Format = "dd-MM-yyyy";
+				}
+
+				worksheet.Cell(rowNumber, 8).Value = row.CycleDays;
+				worksheet.Cell(rowNumber, 9).Value = row.Bucket;
+				worksheet.Cell(rowNumber, 10).Value = row.StateName;
+				worksheet.Cell(rowNumber, 11).Value = row.District;
+				worksheet.Cell(rowNumber, 12).Value = row.QuantityMT;
+				rowNumber++;
+			}
+
+			// Fixed widths avoid the large cost of AdjustToContents on big exports.
+			worksheet.Column(1).Width = 8;
+			worksheet.Column(2).Width = 20;
+			worksheet.Column(3).Width = 30;
+			worksheet.Column(4).Width = 24;
+			worksheet.Column(5).Width = 20;
+			worksheet.Column(6).Width = 14;
+			worksheet.Column(7).Width = 14;
+			worksheet.Column(8).Width = 18;
+			worksheet.Column(9).Width = 14;
+			worksheet.Column(10).Width = 20;
+			worksheet.Column(11).Width = 20;
+			worksheet.Column(12).Width = 14;
+			worksheet.SheetView.FreezeRows(1);
+
+			using var stream = new MemoryStream();
+			workbook.SaveAs(stream);
+
+			return File(
+				stream.ToArray(),
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-				"AcknowledgementCycle.xlsx");
+				$"AcknowledgementCycle_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
 		}
 
-		// TODO: implement if/when needed. Kept as stubs so the UI buttons don't 404.
 		[HttpPost("export/pdf")]
-		public IActionResult ExportPdf([FromBody] AckCycleFilter f) => NoContent();
+		public IActionResult ExportPdf([FromBody] AckCycleFilter? filter)
+			=> NoContent();
 
 		[HttpPost("send-mail")]
-		public IActionResult SendMail([FromBody] AckCycleFilter f) => NoContent();
+		public IActionResult SendMail([FromBody] AckCycleFilter? filter)
+			=> NoContent();
 	}
 }

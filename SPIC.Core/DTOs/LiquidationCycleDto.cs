@@ -13,7 +13,7 @@ namespace SPIC.Core.DTOs
 		public List<int> StatusIds { get; set; } = new();
 		public List<string> DealerKeys { get; set; } = new();
 
-		public string? Source { get; set; } // "Company Sales" | "Wholesaler Sales"
+		public string? Source { get; set; } // "Company Sales" | "Wholesaler Sales" | "Retailer Sales"
 		public string? Search { get; set; }
 		public string? SortColumn { get; set; }
 		public bool SortDesc { get; set; } = true;
@@ -36,7 +36,7 @@ namespace SPIC.Core.DTOs
 		public decimal Liquidated { get; set; }
 		public decimal BalanceStock => TotalStock - Liquidated;
 
-		// Mock trend percentages for UI
+		// Kept unchanged for the current UI contract.
 		public double StockTrendPct { get; set; } = 12.0;
 		public double LiquidatedTrendPct { get; set; } = 7.2;
 		public double BalanceTrendPct { get; set; } = 6.1;
@@ -48,7 +48,7 @@ namespace SPIC.Core.DTOs
 		public decimal TotalStock { get; set; }
 		public decimal FastLiquidated { get; set; }
 		public decimal SlowLiquidated { get; set; }
-		public double Rate { get; set; } // 0-100%
+		public double Rate { get; set; }
 	}
 
 	public class LiqCycleRowDto

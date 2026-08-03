@@ -1,13 +1,13 @@
-﻿using System;
+﻿// ============================================================================
+//  SPIC.Core / DTOs / AgeingReportDto.cs
+//  Single source of truth for all Ageing Report DTOs.
+// ============================================================================
+
+using System;
 using System.Collections.Generic;
 
 namespace SPIC.Core.DTOs
 {
-	// ============================================================
-	//  Ageing Report — shared contract. Same data source as StockReport
-	//  (WholesalerStockAsOnToday). Grid reuses your existing PagedResult<T>.
-	// ============================================================
-
 	public class AgeingReportFilter
 	{
 		public List<int> StateIds { get; set; } = new();
@@ -15,9 +15,9 @@ namespace SPIC.Core.DTOs
 		public List<int> HeadQuarterIds { get; set; } = new();
 		public List<int> DistrictIds { get; set; } = new();
 		public List<int> SubDistrictIds { get; set; } = new();
-		public List<int> LyingWithIds { get; set; } = new();      // DealershipNatureId
+		public List<int> LyingWithIds { get; set; } = new();
 		public List<int> ProductIds { get; set; } = new();
-		public List<string> AgeingRanges { get; set; } = new();   // "0-30","31-60","61-90","91-120","Above 120"
+		public List<string> AgeingRanges { get; set; } = new();
 
 		public string? Search { get; set; }
 		public int Page { get; set; } = 1;
@@ -29,8 +29,9 @@ namespace SPIC.Core.DTOs
 	public class AgeingDashboardDto
 	{
 		public AgeingSummaryDto Summary { get; set; } = new();
-		public List<AgeingStateDto> StateWise { get; set; } = new();   // bar chart
-		public List<AgeingBucketDto> DayBuckets { get; set; } = new(); // donut + table
+		public List<AgeingStateDto> StateWise { get; set; } = new();
+		public List<AgeingStateBucketDto> StateBuckets { get; set; } = new();
+		public List<AgeingBucketDto> DayBuckets { get; set; } = new();
 		public PagedResult<AgeingRowDto> Grid { get; set; } = new();
 	}
 
@@ -38,47 +39,51 @@ namespace SPIC.Core.DTOs
 	{
 		public decimal TotalStock { get; set; }
 		public decimal TotalStockChangePct { get; set; }
-
 		public double AverageAgeing { get; set; }
 		public double AverageAgeingChange { get; set; }
-
-		public decimal Stock30To60 { get; set; }        // ageing > 30 && <= 60
+		public decimal Stock30To60 { get; set; }
 		public decimal Stock30To60ChangePct { get; set; }
-
-		public decimal Stock60Plus { get; set; }        // ageing > 60
+		public decimal Stock60Plus { get; set; }
 		public decimal Stock60PlusChangePct { get; set; }
 	}
 
-	// Bar chart: stock per state (Sales left as a placeholder — this table
-	// has no sales figure; wire a source later if you want the 2nd series).
 	public class AgeingStateDto
 	{
-		public string StateName { get; set; } = "";
+		public string StateName { get; set; } = string.Empty;
 		public decimal Stock { get; set; }
-		public decimal Sales { get; set; }   // TODO: no sales column on WholesalerStockAsOnToday
+		public decimal Sales { get; set; }
+	}
+
+	public class AgeingStateBucketDto
+	{
+		public string StateName { get; set; } = string.Empty;
+		public decimal Fresh { get; set; }
+		public decimal Medium { get; set; }
+		public decimal SlowMoving { get; set; }
+		public decimal LongAged { get; set; }
+		public decimal Critical { get; set; }
+		public decimal Total => Fresh + Medium + SlowMoving + LongAged + Critical;
 	}
 
 	public class AgeingBucketDto
 	{
-		public string Label { get; set; } = "";      // "0 - 30 Days", ...
-		public string Category { get; set; } = "";    // Fresh / Medium / Slow Moving / Long Aged / Critical
+		public string Label { get; set; } = string.Empty;
+		public string Category { get; set; } = string.Empty;
 		public decimal Stock { get; set; }
 		public double Percentage { get; set; }
-		public string Color { get; set; } = "";
+		public string Color { get; set; } = string.Empty;
 	}
 
 	public class AgeingRowDto
 	{
 		public int? DealerRegistrationId { get; set; }
-		public string StateName { get; set; } = "";
-		public string DealerName { get; set; } = "";
-		public string ProductName { get; set; } = "";
+		public string StateName { get; set; } = string.Empty;
+		public string DealerName { get; set; } = string.Empty;
+		public string ProductName { get; set; } = string.Empty;
 		public decimal Quantity { get; set; }
 		public int AgeingDays { get; set; }
-		public string Status { get; set; } = "";      // Fresh / Medium / Slow Moving / Dead Stock
+		public string Status { get; set; } = string.Empty;
 		public string? MobileNo { get; set; }
-
-		// Add these missing properties:
 		public string? DealerCode { get; set; }
 		public string? HeadQuarterName { get; set; }
 		public string? DistrictName { get; set; }

@@ -1,10 +1,11 @@
 ﻿// ============================================================================
-//  ProductStockAvailabilityController
-//  Route: api/ProductStockAvailability
-//  Same thin controller -> interface -> service shape as StockReportController.
-//  Adjust the namespace to match your API project.
+//  SpicAPI / Controllers / ProductStockAvailabilityController.cs
 // ============================================================================
 
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
 using SPIC.Core.DTOs;
@@ -18,70 +19,117 @@ namespace SpicAPI.Controllers
 	{
 		private readonly IProductStockAvailabilityService _service;
 
-		public ProductStockAvailabilityController(IProductStockAvailabilityService service) => _service = service;
+		public ProductStockAvailabilityController(
+			IProductStockAvailabilityService service)
+		{
+			_service = service;
+		}
 
-		// ---- The one the view binds to ----
 		[HttpPost("dashboard")]
 		public async Task<ActionResult<ProductStockAvailabilityDto>> Dashboard(
-			[FromBody] ProductStockAvailabilityFilter filter)
+			[FromBody] ProductStockAvailabilityFilter? filter,
+			CancellationToken cancellationToken)
 		{
-			var data = await _service.GetDashboardAsync(filter ?? new ProductStockAvailabilityFilter());
+			var data = await _service.GetDashboardAsync(
+				filter ?? new ProductStockAvailabilityFilter(),
+				cancellationToken);
+
 			return Ok(data);
 		}
 
-		// ---- Excel export of the full (unpaged) pivot, columns built dynamically ----
 		[HttpPost("export/excel")]
-		public async Task<IActionResult> ExportExcel([FromBody] ProductStockAvailabilityFilter filter)
+		public async Task<IActionResult> ExportExcel(
+			[FromBody] ProductStockAvailabilityFilter? filter,
+			CancellationToken cancellationToken)
 		{
-			var f = filter ?? new ProductStockAvailabilityFilter();
-			f.Page = 1;
-			f.PageSize = int.MaxValue;   // pull every state row
+			var exportFilter = CloneForExport(
+				filter ?? new ProductStockAvailabilityFilter());
 
-			var data = await _service.GetDashboardAsync(f);
+			var data = await _service.GetDashboardAsync(
+				exportFilter,
+				cancellationToken);
 
-			using var wb = new XLWorkbook();
-			var ws = wb.Worksheets.Add("Product-wise Stock");
+			using var workbook = new XLWorkbook();
+			var worksheet = workbook.Worksheets.Add("Product-wise Stock");
 
-			// Header: State | <each product> | Total (MT)
-			int col = 1;
-			WriteHeader(ws, 1, col++, "State");
-			foreach (var c in data.Columns)
-				WriteHeader(ws, 1, col++, c.ProductName);
-			WriteHeader(ws, 1, col, "Total (MT)");
+			var lastColumn = data.Columns.Count + 2;
 
-			// State rows
-			int r = 2;
+			worksheet.Cell(1, 1).Value = "State";
+
+			var columnIndex = 2;
+			foreach (var column in data.Columns)
+			{
+				worksheet.Cell(1, columnIndex++).Value = column.ProductName;
+			}
+
+			worksheet.Cell(1, lastColumn).Value = "Total (MT)";
+
+			var header = worksheet.Range(1, 1, 1, lastColumn);
+			header.Style.Font.Bold = true;
+			header.Style.Fill.BackgroundColor = XLColor.FromHtml("#0f172a");
+			header.Style.Font.FontColor = XLColor.White;
+			header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+			header.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+			var rowIndex = 2;
+
 			foreach (var row in data.Grid.Items)
 			{
-				int cc = 1;
-				ws.Cell(r, cc++).Value = row.StateName;
-				foreach (var c in data.Columns)
-					ws.Cell(r, cc++).Value = row.Quantities.TryGetValue(c.ProductId, out var v) ? v : 0m;
-				ws.Cell(r, cc).Value = row.Total;
-				r++;
-			}
+				worksheet.Cell(rowIndex, 1).Value = row.StateName;
 
-			// Grand total row
-			{
-				int cc = 1;
-				var gc = ws.Cell(r, cc++);
-				gc.Value = "Grand Total";
-				gc.Style.Font.Bold = true;
-				foreach (var c in data.Columns)
+				columnIndex = 2;
+				foreach (var column in data.Columns)
 				{
-					var cell = ws.Cell(r, cc++);
-					cell.Value = data.GrandTotal.Quantities.TryGetValue(c.ProductId, out var v) ? v : 0m;
-					cell.Style.Font.Bold = true;
+					worksheet.Cell(rowIndex, columnIndex++).Value =
+						row.Quantities.TryGetValue(column.ProductId, out var quantity)
+							? quantity
+							: 0m;
 				}
-				var tc = ws.Cell(r, cc);
-				tc.Value = data.GrandTotal.Total;
-				tc.Style.Font.Bold = true;
+
+				worksheet.Cell(rowIndex, lastColumn).Value = row.Total;
+				rowIndex++;
 			}
 
-			ws.Columns().AdjustToContents();
+			worksheet.Cell(rowIndex, 1).Value = "Grand Total";
+
+			columnIndex = 2;
+			foreach (var column in data.Columns)
+			{
+				worksheet.Cell(rowIndex, columnIndex++).Value =
+					data.GrandTotal.Quantities.TryGetValue(
+						column.ProductId,
+						out var quantity)
+						? quantity
+						: 0m;
+			}
+
+			worksheet.Cell(rowIndex, lastColumn).Value = data.GrandTotal.Total;
+
+			var grandTotalRange = worksheet.Range(rowIndex, 1, rowIndex, lastColumn);
+			grandTotalRange.Style.Font.Bold = true;
+			grandTotalRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#e2e8f0");
+
+			if (rowIndex >= 2 && lastColumn >= 2)
+			{
+				worksheet.Range(2, 2, rowIndex, lastColumn)
+					.Style.NumberFormat.Format = "#,##0.###";
+			}
+
+			worksheet.SheetView.FreezeRows(1);
+			worksheet.SheetView.FreezeColumns(1);
+			worksheet.Column(1).Width = 28;
+
+			for (var excelColumn = 2; excelColumn <= lastColumn; excelColumn++)
+			{
+				worksheet.Column(excelColumn).Width = 16;
+			}
+
+			worksheet.RangeUsed()?.Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin);
+			worksheet.RangeUsed()?.Style.Border.SetInsideBorder(XLBorderStyleValues.Hair);
 
 			using var stream = new MemoryStream();
-			wb.SaveAs(stream);
+			workbook.SaveAs(stream);
+
 			return File(
 				stream.ToArray(),
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -89,20 +137,41 @@ namespace SpicAPI.Controllers
 		}
 
 		[HttpPost("export/pdf")]
-		public IActionResult ExportPdf([FromBody] ProductStockAvailabilityFilter filter)
-			=> StatusCode(501, "PDF export not implemented yet. Suggest QuestPDF.");
+		public IActionResult ExportPdf(
+			[FromBody] ProductStockAvailabilityFilter? filter)
+		{
+			return StatusCode(501, "PDF export is not implemented yet.");
+		}
 
 		[HttpPost("send-mail")]
-		public IActionResult SendMail([FromBody] ProductStockAvailabilityFilter filter)
-			=> StatusCode(501, "Send mail not implemented yet.");
-
-		private static void WriteHeader(IXLWorksheet ws, int row, int colIdx, string text)
+		public IActionResult SendMail(
+			[FromBody] ProductStockAvailabilityFilter? filter)
 		{
-			var cell = ws.Cell(row, colIdx);
-			cell.Value = text;
-			cell.Style.Font.Bold = true;
-			cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#0f172a");
-			cell.Style.Font.FontColor = XLColor.White;
+			return StatusCode(501, "Send mail is not implemented yet.");
+		}
+
+		private static ProductStockAvailabilityFilter CloneForExport(
+			ProductStockAvailabilityFilter source)
+		{
+			return new ProductStockAvailabilityFilter
+			{
+				DateFrom = source.DateFrom,
+				DateTo = source.DateTo,
+				StateIds = source.StateIds is null
+					? new()
+					: new(source.StateIds),
+				RegionIds = source.RegionIds is null
+					? new()
+					: new(source.RegionIds),
+				HeadQuarterIds = source.HeadQuarterIds is null
+					? new()
+					: new(source.HeadQuarterIds),
+				Search = source.Search,
+				SortColumn = source.SortColumn,
+				SortDir = source.SortDir,
+				Page = 1,
+				PageSize = int.MaxValue
+			};
 		}
 	}
 }

@@ -1,22 +1,24 @@
-﻿// ============================================================================
-//  IPendingAckService
-//  Location: SPIC.Core/Interfaces/  (same folder as IStockReportService.cs)
-//  Adjust the namespace to match your project if it differs.
-// ============================================================================
-
+﻿using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using SPIC.Core.DTOs;
 
 namespace SPIC.Core.Interfaces
 {
 	public interface IPendingAckService
 	{
-		Task<PendingAckDashboardDto> GetDashboardAsync(PendingAckFilter filter);
+		Task<PendingAckDashboardDto> GetDashboardAsync(
+			PendingAckFilter filter,
+			CancellationToken cancellationToken = default);
 
-		// All filtered rows (no paging) — used by Excel / PDF export.
-		Task<List<PendingAckRowDto>> GetAllRowsAsync(PendingAckFilter filter);
+		Task<List<PendingAckRowDto>> GetAllRowsAsync(
+			PendingAckFilter filter,
+			CancellationToken cancellationToken = default);
 
-		// Filter dropdowns that need custom queries.
-		Task<List<PendingAckDealerTypeDto>> GetDealerTypesAsync();          // from DealerTypes
-		Task<List<PendingAckDealerDto>> GetDealersAsync();                  // DealerRegistrations + IfmsDealers
+		Task<List<PendingAckDealerTypeDto>> GetDealerTypesAsync(
+			CancellationToken cancellationToken = default);
+
+		Task<List<PendingAckDealerDto>> GetDealersAsync(
+			CancellationToken cancellationToken = default);
 	}
 }

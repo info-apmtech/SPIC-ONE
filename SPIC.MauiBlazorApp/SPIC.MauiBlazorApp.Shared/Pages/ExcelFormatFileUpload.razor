@@ -24,18 +24,18 @@
         gap: 6px;
     }
 
-    .fu-header-text h1 {
-        margin: 0;
-        font-size: 26px;
-        font-weight: 700;
-        color: #1e293b;
-    }
+        .fu-header-text h1 {
+            margin: 0;
+            font-size: 26px;
+            font-weight: 700;
+            color: #1e293b;
+        }
 
-    .fu-header-text p {
-        margin: 0;
-        font-size: 15px;
-        color: #64748b;
-    }
+        .fu-header-text p {
+            margin: 0;
+            font-size: 15px;
+            color: #64748b;
+        }
 
     /* Grid of Cards */
     .fu-grid {
@@ -62,9 +62,9 @@
         transition: box-shadow 0.2s ease;
     }
 
-    .fu-card:hover {
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    }
+        .fu-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
 
     .fu-card-header {
         display: flex;
@@ -135,11 +135,11 @@
         transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
     
-    .fu-form-control:focus {
-        outline: none;
-        border-color: #4f46e5;
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-    }
+        .fu-form-control:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
     
     .fu-btn-primary {
         display: inline-flex;
@@ -158,9 +158,9 @@
         align-self: flex-end;
     }
 
-    .fu-btn-primary:hover {
-        background-color: #4338ca;
-    }
+        .fu-btn-primary:hover {
+            background-color: #4338ca;
+        }
 </style>
 
 <div class="container-fluid py-4 px-0 fu-container">
@@ -188,8 +188,18 @@
                     <div class="fu-form-row" style="align-items: flex-end;">
                         <div class="fu-form-group">
                             <label class="fu-form-label">Excel File</label>
-                            <InputFile class="fu-form-control" accept=".xlsx,.xls,.csv" OnChange="@(e => HandleFileSelected(e, item.Id))" />
+                            <InputFile class="fu-form-control" accept=".xlsx,.csv" OnChange="@(e => HandleFileSelected(e, item.Id))" />
                         </div>
+
+                        @if (item.RequiresReportDate)
+                        {
+                            <div class="fu-form-group date-group">
+                                <label class="fu-form-label">Report Date</label>
+                                <InputDate TValue="DateTime?"
+                                           class="fu-form-control"
+                                           @bind-Value="item.ReportDate" />
+                            </div>
+                        }
                         
                         <button class="fu-btn-primary" @onclick="@(() => UploadFile(item.Id))" disabled="@(uploadingCategoryId != null)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
@@ -203,25 +213,27 @@
 </div>
 
 @code {
-    public class UploadCategory
+    public sealed class UploadCategory
     {
-        public string Id { get; set; }
-        public string Title { get; set; }
+        public string Id { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public bool RequiresReportDate { get; set; }
+        public DateTime? ReportDate { get; set; }
     }
 
-    private List<UploadCategory> uploadTypes = new()
+    private readonly List<UploadCategory> uploadTypes = new()
     {
-        new UploadCategory { Id = "One", Title = "DPT Report" },
-        new UploadCategory { Id = "Two", Title = "Company Sales" },
-        new UploadCategory { Id = "Three", Title = "Sales and Receipt" },
-        new UploadCategory { Id = "Four", Title = "Wholesale Sales" },
-        new UploadCategory { Id = "Five", Title = "Wholesale Stock As On Today" },
-        new UploadCategory { Id = "Six", Title = "State Wise Global Stock Reconciliation" },
-        new UploadCategory { Id = "Seven", Title = "Warehouse District Wise Details Global Stock" }
+        new() { Id = "One", Title = "DPT Report", RequiresReportDate = true, ReportDate = DateTime.Today },
+        new() { Id = "Two", Title = "Company Sales" },
+        new() { Id = "Three", Title = "Sales and Receipt", RequiresReportDate = true, ReportDate = DateTime.Today },
+        new() { Id = "Four", Title = "Wholesale Sales" },
+        new() { Id = "Five", Title = "Wholesale Stock As On Today" },
+        new() { Id = "Six", Title = "State Wise Global Stock Reconciliation", RequiresReportDate = true, ReportDate = DateTime.Today },
+        new() { Id = "Seven", Title = "Warehouse District Wise Details Global Stock", RequiresReportDate = true, ReportDate = DateTime.Today }
     };
 
-    private Dictionary<string, IBrowserFile> selectedFiles = new();
-    private string uploadingCategoryId = null;
+    private readonly Dictionary<string, IBrowserFile> selectedFiles = new();
+    private string? uploadingCategoryId;
 
     private void HandleFileSelected(InputFileChangeEventArgs e, string categoryId)
     {
@@ -230,16 +242,22 @@
 
     private async Task UploadFile(string categoryId)
     {
-        if (!selectedFiles.TryGetValue(categoryId, out var file) || file == null)
+        if (!selectedFiles.TryGetValue(categoryId, out var file))
         {
             await JS.InvokeVoidAsync("alert", "Please select a file first.");
             return;
         }
 
-        // For now, Wholesale Stock (Five), DPT Report (One), Sales and Receipt (Three), Sales Wholesalers (Four), Sales Company Sales (Two), State Wise (Six), and District Wise (Seven) are implemented
-        if (categoryId != "Five" && categoryId != "One" && categoryId != "Three" && categoryId != "Four" && categoryId != "Two" && categoryId != "Six" && categoryId != "Seven")
+        var category = uploadTypes.FirstOrDefault(x => x.Id == categoryId);
+        if (category is null)
         {
-            await JS.InvokeVoidAsync("alert", "This category upload is not implemented yet.");
+            await JS.InvokeVoidAsync("alert", "Invalid upload category.");
+            return;
+        }
+
+        if (category.RequiresReportDate && !category.ReportDate.HasValue)
+        {
+            await JS.InvokeVoidAsync("alert", "Please select the Report Date.");
             return;
         }
 
@@ -247,70 +265,101 @@
         {
             uploadingCategoryId = categoryId;
             StateHasChanged();
-            
+
             using var content = new MultipartFormDataContent();
-            var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 104857600)); // 100MB
-            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+            await using var uploadStream = file.OpenReadStream(maxAllowedSize: 100L * 1024L * 1024L);
+            using var fileContent = new StreamContent(uploadStream);
+
+            if (!string.IsNullOrWhiteSpace(file.ContentType))
+            {
+                fileContent.Headers.ContentType =
+                    new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+            }
+
             content.Add(fileContent, "file", file.Name);
             content.Add(new StringContent(categoryId), "categoryId");
 
-            var response = await Http.PostAsync("api/ExcelBulkUpload/import", content);
-            var result = await response.Content.ReadAsStringAsync();
+            if (category.RequiresReportDate && category.ReportDate.HasValue)
+            {
+                content.Add(
+                    new StringContent(
+                        category.ReportDate.Value.ToString(
+                            "yyyy-MM-dd",
+                            System.Globalization.CultureInfo.InvariantCulture)),
+                    "reportDate");
+            }
 
-            try 
+            using var response = await Http.PostAsync("api/ExcelBulkUpload/import", content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            var options = new System.Text.Json.JsonSerializerOptions
             {
-                var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true, AllowTrailingCommas = true };
-                var cleanResult = result.Trim('\uFEFF', '\u200B'); // Remove BOM if present
-                var parsed = System.Text.Json.JsonSerializer.Deserialize<UploadResult>(cleanResult, options);
-                
-                if (response.IsSuccessStatusCode && parsed != null && parsed.Success)
-                {
-                    var msg = $"Upload Successful!\n\n" +
-                              $"Rows Saved: {parsed.RowsInserted}\n" +
-                              $"Rows Skipped (Empty): {parsed.RowsSkipped}\n\n" +
-                              $"New Masters Automatically Created:\n" +
-                              $" • States: {parsed.NewMastersCreated?.States ?? 0}\n" +
-                              $" • Districts: {parsed.NewMastersCreated?.Districts ?? 0}\n" +
-                              $" • Sub-Districts: {parsed.NewMastersCreated?.SubDistricts ?? 0}\n" +
-                              $" • Dealers: {parsed.NewMastersCreated?.IfmsDealers ?? 0}\n" +
-                              $" • Dealer Types: {parsed.NewMastersCreated?.DealerTypes ?? 0}\n" +
-                              $" • Dealership Natures: {parsed.NewMastersCreated?.DealershipNatures ?? 0}\n" +
-                              $" • Companies: {parsed.NewMastersCreated?.Companies ?? 0}\n" +
-                              $" • Plants: {parsed.NewMastersCreated?.Plants ?? 0}\n" +
-                              $" • Products: {parsed.NewMastersCreated?.Products ?? 0}";
-                    
-                    await JS.InvokeVoidAsync("alert", msg);
-                    selectedFiles.Remove(categoryId);
-                }
-                else
-                {
-                    await JS.InvokeVoidAsync("alert", $"Upload Failed:\n{parsed?.Message ?? result}");
-                }
-            }
-            catch (System.Text.Json.JsonException parseEx)
+                PropertyNameCaseInsensitive = true,
+                AllowTrailingCommas = true
+            };
+
+            var cleanResult = responseBody.Trim('\uFEFF', '\u200B');
+            UploadResult? parsed = null;
+
+            try
             {
-                // Fallback if parsing fails
-                if (response.IsSuccessStatusCode)
-                {
-                    await JS.InvokeVoidAsync("alert", $"Upload Successful (Parse Error: {parseEx.Message})!\n" + result);
-                    selectedFiles.Remove(categoryId);
-                }
-                else
-                {
-                    await JS.InvokeVoidAsync("alert", $"Upload Failed (Parse Error: {parseEx.Message}):\n" + result);
-                }
+                parsed = System.Text.Json.JsonSerializer.Deserialize<UploadResult>(cleanResult, options);
             }
+            catch (System.Text.Json.JsonException)
+            {
+                // The raw API response is shown below when JSON cannot be parsed.
+            }
+
+            if (!response.IsSuccessStatusCode || parsed?.Success != true)
+            {
+                await JS.InvokeVoidAsync(
+                    "alert",
+                    $"Upload Failed:\n{parsed?.Message ?? responseBody}");
+                return;
+            }
+
+            var warnings = parsed.Warnings is { Count: > 0 }
+                ? $"\n\nWarnings:\n • {string.Join("\n • ", parsed.Warnings.Take(10))}" +
+                  (parsed.Warnings.Count > 10 ? $"\n • ...and {parsed.Warnings.Count - 10} more" : string.Empty)
+                : string.Empty;
+
+            var msg =
+                $"Upload Successful!\n\n" +
+                $"Total rows: {parsed.TotalRows}\n" +
+                $"Inserted: {parsed.RowsInserted}\n" +
+                $"Updated: {parsed.RowsUpdated}\n" +
+                $"Skipped: {parsed.RowsSkipped}\n" +
+                $"IFMS mobile updated: {parsed.IfmsDealerMobileNumbersUpdated}\n" +
+                $"Existing duplicate rows detected: {parsed.ExistingDuplicateRowsDetected}\n\n" +
+                $"New Masters Automatically Created:\n" +
+                $" • States: {parsed.NewMastersCreated?.States ?? 0}\n" +
+                $" • Districts: {parsed.NewMastersCreated?.Districts ?? 0}\n" +
+                $" • Sub-Districts: {parsed.NewMastersCreated?.SubDistricts ?? 0}\n" +
+                $" • IFMS Dealers: {parsed.NewMastersCreated?.IfmsDealers ?? 0}\n" +
+                $" • Dealer Types: {parsed.NewMastersCreated?.DealerTypes ?? 0}\n" +
+                $" • Dealership Natures: {parsed.NewMastersCreated?.DealershipNatures ?? 0}\n" +
+                $" • Companies: {parsed.NewMastersCreated?.Companies ?? 0}\n" +
+                $" • Plants: {parsed.NewMastersCreated?.Plants ?? 0}\n" +
+                $" • Products: {parsed.NewMastersCreated?.Products ?? 0}\n" +
+                $" • Units: {parsed.NewMastersCreated?.Units ?? 0}\n" +
+                $" • Statuses: {parsed.NewMastersCreated?.Statuses ?? 0}\n" +
+                $" • Transaction Types: {parsed.NewMastersCreated?.TxnTypes ?? 0}\n" +
+                $" • ACK Through: {parsed.NewMastersCreated?.AckThroughs ?? 0}\n" +
+                $" • Warehouses: {parsed.NewMastersCreated?.Warehouses ?? 0}" +
+                warnings;
+
+            await JS.InvokeVoidAsync("alert", msg);
+            selectedFiles.Remove(categoryId);
         }
         catch (System.Threading.Tasks.TaskCanceledException)
         {
-            // Ignore TaskCanceledException (usually happens when alert dialog times out in Blazor Server)
+            await JS.InvokeVoidAsync(
+                "alert",
+                "Upload was cancelled or timed out. Please check the network and try again.");
         }
         catch (Exception ex)
         {
-            if (ex is not System.Threading.Tasks.TaskCanceledException)
-            {
-                await JS.InvokeVoidAsync("alert", "Error during upload: " + ex.Message);
-            }
+            await JS.InvokeVoidAsync("alert", "Error during upload: " + ex.Message);
         }
         finally
         {
@@ -319,16 +368,24 @@
         }
     }
 
-    public class UploadResult
+    public sealed class UploadResult
     {
         public bool Success { get; set; }
-        public string Message { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
+        public string CategoryId { get; set; } = string.Empty;
+        public DateTime? ReportDate { get; set; }
+        public int TotalRows { get; set; }
         public int RowsInserted { get; set; }
+        public int RowsUpdated { get; set; }
         public int RowsSkipped { get; set; }
-        public UploadResultMasters NewMastersCreated { get; set; }
+        public int IfmsDealerMobileNumbersUpdated { get; set; }
+        public int ExistingDuplicateRowsDetected { get; set; }
+        public UploadResultMasters? NewMastersCreated { get; set; }
+        public List<string> Warnings { get; set; } = new();
     }
 
-    public class UploadResultMasters
+    public sealed class UploadResultMasters
     {
         public int States { get; set; }
         public int Districts { get; set; }
@@ -339,6 +396,10 @@
         public int Companies { get; set; }
         public int Plants { get; set; }
         public int Products { get; set; }
+        public int Units { get; set; }
+        public int Statuses { get; set; }
+        public int TxnTypes { get; set; }
+        public int AckThroughs { get; set; }
+        public int Warehouses { get; set; }
     }
 }
-

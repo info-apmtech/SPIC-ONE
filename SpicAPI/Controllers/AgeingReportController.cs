@@ -1,17 +1,11 @@
-﻿// ============================================================================
-//  AgeingReportController — thin, mirrors StockReportController.
-//  Route [controller] => "AgeingReport": api/AgeingReport/dashboard, /export/excel, ...
-//
-//  Register in Program.cs:
-//      builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();
-// ============================================================================
+﻿using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
 using SPIC.Core.DTOs;
 using SPIC.Core.Interfaces;
-using System;
-using System.IO;
-using System.Threading.Tasks;
 
 namespace SpicAPI.Controllers
 {
@@ -20,69 +14,102 @@ namespace SpicAPI.Controllers
 	public class AgeingReportController : ControllerBase
 	{
 		private readonly IAgeingReportService _service;
-		public AgeingReportController(IAgeingReportService service) => _service = service;
+
+		public AgeingReportController(IAgeingReportService service)
+		{
+			_service = service;
+		}
 
 		[HttpPost("dashboard")]
-		public async Task<ActionResult<AgeingDashboardDto>> Dashboard([FromBody] AgeingReportFilter filter)
-			=> Ok(await _service.GetDashboardAsync(filter ?? new AgeingReportFilter()));
+		public async Task<ActionResult<AgeingDashboardDto>> Dashboard(
+			[FromBody] AgeingReportFilter? filter,
+			CancellationToken cancellationToken)
+		{
+			var data = await _service.GetDashboardAsync(
+				filter ?? new AgeingReportFilter(),
+				cancellationToken);
+
+			return Ok(data);
+		}
 
 		[HttpPost("export/excel")]
-		public async Task<IActionResult> ExportExcel([FromBody] AgeingReportFilter filter)
+		public async Task<IActionResult> ExportExcel(
+			[FromBody] AgeingReportFilter? filter,
+			CancellationToken cancellationToken)
 		{
-			var rows = await _service.GetAllRowsAsync(filter ?? new AgeingReportFilter());
+			var rows = await _service.GetAllRowsAsync(
+				filter ?? new AgeingReportFilter(),
+				cancellationToken);
 
-			using var wb = new XLWorkbook();
-			var ws = wb.Worksheets.Add("Ageing Report");
+			using var workbook = new XLWorkbook();
+			var worksheet = workbook.Worksheets.Add("Ageing Report");
 
-			// UPDATED: Added the new columns to the Excel headers
-			string[] headers = {
-				"State", "District", "Sub-District", "Head Quarters",
-				"Dealer ID", "Dealer Name", "Mobile No.", "Product",
-				"Quantity (MT)", "Entry Date", "Ageing Days", "Status"
+			string[] headers =
+			{
+				"State",
+				"District",
+				"Sub-District",
+				"Head Quarters",
+				"Dealer ID",
+				"Dealer Name",
+				"Mobile No.",
+				"Product",
+				"Quantity (MT)",
+				"Entry Date",
+				"Ageing Days",
+				"Status"
 			};
 
-			for (int c = 0; c < headers.Length; c++)
+			for (var column = 0; column < headers.Length; column++)
 			{
-				var cell = ws.Cell(1, c + 1);
-				cell.Value = headers[c];
+				var cell = worksheet.Cell(1, column + 1);
+				cell.Value = headers[column];
 				cell.Style.Font.Bold = true;
 				cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#0f172a");
 				cell.Style.Font.FontColor = XLColor.White;
 			}
 
-			int r = 2;
+			var rowNumber = 2;
 			foreach (var row in rows)
 			{
-				// UPDATED: Mapped the new properties to the Excel columns
-				ws.Cell(r, 1).Value = row.StateName;
-				ws.Cell(r, 2).Value = row.DistrictName;
-				ws.Cell(r, 3).Value = row.SubDistrictName;
-				ws.Cell(r, 4).Value = row.HeadQuarterName;
-				ws.Cell(r, 5).Value = row.DealerCode;
-				ws.Cell(r, 6).Value = row.DealerName;
-				ws.Cell(r, 7).Value = row.MobileNo;
-				ws.Cell(r, 8).Value = row.ProductName;
-				ws.Cell(r, 9).Value = row.Quantity;
-				ws.Cell(r, 10).Value = row.EntryDate?.ToString("dd-MM-yyyy") ?? "";
-				ws.Cell(r, 11).Value = row.AgeingDays;
-				ws.Cell(r, 12).Value = row.Status;
-				r++;
+				worksheet.Cell(rowNumber, 1).Value = row.StateName;
+				worksheet.Cell(rowNumber, 2).Value = row.DistrictName;
+				worksheet.Cell(rowNumber, 3).Value = row.SubDistrictName;
+				worksheet.Cell(rowNumber, 4).Value = row.HeadQuarterName;
+				worksheet.Cell(rowNumber, 5).Value = row.DealerCode;
+				worksheet.Cell(rowNumber, 6).Value = row.DealerName;
+				worksheet.Cell(rowNumber, 7).Value = row.MobileNo;
+				worksheet.Cell(rowNumber, 8).Value = row.ProductName;
+				worksheet.Cell(rowNumber, 9).Value = row.Quantity;
+				worksheet.Cell(rowNumber, 10).Value = row.EntryDate?.ToString("dd-MM-yyyy") ?? string.Empty;
+				worksheet.Cell(rowNumber, 11).Value = row.AgeingDays;
+				worksheet.Cell(rowNumber, 12).Value = row.Status;
+				rowNumber++;
 			}
-			ws.Columns().AdjustToContents();
+
+			worksheet.SheetView.FreezeRows(1);
+			worksheet.RangeUsed()?.SetAutoFilter();
+			worksheet.Columns().AdjustToContents();
 
 			using var stream = new MemoryStream();
-			wb.SaveAs(stream);
-			return File(stream.ToArray(),
+			workbook.SaveAs(stream);
+
+			return File(
+				stream.ToArray(),
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 				$"AgeingReport_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
 		}
 
 		[HttpPost("export/pdf")]
-		public IActionResult ExportPdf([FromBody] AgeingReportFilter filter)
-			=> StatusCode(501, "PDF export not implemented yet.");
+		public IActionResult ExportPdf([FromBody] AgeingReportFilter? filter)
+		{
+			return StatusCode(501, "PDF export not implemented yet.");
+		}
 
 		[HttpPost("send-mail")]
-		public IActionResult SendMail([FromBody] AgeingReportFilter filter)
-			=> StatusCode(501, "Send mail not implemented yet.");
+		public IActionResult SendMail([FromBody] AgeingReportFilter? filter)
+		{
+			return StatusCode(501, "Send mail not implemented yet.");
+		}
 	}
 }

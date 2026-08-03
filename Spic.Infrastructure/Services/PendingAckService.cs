@@ -1,23 +1,8 @@
-﻿// ============================================================================
-//  PendingAckService (implementation)
-//  Location: Spic.Infrastructure/Services/   (next to StockReportService.cs)
-//
-//  Same shape as StockReportService, but this report unifies TWO tables
-//  (SalesCompanySale + SalesWholesaler). ID/date filters run in SQL; the rows
-//  are then unified in memory, age-classified, and turned into the dashboard.
-//
-//  BEFORE IT COMPILES, confirm:
-//   1. AppDbContext            -> already matches your StockReportService.
-//   2. Lookup entity + name properties in LoadLookupsAsync (see the 5 TODOs).
-//      State.StateName and Product.Name are taken from your StockReportService;
-//      District / DealerType / Status are assumed and marked TODO.
-//   3. The "acknowledged" rule in Finish().
-//
-//  PostgreSQL / Npgsql: date filters are normalised to Kind=Utc (Npgsql maps
-//  DateTime -> timestamptz). If InvoiceDate is `timestamp WITHOUT time zone`,
-//  switch Utc(...) to DateTimeKind.Unspecified — exactly like the StockReport note.
-// ============================================================================
-
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
@@ -26,437 +11,1076 @@ using SPIC.Core.Interfaces;
 
 namespace Spic.Infrastructure.Services
 {
-	public class PendingAckService : IPendingAckService
+	/// <summary>
+	/// Performance-optimized Pending Acknowledgement service.
+	///
+	/// Business flow is preserved:
+	/// - Company Sales + Wholesaler Sales are combined.
+	/// - Completed means RetailerReceiptDate is available.
+	/// - Pending age is based on InvoiceDate.
+	/// - Cards and state chart ignore Source/AgeStatuses filters.
+	/// - Grid and export apply Source/AgeStatuses filters.
+	/// - Search still affects cards, chart and grid.
+	///
+	/// Main performance improvement:
+	/// the service no longer loads every matching sale and every lookup master
+	/// into memory before paging. Aggregation, filtering, sorting and paging are
+	/// executed by the database.
+	/// </summary>
+	public sealed class PendingAckService : IPendingAckService
 	{
 		private readonly AppDbContext _db;
 
-		public PendingAckService(AppDbContext db) => _db = db;
+		private const int SourceCompany = 1;
+		private const int SourceWholesaler = 2;
 
-		// ---- Age-status thresholds (must match the view) ----
-		//   Overdue  : age >= 20
-		//   Critical : age 10..19
-		//   Pending  : age 5..9
-		//   Fresh    : age < 5
-		private const int OverdueDays = 20;
-		private const int CriticalDays = 10;
-		private const int PendingDays = 5;
+		private const int StatusCompleted = 0;
+		private const int StatusLatest = 1;
+		private const int StatusCritical = 2;
+		private const int StatusOverdue = 3;
+		private const int StatusConsentOfBuyer = 4;
+
+		public PendingAckService(AppDbContext db)
+		{
+			_db = db;
+		}
 
 		private static DateTime Today() => DateTime.UtcNow.Date;
-		private static DateTime? Utc(DateTime? d) =>
-			d.HasValue ? DateTime.SpecifyKind(d.Value.Date, DateTimeKind.Utc) : (DateTime?)null;
 
-		// ==========================================================
-		//  Public API
-		// ==========================================================
-		public async Task<PendingAckDashboardDto> GetDashboardAsync(PendingAckFilter f)
+		public async Task<PendingAckDashboardDto> GetDashboardAsync(
+			PendingAckFilter filter,
+			CancellationToken cancellationToken = default)
 		{
-			// Base rows respect every filter EXCEPT the Source tab and Age-status,
-			// so the KPI cards + chart stay stable while the grid tab switches.
-			var baseRows = await BuildRowsAsync(f);
+			filter ??= new PendingAckFilter();
+			NormalizeFilter(filter);
+
+			var today = Today();
+			var page = Math.Max(1, filter.Page);
+			var pageSize = filter.PageSize <= 0 ? 16 : filter.PageSize;
+
+			// The base scope intentionally ignores Source and AgeStatuses so the
+			// three cards and state chart keep their existing behaviour.
+			var baseQuery = BuildRawQuery(
+				filter,
+				today,
+				includeBothSources: true);
+
+			// Query 1: compact summary aggregates only.
+			var summaryAggregates = await baseQuery
+				.GroupBy(x => new { x.SourceCode, x.StatusCode })
+				.Select(group => new SummaryAggregateRow
+				{
+					SourceCode = group.Key.SourceCode,
+					StatusCode = group.Key.StatusCode,
+					Count = group.Count(),
+					Quantity = group.Sum(x => x.QuantityMT)
+				})
+				.ToListAsync(cancellationToken);
+
+			var overall = BuildRollup(summaryAggregates, sourceCode: null);
+			var company = BuildRollup(summaryAggregates, SourceCompany);
+			var wholesaler = BuildRollup(summaryAggregates, SourceWholesaler);
+
+			CopySourceCountsToOverall(overall, company, wholesaler);
+
+			// Query 2: state/status aggregates only. This replaces materializing
+			// every transaction and then grouping the full list in memory.
+			var stateAggregates = await (
+				from row in baseQuery
+				join state in _db.Set<State>().AsNoTracking()
+					on row.StateId equals (int?)state.Id
+				group row by new
+				{
+					StateId = state.Id,
+					state.StateName,
+					row.StatusCode
+				}
+				into grouped
+				select new StateAggregateRow
+				{
+					StateId = grouped.Key.StateId,
+					StateName = grouped.Key.StateName,
+					StatusCode = grouped.Key.StatusCode,
+					Count = grouped.Count(),
+					Quantity = grouped.Sum(x => x.QuantityMT)
+				})
+				.ToListAsync(cancellationToken);
+
+			var stateWise = BuildStateWise(stateAggregates);
+
+			// Grid alone applies the active source tab and status selections.
+			var filteredGridQuery = ApplyGridFilters(baseQuery, filter);
+
+			// Query 3: count only.
+			var totalCount = await filteredGridQuery.CountAsync(cancellationToken);
+
+			// Query 4: joined names + sorted database page only.
+			var enrichedGridQuery = BuildEnrichedQuery(filteredGridQuery);
+			var sortedGridQuery = ApplySort(enrichedGridQuery, filter);
+
+			var pageRows = await sortedGridQuery
+				.Skip((page - 1) * pageSize)
+				.Take(pageSize)
+				.ToListAsync(cancellationToken);
+
+			var items = new List<PendingAckRowDto>(pageRows.Count);
+			for (var index = 0; index < pageRows.Count; index++)
+			{
+				items.Add(ToDto(
+					pageRows[index],
+					today,
+					((page - 1) * pageSize) + index + 1));
+			}
 
 			return new PendingAckDashboardDto
 			{
-				Summary   = BuildSummary(baseRows),
-				StateWise = BuildStateWise(baseRows),
-				Grid      = BuildGrid(baseRows, f, paged: true)
+				Summary = overall,
+				Overall = overall,
+				CompanySales = company,
+				WholesalerSales = wholesaler,
+				StateWise = stateWise,
+				Grid = new PagedResult<PendingAckRowDto>
+				{
+					Items = items,
+					TotalCount = totalCount,
+					Page = page,
+					PageSize = pageSize
+				}
 			};
 		}
 
-		public async Task<List<PendingAckRowDto>> GetAllRowsAsync(PendingAckFilter f)
+		public async Task<List<PendingAckRowDto>> GetAllRowsAsync(
+			PendingAckFilter filter,
+			CancellationToken cancellationToken = default)
 		{
-			var baseRows = await BuildRowsAsync(f);
-			return BuildGrid(baseRows, f, paged: false).Items;
-		}
+			filter ??= new PendingAckFilter();
+			NormalizeFilter(filter);
 
-		// ---- Dealer Type dropdown (from DealerTypes) ----
-		public async Task<List<PendingAckDealerTypeDto>> GetDealerTypesAsync()
-		{
-			// TODO: confirm DealerType entity + name property (assumed .Name).
-			var raw = await _db.Set<DealerType>().AsNoTracking()
-				.Select(x => new { x.Id, x.Name })
-				.ToListAsync();
+			var today = Today();
 
-			return raw
-				.Select(x => new PendingAckDealerTypeDto { Id = x.Id, Name = x.Name ?? "" })
-				.Where(x => !string.IsNullOrWhiteSpace(x.Name))
-				.OrderBy(x => x.Name)
-				.ToList();
-		}
+			// Export does not require card/chart data. When a source tab is
+			// selected, skip querying the other sales table completely.
+			var rawQuery = BuildRawQuery(
+				filter,
+				today,
+				includeBothSources: false);
 
-		// ---- Dealer / Agency dropdown (DealerRegistrations + IfmsDealers) ----
-		public async Task<List<PendingAckDealerDto>> GetDealersAsync()
-		{
-			// TODO: confirm the display-name property on each entity.
-			//   DealerRegistration -> assumed FirmName
-			//   IfmsDealer         -> assumed DealerName
-			var regsRaw = await _db.Set<DealerRegistration>().AsNoTracking()
-				.Select(x => new { x.Id, Name = x.FirmName })
-				.ToListAsync();
+			rawQuery = ApplyGridFilters(rawQuery, filter);
 
-			var ifmsRaw = await _db.Set<IfmsDealer>().AsNoTracking()
-				.Select(x => new { x.Id, Name = x.Name })
-				.ToListAsync();
+			var enrichedQuery = BuildEnrichedQuery(rawQuery);
+			var sortedQuery = ApplySort(enrichedQuery, filter);
+			var rows = await sortedQuery.ToListAsync(cancellationToken);
 
-			var dealers = new List<PendingAckDealerDto>();
-			dealers.AddRange(regsRaw.Select(x => new PendingAckDealerDto { Id = "R" + x.Id, Name = x.Name ?? "" }));
-			dealers.AddRange(ifmsRaw.Select(x => new PendingAckDealerDto { Id = "I" + x.Id, Name = x.Name ?? "" }));
-
-			return dealers
-				.Where(x => !string.IsNullOrWhiteSpace(x.Name))
-				.OrderBy(x => x.Name)
-				.ToList();
-		}
-
-		// "R123"/"I456" -> the integer ids for one source table.
-		private static List<int> ParseKeys(List<string> keys, char prefix) =>
-			keys.Where(k => !string.IsNullOrEmpty(k) && k.Length > 1 && k[0] == prefix)
-				.Select(k => int.TryParse(k.Substring(1), out var n) ? n : 0)
-				.Where(n => n > 0)
-				.ToList();
-
-		// ==========================================================
-		//  Load both tables, resolve names, classify age
-		// ==========================================================
-		private async Task<List<UnifiedRow>> BuildRowsAsync(PendingAckFilter f)
-		{
-			var (states, districts, dealerTypes, products, statuses) = await LoadLookupsAsync();
-
-			var from = Utc(f.DateFrom);
-			var to = Utc(f.DateTo);
-			var result = new List<UnifiedRow>();
-
-			// Dealer / agency keys split back into their two source tables.
-			//   "R{id}" -> DealerRegistrations.Id,  "I{id}" -> IfmsDealers.Id
-			var regIds = ParseKeys(f.DealerKeys, 'R');
-			var ifmsIds = ParseKeys(f.DealerKeys, 'I');
-			var hasDealerFilter = regIds.Count > 0 || ifmsIds.Count > 0;
-
-			// ---------- Company Sales ----------
-			var cq = _db.Set<SalesCompanySale>().AsNoTracking();
-			if (f.StateIds.Count > 0) cq = cq.Where(x => x.StateId != null && f.StateIds.Contains(x.StateId.Value));
-			if (f.DistrictIds.Count > 0) cq = cq.Where(x => x.DistrictId != null && f.DistrictIds.Contains(x.DistrictId.Value));
-			if (f.DealerTypeIds.Count > 0) cq = cq.Where(x => x.DealerTypeId != null && f.DealerTypeIds.Contains(x.DealerTypeId.Value));
-			if (f.ProductIds.Count > 0) cq = cq.Where(x => x.ProductId != null && f.ProductIds.Contains(x.ProductId.Value));
-			if (hasDealerFilter) cq = cq.Where(x =>
-											  (x.DealerRegistrationId != null && regIds.Contains(x.DealerRegistrationId.Value)) ||
-											  (x.IfmsDealerId != null && ifmsIds.Contains(x.IfmsDealerId.Value)));
-			if (from.HasValue) cq = cq.Where(x => x.InvoiceDate >= from.Value);
-			if (to.HasValue) cq = cq.Where(x => x.InvoiceDate <= to.Value);
-
-			var company = await cq.Select(x => new
+			var result = new List<PendingAckRowDto>(rows.Count);
+			for (var index = 0; index < rows.Count; index++)
 			{
-				x.Id,
-				x.TransactionId,
-				x.InvoiceNo,
-				x.InvoiceDate,
-				x.EntryDate,
-				x.CreatedAt,
-				x.DealerName,
-				x.DealerRegistrationId,
-				x.IfmsDealerId,
-				x.DealerTypeId,
-				x.StateId,
-				x.DistrictId,
-				x.ProductId,
-				x.QuantityMT,
-				x.ReceivedQuantity,
-				x.StatusId,
-				x.RetailerReceiptDate,
-				x.DdNo,
-				x.MobileNo
-			}).ToListAsync();
-
-			foreach (var x in company)
-			{
-				result.Add(Finish(new UnifiedRow
-				{
-					Id               = x.Id,
-					TransactionId    = x.TransactionId ?? "",
-					Source           = "Company Sales",
-					InvoiceNo        = x.InvoiceNo ?? "",
-					InvoiceDate      = x.InvoiceDate,
-					EntryDate        = x.EntryDate,
-					Anchor           = x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt,
-					AgencyName       = string.IsNullOrWhiteSpace(x.DealerName) ? "-" : x.DealerName,
-					DealerCode       = (x.DealerRegistrationId ?? x.IfmsDealerId)?.ToString() ?? "-",
-					DealerType       = Get(dealerTypes, x.DealerTypeId),
-					StateName        = Get(states, x.StateId),
-					District         = Get(districts, x.DistrictId),
-					ProductName      = Get(products, x.ProductId),
-					QuantityMT       = x.QuantityMT,
-					ReceivedQuantity = x.ReceivedQuantity,
-					WorkflowStatus   = Get(statuses, x.StatusId),
-					HasReceipt       = x.RetailerReceiptDate.HasValue,
-					DdNo             = x.DdNo,
-					MobileNo         = x.MobileNo
-				}));
-			}
-
-			// ---------- Wholesaler Sales ----------
-			var wq = _db.Set<SalesWholesaler>().AsNoTracking();
-			if (f.StateIds.Count > 0) wq = wq.Where(x => x.StateId != null && f.StateIds.Contains(x.StateId.Value));
-			if (f.DistrictIds.Count > 0) wq = wq.Where(x =>
-											  (x.BuyerDistrictId != null && f.DistrictIds.Contains(x.BuyerDistrictId.Value)) ||
-											  (x.SellerDistrictId != null && f.DistrictIds.Contains(x.SellerDistrictId.Value)));
-			if (f.DealerTypeIds.Count > 0) wq = wq.Where(x => x.DealerTypeId != null && f.DealerTypeIds.Contains(x.DealerTypeId.Value));
-			if (f.ProductIds.Count > 0) wq = wq.Where(x => x.ProductId != null && f.ProductIds.Contains(x.ProductId.Value));
-			if (hasDealerFilter) wq = wq.Where(x =>
-											  (x.DealerId != null && regIds.Contains(x.DealerId.Value)) ||      // TODO: confirm DealerId -> DealerRegistrations
-											  (x.IfmsDealerId != null && ifmsIds.Contains(x.IfmsDealerId.Value)));
-			if (from.HasValue) wq = wq.Where(x => x.InvoiceDate >= from.Value);
-			if (to.HasValue) wq = wq.Where(x => x.InvoiceDate <= to.Value);
-
-			var wholesaler = await wq.Select(x => new
-			{
-				x.Id,
-				x.TransactionId,
-				x.InvoiceNo,
-				x.InvoiceDate,
-				x.EntryDate,
-				x.CreatedAt,
-				x.AgencyName,
-				x.WholesalerAgencyName,
-				x.DealerId,
-				x.IfmsDealerId,
-				x.DealerTypeId,
-				x.StateId,
-				x.BuyerDistrictId,
-				x.SellerDistrictId,
-				x.ProductId,
-				x.QuantityMT,
-				x.ReceivedQuantityMT,
-				x.StatusId,
-				x.RetailerReceiptDate,
-				x.DispatchNo,
-				x.MobileNo
-			}).ToListAsync();
-
-			foreach (var x in wholesaler)
-			{
-				result.Add(Finish(new UnifiedRow
-				{
-					Id               = x.Id,
-					TransactionId    = x.TransactionId ?? "",
-					Source           = "Wholesaler Sales",
-					InvoiceNo        = x.InvoiceNo ?? "",
-					InvoiceDate      = x.InvoiceDate,
-					EntryDate        = x.EntryDate,
-					Anchor           = x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt,
-					AgencyName       = FirstNonEmpty(x.AgencyName, x.WholesalerAgencyName, "-"),
-					DealerCode       = (x.DealerId ?? x.IfmsDealerId)?.ToString() ?? "-",
-					DealerType       = Get(dealerTypes, x.DealerTypeId),
-					StateName        = Get(states, x.StateId),
-					District         = Get(districts, x.BuyerDistrictId ?? x.SellerDistrictId),
-					ProductName      = Get(products, x.ProductId),
-					QuantityMT       = x.QuantityMT,
-					ReceivedQuantity = x.ReceivedQuantityMT,
-					WorkflowStatus   = Get(statuses, x.StatusId),
-					HasReceipt       = x.RetailerReceiptDate.HasValue,
-					DispatchNo       = x.DispatchNo,
-					MobileNo         = x.MobileNo
-				}));
+				result.Add(ToDto(rows[index], today, index + 1));
 			}
 
 			return result;
 		}
 
-		// Compute acknowledged flag, age and age-status for one row.
-		private UnifiedRow Finish(UnifiedRow r)
+		public async Task<List<PendingAckDealerTypeDto>> GetDealerTypesAsync(
+			CancellationToken cancellationToken = default)
 		{
-			// TODO: replace with your real "acknowledged" rule (e.g. a specific StatusId).
-			var acknowledged = (r.WorkflowStatus?.IndexOf("Acknowledg", StringComparison.OrdinalIgnoreCase) >= 0)
-							   || r.HasReceipt;
-
-			var age = acknowledged ? 0 : Math.Max(0, (Today() - r.Anchor.Date).Days);
-			r.PendingAckAgeDays = age;
-			r.AgeStatus = acknowledged ? "Completed"
-						: age >= OverdueDays ? "Overdue"
-						: age >= CriticalDays ? "Critical"
-						: age >= PendingDays ? "Pending"
-						: "Fresh";
-			return r;
-		}
-
-		// ==========================================================
-		//  Widgets
-		// ==========================================================
-		private PendingAckSummaryDto BuildSummary(List<UnifiedRow> rows)
-		{
-			int Count(IEnumerable<UnifiedRow> src, string s) => src.Count(x => x.AgeStatus == s);
-
-			var company = rows.Where(x => x.Source == "Company Sales").ToList();
-			var wholesaler = rows.Where(x => x.Source == "Wholesaler Sales").ToList();
-
-			return new PendingAckSummaryDto
-			{
-				Completed    = Count(rows, "Completed"),
-				Critical     = Count(rows, "Critical"),
-				Overdue      = Count(rows, "Overdue"),
-				ConsentBuyer = rows.Count(x => (x.WorkflowStatus ?? "").IndexOf("Consent", StringComparison.OrdinalIgnoreCase) >= 0),
-
-				CompanyTotal     = company.Count,
-				CompanyCompleted = Count(company, "Completed"),
-				CompanyCritical  = Count(company, "Critical"),
-				CompanyOverdue   = Count(company, "Overdue"),
-
-				WholesalerTotal     = wholesaler.Count,
-				WholesalerCompleted = Count(wholesaler, "Completed"),
-				WholesalerCritical  = Count(wholesaler, "Critical"),
-				WholesalerOverdue   = Count(wholesaler, "Overdue")
-			};
-		}
-
-		private List<PendingAckStateDto> BuildStateWise(List<UnifiedRow> rows) =>
-			rows.Where(x => !string.IsNullOrWhiteSpace(x.StateName) && x.StateName != "-")
-				.GroupBy(x => x.StateName)
-				.Select(g => new PendingAckStateDto
+			return await _db.Set<DealerType>()
+				.AsNoTracking()
+				.OrderBy(x => x.Name)
+				.Select(x => new PendingAckDealerTypeDto
 				{
-					StateName = g.Key,
-					Completed = g.Count(x => x.AgeStatus == "Completed"),
-					Overdue   = g.Count(x => x.AgeStatus == "Overdue"),
-					Critical  = g.Count(x => x.AgeStatus == "Critical")
+					Id = x.Id,
+					Name = x.Name
 				})
-				.Where(s => s.Total > 0)
-				.OrderByDescending(s => s.Total)
-				.Take(12)
-				.ToList();
+				.ToListAsync(cancellationToken);
+		}
 
-		private PagedResult<PendingAckRowDto> BuildGrid(List<UnifiedRow> rows, PendingAckFilter f, bool paged)
+		public async Task<List<PendingAckDealerDto>> GetDealersAsync(
+			CancellationToken cancellationToken = default)
 		{
-			IEnumerable<UnifiedRow> q = rows;
+			// Keep the existing DealerRegistration + IFMS dealer combination.
+			// Only the two fields required by the dropdown are selected.
+			var registeredDealers = await _db.Set<DealerRegistration>()
+				.AsNoTracking()
+				.Where(x => x.FirmName != null && x.FirmName != string.Empty)
+				.Select(x => new PendingAckDealerDto
+				{
+					Key = "R" + x.Id,
+					Name = x.FirmName!
+				})
+				.ToListAsync(cancellationToken);
 
-			if (!string.IsNullOrWhiteSpace(f.Source) && f.Source != "All")
-				q = q.Where(x => x.Source == f.Source);
+			var ifmsDealers = await _db.Set<IfmsDealer>()
+				.AsNoTracking()
+				.Where(x => x.Name != null && x.Name != string.Empty)
+				.Select(x => new PendingAckDealerDto
+				{
+					Key = "I" + x.Id,
+					Name = x.Name!
+				})
+				.ToListAsync(cancellationToken);
 
-			if (f.AgeStatuses.Count > 0)
-				q = q.Where(x => f.AgeStatuses.Contains(x.AgeStatus));
+			return registeredDealers
+				.Concat(ifmsDealers)
+				.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+				.ToList();
+		}
 
-			if (!string.IsNullOrWhiteSpace(f.Search))
+		// =====================================================================
+		// Base SQL query
+		// =====================================================================
+
+		private IQueryable<RawQueryRow> BuildRawQuery(
+			PendingAckFilter filter,
+			DateTime today,
+			bool includeBothSources)
+		{
+			var (registrationIds, ifmsIds) = SplitDealerKeys(filter.DealerKeys);
+
+			var latestFrom = today.AddDays(-10);
+			var criticalFrom = today.AddDays(-20);
+
+			var source = filter.Source?.Trim();
+			var sourceIsCompany = string.Equals(
+				source,
+				"Company Sales",
+				StringComparison.OrdinalIgnoreCase);
+			var sourceIsWholesaler = string.Equals(
+				source,
+				"Wholesaler Sales",
+				StringComparison.OrdinalIgnoreCase);
+
+			var includeCompany = includeBothSources || !sourceIsWholesaler;
+			var includeWholesaler = includeBothSources || !sourceIsCompany;
+
+			IQueryable<RawQueryRow>? companyQuery = null;
+			IQueryable<RawQueryRow>? wholesalerQuery = null;
+
+			if (includeCompany)
 			{
-				var s = f.Search.Trim();
-				q = q.Where(x =>
-					(x.InvoiceNo  ?? "").Contains(s, StringComparison.OrdinalIgnoreCase) ||
-					(x.AgencyName ?? "").Contains(s, StringComparison.OrdinalIgnoreCase) ||
-					(x.StateName  ?? "").Contains(s, StringComparison.OrdinalIgnoreCase) ||
-					(x.District   ?? "").Contains(s, StringComparison.OrdinalIgnoreCase));
+				var query = _db.Set<SalesCompanySale>()
+					.AsNoTracking()
+					.AsQueryable();
+
+				query = ApplyCompanyFilters(
+					query,
+					filter,
+					registrationIds,
+					ifmsIds);
+
+				companyQuery = query.Select(x => new RawQueryRow
+				{
+					SourceCode = SourceCompany,
+					SalesId = x.Id,
+					TransactionId = x.TransactionId,
+					InvoiceNo = x.InvoiceNo,
+					InvoiceDate = x.InvoiceDate,
+					EntryDate = x.EntryDate,
+					RetailerReceiptDate = x.RetailerReceiptDate,
+					AgencyName = x.DealerName,
+					DealerTypeId = x.DealerTypeId,
+					StateId = x.StateId,
+					DistrictId = x.DistrictId,
+					ProductId = x.ProductId,
+					QuantityMT = x.QuantityMT,
+					ReceivedQuantity = x.ReceivedQuantity,
+					MobileNo = x.MobileNo,
+					DdNo = x.DdNo,
+					DispatchNo = (string?)null,
+					RegistrationId = x.DealerRegistrationId,
+					IfmsId = x.IfmsDealerId,
+					StatusCode = x.RetailerReceiptDate != null
+						? StatusCompleted
+						: x.InvoiceDate == null || x.InvoiceDate.Value >= latestFrom
+							? StatusLatest
+							: x.InvoiceDate.Value >= criticalFrom
+								? StatusCritical
+								: StatusOverdue
+				});
 			}
 
-			var asc = string.Equals(f.SortDir, "asc", StringComparison.OrdinalIgnoreCase);
-			q = f.SortColumn?.ToLowerInvariant() switch
+			if (includeWholesaler)
 			{
-				"quantity" => asc ? q.OrderBy(x => x.QuantityMT) : q.OrderByDescending(x => x.QuantityMT),
-				"state" => asc ? q.OrderBy(x => x.StateName) : q.OrderByDescending(x => x.StateName),
-				"dealer" => asc ? q.OrderBy(x => x.AgencyName) : q.OrderByDescending(x => x.AgencyName),
-				"product" => asc ? q.OrderBy(x => x.ProductName) : q.OrderByDescending(x => x.ProductName),
-				_ => asc ? q.OrderBy(x => x.PendingAckAgeDays) : q.OrderByDescending(x => x.PendingAckAgeDays)
-			};
+				var query = _db.Set<SalesWholesaler>()
+					.AsNoTracking()
+					.AsQueryable();
 
-			var list = q.ToList();
-			var total = list.Count;
+				query = ApplyWholesalerFilters(
+					query,
+					filter,
+					registrationIds,
+					ifmsIds);
 
-			if (paged)
-				list = list.Skip((f.Page - 1) * f.PageSize).Take(f.PageSize).ToList();
-
-			return new PagedResult<PendingAckRowDto>
-			{
-				TotalCount = total,
-				Page       = f.Page,
-				PageSize   = f.PageSize,
-				Items = list.Select(x => new PendingAckRowDto
+				wholesalerQuery = query.Select(x => new RawQueryRow
 				{
-					Id                = x.Id,
-					TransactionId     = x.TransactionId,
-					InvoiceNo         = x.InvoiceNo,
-					InvoiceDate       = x.InvoiceDate,
-					AgencyName        = x.AgencyName,
-					DealerCode        = x.DealerCode,
-					Source            = x.Source,
-					DealerType        = x.DealerType,
-					StateName         = x.StateName,
-					District          = x.District,
-					ProductName       = x.ProductName,
-					QuantityMT        = x.QuantityMT,
-					ReceivedQuantity  = x.ReceivedQuantity,
-					AgeStatus         = x.AgeStatus,
-					PendingAckAgeDays = x.PendingAckAgeDays,
-					WorkflowStatus    = x.WorkflowStatus,
-					EntryDate         = x.EntryDate,
-					DdNo              = x.DdNo,
-					DispatchNo        = x.DispatchNo,
-					MobileNo          = x.MobileNo
-				}).ToList()
+					SourceCode = SourceWholesaler,
+					SalesId = x.Id,
+					TransactionId = x.TransactionId,
+					InvoiceNo = x.InvoiceNo,
+					InvoiceDate = x.InvoiceDate,
+					EntryDate = x.EntryDate,
+					RetailerReceiptDate = x.RetailerReceiptDate,
+					AgencyName = x.AgencyName,
+					DealerTypeId = x.DealerTypeId,
+					StateId = x.StateId,
+					DistrictId = x.BuyerDistrictId,
+					ProductId = x.ProductId,
+					QuantityMT = x.QuantityMT,
+					ReceivedQuantity = x.ReceivedQuantityMT,
+					MobileNo = x.MobileNo,
+					DdNo = (string?)null,
+					DispatchNo = x.DispatchNo,
+					RegistrationId = x.DealerId,
+					IfmsId = x.IfmsDealerId,
+					StatusCode = x.RetailerReceiptDate != null
+						? StatusCompleted
+						: x.InvoiceDate == null || x.InvoiceDate.Value >= latestFrom
+							? StatusLatest
+							: x.InvoiceDate.Value >= criticalFrom
+								? StatusCritical
+								: StatusOverdue
+				});
+			}
+
+			if (companyQuery is not null && wholesalerQuery is not null)
+			{
+				return companyQuery.Concat(wholesalerQuery);
+			}
+
+			if (companyQuery is not null)
+			{
+				return companyQuery;
+			}
+
+			if (wholesalerQuery is not null)
+			{
+				return wholesalerQuery;
+			}
+
+			// Defensive fallback. Under the current UI flow one source is always
+			// included, but this keeps the method safe for unexpected input.
+			return _db.Set<SalesCompanySale>()
+				.AsNoTracking()
+				.Where(x => false)
+				.Select(x => new RawQueryRow
+				{
+					SourceCode = SourceCompany,
+					SalesId = x.Id
+				});
+		}
+
+		private static IQueryable<SalesCompanySale> ApplyCompanyFilters(
+			IQueryable<SalesCompanySale> query,
+			PendingAckFilter filter,
+			List<int> registrationIds,
+			List<int> ifmsIds)
+		{
+			if (filter.DateFrom.HasValue)
+			{
+				var dateFrom = filter.DateFrom.Value.Date;
+				query = query.Where(x =>
+					x.InvoiceDate != null &&
+					x.InvoiceDate.Value >= dateFrom);
+			}
+
+			if (filter.DateTo.HasValue)
+			{
+				var dateToExclusive = filter.DateTo.Value.Date.AddDays(1);
+				query = query.Where(x =>
+					x.InvoiceDate != null &&
+					x.InvoiceDate.Value < dateToExclusive);
+			}
+
+			if (filter.StateIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.StateId.HasValue &&
+					filter.StateIds.Contains(x.StateId.Value));
+			}
+
+			if (filter.DistrictIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DistrictId.HasValue &&
+					filter.DistrictIds.Contains(x.DistrictId.Value));
+			}
+
+			if (filter.DealerTypeIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DealerTypeId.HasValue &&
+					filter.DealerTypeIds.Contains(x.DealerTypeId.Value));
+			}
+
+			if (filter.ProductIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.ProductId.HasValue &&
+					filter.ProductIds.Contains(x.ProductId.Value));
+			}
+
+			if (registrationIds.Count > 0 || ifmsIds.Count > 0)
+			{
+				query = query.Where(x =>
+					(x.DealerRegistrationId.HasValue &&
+					 registrationIds.Contains(x.DealerRegistrationId.Value)) ||
+					(x.IfmsDealerId.HasValue &&
+					 ifmsIds.Contains(x.IfmsDealerId.Value)));
+			}
+
+			ApplyCompanySearch(ref query, filter.Search);
+			return query;
+		}
+
+		private static IQueryable<SalesWholesaler> ApplyWholesalerFilters(
+			IQueryable<SalesWholesaler> query,
+			PendingAckFilter filter,
+			List<int> registrationIds,
+			List<int> ifmsIds)
+		{
+			if (filter.DateFrom.HasValue)
+			{
+				var dateFrom = filter.DateFrom.Value.Date;
+				query = query.Where(x =>
+					x.InvoiceDate != null &&
+					x.InvoiceDate.Value >= dateFrom);
+			}
+
+			if (filter.DateTo.HasValue)
+			{
+				var dateToExclusive = filter.DateTo.Value.Date.AddDays(1);
+				query = query.Where(x =>
+					x.InvoiceDate != null &&
+					x.InvoiceDate.Value < dateToExclusive);
+			}
+
+			if (filter.StateIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.StateId.HasValue &&
+					filter.StateIds.Contains(x.StateId.Value));
+			}
+
+			if (filter.DistrictIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.BuyerDistrictId.HasValue &&
+					filter.DistrictIds.Contains(x.BuyerDistrictId.Value));
+			}
+
+			if (filter.DealerTypeIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DealerTypeId.HasValue &&
+					filter.DealerTypeIds.Contains(x.DealerTypeId.Value));
+			}
+
+			if (filter.ProductIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.ProductId.HasValue &&
+					filter.ProductIds.Contains(x.ProductId.Value));
+			}
+
+			if (registrationIds.Count > 0 || ifmsIds.Count > 0)
+			{
+				query = query.Where(x =>
+					(x.DealerId.HasValue &&
+					 registrationIds.Contains(x.DealerId.Value)) ||
+					(x.IfmsDealerId.HasValue &&
+					 ifmsIds.Contains(x.IfmsDealerId.Value)));
+			}
+
+			ApplyWholesalerSearch(ref query, filter.Search);
+			return query;
+		}
+
+		private static void ApplyCompanySearch(
+			ref IQueryable<SalesCompanySale> query,
+			string? search)
+		{
+			if (string.IsNullOrWhiteSpace(search))
+			{
+				return;
+			}
+
+			var pattern = $"%{search.Trim()}%";
+			query = query.Where(x =>
+				EF.Functions.ILike(x.InvoiceNo!, pattern) ||
+				EF.Functions.ILike(x.TransactionId!, pattern) ||
+				EF.Functions.ILike(x.DealerName!, pattern));
+		}
+
+		private static void ApplyWholesalerSearch(
+			ref IQueryable<SalesWholesaler> query,
+			string? search)
+		{
+			if (string.IsNullOrWhiteSpace(search))
+			{
+				return;
+			}
+
+			var pattern = $"%{search.Trim()}%";
+			query = query.Where(x =>
+				EF.Functions.ILike(x.InvoiceNo!, pattern) ||
+				EF.Functions.ILike(x.TransactionId!, pattern) ||
+				EF.Functions.ILike(x.AgencyName!, pattern));
+		}
+
+		// =====================================================================
+		// Grid filters, joins and sorting
+		// =====================================================================
+
+		private static IQueryable<RawQueryRow> ApplyGridFilters(
+			IQueryable<RawQueryRow> query,
+			PendingAckFilter filter)
+		{
+			if (string.Equals(
+				filter.Source,
+				"Company Sales",
+				StringComparison.OrdinalIgnoreCase))
+			{
+				query = query.Where(x => x.SourceCode == SourceCompany);
+			}
+			else if (string.Equals(
+				filter.Source,
+				"Wholesaler Sales",
+				StringComparison.OrdinalIgnoreCase))
+			{
+				query = query.Where(x => x.SourceCode == SourceWholesaler);
+			}
+			else if (!string.IsNullOrWhiteSpace(filter.Source) &&
+					 !string.Equals(
+						 filter.Source,
+						 "All",
+						 StringComparison.OrdinalIgnoreCase))
+			{
+				// Preserve the earlier behaviour for an unexpected source value:
+				// a non-empty source that is not Company/Wholesaler/All returns no rows.
+				return query.Where(x => false);
+			}
+
+			if (filter.AgeStatuses.Count > 0)
+			{
+				var statusCodes = ResolveStatusCodes(filter.AgeStatuses);
+
+				if (statusCodes.Count == 0)
+				{
+					return query.Where(x => false);
+				}
+
+				query = query.Where(x => statusCodes.Contains(x.StatusCode));
+			}
+
+			return query;
+		}
+
+		private IQueryable<EnrichedQueryRow> BuildEnrichedQuery(
+			IQueryable<RawQueryRow> query)
+		{
+			return
+				from row in query
+				join stateValue in _db.Set<State>().AsNoTracking()
+					on row.StateId equals (int?)stateValue.Id into stateJoin
+				from state in stateJoin.DefaultIfEmpty()
+
+				join districtValue in _db.Set<District>().AsNoTracking()
+					on row.DistrictId equals (int?)districtValue.Id into districtJoin
+				from district in districtJoin.DefaultIfEmpty()
+
+				join dealerTypeValue in _db.Set<DealerType>().AsNoTracking()
+					on row.DealerTypeId equals (int?)dealerTypeValue.Id into dealerTypeJoin
+				from dealerType in dealerTypeJoin.DefaultIfEmpty()
+
+				join productValue in _db.Set<Product>().AsNoTracking()
+					on row.ProductId equals (int?)productValue.Id into productJoin
+				from product in productJoin.DefaultIfEmpty()
+
+				join registrationValue in _db.Set<DealerRegistration>().AsNoTracking()
+					on row.RegistrationId equals (int?)registrationValue.Id into registrationJoin
+				from registration in registrationJoin.DefaultIfEmpty()
+
+				select new EnrichedQueryRow
+				{
+					SourceCode = row.SourceCode,
+					SalesId = row.SalesId,
+					TransactionId = row.TransactionId,
+					InvoiceNo = row.InvoiceNo,
+					InvoiceDate = row.InvoiceDate,
+					EntryDate = row.EntryDate,
+					AgencyName = row.AgencyName,
+					DealerCode = registration != null
+						? registration.DealerCode
+						: null,
+					RegistrationId = row.RegistrationId,
+					DealerType = dealerType != null
+						? dealerType.Name
+						: null,
+					MobileNo = row.MobileNo,
+					StateId = row.StateId,
+					StateName = state != null
+						? state.StateName
+						: null,
+					DistrictId = row.DistrictId,
+					DistrictName = district != null
+						? district.DistrictName
+						: null,
+					ProductId = row.ProductId,
+					ProductName = product != null
+						? product.Name
+						: null,
+					QuantityMT = row.QuantityMT,
+					ReceivedQuantity = row.ReceivedQuantity,
+					DdNo = row.DdNo,
+					DispatchNo = row.DispatchNo,
+					StatusCode = row.StatusCode
+				};
+		}
+
+		private static IOrderedQueryable<EnrichedQueryRow> ApplySort(
+			IQueryable<EnrichedQueryRow> query,
+			PendingAckFilter filter)
+		{
+			var column = filter.SortColumn?.Trim().ToLowerInvariant();
+			var direction = filter.SortDir?.Trim().ToLowerInvariant() ?? "desc";
+			var ascending = direction == "asc";
+
+			return (column, ascending) switch
+			{
+				("invoiceno", true) => query
+					.OrderBy(x => x.InvoiceNo)
+					.ThenBy(x => x.SourceCode)
+					.ThenBy(x => x.SalesId),
+
+				("invoiceno", false) => query
+					.OrderByDescending(x => x.InvoiceNo)
+					.ThenByDescending(x => x.SourceCode)
+					.ThenByDescending(x => x.SalesId),
+
+				("dealer", true) => query
+					.OrderBy(x => x.AgencyName)
+					.ThenBy(x => x.SourceCode)
+					.ThenBy(x => x.SalesId),
+
+				("dealer", false) => query
+					.OrderByDescending(x => x.AgencyName)
+					.ThenByDescending(x => x.SourceCode)
+					.ThenByDescending(x => x.SalesId),
+
+				("quantity", true) => query
+					.OrderBy(x => x.QuantityMT)
+					.ThenBy(x => x.SourceCode)
+					.ThenBy(x => x.SalesId),
+
+				("quantity", false) => query
+					.OrderByDescending(x => x.QuantityMT)
+					.ThenByDescending(x => x.SourceCode)
+					.ThenByDescending(x => x.SalesId),
+
+				// Age is derived from InvoiceDate. Newer/null invoices have the
+				// smallest clamped age; older invoices have the largest age.
+				("age", true) => query
+					.OrderByDescending(x => x.InvoiceDate == null)
+					.ThenByDescending(x => x.InvoiceDate)
+					.ThenByDescending(x => x.SalesId),
+
+				("age", false) => query
+					.OrderBy(x => x.InvoiceDate == null)
+					.ThenBy(x => x.InvoiceDate)
+					.ThenByDescending(x => x.SalesId),
+
+				("invoicedate", true) => query
+					.OrderBy(x => x.InvoiceDate == null)
+					.ThenBy(x => x.InvoiceDate)
+					.ThenBy(x => x.SalesId),
+
+				_ => query
+					.OrderBy(x => x.InvoiceDate == null)
+					.ThenByDescending(x => x.InvoiceDate)
+					.ThenByDescending(x => x.SalesId)
 			};
 		}
 
-		// ==========================================================
-		//  Lookups (Id -> Name)
-		// ==========================================================
-		private async Task<(Dictionary<int, string> states, Dictionary<int, string> districts,
-							Dictionary<int, string> dealerTypes, Dictionary<int, string> products,
-							Dictionary<int, string> statuses)> LoadLookupsAsync()
+		// =====================================================================
+		// Aggregate and DTO mapping helpers
+		// =====================================================================
+
+		private static PendingAckCategorySummaryDto BuildRollup(
+			IEnumerable<SummaryAggregateRow> aggregates,
+			int? sourceCode)
 		{
-			// State.StateName + Product.Name are taken from your StockReportService.
-			var states = (await _db.Set<State>().AsNoTracking()
-				.Select(x => new LookupPair { Id = x.Id, Name = x.StateName }).ToListAsync());
+			var summary = new PendingAckCategorySummaryDto();
 
-			// TODO: confirm District name property (assumed DistrictName).
-			var districts = (await _db.Set<District>().AsNoTracking()
-				.Select(x => new LookupPair { Id = x.Id, Name = x.DistrictName }).ToListAsync());
+			foreach (var item in aggregates)
+			{
+				if (sourceCode.HasValue && item.SourceCode != sourceCode.Value)
+				{
+					continue;
+				}
 
-			// TODO: confirm DealerType entity + name property (may be Category / DealershipNature).
-			var dealerTypes = (await _db.Set<DealerType>().AsNoTracking()
-				.Select(x => new LookupPair { Id = x.Id, Name = x.Name }).ToListAsync());
+				summary.TotalCount += item.Count;
+				summary.TotalQuantity += item.Quantity;
 
-			var products = (await _db.Set<Product>().AsNoTracking()
-				.Select(x => new LookupPair { Id = x.Id, Name = x.Name }).ToListAsync());
+				switch (item.StatusCode)
+				{
+					case StatusCompleted:
+						summary.CompletedCount += item.Count;
+						summary.CompletedQuantity += item.Quantity;
+						break;
 
-			// TODO: confirm Status entity + name property (New / Consent Buyer / Acknowledged).
-			var statuses = (await _db.Set<Status>().AsNoTracking()
-				.Select(x => new LookupPair { Id = x.Id, Name = x.Name }).ToListAsync());
+					case StatusLatest:
+						summary.LatestCount += item.Count;
+						summary.LatestQuantity += item.Quantity;
+						break;
 
-			return (ToDict(states), ToDict(districts), ToDict(dealerTypes), ToDict(products), ToDict(statuses));
+					case StatusCritical:
+						summary.CriticalCount += item.Count;
+						summary.CriticalQuantity += item.Quantity;
+						break;
+
+					case StatusOverdue:
+						summary.OverdueCount += item.Count;
+						summary.OverdueQuantity += item.Quantity;
+						break;
+
+					case StatusConsentOfBuyer:
+						summary.ConsentBuyerCount += item.Count;
+						summary.ConsentBuyerQuantity += item.Quantity;
+						break;
+				}
+			}
+
+			return summary;
 		}
 
-		private static Dictionary<int, string> ToDict(List<LookupPair> list) =>
-			list.GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().Name ?? "");
-
-		private static string Get(Dictionary<int, string> map, int? id) =>
-			id.HasValue && map.TryGetValue(id.Value, out var n) && !string.IsNullOrWhiteSpace(n) ? n : "-";
-
-		private static string FirstNonEmpty(params string[] values) =>
-			values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? "-";
-
-		// In-memory shapes
-		private class LookupPair
+		private static void CopySourceCountsToOverall(
+			PendingAckCategorySummaryDto overall,
+			PendingAckCategorySummaryDto company,
+			PendingAckCategorySummaryDto wholesaler)
 		{
-			public int Id { get; set; }
-			public string? Name { get; set; }
+			overall.CompanyTotal = company.TotalCount;
+			overall.CompanyCompleted = company.CompletedCount;
+			overall.CompanyLatest = company.LatestCount;
+			overall.CompanyCritical = company.CriticalCount;
+			overall.CompanyOverdue = company.OverdueCount;
+			overall.CompanyConsentBuyer = company.ConsentBuyerCount;
+
+			overall.WholesalerTotal = wholesaler.TotalCount;
+			overall.WholesalerCompleted = wholesaler.CompletedCount;
+			overall.WholesalerLatest = wholesaler.LatestCount;
+			overall.WholesalerCritical = wholesaler.CriticalCount;
+			overall.WholesalerOverdue = wholesaler.OverdueCount;
+			overall.WholesalerConsentBuyer = wholesaler.ConsentBuyerCount;
 		}
 
-		private class UnifiedRow
+		private static List<PendingAckStateWiseDto> BuildStateWise(
+			IEnumerable<StateAggregateRow> aggregates)
 		{
-			public int Id;
-			public string TransactionId = "";
-			public string Source = "";
-			public string InvoiceNo = "";
-			public DateTime? InvoiceDate;
-			public DateTime? EntryDate;
-			public DateTime Anchor;
-			public string AgencyName = "";
-			public string DealerCode = "";
-			public string DealerType = "";
-			public string StateName = "";
-			public string District = "";
-			public string ProductName = "";
-			public decimal QuantityMT;
-			public decimal ReceivedQuantity;
-			public string WorkflowStatus = "";
-			public bool HasReceipt;
-			public string? DdNo;
-			public string? DispatchNo;
-			public string? MobileNo;
-			public int PendingAckAgeDays;
-			public string AgeStatus = "";
+			var result = new List<PendingAckStateWiseDto>();
+
+			foreach (var stateGroup in aggregates.GroupBy(x => new
+			{
+				x.StateId,
+				x.StateName
+			}))
+			{
+				var state = new PendingAckStateWiseDto
+				{
+					StateId = stateGroup.Key.StateId,
+					StateName = stateGroup.Key.StateName ?? string.Empty
+				};
+
+				foreach (var item in stateGroup)
+				{
+					switch (item.StatusCode)
+					{
+						case StatusCompleted:
+							state.CompletedCount += item.Count;
+							state.CompletedQuantity += item.Quantity;
+							break;
+
+						case StatusLatest:
+							state.LatestCount += item.Count;
+							state.LatestQuantity += item.Quantity;
+							break;
+
+						case StatusCritical:
+							state.CriticalCount += item.Count;
+							state.CriticalQuantity += item.Quantity;
+							break;
+
+						case StatusOverdue:
+							state.OverdueCount += item.Count;
+							state.OverdueQuantity += item.Quantity;
+							break;
+
+						case StatusConsentOfBuyer:
+							state.ConsentBuyerCount += item.Count;
+							state.ConsentBuyerQuantity += item.Quantity;
+							break;
+					}
+				}
+
+				result.Add(state);
+			}
+
+			return result
+				.OrderByDescending(x => x.TotalPendingQuantity)
+				.ThenBy(x => x.StateName)
+				.ToList();
+		}
+
+		private static PendingAckRowDto ToDto(
+			EnrichedQueryRow row,
+			DateTime today,
+			int serialNumber)
+		{
+			var ageDays = CalculateAgeDays(today, row.InvoiceDate);
+			var completed = row.StatusCode == StatusCompleted;
+
+			var dealerCode = !string.IsNullOrWhiteSpace(row.DealerCode)
+				? row.DealerCode
+				: row.RegistrationId?.ToString();
+
+			return new PendingAckRowDto
+			{
+				SNo = serialNumber,
+				SalesId = row.SalesId,
+				Source = SourceName(row.SourceCode),
+				TransactionId = row.TransactionId,
+				InvoiceNo = row.InvoiceNo,
+				InvoiceDate = row.InvoiceDate,
+				EntryDate = row.EntryDate,
+				AgencyName = row.AgencyName,
+				DealerCode = dealerCode,
+				DealerType = row.DealerType,
+				MobileNo = string.IsNullOrWhiteSpace(row.MobileNo)
+					? null
+					: row.MobileNo.Trim(),
+				StateId = row.StateId,
+				StateName = row.StateName,
+				DistrictId = row.DistrictId,
+				District = row.DistrictName,
+				ProductId = row.ProductId,
+				ProductName = row.ProductName,
+				QuantityMT = row.QuantityMT,
+				ReceivedQuantity = row.ReceivedQuantity,
+				DdNo = row.DdNo,
+				DispatchNo = row.DispatchNo,
+				PendingAckAgeDays = ageDays,
+				AgeStatus = StatusName(row.StatusCode),
+				WorkflowStatus = completed ? "Acknowledged" : "New",
+				BuyerConsentStatus = "Not Required"
+			};
+		}
+
+		private static int CalculateAgeDays(
+			DateTime today,
+			DateTime? invoiceDate)
+		{
+			if (!invoiceDate.HasValue)
+			{
+				return 0;
+			}
+
+			var days = (int)Math.Floor(
+				(today - invoiceDate.Value.Date).TotalDays);
+
+			return Math.Max(0, days);
+		}
+
+		private static string SourceName(int sourceCode)
+		{
+			return sourceCode == SourceCompany
+				? "Company Sales"
+				: "Wholesaler Sales";
+		}
+
+		private static string StatusName(int statusCode)
+		{
+			return statusCode switch
+			{
+				StatusCompleted => AgeStatus.Completed,
+				StatusLatest => AgeStatus.Latest,
+				StatusCritical => AgeStatus.Critical,
+				StatusOverdue => AgeStatus.Overdue,
+				StatusConsentOfBuyer => AgeStatus.ConsentOfBuyer,
+				_ => AgeStatus.Latest
+			};
+		}
+
+		private static List<int> ResolveStatusCodes(
+			IEnumerable<string> statuses)
+		{
+			var result = new HashSet<int>();
+
+			foreach (var rawStatus in statuses)
+			{
+				var status = rawStatus?.Trim();
+				if (string.IsNullOrWhiteSpace(status))
+				{
+					continue;
+				}
+
+				if (string.Equals(
+					status,
+					AgeStatus.Completed,
+					StringComparison.OrdinalIgnoreCase))
+				{
+					result.Add(StatusCompleted);
+				}
+				else if (
+					string.Equals(status, AgeStatus.Latest, StringComparison.OrdinalIgnoreCase) ||
+					string.Equals(status, "Fresh", StringComparison.OrdinalIgnoreCase) ||
+					string.Equals(status, "Pending", StringComparison.OrdinalIgnoreCase))
+				{
+					// The current Razor still contains the older Fresh/Pending
+					// option names. Accept them as aliases without changing the
+					// canonical service category (Latest).
+					result.Add(StatusLatest);
+				}
+				else if (string.Equals(
+					status,
+					AgeStatus.Critical,
+					StringComparison.OrdinalIgnoreCase))
+				{
+					result.Add(StatusCritical);
+				}
+				else if (string.Equals(
+					status,
+					AgeStatus.Overdue,
+					StringComparison.OrdinalIgnoreCase))
+				{
+					result.Add(StatusOverdue);
+				}
+				else if (string.Equals(
+					status,
+					AgeStatus.ConsentOfBuyer,
+					StringComparison.OrdinalIgnoreCase))
+				{
+					result.Add(StatusConsentOfBuyer);
+				}
+			}
+
+			return result.ToList();
+		}
+
+		private static (
+			List<int> RegistrationIds,
+			List<int> IfmsIds) SplitDealerKeys(
+			IEnumerable<string>? dealerKeys)
+		{
+			var registrationIds = new HashSet<int>();
+			var ifmsIds = new HashSet<int>();
+
+			foreach (var rawKey in dealerKeys ?? Enumerable.Empty<string>())
+			{
+				if (string.IsNullOrWhiteSpace(rawKey) || rawKey.Length < 2)
+				{
+					continue;
+				}
+
+				if (!int.TryParse(rawKey[1..], out var id) || id <= 0)
+				{
+					continue;
+				}
+
+				if (rawKey.StartsWith("R", StringComparison.OrdinalIgnoreCase))
+				{
+					registrationIds.Add(id);
+				}
+				else if (rawKey.StartsWith("I", StringComparison.OrdinalIgnoreCase))
+				{
+					ifmsIds.Add(id);
+				}
+			}
+
+			return (
+				registrationIds.ToList(),
+				ifmsIds.ToList());
+		}
+
+		private static void NormalizeFilter(PendingAckFilter filter)
+		{
+			filter.StateIds ??= new List<int>();
+			filter.DistrictIds ??= new List<int>();
+			filter.DealerTypeIds ??= new List<int>();
+			filter.ProductIds ??= new List<int>();
+			filter.DealerKeys ??= new List<string>();
+			filter.AgeStatuses ??= new List<string>();
+
+			filter.Page = Math.Max(1, filter.Page);
+			filter.PageSize = filter.PageSize <= 0 ? 16 : filter.PageSize;
+		}
+
+		// =====================================================================
+		// Internal database projection types
+		// =====================================================================
+
+		private sealed class RawQueryRow
+		{
+			public int SourceCode { get; set; }
+			public int SalesId { get; set; }
+			public string? TransactionId { get; set; }
+			public string? InvoiceNo { get; set; }
+			public DateTime? InvoiceDate { get; set; }
+			public DateTime? EntryDate { get; set; }
+			public DateTime? RetailerReceiptDate { get; set; }
+			public string? AgencyName { get; set; }
+			public int? DealerTypeId { get; set; }
+			public int? StateId { get; set; }
+			public int? DistrictId { get; set; }
+			public int? ProductId { get; set; }
+			public decimal QuantityMT { get; set; }
+			public decimal ReceivedQuantity { get; set; }
+			public string? MobileNo { get; set; }
+			public string? DdNo { get; set; }
+			public string? DispatchNo { get; set; }
+			public int? RegistrationId { get; set; }
+			public int? IfmsId { get; set; }
+			public int StatusCode { get; set; }
+		}
+
+		private sealed class EnrichedQueryRow
+		{
+			public int SourceCode { get; set; }
+			public int SalesId { get; set; }
+			public string? TransactionId { get; set; }
+			public string? InvoiceNo { get; set; }
+			public DateTime? InvoiceDate { get; set; }
+			public DateTime? EntryDate { get; set; }
+			public string? AgencyName { get; set; }
+			public string? DealerCode { get; set; }
+			public int? RegistrationId { get; set; }
+			public string? DealerType { get; set; }
+			public string? MobileNo { get; set; }
+			public int? StateId { get; set; }
+			public string? StateName { get; set; }
+			public int? DistrictId { get; set; }
+			public string? DistrictName { get; set; }
+			public int? ProductId { get; set; }
+			public string? ProductName { get; set; }
+			public decimal QuantityMT { get; set; }
+			public decimal ReceivedQuantity { get; set; }
+			public string? DdNo { get; set; }
+			public string? DispatchNo { get; set; }
+			public int StatusCode { get; set; }
+		}
+
+		private sealed class SummaryAggregateRow
+		{
+			public int SourceCode { get; set; }
+			public int StatusCode { get; set; }
+			public int Count { get; set; }
+			public decimal Quantity { get; set; }
+		}
+
+		private sealed class StateAggregateRow
+		{
+			public int StateId { get; set; }
+			public string StateName { get; set; } = string.Empty;
+			public int StatusCode { get; set; }
+			public int Count { get; set; }
+			public decimal Quantity { get; set; }
 		}
 	}
 }

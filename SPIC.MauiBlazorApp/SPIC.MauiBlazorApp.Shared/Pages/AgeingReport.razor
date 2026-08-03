@@ -290,41 +290,106 @@
             <!-- Charts (inline SVG/CSS — no JS) -->
             <div class="ar-charts-grid">
 
-                <!-- Ageing by Days: bar -->
-                <div class="ar-chart-card">
-                    <div class="ar-chart-header"><h3>Ageing by Days (MT)</h3></div>
+                <!-- Chart 1: State-wise stock by ageing bucket (stacked bars) -->
+                <div class="ar-chart-card ar-chart1">
+                    <style>
+                        .ar-chart1 { position: relative; }
+                        .ar-float-tip {
+                            position: absolute;
+                            top: 44px;
+                            left: 78px;               /* clear of the Y-axis labels */
+                            min-width: 210px;
+                            background: #fff;
+                            border: 1px solid #e2e8f0;
+                            border-radius: 10px;
+                            box-shadow: 0 8px 24px rgba(0,0,0,.16);
+                            padding: 12px 14px;
+                            z-index: 60;
+                            pointer-events: none;
+                        }
+                        .ar-float-tip .ar-tip-row {
+                            display: flex;
+                            justify-content: space-between;
+                            gap: 16px;
+                            font-size: 12px;
+                            margin-bottom: 4px;
+                        }
+                        .ar-float-tip .ar-tip-row span:last-child { font-weight: 600; }
+                    </style>
+                    <div class="ar-chart-header"><h3>State-wise Stock by Ageing (MT)</h3></div>
+
+                    @if (_hoverState is not null)
+                    {
+                        <div class="ar-float-tip">
+                            <div style="font-weight:600; color:#334155; margin-bottom:6px; font-size:13px;">@_hoverState.StateName</div>
+                            <div class="ar-tip-row" style="color:#059669;"><span>Fresh (0-30)</span><span>@Fmt(_hoverState.Fresh)</span></div>
+                            <div class="ar-tip-row" style="color:#10b981;"><span>Medium (30-90)</span><span>@Fmt(_hoverState.Medium)</span></div>
+                            <div class="ar-tip-row" style="color:#b45309;"><span>Slow Moving (90-180)</span><span>@Fmt(_hoverState.SlowMoving)</span></div>
+                            <div class="ar-tip-row" style="color:#ef4444;"><span>Long Aged (180-365)</span><span>@Fmt(_hoverState.LongAged)</span></div>
+                            <div class="ar-tip-row" style="color:#b91c1c;"><span>Critical (365+)</span><span>@Fmt(_hoverState.Critical)</span></div>
+                            <div class="ar-tip-row" style="color:#0f172a; border-top:1px solid #e2e8f0; margin-top:6px; padding-top:6px; font-weight:700;"><span>Total Stock (MT)</span><span>@Fmt(_hoverState.Total)</span></div>
+                        </div>
+                    }
                     <div class="ar-chart-area" style="min-height:300px;">
                         <div style="display:flex; height:100%; min-height:300px;">
-                            <!-- Y axis -->
-                            <div style="display:flex; flex-direction:column; justify-content:space-between; padding-right:12px; text-align:right; font-size:12px; color:#94a3b8; height:calc(100% - 28px); width:46px; flex-shrink:0;">
-                                @foreach (var lbl in BarAxisLabels())
+                            <!-- Y axis (ageing day-ranges) — stays fixed -->
+                            <div style="display:flex; flex-direction:column; justify-content:space-between; padding-right:12px; text-align:right; font-size:12px; color:#94a3b8; height:calc(100% - 28px); width:66px; flex-shrink:0;">
+                                @foreach (var lbl in StateAxisLabels())
                                 {
                                     <span>@lbl</span>
                                 }
                             </div>
-                            <!-- Plot -->
-                            <div style="flex:1; position:relative;">
-                                <div style="position:absolute; top:0; left:0; right:0; bottom:28px; display:flex; flex-direction:column; justify-content:space-between; z-index:0;">
-                                    <div style="border-top:1px dashed #eef2f7;"></div>
-                                    <div style="border-top:1px dashed #eef2f7;"></div>
-                                    <div style="border-top:1px dashed #eef2f7;"></div>
-                                    <div style="border-top:1px dashed #eef2f7;"></div>
-                                    <div style="border-top:1px solid #e2e8f0;"></div>
-                                </div>
-                                <div style="position:absolute; top:0; left:0; right:0; bottom:28px; display:flex; align-items:flex-end; justify-content:space-around; gap:16px; padding:0 8px; z-index:1;">
-                                    @foreach (var b in _dashboard.DayBuckets)
+                            <!-- Scrollable plot -->
+                            @{
+                                // ~64px per state so bars stay readable; scrolls when it overflows.
+                                var plotMinWidth = Math.Max(_dashboard.StateBuckets.Count * 64, 320);
+                            }
+                            <div style="flex:1; overflow-x:auto; overflow-y:hidden;">
+                                <div style="position:relative; height:100%; min-width:@(plotMinWidth)px;">
+                                    <div style="position:absolute; top:0; left:0; right:0; bottom:28px; display:flex; flex-direction:column; justify-content:space-between; z-index:0;">
+                                        <div style="border-top:1px dashed #eef2f7;"></div>
+                                        <div style="border-top:1px dashed #eef2f7;"></div>
+                                        <div style="border-top:1px dashed #eef2f7;"></div>
+                                        <div style="border-top:1px dashed #eef2f7;"></div>
+                                        <div style="border-top:1px solid #e2e8f0;"></div>
+                                    </div>
+                                <div style="position:absolute; top:0; left:0; right:0; bottom:28px; display:flex; align-items:flex-end; justify-content:space-around; gap:12px; padding:0 8px; z-index:1;">
+                                    @foreach (var s in _dashboard.StateBuckets)
                                     {
-                                        var h = BarHeight(b.Stock);
-                                        <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative;">
-                                            <div style="font-size:12px; font-weight:600; color:#334155; margin-bottom:4px;">@Fmt(b.Stock)</div>
-                                            <div title="@b.Category — @Fmt(b.Stock) MT (@b.Percentage.ToString("0.#")%)"
-                                                 style="width:70%; max-width:54px; height:@h.ToString("0.##", Inv)%; background:@b.Color; border-radius:6px 6px 0 0; transition:height .3s;"></div>
-                                            <div style="position:absolute; bottom:-24px; font-size:11px; color:#64748b; text-align:center; white-space:nowrap;">@b.Category</div>
+                                        var barPct = _stateAxisMax == 0 ? 0 : (double)(s.Total / _stateAxisMax) * 100;
+                                        var freshPct = s.Total == 0 ? 0 : (double)(s.Fresh / s.Total) * 100;
+                                        var mediumPct = s.Total == 0 ? 0 : (double)(s.Medium / s.Total) * 100;
+                                        var slowPct = s.Total == 0 ? 0 : (double)(s.SlowMoving / s.Total) * 100;
+                                        var longPct = s.Total == 0 ? 0 : (double)(s.LongAged / s.Total) * 100;
+                                        var critPct = s.Total == 0 ? 0 : (double)(s.Critical / s.Total) * 100;
+
+                                        <div class="ar-bar-col" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative; cursor:pointer;"
+                                             @onmouseover="() => _hoverState = s" @onmouseout="() => _hoverState = null">
+                                            <div style="width:70%; max-width:46px; height:@barPct.ToString("0.##", Inv)%; display:flex; flex-direction:column; justify-content:flex-start; overflow:hidden; border-radius:6px 6px 0 0;">
+                                                <div style="height:@critPct.ToString("0.##", Inv)%; background:#b91c1c;"></div>
+                                                <div style="height:@longPct.ToString("0.##", Inv)%; background:#ef4444;"></div>
+                                                <div style="height:@slowPct.ToString("0.##", Inv)%; background:#f59e0b;"></div>
+                                                <div style="height:@mediumPct.ToString("0.##", Inv)%; background:#34d399;"></div>
+                                                <div style="height:@freshPct.ToString("0.##", Inv)%; background:#059669;"></div>
+                                            </div>
+                                            <div title="@s.StateName" style="position:absolute; bottom:-24px; width:60px; font-size:11px; color:#64748b; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@s.StateName</div>
                                         </div>
                                     }
+                                    @if (_dashboard.StateBuckets.Count == 0)
+                                    {
+                                        <div style="align-self:center; color:#94a3b8; font-size:13px;">No data for the selected filters.</div>
+                                    }
+                                </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
+                    <div style="display:flex; justify-content:center; flex-wrap:wrap; gap:16px; margin-top:20px; font-size:12px; font-weight:500;">
+                        <div style="display:flex; align-items:center; gap:6px; color:#059669;"><span style="width:12px; height:12px; border-radius:3px; background:#059669;"></span> Fresh (0-30)</div>
+                        <div style="display:flex; align-items:center; gap:6px; color:#059669;"><span style="width:12px; height:12px; border-radius:3px; background:#34d399;"></span> Medium (30-90)</div>
+                        <div style="display:flex; align-items:center; gap:6px; color:#b45309;"><span style="width:12px; height:12px; border-radius:3px; background:#f59e0b;"></span> Slow Moving (90-180)</div>
+                        <div style="display:flex; align-items:center; gap:6px; color:#ef4444;"><span style="width:12px; height:12px; border-radius:3px; background:#ef4444;"></span> Long Aged (180-365)</div>
+                        <div style="display:flex; align-items:center; gap:6px; color:#b91c1c;"><span style="width:12px; height:12px; border-radius:3px; background:#b91c1c;"></span> Critical (365+)</div>
                     </div>
                 </div>
 
@@ -543,6 +608,30 @@
         return max == 0 ? 0 : (double)(value / max) * 100;
     }
 
+    // ---- State-wise stacked chart axis (Chart 1) ----
+    private decimal _stateAxisMax;
+
+    // Currently hovered state bar (drives the shared tooltip panel above the chart).
+    private AgeingStateBucketDto? _hoverState;
+
+    private decimal StateAxisMax()
+    {
+        if (_stateAxisMax > 0) return _stateAxisMax;
+        var max = _dashboard?.StateBuckets.Count > 0 ? _dashboard.StateBuckets.Max(s => s.Total) : 0m;
+        return max <= 0 ? 1m : max;
+    }
+
+    private IEnumerable<string> StateAxisLabels()
+    {
+        // Y-axis shows the ageing day-ranges, top -> bottom, aligned with the
+        // stacked bar order (Critical on top, Fresh at the bottom).
+        yield return "365+";
+        yield return "180-365";
+        yield return "90-180";
+        yield return "30-90";
+        yield return "0-30";
+    }
+
     // ---- Lifecycle ----
     private bool _masterDataLoaded;
     private bool _select2Initialized;
@@ -649,6 +738,7 @@
                 else
                 {
                     _dashboard = dashboard;
+                    _stateAxisMax = dashboard.StateBuckets.Count > 0 ? dashboard.StateBuckets.Max(s => s.Total) : 0m;
                 }
             }
             else
@@ -758,14 +848,16 @@
         "Fresh" => "ar-st-dgreen",
         "Medium" => "ar-st-lgreen",
         "Slow Moving" => "ar-st-orange",
+        "Long Aged" => "ar-st-red",
+        "Critical" => "ar-st-red",
         _ => "ar-st-red"
     };
 
     private string AgeingClass(int days) => days switch
     {
-        <= 7 => "ar-txt-dgreen",
-        <= 30 => "ar-txt-lgreen",
-        <= 60 => "ar-txt-orange",
+        <= 30 => "ar-txt-dgreen",
+        <= 90 => "ar-txt-lgreen",
+        <= 180 => "ar-txt-orange",
         _ => "ar-txt-red"
     };
 

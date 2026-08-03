@@ -1,11 +1,17 @@
-﻿using SPIC.Core.DTOs;
+﻿// ============================================================================
+//  SPIC.Core / Interfaces / IProductStockAvailabilityService.cs
+// ============================================================================
+
+using System.Threading;
 using System.Threading.Tasks;
+using SPIC.Core.DTOs;
 
 namespace SPIC.Core.Interfaces
 {
 	public interface IProductStockAvailabilityService
 	{
-		/// <summary>Loads the whole dashboard (KPI cards, pivot columns, grid, grand total) for the filter.</summary>
-		Task<ProductStockAvailabilityDto> GetDashboardAsync(ProductStockAvailabilityFilter filter);
+		Task<ProductStockAvailabilityDto> GetDashboardAsync(
+			ProductStockAvailabilityFilter filter,
+			CancellationToken cancellationToken = default);
 	}
 }

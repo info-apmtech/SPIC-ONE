@@ -1,271 +1,546 @@
-﻿// ============================================================================
-//  StockDetailsService (implements IStockDetailsService)
-//  Location: Spic.Infrastructure/Services/
-//
-//  Builds a state-wise ledger:
-//    Opening + Supplies = Total Stock,  Total Stock - Total Sales = Closing.
-//
-//  BEFORE IT COMPILES: rename `AppDbContext` and match the `using` namespaces,
-//  exactly as in StockReportService.
-//
-//  ---- DECISIONS TO CONFIRM (each isolated to one spot below) ----
-//   [S1] STOCK SOURCE: Opening/Supplies come from StateGlobalStockReconciliation,
-//        filtered to the selected month by CreatedAt. If the month should be
-//        picked by a different column (or the table isn't monthly), change the
-//        CreatedAt window in BuildStockAsync.
-//   [S2] SUPPLIES = Receipt + ProductionImports. Drop ProductionImports (or add
-//        other movement columns) in BuildStockAsync if your definition differs.
-//   [S3] CLOSING is computed (Total Stock - Total Sales), not the native
-//        ClosingStock column. Swap in MergeRow if you want the stored value.
-//   [S4] SALES = QuantityMT from SalesWholesaler + SalesCompanySale, by InvoiceDate.
-//        Change the Sum column (e.g. ReceivedQuantity) in BuildSales* if needed.
-// ============================================================================
-
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using Spic.Infrastructure.Data;   // <-- your DbContext namespace
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
-using System.Globalization;
+using Spic.Infrastructure.Data;
 
 namespace Spic.Infrastructure.Services
 {
-	public class StockDetailsService : IStockDetailsService
+	/// <summary>
+	/// Builds the existing state-wise Stock Details ledger without changing its
+	/// business flow.
+	///
+	/// Existing mapping preserved:
+	/// - Opening Stock = SUM(StateGlobalStockReconciliation.OpeningStock)
+	/// - Supplies      = SUM(Receipt + ProductionImports)
+	/// - Sales         = SUM(QuantityMT) from SalesWholesaler + SalesCompanySale
+	/// - Closing Stock = Opening + Supplies - Total Sales
+	///
+	/// The reconciliation rows are filtered by CreatedAt and sales rows by
+	/// InvoiceDate, exactly as in the supplied implementation.
+	/// </summary>
+	public sealed class StockDetailsService : IStockDetailsService
 	{
-		private readonly AppDbContext _db;   // <-- rename to your DbContext type
+		private const int DefaultPageSize = 16;
+		private const int MaximumDashboardPageSize = 500;
 
-		public StockDetailsService(AppDbContext db) => _db = db;
+		private static readonly CultureInfo LabelCulture =
+			CultureInfo.GetCultureInfo("en-IN");
 
-		public async Task<StockDetailsDto> GetDashboardAsync(StockDetailsFilter f)
+		private readonly AppDbContext _db;
+
+		public StockDetailsService(AppDbContext db)
 		{
-			var today = DateTime.UtcNow.Date;
+			_db = db;
+		}
 
-			// ---- Resolve the reporting window from From/To dates ----
-			var rangeStart = f.DateFrom?.Date ?? new DateTime(today.Year, today.Month, 1);
-			var rangeEnd = f.DateTo?.Date ?? today;
-			if (rangeEnd < rangeStart) rangeEnd = rangeStart;
+		public async Task<StockDetailsDto> GetDashboardAsync(
+			StockDetailsFilter filter,
+			CancellationToken cancellationToken = default)
+		{
+			filter ??= new StockDetailsFilter();
+			NormalizeFilter(filter);
 
-			var fromUtc = DateTime.SpecifyKind(rangeStart, DateTimeKind.Utc);   // window start / opening anchor
-			var asOnStart = DateTime.SpecifyKind(rangeEnd, DateTimeKind.Utc);    // 00:00 of the "as on" (last) day
-			var asOnNextDay = asOnStart.AddDays(1);                              // exclusive upper bound
+			var period = ResolvePeriod(filter);
 
-			var stateIds = f.StateIds;
+			// Keep EF operations sequential because the same scoped DbContext
+			// cannot execute multiple database commands concurrently.
+			var stockByState = await LoadStockByStateAsync(
+				filter.StateIds,
+				period.PeriodStart,
+				period.AsOnNextDay,
+				cancellationToken);
 
-			// ---- [S1][S2] Stock: Opening / Supplies per state (whole window) ----
-			var stock = await BuildStockAsync(stateIds, fromUtc, asOnNextDay);
+			// Both sales tables are combined before grouping, reducing the two
+			// original sales round trips to one grouped database query.
+			var salesByState = await LoadSalesByStateAsync(
+				filter.StateIds,
+				period.PeriodStart,
+				period.AsOnDate,
+				period.AsOnNextDay,
+				cancellationToken);
 
-			// ---- [S4] Sales per state, bucketed by InvoiceDate ----
-			var salesW = await BuildSalesWholesalerAsync(stateIds, fromUtc, asOnStart, asOnNextDay);
-			var salesC = await BuildSalesCompanyAsync(stateIds, fromUtc, asOnStart, asOnNextDay);
+			var involvedStateIds = stockByState.Keys
+				.Union(salesByState.Keys)
+				.Distinct()
+				.ToList();
 
-			// Merge sales buckets
-			var sales = new Dictionary<int, (decimal Before, decimal OnDay)>();
-			foreach (var s in salesW.Concat(salesC))
+			// Only the State rows referenced by the compact aggregates are loaded.
+			var stateNames = await LoadStateNamesAsync(
+				involvedStateIds,
+				cancellationToken);
+
+			var rows = BuildRows(
+				involvedStateIds,
+				stockByState,
+				salesByState,
+				stateNames);
+
+			// Previous flow preserved: search also affects the KPI cards and
+			// grand total because it is applied before those calculations.
+			if (!string.IsNullOrWhiteSpace(filter.Search))
 			{
-				sales.TryGetValue(s.StateId, out var cur);
-				sales[s.StateId] = (cur.Before + s.Before, cur.OnDay + s.OnDay);
+				var search = filter.Search.Trim();
+				rows = rows
+					.Where(x => x.StateName.Contains(
+						search,
+						StringComparison.OrdinalIgnoreCase))
+					.ToList();
 			}
 
-			// ---- State name lookup for the union of all involved states ----
-			var stateNames = await _db.Set<State>().AsNoTracking()
-				.Select(s => new { s.Id, s.StateName })
-				.ToDictionaryAsync(s => s.Id, s => s.StateName);
-
-			var allStateIds = new HashSet<int>(stock.Keys);
-			allStateIds.UnionWith(sales.Keys);
-
-			// ---- Build one row per state ----
-			var rows = allStateIds.Select(id =>
-			{
-				stock.TryGetValue(id, out var st);
-				sales.TryGetValue(id, out var sl);
-				return MergeRow(id, stateNames.TryGetValue(id, out var nm) ? nm : "-", st.Opening, st.Supplies, sl.Before, sl.OnDay);
-			}).ToList();
-
-			// ---- Search (state name) ----
-			if (!string.IsNullOrWhiteSpace(f.Search))
-			{
-				var term = f.Search.Trim();
-				rows = rows.Where(r => r.StateName.Contains(term, StringComparison.OrdinalIgnoreCase)).ToList();
-			}
-
-			// ---- Grand total across all filtered states ----
-			var grand = new StockDetailsRowDto
-			{
-				StateId = 0,
-				StateName = "Grand Total",
-				OpeningStock = rows.Sum(r => r.OpeningStock),
-				Supplies = rows.Sum(r => r.Supplies),
-				TotalStock = rows.Sum(r => r.TotalStock),
-				SalesBefore = rows.Sum(r => r.SalesBefore),
-				SalesOnDay = rows.Sum(r => r.SalesOnDay),
-				TotalSales = rows.Sum(r => r.TotalSales),
-				ClosingStock = rows.Sum(r => r.ClosingStock)
-			};
-			grand.SalesPct = grand.TotalStock == 0 ? 0 : (double)(grand.TotalSales / grand.TotalStock) * 100;
-
-			// ---- KPI cards ----
+			var grandTotal = BuildGrandTotal(rows);
 			var summary = new StockDetailsSummaryDto
 			{
-				TotalStock = grand.TotalStock,
-				TotalSales = grand.TotalSales,
-				ClosingStock = grand.ClosingStock,
-				SalesPct = grand.SalesPct
+				TotalStock = grandTotal.TotalStock,
+				TotalSales = grandTotal.TotalSales,
+				ClosingStock = grandTotal.ClosingStock,
+				SalesPct = grandTotal.SalesPct
 			};
 
-			// ---- Sort ----
-			rows = (f.SortColumn?.ToLowerInvariant(), (f.SortDir ?? "asc").ToLowerInvariant()) switch
-			{
-				("totalstock", "desc") => rows.OrderByDescending(r => r.TotalStock).ToList(),
-				("totalstock", _) => rows.OrderBy(r => r.TotalStock).ToList(),
-				("totalsales", "desc") => rows.OrderByDescending(r => r.TotalSales).ToList(),
-				("totalsales", _) => rows.OrderBy(r => r.TotalSales).ToList(),
-				("closing", "desc") => rows.OrderByDescending(r => r.ClosingStock).ToList(),
-				("closing", _) => rows.OrderBy(r => r.ClosingStock).ToList(),
-				("salespct", "desc") => rows.OrderByDescending(r => r.SalesPct).ToList(),
-				("salespct", _) => rows.OrderBy(r => r.SalesPct).ToList(),
-				("state", "desc") => rows.OrderByDescending(r => r.StateName).ToList(),
-				_ => rows.OrderBy(r => r.StateName).ToList()
-			};
+			rows = ApplySorting(rows, filter);
 
-			// ---- Page ----
 			var totalCount = rows.Count;
-			var pageSize = f.PageSize <= 0 ? 16 : f.PageSize;
-			var pageRows = rows.Skip((Math.Max(1, f.Page) - 1) * pageSize).Take(pageSize).ToList();
+			var exportAll = filter.PageSize == int.MaxValue;
+			var pageSize = exportAll
+				? int.MaxValue
+				: Math.Min(filter.PageSize, MaximumDashboardPageSize);
+
+			var pageItems = exportAll
+				? rows
+				: rows
+					.Skip((filter.Page - 1) * pageSize)
+					.Take(pageSize)
+					.ToList();
 
 			return new StockDetailsDto
 			{
 				Summary = summary,
-				Labels = BuildLabels(fromUtc, asOnStart),
-				GrandTotal = grand,
+				Labels = BuildLabels(period.PeriodStart, period.AsOnDate),
+				GrandTotal = grandTotal,
 				Grid = new PagedResult<StockDetailsRowDto>
 				{
-					Items = pageRows,
+					Items = pageItems,
 					TotalCount = totalCount,
-					Page = f.Page,
+					Page = filter.Page,
 					PageSize = pageSize
 				}
 			};
 		}
 
-		// [S3] Row assembly + derived columns.
-		private static StockDetailsRowDto MergeRow(int stateId, string name,
-			decimal opening, decimal supplies, decimal salesBefore, decimal salesOnDay)
+		/// <summary>
+		/// Preserves the existing stock rule while returning only one compact row
+		/// per state from SQL.
+		///
+		/// IMPORTANT: this is correct only when rows inside the selected CreatedAt
+		/// window are additive movement/component rows. If this table stores repeated
+		/// daily snapshots, OpeningStock must instead be selected from the first/latest
+		/// snapshot per business key rather than summed across dates.
+		/// </summary>
+		private async Task<Dictionary<int, StockAggregate>> LoadStockByStateAsync(
+			IReadOnlyCollection<int> stateIds,
+			DateTime periodStart,
+			DateTime asOnNextDay,
+			CancellationToken cancellationToken)
 		{
-			var totalStock = opening + supplies;
+			var query = _db.Set<StateGlobalStockReconciliation>()
+				.AsNoTracking()
+				.Where(x =>
+					x.StateId.HasValue &&
+					x.CreatedAt >= periodStart &&
+					x.CreatedAt < asOnNextDay);
+
+			if (stateIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.StateId.HasValue &&
+					stateIds.Contains(x.StateId.Value));
+			}
+
+			var aggregates = await query
+				.GroupBy(x => x.StateId!.Value)
+				.Select(group => new StockAggregate
+				{
+					StateId = group.Key,
+					OpeningStock = group.Sum(x => x.OpeningStock),
+					Supplies = group.Sum(x => x.Receipt + x.ProductionImports)
+				})
+				.ToListAsync(cancellationToken);
+
+			return aggregates.ToDictionary(x => x.StateId);
+		}
+
+		/// <summary>
+		/// Combines SalesWholesaler and SalesCompanySale and calculates both sales
+		/// columns in one SQL GROUP BY query.
+		/// </summary>
+		private async Task<Dictionary<int, SalesAggregate>> LoadSalesByStateAsync(
+			IReadOnlyCollection<int> stateIds,
+			DateTime periodStart,
+			DateTime asOnDate,
+			DateTime asOnNextDay,
+			CancellationToken cancellationToken)
+		{
+			var wholesalerQuery = _db.Set<SalesWholesaler>()
+				.AsNoTracking()
+				.Where(x =>
+					x.StateId.HasValue &&
+					x.InvoiceDate.HasValue &&
+					x.InvoiceDate.Value >= periodStart &&
+					x.InvoiceDate.Value < asOnNextDay);
+
+			var companyQuery = _db.Set<SalesCompanySale>()
+				.AsNoTracking()
+				.Where(x =>
+					x.StateId.HasValue &&
+					x.InvoiceDate.HasValue &&
+					x.InvoiceDate.Value >= periodStart &&
+					x.InvoiceDate.Value < asOnNextDay);
+
+			if (stateIds.Count > 0)
+			{
+				wholesalerQuery = wholesalerQuery.Where(x =>
+					x.StateId.HasValue &&
+					stateIds.Contains(x.StateId.Value));
+
+				companyQuery = companyQuery.Where(x =>
+					x.StateId.HasValue &&
+					stateIds.Contains(x.StateId.Value));
+			}
+
+			var combinedQuery = wholesalerQuery
+				.Select(x => new SalesSourceRow
+				{
+					StateId = x.StateId!.Value,
+					InvoiceDate = x.InvoiceDate!.Value,
+					Quantity = x.QuantityMT
+				})
+				.Concat(
+					companyQuery.Select(x => new SalesSourceRow
+					{
+						StateId = x.StateId!.Value,
+						InvoiceDate = x.InvoiceDate!.Value,
+						Quantity = x.QuantityMT
+					}));
+
+			var aggregates = await combinedQuery
+				.GroupBy(x => x.StateId)
+				.Select(group => new SalesAggregate
+				{
+					StateId = group.Key,
+					SalesBefore = group.Sum(x =>
+						x.InvoiceDate < asOnDate ? x.Quantity : 0m),
+					SalesOnDay = group.Sum(x =>
+						x.InvoiceDate >= asOnDate ? x.Quantity : 0m)
+				})
+				.ToListAsync(cancellationToken);
+
+			return aggregates.ToDictionary(x => x.StateId);
+		}
+
+		private async Task<Dictionary<int, string>> LoadStateNamesAsync(
+			IReadOnlyCollection<int> stateIds,
+			CancellationToken cancellationToken)
+		{
+			if (stateIds.Count == 0)
+			{
+				return new Dictionary<int, string>();
+			}
+
+			return await _db.Set<State>()
+				.AsNoTracking()
+				.Where(x => stateIds.Contains(x.Id))
+				.Select(x => new
+				{
+					x.Id,
+					x.StateName
+				})
+				.ToDictionaryAsync(
+					x => x.Id,
+					x => x.StateName ?? string.Empty,
+					cancellationToken);
+		}
+
+		private static List<StockDetailsRowDto> BuildRows(
+			IReadOnlyCollection<int> stateIds,
+			IReadOnlyDictionary<int, StockAggregate> stockByState,
+			IReadOnlyDictionary<int, SalesAggregate> salesByState,
+			IReadOnlyDictionary<int, string> stateNames)
+		{
+			var rows = new List<StockDetailsRowDto>(stateIds.Count);
+
+			foreach (var stateId in stateIds)
+			{
+				stockByState.TryGetValue(stateId, out var stock);
+				salesByState.TryGetValue(stateId, out var sales);
+
+				rows.Add(MergeRow(
+					stateId,
+					stateNames.TryGetValue(stateId, out var stateName)
+						? stateName
+						: "-",
+					stock?.OpeningStock ?? 0m,
+					stock?.Supplies ?? 0m,
+					sales?.SalesBefore ?? 0m,
+					sales?.SalesOnDay ?? 0m));
+			}
+
+			return rows;
+		}
+
+		/// <summary>
+		/// Row calculation is intentionally unchanged from the supplied code.
+		/// </summary>
+		private static StockDetailsRowDto MergeRow(
+			int stateId,
+			string stateName,
+			decimal openingStock,
+			decimal supplies,
+			decimal salesBefore,
+			decimal salesOnDay)
+		{
+			var totalStock = openingStock + supplies;
 			var totalSales = salesBefore + salesOnDay;
-			var closing = totalStock - totalSales;   // [S3] swap for stored ClosingStock if desired
+			var closingStock = totalStock - totalSales;
+
 			return new StockDetailsRowDto
 			{
 				StateId = stateId,
-				StateName = name,
-				OpeningStock = opening,
+				StateName = stateName,
+				OpeningStock = openingStock,
 				Supplies = supplies,
 				TotalStock = totalStock,
 				SalesBefore = salesBefore,
 				SalesOnDay = salesOnDay,
 				TotalSales = totalSales,
-				ClosingStock = closing,
-				SalesPct = totalStock == 0 ? 0 : (double)(totalSales / totalStock) * 100
+				ClosingStock = closingStock,
+				SalesPct = Percentage(totalSales, totalStock)
 			};
 		}
 
-		// [S1][S2] Opening + Supplies from the state reconciliation, for the selected month.
-		private async Task<Dictionary<int, (decimal Opening, decimal Supplies)>> BuildStockAsync(
-			List<int> stateIds, DateTime monthStart, DateTime monthEndNext)
+		private static StockDetailsRowDto BuildGrandTotal(
+			IReadOnlyCollection<StockDetailsRowDto> rows)
 		{
-			var q = _db.Set<StateGlobalStockReconciliation>().AsNoTracking()
-				.Where(x => x.StateId != null
-						 && x.CreatedAt >= monthStart && x.CreatedAt < monthEndNext);   // [S1] month window
+			var grandTotal = new StockDetailsRowDto
+			{
+				StateId = 0,
+				StateName = "Grand Total",
+				OpeningStock = rows.Sum(x => x.OpeningStock),
+				Supplies = rows.Sum(x => x.Supplies),
+				TotalStock = rows.Sum(x => x.TotalStock),
+				SalesBefore = rows.Sum(x => x.SalesBefore),
+				SalesOnDay = rows.Sum(x => x.SalesOnDay),
+				TotalSales = rows.Sum(x => x.TotalSales),
+				ClosingStock = rows.Sum(x => x.ClosingStock)
+			};
 
-			if (stateIds.Count > 0)
-				q = q.Where(x => stateIds.Contains(x.StateId!.Value));
+			grandTotal.SalesPct = Percentage(
+				grandTotal.TotalSales,
+				grandTotal.TotalStock);
 
-			var agg = await q
-				.GroupBy(x => x.StateId!.Value)
-				.Select(g => new
-				{
-					StateId = g.Key,
-					Opening = g.Sum(x => x.OpeningStock),
-					Supplies = g.Sum(x => x.Receipt + x.ProductionImports)   // [S2]
-				})
-				.ToListAsync();
-
-			return agg.ToDictionary(a => a.StateId, a => (a.Opening, a.Supplies));
+			return grandTotal;
 		}
 
-		private async Task<List<(int StateId, decimal Before, decimal OnDay)>> BuildSalesWholesalerAsync(
-			List<int> stateIds, DateTime monthStart, DateTime asOnStart, DateTime asOnNextDay)
+		private static List<StockDetailsRowDto> ApplySorting(
+			IEnumerable<StockDetailsRowDto> rows,
+			StockDetailsFilter filter)
 		{
-			var q = _db.Set<SalesWholesaler>().AsNoTracking()
-				.Where(x => x.StateId != null && x.InvoiceDate != null
-						 && x.InvoiceDate >= monthStart && x.InvoiceDate < asOnNextDay);
+			var sortColumn = filter.SortColumn?.Trim().ToLowerInvariant();
+			var descending = string.Equals(
+				filter.SortDir?.Trim(),
+				"desc",
+				StringComparison.OrdinalIgnoreCase);
 
-			if (stateIds.Count > 0)
-				q = q.Where(x => stateIds.Contains(x.StateId!.Value));
+			return sortColumn switch
+			{
+				"totalstock" => descending
+					? rows.OrderByDescending(x => x.TotalStock)
+						.ThenBy(x => x.StateName)
+						.ToList()
+					: rows.OrderBy(x => x.TotalStock)
+						.ThenBy(x => x.StateName)
+						.ToList(),
 
-			var agg = await q
-				.GroupBy(x => x.StateId!.Value)
-				.Select(g => new
-				{
-					StateId = g.Key,
-					Before = g.Where(x => x.InvoiceDate < asOnStart).Sum(x => (decimal?)x.QuantityMT) ?? 0m,
-					OnDay = g.Where(x => x.InvoiceDate >= asOnStart).Sum(x => (decimal?)x.QuantityMT) ?? 0m   // [S4]
-				})
-				.ToListAsync();
+				"totalsales" => descending
+					? rows.OrderByDescending(x => x.TotalSales)
+						.ThenBy(x => x.StateName)
+						.ToList()
+					: rows.OrderBy(x => x.TotalSales)
+						.ThenBy(x => x.StateName)
+						.ToList(),
 
-			return agg.Select(a => (a.StateId, a.Before, a.OnDay)).ToList();
+				"closing" => descending
+					? rows.OrderByDescending(x => x.ClosingStock)
+						.ThenBy(x => x.StateName)
+						.ToList()
+					: rows.OrderBy(x => x.ClosingStock)
+						.ThenBy(x => x.StateName)
+						.ToList(),
+
+				"salespct" => descending
+					? rows.OrderByDescending(x => x.SalesPct)
+						.ThenBy(x => x.StateName)
+						.ToList()
+					: rows.OrderBy(x => x.SalesPct)
+						.ThenBy(x => x.StateName)
+						.ToList(),
+
+				"state" => descending
+					? rows.OrderByDescending(x => x.StateName).ToList()
+					: rows.OrderBy(x => x.StateName).ToList(),
+
+				_ => rows.OrderBy(x => x.StateName).ToList()
+			};
 		}
 
-		private async Task<List<(int StateId, decimal Before, decimal OnDay)>> BuildSalesCompanyAsync(
-			List<int> stateIds, DateTime monthStart, DateTime asOnStart, DateTime asOnNextDay)
+		private static ReportingPeriod ResolvePeriod(StockDetailsFilter filter)
 		{
-			var q = _db.Set<SalesCompanySale>().AsNoTracking()
-				.Where(x => x.StateId != null && x.InvoiceDate != null
-						 && x.InvoiceDate >= monthStart && x.InvoiceDate < asOnNextDay);
+			var today = DateTime.UtcNow.Date;
 
-			if (stateIds.Count > 0)
-				q = q.Where(x => stateIds.Contains(x.StateId!.Value));
+			var rangeStart = filter.DateFrom?.Date ??
+				new DateTime(today.Year, today.Month, 1);
 
-			var agg = await q
-				.GroupBy(x => x.StateId!.Value)
-				.Select(g => new
-				{
-					StateId = g.Key,
-					Before = g.Where(x => x.InvoiceDate < asOnStart).Sum(x => (decimal?)x.QuantityMT) ?? 0m,
-					OnDay = g.Where(x => x.InvoiceDate >= asOnStart).Sum(x => (decimal?)x.QuantityMT) ?? 0m   // [S4]
-				})
-				.ToListAsync();
+			var rangeEnd = filter.DateTo?.Date ?? today;
 
-			return agg.Select(a => (a.StateId, a.Before, a.OnDay)).ToList();
+			// Preserve the previous behavior: an invalid reversed range becomes
+			// a single-day range anchored on DateFrom.
+			if (rangeEnd < rangeStart)
+			{
+				rangeEnd = rangeStart;
+			}
+
+			var periodStart = DateTime.SpecifyKind(
+				rangeStart,
+				DateTimeKind.Utc);
+
+			var asOnDate = DateTime.SpecifyKind(
+				rangeEnd,
+				DateTimeKind.Utc);
+
+			return new ReportingPeriod
+			{
+				PeriodStart = periodStart,
+				AsOnDate = asOnDate,
+				AsOnNextDay = asOnDate.AddDays(1)
+			};
 		}
 
-		private static StockDetailsLabelsDto BuildLabels(DateTime from, DateTime asOn)
+		private static StockDetailsLabelsDto BuildLabels(
+			DateTime periodStart,
+			DateTime asOnDate)
 		{
-			var ci = CultureInfo.InvariantCulture;
-			bool sameMonth = from.Year == asOn.Year && from.Month == asOn.Month;
-			var beforeEnd = asOn.AddDays(-1);
+			var sameMonth =
+				periodStart.Year == asOnDate.Year &&
+				periodStart.Month == asOnDate.Month;
 
-			string suppliesLabel = sameMonth
-				? from.ToString("MMMM", ci)
-				: $"{from.ToString("d MMM", ci)} - {asOn.ToString("d MMM", ci)}";
+			var beforeEnd = asOnDate.AddDays(-1);
 
-			string beforeRange;
-			if (beforeEnd < from)
-				beforeRange = "—";
-			else if (from.Year == beforeEnd.Year && from.Month == beforeEnd.Month)
-				beforeRange = $"{from.Day}-{beforeEnd.Day} {from.ToString("MMM", ci)}";
+			var suppliesLabel = sameMonth
+				? periodStart.ToString("MMMM", LabelCulture)
+				: $"{periodStart.ToString("d MMM", LabelCulture)} - " +
+				  $"{asOnDate.ToString("d MMM", LabelCulture)}";
+
+			string salesBeforeRange;
+
+			if (beforeEnd < periodStart)
+			{
+				salesBeforeRange = "—";
+			}
+			else if (
+				periodStart.Year == beforeEnd.Year &&
+				periodStart.Month == beforeEnd.Month)
+			{
+				salesBeforeRange =
+					$"{periodStart.Day}-{beforeEnd.Day} " +
+					periodStart.ToString("MMM", LabelCulture);
+			}
 			else
-				beforeRange = $"{from.ToString("d MMM", ci)} - {beforeEnd.ToString("d MMM", ci)}";
+			{
+				salesBeforeRange =
+					$"{periodStart.ToString("d MMM", LabelCulture)} - " +
+					$"{beforeEnd.ToString("d MMM", LabelCulture)}";
+			}
 
 			return new StockDetailsLabelsDto
 			{
-				OpeningAsOn = from.ToString("d MMM", ci),
+				OpeningAsOn = periodStart.ToString("d MMM", LabelCulture),
 				SuppliesMonth = suppliesLabel,
-				SalesBeforeRange = beforeRange,
-				SalesOnDay = asOn.ToString("d MMM", ci),
-				ClosingAsOn = asOn.ToString("d MMM", ci)
+				SalesBeforeRange = salesBeforeRange,
+				SalesOnDay = asOnDate.ToString("d MMM", LabelCulture),
+				ClosingAsOn = asOnDate.ToString("d MMM", LabelCulture)
 			};
+		}
+
+		private static double Percentage(decimal numerator, decimal denominator)
+		{
+			return denominator == 0m
+				? 0d
+				: (double)(numerator / denominator) * 100d;
+		}
+
+		private static void NormalizeFilter(StockDetailsFilter filter)
+		{
+			filter.StateIds ??= new List<int>();
+			filter.FinancialYearIds ??= new List<int>();
+
+			filter.StateIds = filter.StateIds
+				.Where(x => x > 0)
+				.Distinct()
+				.ToList();
+
+			filter.FinancialYearIds = filter.FinancialYearIds
+				.Where(x => x > 0)
+				.Distinct()
+				.ToList();
+
+			filter.Page = Math.Max(1, filter.Page);
+
+			if (filter.PageSize != int.MaxValue)
+			{
+				filter.PageSize = filter.PageSize <= 0
+					? DefaultPageSize
+					: filter.PageSize;
+			}
+
+			filter.SortDir = string.Equals(
+				filter.SortDir,
+				"desc",
+				StringComparison.OrdinalIgnoreCase)
+				? "desc"
+				: "asc";
+		}
+
+		private sealed class ReportingPeriod
+		{
+			public DateTime PeriodStart { get; set; }
+			public DateTime AsOnDate { get; set; }
+			public DateTime AsOnNextDay { get; set; }
+		}
+
+		private sealed class StockAggregate
+		{
+			public int StateId { get; set; }
+			public decimal OpeningStock { get; set; }
+			public decimal Supplies { get; set; }
+		}
+
+		private sealed class SalesSourceRow
+		{
+			public int StateId { get; set; }
+			public DateTime InvoiceDate { get; set; }
+			public decimal Quantity { get; set; }
+		}
+
+		private sealed class SalesAggregate
+		{
+			public int StateId { get; set; }
+			public decimal SalesBefore { get; set; }
+			public decimal SalesOnDay { get; set; }
 		}
 	}
 }
