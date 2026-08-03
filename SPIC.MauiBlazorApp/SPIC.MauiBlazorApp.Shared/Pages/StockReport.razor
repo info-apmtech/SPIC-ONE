@@ -1,6 +1,7 @@
 @page "/StockReport"
 @implements IDisposable
 @inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
 @using System.Text.Json
 @using System.Net.Http.Json
@@ -128,7 +129,7 @@
 				</button>
 				<button class="sr-btn sr-btn-solid" @onclick="ApplyFilters" disabled="@(!_select2Initialized || _isLoading)">
 					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg>
-					Apply Filters
+                    Search
 				</button>
 			</div>
 		</div>
@@ -674,13 +675,64 @@
 				subDistrict.StateId = parentDistrict.StateId;
 		}
 
-		_states = _allStates;
-		_regions = _allRegions;
-		_hq = _allHqs;
+       // Apply role-based visibility similar to DealerRegistration: admins/director/avp see all,
+		// other roles should be restricted to their assigned State/Region/HQ.
+		ApplyRoleRestrictions();
+
+		// If ApplyRoleRestrictions didn't set lists (e.g. for admins), fall back to full lists.
+		_states ??= _allStates;
+		_regions ??= _allRegions;
+		_hq ??= _allHqs;
 		_districts = _allDistricts;
 		_subDistricts = _allSubDistricts;
 		_products = productsTask.Result;
 		_lyingWith = lyingWithTask.Result;
+	}
+
+	private void ApplyRoleRestrictions()
+	{
+		try
+		{
+			if (LoginState is null) return;
+			// Admins and Director/AVP see everything
+			if (LoginState.IsAdmin || LoginState.IsDirectorOrAVP)
+			{
+				_states = _allStates;
+				_regions = _allRegions;
+				_hq = _allHqs;
+				return;
+			}
+
+			// HQ-level users (MO/MDO/JMDO) -> restrict to their HQ/region/state
+			if (LoginState.IsHQRole && LoginState.HQId > 0)
+			{
+				_hq = _allHqs.Where(h => h.Id == LoginState.HQId).ToList();
+				var regionId = _allHqs.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionId ?? LoginState.RegionId;
+				if (regionId > 0) _regions = _allRegions.Where(r => r.Id == regionId).ToList();
+				var stateId = _allRegions.FirstOrDefault(r => r.Id == regionId)?.StateId ?? LoginState.StateId;
+				if (stateId > 0) _states = _allStates.Where(s => s.Id == stateId).ToList();
+				return;
+			}
+
+			// Region-level users (RM/RMD)
+			if (LoginState.IsRegionRole && LoginState.RegionId > 0)
+			{
+				_regions = _allRegions.Where(r => r.Id == LoginState.RegionId).ToList();
+				_states = _allStates.Where(s => s.Id == (_allRegions.FirstOrDefault(r => r.Id == LoginState.RegionId)?.StateId ?? LoginState.StateId)).ToList();
+				_hq = _allHqs.Where(h => h.RegionId == LoginState.RegionId).ToList();
+				return;
+			}
+
+			// State-level users (SMD/SMM)
+			if (LoginState.IsStateRole && LoginState.StateId > 0)
+			{
+				_states = _allStates.Where(s => s.Id == LoginState.StateId).ToList();
+				_regions = _allRegions.Where(r => r.StateId == LoginState.StateId).ToList();
+				_hq = _allHqs.Where(h => h.StateId == LoginState.StateId).ToList();
+				return;
+			}
+		}
+		catch { /* swallow; keep full lists if anything goes wrong */ }
 	}
 
 	// ---------- Dashboard load ----------

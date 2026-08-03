@@ -1,6 +1,7 @@
 ﻿@page "/StockDetails"
 @implements IDisposable
 @inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
 @using System.Text.Json
 @using System.Net.Http.Json
@@ -66,7 +67,7 @@
             </div>
             <div class="sd-filter-actions">
                 <button class="btn-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ClearAll"><i class="bi bi-x"></i> Clear All</button>
-                <button class="btn-custom btn-primary-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ApplyFilters"><i class="bi bi-funnel"></i> Apply Filters</button>
+                <button class="btn-custom btn-primary-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ApplyFilters"><i class="bi bi-funnel"></i> Search</button>
             </div>
         </div>
     </div>
@@ -343,8 +344,36 @@
         var statesTask = FetchData("api/State/all");
         var fyTask = FetchFinancialYears("api/FinancialYear/all");
         await Task.WhenAll(statesTask, fyTask);
-        _states = statesTask.Result;
+        var allStates = statesTask.Result;
         _financialYears = fyTask.Result;
+
+        // Role-based visibility
+        if (LoginState != null && !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP))
+        {
+            if (LoginState.IsHQRole && LoginState.HQId > 0)
+            {
+                // restrict to HQ's state
+                var stateId = allStates.FirstOrDefault(s => s.Id == LoginState.StateId)?.Id ?? LoginState.StateId;
+                _states = allStates.Where(s => s.Id == stateId).ToList();
+            }
+            else if (LoginState.IsRegionRole && LoginState.RegionId > 0)
+            {
+                var stateId = LoginState.StateId;
+                _states = allStates.Where(s => s.Id == stateId).ToList();
+            }
+            else if (LoginState.IsStateRole && LoginState.StateId > 0)
+            {
+                _states = allStates.Where(s => s.Id == LoginState.StateId).ToList();
+            }
+            else
+            {
+                _states = allStates;
+            }
+        }
+        else
+        {
+            _states = allStates;
+        }
     }
 
     private async Task LoadDashboard()

@@ -1,6 +1,7 @@
 ﻿@page "/CompanySales"
 @implements IDisposable
 @inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
 @using System.Text.Json
 @using System.Net.Http.Json
@@ -120,7 +121,7 @@
                 </button>
                 <button class="cs-btn cs-btn-solid" @onclick="ApplyFilters" disabled="@(!_select2Initialized || _isLoading)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg>
-                    Apply Filters
+                    Search
                 </button>
             </div>
         </div>
@@ -653,8 +654,17 @@
         _allStates    = statesTask.Result;
         _allDistricts = districtsTask.Result;
 
-        _states      = _allStates;
-        _districts   = _allDistricts;
+        // Role-based visibility: if user has an associated StateId, restrict to it for non-admins
+        if (LoginState != null && !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP) && LoginState.StateId > 0)
+        {
+            _states = _allStates.Where(s => s.Id == LoginState.StateId).ToList();
+            _districts = _allDistricts.Where(d => d.StateId == LoginState.StateId).ToList();
+        }
+        else
+        {
+            _states      = _allStates;
+            _districts   = _allDistricts;
+        }
         _dealerTypes = dealerTypesTask.Result;
         _products    = productsTask.Result;
         _dealers     = dealersTask.Result;
