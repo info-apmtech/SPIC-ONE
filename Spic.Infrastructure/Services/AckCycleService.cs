@@ -16,8 +16,11 @@ namespace Spic.Infrastructure.Services
 	/// Performance-optimized Acknowledgement Cycle report.
 	///
 	/// Business flow retained:
-	/// - Sources: SalesCompanySale + SalesWholesaler.
-	/// - Only workflow Status.Name == "Ack" is included.
+	/// - Sources: SalesCompanySale + SalesWholesaler only.
+	/// - Stock snapshot tables are intentionally excluded because they do not carry
+	///   an invoice-to-receipt acknowledgement cycle.
+	/// - Only workflow Status.Name == "Ack" rows having valid invoice and receipt
+	///   dates are included.
 	/// - Cycle = RetailerReceiptDate.Date - InvoiceDate.Date.
 	/// - Fast 0-2, Normal 3-5, Delayed 6-10, Critical > 10.
 	/// - KPI cards and Top-5 lists ignore Source/Bucket/Search grid controls.
@@ -119,7 +122,12 @@ namespace Spic.Infrastructure.Services
 
 			var companySales = _db.Set<SalesCompanySale>()
 				.AsNoTracking()
-				.Where(x => x.StatusId.HasValue && ackStatusIds.Contains(x.StatusId.Value));
+				.Where(x =>
+					x.StatusId.HasValue &&
+					ackStatusIds.Contains(x.StatusId.Value) &&
+					x.InvoiceDate.HasValue &&
+					x.RetailerReceiptDate.HasValue &&
+					x.RetailerReceiptDate.Value.Date >= x.InvoiceDate.Value.Date);
 
 			if (filter.StateIds.Count > 0)
 			{
@@ -204,7 +212,12 @@ namespace Spic.Infrastructure.Services
 
 			var wholesalerSales = _db.Set<SalesWholesaler>()
 				.AsNoTracking()
-				.Where(x => x.StatusId.HasValue && ackStatusIds.Contains(x.StatusId.Value));
+				.Where(x =>
+					x.StatusId.HasValue &&
+					ackStatusIds.Contains(x.StatusId.Value) &&
+					x.InvoiceDate.HasValue &&
+					x.RetailerReceiptDate.HasValue &&
+					x.RetailerReceiptDate.Value.Date >= x.InvoiceDate.Value.Date);
 
 			if (filter.StateIds.Count > 0)
 			{

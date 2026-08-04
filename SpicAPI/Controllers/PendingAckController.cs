@@ -89,7 +89,7 @@ namespace SpicAPI.Controllers
 			{
 				worksheet.Cell(rowIndex, 1).Value =
 					string.IsNullOrWhiteSpace(row.InvoiceNo)
-						? row.Source == "DPT Sales" ? "DPT Report" : string.Empty
+						? row.Source == "Retailer Sales" ? "Retailer Report" : string.Empty
 						: row.InvoiceNo;
 				worksheet.Cell(rowIndex, 2).Value = row.InvoiceDate?.ToString("dd-MM-yyyy");
 				worksheet.Cell(rowIndex, 3).Value = row.AgencyName;

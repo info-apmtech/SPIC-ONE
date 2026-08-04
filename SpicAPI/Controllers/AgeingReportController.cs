@@ -55,7 +55,7 @@ namespace SpicAPI.Controllers
 				"Mobile No.",
 				"Product",
 				"Quantity (MT)",
-				"Entry Date",
+				"ACK / Entry Date",
 				"Ageing Days",
 				"Status"
 			};

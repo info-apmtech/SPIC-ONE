@@ -27,6 +27,12 @@ namespace SPIC.Core.DTOs
 		public LiqCycleSummaryDto Summary { get; set; } = new();
 		public List<LiqCycleStatDto> TopFastDealers { get; set; } = new();
 		public List<LiqCycleStatDto> TopSlowDealers { get; set; } = new();
+
+		// Additive fields used by the existing State-wise chart toggle.
+		// Existing API consumers remain compatible because no old field changed.
+		public List<LiqCycleStatDto> TopFastStates { get; set; } = new();
+		public List<LiqCycleStatDto> TopSlowStates { get; set; } = new();
+
 		public PagedResult<LiqCycleRowDto> Grid { get; set; } = new();
 	}
 
@@ -36,9 +42,10 @@ namespace SPIC.Core.DTOs
 		public decimal Liquidated { get; set; }
 		public decimal BalanceStock => TotalStock - Liquidated;
 
-		public double StockTrendPct { get; set; } = 12.0;
-		public double LiquidatedTrendPct { get; set; } = 7.2;
-		public double BalanceTrendPct { get; set; } = 6.1;
+		// No false hard-coded percentages. Keep the existing fields for API compatibility.
+		public double StockTrendPct { get; set; }
+		public double LiquidatedTrendPct { get; set; }
+		public double BalanceTrendPct { get; set; }
 	}
 
 	public class LiqCycleStatDto

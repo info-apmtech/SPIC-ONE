@@ -14,11 +14,17 @@ namespace Spic.Infrastructure.Services
 	/// <summary>
 	/// Performance-optimized Pending Acknowledgement service.
 	///
-	/// Business flow is preserved:
-	/// - Company Sales + Wholesaler Sales + DPT Sold Quantity are combined.
-	/// - Company/Wholesaler completed status is based on RetailerReceiptDate.
-	/// - DPT SoldQuantity is already a reported retailer sale, so it is shown as Completed.
-	/// - Pending age is based on InvoiceDate; DPT uses its report date (CreatedAt).
+	/// Business flow is preserved and clarified:
+	/// - Company Sales + Wholesaler Sales + Retailer Sales are combined.
+	/// - Retailer Sales comes from DptReport.SoldQuantity, but the UI never displays
+	///   the internal DPT name. Its source is "Retailer Sales" and dealer type is "Retailer".
+	/// - Pending age is based on InvoiceDate; Retailer Sales uses the DPT report date
+	///   stored in CreatedAt.
+	/// - Age status: Latest 0-10, Critical 11-20, Overdue 21+, or Consent of Buyer.
+	/// - Completed is retained for acknowledged rows to preserve the existing dashboard.
+	/// - The last grid status column displays the exact Status master name uploaded
+	///   from Excel (for example New or Ack). Retailer Sales has no StatusId and
+	///   therefore displays Reported.
 	/// - Cards and state chart ignore Source/AgeStatuses filters.
 	/// - Grid and export apply Source/AgeStatuses filters.
 	/// - Search still affects cards, chart and grid.
@@ -60,12 +66,16 @@ namespace Spic.Infrastructure.Services
 			var page = Math.Max(1, filter.Page);
 			var pageSize = filter.PageSize <= 0 ? 16 : filter.PageSize;
 
+			var workflowRules = await LoadWorkflowStatusRulesAsync(cancellationToken);
+
 			// The base scope intentionally ignores Source and AgeStatuses so the
 			// source cards and state chart keep their existing behaviour.
 			var baseQuery = BuildRawQuery(
 				filter,
 				today,
-				includeAllSources: true);
+				includeAllSources: true,
+				workflowRules.AckStatusIds,
+				workflowRules.ConsentStatusIds);
 
 			// Query 1: compact summary aggregates only.
 			var summaryAggregates = await baseQuery
@@ -161,13 +171,16 @@ namespace Spic.Infrastructure.Services
 			NormalizeFilter(filter);
 
 			var today = Today();
+			var workflowRules = await LoadWorkflowStatusRulesAsync(cancellationToken);
 
 			// Export does not require card/chart data. When a source tab is
 			// selected, skip querying the other two sources completely.
 			var rawQuery = BuildRawQuery(
 				filter,
 				today,
-				includeAllSources: false);
+				includeAllSources: false,
+				workflowRules.AckStatusIds,
+				workflowRules.ConsentStatusIds);
 
 			rawQuery = ApplyGridFilters(rawQuery, filter);
 
@@ -236,7 +249,9 @@ namespace Spic.Infrastructure.Services
 		private IQueryable<RawQueryRow> BuildRawQuery(
 			PendingAckFilter filter,
 			DateTime today,
-			bool includeAllSources)
+			bool includeAllSources,
+			List<int> ackStatusIds,
+			List<int> consentStatusIds)
 		{
 			var (registrationIds, ifmsIds) = SplitDealerKeys(filter.DealerKeys);
 
@@ -252,10 +267,15 @@ namespace Spic.Infrastructure.Services
 				source,
 				"Wholesaler Sales",
 				StringComparison.OrdinalIgnoreCase);
-			var sourceIsDpt = string.Equals(
-				source,
-				"DPT Sales",
-				StringComparison.OrdinalIgnoreCase);
+			var sourceIsDpt =
+				string.Equals(
+					source,
+					"Retailer Sales",
+					StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(
+					source,
+					"DPT Sales",
+					StringComparison.OrdinalIgnoreCase); // backwards-compatible alias
 
 			var hasSpecificSource = sourceIsCompany || sourceIsWholesaler || sourceIsDpt;
 			var includeCompany = includeAllSources || !hasSpecificSource || sourceIsCompany;
@@ -300,13 +320,19 @@ namespace Spic.Infrastructure.Services
 					DispatchNo = (string?)null,
 					RegistrationId = x.DealerRegistrationId,
 					IfmsId = x.IfmsDealerId,
-					StatusCode = x.RetailerReceiptDate != null
-						? StatusCompleted
-						: x.InvoiceDate == null || x.InvoiceDate.Value >= latestFrom
-							? StatusLatest
-							: x.InvoiceDate.Value >= criticalFrom
-								? StatusCritical
-								: StatusOverdue
+					WorkflowStatusId = x.StatusId,
+					WorkflowStatusOverride = null,
+					StatusCode =
+						(x.StatusId.HasValue && ackStatusIds.Contains(x.StatusId.Value)) ||
+						x.RetailerReceiptDate != null
+							? StatusCompleted
+							: x.StatusId.HasValue && consentStatusIds.Contains(x.StatusId.Value)
+								? StatusConsentOfBuyer
+								: x.InvoiceDate == null || x.InvoiceDate.Value >= latestFrom
+									? StatusLatest
+									: x.InvoiceDate.Value >= criticalFrom
+										? StatusCritical
+										: StatusOverdue
 				});
 			}
 
@@ -344,13 +370,19 @@ namespace Spic.Infrastructure.Services
 					DispatchNo = x.DispatchNo,
 					RegistrationId = x.DealerId,
 					IfmsId = x.IfmsDealerId,
-					StatusCode = x.RetailerReceiptDate != null
-						? StatusCompleted
-						: x.InvoiceDate == null || x.InvoiceDate.Value >= latestFrom
-							? StatusLatest
-							: x.InvoiceDate.Value >= criticalFrom
-								? StatusCritical
-								: StatusOverdue
+					WorkflowStatusId = x.StatusId,
+					WorkflowStatusOverride = null,
+					StatusCode =
+						(x.StatusId.HasValue && ackStatusIds.Contains(x.StatusId.Value)) ||
+						x.RetailerReceiptDate != null
+							? StatusCompleted
+							: x.StatusId.HasValue && consentStatusIds.Contains(x.StatusId.Value)
+								? StatusConsentOfBuyer
+								: x.InvoiceDate == null || x.InvoiceDate.Value >= latestFrom
+									? StatusLatest
+									: x.InvoiceDate.Value >= criticalFrom
+										? StatusCritical
+										: StatusOverdue
 				});
 			}
 
@@ -367,8 +399,9 @@ namespace Spic.Infrastructure.Services
 					registrationIds,
 					ifmsIds);
 
-				// DPT contains daily retailer sales but has no invoice or acknowledgement
-				// columns. SoldQuantity is therefore treated as already reported/completed.
+				// DptReport contains retailer SoldQuantity and a business report date, but
+				// it has no StatusId or acknowledgement date. It is presented as Retailer
+				// Sales, with pending age calculated from CreatedAt.
 				dptQuery = query.Select(x => new RawQueryRow
 				{
 					SourceCode = SourceDpt,
@@ -377,10 +410,10 @@ namespace Spic.Infrastructure.Services
 					InvoiceNo = null,
 					InvoiceDate = x.CreatedAt,
 					EntryDate = x.CreatedAt,
-					RetailerReceiptDate = x.CreatedAt,
+					RetailerReceiptDate = null,
 					AgencyName = x.RetailerName,
 					DealerTypeId = null,
-					DealerTypeName = "Retailer (DPT)",
+					DealerTypeName = "Retailer",
 					StateId = x.StateId,
 					DistrictId = x.DistrictId,
 					ProductId = x.ProductId,
@@ -391,7 +424,13 @@ namespace Spic.Infrastructure.Services
 					DispatchNo = null,
 					RegistrationId = x.DealerRegistrationId,
 					IfmsId = x.IfmsDealerId,
-					StatusCode = StatusCompleted
+					WorkflowStatusId = null,
+					WorkflowStatusOverride = "Reported",
+					StatusCode = x.CreatedAt >= latestFrom
+						? StatusLatest
+						: x.CreatedAt >= criticalFrom
+							? StatusCritical
+							: StatusOverdue
 				});
 			}
 
@@ -672,10 +711,15 @@ namespace Spic.Infrastructure.Services
 			{
 				query = query.Where(x => x.SourceCode == SourceWholesaler);
 			}
-			else if (string.Equals(
-				filter.Source,
-				"DPT Sales",
-				StringComparison.OrdinalIgnoreCase))
+			else if (
+				string.Equals(
+					filter.Source,
+					"Retailer Sales",
+					StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(
+					filter.Source,
+					"DPT Sales",
+					StringComparison.OrdinalIgnoreCase))
 			{
 				query = query.Where(x => x.SourceCode == SourceDpt);
 			}
@@ -728,6 +772,10 @@ namespace Spic.Infrastructure.Services
 					on row.RegistrationId equals (int?)registrationValue.Id into registrationJoin
 				from registration in registrationJoin.DefaultIfEmpty()
 
+				join workflowStatusValue in _db.Set<Status>().AsNoTracking()
+					on row.WorkflowStatusId equals (int?)workflowStatusValue.Id into workflowStatusJoin
+				from workflowStatus in workflowStatusJoin.DefaultIfEmpty()
+
 				select new EnrichedQueryRow
 				{
 					SourceCode = row.SourceCode,
@@ -761,7 +809,9 @@ namespace Spic.Infrastructure.Services
 					ReceivedQuantity = row.ReceivedQuantity,
 					DdNo = row.DdNo,
 					DispatchNo = row.DispatchNo,
-					StatusCode = row.StatusCode
+					StatusCode = row.StatusCode,
+					WorkflowStatusName = row.WorkflowStatusOverride ??
+						(workflowStatus != null ? workflowStatus.Name : null)
 				};
 		}
 
@@ -973,7 +1023,12 @@ namespace Spic.Infrastructure.Services
 		{
 			var ageDays = CalculateAgeDays(today, row.InvoiceDate);
 			var completed = row.StatusCode == StatusCompleted;
-			var isDpt = row.SourceCode == SourceDpt;
+
+			var workflowStatus = !string.IsNullOrWhiteSpace(row.WorkflowStatusName)
+				? row.WorkflowStatusName.Trim()
+				: completed
+					? "Ack"
+					: "New";
 
 			var dealerCode = !string.IsNullOrWhiteSpace(row.DealerCode)
 				? row.DealerCode
@@ -990,7 +1045,9 @@ namespace Spic.Infrastructure.Services
 				EntryDate = row.EntryDate,
 				AgencyName = row.AgencyName,
 				DealerCode = dealerCode,
-				DealerType = row.DealerType,
+				DealerType = row.SourceCode == SourceDpt
+					? "Retailer"
+					: row.DealerType,
 				MobileNo = string.IsNullOrWhiteSpace(row.MobileNo)
 					? null
 					: row.MobileNo.Trim(),
@@ -1006,10 +1063,39 @@ namespace Spic.Infrastructure.Services
 				DispatchNo = row.DispatchNo,
 				PendingAckAgeDays = completed ? 0 : ageDays,
 				AgeStatus = StatusName(row.StatusCode),
-				WorkflowStatus = isDpt
-					? "Reported"
-					: completed ? "Acknowledged" : "New",
-				BuyerConsentStatus = "Not Required"
+				WorkflowStatus = workflowStatus,
+				BuyerConsentStatus = row.StatusCode == StatusConsentOfBuyer
+					? "Required"
+					: "Not Required"
+			};
+		}
+
+		private async Task<WorkflowStatusRules> LoadWorkflowStatusRulesAsync(
+			CancellationToken cancellationToken)
+		{
+			var statuses = await _db.Set<Status>()
+				.AsNoTracking()
+				.Select(x => new { x.Id, x.Name })
+				.ToListAsync(cancellationToken);
+
+			var ackStatusIds = statuses
+				.Where(x =>
+					string.Equals(x.Name?.Trim(), "Ack", StringComparison.OrdinalIgnoreCase) ||
+					string.Equals(x.Name?.Trim(), "Acknowledged", StringComparison.OrdinalIgnoreCase))
+				.Select(x => x.Id)
+				.ToList();
+
+			var consentStatusIds = statuses
+				.Where(x =>
+					!string.IsNullOrWhiteSpace(x.Name) &&
+					x.Name.IndexOf("consent", StringComparison.OrdinalIgnoreCase) >= 0)
+				.Select(x => x.Id)
+				.ToList();
+
+			return new WorkflowStatusRules
+			{
+				AckStatusIds = ackStatusIds,
+				ConsentStatusIds = consentStatusIds
 			};
 		}
 
@@ -1034,7 +1120,7 @@ namespace Spic.Infrastructure.Services
 			{
 				SourceCompany => "Company Sales",
 				SourceWholesaler => "Wholesaler Sales",
-				SourceDpt => "DPT Sales",
+				SourceDpt => "Retailer Sales",
 				_ => "Unknown"
 			};
 		}
@@ -1182,6 +1268,8 @@ namespace Spic.Infrastructure.Services
 			public string? DispatchNo { get; set; }
 			public int? RegistrationId { get; set; }
 			public int? IfmsId { get; set; }
+			public int? WorkflowStatusId { get; set; }
+			public string? WorkflowStatusOverride { get; set; }
 			public int StatusCode { get; set; }
 		}
 
@@ -1209,6 +1297,13 @@ namespace Spic.Infrastructure.Services
 			public string? DdNo { get; set; }
 			public string? DispatchNo { get; set; }
 			public int StatusCode { get; set; }
+			public string? WorkflowStatusName { get; set; }
+		}
+
+		private sealed class WorkflowStatusRules
+		{
+			public List<int> AckStatusIds { get; set; } = new();
+			public List<int> ConsentStatusIds { get; set; } = new();
 		}
 
 		private sealed class SummaryAggregateRow

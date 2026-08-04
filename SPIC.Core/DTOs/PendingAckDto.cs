@@ -39,7 +39,10 @@ namespace SPIC.Core.DTOs
 		public PendingAckCategorySummaryDto Overall { get; set; } = new();
 		public PendingAckCategorySummaryDto CompanySales { get; set; } = new();
 		public PendingAckCategorySummaryDto WholesalerSales { get; set; } = new();
+
+		// Kept for API compatibility. The UI displays this as "Retailer Sales".
 		public PendingAckCategorySummaryDto DptSales { get; set; } = new();
+
 		public List<PendingAckStateWiseDto> StateWise { get; set; } = new();
 		public PagedResult<PendingAckRowDto> Grid { get; set; } = new();
 	}
@@ -85,6 +88,7 @@ namespace SPIC.Core.DTOs
 		public int WholesalerOverdue { get; set; }
 		public int WholesalerConsentBuyer { get; set; }
 
+		// Kept for API compatibility. These values represent Retailer Sales.
 		public int DptTotal { get; set; }
 		public int DptCompleted { get; set; }
 		public int DptLatest { get; set; }
@@ -161,6 +165,9 @@ namespace SPIC.Core.DTOs
 
 		public int PendingAckAgeDays { get; set; }
 		public string AgeStatus { get; set; } = string.Empty;
+
+		// Exact Status master value uploaded from Excel for company/wholesaler rows.
+		// Retailer Sales (DPT) has no StatusId, so it displays "Reported".
 		public string WorkflowStatus { get; set; } = "New";
 		public string BuyerConsentStatus { get; set; } = "Not Required";
 	}

@@ -76,8 +76,8 @@ namespace SpicAPI.Controllers
 			string[] headers =
 			{
 				"S.No", "Source", "Dealer Name", "Product", "Invoice No",
-				"Invoice Date", "Receipt Date", "Ack Cycle (Days)", "Status",
-				"State", "District", "Qty (MT)"
+				"Invoice Date", "Receipt Date", "Ack Cycle (Days)",
+				"Cycle Status", "Workflow Status", "State", "District", "Qty (MT)"
 			};
 
 			for (var column = 0; column < headers.Length; column++)
@@ -113,13 +113,13 @@ namespace SpicAPI.Controllers
 
 				worksheet.Cell(rowNumber, 8).Value = row.CycleDays;
 				worksheet.Cell(rowNumber, 9).Value = row.Bucket;
-				worksheet.Cell(rowNumber, 10).Value = row.StateName;
-				worksheet.Cell(rowNumber, 11).Value = row.District;
-				worksheet.Cell(rowNumber, 12).Value = row.QuantityMT;
+				worksheet.Cell(rowNumber, 10).Value = row.WorkflowStatus;
+				worksheet.Cell(rowNumber, 11).Value = row.StateName;
+				worksheet.Cell(rowNumber, 12).Value = row.District;
+				worksheet.Cell(rowNumber, 13).Value = row.QuantityMT;
 				rowNumber++;
 			}
 
-			// Fixed widths avoid the large cost of AdjustToContents on big exports.
 			worksheet.Column(1).Width = 8;
 			worksheet.Column(2).Width = 20;
 			worksheet.Column(3).Width = 30;
@@ -128,10 +128,11 @@ namespace SpicAPI.Controllers
 			worksheet.Column(6).Width = 14;
 			worksheet.Column(7).Width = 14;
 			worksheet.Column(8).Width = 18;
-			worksheet.Column(9).Width = 14;
-			worksheet.Column(10).Width = 20;
+			worksheet.Column(9).Width = 16;
+			worksheet.Column(10).Width = 18;
 			worksheet.Column(11).Width = 20;
-			worksheet.Column(12).Width = 14;
+			worksheet.Column(12).Width = 20;
+			worksheet.Column(13).Width = 14;
 			worksheet.SheetView.FreezeRows(1);
 
 			using var stream = new MemoryStream();
