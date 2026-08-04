@@ -75,7 +75,6 @@ namespace SpicAPI.Controllers
 				rowNumber++;
 			}
 
-			// Fixed widths are much faster than AdjustToContents() for large exports.
 			worksheet.Column(1).Width = 30;
 			worksheet.Column(2).Width = 18;
 			worksheet.Column(3).Width = 24;

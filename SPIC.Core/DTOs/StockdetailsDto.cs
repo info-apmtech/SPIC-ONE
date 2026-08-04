@@ -11,10 +11,7 @@ namespace SPIC.Core.DTOs
 		public DateTime? DateFrom { get; set; }
 		public DateTime? DateTo { get; set; }
 
-		// The Razor page resolves Financial Year selections into DateFrom/DateTo.
-		// Retained so the current request contract does not change.
 		public List<int> FinancialYearIds { get; set; } = new();
-
 		public List<int> StateIds { get; set; } = new();
 
 		public string? Search { get; set; }

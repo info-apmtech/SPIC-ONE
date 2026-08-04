@@ -61,8 +61,8 @@ namespace SpicAPI.Controllers
 
 			string[] headers =
 			{
-				"Invoice No.",
-				"Invoice Date",
+				"Invoice / Reference No.",
+				"Invoice / Report Date",
 				"Agency Name",
 				"Source",
 				"Dealer Type",
@@ -87,9 +87,11 @@ namespace SpicAPI.Controllers
 			var rowIndex = 2;
 			foreach (var row in rows)
 			{
-				worksheet.Cell(rowIndex, 1).Value = row.InvoiceNo;
-				worksheet.Cell(rowIndex, 2).Value =
-					row.InvoiceDate?.ToString("dd-MM-yyyy");
+				worksheet.Cell(rowIndex, 1).Value =
+					string.IsNullOrWhiteSpace(row.InvoiceNo)
+						? row.Source == "DPT Sales" ? "DPT Report" : string.Empty
+						: row.InvoiceNo;
+				worksheet.Cell(rowIndex, 2).Value = row.InvoiceDate?.ToString("dd-MM-yyyy");
 				worksheet.Cell(rowIndex, 3).Value = row.AgencyName;
 				worksheet.Cell(rowIndex, 4).Value = row.Source;
 				worksheet.Cell(rowIndex, 5).Value = row.DealerType;
@@ -102,8 +104,7 @@ namespace SpicAPI.Controllers
 						? "--"
 						: row.PendingAckAgeDays.ToString();
 				worksheet.Cell(rowIndex, 11).Value = row.WorkflowStatus;
-				worksheet.Cell(rowIndex, 12).Value =
-					row.EntryDate?.ToString("dd-MM-yyyy");
+				worksheet.Cell(rowIndex, 12).Value = row.EntryDate?.ToString("dd-MM-yyyy");
 				rowIndex++;
 			}
 
@@ -120,14 +121,10 @@ namespace SpicAPI.Controllers
 				$"PendingAcknowledgement_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
 		}
 
-		// Preserved exactly as optional endpoints. Their implementation depends
-		// on the PDF and email services used by your application.
 		[HttpPost("export/pdf")]
 		public IActionResult ExportPdf([FromBody] PendingAckFilter filter)
 		{
-			return StatusCode(
-				501,
-				"PDF export not implemented yet. Suggest QuestPDF.");
+			return StatusCode(501, "PDF export not implemented yet. Suggest QuestPDF.");
 		}
 
 		[HttpPost("send-mail")]

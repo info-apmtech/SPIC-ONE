@@ -1,9 +1,4 @@
-﻿// ============================================================================
-//  SPIC.Core / DTOs / AgeingReportDto.cs
-//  Single source of truth for all Ageing Report DTOs.
-// ============================================================================
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace SPIC.Core.DTOs

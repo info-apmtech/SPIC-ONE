@@ -1,22 +1,26 @@
 ﻿// ============================================================================
 //  AgeingReportService — Spic.Infrastructure/Services/
 //
-//  PERFORMANCE-OPTIMIZED IMPLEMENTATION
+//  Production-safe stock and sales sources:
+//    CURRENT STOCK
+//      * WholesalerStockAsOnToday.Stock
+//      * DptReport.ClosingBalance
+//      * WarehouseDistrictGlobalStockReconciliation.ClosingStock
 //
-//  Existing business flow is preserved:
-//    * SalesCompanySale + SalesWholesaler are combined.
-//    * Only acknowledged rows are aged.
-//    * Acknowledgement date = RetailerReceiptDate.
-//    * Ageing quantity = ReceivedQuantity, falling back to QuantityMT.
-//    * Total Stock comes from the three stock tables.
-//    * Search, filters, cards, charts, sorting, paging and export remain intact.
+//    SALES
+//      * SalesCompanySale.QuantityMT
+//      * SalesWholesaler.QuantityMT
+//      * DptReport.SoldQuantity
 //
-//  Main performance changes:
-//    * No full sales-table materialization for dashboard requests.
-//    * Summary and chart values are aggregated in SQL.
-//    * Only the requested grid page is loaded with lookup names.
-//    * Average ageing loads a compact date histogram instead of every sale row.
-//    * Total stock is calculated through one UNION ALL aggregate query.
+//  Important snapshot rule:
+//    Stock is taken only from the latest available report date of each stock
+//    source. Historical stock snapshots are not added together.
+//
+//  Existing ageing flow is preserved:
+//    * Company and wholesaler ageing rows require RetailerReceiptDate.
+//    * Ageing is calculated from RetailerReceiptDate.
+//    * DPT SoldQuantity is included in sales totals, but not in acknowledgement
+//      ageing buckets/grid because DptReport has no RetailerReceiptDate.
 // ============================================================================
 
 using System;
@@ -32,7 +36,7 @@ using SPIC.Core.Interfaces;
 
 namespace Spic.Infrastructure.Services
 {
-	public class AgeingReportService : IAgeingReportService
+	public sealed class AgeingReportService : IAgeingReportService
 	{
 		private readonly AppDbContext _db;
 
@@ -50,40 +54,46 @@ namespace Spic.Infrastructure.Services
 			var f = NormalizeFilter(filter);
 			var today = Today();
 
-			// Unified, acknowledged, filtered sales query. This remains IQueryable,
-			// so summary, charts, count, sort and paging execute in the database.
-			var rows = BuildResolvedSalesQuery(f, today);
+			// Existing ageing calculation: acknowledged company + wholesaler rows.
+			var ageingRows = BuildResolvedAgeingQuery(f, today);
 
-			// Keep queries sequential because the same scoped DbContext is used.
-			var totalStock = await ComputeTotalStockAsync(f, cancellationToken);
-			var global = await LoadGlobalAggregateAsync(rows, today, cancellationToken);
-			var stateAggregates = await LoadStateAggregatesAsync(rows, today, cancellationToken);
-			var averageAgeing = await LoadAverageAgeingAsync(rows, today, cancellationToken);
-			var grid = await LoadGridAsync(rows, f, today, cancellationToken);
+			// The same scoped DbContext must not execute concurrent operations.
+			var currentStockByState = await LoadCurrentStockByStateAsync(
+				f,
+				cancellationToken);
 
-			var stateWise = stateAggregates
-				.Select(x => new AgeingStateDto
-				{
-					StateName = x.StateName ?? string.Empty,
-					Stock = x.Total,
-					Sales = 0m
-				})
-				.OrderByDescending(x => x.Stock)
-				.ToList();
+			var salesByState = await LoadSalesByStateAsync(
+				f,
+				today,
+				cancellationToken);
 
-			var stateBuckets = stateAggregates
-				.Where(x => !string.IsNullOrWhiteSpace(x.StateName))
-				.Select(x => new AgeingStateBucketDto
-				{
-					StateName = x.StateName!,
-					Fresh = x.Fresh,
-					Medium = x.Medium,
-					SlowMoving = x.SlowMoving,
-					LongAged = x.LongAged,
-					Critical = x.Critical
-				})
-				.OrderByDescending(x => x.Total)
-				.ToList();
+			var stateNames = await LoadStateNamesAsync(
+				currentStockByState,
+				salesByState,
+				cancellationToken);
+
+			var global = await LoadGlobalAggregateAsync(
+				ageingRows,
+				today,
+				cancellationToken);
+
+			var ageingStateAggregates = await LoadAgeingStateAggregatesAsync(
+				ageingRows,
+				today,
+				cancellationToken);
+
+			var averageAgeing = await LoadAverageAgeingAsync(
+				ageingRows,
+				today,
+				cancellationToken);
+
+			var grid = await LoadGridAsync(
+				ageingRows,
+				f,
+				today,
+				cancellationToken);
+
+			var totalStock = currentStockByState.Sum(x => x.Amount);
 
 			return new AgeingDashboardDto
 			{
@@ -98,8 +108,24 @@ namespace Spic.Infrastructure.Services
 					Stock60Plus = global.Stock60Plus,
 					Stock60PlusChangePct = 0m
 				},
-				StateWise = stateWise,
-				StateBuckets = stateBuckets,
+				StateWise = BuildStockVsSalesStateWise(
+					currentStockByState,
+					salesByState,
+					stateNames),
+				StateBuckets = ageingStateAggregates
+					.Where(x => !string.IsNullOrWhiteSpace(x.StateName))
+					.Select(x => new AgeingStateBucketDto
+					{
+						StateName = x.StateName!,
+						Fresh = x.Fresh,
+						Medium = x.Medium,
+						SlowMoving = x.SlowMoving,
+						LongAged = x.LongAged,
+						Critical = x.Critical
+					})
+					.OrderByDescending(x => x.Total)
+					.ThenBy(x => x.StateName)
+					.ToList(),
 				DayBuckets = BuildDayBuckets(global),
 				Grid = grid
 			};
@@ -111,9 +137,8 @@ namespace Spic.Infrastructure.Services
 		{
 			var f = NormalizeFilter(filter);
 			var today = Today();
-			var query = BuildResolvedSalesQuery(f, today);
+			var query = BuildResolvedAgeingQuery(f, today);
 
-			// Preserve the previous export flow: oldest/highest-ageing rows first.
 			var rawRows = await query
 				.OrderBy(x => x.AckDate)
 				.ThenBy(x => x.DealerName)
@@ -135,20 +160,21 @@ namespace Spic.Infrastructure.Services
 		}
 
 		// ====================================================================
-		//  Unified sales query
+		//  Existing ageing rows — acknowledged company and wholesaler sales
 		// ====================================================================
 
-		private IQueryable<ResolvedAgeingRow> BuildResolvedSalesQuery(
+		private IQueryable<ResolvedAgeingRow> BuildResolvedAgeingQuery(
 			AgeingReportFilter f,
 			DateTime today)
 		{
-			var company = ApplyCompanyFilters(
+			var company = ApplyCompanyAgeingFilters(
 					_db.Set<SalesCompanySale>().AsNoTracking(),
 					f,
 					today)
 				.Select(x => new SalesAgeingRaw
 				{
 					DealerRegistrationId = x.DealerRegistrationId,
+					IfmsDealerId = x.IfmsDealerId,
 					DealerName = x.DealerName,
 					StateId = x.StateId,
 					DistrictId = x.DistrictId,
@@ -160,15 +186,14 @@ namespace Spic.Infrastructure.Services
 					AckDate = x.RetailerReceiptDate!.Value
 				});
 
-			var wholesaler = ApplyWholesalerFilters(
+			var wholesaler = ApplyWholesalerAgeingFilters(
 					_db.Set<SalesWholesaler>().AsNoTracking(),
 					f,
 					today)
 				.Select(x => new SalesAgeingRaw
 				{
-					// Existing flow treats SalesWholesaler.DealerId as the
-					// dealer-registration ID.
 					DealerRegistrationId = x.DealerId,
+					IfmsDealerId = x.IfmsDealerId,
 					DealerName = x.AgencyName,
 					StateId = x.StateId,
 					DistrictId = x.BuyerDistrictId,
@@ -185,32 +210,48 @@ namespace Spic.Infrastructure.Services
 			var states = _db.Set<State>().AsNoTracking();
 			var districts = _db.Set<District>().AsNoTracking();
 			var products = _db.Set<Product>().AsNoTracking();
-			var dealers = _db.Set<DealerRegistration>().AsNoTracking();
+			var registeredDealers = _db.Set<DealerRegistration>().AsNoTracking();
+			var ifmsDealers = _db.Set<IfmsDealer>().AsNoTracking();
 
 			var resolved =
 				from sale in sales
-				join state in states
-					on sale.StateId equals state.Id into stateJoin
+				join stateValue in states
+					on sale.StateId equals (int?)stateValue.Id into stateJoin
 				from state in stateJoin.DefaultIfEmpty()
-				join district in districts
-					on sale.DistrictId equals district.Id into districtJoin
+				join districtValue in districts
+					on sale.DistrictId equals (int?)districtValue.Id into districtJoin
 				from district in districtJoin.DefaultIfEmpty()
-				join product in products
-					on sale.ProductId equals product.Id into productJoin
+				join productValue in products
+					on sale.ProductId equals (int?)productValue.Id into productJoin
 				from product in productJoin.DefaultIfEmpty()
-				join dealer in dealers
-					on sale.DealerRegistrationId equals dealer.Id into dealerJoin
-				from dealer in dealerJoin.DefaultIfEmpty()
+				join registrationValue in registeredDealers
+					on sale.DealerRegistrationId equals (int?)registrationValue.Id into registrationJoin
+				from registration in registrationJoin.DefaultIfEmpty()
+				join ifmsValue in ifmsDealers
+					on sale.IfmsDealerId equals (int?)ifmsValue.Id into ifmsJoin
+				from ifms in ifmsJoin.DefaultIfEmpty()
 				select new ResolvedAgeingRow
 				{
 					DealerRegistrationId = sale.DealerRegistrationId,
-					DealerName = sale.DealerName ?? string.Empty,
-					DealerCode = dealer != null ? dealer.DealerCode : null,
+					DealerName = sale.DealerName ??
+						(registration != null ? registration.FirmName : null) ??
+						(ifms != null ? ifms.Name : null) ??
+						string.Empty,
+					DealerCode = registration != null
+						? registration.DealerCode
+						: null,
 					StateId = sale.StateId,
-					StateName = state != null ? state.StateName : string.Empty,
-					DistrictName = district != null ? district.DistrictName : null,
-					ProductName = product != null ? product.Name : string.Empty,
-					MobileNo = sale.MobileNo,
+					StateName = state != null
+						? state.StateName
+						: string.Empty,
+					DistrictName = district != null
+						? district.DistrictName
+						: null,
+					ProductName = product != null
+						? product.Name
+						: string.Empty,
+					MobileNo = sale.MobileNo ??
+						(ifms != null ? ifms.MobileNo : null),
 					Quantity = sale.Quantity,
 					AckDate = sale.AckDate
 				};
@@ -228,12 +269,11 @@ namespace Spic.Infrastructure.Services
 			return resolved;
 		}
 
-		private static IQueryable<SalesCompanySale> ApplyCompanyFilters(
+		private static IQueryable<SalesCompanySale> ApplyCompanyAgeingFilters(
 			IQueryable<SalesCompanySale> query,
 			AgeingReportFilter f,
 			DateTime today)
 		{
-			// Only acknowledged sales enter the ageing report.
 			query = query.Where(x => x.RetailerReceiptDate != null);
 
 			if (f.StateIds.Count > 0)
@@ -250,6 +290,12 @@ namespace Spic.Infrastructure.Services
 					f.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
+			if (f.SubDistrictIds.Count > 0)
+			{
+				// SalesCompanySale has no SubDistrictId.
+				query = query.Where(_ => false);
+			}
+
 			if (f.ProductIds.Count > 0)
 			{
 				query = query.Where(x =>
@@ -264,15 +310,17 @@ namespace Spic.Infrastructure.Services
 					f.LyingWithIds.Contains(x.DealershipNatureId.Value));
 			}
 
-			return ApplyCompanyAgeingRanges(query, f.AgeingRanges, today);
+			return ApplyCompanyAcknowledgementAgeRanges(
+				query,
+				f.AgeingRanges,
+				today);
 		}
 
-		private static IQueryable<SalesWholesaler> ApplyWholesalerFilters(
+		private static IQueryable<SalesWholesaler> ApplyWholesalerAgeingFilters(
 			IQueryable<SalesWholesaler> query,
 			AgeingReportFilter f,
 			DateTime today)
 		{
-			// Only acknowledged sales enter the ageing report.
 			query = query.Where(x => x.RetailerReceiptDate != null);
 
 			if (f.StateIds.Count > 0)
@@ -289,6 +337,12 @@ namespace Spic.Infrastructure.Services
 					f.DistrictIds.Contains(x.BuyerDistrictId.Value));
 			}
 
+			if (f.SubDistrictIds.Count > 0)
+			{
+				// SalesWholesaler has no SubDistrictId.
+				query = query.Where(_ => false);
+			}
+
 			if (f.ProductIds.Count > 0)
 			{
 				query = query.Where(x =>
@@ -303,10 +357,13 @@ namespace Spic.Infrastructure.Services
 					f.LyingWithIds.Contains(x.DealerNatureId.Value));
 			}
 
-			return ApplyWholesalerAgeingRanges(query, f.AgeingRanges, today);
+			return ApplyWholesalerAcknowledgementAgeRanges(
+				query,
+				f.AgeingRanges,
+				today);
 		}
 
-		private static IQueryable<SalesCompanySale> ApplyCompanyAgeingRanges(
+		private static IQueryable<SalesCompanySale> ApplyCompanyAcknowledgementAgeRanges(
 			IQueryable<SalesCompanySale> query,
 			IReadOnlyCollection<string> ranges,
 			DateTime today)
@@ -335,7 +392,7 @@ namespace Spic.Infrastructure.Services
 				(rAbove120 && x.RetailerReceiptDate < d120));
 		}
 
-		private static IQueryable<SalesWholesaler> ApplyWholesalerAgeingRanges(
+		private static IQueryable<SalesWholesaler> ApplyWholesalerAcknowledgementAgeRanges(
 			IQueryable<SalesWholesaler> query,
 			IReadOnlyCollection<string> ranges,
 			DateTime today)
@@ -365,7 +422,543 @@ namespace Spic.Infrastructure.Services
 		}
 
 		// ====================================================================
-		//  Dashboard aggregates
+		//  Current stock — latest snapshot only from all three stock sources
+		// ====================================================================
+
+		private async Task<List<StateAmount>> LoadCurrentStockByStateAsync(
+			AgeingReportFilter f,
+			CancellationToken cancellationToken)
+		{
+			var combined = new List<StateAmount>();
+
+			var latestWholesalerTimestamp = await _db
+				.Set<WholesalerStockAsOnToday>()
+				.AsNoTracking()
+				.MaxAsync(x => (DateTime?)x.StockDate, cancellationToken);
+
+			if (latestWholesalerTimestamp.HasValue)
+			{
+				var start = latestWholesalerTimestamp.Value.Date;
+				var end = start.AddDays(1);
+
+				var query = _db.Set<WholesalerStockAsOnToday>()
+					.AsNoTracking()
+					.Where(x =>
+						x.StockDate >= start &&
+						x.StockDate < end &&
+						x.Stock > 0m);
+
+				query = ApplyWholesalerStockFilters(query, f);
+
+				combined.AddRange(await query
+					.GroupBy(x => x.StateId)
+					.Select(group => new StateAmount
+					{
+						StateId = group.Key,
+						Amount = group.Sum(x => x.Stock)
+					})
+					.ToListAsync(cancellationToken));
+			}
+
+			var latestDptTimestamp = await _db
+				.Set<DptReport>()
+				.AsNoTracking()
+				.MaxAsync(x => (DateTime?)x.CreatedAt, cancellationToken);
+
+			if (latestDptTimestamp.HasValue)
+			{
+				var start = latestDptTimestamp.Value.Date;
+				var end = start.AddDays(1);
+
+				var query = _db.Set<DptReport>()
+					.AsNoTracking()
+					.Where(x =>
+						x.CreatedAt >= start &&
+						x.CreatedAt < end &&
+						x.ClosingBalance > 0m);
+
+				query = ApplyDptStockFilters(query, f);
+
+				combined.AddRange(await query
+					.GroupBy(x => x.StateId)
+					.Select(group => new StateAmount
+					{
+						StateId = group.Key,
+						Amount = group.Sum(x => x.ClosingBalance)
+					})
+					.ToListAsync(cancellationToken));
+			}
+
+			var latestWarehouseTimestamp = await _db
+				.Set<WarehouseDistrictGlobalStockReconciliation>()
+				.AsNoTracking()
+				.MaxAsync(x => (DateTime?)x.CreatedAt, cancellationToken);
+
+			if (latestWarehouseTimestamp.HasValue)
+			{
+				var start = latestWarehouseTimestamp.Value.Date;
+				var end = start.AddDays(1);
+
+				var query = _db.Set<WarehouseDistrictGlobalStockReconciliation>()
+					.AsNoTracking()
+					.Where(x =>
+						x.CreatedAt >= start &&
+						x.CreatedAt < end &&
+						x.ClosingStock > 0m);
+
+				query = ApplyWarehouseStockFilters(query, f);
+
+				combined.AddRange(await query
+					.GroupBy(x => x.StateId)
+					.Select(group => new StateAmount
+					{
+						StateId = group.Key,
+						Amount = group.Sum(x => x.ClosingStock)
+					})
+					.ToListAsync(cancellationToken));
+			}
+
+			return combined
+				.GroupBy(x => x.StateId)
+				.Select(group => new StateAmount
+				{
+					StateId = group.Key,
+					Amount = group.Sum(x => x.Amount)
+				})
+				.ToList();
+		}
+
+		private static IQueryable<WholesalerStockAsOnToday> ApplyWholesalerStockFilters(
+			IQueryable<WholesalerStockAsOnToday> query,
+			AgeingReportFilter f)
+		{
+			if (f.StateIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.StateId.HasValue &&
+					f.StateIds.Contains(x.StateId.Value));
+			}
+
+			if (f.DistrictIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DistrictId.HasValue &&
+					f.DistrictIds.Contains(x.DistrictId.Value));
+			}
+
+			if (f.SubDistrictIds.Count > 0)
+			{
+				query = query.Where(_ => false);
+			}
+
+			if (f.ProductIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.ProductId.HasValue &&
+					f.ProductIds.Contains(x.ProductId.Value));
+			}
+
+			if (f.LyingWithIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DealershipNatureId.HasValue &&
+					f.LyingWithIds.Contains(x.DealershipNatureId.Value));
+			}
+
+			return query;
+		}
+
+		private static IQueryable<DptReport> ApplyDptStockFilters(
+			IQueryable<DptReport> query,
+			AgeingReportFilter f)
+		{
+			if (f.StateIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.StateId.HasValue &&
+					f.StateIds.Contains(x.StateId.Value));
+			}
+
+			if (f.DistrictIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DistrictId.HasValue &&
+					f.DistrictIds.Contains(x.DistrictId.Value));
+			}
+
+			if (f.SubDistrictIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.SubDistrictId.HasValue &&
+					f.SubDistrictIds.Contains(x.SubDistrictId.Value));
+			}
+
+			if (f.ProductIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.ProductId.HasValue &&
+					f.ProductIds.Contains(x.ProductId.Value));
+			}
+
+			if (f.LyingWithIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DealershipNatureId.HasValue &&
+					f.LyingWithIds.Contains(x.DealershipNatureId.Value));
+			}
+
+			return query;
+		}
+
+		private static IQueryable<WarehouseDistrictGlobalStockReconciliation> ApplyWarehouseStockFilters(
+			IQueryable<WarehouseDistrictGlobalStockReconciliation> query,
+			AgeingReportFilter f)
+		{
+			if (f.StateIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.StateId.HasValue &&
+					f.StateIds.Contains(x.StateId.Value));
+			}
+
+			if (f.DistrictIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DistrictId.HasValue &&
+					f.DistrictIds.Contains(x.DistrictId.Value));
+			}
+
+			if (f.SubDistrictIds.Count > 0 || f.LyingWithIds.Count > 0)
+			{
+				// Warehouse rows do not have SubDistrictId or DealershipNatureId.
+				query = query.Where(_ => false);
+			}
+
+			if (f.ProductIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.ProductId.HasValue &&
+					f.ProductIds.Contains(x.ProductId.Value));
+			}
+
+			return query;
+		}
+
+		// ====================================================================
+		//  Sales totals by state — company + wholesaler + DPT SoldQuantity
+		// ====================================================================
+
+		private async Task<List<StateAmount>> LoadSalesByStateAsync(
+			AgeingReportFilter f,
+			DateTime today,
+			CancellationToken cancellationToken)
+		{
+			var combined = new List<StateAmount>();
+
+			var company = ApplyCompanySalesTotalFilters(
+				_db.Set<SalesCompanySale>()
+					.AsNoTracking()
+					.Where(x => x.QuantityMT > 0m),
+				f,
+				today);
+
+			combined.AddRange(await company
+				.GroupBy(x => x.StateId)
+				.Select(group => new StateAmount
+				{
+					StateId = group.Key,
+					Amount = group.Sum(x => x.QuantityMT)
+				})
+				.ToListAsync(cancellationToken));
+
+			var wholesaler = ApplyWholesalerSalesTotalFilters(
+				_db.Set<SalesWholesaler>()
+					.AsNoTracking()
+					.Where(x => x.QuantityMT > 0m),
+				f,
+				today);
+
+			combined.AddRange(await wholesaler
+				.GroupBy(x => x.StateId)
+				.Select(group => new StateAmount
+				{
+					StateId = group.Key,
+					Amount = group.Sum(x => x.QuantityMT)
+				})
+				.ToListAsync(cancellationToken));
+
+			var dpt = ApplyDptSalesTotalFilters(
+				_db.Set<DptReport>()
+					.AsNoTracking()
+					.Where(x => x.SoldQuantity > 0m),
+				f,
+				today);
+
+			combined.AddRange(await dpt
+				.GroupBy(x => x.StateId)
+				.Select(group => new StateAmount
+				{
+					StateId = group.Key,
+					Amount = group.Sum(x => x.SoldQuantity)
+				})
+				.ToListAsync(cancellationToken));
+
+			return combined
+				.GroupBy(x => x.StateId)
+				.Select(group => new StateAmount
+				{
+					StateId = group.Key,
+					Amount = group.Sum(x => x.Amount)
+				})
+				.ToList();
+		}
+
+		private static IQueryable<SalesCompanySale> ApplyCompanySalesTotalFilters(
+			IQueryable<SalesCompanySale> query,
+			AgeingReportFilter f,
+			DateTime today)
+		{
+			if (f.StateIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.StateId.HasValue &&
+					f.StateIds.Contains(x.StateId.Value));
+			}
+
+			if (f.DistrictIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DistrictId.HasValue &&
+					f.DistrictIds.Contains(x.DistrictId.Value));
+			}
+
+			if (f.SubDistrictIds.Count > 0)
+			{
+				query = query.Where(_ => false);
+			}
+
+			if (f.ProductIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.ProductId.HasValue &&
+					f.ProductIds.Contains(x.ProductId.Value));
+			}
+
+			if (f.LyingWithIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DealershipNatureId.HasValue &&
+					f.LyingWithIds.Contains(x.DealershipNatureId.Value));
+			}
+
+			return ApplyCompanySaleDateRanges(query, f.AgeingRanges, today);
+		}
+
+		private static IQueryable<SalesWholesaler> ApplyWholesalerSalesTotalFilters(
+			IQueryable<SalesWholesaler> query,
+			AgeingReportFilter f,
+			DateTime today)
+		{
+			if (f.StateIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.StateId.HasValue &&
+					f.StateIds.Contains(x.StateId.Value));
+			}
+
+			if (f.DistrictIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.BuyerDistrictId.HasValue &&
+					f.DistrictIds.Contains(x.BuyerDistrictId.Value));
+			}
+
+			if (f.SubDistrictIds.Count > 0)
+			{
+				query = query.Where(_ => false);
+			}
+
+			if (f.ProductIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.ProductId.HasValue &&
+					f.ProductIds.Contains(x.ProductId.Value));
+			}
+
+			if (f.LyingWithIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DealerNatureId.HasValue &&
+					f.LyingWithIds.Contains(x.DealerNatureId.Value));
+			}
+
+			return ApplyWholesalerSaleDateRanges(query, f.AgeingRanges, today);
+		}
+
+		private static IQueryable<DptReport> ApplyDptSalesTotalFilters(
+			IQueryable<DptReport> query,
+			AgeingReportFilter f,
+			DateTime today)
+		{
+			query = ApplyDptStockFilters(query, f);
+			return ApplyDptSaleDateRanges(query, f.AgeingRanges, today);
+		}
+
+		private static IQueryable<SalesCompanySale> ApplyCompanySaleDateRanges(
+			IQueryable<SalesCompanySale> query,
+			IReadOnlyCollection<string> ranges,
+			DateTime today)
+		{
+			if (ranges.Count == 0)
+			{
+				return query;
+			}
+
+			var r030 = ranges.Contains("0-30");
+			var r3160 = ranges.Contains("31-60");
+			var r6190 = ranges.Contains("61-90");
+			var r91120 = ranges.Contains("91-120");
+			var rAbove120 = ranges.Contains("Above 120");
+
+			var d30 = today.AddDays(-30);
+			var d60 = today.AddDays(-60);
+			var d90 = today.AddDays(-90);
+			var d120 = today.AddDays(-120);
+
+			return query.Where(x =>
+				(r030 && (x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) >= d30) ||
+				(r3160 && (x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) < d30 &&
+					(x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) >= d60) ||
+				(r6190 && (x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) < d60 &&
+					(x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) >= d90) ||
+				(r91120 && (x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) < d90 &&
+					(x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) >= d120) ||
+				(rAbove120 && (x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) < d120));
+		}
+
+		private static IQueryable<SalesWholesaler> ApplyWholesalerSaleDateRanges(
+			IQueryable<SalesWholesaler> query,
+			IReadOnlyCollection<string> ranges,
+			DateTime today)
+		{
+			if (ranges.Count == 0)
+			{
+				return query;
+			}
+
+			var r030 = ranges.Contains("0-30");
+			var r3160 = ranges.Contains("31-60");
+			var r6190 = ranges.Contains("61-90");
+			var r91120 = ranges.Contains("91-120");
+			var rAbove120 = ranges.Contains("Above 120");
+
+			var d30 = today.AddDays(-30);
+			var d60 = today.AddDays(-60);
+			var d90 = today.AddDays(-90);
+			var d120 = today.AddDays(-120);
+
+			return query.Where(x =>
+				(r030 && (x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) >= d30) ||
+				(r3160 && (x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) < d30 &&
+					(x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) >= d60) ||
+				(r6190 && (x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) < d60 &&
+					(x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) >= d90) ||
+				(r91120 && (x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) < d90 &&
+					(x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) >= d120) ||
+				(rAbove120 && (x.RetailerReceiptDate ?? x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) < d120));
+		}
+
+		private static IQueryable<DptReport> ApplyDptSaleDateRanges(
+			IQueryable<DptReport> query,
+			IReadOnlyCollection<string> ranges,
+			DateTime today)
+		{
+			if (ranges.Count == 0)
+			{
+				return query;
+			}
+
+			var r030 = ranges.Contains("0-30");
+			var r3160 = ranges.Contains("31-60");
+			var r6190 = ranges.Contains("61-90");
+			var r91120 = ranges.Contains("91-120");
+			var rAbove120 = ranges.Contains("Above 120");
+
+			var d30 = today.AddDays(-30);
+			var d60 = today.AddDays(-60);
+			var d90 = today.AddDays(-90);
+			var d120 = today.AddDays(-120);
+
+			return query.Where(x =>
+				(r030 && x.CreatedAt >= d30) ||
+				(r3160 && x.CreatedAt < d30 && x.CreatedAt >= d60) ||
+				(r6190 && x.CreatedAt < d60 && x.CreatedAt >= d90) ||
+				(r91120 && x.CreatedAt < d90 && x.CreatedAt >= d120) ||
+				(rAbove120 && x.CreatedAt < d120));
+		}
+
+		private async Task<Dictionary<int, string>> LoadStateNamesAsync(
+			IEnumerable<StateAmount> stockRows,
+			IEnumerable<StateAmount> salesRows,
+			CancellationToken cancellationToken)
+		{
+			var ids = stockRows
+				.Concat(salesRows)
+				.Where(x => x.StateId.HasValue)
+				.Select(x => x.StateId!.Value)
+				.Distinct()
+				.ToList();
+
+			if (ids.Count == 0)
+			{
+				return new Dictionary<int, string>();
+			}
+
+			return await _db.Set<State>()
+				.AsNoTracking()
+				.Where(x => ids.Contains(x.Id))
+				.ToDictionaryAsync(
+					x => x.Id,
+					x => x.StateName ?? string.Empty,
+					cancellationToken);
+		}
+
+		private static List<AgeingStateDto> BuildStockVsSalesStateWise(
+			IEnumerable<StateAmount> stockRows,
+			IEnumerable<StateAmount> salesRows,
+			IReadOnlyDictionary<int, string> stateNames)
+		{
+			var stock = stockRows
+				.Where(x => x.StateId.HasValue)
+				.ToDictionary(x => x.StateId!.Value, x => x.Amount);
+
+			var sales = salesRows
+				.Where(x => x.StateId.HasValue)
+				.ToDictionary(x => x.StateId!.Value, x => x.Amount);
+
+			return stock.Keys
+				.Union(sales.Keys)
+				.Select(stateId => new AgeingStateDto
+				{
+					StateName = stateNames.TryGetValue(stateId, out var name)
+						? name
+						: string.Empty,
+					Stock = stock.TryGetValue(stateId, out var stockAmount)
+						? stockAmount
+						: 0m,
+					Sales = sales.TryGetValue(stateId, out var salesAmount)
+						? salesAmount
+						: 0m
+				})
+				.Where(x => !string.IsNullOrWhiteSpace(x.StateName))
+				.OrderByDescending(x => x.Stock)
+				.ThenByDescending(x => x.Sales)
+				.ThenBy(x => x.StateName)
+				.ToList();
+		}
+
+		// ====================================================================
+		//  Ageing aggregates, buckets and grid
 		// ====================================================================
 
 		private static async Task<GlobalAggregate> LoadGlobalAggregateAsync(
@@ -384,37 +977,30 @@ namespace Spic.Infrastructure.Services
 				.Select(group => new GlobalAggregate
 				{
 					TotalQuantity = group.Sum(x => x.Quantity),
-
 					Stock30To60 = group.Sum(x =>
 						x.AckDate < d30 && x.AckDate >= d60
 							? x.Quantity
 							: 0m),
-
 					Stock60Plus = group.Sum(x =>
 						x.AckDate < d60
 							? x.Quantity
 							: 0m),
-
 					Fresh = group.Sum(x =>
 						x.AckDate >= d30
 							? x.Quantity
 							: 0m),
-
 					Medium = group.Sum(x =>
 						x.AckDate < d30 && x.AckDate >= d90
 							? x.Quantity
 							: 0m),
-
 					SlowMoving = group.Sum(x =>
 						x.AckDate < d90 && x.AckDate >= d180
 							? x.Quantity
 							: 0m),
-
 					LongAged = group.Sum(x =>
 						x.AckDate < d180 && x.AckDate >= d365
 							? x.Quantity
 							: 0m),
-
 					Critical = group.Sum(x =>
 						x.AckDate < d365
 							? x.Quantity
@@ -424,7 +1010,7 @@ namespace Spic.Infrastructure.Services
 				?? new GlobalAggregate();
 		}
 
-		private static async Task<List<StateAggregate>> LoadStateAggregatesAsync(
+		private static async Task<List<StateAggregate>> LoadAgeingStateAggregatesAsync(
 			IQueryable<ResolvedAgeingRow> rows,
 			DateTime today,
 			CancellationToken cancellationToken)
@@ -445,27 +1031,22 @@ namespace Spic.Infrastructure.Services
 					StateId = group.Key.StateId,
 					StateName = group.Key.StateName,
 					Total = group.Sum(x => x.Quantity),
-
 					Fresh = group.Sum(x =>
 						x.AckDate >= d30
 							? x.Quantity
 							: 0m),
-
 					Medium = group.Sum(x =>
 						x.AckDate < d30 && x.AckDate >= d90
 							? x.Quantity
 							: 0m),
-
 					SlowMoving = group.Sum(x =>
 						x.AckDate < d90 && x.AckDate >= d180
 							? x.Quantity
 							: 0m),
-
 					LongAged = group.Sum(x =>
 						x.AckDate < d180 && x.AckDate >= d365
 							? x.Quantity
 							: 0m),
-
 					Critical = group.Sum(x =>
 						x.AckDate < d365
 							? x.Quantity
@@ -479,9 +1060,6 @@ namespace Spic.Infrastructure.Services
 			DateTime today,
 			CancellationToken cancellationToken)
 		{
-			// One result per acknowledgement date instead of one result per sale.
-			// This preserves the exact row-weighted average while keeping the
-			// transferred result set very small.
 			var histogram = await rows
 				.GroupBy(x => x.AckDate.Date)
 				.Select(group => new AgeDateCount
@@ -496,12 +1074,7 @@ namespace Spic.Infrastructure.Services
 
 			foreach (var item in histogram)
 			{
-				var days = (today - item.Date.Date).Days;
-				if (days < 0)
-				{
-					days = 0;
-				}
-
+				var days = Math.Max(0, (today - item.Date.Date).Days);
 				count += item.Count;
 				weightedDays += (double)days * item.Count;
 			}
@@ -514,10 +1087,10 @@ namespace Spic.Infrastructure.Services
 		private static List<AgeingBucketDto> BuildDayBuckets(GlobalAggregate aggregate)
 		{
 			var total = aggregate.Fresh +
-						aggregate.Medium +
-						aggregate.SlowMoving +
-						aggregate.LongAged +
-						aggregate.Critical;
+				aggregate.Medium +
+				aggregate.SlowMoving +
+				aggregate.LongAged +
+				aggregate.Critical;
 
 			static double Percentage(decimal value, decimal totalValue)
 			{
@@ -571,10 +1144,6 @@ namespace Spic.Infrastructure.Services
 			};
 		}
 
-		// ====================================================================
-		//  Grid
-		// ====================================================================
-
 		private static async Task<PagedResult<AgeingRowDto>> LoadGridAsync(
 			IQueryable<ResolvedAgeingRow> rows,
 			AgeingReportFilter f,
@@ -582,7 +1151,6 @@ namespace Spic.Infrastructure.Services
 			CancellationToken cancellationToken)
 		{
 			var totalCount = await rows.CountAsync(cancellationToken);
-
 			var sorted = ApplySorting(rows, f);
 			var skip = (f.Page - 1) * f.PageSize;
 
@@ -617,48 +1185,40 @@ namespace Spic.Infrastructure.Services
 			AgeingReportFilter f)
 		{
 			var column = f.SortColumn?.Trim().ToLowerInvariant();
-			var direction = f.SortDir?.Trim().ToLowerInvariant();
-			var descending = direction == "desc";
+			var descending = string.Equals(
+				f.SortDir,
+				"desc",
+				StringComparison.OrdinalIgnoreCase);
 
 			return column switch
 			{
 				"dealer" when descending => rows
 					.OrderByDescending(x => x.DealerName)
 					.ThenBy(x => x.AckDate),
-
 				"dealer" => rows
 					.OrderBy(x => x.DealerName)
 					.ThenBy(x => x.AckDate),
-
 				"product" when descending => rows
 					.OrderByDescending(x => x.ProductName)
 					.ThenBy(x => x.DealerName),
-
 				"product" => rows
 					.OrderBy(x => x.ProductName)
 					.ThenBy(x => x.DealerName),
-
 				"quantity" when descending => rows
 					.OrderByDescending(x => x.Quantity)
 					.ThenBy(x => x.DealerName),
-
 				"quantity" => rows
 					.OrderBy(x => x.Quantity)
 					.ThenBy(x => x.DealerName),
-
 				"state" when descending => rows
 					.OrderByDescending(x => x.StateName)
 					.ThenBy(x => x.DealerName),
-
 				"state" => rows
 					.OrderBy(x => x.StateName)
 					.ThenBy(x => x.DealerName),
-
-				// A higher ageing value means an older/smaller acknowledgement date.
 				"ageing" when !descending => rows
 					.OrderByDescending(x => x.AckDate)
 					.ThenBy(x => x.DealerName),
-
 				_ => rows
 					.OrderBy(x => x.AckDate)
 					.ThenBy(x => x.DealerName)
@@ -667,11 +1227,7 @@ namespace Spic.Infrastructure.Services
 
 		private static AgeingRowDto ToRow(GridRaw raw, DateTime today)
 		{
-			var ageingDays = (today - raw.AckDate.Date).Days;
-			if (ageingDays < 0)
-			{
-				ageingDays = 0;
-			}
+			var ageingDays = Math.Max(0, (today - raw.AckDate.Date).Days);
 
 			return new AgeingRowDto
 			{
@@ -705,92 +1261,6 @@ namespace Spic.Infrastructure.Services
 			};
 		}
 
-		// ====================================================================
-		//  Total stock from the three stock sources
-		// ====================================================================
-
-		private async Task<decimal> ComputeTotalStockAsync(
-			AgeingReportFilter f,
-			CancellationToken cancellationToken)
-		{
-			var wholesaler = _db.Set<WholesalerStockAsOnToday>()
-				.AsNoTracking()
-				.Where(x => x.Stock > 0m);
-
-			var retailer = _db.Set<DptReport>()
-				.AsNoTracking()
-				.Where(x => x.ClosingBalance > 0m);
-
-			var warehouse = _db.Set<WarehouseDistrictGlobalStockReconciliation>()
-				.AsNoTracking()
-				.Where(x => x.ClosingStock > 0m);
-
-			if (f.StateIds.Count > 0)
-			{
-				wholesaler = wholesaler.Where(x =>
-					x.StateId.HasValue &&
-					f.StateIds.Contains(x.StateId.Value));
-
-				retailer = retailer.Where(x =>
-					x.StateId.HasValue &&
-					f.StateIds.Contains(x.StateId.Value));
-
-				warehouse = warehouse.Where(x =>
-					x.StateId.HasValue &&
-					f.StateIds.Contains(x.StateId.Value));
-			}
-
-			if (f.DistrictIds.Count > 0)
-			{
-				wholesaler = wholesaler.Where(x =>
-					x.DistrictId.HasValue &&
-					f.DistrictIds.Contains(x.DistrictId.Value));
-
-				retailer = retailer.Where(x =>
-					x.DistrictId.HasValue &&
-					f.DistrictIds.Contains(x.DistrictId.Value));
-
-				warehouse = warehouse.Where(x =>
-					x.DistrictId.HasValue &&
-					f.DistrictIds.Contains(x.DistrictId.Value));
-			}
-
-			if (f.ProductIds.Count > 0)
-			{
-				wholesaler = wholesaler.Where(x =>
-					x.ProductId.HasValue &&
-					f.ProductIds.Contains(x.ProductId.Value));
-
-				retailer = retailer.Where(x =>
-					x.ProductId.HasValue &&
-					f.ProductIds.Contains(x.ProductId.Value));
-
-				warehouse = warehouse.Where(x =>
-					x.ProductId.HasValue &&
-					f.ProductIds.Contains(x.ProductId.Value));
-			}
-
-			if (f.LyingWithIds.Count > 0)
-			{
-				wholesaler = wholesaler.Where(x =>
-					x.DealershipNatureId.HasValue &&
-					f.LyingWithIds.Contains(x.DealershipNatureId.Value));
-
-				retailer = retailer.Where(x =>
-					x.DealershipNatureId.HasValue &&
-					f.LyingWithIds.Contains(x.DealershipNatureId.Value));
-
-				// Warehouse reconciliation has no DealershipNatureId.
-			}
-
-			var allStockValues = wholesaler
-				.Select(x => (decimal?)x.Stock)
-				.Concat(retailer.Select(x => (decimal?)x.ClosingBalance))
-				.Concat(warehouse.Select(x => (decimal?)x.ClosingStock));
-
-			return await allStockValues.SumAsync(cancellationToken) ?? 0m;
-		}
-
 		private static AgeingReportFilter NormalizeFilter(AgeingReportFilter? filter)
 		{
 			var f = filter ?? new AgeingReportFilter();
@@ -816,7 +1286,10 @@ namespace Spic.Infrastructure.Services
 				? "ageing"
 				: f.SortColumn.Trim();
 
-			f.SortDir = string.Equals(f.SortDir, "asc", StringComparison.OrdinalIgnoreCase)
+			f.SortDir = string.Equals(
+				f.SortDir,
+				"asc",
+				StringComparison.OrdinalIgnoreCase)
 				? "asc"
 				: "desc";
 
@@ -830,6 +1303,7 @@ namespace Spic.Infrastructure.Services
 		private sealed class SalesAgeingRaw
 		{
 			public int? DealerRegistrationId { get; set; }
+			public int? IfmsDealerId { get; set; }
 			public string? DealerName { get; set; }
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
@@ -851,6 +1325,12 @@ namespace Spic.Infrastructure.Services
 			public string? MobileNo { get; set; }
 			public decimal Quantity { get; set; }
 			public DateTime AckDate { get; set; }
+		}
+
+		private sealed class StateAmount
+		{
+			public int? StateId { get; set; }
+			public decimal Amount { get; set; }
 		}
 
 		private sealed class GlobalAggregate

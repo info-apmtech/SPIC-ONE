@@ -81,7 +81,8 @@ namespace SpicAPI.Controllers
 				worksheet.Cell(rowNumber, 7).Value = row.MobileNo;
 				worksheet.Cell(rowNumber, 8).Value = row.ProductName;
 				worksheet.Cell(rowNumber, 9).Value = row.Quantity;
-				worksheet.Cell(rowNumber, 10).Value = row.EntryDate?.ToString("dd-MM-yyyy") ?? string.Empty;
+				worksheet.Cell(rowNumber, 10).Value =
+					row.EntryDate?.ToString("dd-MM-yyyy") ?? string.Empty;
 				worksheet.Cell(rowNumber, 11).Value = row.AgeingDays;
 				worksheet.Cell(rowNumber, 12).Value = row.Status;
 				rowNumber++;

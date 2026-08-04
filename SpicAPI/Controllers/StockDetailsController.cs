@@ -77,9 +77,8 @@ namespace SpicAPI.Controllers
 			WriteRow(worksheet, rowIndex, data.GrandTotal, bold: true);
 
 			worksheet.SheetView.FreezeRows(1);
-			worksheet.RangeUsed().SetAutoFilter();
+			worksheet.RangeUsed()?.SetAutoFilter();
 
-			// Fixed widths are much faster than AdjustToContents for large exports.
 			worksheet.Column(1).Width = 24;
 			worksheet.Columns(2, 8).Width = 19;
 			worksheet.Column(9).Width = 13;

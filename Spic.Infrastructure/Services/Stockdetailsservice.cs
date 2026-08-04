@@ -13,17 +13,19 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Services
 {
 	/// <summary>
-	/// Builds the existing state-wise Stock Details ledger without changing its
-	/// business flow.
+	/// Production-safe state-wise stock ledger.
 	///
-	/// Existing mapping preserved:
-	/// - Opening Stock = SUM(StateGlobalStockReconciliation.OpeningStock)
-	/// - Supplies      = SUM(Receipt + ProductionImports)
-	/// - Sales         = SUM(QuantityMT) from SalesWholesaler + SalesCompanySale
-	/// - Closing Stock = Opening + Supplies - Total Sales
+	/// Stock sources (snapshot data - historical dates are not added):
+	/// - WholesalerStockAsOnToday.Stock
+	/// - DptReport.ClosingBalance
+	/// - WarehouseDistrictGlobalStockReconciliation.ClosingStock
 	///
-	/// The reconciliation rows are filtered by CreatedAt and sales rows by
-	/// InvoiceDate, exactly as in the supplied implementation.
+	/// Sales sources (movement data inside the selected date range):
+	/// - SalesWholesaler.QuantityMT
+	/// - SalesCompanySale.QuantityMT
+	/// - DptReport.SoldQuantity
+	///
+	/// Existing DTO, controller and Razor contracts are preserved.
 	/// </summary>
 	public sealed class StockDetailsService : IStockDetailsService
 	{
@@ -49,16 +51,20 @@ namespace Spic.Infrastructure.Services
 
 			var period = ResolvePeriod(filter);
 
-			// Keep EF operations sequential because the same scoped DbContext
-			// cannot execute multiple database commands concurrently.
-			var stockByState = await LoadStockByStateAsync(
+			// Opening stock is the latest available snapshot on or before DateFrom.
+			var openingStockByState = await LoadCombinedStockByStateAsync(
 				filter.StateIds,
 				period.PeriodStart,
-				period.AsOnNextDay,
 				cancellationToken);
 
-			// Both sales tables are combined before grouping, reducing the two
-			// original sales round trips to one grouped database query.
+			// Closing stock is the latest available snapshot on or before DateTo.
+			var closingStockByState = await LoadCombinedStockByStateAsync(
+				filter.StateIds,
+				period.AsOnDate,
+				cancellationToken);
+
+			// Company and wholesaler sales are transactions. DPT SoldQuantity is
+			// treated as the movement reported for that DPT report date.
 			var salesByState = await LoadSalesByStateAsync(
 				filter.StateIds,
 				period.PeriodStart,
@@ -66,27 +72,28 @@ namespace Spic.Infrastructure.Services
 				period.AsOnNextDay,
 				cancellationToken);
 
-			var involvedStateIds = stockByState.Keys
+			var involvedStateIds = openingStockByState.Keys
+				.Union(closingStockByState.Keys)
 				.Union(salesByState.Keys)
 				.Distinct()
 				.ToList();
 
-			// Only the State rows referenced by the compact aggregates are loaded.
 			var stateNames = await LoadStateNamesAsync(
 				involvedStateIds,
 				cancellationToken);
 
 			var rows = BuildRows(
 				involvedStateIds,
-				stockByState,
+				openingStockByState,
+				closingStockByState,
 				salesByState,
 				stateNames);
 
-			// Previous flow preserved: search also affects the KPI cards and
-			// grand total because it is applied before those calculations.
+			// Preserve the current page behaviour: search also affects cards and totals.
 			if (!string.IsNullOrWhiteSpace(filter.Search))
 			{
 				var search = filter.Search.Trim();
+
 				rows = rows
 					.Where(x => x.StateName.Contains(
 						search,
@@ -133,51 +140,241 @@ namespace Spic.Infrastructure.Services
 			};
 		}
 
-		/// <summary>
-		/// Preserves the existing stock rule while returning only one compact row
-		/// per state from SQL.
-		///
-		/// IMPORTANT: this is correct only when rows inside the selected CreatedAt
-		/// window are additive movement/component rows. If this table stores repeated
-		/// daily snapshots, OpeningStock must instead be selected from the first/latest
-		/// snapshot per business key rather than summed across dates.
-		/// </summary>
-		private async Task<Dictionary<int, StockAggregate>> LoadStockByStateAsync(
+		// =====================================================================
+		// Combined current-stock snapshot loading
+		// =====================================================================
+
+		private async Task<Dictionary<int, decimal>> LoadCombinedStockByStateAsync(
 			IReadOnlyCollection<int> stateIds,
-			DateTime periodStart,
-			DateTime asOnNextDay,
+			DateTime asOnDate,
 			CancellationToken cancellationToken)
 		{
-			var query = _db.Set<StateGlobalStockReconciliation>()
+			var result = new Dictionary<int, decimal>();
+
+			// Run sequentially because the same scoped DbContext cannot execute
+			// multiple database operations concurrently.
+			var wholesaler = await LoadLatestWholesalerStockByStateAsync(
+				stateIds,
+				asOnDate,
+				cancellationToken);
+
+			MergeQuantities(result, wholesaler);
+
+			var retailer = await LoadLatestDptClosingStockByStateAsync(
+				stateIds,
+				asOnDate,
+				cancellationToken);
+
+			MergeQuantities(result, retailer);
+
+			var warehouse = await LoadLatestWarehouseStockByStateAsync(
+				stateIds,
+				asOnDate,
+				cancellationToken);
+
+			MergeQuantities(result, warehouse);
+
+			return result;
+		}
+
+		/// <summary>
+		/// Uses one latest row per wholesaler/dealer + product business key on or
+		/// before the requested date. Old snapshot dates are never added together.
+		/// </summary>
+		private async Task<Dictionary<int, decimal>> LoadLatestWholesalerStockByStateAsync(
+			IReadOnlyCollection<int> stateIds,
+			DateTime asOnDate,
+			CancellationToken cancellationToken)
+		{
+			var asOnExclusive = asOnDate.Date.AddDays(1);
+
+			var baseQuery = _db.WholesalerStockAsOnTodays
 				.AsNoTracking()
 				.Where(x =>
 					x.StateId.HasValue &&
-					x.CreatedAt >= periodStart &&
-					x.CreatedAt < asOnNextDay);
+					x.StockDate < asOnExclusive);
 
 			if (stateIds.Count > 0)
 			{
-				query = query.Where(x =>
+				baseQuery = baseQuery.Where(x =>
 					x.StateId.HasValue &&
 					stateIds.Contains(x.StateId.Value));
 			}
 
-			var aggregates = await query
+			// NOT EXISTS selects the newest snapshot for each business key.
+			var latestQuery = baseQuery.Where(current =>
+				!baseQuery.Any(candidate =>
+					(candidate.StateId ?? 0) == (current.StateId ?? 0) &&
+					(candidate.DistrictId ?? 0) == (current.DistrictId ?? 0) &&
+					(candidate.DealerRegistrationId ?? 0) ==
+						(current.DealerRegistrationId ?? 0) &&
+					(candidate.DealerRegistrationId.HasValue
+						? 0
+						: candidate.IfmsDealerId ?? 0) ==
+					(current.DealerRegistrationId.HasValue
+						? 0
+						: current.IfmsDealerId ?? 0) &&
+					(candidate.DealerRegistrationId.HasValue || candidate.IfmsDealerId.HasValue
+						? string.Empty
+						: candidate.AgencyName ?? string.Empty) ==
+					(current.DealerRegistrationId.HasValue || current.IfmsDealerId.HasValue
+						? string.Empty
+						: current.AgencyName ?? string.Empty) &&
+					(candidate.CompanyId ?? 0) == (current.CompanyId ?? 0) &&
+					(candidate.PlantId ?? 0) == (current.PlantId ?? 0) &&
+					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
+					(
+						candidate.StockDate > current.StockDate ||
+						(candidate.StockDate == current.StockDate &&
+						 candidate.UpdatedAt > current.UpdatedAt) ||
+						(candidate.StockDate == current.StockDate &&
+						 candidate.UpdatedAt == current.UpdatedAt &&
+						 candidate.Id > current.Id)
+					)));
+
+			var rows = await latestQuery
 				.GroupBy(x => x.StateId!.Value)
-				.Select(group => new StockAggregate
+				.Select(group => new StateQuantity
 				{
 					StateId = group.Key,
-					OpeningStock = group.Sum(x => x.OpeningStock),
-					Supplies = group.Sum(x => x.Receipt + x.ProductionImports)
+					Quantity = group.Sum(x => x.Stock)
 				})
 				.ToListAsync(cancellationToken);
 
-			return aggregates.ToDictionary(x => x.StateId);
+			return rows.ToDictionary(x => x.StateId, x => x.Quantity);
 		}
 
 		/// <summary>
-		/// Combines SalesWholesaler and SalesCompanySale and calculates both sales
-		/// columns in one SQL GROUP BY query.
+		/// Uses one latest DPT row per retailer + product business key on or before
+		/// the requested date. ClosingBalance is the current retailer stock.
+		/// </summary>
+		private async Task<Dictionary<int, decimal>> LoadLatestDptClosingStockByStateAsync(
+			IReadOnlyCollection<int> stateIds,
+			DateTime asOnDate,
+			CancellationToken cancellationToken)
+		{
+			var asOnExclusive = asOnDate.Date.AddDays(1);
+
+			var baseQuery = _db.DptReports
+				.AsNoTracking()
+				.Where(x =>
+					x.StateId.HasValue &&
+					x.CreatedAt < asOnExclusive);
+
+			if (stateIds.Count > 0)
+			{
+				baseQuery = baseQuery.Where(x =>
+					x.StateId.HasValue &&
+					stateIds.Contains(x.StateId.Value));
+			}
+
+			var latestQuery = baseQuery.Where(current =>
+				!baseQuery.Any(candidate =>
+					(candidate.StateId ?? 0) == (current.StateId ?? 0) &&
+					(candidate.DistrictId ?? 0) == (current.DistrictId ?? 0) &&
+					(candidate.SubDistrictId ?? 0) == (current.SubDistrictId ?? 0) &&
+					(candidate.DealerRegistrationId ?? 0) ==
+						(current.DealerRegistrationId ?? 0) &&
+					(candidate.DealerRegistrationId.HasValue
+						? 0
+						: candidate.IfmsDealerId ?? 0) ==
+					(current.DealerRegistrationId.HasValue
+						? 0
+						: current.IfmsDealerId ?? 0) &&
+					(candidate.DealerRegistrationId.HasValue || candidate.IfmsDealerId.HasValue
+						? string.Empty
+						: candidate.RetailerName ?? string.Empty) ==
+					(current.DealerRegistrationId.HasValue || current.IfmsDealerId.HasValue
+						? string.Empty
+						: current.RetailerName ?? string.Empty) &&
+					(candidate.CompanyId ?? 0) == (current.CompanyId ?? 0) &&
+					(candidate.PlantId ?? 0) == (current.PlantId ?? 0) &&
+					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
+					(
+						candidate.CreatedAt > current.CreatedAt ||
+						(candidate.CreatedAt == current.CreatedAt &&
+						 candidate.UpdatedAt > current.UpdatedAt) ||
+						(candidate.CreatedAt == current.CreatedAt &&
+						 candidate.UpdatedAt == current.UpdatedAt &&
+						 candidate.Id > current.Id)
+					)));
+
+			var rows = await latestQuery
+				.GroupBy(x => x.StateId!.Value)
+				.Select(group => new StateQuantity
+				{
+					StateId = group.Key,
+					Quantity = group.Sum(x => x.ClosingBalance)
+				})
+				.ToListAsync(cancellationToken);
+
+			return rows.ToDictionary(x => x.StateId, x => x.Quantity);
+		}
+
+		/// <summary>
+		/// Uses one latest warehouse row per warehouse/location/product business key
+		/// on or before the requested date.
+		/// </summary>
+		private async Task<Dictionary<int, decimal>> LoadLatestWarehouseStockByStateAsync(
+			IReadOnlyCollection<int> stateIds,
+			DateTime asOnDate,
+			CancellationToken cancellationToken)
+		{
+			var asOnExclusive = asOnDate.Date.AddDays(1);
+
+			var baseQuery = _db.WarehouseDistrictGlobalStockReconciliations
+				.AsNoTracking()
+				.Where(x =>
+					x.StateId.HasValue &&
+					x.CreatedAt < asOnExclusive);
+
+			if (stateIds.Count > 0)
+			{
+				baseQuery = baseQuery.Where(x =>
+					x.StateId.HasValue &&
+					stateIds.Contains(x.StateId.Value));
+			}
+
+			var latestQuery = baseQuery.Where(current =>
+				!baseQuery.Any(candidate =>
+					(candidate.StateId ?? 0) == (current.StateId ?? 0) &&
+					(candidate.DistrictId ?? 0) == (current.DistrictId ?? 0) &&
+					(candidate.WarehouseId ?? 0) == (current.WarehouseId ?? 0) &&
+					(candidate.PlantId ?? 0) == (current.PlantId ?? 0) &&
+					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
+					(
+						candidate.CreatedAt > current.CreatedAt ||
+						(candidate.CreatedAt == current.CreatedAt &&
+						 candidate.UpdatedAt > current.UpdatedAt) ||
+						(candidate.CreatedAt == current.CreatedAt &&
+						 candidate.UpdatedAt == current.UpdatedAt &&
+						 candidate.Id > current.Id)
+					)));
+
+			var rows = await latestQuery
+				.GroupBy(x => x.StateId!.Value)
+				.Select(group => new StateQuantity
+				{
+					StateId = group.Key,
+					Quantity = group.Sum(x => x.ClosingStock)
+				})
+				.ToListAsync(cancellationToken);
+
+			return rows.ToDictionary(x => x.StateId, x => x.Quantity);
+		}
+
+		// =====================================================================
+		// Combined sales loading
+		// =====================================================================
+
+		/// <summary>
+		/// Adds sales movements from:
+		/// - SalesWholesaler.QuantityMT
+		/// - SalesCompanySale.QuantityMT
+		/// - DptReport.SoldQuantity
+		///
+		/// Company/wholesaler sales use InvoiceDate. DPT sales use CreatedAt,
+		/// which is the selected report date saved by the upload service.
 		/// </summary>
 		private async Task<Dictionary<int, SalesAggregate>> LoadSalesByStateAsync(
 			IReadOnlyCollection<int> stateIds,
@@ -186,7 +383,7 @@ namespace Spic.Infrastructure.Services
 			DateTime asOnNextDay,
 			CancellationToken cancellationToken)
 		{
-			var wholesalerQuery = _db.Set<SalesWholesaler>()
+			var wholesalerQuery = _db.SalesWholesalers
 				.AsNoTracking()
 				.Where(x =>
 					x.StateId.HasValue &&
@@ -194,13 +391,21 @@ namespace Spic.Infrastructure.Services
 					x.InvoiceDate.Value >= periodStart &&
 					x.InvoiceDate.Value < asOnNextDay);
 
-			var companyQuery = _db.Set<SalesCompanySale>()
+			var companyQuery = _db.SalesCompanySales
 				.AsNoTracking()
 				.Where(x =>
 					x.StateId.HasValue &&
 					x.InvoiceDate.HasValue &&
 					x.InvoiceDate.Value >= periodStart &&
 					x.InvoiceDate.Value < asOnNextDay);
+
+			var dptQuery = _db.DptReports
+				.AsNoTracking()
+				.Where(x =>
+					x.StateId.HasValue &&
+					x.CreatedAt >= periodStart &&
+					x.CreatedAt < asOnNextDay &&
+					x.SoldQuantity != 0m);
 
 			if (stateIds.Count > 0)
 			{
@@ -211,21 +416,63 @@ namespace Spic.Infrastructure.Services
 				companyQuery = companyQuery.Where(x =>
 					x.StateId.HasValue &&
 					stateIds.Contains(x.StateId.Value));
+
+				dptQuery = dptQuery.Where(x =>
+					x.StateId.HasValue &&
+					stateIds.Contains(x.StateId.Value));
 			}
+
+			// Protect DPT sales from accidental duplicate rows for the same report
+			// date and business key. Historical report dates remain additive sales.
+			var deduplicatedDptQuery = dptQuery.Where(current =>
+				!dptQuery.Any(candidate =>
+					candidate.CreatedAt == current.CreatedAt &&
+					(candidate.StateId ?? 0) == (current.StateId ?? 0) &&
+					(candidate.DistrictId ?? 0) == (current.DistrictId ?? 0) &&
+					(candidate.SubDistrictId ?? 0) == (current.SubDistrictId ?? 0) &&
+					(candidate.DealerRegistrationId ?? 0) ==
+						(current.DealerRegistrationId ?? 0) &&
+					(candidate.DealerRegistrationId.HasValue
+						? 0
+						: candidate.IfmsDealerId ?? 0) ==
+					(current.DealerRegistrationId.HasValue
+						? 0
+						: current.IfmsDealerId ?? 0) &&
+					(candidate.DealerRegistrationId.HasValue || candidate.IfmsDealerId.HasValue
+						? string.Empty
+						: candidate.RetailerName ?? string.Empty) ==
+					(current.DealerRegistrationId.HasValue || current.IfmsDealerId.HasValue
+						? string.Empty
+						: current.RetailerName ?? string.Empty) &&
+					(candidate.CompanyId ?? 0) == (current.CompanyId ?? 0) &&
+					(candidate.PlantId ?? 0) == (current.PlantId ?? 0) &&
+					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
+					(
+						candidate.UpdatedAt > current.UpdatedAt ||
+						(candidate.UpdatedAt == current.UpdatedAt &&
+						 candidate.Id > current.Id)
+					)));
 
 			var combinedQuery = wholesalerQuery
 				.Select(x => new SalesSourceRow
 				{
 					StateId = x.StateId!.Value,
-					InvoiceDate = x.InvoiceDate!.Value,
+					ActivityDate = x.InvoiceDate!.Value,
 					Quantity = x.QuantityMT
 				})
 				.Concat(
 					companyQuery.Select(x => new SalesSourceRow
 					{
 						StateId = x.StateId!.Value,
-						InvoiceDate = x.InvoiceDate!.Value,
+						ActivityDate = x.InvoiceDate!.Value,
 						Quantity = x.QuantityMT
+					}))
+				.Concat(
+					deduplicatedDptQuery.Select(x => new SalesSourceRow
+					{
+						StateId = x.StateId!.Value,
+						ActivityDate = x.CreatedAt,
+						Quantity = x.SoldQuantity
 					}));
 
 			var aggregates = await combinedQuery
@@ -234,14 +481,36 @@ namespace Spic.Infrastructure.Services
 				{
 					StateId = group.Key,
 					SalesBefore = group.Sum(x =>
-						x.InvoiceDate < asOnDate ? x.Quantity : 0m),
+						x.ActivityDate < asOnDate ? x.Quantity : 0m),
 					SalesOnDay = group.Sum(x =>
-						x.InvoiceDate >= asOnDate ? x.Quantity : 0m)
+						x.ActivityDate >= asOnDate ? x.Quantity : 0m)
 				})
 				.ToListAsync(cancellationToken);
 
 			return aggregates.ToDictionary(x => x.StateId);
 		}
+
+		// =====================================================================
+		// Quantity merge helper
+		// =====================================================================
+
+		private static void MergeQuantities(
+			IDictionary<int, decimal> destination,
+			IReadOnlyDictionary<int, decimal> source)
+		{
+			foreach (var item in source)
+			{
+				destination[item.Key] = destination.TryGetValue(
+					item.Key,
+					out var existing)
+					? existing + item.Value
+					: item.Value;
+			}
+		}
+
+		// =====================================================================
+		// State names and row calculations
+		// =====================================================================
 
 		private async Task<Dictionary<int, string>> LoadStateNamesAsync(
 			IReadOnlyCollection<int> stateIds,
@@ -268,7 +537,8 @@ namespace Spic.Infrastructure.Services
 
 		private static List<StockDetailsRowDto> BuildRows(
 			IReadOnlyCollection<int> stateIds,
-			IReadOnlyDictionary<int, StockAggregate> stockByState,
+			IReadOnlyDictionary<int, decimal> openingStockByState,
+			IReadOnlyDictionary<int, decimal> closingStockByState,
 			IReadOnlyDictionary<int, SalesAggregate> salesByState,
 			IReadOnlyDictionary<int, string> stateNames)
 		{
@@ -276,7 +546,8 @@ namespace Spic.Infrastructure.Services
 
 			foreach (var stateId in stateIds)
 			{
-				stockByState.TryGetValue(stateId, out var stock);
+				openingStockByState.TryGetValue(stateId, out var openingStock);
+				closingStockByState.TryGetValue(stateId, out var closingStock);
 				salesByState.TryGetValue(stateId, out var sales);
 
 				rows.Add(MergeRow(
@@ -284,8 +555,8 @@ namespace Spic.Infrastructure.Services
 					stateNames.TryGetValue(stateId, out var stateName)
 						? stateName
 						: "-",
-					stock?.OpeningStock ?? 0m,
-					stock?.Supplies ?? 0m,
+					openingStock,
+					closingStock,
 					sales?.SalesBefore ?? 0m,
 					sales?.SalesOnDay ?? 0m));
 			}
@@ -294,19 +565,29 @@ namespace Spic.Infrastructure.Services
 		}
 
 		/// <summary>
-		/// Row calculation is intentionally unchanged from the supplied code.
+		/// The three stock tables already store closing/current stock snapshots.
+		/// Therefore current stock must not be reduced by sales a second time.
+		///
+		/// To preserve the existing UI columns, the ledger is reconciled as:
+		/// TotalSales = SalesBefore + SalesOnDay
+		/// ClosingStock = latest combined stock snapshot as on DateTo
+		/// TotalStock = ClosingStock + TotalSales
+		/// Supplies = TotalStock - OpeningStock
+		///
+		/// Supplies is therefore the net inward/adjustment required to reconcile
+		/// opening stock, sales and closing stock for the selected period.
 		/// </summary>
 		private static StockDetailsRowDto MergeRow(
 			int stateId,
 			string stateName,
 			decimal openingStock,
-			decimal supplies,
+			decimal closingStock,
 			decimal salesBefore,
 			decimal salesOnDay)
 		{
-			var totalStock = openingStock + supplies;
 			var totalSales = salesBefore + salesOnDay;
-			var closingStock = totalStock - totalSales;
+			var totalStock = closingStock + totalSales;
+			var supplies = totalStock - openingStock;
 
 			return new StockDetailsRowDto
 			{
@@ -407,8 +688,6 @@ namespace Spic.Infrastructure.Services
 
 			var rangeEnd = filter.DateTo?.Date ?? today;
 
-			// Preserve the previous behavior: an invalid reversed range becomes
-			// a single-day range anchored on DateFrom.
 			if (rangeEnd < rangeStart)
 			{
 				rangeEnd = rangeStart;
@@ -449,7 +728,7 @@ namespace Spic.Infrastructure.Services
 
 			if (beforeEnd < periodStart)
 			{
-				salesBeforeRange = "—";
+				salesBeforeRange = "-";
 			}
 			else if (
 				periodStart.Year == beforeEnd.Year &&
@@ -522,17 +801,16 @@ namespace Spic.Infrastructure.Services
 			public DateTime AsOnNextDay { get; set; }
 		}
 
-		private sealed class StockAggregate
+		private sealed class StateQuantity
 		{
 			public int StateId { get; set; }
-			public decimal OpeningStock { get; set; }
-			public decimal Supplies { get; set; }
+			public decimal Quantity { get; set; }
 		}
 
 		private sealed class SalesSourceRow
 		{
 			public int StateId { get; set; }
-			public DateTime InvoiceDate { get; set; }
+			public DateTime ActivityDate { get; set; }
 			public decimal Quantity { get; set; }
 		}
 

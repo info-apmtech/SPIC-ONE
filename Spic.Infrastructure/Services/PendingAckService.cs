@@ -15,9 +15,10 @@ namespace Spic.Infrastructure.Services
 	/// Performance-optimized Pending Acknowledgement service.
 	///
 	/// Business flow is preserved:
-	/// - Company Sales + Wholesaler Sales are combined.
-	/// - Completed means RetailerReceiptDate is available.
-	/// - Pending age is based on InvoiceDate.
+	/// - Company Sales + Wholesaler Sales + DPT Sold Quantity are combined.
+	/// - Company/Wholesaler completed status is based on RetailerReceiptDate.
+	/// - DPT SoldQuantity is already a reported retailer sale, so it is shown as Completed.
+	/// - Pending age is based on InvoiceDate; DPT uses its report date (CreatedAt).
 	/// - Cards and state chart ignore Source/AgeStatuses filters.
 	/// - Grid and export apply Source/AgeStatuses filters.
 	/// - Search still affects cards, chart and grid.
@@ -33,6 +34,7 @@ namespace Spic.Infrastructure.Services
 
 		private const int SourceCompany = 1;
 		private const int SourceWholesaler = 2;
+		private const int SourceDpt = 3;
 
 		private const int StatusCompleted = 0;
 		private const int StatusLatest = 1;
@@ -59,11 +61,11 @@ namespace Spic.Infrastructure.Services
 			var pageSize = filter.PageSize <= 0 ? 16 : filter.PageSize;
 
 			// The base scope intentionally ignores Source and AgeStatuses so the
-			// three cards and state chart keep their existing behaviour.
+			// source cards and state chart keep their existing behaviour.
 			var baseQuery = BuildRawQuery(
 				filter,
 				today,
-				includeBothSources: true);
+				includeAllSources: true);
 
 			// Query 1: compact summary aggregates only.
 			var summaryAggregates = await baseQuery
@@ -80,8 +82,9 @@ namespace Spic.Infrastructure.Services
 			var overall = BuildRollup(summaryAggregates, sourceCode: null);
 			var company = BuildRollup(summaryAggregates, SourceCompany);
 			var wholesaler = BuildRollup(summaryAggregates, SourceWholesaler);
+			var dpt = BuildRollup(summaryAggregates, SourceDpt);
 
-			CopySourceCountsToOverall(overall, company, wholesaler);
+			CopySourceCountsToOverall(overall, company, wholesaler, dpt);
 
 			// Query 2: state/status aggregates only. This replaces materializing
 			// every transaction and then grouping the full list in memory.
@@ -138,6 +141,7 @@ namespace Spic.Infrastructure.Services
 				Overall = overall,
 				CompanySales = company,
 				WholesalerSales = wholesaler,
+				DptSales = dpt,
 				StateWise = stateWise,
 				Grid = new PagedResult<PendingAckRowDto>
 				{
@@ -159,11 +163,11 @@ namespace Spic.Infrastructure.Services
 			var today = Today();
 
 			// Export does not require card/chart data. When a source tab is
-			// selected, skip querying the other sales table completely.
+			// selected, skip querying the other two sources completely.
 			var rawQuery = BuildRawQuery(
 				filter,
 				today,
-				includeBothSources: false);
+				includeAllSources: false);
 
 			rawQuery = ApplyGridFilters(rawQuery, filter);
 
@@ -232,7 +236,7 @@ namespace Spic.Infrastructure.Services
 		private IQueryable<RawQueryRow> BuildRawQuery(
 			PendingAckFilter filter,
 			DateTime today,
-			bool includeBothSources)
+			bool includeAllSources)
 		{
 			var (registrationIds, ifmsIds) = SplitDealerKeys(filter.DealerKeys);
 
@@ -248,12 +252,19 @@ namespace Spic.Infrastructure.Services
 				source,
 				"Wholesaler Sales",
 				StringComparison.OrdinalIgnoreCase);
+			var sourceIsDpt = string.Equals(
+				source,
+				"DPT Sales",
+				StringComparison.OrdinalIgnoreCase);
 
-			var includeCompany = includeBothSources || !sourceIsWholesaler;
-			var includeWholesaler = includeBothSources || !sourceIsCompany;
+			var hasSpecificSource = sourceIsCompany || sourceIsWholesaler || sourceIsDpt;
+			var includeCompany = includeAllSources || !hasSpecificSource || sourceIsCompany;
+			var includeWholesaler = includeAllSources || !hasSpecificSource || sourceIsWholesaler;
+			var includeDpt = includeAllSources || !hasSpecificSource || sourceIsDpt;
 
 			IQueryable<RawQueryRow>? companyQuery = null;
 			IQueryable<RawQueryRow>? wholesalerQuery = null;
+			IQueryable<RawQueryRow>? dptQuery = null;
 
 			if (includeCompany)
 			{
@@ -278,6 +289,7 @@ namespace Spic.Infrastructure.Services
 					RetailerReceiptDate = x.RetailerReceiptDate,
 					AgencyName = x.DealerName,
 					DealerTypeId = x.DealerTypeId,
+					DealerTypeName = null,
 					StateId = x.StateId,
 					DistrictId = x.DistrictId,
 					ProductId = x.ProductId,
@@ -321,6 +333,7 @@ namespace Spic.Infrastructure.Services
 					RetailerReceiptDate = x.RetailerReceiptDate,
 					AgencyName = x.AgencyName,
 					DealerTypeId = x.DealerTypeId,
+					DealerTypeName = null,
 					StateId = x.StateId,
 					DistrictId = x.BuyerDistrictId,
 					ProductId = x.ProductId,
@@ -341,23 +354,58 @@ namespace Spic.Infrastructure.Services
 				});
 			}
 
-			if (companyQuery is not null && wholesalerQuery is not null)
+			if (includeDpt)
 			{
-				return companyQuery.Concat(wholesalerQuery);
+				var query = _db.Set<DptReport>()
+					.AsNoTracking()
+					.Where(x => x.SoldQuantity > 0m)
+					.AsQueryable();
+
+				query = ApplyDptFilters(
+					query,
+					filter,
+					registrationIds,
+					ifmsIds);
+
+				// DPT contains daily retailer sales but has no invoice or acknowledgement
+				// columns. SoldQuantity is therefore treated as already reported/completed.
+				dptQuery = query.Select(x => new RawQueryRow
+				{
+					SourceCode = SourceDpt,
+					SalesId = x.Id,
+					TransactionId = null,
+					InvoiceNo = null,
+					InvoiceDate = x.CreatedAt,
+					EntryDate = x.CreatedAt,
+					RetailerReceiptDate = x.CreatedAt,
+					AgencyName = x.RetailerName,
+					DealerTypeId = null,
+					DealerTypeName = "Retailer (DPT)",
+					StateId = x.StateId,
+					DistrictId = x.DistrictId,
+					ProductId = x.ProductId,
+					QuantityMT = x.SoldQuantity,
+					ReceivedQuantity = 0m,
+					MobileNo = x.MobileNo,
+					DdNo = null,
+					DispatchNo = null,
+					RegistrationId = x.DealerRegistrationId,
+					IfmsId = x.IfmsDealerId,
+					StatusCode = StatusCompleted
+				});
 			}
 
+			IQueryable<RawQueryRow>? combined = null;
 			if (companyQuery is not null)
-			{
-				return companyQuery;
-			}
-
+				combined = companyQuery;
 			if (wholesalerQuery is not null)
-			{
-				return wholesalerQuery;
-			}
+				combined = combined is null ? wholesalerQuery : combined.Concat(wholesalerQuery);
+			if (dptQuery is not null)
+				combined = combined is null ? dptQuery : combined.Concat(dptQuery);
 
-			// Defensive fallback. Under the current UI flow one source is always
-			// included, but this keeps the method safe for unexpected input.
+			if (combined is not null)
+				return combined;
+
 			return _db.Set<SalesCompanySale>()
 				.AsNoTracking()
 				.Where(x => false)
@@ -494,6 +542,66 @@ namespace Spic.Infrastructure.Services
 			return query;
 		}
 
+		private static IQueryable<DptReport> ApplyDptFilters(
+			IQueryable<DptReport> query,
+			PendingAckFilter filter,
+			List<int> registrationIds,
+			List<int> ifmsIds)
+		{
+			if (filter.DateFrom.HasValue)
+			{
+				var dateFrom = filter.DateFrom.Value.Date;
+				query = query.Where(x => x.CreatedAt >= dateFrom);
+			}
+
+			if (filter.DateTo.HasValue)
+			{
+				var dateToExclusive = filter.DateTo.Value.Date.AddDays(1);
+				query = query.Where(x => x.CreatedAt < dateToExclusive);
+			}
+
+			if (filter.StateIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.StateId.HasValue &&
+					filter.StateIds.Contains(x.StateId.Value));
+			}
+
+			if (filter.DistrictIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.DistrictId.HasValue &&
+					filter.DistrictIds.Contains(x.DistrictId.Value));
+			}
+
+			if (filter.ProductIds.Count > 0)
+			{
+				query = query.Where(x =>
+					x.ProductId.HasValue &&
+					filter.ProductIds.Contains(x.ProductId.Value));
+			}
+
+			if (registrationIds.Count > 0 || ifmsIds.Count > 0)
+			{
+				query = query.Where(x =>
+					(x.DealerRegistrationId.HasValue &&
+					 registrationIds.Contains(x.DealerRegistrationId.Value)) ||
+					(x.IfmsDealerId.HasValue &&
+					 ifmsIds.Contains(x.IfmsDealerId.Value)));
+			}
+
+			// DptReport has DealershipNatureId but no DealerTypeId. Applying a
+			// DealerType filter to it would compare unrelated master IDs, so DPT is
+			// safely excluded only while that specific filter is active.
+			if (filter.DealerTypeIds.Count > 0)
+			{
+				query = query.Where(x => false);
+			}
+
+			ApplyDptSearch(ref query, filter.Search);
+			return query;
+		}
+
 		private static void ApplyCompanySearch(
 			ref IQueryable<SalesCompanySale> query,
 			string? search)
@@ -526,6 +634,22 @@ namespace Spic.Infrastructure.Services
 				EF.Functions.ILike(x.AgencyName!, pattern));
 		}
 
+
+		private static void ApplyDptSearch(
+			ref IQueryable<DptReport> query,
+			string? search)
+		{
+			if (string.IsNullOrWhiteSpace(search))
+			{
+				return;
+			}
+
+			var pattern = $"%{search.Trim()}%";
+			query = query.Where(x =>
+				EF.Functions.ILike(x.RetailerName!, pattern) ||
+				EF.Functions.ILike(x.MobileNo!, pattern));
+		}
+
 		// =====================================================================
 		// Grid filters, joins and sorting
 		// =====================================================================
@@ -548,14 +672,19 @@ namespace Spic.Infrastructure.Services
 			{
 				query = query.Where(x => x.SourceCode == SourceWholesaler);
 			}
+			else if (string.Equals(
+				filter.Source,
+				"DPT Sales",
+				StringComparison.OrdinalIgnoreCase))
+			{
+				query = query.Where(x => x.SourceCode == SourceDpt);
+			}
 			else if (!string.IsNullOrWhiteSpace(filter.Source) &&
 					 !string.Equals(
 						 filter.Source,
 						 "All",
 						 StringComparison.OrdinalIgnoreCase))
 			{
-				// Preserve the earlier behaviour for an unexpected source value:
-				// a non-empty source that is not Company/Wholesaler/All returns no rows.
 				return query.Where(x => false);
 			}
 
@@ -612,9 +741,9 @@ namespace Spic.Infrastructure.Services
 						? registration.DealerCode
 						: null,
 					RegistrationId = row.RegistrationId,
-					DealerType = dealerType != null
+					DealerType = row.DealerTypeName ?? (dealerType != null
 						? dealerType.Name
-						: null,
+						: null),
 					MobileNo = row.MobileNo,
 					StateId = row.StateId,
 					StateName = state != null
@@ -755,7 +884,8 @@ namespace Spic.Infrastructure.Services
 		private static void CopySourceCountsToOverall(
 			PendingAckCategorySummaryDto overall,
 			PendingAckCategorySummaryDto company,
-			PendingAckCategorySummaryDto wholesaler)
+			PendingAckCategorySummaryDto wholesaler,
+			PendingAckCategorySummaryDto dpt)
 		{
 			overall.CompanyTotal = company.TotalCount;
 			overall.CompanyCompleted = company.CompletedCount;
@@ -770,6 +900,13 @@ namespace Spic.Infrastructure.Services
 			overall.WholesalerCritical = wholesaler.CriticalCount;
 			overall.WholesalerOverdue = wholesaler.OverdueCount;
 			overall.WholesalerConsentBuyer = wholesaler.ConsentBuyerCount;
+
+			overall.DptTotal = dpt.TotalCount;
+			overall.DptCompleted = dpt.CompletedCount;
+			overall.DptLatest = dpt.LatestCount;
+			overall.DptCritical = dpt.CriticalCount;
+			overall.DptOverdue = dpt.OverdueCount;
+			overall.DptConsentBuyer = dpt.ConsentBuyerCount;
 		}
 
 		private static List<PendingAckStateWiseDto> BuildStateWise(
@@ -836,6 +973,7 @@ namespace Spic.Infrastructure.Services
 		{
 			var ageDays = CalculateAgeDays(today, row.InvoiceDate);
 			var completed = row.StatusCode == StatusCompleted;
+			var isDpt = row.SourceCode == SourceDpt;
 
 			var dealerCode = !string.IsNullOrWhiteSpace(row.DealerCode)
 				? row.DealerCode
@@ -866,9 +1004,11 @@ namespace Spic.Infrastructure.Services
 				ReceivedQuantity = row.ReceivedQuantity,
 				DdNo = row.DdNo,
 				DispatchNo = row.DispatchNo,
-				PendingAckAgeDays = ageDays,
+				PendingAckAgeDays = completed ? 0 : ageDays,
 				AgeStatus = StatusName(row.StatusCode),
-				WorkflowStatus = completed ? "Acknowledged" : "New",
+				WorkflowStatus = isDpt
+					? "Reported"
+					: completed ? "Acknowledged" : "New",
 				BuyerConsentStatus = "Not Required"
 			};
 		}
@@ -890,9 +1030,13 @@ namespace Spic.Infrastructure.Services
 
 		private static string SourceName(int sourceCode)
 		{
-			return sourceCode == SourceCompany
-				? "Company Sales"
-				: "Wholesaler Sales";
+			return sourceCode switch
+			{
+				SourceCompany => "Company Sales",
+				SourceWholesaler => "Wholesaler Sales",
+				SourceDpt => "DPT Sales",
+				_ => "Unknown"
+			};
 		}
 
 		private static string StatusName(int statusCode)
@@ -1027,6 +1171,7 @@ namespace Spic.Infrastructure.Services
 			public DateTime? RetailerReceiptDate { get; set; }
 			public string? AgencyName { get; set; }
 			public int? DealerTypeId { get; set; }
+			public string? DealerTypeName { get; set; }
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
 			public int? ProductId { get; set; }

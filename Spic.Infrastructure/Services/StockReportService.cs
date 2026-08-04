@@ -24,15 +24,32 @@ namespace Spic.Infrastructure.Services
 	///
 	/// Example for the same dealer/product:
 	/// 01-Aug = 10, 02-Aug = 15, 03-Aug = 12 -> current stock is 12, not 37.
+	///
+	/// AGEING SOURCES:
+	/// 1. Company Sales: Status.Name = Ack + RetailerReceiptDate.
+	/// 2. Wholesaler Sales: Status.Name = Ack + RetailerReceiptDate.
+	/// 3. Retailer Sales: DptReport.SoldQuantity > 0, using DPT CreatedAt report date
+	///    only as an ACK-equivalent fallback for DPT/retailer stock because the
+	///    supplied DPT model has no StatusId or RetailerReceiptDate.
 	/// </summary>
 	public sealed class StockReportService : IStockReportService
 	{
 		private readonly AppDbContext _db;
 
-		private const int FreshMax = 7;
-		private const int MediumMax = 30;
-		private const int SlowMax = 60;
-		private const int HighAgeingDays = 180;
+		// ACK-based stock-ageing buckets. Boundaries are non-overlapping:
+		// Fresh 0-30, Medium 31-90, Slow Moving 91-180,
+		// Long Aged 181-364 and Critical 365+.
+		private const int FreshMax = 30;
+		private const int MediumMax = 90;
+		private const int SlowMax = 180;
+		private const int CriticalMin = 365;
+
+		private const string AckPendingStatus = "ACK Pending";
+		private const string AckUnavailableStatus = "ACK Not Available";
+
+		private const string WholesalerStockSource = "Wholesaler Stock";
+		private const string RetailerStockSource = "Retailer Stock";
+		private const string WarehouseStockSource = "Warehouse Stock";
 
 		private static readonly string[] ProductPalette =
 		{
@@ -201,40 +218,48 @@ namespace Spic.Infrastructure.Services
 				previousYearWarehouseDate);
 
 			// -----------------------------------------------------------------
-			// 3. Acknowledgement lookup for the current wholesaler stock rows.
+			// 3. Ageing lookup for dealer-held stock. Strict sources require
+			// Status.Name = "Ack" and RetailerReceiptDate. DPT SoldQuantity is
+			// included as the retailer-sales fallback described in BuildAckLookupAsync.
 			// -----------------------------------------------------------------
 			var acknowledgementLookup = await BuildAckLookupAsync(
 				currentWholesalerRows
 					.Concat(yesterdayWholesalerRows)
 					.Concat(lastMonthWholesalerRows)
-					.Concat(previousYearWholesalerRows));
+					.Concat(previousYearWholesalerRows),
+				currentDptRows
+					.Concat(yesterdayDptRows)
+					.Concat(lastMonthDptRows)
+					.Concat(previousYearDptRows));
 
-			// Ageing filters are based on the displayed ACK-based ageing value.
-			// Apply the same filter to comparison snapshots so the percentage and
-			// dealer comparison use the same wholesaler population.
-			currentWholesalerRows = ApplyAgeingFilter(
-				currentWholesalerRows,
-				filter,
-				today,
-				acknowledgementLookup);
+			// Ageing filters apply only to rows having a valid Status=Ack receipt
+			// date. Warehouse rows have no confirmed dealer ACK relationship and
+			// are therefore excluded only when an ageing filter is selected.
+			currentWholesalerRows = ApplyWholesalerAgeingFilter(
+				currentWholesalerRows, filter, today, acknowledgementLookup);
+			yesterdayWholesalerRows = ApplyWholesalerAgeingFilter(
+				yesterdayWholesalerRows, filter, today, acknowledgementLookup);
+			lastMonthWholesalerRows = ApplyWholesalerAgeingFilter(
+				lastMonthWholesalerRows, filter, today, acknowledgementLookup);
+			previousYearWholesalerRows = ApplyWholesalerAgeingFilter(
+				previousYearWholesalerRows, filter, today, acknowledgementLookup);
 
-			yesterdayWholesalerRows = ApplyAgeingFilter(
-				yesterdayWholesalerRows,
-				filter,
-				today,
-				acknowledgementLookup);
+			currentDptRows = ApplyDptAgeingFilter(
+				currentDptRows, filter, today, acknowledgementLookup);
+			yesterdayDptRows = ApplyDptAgeingFilter(
+				yesterdayDptRows, filter, today, acknowledgementLookup);
+			lastMonthDptRows = ApplyDptAgeingFilter(
+				lastMonthDptRows, filter, today, acknowledgementLookup);
+			previousYearDptRows = ApplyDptAgeingFilter(
+				previousYearDptRows, filter, today, acknowledgementLookup);
 
-			lastMonthWholesalerRows = ApplyAgeingFilter(
-				lastMonthWholesalerRows,
-				filter,
-				today,
-				acknowledgementLookup);
-
-			previousYearWholesalerRows = ApplyAgeingFilter(
-				previousYearWholesalerRows,
-				filter,
-				today,
-				acknowledgementLookup);
+			if (filter.AgeingRanges.Count > 0)
+			{
+				currentWarehouseRows.Clear();
+				yesterdayWarehouseRows.Clear();
+				lastMonthWarehouseRows.Clear();
+				previousYearWarehouseRows.Clear();
+			}
 
 			// -----------------------------------------------------------------
 			// 4. Summary cards - current snapshots only, never historical sums.
@@ -282,22 +307,38 @@ namespace Spic.Infrastructure.Services
 
 			foreach (var row in currentWholesalerRows)
 			{
-				var ageingDays = AgeForRow(
+				var ageingDays = AckAgeForWholesalerRow(
 					acknowledgementLookup,
 					today,
 					row.DealerRegistrationId,
 					row.IfmsDealerId,
-					row.ProductId,
-					row.StockDate);
+					row.ProductId);
 
-				ageingTotal += ageingDays;
-				ageingRowCount++;
+				AddAgeingSummary(
+					ageingDays,
+					row.Stock,
+					ref ageingTotal,
+					ref ageingRowCount,
+					ref highAgeingCount,
+					ref highAgeingStock);
+			}
 
-				if (ageingDays > HighAgeingDays)
-				{
-					highAgeingCount++;
-					highAgeingStock += row.Stock;
-				}
+			foreach (var row in currentDptRows)
+			{
+				var ageingDays = AckAgeForDptRow(
+					acknowledgementLookup,
+					today,
+					row.DealerRegistrationId,
+					row.IfmsDealerId,
+					row.ProductId);
+
+				AddAgeingSummary(
+					ageingDays,
+					row.ClosingBalance,
+					ref ageingTotal,
+					ref ageingRowCount,
+					ref highAgeingCount,
+					ref highAgeingStock);
 			}
 
 			var averageAgeing = ageingRowCount == 0
@@ -440,10 +481,12 @@ namespace Spic.Infrastructure.Services
 				.ToList();
 
 			// -----------------------------------------------------------------
-			// 7. Grid: latest current wholesaler snapshot only.
+			// 7. Grid: all three latest current stock snapshots.
 			// -----------------------------------------------------------------
 			var grid = await BuildGridAsync(
 				currentWholesalerRows,
+				currentDptRows,
+				currentWarehouseRows,
 				filter,
 				today,
 				acknowledgementLookup,
@@ -467,31 +510,69 @@ namespace Spic.Infrastructure.Services
 			var today = DateTime.UtcNow.Date;
 			var currentAsOfExclusive = today.AddDays(1);
 
-			var availableDates = await GetWholesalerAvailableDatesAsync(
+			var wholesalerAvailableDates = await GetWholesalerAvailableDatesAsync(
 				currentAsOfExclusive);
 
-			var currentSnapshotDate = LatestDateBefore(
-				availableDates,
+			var dptAvailableDates = await GetDptAvailableDatesAsync(
 				currentAsOfExclusive);
 
-			var snapshotMap = await LoadWholesalerSnapshotsAsync(
+			var warehouseAvailableDates = await GetWarehouseAvailableDatesAsync(
+				currentAsOfExclusive);
+
+			var currentWholesalerDate = LatestDateBefore(
+				wholesalerAvailableDates,
+				currentAsOfExclusive);
+
+			var currentDptDate = LatestDateBefore(
+				dptAvailableDates,
+				currentAsOfExclusive);
+
+			var currentWarehouseDate = LatestDateBefore(
+				warehouseAvailableDates,
+				currentAsOfExclusive);
+
+			var wholesalerSnapshotMap = await LoadWholesalerSnapshotsAsync(
 				filter,
-				DistinctDates(currentSnapshotDate));
+				DistinctDates(currentWholesalerDate));
 
-			var currentRows = GetSnapshotRows(
-				snapshotMap,
-				currentSnapshotDate);
-
-			var acknowledgementLookup = await BuildAckLookupAsync(currentRows);
-
-			currentRows = ApplyAgeingFilter(
-				currentRows,
+			var dptSnapshotMap = await LoadDptSnapshotsAsync(
 				filter,
-				today,
-				acknowledgementLookup);
+				DistinctDates(currentDptDate));
+
+			var warehouseSnapshotMap = await LoadWarehouseSnapshotsAsync(
+				filter,
+				DistinctDates(currentWarehouseDate));
+
+			var currentWholesalerRows = GetSnapshotRows(
+				wholesalerSnapshotMap,
+				currentWholesalerDate);
+
+			var currentDptRows = GetSnapshotRows(
+				dptSnapshotMap,
+				currentDptDate);
+
+			var currentWarehouseRows = GetSnapshotRows(
+				warehouseSnapshotMap,
+				currentWarehouseDate);
+
+			var acknowledgementLookup = await BuildAckLookupAsync(
+				currentWholesalerRows,
+				currentDptRows);
+
+			currentWholesalerRows = ApplyWholesalerAgeingFilter(
+				currentWholesalerRows, filter, today, acknowledgementLookup);
+			currentDptRows = ApplyDptAgeingFilter(
+				currentDptRows, filter, today, acknowledgementLookup);
+
+			if (filter.AgeingRanges.Count > 0)
+			{
+				currentWarehouseRows.Clear();
+			}
 
 			var result = await BuildGridAsync(
-				currentRows,
+				currentWholesalerRows,
+				currentDptRows,
+				currentWarehouseRows,
 				filter,
 				today,
 				acknowledgementLookup,
@@ -898,31 +979,44 @@ namespace Spic.Infrastructure.Services
 		// Acknowledgement and ageing
 		// =====================================================================
 
-		private async Task<Dictionary<string, DateTime>> BuildAckLookupAsync(
-			IEnumerable<WholesalerStockAsOnToday> stockRows)
+		private async Task<StockAgeingLookup> BuildAckLookupAsync(
+			IEnumerable<WholesalerStockAsOnToday> wholesalerRows,
+			IEnumerable<DptReport> dptRows)
 		{
-			var keys = stockRows
+			var keyRows = wholesalerRows
+				.Select(x => new AckStockKey
+				{
+					DealerRegistrationId = x.DealerRegistrationId,
+					IfmsDealerId = x.IfmsDealerId,
+					ProductId = x.ProductId
+				})
+				.Concat(dptRows.Select(x => new AckStockKey
+				{
+					DealerRegistrationId = x.DealerRegistrationId,
+					IfmsDealerId = x.IfmsDealerId,
+					ProductId = x.ProductId
+				}))
 				.Where(x => x.ProductId.HasValue)
 				.ToList();
 
-			var registrationIds = keys
+			var registrationIds = keyRows
 				.Where(x => x.DealerRegistrationId.HasValue)
 				.Select(x => x.DealerRegistrationId!.Value)
 				.Distinct()
 				.ToList();
 
-			var ifmsIds = keys
+			var ifmsIds = keyRows
 				.Where(x => x.IfmsDealerId.HasValue)
 				.Select(x => x.IfmsDealerId!.Value)
 				.Distinct()
 				.ToList();
 
-			var productIds = keys
+			var productIds = keyRows
 				.Select(x => x.ProductId!.Value)
 				.Distinct()
 				.ToList();
 
-			var result = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+			var result = new StockAgeingLookup();
 
 			if (productIds.Count == 0 ||
 				(registrationIds.Count == 0 && ifmsIds.Count == 0))
@@ -930,19 +1024,143 @@ namespace Spic.Infrastructure.Services
 				return result;
 			}
 
-			var companyQuery = _db.Set<SalesCompanySale>()
+			// -------------------------------------------------------------
+			// 1. Strict workflow ACK sources
+			// -------------------------------------------------------------
+			// A receipt date alone does not start strict ACK ageing. Company and
+			// wholesaler transactions must have Status.Name = "Ack".
+			var statusRows = await _db.Set<Status>()
+				.AsNoTracking()
+				.Where(x => x.Name != null)
+				.Select(x => new { x.Id, x.Name })
+				.ToListAsync();
+
+			var ackStatusIds = statusRows
+				.Where(x => string.Equals(
+					x.Name?.Trim(),
+					"Ack",
+					StringComparison.OrdinalIgnoreCase))
+				.Select(x => x.Id)
+				.Distinct()
+				.ToList();
+
+			if (ackStatusIds.Count > 0)
+			{
+				var companyQuery = _db.Set<SalesCompanySale>()
+					.AsNoTracking()
+					.Where(x =>
+						x.StatusId.HasValue &&
+						ackStatusIds.Contains(x.StatusId.Value) &&
+						x.RetailerReceiptDate.HasValue &&
+						x.ProductId.HasValue &&
+						productIds.Contains(x.ProductId.Value));
+
+				companyQuery = ApplyCompanyDealerFilter(
+					companyQuery,
+					registrationIds,
+					ifmsIds);
+
+				var companyRows = await companyQuery
+					.GroupBy(x => new
+					{
+						x.DealerRegistrationId,
+						x.IfmsDealerId,
+						x.ProductId
+					})
+					.Select(group => new AckAggregateRow
+					{
+						RegistrationId = group.Key.DealerRegistrationId,
+						IfmsId = group.Key.IfmsDealerId,
+						ProductId = group.Key.ProductId,
+						AckDate = group.Max(x => x.RetailerReceiptDate)
+					})
+					.ToListAsync();
+
+				foreach (var row in companyRows)
+				{
+					AddAcknowledgement(
+						result.StrictAckDates,
+						"R",
+						row.RegistrationId,
+						row.ProductId,
+						row.AckDate);
+					AddAcknowledgement(
+						result.StrictAckDates,
+						"I",
+						row.IfmsId,
+						row.ProductId,
+						row.AckDate);
+				}
+
+				var wholesalerSalesQuery = _db.Set<SalesWholesaler>()
+					.AsNoTracking()
+					.Where(x =>
+						x.StatusId.HasValue &&
+						ackStatusIds.Contains(x.StatusId.Value) &&
+						x.RetailerReceiptDate.HasValue &&
+						x.ProductId.HasValue &&
+						productIds.Contains(x.ProductId.Value));
+
+				wholesalerSalesQuery = ApplyWholesalerSalesDealerFilter(
+					wholesalerSalesQuery,
+					registrationIds,
+					ifmsIds);
+
+				var wholesalerSalesRows = await wholesalerSalesQuery
+					.GroupBy(x => new
+					{
+						RegistrationId = x.DealerId,
+						x.IfmsDealerId,
+						x.ProductId
+					})
+					.Select(group => new AckAggregateRow
+					{
+						RegistrationId = group.Key.RegistrationId,
+						IfmsId = group.Key.IfmsDealerId,
+						ProductId = group.Key.ProductId,
+						AckDate = group.Max(x => x.RetailerReceiptDate)
+					})
+					.ToListAsync();
+
+				foreach (var row in wholesalerSalesRows)
+				{
+					AddAcknowledgement(
+						result.StrictAckDates,
+						"R",
+						row.RegistrationId,
+						row.ProductId,
+						row.AckDate);
+					AddAcknowledgement(
+						result.StrictAckDates,
+						"I",
+						row.IfmsId,
+						row.ProductId,
+						row.AckDate);
+				}
+			}
+
+			// -------------------------------------------------------------
+			// 2. Retailer sales source from DPT Report.SoldQuantity
+			// -------------------------------------------------------------
+			// The supplied DPT Excel/model has SoldQuantity and the business report
+			// date in CreatedAt, but it has no StatusId or RetailerReceiptDate.
+			// Therefore, for DPT/retailer stock only, SoldQuantity > 0 is treated as
+			// an ACK-equivalent retailer-reported sale on CreatedAt. A real strict
+			// Status=Ack receipt date always has priority over this fallback.
+			var dptSalesQuery = _db.Set<DptReport>()
 				.AsNoTracking()
 				.Where(x =>
-					x.RetailerReceiptDate.HasValue &&
+					x.SoldQuantity > 0m &&
 					x.ProductId.HasValue &&
-					productIds.Contains(x.ProductId.Value));
+					productIds.Contains(x.ProductId.Value) &&
+					x.CreatedAt < DateTime.UtcNow.Date.AddDays(1));
 
-			companyQuery = ApplyCompanyDealerFilter(
-				companyQuery,
+			dptSalesQuery = ApplyDptDealerFilter(
+				dptSalesQuery,
 				registrationIds,
 				ifmsIds);
 
-			var companyRows = await companyQuery
+			var dptSalesRows = await dptSalesQuery
 				.GroupBy(x => new
 				{
 					x.DealerRegistrationId,
@@ -954,66 +1172,20 @@ namespace Spic.Infrastructure.Services
 					RegistrationId = group.Key.DealerRegistrationId,
 					IfmsId = group.Key.IfmsDealerId,
 					ProductId = group.Key.ProductId,
-					AckDate = group.Max(x => x.RetailerReceiptDate)
+					AckDate = group.Max(x => (DateTime?)x.CreatedAt)
 				})
 				.ToListAsync();
 
-			foreach (var row in companyRows)
+			foreach (var row in dptSalesRows)
 			{
 				AddAcknowledgement(
-					result,
+					result.DptRetailerSaleDates,
 					"R",
 					row.RegistrationId,
 					row.ProductId,
 					row.AckDate);
-
 				AddAcknowledgement(
-					result,
-					"I",
-					row.IfmsId,
-					row.ProductId,
-					row.AckDate);
-			}
-
-			var wholesalerSalesQuery = _db.Set<SalesWholesaler>()
-				.AsNoTracking()
-				.Where(x =>
-					x.RetailerReceiptDate.HasValue &&
-					x.ProductId.HasValue &&
-					productIds.Contains(x.ProductId.Value));
-
-			wholesalerSalesQuery = ApplyWholesalerSalesDealerFilter(
-				wholesalerSalesQuery,
-				registrationIds,
-				ifmsIds);
-
-			var wholesalerSalesRows = await wholesalerSalesQuery
-				.GroupBy(x => new
-				{
-					RegistrationId = x.DealerId,
-					x.IfmsDealerId,
-					x.ProductId
-				})
-				.Select(group => new AckAggregateRow
-				{
-					RegistrationId = group.Key.RegistrationId,
-					IfmsId = group.Key.IfmsDealerId,
-					ProductId = group.Key.ProductId,
-					AckDate = group.Max(x => x.RetailerReceiptDate)
-				})
-				.ToListAsync();
-
-			foreach (var row in wholesalerSalesRows)
-			{
-				AddAcknowledgement(
-					result,
-					"R",
-					row.RegistrationId,
-					row.ProductId,
-					row.AckDate);
-
-				AddAcknowledgement(
-					result,
+					result.DptRetailerSaleDates,
 					"I",
 					row.IfmsId,
 					row.ProductId,
@@ -1076,6 +1248,32 @@ namespace Spic.Infrastructure.Services
 				ifmsIds.Contains(x.IfmsDealerId.Value));
 		}
 
+		private static IQueryable<DptReport> ApplyDptDealerFilter(
+			IQueryable<DptReport> query,
+			List<int> registrationIds,
+			List<int> ifmsIds)
+		{
+			if (registrationIds.Count > 0 && ifmsIds.Count > 0)
+			{
+				return query.Where(x =>
+					(x.DealerRegistrationId.HasValue &&
+					 registrationIds.Contains(x.DealerRegistrationId.Value)) ||
+					(x.IfmsDealerId.HasValue &&
+					 ifmsIds.Contains(x.IfmsDealerId.Value)));
+			}
+
+			if (registrationIds.Count > 0)
+			{
+				return query.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					registrationIds.Contains(x.DealerRegistrationId.Value));
+			}
+
+			return query.Where(x =>
+				x.IfmsDealerId.HasValue &&
+				ifmsIds.Contains(x.IfmsDealerId.Value));
+		}
+
 		private static void AddAcknowledgement(
 			IDictionary<string, DateTime> lookup,
 			string prefix,
@@ -1090,11 +1288,10 @@ namespace Spic.Infrastructure.Services
 				return;
 			}
 
-			var key = BuildAckKey(
-				prefix,
-				dealerId.Value,
-				productId.Value);
+			var key = BuildAckKey(prefix, dealerId.Value, productId.Value);
 
+			// Current stock is one aggregate snapshot row. Without lot/FIFO linkage,
+			// the most recent valid ACK is used as the stock-ageing anchor.
 			if (!lookup.TryGetValue(key, out var currentDate) ||
 				acknowledgementDate.Value > currentDate)
 			{
@@ -1110,51 +1307,96 @@ namespace Spic.Infrastructure.Services
 			return $"{prefix}{dealerId}|{productId}";
 		}
 
-		private static int AgeForRow(
-			IReadOnlyDictionary<string, DateTime> acknowledgementLookup,
+		private static int? AckAgeForWholesalerRow(
+			StockAgeingLookup ageingLookup,
 			DateTime today,
 			int? dealerRegistrationId,
 			int? ifmsDealerId,
-			int? productId,
-			DateTime stockDate)
+			int? productId)
 		{
-			DateTime? acknowledgementDate = null;
+			var acknowledgementDate = FindAgeingAnchor(
+				ageingLookup.StrictAckDates,
+				dealerRegistrationId,
+				ifmsDealerId,
+				productId);
 
-			if (productId.HasValue)
+			return CalculateAgeingDays(today, acknowledgementDate);
+		}
+
+		private static int? AckAgeForDptRow(
+			StockAgeingLookup ageingLookup,
+			DateTime today,
+			int? dealerRegistrationId,
+			int? ifmsDealerId,
+			int? productId)
+		{
+			// A genuine workflow ACK is always the first choice.
+			var acknowledgementDate = FindAgeingAnchor(
+				ageingLookup.StrictAckDates,
+				dealerRegistrationId,
+				ifmsDealerId,
+				productId);
+
+			// DPT has SoldQuantity but no StatusId/RetailerReceiptDate. When no
+			// strict ACK exists, use the latest positive SoldQuantity report date as
+			// the retailer-sales ACK-equivalent anchor requested by the business.
+			acknowledgementDate ??= FindAgeingAnchor(
+				ageingLookup.DptRetailerSaleDates,
+				dealerRegistrationId,
+				ifmsDealerId,
+				productId);
+
+			return CalculateAgeingDays(today, acknowledgementDate);
+		}
+
+		private static DateTime? FindAgeingAnchor(
+			IReadOnlyDictionary<string, DateTime> lookup,
+			int? dealerRegistrationId,
+			int? ifmsDealerId,
+			int? productId)
+		{
+			if (!productId.HasValue)
 			{
-				if (dealerRegistrationId.HasValue &&
-					acknowledgementLookup.TryGetValue(
-						BuildAckKey(
-							"R",
-							dealerRegistrationId.Value,
-							productId.Value),
-						out var registeredAck))
-				{
-					acknowledgementDate = registeredAck;
-				}
-				else if (ifmsDealerId.HasValue &&
-						 acknowledgementLookup.TryGetValue(
-							 BuildAckKey(
-								 "I",
-								 ifmsDealerId.Value,
-								 productId.Value),
-							 out var ifmsAck))
-				{
-					acknowledgementDate = ifmsAck;
-				}
+				return null;
 			}
 
-			var anchorDate = (acknowledgementDate ?? stockDate).Date;
-			var ageingDays = (int)Math.Floor((today - anchorDate).TotalDays);
+			if (dealerRegistrationId.HasValue &&
+				lookup.TryGetValue(
+					BuildAckKey("R", dealerRegistrationId.Value, productId.Value),
+					out var registeredDate))
+			{
+				return registeredDate;
+			}
 
+			if (ifmsDealerId.HasValue &&
+				lookup.TryGetValue(
+					BuildAckKey("I", ifmsDealerId.Value, productId.Value),
+					out var ifmsDate))
+			{
+				return ifmsDate;
+			}
+
+			return null;
+		}
+
+		private static int? CalculateAgeingDays(
+			DateTime today,
+			DateTime? acknowledgementDate)
+		{
+			if (!acknowledgementDate.HasValue)
+			{
+				return null;
+			}
+
+			var ageingDays = (today.Date - acknowledgementDate.Value.Date).Days;
 			return ageingDays < 0 ? 0 : ageingDays;
 		}
 
-		private static List<WholesalerStockAsOnToday> ApplyAgeingFilter(
+		private static List<WholesalerStockAsOnToday> ApplyWholesalerAgeingFilter(
 			List<WholesalerStockAsOnToday> rows,
 			StockReportFilter filter,
 			DateTime today,
-			IReadOnlyDictionary<string, DateTime> acknowledgementLookup)
+			StockAgeingLookup acknowledgementLookup)
 		{
 			if (filter.AgeingRanges.Count == 0)
 			{
@@ -1162,15 +1404,45 @@ namespace Spic.Infrastructure.Services
 			}
 
 			return rows
-				.Where(row => MatchesAgeingRange(
-					AgeForRow(
+				.Where(row =>
+				{
+					var ageingDays = AckAgeForWholesalerRow(
 						acknowledgementLookup,
 						today,
 						row.DealerRegistrationId,
 						row.IfmsDealerId,
-						row.ProductId,
-						row.StockDate),
-					filter.AgeingRanges))
+						row.ProductId);
+
+					return ageingDays.HasValue &&
+						   MatchesAgeingRange(ageingDays.Value, filter.AgeingRanges);
+				})
+				.ToList();
+		}
+
+		private static List<DptReport> ApplyDptAgeingFilter(
+			List<DptReport> rows,
+			StockReportFilter filter,
+			DateTime today,
+			StockAgeingLookup acknowledgementLookup)
+		{
+			if (filter.AgeingRanges.Count == 0)
+			{
+				return rows;
+			}
+
+			return rows
+				.Where(row =>
+				{
+					var ageingDays = AckAgeForDptRow(
+						acknowledgementLookup,
+						today,
+						row.DealerRegistrationId,
+						row.IfmsDealerId,
+						row.ProductId);
+
+					return ageingDays.HasValue &&
+						   MatchesAgeingRange(ageingDays.Value, filter.AgeingRanges);
+				})
 				.ToList();
 		}
 
@@ -1178,8 +1450,19 @@ namespace Spic.Infrastructure.Services
 			int ageingDays,
 			IReadOnlyCollection<string> selectedRanges)
 		{
+			if (ageingDays < 0)
+			{
+				return false;
+			}
+
 			return
 				(selectedRanges.Contains("0-30") && ageingDays <= 30) ||
+				(selectedRanges.Contains("31-90") && ageingDays >= 31 && ageingDays <= 90) ||
+				(selectedRanges.Contains("91-180") && ageingDays >= 91 && ageingDays <= 180) ||
+				(selectedRanges.Contains("181-364") && ageingDays >= 181 && ageingDays <= 364) ||
+				(selectedRanges.Contains("365+") && ageingDays >= 365) ||
+
+				// Backward-compatible aliases for older clients/bookmarks.
 				(selectedRanges.Contains("31-60") && ageingDays >= 31 && ageingDays <= 60) ||
 				(selectedRanges.Contains("61-90") && ageingDays >= 61 && ageingDays <= 90) ||
 				(selectedRanges.Contains("91-120") && ageingDays >= 91 && ageingDays <= 120) ||
@@ -1191,39 +1474,68 @@ namespace Spic.Infrastructure.Services
 		// =====================================================================
 
 		private async Task<PagedResult<StockRowDto>> BuildGridAsync(
-			List<WholesalerStockAsOnToday> rows,
+			List<WholesalerStockAsOnToday> wholesalerRows,
+			List<DptReport> dptRows,
+			List<WarehouseDistrictGlobalStockReconciliation> warehouseRows,
 			StockReportFilter filter,
 			DateTime today,
-			IReadOnlyDictionary<string, DateTime> acknowledgementLookup,
+			StockAgeingLookup acknowledgementLookup,
 			bool paged)
 		{
-			var stateIds = rows
+			var stateIds = wholesalerRows
 				.Where(x => x.StateId.HasValue)
 				.Select(x => x.StateId!.Value)
+				.Concat(dptRows
+					.Where(x => x.StateId.HasValue)
+					.Select(x => x.StateId!.Value))
+				.Concat(warehouseRows
+					.Where(x => x.StateId.HasValue)
+					.Select(x => x.StateId!.Value))
 				.Distinct()
 				.ToList();
 
-			var productIds = rows
+			var productIds = wholesalerRows
 				.Where(x => x.ProductId.HasValue)
 				.Select(x => x.ProductId!.Value)
+				.Concat(dptRows
+					.Where(x => x.ProductId.HasValue)
+					.Select(x => x.ProductId!.Value))
+				.Concat(warehouseRows
+					.Where(x => x.ProductId.HasValue)
+					.Select(x => x.ProductId!.Value))
 				.Distinct()
 				.ToList();
 
-			var natureIds = rows
+			var natureIds = wholesalerRows
 				.Where(x => x.DealershipNatureId.HasValue)
 				.Select(x => x.DealershipNatureId!.Value)
+				.Concat(dptRows
+					.Where(x => x.DealershipNatureId.HasValue)
+					.Select(x => x.DealershipNatureId!.Value))
 				.Distinct()
 				.ToList();
 
-			var registrationIds = rows
+			var registrationIds = wholesalerRows
 				.Where(x => x.DealerRegistrationId.HasValue)
 				.Select(x => x.DealerRegistrationId!.Value)
+				.Concat(dptRows
+					.Where(x => x.DealerRegistrationId.HasValue)
+					.Select(x => x.DealerRegistrationId!.Value))
 				.Distinct()
 				.ToList();
 
-			var ifmsIds = rows
+			var ifmsIds = wholesalerRows
 				.Where(x => x.IfmsDealerId.HasValue)
 				.Select(x => x.IfmsDealerId!.Value)
+				.Concat(dptRows
+					.Where(x => x.IfmsDealerId.HasValue)
+					.Select(x => x.IfmsDealerId!.Value))
+				.Distinct()
+				.ToList();
+
+			var warehouseIds = warehouseRows
+				.Where(x => x.WarehouseId.HasValue)
+				.Select(x => x.WarehouseId!.Value)
 				.Distinct()
 				.ToList();
 
@@ -1282,66 +1594,161 @@ namespace Spic.Infrastructure.Services
 					})
 					.ToDictionaryAsync(x => x.Id);
 
-			var projections = rows
-				.Select(row =>
+			var warehouseNames = warehouseIds.Count == 0
+				? new Dictionary<int, string>()
+				: await _db.Set<Warehouse>()
+					.AsNoTracking()
+					.Where(x => warehouseIds.Contains(x.Id))
+					.ToDictionaryAsync(
+						x => x.Id,
+						x => x.Name ?? string.Empty);
+
+			var projections = new List<GridProjection>(
+				wholesalerRows.Count + dptRows.Count + warehouseRows.Count);
+
+			foreach (var row in wholesalerRows)
+			{
+				registeredDealers.TryGetValue(
+					row.DealerRegistrationId ?? 0,
+					out var registeredDealer);
+
+				ifmsDealers.TryGetValue(
+					row.IfmsDealerId ?? 0,
+					out var ifmsDealer);
+
+				var ageingDays = AckAgeForWholesalerRow(
+					acknowledgementLookup,
+					today,
+					row.DealerRegistrationId,
+					row.IfmsDealerId,
+					row.ProductId);
+
+				var whatsapp = Blank(registeredDealer?.WhatsAppNumber);
+				var official = Blank(registeredDealer?.OfficialContactNumber);
+				var alternative = Blank(registeredDealer?.AlternativeNumber);
+				var ifmsMobile = Blank(ifmsDealer?.MobileNo);
+
+				projections.Add(new GridProjection
 				{
-					registeredDealers.TryGetValue(
-						row.DealerRegistrationId ?? 0,
-						out var registeredDealer);
-
-					ifmsDealers.TryGetValue(
-						row.IfmsDealerId ?? 0,
-						out var ifmsDealer);
-
-					var ageingDays = AgeForRow(
-						acknowledgementLookup,
-						today,
-						row.DealerRegistrationId,
-						row.IfmsDealerId,
-						row.ProductId,
-						row.StockDate);
-
-					var dealerName = FirstNonBlank(
+					Source = WholesalerStockSource,
+					DealerRegistrationId = row.DealerRegistrationId,
+					IfmsDealerId = row.IfmsDealerId,
+					StateName = GetLookupName(stateNames, row.StateId),
+					DealerName = FirstNonBlank(
 						row.AgencyName,
 						registeredDealer?.FirmName,
-						ifmsDealer?.Name)
-						?? string.Empty;
+						ifmsDealer?.Name) ?? string.Empty,
+					ProductName = GetLookupName(productNames, row.ProductId),
+					Quantity = row.Stock,
+					LyingWith = FirstNonBlank(
+						GetLookupName(natureNames, row.DealershipNatureId),
+						"Wholesaler") ?? "Wholesaler",
+					AgeingDays = ageingDays ?? 0,
+					HasAckAgeing = ageingDays.HasValue,
+					Status = ageingDays.HasValue
+						? MapStatus(ageingDays.Value)
+						: AckPendingStatus,
+					WhatsAppNumber = whatsapp,
+					OfficialContactNumber = official,
+					AlternativeNumber = alternative,
+					MobileNo = FirstNonBlank(
+						whatsapp,
+						official,
+						alternative,
+						ifmsMobile)
+				});
+			}
 
-					var whatsapp = Blank(registeredDealer?.WhatsAppNumber);
-					var official = Blank(registeredDealer?.OfficialContactNumber);
-					var alternative = Blank(registeredDealer?.AlternativeNumber);
-					var ifmsMobile = Blank(ifmsDealer?.MobileNo);
+			foreach (var row in dptRows)
+			{
+				registeredDealers.TryGetValue(
+					row.DealerRegistrationId ?? 0,
+					out var registeredDealer);
 
-					return new GridProjection
-					{
-						DealerRegistrationId = row.DealerRegistrationId,
-						StateName = row.StateId.HasValue &&
-									stateNames.TryGetValue(row.StateId.Value, out var stateName)
-							? stateName
-							: string.Empty,
-						DealerName = dealerName,
-						ProductName = row.ProductId.HasValue &&
-									  productNames.TryGetValue(row.ProductId.Value, out var productName)
-							? productName
-							: string.Empty,
-						Quantity = row.Stock,
-						LyingWith = row.DealershipNatureId.HasValue &&
-									natureNames.TryGetValue(row.DealershipNatureId.Value, out var natureName)
-							? natureName
-							: string.Empty,
-						AgeingDays = ageingDays,
-						Status = MapStatus(ageingDays),
-						WhatsAppNumber = whatsapp,
-						OfficialContactNumber = official,
-						AlternativeNumber = alternative,
-						MobileNo = FirstNonBlank(
-							whatsapp,
-							official,
-							alternative,
-							ifmsMobile)
-					};
-				})
-				.ToList();
+				ifmsDealers.TryGetValue(
+					row.IfmsDealerId ?? 0,
+					out var ifmsDealer);
+
+				var ageingDays = AckAgeForDptRow(
+					acknowledgementLookup,
+					today,
+					row.DealerRegistrationId,
+					row.IfmsDealerId,
+					row.ProductId);
+				var whatsapp = Blank(registeredDealer?.WhatsAppNumber);
+				var official = Blank(registeredDealer?.OfficialContactNumber);
+				var alternative = Blank(registeredDealer?.AlternativeNumber);
+				var ifmsMobile = Blank(ifmsDealer?.MobileNo);
+
+				projections.Add(new GridProjection
+				{
+					Source = RetailerStockSource,
+					DealerRegistrationId = row.DealerRegistrationId,
+					IfmsDealerId = row.IfmsDealerId,
+					StateName = GetLookupName(stateNames, row.StateId),
+					DealerName = FirstNonBlank(
+						row.RetailerName,
+						registeredDealer?.FirmName,
+						ifmsDealer?.Name) ?? string.Empty,
+					ProductName = GetLookupName(productNames, row.ProductId),
+					Quantity = row.ClosingBalance,
+					LyingWith = FirstNonBlank(
+						GetLookupName(natureNames, row.DealershipNatureId),
+						"Retailer") ?? "Retailer",
+					AgeingDays = ageingDays ?? 0,
+					HasAckAgeing = ageingDays.HasValue,
+					Status = ageingDays.HasValue
+						? MapStatus(ageingDays.Value)
+						: AckPendingStatus,
+					WhatsAppNumber = whatsapp,
+					OfficialContactNumber = official,
+					AlternativeNumber = alternative,
+					MobileNo = FirstNonBlank(
+						row.MobileNo,
+						whatsapp,
+						official,
+						alternative,
+						ifmsMobile)
+				});
+			}
+
+			foreach (var row in warehouseRows)
+			{
+				// Warehouse reconciliation has no DealerRegistrationId/IfmsDealerId,
+				// so it cannot be matched safely to Status=Ack dealer sales.
+				var warehouseName = row.WarehouseId.HasValue &&
+					warehouseNames.TryGetValue(row.WarehouseId.Value, out var name) &&
+					!string.IsNullOrWhiteSpace(name)
+						? name
+						: row.WarehouseId.HasValue
+							? $"Warehouse {row.WarehouseId.Value}"
+							: "Warehouse";
+
+				projections.Add(new GridProjection
+				{
+					Source = WarehouseStockSource,
+					WarehouseId = row.WarehouseId,
+					StateName = GetLookupName(stateNames, row.StateId),
+					DealerName = warehouseName,
+					ProductName = GetLookupName(productNames, row.ProductId),
+					Quantity = row.ClosingStock,
+					LyingWith = "Warehouse",
+					AgeingDays = 0,
+					HasAckAgeing = false,
+					Status = AckUnavailableStatus
+				});
+			}
+
+			if (filter.AgeingRanges.Count > 0)
+			{
+				projections = projections
+					.Where(x =>
+						x.HasAckAgeing &&
+						MatchesAgeingRange(
+							x.AgeingDays,
+							filter.AgeingRanges))
+					.ToList();
+			}
 
 			if (!string.IsNullOrWhiteSpace(filter.Search))
 			{
@@ -1349,6 +1756,7 @@ namespace Spic.Infrastructure.Services
 
 				projections = projections
 					.Where(x =>
+						ContainsIgnoreCase(x.Source, search) ||
 						ContainsIgnoreCase(x.StateName, search) ||
 						ContainsIgnoreCase(x.DealerName, search) ||
 						ContainsIgnoreCase(x.ProductName, search) ||
@@ -1380,6 +1788,7 @@ namespace Spic.Infrastructure.Services
 						Quantity = x.Quantity,
 						LyingWith = x.LyingWith,
 						AgeingDays = x.AgeingDays,
+						HasAckAgeing = x.HasAckAgeing,
 						Status = x.Status,
 						MobileNo = x.MobileNo,
 						WhatsAppNumber = x.WhatsAppNumber,
@@ -1430,8 +1839,10 @@ namespace Spic.Infrastructure.Services
 
 				case "ageing":
 					ordered = descending
-						? rows.OrderByDescending(x => x.AgeingDays)
-						: rows.OrderBy(x => x.AgeingDays);
+						? rows.OrderBy(x => !x.HasAckAgeing)
+							.ThenByDescending(x => x.AgeingDays)
+						: rows.OrderBy(x => !x.HasAckAgeing)
+							.ThenBy(x => x.AgeingDays);
 					break;
 
 				case "state":
@@ -1571,8 +1982,50 @@ namespace Spic.Infrastructure.Services
 			}
 		}
 
+		private static void AddAgeingSummary(
+			int? ageingDays,
+			decimal quantity,
+			ref double ageingTotal,
+			ref int ageingRowCount,
+			ref int highAgeingCount,
+			ref decimal highAgeingStock)
+		{
+			if (!ageingDays.HasValue)
+			{
+				return;
+			}
+
+			ageingTotal += ageingDays.Value;
+			ageingRowCount++;
+
+			if (ageingDays.Value >= CriticalMin)
+			{
+				highAgeingCount++;
+				highAgeingStock += quantity;
+			}
+		}
+
+		private static string GetLookupName(
+			IReadOnlyDictionary<int, string> lookup,
+			int? id)
+		{
+			if (!id.HasValue ||
+				!lookup.TryGetValue(id.Value, out var name) ||
+				string.IsNullOrWhiteSpace(name))
+			{
+				return string.Empty;
+			}
+
+			return name.Trim();
+		}
+
 		private static string MapStatus(int ageingDays)
 		{
+			if (ageingDays < 0)
+			{
+				return AckPendingStatus;
+			}
+
 			if (ageingDays <= FreshMax)
 			{
 				return "Fresh";
@@ -1588,7 +2041,12 @@ namespace Spic.Infrastructure.Services
 				return "Slow Moving";
 			}
 
-			return "Dead Stock";
+			if (ageingDays < CriticalMin)
+			{
+				return "Long Aged";
+			}
+
+			return "Critical";
 		}
 
 		private static bool ContainsIgnoreCase(
@@ -1649,6 +2107,22 @@ namespace Spic.Infrastructure.Services
 			public decimal Previous { get; set; }
 		}
 
+		private sealed class StockAgeingLookup
+		{
+			public Dictionary<string, DateTime> StrictAckDates { get; } =
+				new(StringComparer.Ordinal);
+
+			public Dictionary<string, DateTime> DptRetailerSaleDates { get; } =
+				new(StringComparer.Ordinal);
+		}
+
+		private sealed class AckStockKey
+		{
+			public int? DealerRegistrationId { get; set; }
+			public int? IfmsDealerId { get; set; }
+			public int? ProductId { get; set; }
+		}
+
 		private sealed class AckAggregateRow
 		{
 			public int? RegistrationId { get; set; }
@@ -1675,13 +2149,17 @@ namespace Spic.Infrastructure.Services
 
 		private sealed class GridProjection
 		{
+			public string Source { get; set; } = string.Empty;
 			public int? DealerRegistrationId { get; set; }
+			public int? IfmsDealerId { get; set; }
+			public int? WarehouseId { get; set; }
 			public string StateName { get; set; } = string.Empty;
 			public string DealerName { get; set; } = string.Empty;
 			public string ProductName { get; set; } = string.Empty;
 			public decimal Quantity { get; set; }
 			public string LyingWith { get; set; } = string.Empty;
 			public int AgeingDays { get; set; }
+			public bool HasAckAgeing { get; set; }
 			public string Status { get; set; } = string.Empty;
 			public string? MobileNo { get; set; }
 			public string? WhatsAppNumber { get; set; }

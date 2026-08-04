@@ -33,6 +33,8 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> ExportExcel(
 			[FromBody] StockReportFilter? filter)
 		{
+			// GetAllRowsAsync now returns the latest Wholesaler, Retailer/DPT and
+			// Warehouse stock rows. Existing Excel columns and flow are unchanged.
 			var rows = await _service.GetAllRowsAsync(
 				filter ?? new StockReportFilter());
 
@@ -68,7 +70,14 @@ namespace SpicAPI.Controllers
 				worksheet.Cell(rowNumber, 3).Value = row.ProductName;
 				worksheet.Cell(rowNumber, 4).Value = row.Quantity;
 				worksheet.Cell(rowNumber, 5).Value = row.LyingWith;
-				worksheet.Cell(rowNumber, 6).Value = row.AgeingDays;
+				if (row.HasAckAgeing)
+				{
+					worksheet.Cell(rowNumber, 6).Value = row.AgeingDays;
+				}
+				else
+				{
+					worksheet.Cell(rowNumber, 6).Value = "N/A";
+				}
 				worksheet.Cell(rowNumber, 7).Value = row.Status;
 				rowNumber++;
 			}

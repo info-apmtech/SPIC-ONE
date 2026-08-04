@@ -1,11 +1,17 @@
 ﻿// ============================================================================
 //  SPIC.Core / DTOs / ProductStockAvailabilityDtos.cs
-//  DTOs for the Product-wise Stock Availability report.
 //
-//  Shape: State x Product pivot.
-//    - Columns    : products present in the selected stock snapshot.
-//    - Grid       : one row per State, quantities keyed by ProductId.
-//    - GrandTotal : totals across every filtered state, independent of paging.
+//  State x Product pivot for current stock and sales.
+//
+//  Current stock sources:
+//    * WholesalerStockAsOnToday.Stock
+//    * DptReport.ClosingBalance
+//    * WarehouseDistrictGlobalStockReconciliation.ClosingStock
+//
+//  Sales sources:
+//    * SalesWholesaler.QuantityMT
+//    * SalesCompanySale.QuantityMT
+//    * DptReport.SoldQuantity from the latest DPT snapshot
 //
 //  Reuses PagedResult<T> from StockReportDtos.cs.
 // ============================================================================
@@ -20,7 +26,6 @@ namespace SPIC.Core.DTOs
 		public DateTime? DateFrom { get; set; }
 		public DateTime? DateTo { get; set; }
 
-		// The Razor cascade resolves Region/HQ selections into StateIds.
 		public List<int> StateIds { get; set; } = new();
 		public List<int> RegionIds { get; set; } = new();
 		public List<int> HeadQuarterIds { get; set; } = new();
@@ -45,7 +50,11 @@ namespace SPIC.Core.DTOs
 	{
 		public int TotalStates { get; set; }
 		public int TotalProducts { get; set; }
+
+		// Backward-compatible name: this is the current stock total.
 		public decimal TotalQuantity { get; set; }
+
+		public decimal TotalSales { get; set; }
 		public string HighestStockState { get; set; } = "-";
 		public decimal HighestStockQuantity { get; set; }
 		public int LowStockAlerts { get; set; }
@@ -62,7 +71,17 @@ namespace SPIC.Core.DTOs
 	{
 		public int StateId { get; set; }
 		public string StateName { get; set; } = "";
+
+		// Current stock values by ProductId.
 		public Dictionary<int, decimal> Quantities { get; set; } = new();
+
+		// Sales values by ProductId.
+		public Dictionary<int, decimal> SalesQuantities { get; set; } = new();
+
+		// Current stock total for the state.
 		public decimal Total { get; set; }
+
+		// Sales total for the state.
+		public decimal TotalSales { get; set; }
 	}
 }

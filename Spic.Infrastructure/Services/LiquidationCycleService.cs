@@ -14,10 +14,11 @@ namespace Spic.Infrastructure.Services
 	/// <summary>
 	/// Performance-optimized implementation of the existing liquidation flow.
 	///
-	/// Business mapping is unchanged:
-	/// Company    : Warehouse ClosingStock + SalesCompanySale.QuantityMT
-	/// Wholesaler : WholesalerStockAsOnToday.Stock + SalesWholesaler.QuantityMT
-	/// Retailer   : DptReport.ClosingBalance + DptReport.SoldQuantity
+	/// Production mapping:
+	/// Company    : latest Warehouse ClosingStock + SalesCompanySale.QuantityMT
+	/// Wholesaler : latest WholesalerStockAsOnToday.Stock + SalesWholesaler.QuantityMT
+	/// Retailer   : latest DptReport.ClosingBalance + latest DptReport.SoldQuantity
+	/// Historical stock snapshot dates are never added together.
 	///
 	/// Main optimization: historical/raw transaction rows are no longer fully loaded.
 	/// Latest snapshots and sales totals are reduced in SQL before materialization.
@@ -107,6 +108,7 @@ namespace Spic.Infrastructure.Services
 			{
 				stageRows.AddRange(await BuildRetailerStageRowsAsync(
 					filter,
+					from,
 					toExclusive,
 					dealerIds,
 					cancellationToken));
@@ -154,8 +156,8 @@ namespace Spic.Infrastructure.Services
 			DealerIdSelection dealerIds,
 			CancellationToken cancellationToken)
 		{
-			// Warehouse reconciliation has no dealer identity. This preserves the
-			// previous behavior: selecting a dealer excludes company/warehouse rows.
+			// Warehouse reconciliation has no dealer identity. When a dealer filter is
+			// selected, company/warehouse rows cannot be matched safely and are excluded.
 			if (dealerIds.HasAny)
 			{
 				return new List<StageRow>();
@@ -183,47 +185,70 @@ namespace Spic.Infrastructure.Services
 					x.ProductId.HasValue && filter.ProductIds.Contains(x.ProductId.Value));
 			}
 
+			// CreatedAt carries the uploaded business report date for this snapshot table.
 			if (toExclusive.HasValue)
 			{
-				warehouseBase = warehouseBase.Where(x => x.UpdatedAt < toExclusive.Value);
+				warehouseBase = warehouseBase.Where(x => x.CreatedAt < toExclusive.Value);
 			}
 
-			// Correlated NOT EXISTS selects only the latest row for each
-			// Warehouse + State + District + Product snapshot key.
-			var latestWarehouseQuery = warehouseBase.Where(current =>
-				!warehouseBase.Any(candidate =>
-					(candidate.WarehouseId ?? 0) == (current.WarehouseId ?? 0) &&
-					(candidate.StateId ?? 0) == (current.StateId ?? 0) &&
-					(candidate.DistrictId ?? 0) == (current.DistrictId ?? 0) &&
-					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
-					(
-						candidate.UpdatedAt > current.UpdatedAt ||
-						(candidate.UpdatedAt == current.UpdatedAt && candidate.Id > current.Id)
-					)));
+			var latestWarehouseReportValue = await warehouseBase
+				.Select(x => (DateTime?)x.CreatedAt)
+				.MaxAsync(cancellationToken);
 
-			var latestWarehouseRows = await latestWarehouseQuery
-				.Select(x => new WarehouseSnapshot
-				{
-					Id = x.Id,
-					StateId = x.StateId ?? 0,
-					DistrictId = x.DistrictId ?? 0,
-					ProductId = x.ProductId ?? 0,
-					ClosingStock = x.ClosingStock,
-					SnapshotDate = x.UpdatedAt
-				})
-				.ToListAsync(cancellationToken);
+			var warehouseBalances = new Dictionary<LocationProductKey, WarehouseBalance>();
 
-			// The latest row per warehouse is now small enough to combine by location.
-			var warehouseBalances = latestWarehouseRows
-				.GroupBy(x => new LocationProductKey(x.StateId, x.DistrictId, x.ProductId))
-				.ToDictionary(
-					group => group.Key,
-					group => new WarehouseBalance
+			if (latestWarehouseReportValue.HasValue)
+			{
+				var snapshotStart = latestWarehouseReportValue.Value.Date;
+				var snapshotEnd = snapshotStart.AddDays(1);
+
+				var rawWarehouseRows = await warehouseBase
+					.Where(x => x.CreatedAt >= snapshotStart && x.CreatedAt < snapshotEnd)
+					.Select(x => new WarehouseSnapshot
 					{
-						Id = group.Max(x => x.Id),
-						ClosingStock = group.Sum(x => x.ClosingStock),
-						SnapshotDate = group.Max(x => x.SnapshotDate)
-					});
+						Id = x.Id,
+						WarehouseId = x.WarehouseId,
+						PlantId = x.PlantId,
+						StateId = x.StateId,
+						DistrictId = x.DistrictId,
+						ProductId = x.ProductId,
+						ClosingStock = x.ClosingStock,
+						ReportDate = x.CreatedAt,
+						UpdatedAt = x.UpdatedAt
+					})
+					.ToListAsync(cancellationToken);
+
+				// Same report date + same warehouse business key: use only the latest
+				// updated row. This protects the report from historical database duplicates.
+				var deduplicatedWarehouseRows = rawWarehouseRows
+					.GroupBy(x => new
+					{
+						WarehouseId = x.WarehouseId ?? 0,
+						PlantId = x.PlantId ?? 0,
+						StateId = x.StateId ?? 0,
+						DistrictId = x.DistrictId ?? 0,
+						ProductId = x.ProductId ?? 0
+					})
+					.Select(group => group
+						.OrderByDescending(x => x.UpdatedAt)
+						.ThenByDescending(x => x.Id)
+						.First())
+					.ToList();
+
+				warehouseBalances = deduplicatedWarehouseRows
+					.GroupBy(x => new LocationProductKey(
+						x.StateId ?? 0,
+						x.DistrictId ?? 0,
+						x.ProductId ?? 0))
+					.ToDictionary(
+						group => group.Key,
+						group => new WarehouseBalance
+						{
+							Id = group.Max(x => x.Id),
+							ClosingStock = group.Sum(x => x.ClosingStock),
+							SnapshotDate = snapshotStart
+						});
+			}
 
 			var companySalesQuery = _db.SalesCompanySales
 				.AsNoTracking()
@@ -265,7 +290,6 @@ namespace Spic.Infrastructure.Services
 					x.InvoiceDate.HasValue && x.InvoiceDate.Value < toExclusive.Value);
 			}
 
-			// Sales are aggregated in SQL; individual invoices are not materialized.
 			var companySalesRows = await companySalesQuery
 				.GroupBy(x => new
 				{
@@ -331,7 +355,6 @@ namespace Spic.Infrastructure.Services
 		{
 			var stockBase = _db.WholesalerStockAsOnTodays
 				.AsNoTracking()
-				// Previous code discarded rows that could not produce R{id}/I{id}.
 				.Where(x => x.DealerRegistrationId.HasValue || x.IfmsDealerId.HasValue)
 				.AsQueryable();
 
@@ -367,57 +390,84 @@ namespace Spic.Infrastructure.Services
 				stockBase = stockBase.Where(x => x.StockDate < toExclusive.Value);
 			}
 
-			// Latest stock per normalized dealer identity + product.
-			// Regular dealer ID takes precedence over IFMS ID, matching BuildDealerKey().
-			var latestStockQuery = stockBase.Where(current =>
-				!stockBase.Any(candidate =>
-					(candidate.DealerRegistrationId ?? 0) ==
-						(current.DealerRegistrationId ?? 0) &&
-					(candidate.DealerRegistrationId.HasValue
-						? 0
-						: candidate.IfmsDealerId ?? 0) ==
-					(current.DealerRegistrationId.HasValue
-						? 0
-						: current.IfmsDealerId ?? 0) &&
-					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
-					(
-						candidate.StockDate > current.StockDate ||
-						(candidate.StockDate == current.StockDate &&
-						 candidate.UpdatedAt > current.UpdatedAt) ||
-						(candidate.StockDate == current.StockDate &&
-						 candidate.UpdatedAt == current.UpdatedAt &&
-						 candidate.Id > current.Id)
-					)));
+			var latestStockDateValue = await stockBase
+				.Select(x => (DateTime?)x.StockDate)
+				.MaxAsync(cancellationToken);
 
-			var latestStockRows = await latestStockQuery
-				.Select(x => new WholesalerStockSnapshot
-				{
-					Id = x.Id,
-					DealerRegistrationId = x.DealerRegistrationId,
-					IfmsDealerId = x.IfmsDealerId,
-					AgencyName = x.AgencyName,
-					StateId = x.StateId,
-					DistrictId = x.DistrictId,
-					ProductId = x.ProductId,
-					Stock = x.Stock,
-					StockDate = x.StockDate
-				})
-				.ToListAsync(cancellationToken);
+			var latestStock = new Dictionary<DealerProductKey, WholesalerBalance>();
 
-			var latestStock = latestStockRows
-				.Select(x => new
-				{
-					Key = new DealerProductKey(
+			if (latestStockDateValue.HasValue)
+			{
+				var snapshotStart = latestStockDateValue.Value.Date;
+				var snapshotEnd = snapshotStart.AddDays(1);
+
+				var rawStockRows = await stockBase
+					.Where(x => x.StockDate >= snapshotStart && x.StockDate < snapshotEnd)
+					.Select(x => new WholesalerStockSnapshot
+					{
+						Id = x.Id,
+						DealerRegistrationId = x.DealerRegistrationId,
+						IfmsDealerId = x.IfmsDealerId,
+						AgencyName = x.AgencyName,
+						StateId = x.StateId,
+						DistrictId = x.DistrictId,
+						CompanyId = x.CompanyId,
+						PlantId = x.PlantId,
+						ProductId = x.ProductId,
+						Stock = x.Stock,
+						StockDate = x.StockDate,
+						UpdatedAt = x.UpdatedAt
+					})
+					.ToListAsync(cancellationToken);
+
+				var deduplicatedStockRows = rawStockRows
+					.GroupBy(x => new
+					{
+						RegularId = x.DealerRegistrationId ?? 0,
+						IfmsId = x.DealerRegistrationId.HasValue ? 0 : x.IfmsDealerId ?? 0,
+						StateId = x.StateId ?? 0,
+						DistrictId = x.DistrictId ?? 0,
+						CompanyId = x.CompanyId ?? 0,
+						PlantId = x.PlantId ?? 0,
+						ProductId = x.ProductId ?? 0
+					})
+					.Select(group => group
+						.OrderByDescending(x => x.UpdatedAt)
+						.ThenByDescending(x => x.Id)
+						.First())
+					.ToList();
+
+				latestStock = deduplicatedStockRows
+					.GroupBy(x => new DealerProductKey(
 						BuildDealerKey(x.DealerRegistrationId, x.IfmsDealerId),
-						x.ProductId ?? 0),
-					Row = x
-				})
-				.Where(x => x.Key.DealerKey != "-")
-				.ToDictionary(x => x.Key, x => x.Row);
+						x.ProductId ?? 0))
+					.Where(group => group.Key.DealerKey != "-")
+					.ToDictionary(
+						group => group.Key,
+						group =>
+						{
+							var representative = group
+								.OrderByDescending(x => x.UpdatedAt)
+								.ThenByDescending(x => x.Id)
+								.First();
+
+							return new WholesalerBalance
+							{
+								Id = representative.Id,
+								DealerRegistrationId = representative.DealerRegistrationId,
+								IfmsDealerId = representative.IfmsDealerId,
+								AgencyName = representative.AgencyName,
+								StateId = representative.StateId,
+								DistrictId = representative.DistrictId,
+								ProductId = representative.ProductId,
+								Stock = group.Sum(x => x.Stock),
+								SnapshotDate = snapshotStart
+							};
+						});
+			}
 
 			var salesBase = _db.SalesWholesalers
 				.AsNoTracking()
-				// Previous code discarded sales without a seller identity.
 				.Where(x => x.WholesalerId.HasValue || x.IfmsWholesalerId.HasValue)
 				.AsQueryable();
 
@@ -427,7 +477,6 @@ namespace Spic.Infrastructure.Services
 					x.StateId.HasValue && filter.StateIds.Contains(x.StateId.Value));
 			}
 
-			// Seller district is the wholesaler's location in this report.
 			if (filter.DistrictIds.Count > 0)
 			{
 				salesBase = salesBase.Where(x =>
@@ -468,7 +517,6 @@ namespace Spic.Infrastructure.Services
 					x.InvoiceDate.HasValue && x.InvoiceDate.Value < toExclusive.Value);
 			}
 
-			// Aggregate quantities and last invoice date in SQL.
 			var salesAggregateRows = await salesBase
 				.GroupBy(x => new
 				{
@@ -486,17 +534,11 @@ namespace Spic.Infrastructure.Services
 				})
 				.ToListAsync(cancellationToken);
 
-			// Load only one representative row per seller + product for fallback
-			// display fields. The oldest Id approximates the previous unsorted first row.
 			var representativeSalesQuery = salesBase.Where(current =>
 				!salesBase.Any(candidate =>
 					(candidate.WholesalerId ?? 0) == (current.WholesalerId ?? 0) &&
-					(candidate.WholesalerId.HasValue
-						? 0
-						: candidate.IfmsWholesalerId ?? 0) ==
-					(current.WholesalerId.HasValue
-						? 0
-						: current.IfmsWholesalerId ?? 0) &&
+					(candidate.WholesalerId.HasValue ? 0 : candidate.IfmsWholesalerId ?? 0) ==
+					(current.WholesalerId.HasValue ? 0 : current.IfmsWholesalerId ?? 0) &&
 					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
 					candidate.Id < current.Id));
 
@@ -522,12 +564,24 @@ namespace Spic.Infrastructure.Services
 					Row = x
 				})
 				.Where(x => x.Key.DealerKey != "-")
-				.ToDictionary(x => x.Key, x => x.Row);
+				.GroupBy(x => x.Key)
+				.ToDictionary(group => group.Key, group => group.First().Row);
 
-			var sales = salesAggregateRows.ToDictionary(
-				x => new DealerProductKey(
+			var sales = salesAggregateRows
+				.GroupBy(x => new DealerProductKey(
 					BuildDealerKey(x.WholesalerId, x.IfmsWholesalerId),
-					x.ProductId));
+					x.ProductId))
+				.Where(group => group.Key.DealerKey != "-")
+				.ToDictionary(
+					group => group.Key,
+					group => new WholesalerSalesAggregate
+					{
+						WholesalerId = group.First().WholesalerId,
+						IfmsWholesalerId = group.First().IfmsWholesalerId,
+						ProductId = group.Key.ProductId,
+						Quantity = group.Sum(x => x.Quantity),
+						LastDate = group.Max(x => x.LastDate)
+					});
 
 			var keys = latestStock.Keys
 				.Union(sales.Keys)
@@ -558,7 +612,7 @@ namespace Spic.Infrastructure.Services
 					MobileNo = FirstNonEmpty(representative?.MobileNo, "-"),
 					Stock = stock?.Stock ?? 0m,
 					Sales = sale?.Quantity ?? 0m,
-					ActivityDate = stock?.StockDate ?? sale?.LastDate
+					ActivityDate = stock?.SnapshotDate ?? sale?.LastDate
 				});
 			}
 
@@ -571,6 +625,7 @@ namespace Spic.Infrastructure.Services
 
 		private async Task<List<StageRow>> BuildRetailerStageRowsAsync(
 			LiqCycleFilter filter,
+			DateTime? from,
 			DateTime? toExclusive,
 			DealerIdSelection dealerIds,
 			CancellationToken cancellationToken)
@@ -606,39 +661,26 @@ namespace Spic.Infrastructure.Services
 					 dealerIds.IfmsIds.Contains(x.IfmsDealerId.Value)));
 			}
 
+			// CreatedAt carries the selected DPT report date.
 			if (toExclusive.HasValue)
 			{
-				dptBase = dptBase.Where(x => x.UpdatedAt < toExclusive.Value);
+				dptBase = dptBase.Where(x => x.CreatedAt < toExclusive.Value);
 			}
 
-			// Latest DPT row per retailer identity + product + location.
-			// For rows without IDs, the normalized retailer name remains the identity,
-			// exactly as in the previous BuildRetailerIdentity() flow.
-			var latestDptQuery = dptBase.Where(current =>
-				!dptBase.Any(candidate =>
-					(candidate.DealerRegistrationId ?? 0) ==
-						(current.DealerRegistrationId ?? 0) &&
-					(candidate.DealerRegistrationId.HasValue
-						? 0
-						: candidate.IfmsDealerId ?? 0) ==
-					(current.DealerRegistrationId.HasValue
-						? 0
-						: current.IfmsDealerId ?? 0) &&
-					(candidate.DealerRegistrationId.HasValue || candidate.IfmsDealerId.HasValue
-						? string.Empty
-						: (candidate.RetailerName ?? string.Empty).Trim().ToUpper()) ==
-					(current.DealerRegistrationId.HasValue || current.IfmsDealerId.HasValue
-						? string.Empty
-						: (current.RetailerName ?? string.Empty).Trim().ToUpper()) &&
-					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
-					(candidate.StateId ?? 0) == (current.StateId ?? 0) &&
-					(candidate.DistrictId ?? 0) == (current.DistrictId ?? 0) &&
-					(
-						candidate.UpdatedAt > current.UpdatedAt ||
-						(candidate.UpdatedAt == current.UpdatedAt && candidate.Id > current.Id)
-					)));
+			var latestDptReportValue = await dptBase
+				.Select(x => (DateTime?)x.CreatedAt)
+				.MaxAsync(cancellationToken);
 
-			var latestRows = await latestDptQuery
+			if (!latestDptReportValue.HasValue)
+			{
+				return new List<StageRow>();
+			}
+
+			var snapshotStart = latestDptReportValue.Value.Date;
+			var snapshotEnd = snapshotStart.AddDays(1);
+
+			var rawDptRows = await dptBase
+				.Where(x => x.CreatedAt >= snapshotStart && x.CreatedAt < snapshotEnd)
 				.Select(x => new RetailerSnapshot
 				{
 					Id = x.Id,
@@ -647,34 +689,77 @@ namespace Spic.Infrastructure.Services
 					RetailerName = x.RetailerName,
 					StateId = x.StateId,
 					DistrictId = x.DistrictId,
+					SubDistrictId = x.SubDistrictId,
+					CompanyId = x.CompanyId,
+					PlantId = x.PlantId,
 					ProductId = x.ProductId,
 					MobileNo = x.MobileNo,
 					SoldQuantity = x.SoldQuantity,
 					ClosingBalance = x.ClosingBalance,
+					ReportDate = x.CreatedAt,
 					UpdatedAt = x.UpdatedAt
 				})
 				.ToListAsync(cancellationToken);
 
-			var rows = new List<StageRow>(latestRows.Count);
+			var deduplicatedRows = rawDptRows
+				.GroupBy(x => new
+				{
+					RegularId = x.DealerRegistrationId ?? 0,
+					IfmsId = x.DealerRegistrationId.HasValue ? 0 : x.IfmsDealerId ?? 0,
+					FallbackName = x.DealerRegistrationId.HasValue || x.IfmsDealerId.HasValue
+						? string.Empty
+						: NormalizeText(x.RetailerName),
+					StateId = x.StateId ?? 0,
+					DistrictId = x.DistrictId ?? 0,
+					SubDistrictId = x.SubDistrictId ?? 0,
+					CompanyId = x.CompanyId ?? 0,
+					PlantId = x.PlantId ?? 0,
+					ProductId = x.ProductId ?? 0
+				})
+				.Select(group => group
+					.OrderByDescending(x => x.UpdatedAt)
+					.ThenByDescending(x => x.Id)
+					.First())
+				.ToList();
 
-			foreach (var item in latestRows)
+			var includeDptSales = !from.HasValue || snapshotStart >= from.Value.Date;
+
+			var balances = deduplicatedRows
+				.GroupBy(x => new RetailerProductKey(
+					BuildRetailerIdentity(
+						x.DealerRegistrationId,
+						x.IfmsDealerId,
+						x.RetailerName,
+						x.StateId,
+						x.DistrictId),
+					x.ProductId ?? 0))
+				.ToList();
+
+			var rows = new List<StageRow>(balances.Count);
+
+			foreach (var group in balances)
 			{
+				var representative = group
+					.OrderByDescending(x => x.UpdatedAt)
+					.ThenByDescending(x => x.Id)
+					.First();
+
 				rows.Add(new StageRow
 				{
-					Id = item.Id,
+					Id = representative.Id,
 					Source = RetailerSource,
-					DealerName = FirstNonEmpty(item.RetailerName, "-"),
+					DealerName = FirstNonEmpty(representative.RetailerName, "-"),
 					DealerCode = BuildDealerKey(
-						item.DealerRegistrationId,
-						item.IfmsDealerId),
+						representative.DealerRegistrationId,
+						representative.IfmsDealerId),
 					DealerType = "Retailer",
-					ProductId = item.ProductId,
-					StateId = item.StateId,
-					DistrictId = item.DistrictId,
-					MobileNo = FirstNonEmpty(item.MobileNo, "-"),
-					Stock = item.ClosingBalance,
-					Sales = item.SoldQuantity,
-					ActivityDate = item.UpdatedAt
+					ProductId = NullIfZero(group.Key.ProductId),
+					StateId = representative.StateId,
+					DistrictId = representative.DistrictId,
+					MobileNo = FirstNonEmpty(representative.MobileNo, "-"),
+					Stock = group.Sum(x => x.ClosingBalance),
+					Sales = includeDptSales ? group.Sum(x => x.SoldQuantity) : 0m,
+					ActivityDate = snapshotStart
 				});
 			}
 
@@ -1004,6 +1089,29 @@ namespace Spic.Infrastructure.Services
 			};
 		}
 
+		private static string BuildRetailerIdentity(
+			int? regularDealerId,
+			int? ifmsDealerId,
+			string? retailerName,
+			int? stateId,
+			int? districtId)
+		{
+			var dealerKey = BuildDealerKey(regularDealerId, ifmsDealerId);
+			if (dealerKey != "-")
+			{
+				return dealerKey;
+			}
+
+			return $"N:{NormalizeText(retailerName)}|S:{stateId ?? 0}|D:{districtId ?? 0}";
+		}
+
+		private static string NormalizeText(string? value)
+		{
+			return string.IsNullOrWhiteSpace(value)
+				? string.Empty
+				: value.Trim().ToUpperInvariant();
+		}
+
 		private static string FirstNonEmpty(params string?[] values)
 		{
 			return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? "-";
@@ -1053,11 +1161,14 @@ namespace Spic.Infrastructure.Services
 		private sealed class WarehouseSnapshot
 		{
 			public int Id { get; set; }
-			public int StateId { get; set; }
-			public int DistrictId { get; set; }
-			public int ProductId { get; set; }
+			public int? WarehouseId { get; set; }
+			public int? PlantId { get; set; }
+			public int? StateId { get; set; }
+			public int? DistrictId { get; set; }
+			public int? ProductId { get; set; }
 			public decimal ClosingStock { get; set; }
-			public DateTime SnapshotDate { get; set; }
+			public DateTime ReportDate { get; set; }
+			public DateTime UpdatedAt { get; set; }
 		}
 
 		private sealed class WarehouseBalance
@@ -1084,9 +1195,25 @@ namespace Spic.Infrastructure.Services
 			public string? AgencyName { get; set; }
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
+			public int? CompanyId { get; set; }
+			public int? PlantId { get; set; }
 			public int? ProductId { get; set; }
 			public decimal Stock { get; set; }
 			public DateTime StockDate { get; set; }
+			public DateTime UpdatedAt { get; set; }
+		}
+
+		private sealed class WholesalerBalance
+		{
+			public int Id { get; set; }
+			public int? DealerRegistrationId { get; set; }
+			public int? IfmsDealerId { get; set; }
+			public string? AgencyName { get; set; }
+			public int? StateId { get; set; }
+			public int? DistrictId { get; set; }
+			public int? ProductId { get; set; }
+			public decimal Stock { get; set; }
+			public DateTime SnapshotDate { get; set; }
 		}
 
 		private sealed class WholesalerSalesAggregate
@@ -1109,6 +1236,10 @@ namespace Spic.Infrastructure.Services
 			public string? MobileNo { get; set; }
 		}
 
+		private readonly record struct RetailerProductKey(
+			string RetailerKey,
+			int ProductId);
+
 		private sealed class RetailerSnapshot
 		{
 			public int Id { get; set; }
@@ -1117,11 +1248,16 @@ namespace Spic.Infrastructure.Services
 			public string? RetailerName { get; set; }
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
+			public int? SubDistrictId { get; set; }
+			public int? CompanyId { get; set; }
+			public int? PlantId { get; set; }
 			public int? ProductId { get; set; }
 			public string? MobileNo { get; set; }
 			public decimal SoldQuantity { get; set; }
 			public decimal ClosingBalance { get; set; }
+			public DateTime ReportDate { get; set; }
 			public DateTime UpdatedAt { get; set; }
 		}
+
 	}
 }

@@ -13,7 +13,7 @@ namespace SPIC.Core.DTOs
 		public List<int> StatusIds { get; set; } = new();
 		public List<string> DealerKeys { get; set; } = new();
 
-		public string? Source { get; set; } // "Company Sales" | "Wholesaler Sales" | "Retailer Sales"
+		public string? Source { get; set; }
 		public string? Search { get; set; }
 		public string? SortColumn { get; set; }
 		public bool SortDesc { get; set; } = true;
@@ -36,7 +36,6 @@ namespace SPIC.Core.DTOs
 		public decimal Liquidated { get; set; }
 		public decimal BalanceStock => TotalStock - Liquidated;
 
-		// Kept unchanged for the current UI contract.
 		public double StockTrendPct { get; set; } = 12.0;
 		public double LiquidatedTrendPct { get; set; } = 7.2;
 		public double BalanceTrendPct { get; set; } = 6.1;
@@ -67,7 +66,7 @@ namespace SPIC.Core.DTOs
 		public decimal Sales { get; set; }
 		public int AgeingDays { get; set; }
 
-		public string Bucket { get; set; } = ""; // Fast, Normal, Slow, Critical
-		public string Status { get; set; } = ""; // Active, Monitoring, Critical
+		public string Bucket { get; set; } = "";
+		public string Status { get; set; } = "";
 	}
 }

@@ -1,19 +1,17 @@
 ﻿// ============================================================================
 //  Spic.Infrastructure / Services / ProductStockAvailabilityService.cs
 //
-//  Performance-focused implementation that preserves the existing flow:
-//    * Source table      : WholesalerStockAsOnToday only.
-//    * Snapshot rule     : latest StockDate day inside the selected range.
-//    * Cell calculation  : SUM(Stock) grouped by State + Product.
-//    * Search semantics  : filters State rows before cards/grand total/paging.
-//    * Region/HQ filters : resolved into StateIds by the Razor page.
+//  Current stock is built from the latest snapshot independently for:
+//    * WholesalerStockAsOnToday.Stock       using StockDate
+//    * DptReport.ClosingBalance             using CreatedAt report date
+//    * WarehouseDistrict...ClosingStock     using CreatedAt report date
 //
-//  Main improvements:
-//    * Uses an index-friendly ORDER BY ... LIMIT 1 for latest snapshot lookup.
-//    * Aggregates in SQL and transfers only State x Product totals.
-//    * Builds columns, pivot rows and totals with single-pass dictionaries.
-//    * Supports request cancellation all the way into EF Core.
-//    * Avoids repeated GroupBy/Sum enumeration over the same result set.
+//  Sales are built from:
+//    * SalesCompanySale.QuantityMT          summed by InvoiceDate
+//    * SalesWholesaler.QuantityMT           summed by InvoiceDate
+//    * DptReport.SoldQuantity               latest DPT snapshot only
+//
+//  Historical stock snapshots are never added together.
 // ============================================================================
 
 using System;
@@ -55,83 +53,93 @@ namespace Spic.Infrastructure.Services
 			var dateFrom = ToUtcStart(filter.DateFrom);
 			var dateToExclusive = ToUtcExclusiveEnd(filter.DateTo);
 
-			var stockQuery = _db.WholesalerStockAsOnTodays
+			// Keep the operations sequential because they share the same scoped DbContext.
+			var wholesalerStock = await LoadLatestWholesalerStockAsync(
+				filter,
+				dateFrom,
+				dateToExclusive,
+				cancellationToken);
+
+			var dptStockAndSales = await LoadLatestDptStockAndSalesAsync(
+				filter,
+				dateFrom,
+				dateToExclusive,
+				cancellationToken);
+
+			var warehouseStock = await LoadLatestWarehouseStockAsync(
+				filter,
+				dateFrom,
+				dateToExclusive,
+				cancellationToken);
+
+			var companySales = await LoadCompanySalesAsync(
+				filter,
+				dateFrom,
+				dateToExclusive,
+				cancellationToken);
+
+			var wholesalerSales = await LoadWholesalerSalesAsync(
+				filter,
+				dateFrom,
+				dateToExclusive,
+				cancellationToken);
+
+			var combined = new Dictionary<StateProductKey, CombinedValue>();
+
+			Merge(combined, wholesalerStock);
+			Merge(combined, dptStockAndSales);
+			Merge(combined, warehouseStock);
+			Merge(combined, companySales);
+			Merge(combined, wholesalerSales);
+
+			if (combined.Count == 0)
+			{
+				return EmptyDashboard(page, pageSize);
+			}
+
+			var stateIds = combined.Keys
+				.Select(key => key.StateId)
+				.Distinct()
+				.ToList();
+
+			var productIds = combined.Keys
+				.Select(key => key.ProductId)
+				.Distinct()
+				.ToList();
+
+			var stateNames = await _db.Set<State>()
 				.AsNoTracking()
-				.Where(stock =>
-					stock.StateId.HasValue &&
-					stock.ProductId.HasValue);
+				.Where(state => stateIds.Contains(state.Id))
+				.ToDictionaryAsync(
+					state => state.Id,
+					state => state.StateName ?? string.Empty,
+					cancellationToken);
 
-			if (filter.StateIds.Count > 0)
-			{
-				stockQuery = stockQuery.Where(stock =>
-					stock.StateId.HasValue &&
-					filter.StateIds.Contains(stock.StateId.Value));
-			}
+			var productNames = await _db.Set<Product>()
+				.AsNoTracking()
+				.Where(product => productIds.Contains(product.Id))
+				.ToDictionaryAsync(
+					product => product.Id,
+					product => product.Name ?? string.Empty,
+					cancellationToken);
 
-			if (dateFrom.HasValue)
-			{
-				stockQuery = stockQuery.Where(stock =>
-					stock.StockDate >= dateFrom.Value);
-			}
-
-			if (dateToExclusive.HasValue)
-			{
-				stockQuery = stockQuery.Where(stock =>
-					stock.StockDate < dateToExclusive.Value);
-			}
-
-			// ORDER BY + FirstOrDefault is index-friendly when StockDate is indexed.
-			// We then retain the existing rule: every row from that latest calendar day.
-			var latestStockDate = await stockQuery
-				.OrderByDescending(stock => stock.StockDate)
-				.Select(stock => (DateTime?)stock.StockDate)
-				.FirstOrDefaultAsync(cancellationToken);
-
-			if (!latestStockDate.HasValue)
-			{
-				return EmptyDashboard(page, pageSize);
-			}
-
-			var snapshotStart = ToUtcDate(latestStockDate.Value);
-			var snapshotEnd = snapshotStart.AddDays(1);
-
-			var aggregateRows = await (
-				from stock in stockQuery
-				where stock.StockDate >= snapshotStart &&
-					  stock.StockDate < snapshotEnd
-				join state in _db.Set<State>().AsNoTracking()
-					on stock.StateId equals (int?)state.Id
-				join product in _db.Set<Product>().AsNoTracking()
-					on stock.ProductId equals (int?)product.Id
-				group stock by new
+			var columns = productIds
+				.Select(productId => new ProdStockColumnDto
 				{
-					StateId = state.Id,
-					state.StateName,
-					ProductId = product.Id,
-					ProductName = product.Name
-				}
-				into grouped
-				select new AggregateRow
-				{
-					StateId = grouped.Key.StateId,
-					StateName = grouped.Key.StateName ?? "",
-					ProductId = grouped.Key.ProductId,
-					ProductName = grouped.Key.ProductName ?? "",
-					Quantity = grouped.Sum(item => item.Stock)
+					ProductId = productId,
+					ProductName = productNames.TryGetValue(productId, out var name)
+						? NormalizeName(name)
+						: "-",
+					Group = DefaultColumnGroup
 				})
-				.ToListAsync(cancellationToken);
+				.OrderBy(column => column.ProductName, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(column => column.ProductId)
+				.ToList();
 
-			if (aggregateRows.Count == 0)
-			{
-				return EmptyDashboard(page, pageSize);
-			}
+			var rows = BuildRows(combined, stateNames);
 
-			var pivot = BuildPivot(aggregateRows);
-			var columns = pivot.Columns;
-			var rows = pivot.Rows;
-
-			// Preserve the previous behavior: search changes cards and grand total,
-			// while the product-column list remains based on the complete snapshot.
+			// Preserve the existing behavior: search filters state rows before cards,
+			// grand totals, sorting and paging.
 			if (!string.IsNullOrWhiteSpace(filter.Search))
 			{
 				var search = filter.Search.Trim();
@@ -143,7 +151,12 @@ namespace Spic.Infrastructure.Services
 			}
 
 			var grandTotal = BuildGrandTotal(rows, columns);
-			var summary = BuildSummary(rows, columns.Count, grandTotal.Total);
+			var summary = BuildSummary(
+				rows,
+				columns.Count,
+				grandTotal.Total,
+				grandTotal.TotalSales);
+
 			var sortedRows = ApplySorting(rows, filter);
 			var totalCount = sortedRows.Count;
 
@@ -179,90 +192,367 @@ namespace Spic.Infrastructure.Services
 			};
 		}
 
-		private static PivotResult BuildPivot(
-			IReadOnlyCollection<AggregateRow> aggregateRows)
-		{
-			var productNames = new Dictionary<int, string>();
-			var stateBuilders = new Dictionary<int, StateRowBuilder>();
+		// --------------------------------------------------------------------
+		// Latest current-stock snapshots
+		// --------------------------------------------------------------------
 
-			foreach (var item in aggregateRows)
+		private async Task<List<SourceAggregate>> LoadLatestWholesalerStockAsync(
+			ProductStockAvailabilityFilter filter,
+			DateTime? dateFrom,
+			DateTime? dateToExclusive,
+			CancellationToken cancellationToken)
+		{
+			var query = _db.WholesalerStockAsOnTodays
+				.AsNoTracking()
+				.Where(row => row.StateId.HasValue && row.ProductId.HasValue);
+
+			if (filter.StateIds.Count > 0)
 			{
-				if (!productNames.ContainsKey(item.ProductId))
+				query = query.Where(row => filter.StateIds.Contains(row.StateId!.Value));
+			}
+
+			if (dateFrom.HasValue)
+			{
+				query = query.Where(row => row.StockDate >= dateFrom.Value);
+			}
+
+			if (dateToExclusive.HasValue)
+			{
+				query = query.Where(row => row.StockDate < dateToExclusive.Value);
+			}
+
+			var latestDate = await query
+				.OrderByDescending(row => row.StockDate)
+				.Select(row => (DateTime?)row.StockDate)
+				.FirstOrDefaultAsync(cancellationToken);
+
+			if (!latestDate.HasValue)
+			{
+				return new List<SourceAggregate>();
+			}
+
+			var start = ToUtcDate(latestDate.Value);
+			var end = start.AddDays(1);
+
+			return await query
+				.Where(row => row.StockDate >= start && row.StockDate < end)
+				.GroupBy(row => new
 				{
-					productNames[item.ProductId] = NormalizeName(item.ProductName);
+					StateId = row.StateId!.Value,
+					ProductId = row.ProductId!.Value
+				})
+				.Select(group => new SourceAggregate
+				{
+					StateId = group.Key.StateId,
+					ProductId = group.Key.ProductId,
+					Stock = group.Sum(row => row.Stock),
+					Sales = 0m
+				})
+				.ToListAsync(cancellationToken);
+		}
+
+		private async Task<List<SourceAggregate>> LoadLatestDptStockAndSalesAsync(
+			ProductStockAvailabilityFilter filter,
+			DateTime? dateFrom,
+			DateTime? dateToExclusive,
+			CancellationToken cancellationToken)
+		{
+			var query = _db.DptReports
+				.AsNoTracking()
+				.Where(row => row.StateId.HasValue && row.ProductId.HasValue);
+
+			if (filter.StateIds.Count > 0)
+			{
+				query = query.Where(row => filter.StateIds.Contains(row.StateId!.Value));
+			}
+
+			if (dateFrom.HasValue)
+			{
+				query = query.Where(row => row.CreatedAt >= dateFrom.Value);
+			}
+
+			if (dateToExclusive.HasValue)
+			{
+				query = query.Where(row => row.CreatedAt < dateToExclusive.Value);
+			}
+
+			var latestDate = await query
+				.OrderByDescending(row => row.CreatedAt)
+				.Select(row => (DateTime?)row.CreatedAt)
+				.FirstOrDefaultAsync(cancellationToken);
+
+			if (!latestDate.HasValue)
+			{
+				return new List<SourceAggregate>();
+			}
+
+			var start = ToUtcDate(latestDate.Value);
+			var end = start.AddDays(1);
+
+			return await query
+				.Where(row => row.CreatedAt >= start && row.CreatedAt < end)
+				.GroupBy(row => new
+				{
+					StateId = row.StateId!.Value,
+					ProductId = row.ProductId!.Value
+				})
+				.Select(group => new SourceAggregate
+				{
+					StateId = group.Key.StateId,
+					ProductId = group.Key.ProductId,
+					Stock = group.Sum(row => row.ClosingBalance),
+					Sales = group.Sum(row => row.SoldQuantity)
+				})
+				.ToListAsync(cancellationToken);
+		}
+
+		private async Task<List<SourceAggregate>> LoadLatestWarehouseStockAsync(
+			ProductStockAvailabilityFilter filter,
+			DateTime? dateFrom,
+			DateTime? dateToExclusive,
+			CancellationToken cancellationToken)
+		{
+			var query = _db.WarehouseDistrictGlobalStockReconciliations
+				.AsNoTracking()
+				.Where(row => row.StateId.HasValue && row.ProductId.HasValue);
+
+			if (filter.StateIds.Count > 0)
+			{
+				query = query.Where(row => filter.StateIds.Contains(row.StateId!.Value));
+			}
+
+			if (dateFrom.HasValue)
+			{
+				query = query.Where(row => row.CreatedAt >= dateFrom.Value);
+			}
+
+			if (dateToExclusive.HasValue)
+			{
+				query = query.Where(row => row.CreatedAt < dateToExclusive.Value);
+			}
+
+			var latestDate = await query
+				.OrderByDescending(row => row.CreatedAt)
+				.Select(row => (DateTime?)row.CreatedAt)
+				.FirstOrDefaultAsync(cancellationToken);
+
+			if (!latestDate.HasValue)
+			{
+				return new List<SourceAggregate>();
+			}
+
+			var start = ToUtcDate(latestDate.Value);
+			var end = start.AddDays(1);
+
+			return await query
+				.Where(row => row.CreatedAt >= start && row.CreatedAt < end)
+				.GroupBy(row => new
+				{
+					StateId = row.StateId!.Value,
+					ProductId = row.ProductId!.Value
+				})
+				.Select(group => new SourceAggregate
+				{
+					StateId = group.Key.StateId,
+					ProductId = group.Key.ProductId,
+					Stock = group.Sum(row => row.ClosingStock),
+					Sales = 0m
+				})
+				.ToListAsync(cancellationToken);
+		}
+
+		// --------------------------------------------------------------------
+		// Transaction sales
+		// --------------------------------------------------------------------
+
+		private async Task<List<SourceAggregate>> LoadCompanySalesAsync(
+			ProductStockAvailabilityFilter filter,
+			DateTime? dateFrom,
+			DateTime? dateToExclusive,
+			CancellationToken cancellationToken)
+		{
+			var query = _db.SalesCompanySales
+				.AsNoTracking()
+				.Where(row =>
+					row.StateId.HasValue &&
+					row.ProductId.HasValue &&
+					row.InvoiceDate.HasValue);
+
+			if (filter.StateIds.Count > 0)
+			{
+				query = query.Where(row => filter.StateIds.Contains(row.StateId!.Value));
+			}
+
+			if (dateFrom.HasValue)
+			{
+				query = query.Where(row => row.InvoiceDate!.Value >= dateFrom.Value);
+			}
+
+			if (dateToExclusive.HasValue)
+			{
+				query = query.Where(row => row.InvoiceDate!.Value < dateToExclusive.Value);
+			}
+
+			return await query
+				.GroupBy(row => new
+				{
+					StateId = row.StateId!.Value,
+					ProductId = row.ProductId!.Value
+				})
+				.Select(group => new SourceAggregate
+				{
+					StateId = group.Key.StateId,
+					ProductId = group.Key.ProductId,
+					Stock = 0m,
+					Sales = group.Sum(row => row.QuantityMT)
+				})
+				.ToListAsync(cancellationToken);
+		}
+
+		private async Task<List<SourceAggregate>> LoadWholesalerSalesAsync(
+			ProductStockAvailabilityFilter filter,
+			DateTime? dateFrom,
+			DateTime? dateToExclusive,
+			CancellationToken cancellationToken)
+		{
+			var query = _db.SalesWholesalers
+				.AsNoTracking()
+				.Where(row =>
+					row.StateId.HasValue &&
+					row.ProductId.HasValue &&
+					row.InvoiceDate.HasValue);
+
+			if (filter.StateIds.Count > 0)
+			{
+				query = query.Where(row => filter.StateIds.Contains(row.StateId!.Value));
+			}
+
+			if (dateFrom.HasValue)
+			{
+				query = query.Where(row => row.InvoiceDate!.Value >= dateFrom.Value);
+			}
+
+			if (dateToExclusive.HasValue)
+			{
+				query = query.Where(row => row.InvoiceDate!.Value < dateToExclusive.Value);
+			}
+
+			return await query
+				.GroupBy(row => new
+				{
+					StateId = row.StateId!.Value,
+					ProductId = row.ProductId!.Value
+				})
+				.Select(group => new SourceAggregate
+				{
+					StateId = group.Key.StateId,
+					ProductId = group.Key.ProductId,
+					Stock = 0m,
+					Sales = group.Sum(row => row.QuantityMT)
+				})
+				.ToListAsync(cancellationToken);
+		}
+
+		// --------------------------------------------------------------------
+		// Pivot construction
+		// --------------------------------------------------------------------
+
+		private static void Merge(
+			IDictionary<StateProductKey, CombinedValue> target,
+			IEnumerable<SourceAggregate> source)
+		{
+			foreach (var item in source)
+			{
+				var key = new StateProductKey(item.StateId, item.ProductId);
+
+				if (!target.TryGetValue(key, out var value))
+				{
+					value = new CombinedValue();
+					target[key] = value;
 				}
 
-				if (!stateBuilders.TryGetValue(item.StateId, out var state))
+				value.Stock += item.Stock;
+				value.Sales += item.Sales;
+			}
+		}
+
+		private static List<ProdStockStateRowDto> BuildRows(
+			IReadOnlyDictionary<StateProductKey, CombinedValue> combined,
+			IReadOnlyDictionary<int, string> stateNames)
+		{
+			var stateBuilders = new Dictionary<int, StateRowBuilder>();
+
+			foreach (var item in combined)
+			{
+				var key = item.Key;
+				var value = item.Value;
+
+				if (!stateBuilders.TryGetValue(key.StateId, out var state))
 				{
 					state = new StateRowBuilder
 					{
-						StateId = item.StateId,
-						StateName = NormalizeName(item.StateName)
+						StateId = key.StateId,
+						StateName = stateNames.TryGetValue(key.StateId, out var name)
+							? NormalizeName(name)
+							: "-"
 					};
 
-					stateBuilders[item.StateId] = state;
+					stateBuilders[key.StateId] = state;
 				}
 
-				// SQL grouping already produces one row per State + Product.
-				// += keeps this safe if a provider/query change ever emits duplicates.
-				if (state.Quantities.TryGetValue(item.ProductId, out var existing))
-				{
-					state.Quantities[item.ProductId] = existing + item.Quantity;
-				}
-				else
-				{
-					state.Quantities[item.ProductId] = item.Quantity;
-				}
-
-				state.Total += item.Quantity;
+				state.StockQuantities[key.ProductId] = value.Stock;
+				state.SalesQuantities[key.ProductId] = value.Sales;
+				state.TotalStock += value.Stock;
+				state.TotalSales += value.Sales;
 			}
 
-			var columns = productNames
-				.Select(item => new ProdStockColumnDto
-				{
-					ProductId = item.Key,
-					ProductName = item.Value,
-					Group = DefaultColumnGroup
-				})
-				.OrderBy(column => column.Group, StringComparer.OrdinalIgnoreCase)
-				.ThenBy(column => column.ProductName, StringComparer.OrdinalIgnoreCase)
-				.ToList();
-
-			var rows = stateBuilders.Values
+			return stateBuilders.Values
 				.Select(state => new ProdStockStateRowDto
 				{
 					StateId = state.StateId,
 					StateName = state.StateName,
-					Quantities = state.Quantities,
-					Total = state.Total
+					Quantities = state.StockQuantities,
+					SalesQuantities = state.SalesQuantities,
+					Total = state.TotalStock,
+					TotalSales = state.TotalSales
 				})
 				.ToList();
-
-			return new PivotResult(columns, rows);
 		}
 
 		private static ProdStockStateRowDto BuildGrandTotal(
 			IReadOnlyCollection<ProdStockStateRowDto> rows,
 			IReadOnlyCollection<ProdStockColumnDto> columns)
 		{
-			var quantities = new Dictionary<int, decimal>(columns.Count);
+			var stockQuantities = columns.ToDictionary(
+				column => column.ProductId,
+				_ => 0m);
 
-			foreach (var column in columns)
-			{
-				quantities[column.ProductId] = 0m;
-			}
+			var salesQuantities = columns.ToDictionary(
+				column => column.ProductId,
+				_ => 0m);
 
-			decimal total = 0m;
+			decimal totalStock = 0m;
+			decimal totalSales = 0m;
 
 			foreach (var row in rows)
 			{
-				total += row.Total;
+				totalStock += row.Total;
+				totalSales += row.TotalSales;
 
 				foreach (var item in row.Quantities)
 				{
-					quantities[item.Key] = quantities.TryGetValue(item.Key, out var current)
-						? current + item.Value
-						: item.Value;
+					stockQuantities[item.Key] =
+						stockQuantities.TryGetValue(item.Key, out var current)
+							? current + item.Value
+							: item.Value;
+				}
+
+				foreach (var item in row.SalesQuantities)
+				{
+					salesQuantities[item.Key] =
+						salesQuantities.TryGetValue(item.Key, out var current)
+							? current + item.Value
+							: item.Value;
 				}
 			}
 
@@ -270,15 +560,18 @@ namespace Spic.Infrastructure.Services
 			{
 				StateId = 0,
 				StateName = "Grand Total",
-				Quantities = quantities,
-				Total = total
+				Quantities = stockQuantities,
+				SalesQuantities = salesQuantities,
+				Total = totalStock,
+				TotalSales = totalSales
 			};
 		}
 
 		private static ProdStockSummaryDto BuildSummary(
 			IReadOnlyCollection<ProdStockStateRowDto> rows,
 			int productCount,
-			decimal totalQuantity)
+			decimal totalStock,
+			decimal totalSales)
 		{
 			ProdStockStateRowDto? highest = null;
 			var lowStockAlerts = 0;
@@ -306,7 +599,8 @@ namespace Spic.Infrastructure.Services
 			{
 				TotalStates = rows.Count,
 				TotalProducts = productCount,
-				TotalQuantity = totalQuantity,
+				TotalQuantity = totalStock,
+				TotalSales = totalSales,
 				HighestStockState = highest?.StateName ?? "-",
 				HighestStockQuantity = highest?.Total ?? 0m,
 				LowStockAlerts = lowStockAlerts
@@ -333,6 +627,14 @@ namespace Spic.Infrastructure.Services
 					.OrderBy(row => row.Total)
 					.ThenBy(row => row.StateName, StringComparer.OrdinalIgnoreCase),
 
+				"sales" when descending => rows
+					.OrderByDescending(row => row.TotalSales)
+					.ThenBy(row => row.StateName, StringComparer.OrdinalIgnoreCase),
+
+				"sales" => rows
+					.OrderBy(row => row.TotalSales)
+					.ThenBy(row => row.StateName, StringComparer.OrdinalIgnoreCase),
+
 				"state" when descending => rows
 					.OrderByDescending(row => row.StateName, StringComparer.OrdinalIgnoreCase),
 
@@ -356,7 +658,9 @@ namespace Spic.Infrastructure.Services
 					StateId = 0,
 					StateName = "Grand Total",
 					Quantities = new Dictionary<int, decimal>(),
-					Total = 0m
+					SalesQuantities = new Dictionary<int, decimal>(),
+					Total = 0m,
+					TotalSales = 0m
 				},
 				Grid = new PagedResult<ProdStockStateRowDto>
 				{
@@ -394,7 +698,6 @@ namespace Spic.Infrastructure.Services
 
 		private static int ResolvePageSize(int requestedPageSize)
 		{
-			// The controller uses int.MaxValue only for an unpaged Excel export.
 			if (requestedPageSize == int.MaxValue)
 			{
 				return int.MaxValue;
@@ -410,16 +713,12 @@ namespace Spic.Infrastructure.Services
 
 		private static DateTime? ToUtcStart(DateTime? value)
 		{
-			return value.HasValue
-				? ToUtcDate(value.Value)
-				: null;
+			return value.HasValue ? ToUtcDate(value.Value) : null;
 		}
 
 		private static DateTime? ToUtcExclusiveEnd(DateTime? value)
 		{
-			return value.HasValue
-				? ToUtcDate(value.Value).AddDays(1)
-				: null;
+			return value.HasValue ? ToUtcDate(value.Value).AddDays(1) : null;
 		}
 
 		private static DateTime ToUtcDate(DateTime value)
@@ -429,30 +728,33 @@ namespace Spic.Infrastructure.Services
 
 		private static string NormalizeName(string? value)
 		{
-			return string.IsNullOrWhiteSpace(value)
-				? "-"
-				: value.Trim();
+			return string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
 		}
 
-		private sealed class AggregateRow
+		private readonly record struct StateProductKey(int StateId, int ProductId);
+
+		private sealed class SourceAggregate
 		{
 			public int StateId { get; set; }
-			public string StateName { get; set; } = "";
 			public int ProductId { get; set; }
-			public string ProductName { get; set; } = "";
-			public decimal Quantity { get; set; }
+			public decimal Stock { get; set; }
+			public decimal Sales { get; set; }
+		}
+
+		private sealed class CombinedValue
+		{
+			public decimal Stock { get; set; }
+			public decimal Sales { get; set; }
 		}
 
 		private sealed class StateRowBuilder
 		{
 			public int StateId { get; set; }
 			public string StateName { get; set; } = "";
-			public Dictionary<int, decimal> Quantities { get; } = new();
-			public decimal Total { get; set; }
+			public Dictionary<int, decimal> StockQuantities { get; } = new();
+			public Dictionary<int, decimal> SalesQuantities { get; } = new();
+			public decimal TotalStock { get; set; }
+			public decimal TotalSales { get; set; }
 		}
-
-		private sealed record PivotResult(
-			List<ProdStockColumnDto> Columns,
-			List<ProdStockStateRowDto> Rows);
 	}
 }

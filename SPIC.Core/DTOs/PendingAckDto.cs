@@ -39,6 +39,7 @@ namespace SPIC.Core.DTOs
 		public PendingAckCategorySummaryDto Overall { get; set; } = new();
 		public PendingAckCategorySummaryDto CompanySales { get; set; } = new();
 		public PendingAckCategorySummaryDto WholesalerSales { get; set; } = new();
+		public PendingAckCategorySummaryDto DptSales { get; set; } = new();
 		public List<PendingAckStateWiseDto> StateWise { get; set; } = new();
 		public PagedResult<PendingAckRowDto> Grid { get; set; } = new();
 	}
@@ -83,6 +84,13 @@ namespace SPIC.Core.DTOs
 		public int WholesalerCritical { get; set; }
 		public int WholesalerOverdue { get; set; }
 		public int WholesalerConsentBuyer { get; set; }
+
+		public int DptTotal { get; set; }
+		public int DptCompleted { get; set; }
+		public int DptLatest { get; set; }
+		public int DptCritical { get; set; }
+		public int DptOverdue { get; set; }
+		public int DptConsentBuyer { get; set; }
 	}
 
 	public class PendingAckStateWiseDto
@@ -167,8 +175,6 @@ namespace SPIC.Core.DTOs
 	{
 		public string Key { get; set; } = string.Empty;
 
-		// Compatibility alias for CompanySales.razor FetchOptions(), which reads
-		// an "id" JSON property. Both Key and Id return the same value.
 		public string Id
 		{
 			get => Key;

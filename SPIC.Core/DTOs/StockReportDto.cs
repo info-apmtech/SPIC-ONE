@@ -66,6 +66,17 @@ namespace SPIC.Core.DTOs
 		public decimal Quantity { get; set; }
 		public string LyingWith { get; set; } = string.Empty;
 		public int AgeingDays { get; set; }
+
+		/// <summary>
+		/// True only when AgeingDays was calculated from a matching sales row
+		/// whose workflow Status.Name is Ack and RetailerReceiptDate is present.
+		/// </summary>
+		public bool HasAckAgeing { get; set; }
+
+		public string AgeingDisplay => HasAckAgeing
+			? AgeingDays.ToString()
+			: "--";
+
 		public string Status { get; set; } = string.Empty;
 		public string? MobileNo { get; set; }
 		public string? WhatsAppNumber { get; set; }
