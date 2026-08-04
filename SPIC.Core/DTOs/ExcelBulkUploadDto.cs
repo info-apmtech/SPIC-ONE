@@ -34,6 +34,8 @@ namespace SPIC.Core.DTOs
 		public int Companies { get; set; }
 		public int Plants { get; set; }
 		public int Products { get; set; }
+		public int IfmsProducts { get; set; }
+
 
 		// Used by Company Sales / Wholesale Sales / Reconciliation imports.
 		public int Units { get; set; }

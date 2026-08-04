@@ -104,11 +104,26 @@
                 <div class="cs-form-group">
                     <label class="cs-form-label">Status (By Age)</label>
                     <select id="agestatus-select" class="cs-form-select" multiple="multiple">
-                        <option value="Fresh" selected="@(_selectedAgeStatuses.Contains("Fresh"))">Fresh</option>
-                        <option value="Pending" selected="@(_selectedAgeStatuses.Contains("Pending"))">Pending</option>
-                        <option value="Critical" selected="@(_selectedAgeStatuses.Contains("Critical"))">Critical</option>
-                        <option value="Overdue" selected="@(_selectedAgeStatuses.Contains("Overdue"))">Overdue</option>
-                        <option value="Completed" selected="@(_selectedAgeStatuses.Contains("Completed"))">Completed</option>
+                        <option value="@AgeStatus.Completed"
+                                selected="@(_selectedAgeStatuses.Contains(AgeStatus.Completed))">
+                            @AgeStatus.Completed
+                        </option>
+                        <option value="@AgeStatus.Latest"
+                                selected="@(_selectedAgeStatuses.Contains(AgeStatus.Latest))">
+                            @AgeStatus.Latest
+                        </option>
+                        <option value="@AgeStatus.Critical"
+                                selected="@(_selectedAgeStatuses.Contains(AgeStatus.Critical))">
+                            @AgeStatus.Critical
+                        </option>
+                        <option value="@AgeStatus.Overdue"
+                                selected="@(_selectedAgeStatuses.Contains(AgeStatus.Overdue))">
+                            @AgeStatus.Overdue
+                        </option>
+                        <option value="@AgeStatus.ConsentOfBuyer"
+                                selected="@(_selectedAgeStatuses.Contains(AgeStatus.ConsentOfBuyer))">
+                            @AgeStatus.ConsentOfBuyer
+                        </option>
                     </select>
                 </div>
                 <div></div>
@@ -562,13 +577,13 @@
     private List<LocationDto> _states = new();
     private List<LocationDto> _districts = new();
     private List<LocationDto> _dealerTypes = new();
-    private List<LocationDto> _products = new();
+    private List<OptionDto> _products = new();   // keyed product ids ("P:123" / "I:456")
     private List<OptionDto> _dealers = new();   // keyed ids ("R123"/"I456")
 
     private List<int> _selectedStates = new();
     private List<int> _selectedDistricts = new();
     private List<int> _selectedDealerTypes = new();
-    private List<int> _selectedProducts = new();
+    private List<string> _selectedProducts = new();
     private List<string> _selectedDealers = new();
     private List<string> _selectedAgeStatuses = new();
 
@@ -646,7 +661,7 @@
         var statesTask = FetchData("api/State/all");
         var districtsTask = FetchData("api/District/all");
         var dealerTypesTask = FetchData("api/PendingAck/dealer-types");   // from DealerTypes
-        var productsTask = FetchData("api/Product/all");
+        var productsTask = FetchOptions("api/PendingAck/products"); // Products + IFMS Products
         var dealersTask = FetchOptions("api/PendingAck/dealers");     // DealerRegistrations + IfmsDealers (keyed ids)
 
         await Task.WhenAll(statesTask, districtsTask, dealerTypesTask, productsTask, dealersTask);
@@ -746,7 +761,10 @@
         _filter.StateIds      = _selectedStates.ToList();
         _filter.DistrictIds   = _selectedDistricts.ToList();
         _filter.DealerTypeIds = _selectedDealerTypes.ToList();
-        _filter.ProductIds    = _selectedProducts.ToList();
+        // The new page sends typed keys. ProductIds remains populated for
+        // approved products so older API clients/logic stay compatible.
+        _filter.ProductKeys   = _selectedProducts.ToList();
+        _filter.ProductIds    = ParseProductIds(_selectedProducts, "P:");
         _filter.DealerKeys    = _selectedDealers.ToList();
         _filter.AgeStatuses   = _selectedAgeStatuses.ToList();
     }
@@ -925,6 +943,21 @@
             .Distinct()
             .ToList();
 
+    private static List<int> ParseProductIds(
+        IEnumerable<string>? values,
+        string prefix)
+    {
+        return (values ?? Enumerable.Empty<string>())
+            .Where(value =>
+                !string.IsNullOrWhiteSpace(value) &&
+                value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Select(value => value[prefix.Length..])
+            .Where(value => int.TryParse(value, out _))
+            .Select(int.Parse)
+            .Distinct()
+            .ToList();
+    }
+
     // ==========================================================
     //  Select2 cascade logic (State -> District; others independent)
     // ==========================================================
@@ -996,10 +1029,26 @@
     public void OnDealerChanged(List<string>? values) { _selectedDealers = values ?? new(); StateHasChanged(); }
 
     [JSInvokable]
-    public void OnProductChanged(List<string>? values) { _selectedProducts = ParseIntValues(values); StateHasChanged(); }
+    public void OnProductChanged(List<string>? values)
+    {
+        _selectedProducts = (values ?? new List<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        StateHasChanged();
+    }
 
     [JSInvokable]
-    public void OnAgeStatusChanged(List<string>? values) { _selectedAgeStatuses = values ?? new(); StateHasChanged(); }
+    public void OnAgeStatusChanged(List<string>? values)
+    {
+        _selectedAgeStatuses = (values ?? new List<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        StateHasChanged();
+    }
 
     private async Task RefreshSelect2Hierarchy()
     {

@@ -14,5 +14,8 @@ namespace SPIC.Core.Interfaces
 		Task<List<LiqCycleRowDto>> GetAllRowsAsync(
 			LiqCycleFilter filter,
 			CancellationToken cancellationToken = default);
+
+		Task<List<LiqCycleProductDto>> GetProductsAsync(
+			CancellationToken cancellationToken = default);
 	}
 }

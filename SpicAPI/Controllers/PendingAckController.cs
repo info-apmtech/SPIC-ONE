@@ -47,6 +47,13 @@ namespace SpicAPI.Controllers
 			return Ok(await _service.GetDealersAsync(cancellationToken));
 		}
 
+		[HttpGet("products")]
+		public async Task<ActionResult<List<PendingAckProductDto>>> Products(
+			CancellationToken cancellationToken)
+		{
+			return Ok(await _service.GetProductsAsync(cancellationToken));
+		}
+
 		[HttpPost("export/excel")]
 		public async Task<IActionResult> ExportExcel(
 			[FromBody] PendingAckFilter? filter,

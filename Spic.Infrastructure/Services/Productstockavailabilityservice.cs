@@ -12,6 +12,10 @@
 //    * DptReport.SoldQuantity               latest DPT snapshot only
 //
 //  Historical stock snapshots are never added together.
+//
+//  Product identity:
+//    * ProductId keeps its existing positive pivot key.
+//    * IfmsProductId uses a negative internal pivot key to prevent ID collisions.
 // ============================================================================
 
 using System;
@@ -33,6 +37,7 @@ namespace Spic.Infrastructure.Services
 		private const int DefaultPageSize = 16;
 		private const int MaxInteractivePageSize = 500;
 		private const string DefaultColumnGroup = "Products";
+		private const string IfmsColumnGroup = "IFMS Products";
 
 		private readonly AppDbContext _db;
 
@@ -102,8 +107,21 @@ namespace Spic.Infrastructure.Services
 				.Distinct()
 				.ToList();
 
-			var productIds = combined.Keys
-				.Select(key => key.ProductId)
+			// Product table IDs stay positive. IFMS product IDs use a negative pivot
+			// key internally so Product.Id 10 and IfmsProduct.Id 10 never collide.
+			var productKeys = combined.Keys
+				.Select(key => key.ProductKey)
+				.Distinct()
+				.ToList();
+
+			var approvedProductIds = productKeys
+				.Where(key => key > 0)
+				.Distinct()
+				.ToList();
+
+			var ifmsProductIds = productKeys
+				.Where(key => key < 0)
+				.Select(key => -key)
 				.Distinct()
 				.ToList();
 
@@ -115,24 +133,52 @@ namespace Spic.Infrastructure.Services
 					state => state.StateName ?? string.Empty,
 					cancellationToken);
 
-			var productNames = await _db.Set<Product>()
-				.AsNoTracking()
-				.Where(product => productIds.Contains(product.Id))
-				.ToDictionaryAsync(
-					product => product.Id,
-					product => product.Name ?? string.Empty,
-					cancellationToken);
+			var productNames = approvedProductIds.Count == 0
+				? new Dictionary<int, string>()
+				: await _db.Set<Product>()
+					.AsNoTracking()
+					.Where(product => approvedProductIds.Contains(product.Id))
+					.ToDictionaryAsync(
+						product => product.Id,
+						product => product.Name ?? string.Empty,
+						cancellationToken);
 
-			var columns = productIds
-				.Select(productId => new ProdStockColumnDto
+			var ifmsProductNames = ifmsProductIds.Count == 0
+				? new Dictionary<int, string>()
+				: await _db.Set<IfmsProduct>()
+					.AsNoTracking()
+					.Where(product => ifmsProductIds.Contains(product.Id))
+					.ToDictionaryAsync(
+						product => product.Id,
+						product => product.Name ?? string.Empty,
+						cancellationToken);
+
+			var columns = productKeys
+				.Select(productKey =>
 				{
-					ProductId = productId,
-					ProductName = productNames.TryGetValue(productId, out var name)
-						? NormalizeName(name)
-						: "-",
-					Group = DefaultColumnGroup
+					var isIfmsProduct = productKey < 0;
+					var actualProductId = isIfmsProduct ? -productKey : productKey;
+					var name = isIfmsProduct
+						? ifmsProductNames.TryGetValue(actualProductId, out var ifmsName)
+							? ifmsName
+							: null
+						: productNames.TryGetValue(actualProductId, out var productName)
+							? productName
+							: null;
+
+					return new ProdStockColumnDto
+					{
+						// Existing ProductId remains the dictionary/pivot key.
+						// Approved products are positive; IFMS products are negative.
+						ProductId = productKey,
+						ApprovedProductId = isIfmsProduct ? null : actualProductId,
+						IfmsProductId = isIfmsProduct ? actualProductId : null,
+						ProductName = NormalizeName(name),
+						Group = isIfmsProduct ? IfmsColumnGroup : DefaultColumnGroup
+					};
 				})
-				.OrderBy(column => column.ProductName, StringComparer.OrdinalIgnoreCase)
+				.OrderBy(column => column.IsIfmsProduct)
+				.ThenBy(column => column.ProductName, StringComparer.OrdinalIgnoreCase)
 				.ThenBy(column => column.ProductId)
 				.ToList();
 
@@ -204,7 +250,9 @@ namespace Spic.Infrastructure.Services
 		{
 			var query = _db.WholesalerStockAsOnTodays
 				.AsNoTracking()
-				.Where(row => row.StateId.HasValue && row.ProductId.HasValue);
+				.Where(row =>
+					row.StateId.HasValue &&
+					(row.ProductId.HasValue || row.IfmsProductId.HasValue));
 
 			if (filter.StateIds.Count > 0)
 			{
@@ -239,12 +287,14 @@ namespace Spic.Infrastructure.Services
 				.GroupBy(row => new
 				{
 					StateId = row.StateId!.Value,
-					ProductId = row.ProductId!.Value
+					row.ProductId,
+					row.IfmsProductId
 				})
 				.Select(group => new SourceAggregate
 				{
 					StateId = group.Key.StateId,
 					ProductId = group.Key.ProductId,
+					IfmsProductId = group.Key.IfmsProductId,
 					Stock = group.Sum(row => row.Stock),
 					Sales = 0m
 				})
@@ -259,7 +309,9 @@ namespace Spic.Infrastructure.Services
 		{
 			var query = _db.DptReports
 				.AsNoTracking()
-				.Where(row => row.StateId.HasValue && row.ProductId.HasValue);
+				.Where(row =>
+					row.StateId.HasValue &&
+					(row.ProductId.HasValue || row.IfmsProductId.HasValue));
 
 			if (filter.StateIds.Count > 0)
 			{
@@ -294,12 +346,14 @@ namespace Spic.Infrastructure.Services
 				.GroupBy(row => new
 				{
 					StateId = row.StateId!.Value,
-					ProductId = row.ProductId!.Value
+					row.ProductId,
+					row.IfmsProductId
 				})
 				.Select(group => new SourceAggregate
 				{
 					StateId = group.Key.StateId,
 					ProductId = group.Key.ProductId,
+					IfmsProductId = group.Key.IfmsProductId,
 					Stock = group.Sum(row => row.ClosingBalance),
 					Sales = group.Sum(row => row.SoldQuantity)
 				})
@@ -314,7 +368,9 @@ namespace Spic.Infrastructure.Services
 		{
 			var query = _db.WarehouseDistrictGlobalStockReconciliations
 				.AsNoTracking()
-				.Where(row => row.StateId.HasValue && row.ProductId.HasValue);
+				.Where(row =>
+					row.StateId.HasValue &&
+					(row.ProductId.HasValue || row.IfmsProductId.HasValue));
 
 			if (filter.StateIds.Count > 0)
 			{
@@ -349,12 +405,14 @@ namespace Spic.Infrastructure.Services
 				.GroupBy(row => new
 				{
 					StateId = row.StateId!.Value,
-					ProductId = row.ProductId!.Value
+					row.ProductId,
+					row.IfmsProductId
 				})
 				.Select(group => new SourceAggregate
 				{
 					StateId = group.Key.StateId,
 					ProductId = group.Key.ProductId,
+					IfmsProductId = group.Key.IfmsProductId,
 					Stock = group.Sum(row => row.ClosingStock),
 					Sales = 0m
 				})
@@ -375,7 +433,7 @@ namespace Spic.Infrastructure.Services
 				.AsNoTracking()
 				.Where(row =>
 					row.StateId.HasValue &&
-					row.ProductId.HasValue &&
+					(row.ProductId.HasValue || row.IfmsProductId.HasValue) &&
 					row.InvoiceDate.HasValue);
 
 			if (filter.StateIds.Count > 0)
@@ -397,12 +455,14 @@ namespace Spic.Infrastructure.Services
 				.GroupBy(row => new
 				{
 					StateId = row.StateId!.Value,
-					ProductId = row.ProductId!.Value
+					row.ProductId,
+					row.IfmsProductId
 				})
 				.Select(group => new SourceAggregate
 				{
 					StateId = group.Key.StateId,
 					ProductId = group.Key.ProductId,
+					IfmsProductId = group.Key.IfmsProductId,
 					Stock = 0m,
 					Sales = group.Sum(row => row.QuantityMT)
 				})
@@ -419,7 +479,7 @@ namespace Spic.Infrastructure.Services
 				.AsNoTracking()
 				.Where(row =>
 					row.StateId.HasValue &&
-					row.ProductId.HasValue &&
+					(row.ProductId.HasValue || row.IfmsProductId.HasValue) &&
 					row.InvoiceDate.HasValue);
 
 			if (filter.StateIds.Count > 0)
@@ -441,12 +501,14 @@ namespace Spic.Infrastructure.Services
 				.GroupBy(row => new
 				{
 					StateId = row.StateId!.Value,
-					ProductId = row.ProductId!.Value
+					row.ProductId,
+					row.IfmsProductId
 				})
 				.Select(group => new SourceAggregate
 				{
 					StateId = group.Key.StateId,
 					ProductId = group.Key.ProductId,
+					IfmsProductId = group.Key.IfmsProductId,
 					Stock = 0m,
 					Sales = group.Sum(row => row.QuantityMT)
 				})
@@ -463,7 +525,13 @@ namespace Spic.Infrastructure.Services
 		{
 			foreach (var item in source)
 			{
-				var key = new StateProductKey(item.StateId, item.ProductId);
+				var productKey = BuildProductKey(item.ProductId, item.IfmsProductId);
+				if (productKey == 0)
+				{
+					continue;
+				}
+
+				var key = new StateProductKey(item.StateId, productKey);
 
 				if (!target.TryGetValue(key, out var value))
 				{
@@ -500,8 +568,8 @@ namespace Spic.Infrastructure.Services
 					stateBuilders[key.StateId] = state;
 				}
 
-				state.StockQuantities[key.ProductId] = value.Stock;
-				state.SalesQuantities[key.ProductId] = value.Sales;
+				state.StockQuantities[key.ProductKey] = value.Stock;
+				state.SalesQuantities[key.ProductKey] = value.Sales;
 				state.TotalStock += value.Stock;
 				state.TotalSales += value.Sales;
 			}
@@ -726,17 +794,36 @@ namespace Spic.Infrastructure.Services
 			return DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
 		}
 
+		private static int BuildProductKey(int? productId, int? ifmsProductId)
+		{
+			// Preserve the previous Product table identity exactly.
+			if (productId.HasValue && productId.Value > 0)
+			{
+				return productId.Value;
+			}
+
+			// Negative values are internal pivot keys only. The real IFMS ID remains
+			// available on ProdStockColumnDto.IfmsProductId.
+			if (ifmsProductId.HasValue && ifmsProductId.Value > 0)
+			{
+				return -ifmsProductId.Value;
+			}
+
+			return 0;
+		}
+
 		private static string NormalizeName(string? value)
 		{
 			return string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
 		}
 
-		private readonly record struct StateProductKey(int StateId, int ProductId);
+		private readonly record struct StateProductKey(int StateId, int ProductKey);
 
 		private sealed class SourceAggregate
 		{
 			public int StateId { get; set; }
-			public int ProductId { get; set; }
+			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public decimal Stock { get; set; }
 			public decimal Sales { get; set; }
 		}

@@ -20,7 +20,16 @@ namespace SPIC.Core.DTOs
 		public List<int> StateIds { get; set; } = new();
 		public List<int> DistrictIds { get; set; } = new();
 		public List<int> DealerTypeIds { get; set; } = new();
+
+		// Backward-compatible approved Product IDs used by older clients.
 		public List<int> ProductIds { get; set; } = new();
+
+		// Combined product keys used by the current dropdown:
+		// P:10 = Product.Id 10, I:10 = IfmsProduct.Id 10.
+		public List<string> ProductKeys { get; set; } = new();
+
+		// Combined dealer keys:
+		// R:10 = DealerRegistration.Id 10, I:10 = IfmsDealer.Id 10.
 		public List<string> DealerKeys { get; set; } = new();
 
 		public string? Source { get; set; }
@@ -157,6 +166,13 @@ namespace SPIC.Core.DTOs
 		public int? StateId { get; set; }
 		public int? DistrictId { get; set; }
 		public int? ProductId { get; set; }
+		public int? IfmsProductId { get; set; }
+
+		public string ProductKey => ProductId.HasValue
+			? $"P:{ProductId.Value}"
+			: IfmsProductId.HasValue
+				? $"I:{IfmsProductId.Value}"
+				: string.Empty;
 
 		public decimal QuantityMT { get; set; }
 		public decimal ReceivedQuantity { get; set; }
@@ -178,6 +194,20 @@ namespace SPIC.Core.DTOs
 		public string Name { get; set; } = string.Empty;
 	}
 
+	public class PendingAckProductDto
+	{
+		public string Key { get; set; } = string.Empty;
+
+		public string Id
+		{
+			get => Key;
+			set => Key = value;
+		}
+
+		public string Name { get; set; } = string.Empty;
+		public string Source { get; set; } = string.Empty;
+	}
+
 	public class PendingAckDealerDto
 	{
 		public string Key { get; set; } = string.Empty;
@@ -189,5 +219,6 @@ namespace SPIC.Core.DTOs
 		}
 
 		public string Name { get; set; } = string.Empty;
+		public string Source { get; set; } = string.Empty;
 	}
 }

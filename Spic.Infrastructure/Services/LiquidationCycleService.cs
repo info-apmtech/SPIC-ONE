@@ -73,6 +73,41 @@ namespace Spic.Infrastructure.Services
 			return BuildGrid(rows, filter, paged: false).Items;
 		}
 
+		public async Task<List<LiqCycleProductDto>> GetProductsAsync(
+			CancellationToken cancellationToken = default)
+		{
+			// Keep the existing Product master and add IFMS products as a second source.
+			// P:<id> and I:<id> prevent equal numeric IDs from colliding.
+			var approvedRows = await _db.Set<Product>()
+				.AsNoTracking()
+				.Where(x => x.Name != null && x.Name != string.Empty)
+				.Select(x => new { x.Id, x.Name })
+				.ToListAsync(cancellationToken);
+
+			var ifmsRows = await _db.Set<IfmsProduct>()
+				.AsNoTracking()
+				.Where(x => x.Name != null && x.Name != string.Empty)
+				.Select(x => new { x.Id, x.Name })
+				.ToListAsync(cancellationToken);
+
+			return approvedRows
+				.Select(x => new LiqCycleProductDto
+				{
+					Key = $"P:{x.Id}",
+					Name = x.Name!,
+					Source = "Product"
+				})
+				.Concat(ifmsRows.Select(x => new LiqCycleProductDto
+				{
+					Key = $"I:{x.Id}",
+					Name = x.Name!,
+					Source = "IFMS"
+				}))
+				.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+				.ToList();
+		}
+
 		// =====================================================================
 		// Unified compact loading
 		// =====================================================================
@@ -85,6 +120,7 @@ namespace Spic.Infrastructure.Services
 			var toExclusive = ToUtcExclusiveEnd(filter.DateTo);
 			var asOfDate = filter.DateTo?.Date ?? DateTime.UtcNow.Date;
 			var dealerIds = SplitDealerKeys(filter.DealerKeys);
+			var productIds = SplitProductKeys(filter);
 
 			// These are already aggregated/latest rows, not full transaction history.
 			var stageRows = new List<StageRow>();
@@ -97,6 +133,7 @@ namespace Spic.Infrastructure.Services
 					from,
 					toExclusive,
 					dealerIds,
+					productIds,
 					cancellationToken));
 			}
 
@@ -107,6 +144,7 @@ namespace Spic.Infrastructure.Services
 					from,
 					toExclusive,
 					dealerIds,
+					productIds,
 					cancellationToken));
 			}
 
@@ -117,6 +155,7 @@ namespace Spic.Infrastructure.Services
 					from,
 					toExclusive,
 					dealerIds,
+					productIds,
 					cancellationToken));
 			}
 
@@ -138,7 +177,13 @@ namespace Spic.Infrastructure.Services
 					DealerName = FirstNonEmpty(row.DealerName, "-"),
 					DealerCode = FirstNonEmpty(row.DealerCode, "-"),
 					DealerType = row.DealerType,
-					ProductName = GetName(lookup.Products, row.ProductId),
+					ProductId = row.ProductId,
+					IfmsProductId = row.IfmsProductId,
+					ProductName = GetProductName(
+						lookup.Products,
+						lookup.IfmsProducts,
+						row.ProductId,
+						row.IfmsProductId),
 					StateName = GetName(lookup.States, row.StateId),
 					District = GetName(lookup.Districts, row.DistrictId),
 					MobileNo = FirstNonEmpty(row.MobileNo, "-"),
@@ -160,6 +205,7 @@ namespace Spic.Infrastructure.Services
 			DateTime? from,
 			DateTime? toExclusive,
 			DealerIdSelection dealerIds,
+			ProductIdSelection productIds,
 			CancellationToken cancellationToken)
 		{
 			// Warehouse reconciliation has no dealer identity. When a dealer filter is
@@ -185,10 +231,11 @@ namespace Spic.Infrastructure.Services
 					x.DistrictId.HasValue && filter.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
-			if (filter.ProductIds.Count > 0)
+			if (productIds.HasAny)
 			{
 				warehouseBase = warehouseBase.Where(x =>
-					x.ProductId.HasValue && filter.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue && productIds.ProductIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && productIds.IfmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			// CreatedAt carries the uploaded business report date for this snapshot table.
@@ -218,6 +265,7 @@ namespace Spic.Infrastructure.Services
 						StateId = x.StateId,
 						DistrictId = x.DistrictId,
 						ProductId = x.ProductId,
+						IfmsProductId = x.IfmsProductId,
 						ClosingStock = x.ClosingStock,
 						ReportDate = x.CreatedAt,
 						UpdatedAt = x.UpdatedAt
@@ -233,7 +281,8 @@ namespace Spic.Infrastructure.Services
 						PlantId = x.PlantId ?? 0,
 						StateId = x.StateId ?? 0,
 						DistrictId = x.DistrictId ?? 0,
-						ProductId = x.ProductId ?? 0
+						ProductId = x.ProductId ?? 0,
+						IfmsProductId = x.IfmsProductId ?? 0
 					})
 					.Select(group => group
 						.OrderByDescending(x => x.UpdatedAt)
@@ -245,7 +294,8 @@ namespace Spic.Infrastructure.Services
 					.GroupBy(x => new LocationProductKey(
 						x.StateId ?? 0,
 						x.DistrictId ?? 0,
-						x.ProductId ?? 0))
+						x.ProductId ?? 0,
+						x.IfmsProductId ?? 0))
 					.ToDictionary(
 						group => group.Key,
 						group => new WarehouseBalance
@@ -272,10 +322,11 @@ namespace Spic.Infrastructure.Services
 					x.DistrictId.HasValue && filter.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
-			if (filter.ProductIds.Count > 0)
+			if (productIds.HasAny)
 			{
 				companySalesQuery = companySalesQuery.Where(x =>
-					x.ProductId.HasValue && filter.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue && productIds.ProductIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && productIds.IfmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			if (filter.StatusIds.Count > 0)
@@ -301,20 +352,26 @@ namespace Spic.Infrastructure.Services
 				{
 					StateId = x.StateId ?? 0,
 					DistrictId = x.DistrictId ?? 0,
-					ProductId = x.ProductId ?? 0
+					ProductId = x.ProductId ?? 0,
+					IfmsProductId = x.IfmsProductId ?? 0
 				})
 				.Select(group => new CompanySalesAggregate
 				{
 					StateId = group.Key.StateId,
 					DistrictId = group.Key.DistrictId,
 					ProductId = group.Key.ProductId,
+					IfmsProductId = group.Key.IfmsProductId,
 					Quantity = group.Sum(x => x.QuantityMT),
 					LastDate = group.Max(x => x.InvoiceDate)
 				})
 				.ToListAsync(cancellationToken);
 
 			var companySales = companySalesRows.ToDictionary(
-				x => new LocationProductKey(x.StateId, x.DistrictId, x.ProductId));
+				x => new LocationProductKey(
+					x.StateId,
+					x.DistrictId,
+					x.ProductId,
+					x.IfmsProductId));
 
 			var keys = warehouseBalances.Keys
 				.Union(companySales.Keys)
@@ -338,6 +395,7 @@ namespace Spic.Infrastructure.Services
 					StateId = NullIfZero(key.StateId),
 					DistrictId = NullIfZero(key.DistrictId),
 					ProductId = NullIfZero(key.ProductId),
+					IfmsProductId = NullIfZero(key.IfmsProductId),
 					MobileNo = "-",
 					Stock = stock?.ClosingStock ?? 0m,
 					Sales = sales?.Quantity ?? 0m,
@@ -357,6 +415,7 @@ namespace Spic.Infrastructure.Services
 			DateTime? from,
 			DateTime? toExclusive,
 			DealerIdSelection dealerIds,
+			ProductIdSelection productIds,
 			CancellationToken cancellationToken)
 		{
 			var stockBase = _db.WholesalerStockAsOnTodays
@@ -376,10 +435,11 @@ namespace Spic.Infrastructure.Services
 					x.DistrictId.HasValue && filter.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
-			if (filter.ProductIds.Count > 0)
+			if (productIds.HasAny)
 			{
 				stockBase = stockBase.Where(x =>
-					x.ProductId.HasValue && filter.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue && productIds.ProductIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && productIds.IfmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			if (dealerIds.HasAny)
@@ -420,6 +480,7 @@ namespace Spic.Infrastructure.Services
 						CompanyId = x.CompanyId,
 						PlantId = x.PlantId,
 						ProductId = x.ProductId,
+						IfmsProductId = x.IfmsProductId,
 						Stock = x.Stock,
 						StockDate = x.StockDate,
 						UpdatedAt = x.UpdatedAt
@@ -435,7 +496,8 @@ namespace Spic.Infrastructure.Services
 						DistrictId = x.DistrictId ?? 0,
 						CompanyId = x.CompanyId ?? 0,
 						PlantId = x.PlantId ?? 0,
-						ProductId = x.ProductId ?? 0
+						ProductId = x.ProductId ?? 0,
+						IfmsProductId = x.IfmsProductId ?? 0
 					})
 					.Select(group => group
 						.OrderByDescending(x => x.UpdatedAt)
@@ -446,7 +508,8 @@ namespace Spic.Infrastructure.Services
 				latestStock = deduplicatedStockRows
 					.GroupBy(x => new DealerProductKey(
 						BuildDealerKey(x.DealerRegistrationId, x.IfmsDealerId),
-						x.ProductId ?? 0))
+						x.ProductId ?? 0,
+						x.IfmsProductId ?? 0))
 					.Where(group => group.Key.DealerKey != "-")
 					.ToDictionary(
 						group => group.Key,
@@ -466,6 +529,7 @@ namespace Spic.Infrastructure.Services
 								StateId = representative.StateId,
 								DistrictId = representative.DistrictId,
 								ProductId = representative.ProductId,
+								IfmsProductId = representative.IfmsProductId,
 								Stock = group.Sum(x => x.Stock),
 								SnapshotDate = snapshotStart
 							};
@@ -490,10 +554,11 @@ namespace Spic.Infrastructure.Services
 					filter.DistrictIds.Contains(x.SellerDistrictId.Value));
 			}
 
-			if (filter.ProductIds.Count > 0)
+			if (productIds.HasAny)
 			{
 				salesBase = salesBase.Where(x =>
-					x.ProductId.HasValue && filter.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue && productIds.ProductIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && productIds.IfmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			if (filter.StatusIds.Count > 0)
@@ -528,13 +593,15 @@ namespace Spic.Infrastructure.Services
 				{
 					RegularId = x.WholesalerId,
 					IfmsId = x.WholesalerId.HasValue ? null : x.IfmsWholesalerId,
-					ProductId = x.ProductId ?? 0
+					ProductId = x.ProductId ?? 0,
+					IfmsProductId = x.IfmsProductId ?? 0
 				})
 				.Select(group => new WholesalerSalesAggregate
 				{
 					WholesalerId = group.Key.RegularId,
 					IfmsWholesalerId = group.Key.IfmsId,
 					ProductId = group.Key.ProductId,
+					IfmsProductId = group.Key.IfmsProductId,
 					Quantity = group.Sum(x => x.QuantityMT),
 					LastDate = group.Max(x => x.InvoiceDate)
 				})
@@ -548,6 +615,7 @@ namespace Spic.Infrastructure.Services
 					(candidate.WholesalerId.HasValue ? 0 : candidate.IfmsWholesalerId ?? 0) ==
 					(current.WholesalerId.HasValue ? 0 : current.IfmsWholesalerId ?? 0) &&
 					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
+					(candidate.IfmsProductId ?? 0) == (current.IfmsProductId ?? 0) &&
 					candidate.Id > current.Id));
 
 			var representativeSalesRows = await representativeSalesQuery
@@ -556,6 +624,7 @@ namespace Spic.Infrastructure.Services
 					WholesalerId = x.WholesalerId,
 					IfmsWholesalerId = x.IfmsWholesalerId,
 					ProductId = x.ProductId,
+					IfmsProductId = x.IfmsProductId,
 					DealerName = x.WholesalerAgencyName,
 					StateId = x.StateId,
 					DistrictId = x.SellerDistrictId,
@@ -568,7 +637,8 @@ namespace Spic.Infrastructure.Services
 				{
 					Key = new DealerProductKey(
 						BuildDealerKey(x.WholesalerId, x.IfmsWholesalerId),
-						x.ProductId ?? 0),
+						x.ProductId ?? 0,
+						x.IfmsProductId ?? 0),
 					Row = x
 				})
 				.Where(x => x.Key.DealerKey != "-")
@@ -578,7 +648,8 @@ namespace Spic.Infrastructure.Services
 			var sales = salesAggregateRows
 				.GroupBy(x => new DealerProductKey(
 					BuildDealerKey(x.WholesalerId, x.IfmsWholesalerId),
-					x.ProductId))
+					x.ProductId,
+					x.IfmsProductId))
 				.Where(group => group.Key.DealerKey != "-")
 				.ToDictionary(
 					group => group.Key,
@@ -587,6 +658,7 @@ namespace Spic.Infrastructure.Services
 						WholesalerId = group.First().WholesalerId,
 						IfmsWholesalerId = group.First().IfmsWholesalerId,
 						ProductId = group.Key.ProductId,
+						IfmsProductId = group.Key.IfmsProductId,
 						Quantity = group.Sum(x => x.Quantity),
 						LastDate = group.Max(x => x.LastDate)
 					});
@@ -615,6 +687,7 @@ namespace Spic.Infrastructure.Services
 					DealerCode = key.DealerKey,
 					DealerType = "Wholesaler",
 					ProductId = NullIfZero(key.ProductId),
+					IfmsProductId = NullIfZero(key.IfmsProductId),
 					StateId = stock?.StateId ?? representative?.StateId,
 					DistrictId = stock?.DistrictId ?? representative?.DistrictId,
 					MobileNo = FirstNonEmpty(representative?.MobileNo, "-"),
@@ -636,6 +709,7 @@ namespace Spic.Infrastructure.Services
 			DateTime? from,
 			DateTime? toExclusive,
 			DealerIdSelection dealerIds,
+			ProductIdSelection productIds,
 			CancellationToken cancellationToken)
 		{
 			var filteredBase = _db.DptReports
@@ -654,10 +728,11 @@ namespace Spic.Infrastructure.Services
 					x.DistrictId.HasValue && filter.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
-			if (filter.ProductIds.Count > 0)
+			if (productIds.HasAny)
 			{
 				filteredBase = filteredBase.Where(x =>
-					x.ProductId.HasValue && filter.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue && productIds.ProductIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && productIds.IfmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			if (dealerIds.HasAny)
@@ -706,6 +781,7 @@ namespace Spic.Infrastructure.Services
 						CompanyId = x.CompanyId,
 						PlantId = x.PlantId,
 						ProductId = x.ProductId,
+						IfmsProductId = x.IfmsProductId,
 						MobileNo = x.MobileNo,
 						SoldQuantity = x.SoldQuantity,
 						ClosingBalance = x.ClosingBalance,
@@ -724,7 +800,8 @@ namespace Spic.Infrastructure.Services
 							x.RetailerName,
 							x.StateId,
 							x.DistrictId),
-						x.ProductId ?? 0))
+						x.ProductId ?? 0,
+						x.IfmsProductId ?? 0))
 					.ToDictionary(
 						group => group.Key,
 						group =>
@@ -743,6 +820,7 @@ namespace Spic.Infrastructure.Services
 								StateId = representative.StateId,
 								DistrictId = representative.DistrictId,
 								ProductId = representative.ProductId,
+								IfmsProductId = representative.IfmsProductId,
 								MobileNo = representative.MobileNo,
 								ClosingBalance = group.Sum(x => x.ClosingBalance),
 								SnapshotDate = snapshotStart
@@ -781,6 +859,7 @@ namespace Spic.Infrastructure.Services
 					CompanyId = x.CompanyId,
 					PlantId = x.PlantId,
 					ProductId = x.ProductId,
+					IfmsProductId = x.IfmsProductId,
 					MobileNo = x.MobileNo,
 					SoldQuantity = x.SoldQuantity,
 					ClosingBalance = x.ClosingBalance,
@@ -799,7 +878,8 @@ namespace Spic.Infrastructure.Services
 						x.RetailerName,
 						x.StateId,
 						x.DistrictId),
-					x.ProductId ?? 0))
+					x.ProductId ?? 0,
+					x.IfmsProductId ?? 0))
 				.ToDictionary(
 					group => group.Key,
 					group =>
@@ -818,6 +898,7 @@ namespace Spic.Infrastructure.Services
 							StateId = representative.StateId,
 							DistrictId = representative.DistrictId,
 							ProductId = representative.ProductId,
+							IfmsProductId = representative.IfmsProductId,
 							MobileNo = representative.MobileNo,
 							Quantity = group.Sum(x => x.SoldQuantity),
 							LastDate = group.Max(x => x.ReportDate)
@@ -846,6 +927,7 @@ namespace Spic.Infrastructure.Services
 						stock?.IfmsDealerId ?? sale?.IfmsDealerId),
 					DealerType = "Retailer",
 					ProductId = NullIfZero(key.ProductId),
+					IfmsProductId = NullIfZero(key.IfmsProductId),
 					StateId = stock?.StateId ?? sale?.StateId,
 					DistrictId = stock?.DistrictId ?? sale?.DistrictId,
 					MobileNo = FirstNonEmpty(stock?.MobileNo, sale?.MobileNo, "-"),
@@ -876,7 +958,8 @@ namespace Spic.Infrastructure.Services
 					SubDistrictId = x.SubDistrictId ?? 0,
 					CompanyId = x.CompanyId ?? 0,
 					PlantId = x.PlantId ?? 0,
-					ProductId = x.ProductId ?? 0
+					ProductId = x.ProductId ?? 0,
+					IfmsProductId = x.IfmsProductId ?? 0
 				})
 				.Select(group => group
 					.OrderByDescending(x => x.UpdatedAt)
@@ -911,6 +994,12 @@ namespace Spic.Infrastructure.Services
 				.Distinct()
 				.ToList();
 
+			var ifmsProductIds = rows
+				.Where(x => x.IfmsProductId.HasValue)
+				.Select(x => x.IfmsProductId!.Value)
+				.Distinct()
+				.ToList();
+
 			var states = stateIds.Count == 0
 				? new Dictionary<int, string>()
 				: await _db.Set<State>()
@@ -932,7 +1021,14 @@ namespace Spic.Infrastructure.Services
 					.Where(x => productIds.Contains(x.Id))
 					.ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
 
-			return new LookupMaps(states, districts, products);
+			var ifmsProducts = ifmsProductIds.Count == 0
+				? new Dictionary<int, string>()
+				: await _db.Set<IfmsProduct>()
+					.AsNoTracking()
+					.Where(x => ifmsProductIds.Contains(x.Id))
+					.ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+
+			return new LookupMaps(states, districts, products, ifmsProducts);
 		}
 
 		// =====================================================================
@@ -1104,12 +1200,18 @@ namespace Spic.Infrastructure.Services
 			filter.StateIds ??= new List<int>();
 			filter.DistrictIds ??= new List<int>();
 			filter.ProductIds ??= new List<int>();
+			filter.ProductKeys ??= new List<string>();
 			filter.StatusIds ??= new List<int>();
 			filter.DealerKeys ??= new List<string>();
 
 			filter.StateIds = filter.StateIds.Where(x => x > 0).Distinct().ToList();
 			filter.DistrictIds = filter.DistrictIds.Where(x => x > 0).Distinct().ToList();
 			filter.ProductIds = filter.ProductIds.Where(x => x > 0).Distinct().ToList();
+			filter.ProductKeys = filter.ProductKeys
+				.Where(x => !string.IsNullOrWhiteSpace(x))
+				.Select(x => x.Trim())
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
 			filter.StatusIds = filter.StatusIds.Where(x => x > 0).Distinct().ToList();
 			filter.DealerKeys = filter.DealerKeys
 				.Where(x => !string.IsNullOrWhiteSpace(x))
@@ -1153,6 +1255,21 @@ namespace Spic.Infrastructure.Services
 				   !string.IsNullOrWhiteSpace(name)
 				? name
 				: "-";
+		}
+
+		private static string GetProductName(
+			IReadOnlyDictionary<int, string> products,
+			IReadOnlyDictionary<int, string> ifmsProducts,
+			int? productId,
+			int? ifmsProductId)
+		{
+			var approvedName = GetName(products, productId);
+			if (approvedName != "-")
+			{
+				return approvedName;
+			}
+
+			return GetName(ifmsProducts, ifmsProductId);
 		}
 
 		private static int? NullIfZero(int value)
@@ -1209,6 +1326,45 @@ namespace Spic.Infrastructure.Services
 			};
 		}
 
+		private static ProductIdSelection SplitProductKeys(LiqCycleFilter filter)
+		{
+			// ProductIds is retained for all existing clients. ProductKeys is used by
+			// the new combined dropdown and keeps Product/IFMS numeric IDs separate.
+			var approvedIds = new HashSet<int>(filter.ProductIds.Where(x => x > 0));
+			var ifmsIds = new HashSet<int>();
+
+			foreach (var rawKey in filter.ProductKeys ?? Enumerable.Empty<string>())
+			{
+				if (string.IsNullOrWhiteSpace(rawKey))
+				{
+					continue;
+				}
+
+				var parts = rawKey.Trim().Split(':', 2);
+				if (parts.Length != 2 ||
+					!int.TryParse(parts[1], out var id) ||
+					id <= 0)
+				{
+					continue;
+				}
+
+				if (string.Equals(parts[0], "P", StringComparison.OrdinalIgnoreCase))
+				{
+					approvedIds.Add(id);
+				}
+				else if (string.Equals(parts[0], "I", StringComparison.OrdinalIgnoreCase))
+				{
+					ifmsIds.Add(id);
+				}
+			}
+
+			return new ProductIdSelection
+			{
+				ProductIds = approvedIds.ToList(),
+				IfmsProductIds = ifmsIds.ToList()
+			};
+		}
+
 		private static string BuildRetailerIdentity(
 			int? regularDealerId,
 			int? ifmsDealerId,
@@ -1251,6 +1407,7 @@ namespace Spic.Infrastructure.Services
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public string? MobileNo { get; set; }
 			public decimal Stock { get; set; }
 			public decimal Sales { get; set; }
@@ -1264,19 +1421,29 @@ namespace Spic.Infrastructure.Services
 			public bool HasAny => RegularIds.Count > 0 || IfmsIds.Count > 0;
 		}
 
+		private sealed class ProductIdSelection
+		{
+			public List<int> ProductIds { get; set; } = new();
+			public List<int> IfmsProductIds { get; set; } = new();
+			public bool HasAny => ProductIds.Count > 0 || IfmsProductIds.Count > 0;
+		}
+
 		private sealed record LookupMaps(
 			Dictionary<int, string> States,
 			Dictionary<int, string> Districts,
-			Dictionary<int, string> Products);
+			Dictionary<int, string> Products,
+			Dictionary<int, string> IfmsProducts);
 
 		private readonly record struct LocationProductKey(
 			int StateId,
 			int DistrictId,
-			int ProductId);
+			int ProductId,
+			int IfmsProductId);
 
 		private readonly record struct DealerProductKey(
 			string DealerKey,
-			int ProductId);
+			int ProductId,
+			int IfmsProductId);
 
 		private sealed class WarehouseSnapshot
 		{
@@ -1286,6 +1453,7 @@ namespace Spic.Infrastructure.Services
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public decimal ClosingStock { get; set; }
 			public DateTime ReportDate { get; set; }
 			public DateTime UpdatedAt { get; set; }
@@ -1303,6 +1471,7 @@ namespace Spic.Infrastructure.Services
 			public int StateId { get; set; }
 			public int DistrictId { get; set; }
 			public int ProductId { get; set; }
+			public int IfmsProductId { get; set; }
 			public decimal Quantity { get; set; }
 			public DateTime? LastDate { get; set; }
 		}
@@ -1318,6 +1487,7 @@ namespace Spic.Infrastructure.Services
 			public int? CompanyId { get; set; }
 			public int? PlantId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public decimal Stock { get; set; }
 			public DateTime StockDate { get; set; }
 			public DateTime UpdatedAt { get; set; }
@@ -1332,6 +1502,7 @@ namespace Spic.Infrastructure.Services
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public decimal Stock { get; set; }
 			public DateTime SnapshotDate { get; set; }
 		}
@@ -1341,6 +1512,7 @@ namespace Spic.Infrastructure.Services
 			public int? WholesalerId { get; set; }
 			public int? IfmsWholesalerId { get; set; }
 			public int ProductId { get; set; }
+			public int IfmsProductId { get; set; }
 			public decimal Quantity { get; set; }
 			public DateTime? LastDate { get; set; }
 		}
@@ -1350,6 +1522,7 @@ namespace Spic.Infrastructure.Services
 			public int? WholesalerId { get; set; }
 			public int? IfmsWholesalerId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public string? DealerName { get; set; }
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
@@ -1365,6 +1538,7 @@ namespace Spic.Infrastructure.Services
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public string? MobileNo { get; set; }
 			public decimal ClosingBalance { get; set; }
 			public DateTime SnapshotDate { get; set; }
@@ -1378,6 +1552,7 @@ namespace Spic.Infrastructure.Services
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public string? MobileNo { get; set; }
 			public decimal Quantity { get; set; }
 			public DateTime? LastDate { get; set; }
@@ -1385,7 +1560,8 @@ namespace Spic.Infrastructure.Services
 
 		private readonly record struct RetailerProductKey(
 			string RetailerKey,
-			int ProductId);
+			int ProductId,
+			int IfmsProductId);
 
 		private sealed class RetailerSnapshot
 		{
@@ -1399,6 +1575,7 @@ namespace Spic.Infrastructure.Services
 			public int? CompanyId { get; set; }
 			public int? PlantId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public string? MobileNo { get; set; }
 			public decimal SoldQuantity { get; set; }
 			public decimal ClosingBalance { get; set; }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,6 +31,13 @@ namespace SpicAPI.Controllers
 				cancellationToken);
 
 			return Ok(data);
+		}
+
+		[HttpGet("products")]
+		public async Task<ActionResult<List<AgeingReportProductDto>>> Products(
+			CancellationToken cancellationToken)
+		{
+			return Ok(await _service.GetProductsAsync(cancellationToken));
 		}
 
 		[HttpPost("export/excel")]

@@ -10,7 +10,13 @@ namespace SPIC.Core.DTOs
 		public List<int> DistrictIds { get; set; } = new();
 		public List<int> SubDistrictIds { get; set; } = new();
 		public List<int> LyingWithIds { get; set; } = new();
+
+		// Existing approved Product master selections.
 		public List<int> ProductIds { get; set; } = new();
+
+		// New IFMS product master selections.
+		public List<int> IfmsProductIds { get; set; } = new();
+
 		public List<string> AgeingRanges { get; set; } = new();
 
 		public string? Search { get; set; }
@@ -18,6 +24,18 @@ namespace SPIC.Core.DTOs
 		public string? SortDir { get; set; } = "asc";
 		public int Page { get; set; } = 1;
 		public int PageSize { get; set; } = 16;
+	}
+
+	/// <summary>
+	/// One option in the Stock Report product filter.
+	/// Value uses P:&lt;id&gt; for Product and I:&lt;id&gt; for IfmsProduct so
+	/// matching numeric IDs in the two tables can never collide.
+	/// </summary>
+	public class ProductFilterOptionDto
+	{
+		public string Value { get; set; } = string.Empty;
+		public string Name { get; set; } = string.Empty;
+		public string Source { get; set; } = string.Empty;
 	}
 
 	public class StockDashboardDto

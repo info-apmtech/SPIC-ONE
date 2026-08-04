@@ -14,7 +14,7 @@
 //  ACK-based stock-ageing rule:
 //    - Company / wholesaler sales start ageing only when Status.Name = "Ack"
 //      and RetailerReceiptDate is present.
-//    - Stock is matched by DealerRegistrationId or IfmsDealerId + ProductId.
+//    - Stock is matched by DealerRegistrationId or IfmsDealerId + ProductId/IfmsProductId.
 //    - DPT retailer stock first uses a strict workflow ACK. When none exists,
 //      the latest DptReport row with SoldQuantity > 0 is used as the retailer-
 //      sale ACK-equivalent date because DptReport has no StatusId or
@@ -182,6 +182,53 @@ namespace Spic.Infrastructure.Services
 				.ToList();
 		}
 
+		public async Task<List<AgeingReportProductDto>> GetProductsAsync(
+			CancellationToken cancellationToken = default)
+		{
+			var approvedRows = await _db.Set<Product>()
+				.AsNoTracking()
+				.Where(x => x.Name != null && x.Name != string.Empty)
+				.Select(x => new
+				{
+					x.Id,
+					x.Name
+				})
+				.ToListAsync(cancellationToken);
+
+			var ifmsRows = await _db.Set<IfmsProduct>()
+				.AsNoTracking()
+				.Where(x => x.Name != null && x.Name != string.Empty)
+				.Select(x => new
+				{
+					x.Id,
+					x.Name
+				})
+				.ToListAsync(cancellationToken);
+
+			var approvedProducts = approvedRows.Select(x => new AgeingReportProductDto
+			{
+				Key = $"P:{x.Id}",
+				Name = x.Name?.Trim() ?? string.Empty,
+				Source = "Product"
+			});
+
+			var ifmsProducts = ifmsRows.Select(x => new AgeingReportProductDto
+			{
+				Key = $"I:{x.Id}",
+				Name = $"{x.Name?.Trim()} (IFMS)",
+				Source = "IFMS"
+			});
+
+			return approvedProducts
+				.Concat(ifmsProducts)
+				.Where(x => !string.IsNullOrWhiteSpace(x.Name))
+				.GroupBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+				.Select(group => group.First())
+				.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+				.ToList();
+		}
+
 		// ====================================================================
 		// Latest current-stock snapshots
 		// ====================================================================
@@ -290,11 +337,12 @@ namespace Spic.Infrastructure.Services
 					f.LyingWithIds.Contains(x.DealershipNatureId.Value));
 			}
 
-			if (f.ProductIds.Count > 0)
+			var (productIds, ifmsProductIds) = SplitProductKeys(f);
+			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
 				query = query.Where(x =>
-					x.ProductId.HasValue &&
-					f.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			// Region/HQ selections are resolved to StateIds by the existing Razor
@@ -334,11 +382,12 @@ namespace Spic.Infrastructure.Services
 					f.LyingWithIds.Contains(x.DealershipNatureId.Value));
 			}
 
-			if (f.ProductIds.Count > 0)
+			var (productIds, ifmsProductIds) = SplitProductKeys(f);
+			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
 				query = query.Where(x =>
-					x.ProductId.HasValue &&
-					f.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			return query;
@@ -363,11 +412,12 @@ namespace Spic.Infrastructure.Services
 					f.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
-			if (f.ProductIds.Count > 0)
+			var (productIds, ifmsProductIds) = SplitProductKeys(f);
+			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
 				query = query.Where(x =>
-					x.ProductId.HasValue &&
-					f.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			// Warehouse rows do not have SubDistrictId or DealershipNatureId.
@@ -393,15 +443,17 @@ namespace Spic.Infrastructure.Services
 				{
 					DealerRegistrationId = x.DealerRegistrationId,
 					IfmsDealerId = x.IfmsDealerId,
-					ProductId = x.ProductId
+					ProductId = x.ProductId,
+					IfmsProductId = x.IfmsProductId
 				})
 				.Concat(dptRows.Select(x => new DealerProductKey
 				{
 					DealerRegistrationId = x.DealerRegistrationId,
 					IfmsDealerId = x.IfmsDealerId,
-					ProductId = x.ProductId
+					ProductId = x.ProductId,
+					IfmsProductId = x.IfmsProductId
 				}))
-				.Where(x => x.ProductId.HasValue)
+				.Where(x => x.ProductId.HasValue || x.IfmsProductId.HasValue)
 				.ToList();
 
 			var registrationIds = keys
@@ -422,9 +474,15 @@ namespace Spic.Infrastructure.Services
 				.Distinct()
 				.ToList();
 
+			var ifmsProductIds = keys
+				.Where(x => x.IfmsProductId.HasValue)
+				.Select(x => x.IfmsProductId!.Value)
+				.Distinct()
+				.ToList();
+
 			var result = new AcknowledgementLookup();
 
-			if (productIds.Count == 0 ||
+			if ((productIds.Count == 0 && ifmsProductIds.Count == 0) ||
 				(registrationIds.Count == 0 && ifmsIds.Count == 0))
 			{
 				return result;
@@ -453,8 +511,8 @@ namespace Spic.Infrastructure.Services
 						x.StatusId.HasValue &&
 						ackStatusIds.Contains(x.StatusId.Value) &&
 						x.RetailerReceiptDate.HasValue &&
-						x.ProductId.HasValue &&
-						productIds.Contains(x.ProductId.Value));
+						((x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
+						 (x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value))));
 
 				companyQuery = ApplyCompanyDealerScope(
 					companyQuery,
@@ -466,21 +524,23 @@ namespace Spic.Infrastructure.Services
 					{
 						x.DealerRegistrationId,
 						x.IfmsDealerId,
-						x.ProductId
+						x.ProductId,
+						x.IfmsProductId
 					})
 					.Select(group => new AckAggregate
 					{
 						DealerRegistrationId = group.Key.DealerRegistrationId,
 						IfmsDealerId = group.Key.IfmsDealerId,
 						ProductId = group.Key.ProductId,
+						IfmsProductId = group.Key.IfmsProductId,
 						AckDate = group.Max(x => x.RetailerReceiptDate)
 					})
 					.ToListAsync(cancellationToken);
 
 				foreach (var row in companyRows)
 				{
-					AddAck(result.StrictAckDates, "R", row.DealerRegistrationId, row.ProductId, row.AckDate);
-					AddAck(result.StrictAckDates, "I", row.IfmsDealerId, row.ProductId, row.AckDate);
+					AddAck(result.StrictAckDates, "R", row.DealerRegistrationId, row.ProductId, row.IfmsProductId, row.AckDate);
+					AddAck(result.StrictAckDates, "I", row.IfmsDealerId, row.ProductId, row.IfmsProductId, row.AckDate);
 				}
 
 				var wholesalerQuery = _db.Set<SalesWholesaler>()
@@ -489,8 +549,8 @@ namespace Spic.Infrastructure.Services
 						x.StatusId.HasValue &&
 						ackStatusIds.Contains(x.StatusId.Value) &&
 						x.RetailerReceiptDate.HasValue &&
-						x.ProductId.HasValue &&
-						productIds.Contains(x.ProductId.Value));
+						((x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
+						 (x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value))));
 
 				wholesalerQuery = ApplyWholesalerDealerScope(
 					wholesalerQuery,
@@ -502,21 +562,23 @@ namespace Spic.Infrastructure.Services
 					{
 						DealerRegistrationId = x.DealerId,
 						x.IfmsDealerId,
-						x.ProductId
+						x.ProductId,
+						x.IfmsProductId
 					})
 					.Select(group => new AckAggregate
 					{
 						DealerRegistrationId = group.Key.DealerRegistrationId,
 						IfmsDealerId = group.Key.IfmsDealerId,
 						ProductId = group.Key.ProductId,
+						IfmsProductId = group.Key.IfmsProductId,
 						AckDate = group.Max(x => x.RetailerReceiptDate)
 					})
 					.ToListAsync(cancellationToken);
 
 				foreach (var row in wholesalerSalesRows)
 				{
-					AddAck(result.StrictAckDates, "R", row.DealerRegistrationId, row.ProductId, row.AckDate);
-					AddAck(result.StrictAckDates, "I", row.IfmsDealerId, row.ProductId, row.AckDate);
+					AddAck(result.StrictAckDates, "R", row.DealerRegistrationId, row.ProductId, row.IfmsProductId, row.AckDate);
+					AddAck(result.StrictAckDates, "I", row.IfmsDealerId, row.ProductId, row.IfmsProductId, row.AckDate);
 				}
 			}
 
@@ -526,8 +588,8 @@ namespace Spic.Infrastructure.Services
 				.AsNoTracking()
 				.Where(x =>
 					x.SoldQuantity > 0m &&
-					x.ProductId.HasValue &&
-					productIds.Contains(x.ProductId.Value) &&
+					((x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
+					 (x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value))) &&
 					x.CreatedAt < DateTime.UtcNow.Date.AddDays(1));
 
 			dptSalesQuery = ApplyDptDealerScope(
@@ -540,21 +602,23 @@ namespace Spic.Infrastructure.Services
 				{
 					x.DealerRegistrationId,
 					x.IfmsDealerId,
-					x.ProductId
+					x.ProductId,
+					x.IfmsProductId
 				})
 				.Select(group => new AckAggregate
 				{
 					DealerRegistrationId = group.Key.DealerRegistrationId,
 					IfmsDealerId = group.Key.IfmsDealerId,
 					ProductId = group.Key.ProductId,
+					IfmsProductId = group.Key.IfmsProductId,
 					AckDate = group.Max(x => (DateTime?)x.CreatedAt)
 				})
 				.ToListAsync(cancellationToken);
 
 			foreach (var row in dptSalesRows)
 			{
-				AddAck(result.DptRetailerSaleDates, "R", row.DealerRegistrationId, row.ProductId, row.AckDate);
-				AddAck(result.DptRetailerSaleDates, "I", row.IfmsDealerId, row.ProductId, row.AckDate);
+				AddAck(result.DptRetailerSaleDates, "R", row.DealerRegistrationId, row.ProductId, row.IfmsProductId, row.AckDate);
+				AddAck(result.DptRetailerSaleDates, "I", row.IfmsDealerId, row.ProductId, row.IfmsProductId, row.AckDate);
 			}
 
 			return result;
@@ -649,17 +713,22 @@ namespace Spic.Infrastructure.Services
 
 		private static void AddAck(
 			IDictionary<string, DateTime> lookup,
-			string prefix,
+			string dealerPrefix,
 			int? dealerId,
 			int? productId,
+			int? ifmsProductId,
 			DateTime? ackDate)
 		{
-			if (!dealerId.HasValue || !productId.HasValue || !ackDate.HasValue)
+			var productKey = ProductIdentity(productId, ifmsProductId);
+
+			if (!dealerId.HasValue ||
+				string.IsNullOrWhiteSpace(productKey) ||
+				!ackDate.HasValue)
 			{
 				return;
 			}
 
-			var key = BuildAckKey(prefix, dealerId.Value, productId.Value);
+			var key = BuildAckKey(dealerPrefix, dealerId.Value, productKey);
 
 			// Current snapshots are not linked to invoice lots. The latest valid ACK
 			// for dealer + product is therefore used, matching the established flow.
@@ -669,16 +738,21 @@ namespace Spic.Infrastructure.Services
 			}
 		}
 
-		private static string BuildAckKey(string prefix, int dealerId, int productId) =>
-			$"{prefix}{dealerId}|{productId}";
+		private static string BuildAckKey(
+			string dealerPrefix,
+			int dealerId,
+			string productKey) =>
+			$"{dealerPrefix}{dealerId}|{productKey}";
 
 		private static DateTime? FindAckDate(
 			IReadOnlyDictionary<string, DateTime> lookup,
 			int? dealerRegistrationId,
 			int? ifmsDealerId,
-			int? productId)
+			int? productId,
+			int? ifmsProductId)
 		{
-			if (!productId.HasValue)
+			var productKey = ProductIdentity(productId, ifmsProductId);
+			if (string.IsNullOrWhiteSpace(productKey))
 			{
 				return null;
 			}
@@ -687,7 +761,7 @@ namespace Spic.Infrastructure.Services
 
 			if (dealerRegistrationId.HasValue &&
 				lookup.TryGetValue(
-					BuildAckKey("R", dealerRegistrationId.Value, productId.Value),
+					BuildAckKey("R", dealerRegistrationId.Value, productKey),
 					out var registrationDate))
 			{
 				result = registrationDate;
@@ -695,7 +769,7 @@ namespace Spic.Infrastructure.Services
 
 			if (ifmsDealerId.HasValue &&
 				lookup.TryGetValue(
-					BuildAckKey("I", ifmsDealerId.Value, productId.Value),
+					BuildAckKey("I", ifmsDealerId.Value, productKey),
 					out var ifmsDate) &&
 				(!result.HasValue || ifmsDate > result.Value))
 			{
@@ -743,6 +817,13 @@ namespace Spic.Infrastructure.Services
 				.Where(x => x.ProductId.HasValue)
 				.Select(x => x.ProductId!.Value)
 				.Concat(dptList.Where(x => x.ProductId.HasValue).Select(x => x.ProductId!.Value))
+				.Distinct()
+				.ToList();
+
+			var ifmsProductIds = wholesalerList
+				.Where(x => x.IfmsProductId.HasValue)
+				.Select(x => x.IfmsProductId!.Value)
+				.Concat(dptList.Where(x => x.IfmsProductId.HasValue).Select(x => x.IfmsProductId!.Value))
 				.Distinct()
 				.ToList();
 
@@ -800,6 +881,16 @@ namespace Spic.Infrastructure.Services
 						x => x.Name ?? string.Empty,
 						cancellationToken);
 
+			var ifmsProducts = ifmsProductIds.Count == 0
+				? new Dictionary<int, string>()
+				: await _db.Set<IfmsProduct>()
+					.AsNoTracking()
+					.Where(x => ifmsProductIds.Contains(x.Id))
+					.ToDictionaryAsync(
+						x => x.Id,
+						x => x.Name ?? string.Empty,
+						cancellationToken);
+
 			var registeredDealers = registrationIds.Count == 0
 				? new Dictionary<int, RegisteredDealerLookup>()
 				: await _db.Set<DealerRegistration>()
@@ -837,7 +928,8 @@ namespace Spic.Infrastructure.Services
 					acknowledgementLookup.StrictAckDates,
 					row.DealerRegistrationId,
 					row.IfmsDealerId,
-					row.ProductId);
+					row.ProductId,
+					row.IfmsProductId);
 
 				// Pending acknowledgement belongs to the Pending ACK report and is not
 				// inserted into ageing buckets/list until ACK starts the ageing clock.
@@ -862,7 +954,13 @@ namespace Spic.Infrastructure.Services
 					DealerName = FirstNonBlank(row.AgencyName, registered?.Name, ifms?.Name),
 					DealerCode = registered?.DealerCode,
 					MobileNo = FirstNonBlank(registered?.MobileNo, ifms?.MobileNo),
-					ProductName = Lookup(products, row.ProductId),
+					ProductId = row.ProductId,
+					IfmsProductId = row.IfmsProductId,
+					ProductName = LookupProduct(
+						products,
+						ifmsProducts,
+						row.ProductId,
+						row.IfmsProductId),
 					Quantity = row.Stock,
 					AckDate = ackDate.Value,
 					AgeingDays = ageingDays,
@@ -876,13 +974,15 @@ namespace Spic.Infrastructure.Services
 					acknowledgementLookup.StrictAckDates,
 					row.DealerRegistrationId,
 					row.IfmsDealerId,
-					row.ProductId);
+					row.ProductId,
+					row.IfmsProductId);
 
 				ackDate ??= FindAckDate(
 					acknowledgementLookup.DptRetailerSaleDates,
 					row.DealerRegistrationId,
 					row.IfmsDealerId,
-					row.ProductId);
+					row.ProductId,
+					row.IfmsProductId);
 
 				if (!ackDate.HasValue)
 				{
@@ -905,7 +1005,13 @@ namespace Spic.Infrastructure.Services
 					DealerName = FirstNonBlank(row.RetailerName, registered?.Name, ifms?.Name),
 					DealerCode = registered?.DealerCode,
 					MobileNo = FirstNonBlank(row.MobileNo, registered?.MobileNo, ifms?.MobileNo),
-					ProductName = Lookup(products, row.ProductId),
+					ProductId = row.ProductId,
+					IfmsProductId = row.IfmsProductId,
+					ProductName = LookupProduct(
+						products,
+						ifmsProducts,
+						row.ProductId,
+						row.IfmsProductId),
 					Quantity = row.ClosingBalance,
 					AckDate = ackDate.Value,
 					AgeingDays = ageingDays,
@@ -990,8 +1096,13 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(x => x.DistrictId.HasValue && f.DistrictIds.Contains(x.DistrictId.Value));
 			if (f.SubDistrictIds.Count > 0)
 				query = query.Where(_ => false);
-			if (f.ProductIds.Count > 0)
-				query = query.Where(x => x.ProductId.HasValue && f.ProductIds.Contains(x.ProductId.Value));
+			var (productIds, ifmsProductIds) = SplitProductKeys(f);
+			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
+			{
+				query = query.Where(x =>
+					(x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value)));
+			}
 			if (f.LyingWithIds.Count > 0)
 				query = query.Where(x => x.DealershipNatureId.HasValue && f.LyingWithIds.Contains(x.DealershipNatureId.Value));
 
@@ -1009,8 +1120,13 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(x => x.BuyerDistrictId.HasValue && f.DistrictIds.Contains(x.BuyerDistrictId.Value));
 			if (f.SubDistrictIds.Count > 0)
 				query = query.Where(_ => false);
-			if (f.ProductIds.Count > 0)
-				query = query.Where(x => x.ProductId.HasValue && f.ProductIds.Contains(x.ProductId.Value));
+			var (productIds, ifmsProductIds) = SplitProductKeys(f);
+			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
+			{
+				query = query.Where(x =>
+					(x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value)));
+			}
 			if (f.LyingWithIds.Count > 0)
 				query = query.Where(x => x.DealerNatureId.HasValue && f.LyingWithIds.Contains(x.DealerNatureId.Value));
 
@@ -1380,6 +1496,8 @@ namespace Spic.Infrastructure.Services
 				DealerRegistrationId = row.DealerRegistrationId,
 				StateName = row.StateName ?? string.Empty,
 				DealerName = row.DealerName ?? string.Empty,
+				ProductId = row.ProductId,
+				IfmsProductId = row.IfmsProductId,
 				ProductName = row.ProductName ?? string.Empty,
 				Quantity = row.Quantity,
 				AgeingDays = row.AgeingDays,
@@ -1416,6 +1534,7 @@ namespace Spic.Infrastructure.Services
 			f.SubDistrictIds ??= new List<int>();
 			f.LyingWithIds ??= new List<int>();
 			f.ProductIds ??= new List<int>();
+			f.ProductKeys ??= new List<string>();
 			f.AgeingRanges ??= new List<string>();
 
 			f.StateIds = f.StateIds.Distinct().ToList();
@@ -1424,7 +1543,15 @@ namespace Spic.Infrastructure.Services
 			f.DistrictIds = f.DistrictIds.Distinct().ToList();
 			f.SubDistrictIds = f.SubDistrictIds.Distinct().ToList();
 			f.LyingWithIds = f.LyingWithIds.Distinct().ToList();
-			f.ProductIds = f.ProductIds.Distinct().ToList();
+			f.ProductIds = f.ProductIds
+				.Where(x => x > 0)
+				.Distinct()
+				.ToList();
+			f.ProductKeys = f.ProductKeys
+				.Where(x => !string.IsNullOrWhiteSpace(x))
+				.Select(x => x.Trim())
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
 			f.AgeingRanges = f.AgeingRanges
 				.Where(x => !string.IsNullOrWhiteSpace(x))
 				.Select(x => x.Trim())
@@ -1448,6 +1575,84 @@ namespace Spic.Infrastructure.Services
 				: "desc";
 
 			return f;
+		}
+
+		private static (List<int> ProductIds, List<int> IfmsProductIds) SplitProductKeys(
+			AgeingReportFilter filter)
+		{
+			var productIds = new HashSet<int>(
+				(filter.ProductIds ?? new List<int>()).Where(x => x > 0));
+			var ifmsProductIds = new HashSet<int>();
+
+			foreach (var rawKey in filter.ProductKeys ?? Enumerable.Empty<string>())
+			{
+				var key = rawKey?.Trim();
+				if (string.IsNullOrWhiteSpace(key))
+				{
+					continue;
+				}
+
+				if (key.StartsWith("P:", StringComparison.OrdinalIgnoreCase) &&
+					int.TryParse(key[2..], out var productId) &&
+					productId > 0)
+				{
+					productIds.Add(productId);
+				}
+				else if (key.StartsWith("I:", StringComparison.OrdinalIgnoreCase) &&
+					int.TryParse(key[2..], out var ifmsProductId) &&
+					ifmsProductId > 0)
+				{
+					ifmsProductIds.Add(ifmsProductId);
+				}
+				else if (int.TryParse(key, out var legacyProductId) &&
+					legacyProductId > 0)
+				{
+					// Numeric values from older clients remain approved Product IDs.
+					productIds.Add(legacyProductId);
+				}
+			}
+
+			return (productIds.ToList(), ifmsProductIds.ToList());
+		}
+
+		private static string ProductIdentity(
+			int? productId,
+			int? ifmsProductId)
+		{
+			if (productId.HasValue)
+			{
+				return $"P:{productId.Value}";
+			}
+
+			if (ifmsProductId.HasValue)
+			{
+				return $"I:{ifmsProductId.Value}";
+			}
+
+			return string.Empty;
+		}
+
+		private static string LookupProduct(
+			IReadOnlyDictionary<int, string> products,
+			IReadOnlyDictionary<int, string> ifmsProducts,
+			int? productId,
+			int? ifmsProductId)
+		{
+			if (productId.HasValue &&
+				products.TryGetValue(productId.Value, out var productName) &&
+				!string.IsNullOrWhiteSpace(productName))
+			{
+				return productName.Trim();
+			}
+
+			if (ifmsProductId.HasValue &&
+				ifmsProducts.TryGetValue(ifmsProductId.Value, out var ifmsProductName) &&
+				!string.IsNullOrWhiteSpace(ifmsProductName))
+			{
+				return ifmsProductName.Trim();
+			}
+
+			return string.Empty;
 		}
 
 		private static bool ContainsIgnoreCase(string? value, string search) =>
@@ -1494,6 +1699,7 @@ namespace Spic.Infrastructure.Services
 			public int? DealerRegistrationId { get; set; }
 			public int? IfmsDealerId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 		}
 
 		private sealed class AckAggregate
@@ -1501,6 +1707,7 @@ namespace Spic.Infrastructure.Services
 			public int? DealerRegistrationId { get; set; }
 			public int? IfmsDealerId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public DateTime? AckDate { get; set; }
 		}
 
@@ -1530,6 +1737,8 @@ namespace Spic.Infrastructure.Services
 			public string? DealerName { get; set; }
 			public string? DealerCode { get; set; }
 			public string? MobileNo { get; set; }
+			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public string? ProductName { get; set; }
 			public decimal Quantity { get; set; }
 			public DateTime AckDate { get; set; }

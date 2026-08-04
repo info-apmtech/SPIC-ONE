@@ -5,13 +5,25 @@ namespace SPIC.Core.DTOs
 {
 	public class AgeingReportFilter
 	{
+		// Optional report period. When both values are empty, the existing latest
+		// snapshot/current-date behaviour remains unchanged.
+		public DateTime? DateFrom { get; set; }
+		public DateTime? DateTo { get; set; }
+
 		public List<int> StateIds { get; set; } = new();
 		public List<int> RegionIds { get; set; } = new();
 		public List<int> HeadQuarterIds { get; set; } = new();
 		public List<int> DistrictIds { get; set; } = new();
 		public List<int> SubDistrictIds { get; set; } = new();
 		public List<int> LyingWithIds { get; set; } = new();
+
+		// Backward-compatible approved Product IDs used by the previous page/client.
 		public List<int> ProductIds { get; set; } = new();
+
+		// New combined product keys:
+		// P:10 = Product.Id 10, I:10 = IfmsProduct.Id 10.
+		public List<string> ProductKeys { get; set; } = new();
+
 		public List<string> AgeingRanges { get; set; } = new();
 
 		public string? Search { get; set; }
@@ -74,6 +86,15 @@ namespace SPIC.Core.DTOs
 		public int? DealerRegistrationId { get; set; }
 		public string StateName { get; set; } = string.Empty;
 		public string DealerName { get; set; } = string.Empty;
+
+		public int? ProductId { get; set; }
+		public int? IfmsProductId { get; set; }
+		public string ProductKey => ProductId.HasValue
+			? $"P:{ProductId.Value}"
+			: IfmsProductId.HasValue
+				? $"I:{IfmsProductId.Value}"
+				: string.Empty;
+
 		public string ProductName { get; set; } = string.Empty;
 		public decimal Quantity { get; set; }
 		public int AgeingDays { get; set; }
@@ -84,5 +105,20 @@ namespace SPIC.Core.DTOs
 		public string? DistrictName { get; set; }
 		public string? SubDistrictName { get; set; }
 		public DateTime? EntryDate { get; set; }
+	}
+
+	public class AgeingReportProductDto
+	{
+		public string Key { get; set; } = string.Empty;
+
+		// The Razor product dropdown reads the value through Id.
+		public string Id
+		{
+			get => Key;
+			set => Key = value;
+		}
+
+		public string Name { get; set; } = string.Empty;
+		public string Source { get; set; } = string.Empty;
 	}
 }

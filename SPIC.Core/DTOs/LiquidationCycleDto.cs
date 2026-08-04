@@ -9,7 +9,14 @@ namespace SPIC.Core.DTOs
 		public DateTime? DateTo { get; set; }
 		public List<int> StateIds { get; set; } = new();
 		public List<int> DistrictIds { get; set; } = new();
+
+		// Backward-compatible approved Product IDs used by existing clients.
 		public List<int> ProductIds { get; set; } = new();
+
+		// Combined product keys used by the updated dropdown:
+		// P:10 = Product.Id 10, I:10 = IfmsProduct.Id 10.
+		public List<string> ProductKeys { get; set; } = new();
+
 		public List<int> StatusIds { get; set; } = new();
 		public List<string> DealerKeys { get; set; } = new();
 
@@ -64,6 +71,16 @@ namespace SPIC.Core.DTOs
 		public string DealerName { get; set; } = "";
 		public string DealerCode { get; set; } = "";
 		public string DealerType { get; set; } = "";
+
+		public int? ProductId { get; set; }
+		public int? IfmsProductId { get; set; }
+
+		public string ProductKey => ProductId.HasValue
+			? $"P:{ProductId.Value}"
+			: IfmsProductId.HasValue
+				? $"I:{IfmsProductId.Value}"
+				: string.Empty;
+
 		public string ProductName { get; set; } = "";
 		public string StateName { get; set; } = "";
 		public string District { get; set; } = "";
@@ -75,5 +92,20 @@ namespace SPIC.Core.DTOs
 
 		public string Bucket { get; set; } = "";
 		public string Status { get; set; } = "";
+	}
+
+	public class LiqCycleProductDto
+	{
+		public string Key { get; set; } = string.Empty;
+
+		// Alias retained for controls or clients that expect an Id property.
+		public string Id
+		{
+			get => Key;
+			set => Key = value;
+		}
+
+		public string Name { get; set; } = string.Empty;
+		public string Source { get; set; } = string.Empty;
 	}
 }

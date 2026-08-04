@@ -14,6 +14,13 @@ namespace SPIC.Core.DTOs
 		public List<int> FinancialYearIds { get; set; } = new();
 		public List<int> StateIds { get; set; } = new();
 
+		// Backward-compatible approved Product IDs used by existing clients.
+		public List<int> ProductIds { get; set; } = new();
+
+		// Combined product keys used by the updated Product dropdown:
+		// P:10 = Product.Id 10, I:10 = IfmsProduct.Id 10.
+		public List<string> ProductKeys { get; set; } = new();
+
 		public string? Search { get; set; }
 		public string? SortColumn { get; set; }
 		public string? SortDir { get; set; } = "asc";
@@ -62,5 +69,20 @@ namespace SPIC.Core.DTOs
 
 		public decimal ClosingStock { get; set; }
 		public double SalesPct { get; set; }
+	}
+
+	public class StockDetailsProductDto
+	{
+		public string Key { get; set; } = string.Empty;
+
+		// Keeps Select2/JSON consumers that expect an Id-like field compatible.
+		public string Id
+		{
+			get => Key;
+			set => Key = value;
+		}
+
+		public string Name { get; set; } = string.Empty;
+		public string Source { get; set; } = string.Empty;
 	}
 }

@@ -42,6 +42,51 @@ namespace Spic.Infrastructure.Services
 			_db = db;
 		}
 
+		public async Task<List<StockDetailsProductDto>> GetProductsAsync(
+			CancellationToken cancellationToken = default)
+		{
+			// Typed keys prevent Product.Id and IfmsProduct.Id collisions.
+			var approvedRows = await _db.Set<Product>()
+				.AsNoTracking()
+				.Select(x => new
+				{
+					x.Id,
+					x.Name
+				})
+				.ToListAsync(cancellationToken);
+
+			var ifmsRows = await _db.Set<IfmsProduct>()
+				.AsNoTracking()
+				.Select(x => new
+				{
+					x.Id,
+					x.Name
+				})
+				.ToListAsync(cancellationToken);
+
+			var approvedProducts = approvedRows.Select(x => new StockDetailsProductDto
+			{
+				Key = $"P:{x.Id}",
+				Name = x.Name ?? string.Empty,
+				Source = "Products"
+			});
+
+			var ifmsProducts = ifmsRows.Select(x => new StockDetailsProductDto
+			{
+				Key = $"I:{x.Id}",
+				Name = x.Name ?? string.Empty,
+				Source = "IFMS Products"
+			});
+
+			return approvedProducts
+				.Concat(ifmsProducts)
+				.Where(x => !string.IsNullOrWhiteSpace(x.Name))
+				.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(x => x.Source, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+				.ToList();
+		}
+
 		public async Task<StockDetailsDto> GetDashboardAsync(
 			StockDetailsFilter filter,
 			CancellationToken cancellationToken = default)
@@ -49,17 +94,20 @@ namespace Spic.Infrastructure.Services
 			filter ??= new StockDetailsFilter();
 			NormalizeFilter(filter);
 
+			var productIds = SplitProductKeys(filter);
 			var period = ResolvePeriod(filter);
 
 			// Opening stock is the latest available snapshot on or before DateFrom.
 			var openingStockByState = await LoadCombinedStockByStateAsync(
 				filter.StateIds,
+				productIds,
 				period.PeriodStart,
 				cancellationToken);
 
 			// Closing stock is the latest available snapshot on or before DateTo.
 			var closingStockByState = await LoadCombinedStockByStateAsync(
 				filter.StateIds,
+				productIds,
 				period.AsOnDate,
 				cancellationToken);
 
@@ -67,6 +115,7 @@ namespace Spic.Infrastructure.Services
 			// treated as the movement reported for that DPT report date.
 			var salesByState = await LoadSalesByStateAsync(
 				filter.StateIds,
+				productIds,
 				period.PeriodStart,
 				period.AsOnDate,
 				period.AsOnNextDay,
@@ -146,6 +195,7 @@ namespace Spic.Infrastructure.Services
 
 		private async Task<Dictionary<int, decimal>> LoadCombinedStockByStateAsync(
 			IReadOnlyCollection<int> stateIds,
+			ProductIdSelection productIds,
 			DateTime asOnDate,
 			CancellationToken cancellationToken)
 		{
@@ -155,6 +205,7 @@ namespace Spic.Infrastructure.Services
 			// multiple database operations concurrently.
 			var wholesaler = await LoadLatestWholesalerStockByStateAsync(
 				stateIds,
+				productIds,
 				asOnDate,
 				cancellationToken);
 
@@ -162,6 +213,7 @@ namespace Spic.Infrastructure.Services
 
 			var retailer = await LoadLatestDptClosingStockByStateAsync(
 				stateIds,
+				productIds,
 				asOnDate,
 				cancellationToken);
 
@@ -169,6 +221,7 @@ namespace Spic.Infrastructure.Services
 
 			var warehouse = await LoadLatestWarehouseStockByStateAsync(
 				stateIds,
+				productIds,
 				asOnDate,
 				cancellationToken);
 
@@ -183,6 +236,7 @@ namespace Spic.Infrastructure.Services
 		/// </summary>
 		private async Task<Dictionary<int, decimal>> LoadLatestWholesalerStockByStateAsync(
 			IReadOnlyCollection<int> stateIds,
+			ProductIdSelection productIds,
 			DateTime asOnDate,
 			CancellationToken cancellationToken)
 		{
@@ -199,6 +253,15 @@ namespace Spic.Infrastructure.Services
 				baseQuery = baseQuery.Where(x =>
 					x.StateId.HasValue &&
 					stateIds.Contains(x.StateId.Value));
+			}
+
+			if (productIds.HasAny)
+			{
+				baseQuery = baseQuery.Where(x =>
+					(x.ProductId.HasValue &&
+					 productIds.ApprovedIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue &&
+					 productIds.IfmsIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			// NOT EXISTS selects the newest snapshot for each business key.
@@ -223,6 +286,7 @@ namespace Spic.Infrastructure.Services
 					(candidate.CompanyId ?? 0) == (current.CompanyId ?? 0) &&
 					(candidate.PlantId ?? 0) == (current.PlantId ?? 0) &&
 					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
+					(candidate.IfmsProductId ?? 0) == (current.IfmsProductId ?? 0) &&
 					(
 						candidate.StockDate > current.StockDate ||
 						(candidate.StockDate == current.StockDate &&
@@ -250,6 +314,7 @@ namespace Spic.Infrastructure.Services
 		/// </summary>
 		private async Task<Dictionary<int, decimal>> LoadLatestDptClosingStockByStateAsync(
 			IReadOnlyCollection<int> stateIds,
+			ProductIdSelection productIds,
 			DateTime asOnDate,
 			CancellationToken cancellationToken)
 		{
@@ -266,6 +331,15 @@ namespace Spic.Infrastructure.Services
 				baseQuery = baseQuery.Where(x =>
 					x.StateId.HasValue &&
 					stateIds.Contains(x.StateId.Value));
+			}
+
+			if (productIds.HasAny)
+			{
+				baseQuery = baseQuery.Where(x =>
+					(x.ProductId.HasValue &&
+					 productIds.ApprovedIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue &&
+					 productIds.IfmsIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			var latestQuery = baseQuery.Where(current =>
@@ -290,6 +364,7 @@ namespace Spic.Infrastructure.Services
 					(candidate.CompanyId ?? 0) == (current.CompanyId ?? 0) &&
 					(candidate.PlantId ?? 0) == (current.PlantId ?? 0) &&
 					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
+					(candidate.IfmsProductId ?? 0) == (current.IfmsProductId ?? 0) &&
 					(
 						candidate.CreatedAt > current.CreatedAt ||
 						(candidate.CreatedAt == current.CreatedAt &&
@@ -317,6 +392,7 @@ namespace Spic.Infrastructure.Services
 		/// </summary>
 		private async Task<Dictionary<int, decimal>> LoadLatestWarehouseStockByStateAsync(
 			IReadOnlyCollection<int> stateIds,
+			ProductIdSelection productIds,
 			DateTime asOnDate,
 			CancellationToken cancellationToken)
 		{
@@ -335,6 +411,15 @@ namespace Spic.Infrastructure.Services
 					stateIds.Contains(x.StateId.Value));
 			}
 
+			if (productIds.HasAny)
+			{
+				baseQuery = baseQuery.Where(x =>
+					(x.ProductId.HasValue &&
+					 productIds.ApprovedIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue &&
+					 productIds.IfmsIds.Contains(x.IfmsProductId.Value)));
+			}
+
 			var latestQuery = baseQuery.Where(current =>
 				!baseQuery.Any(candidate =>
 					(candidate.StateId ?? 0) == (current.StateId ?? 0) &&
@@ -342,6 +427,7 @@ namespace Spic.Infrastructure.Services
 					(candidate.WarehouseId ?? 0) == (current.WarehouseId ?? 0) &&
 					(candidate.PlantId ?? 0) == (current.PlantId ?? 0) &&
 					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
+					(candidate.IfmsProductId ?? 0) == (current.IfmsProductId ?? 0) &&
 					(
 						candidate.CreatedAt > current.CreatedAt ||
 						(candidate.CreatedAt == current.CreatedAt &&
@@ -378,6 +464,7 @@ namespace Spic.Infrastructure.Services
 		/// </summary>
 		private async Task<Dictionary<int, SalesAggregate>> LoadSalesByStateAsync(
 			IReadOnlyCollection<int> stateIds,
+			ProductIdSelection productIds,
 			DateTime periodStart,
 			DateTime asOnDate,
 			DateTime asOnNextDay,
@@ -422,6 +509,27 @@ namespace Spic.Infrastructure.Services
 					stateIds.Contains(x.StateId.Value));
 			}
 
+			if (productIds.HasAny)
+			{
+				wholesalerQuery = wholesalerQuery.Where(x =>
+					(x.ProductId.HasValue &&
+					 productIds.ApprovedIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue &&
+					 productIds.IfmsIds.Contains(x.IfmsProductId.Value)));
+
+				companyQuery = companyQuery.Where(x =>
+					(x.ProductId.HasValue &&
+					 productIds.ApprovedIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue &&
+					 productIds.IfmsIds.Contains(x.IfmsProductId.Value)));
+
+				dptQuery = dptQuery.Where(x =>
+					(x.ProductId.HasValue &&
+					 productIds.ApprovedIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue &&
+					 productIds.IfmsIds.Contains(x.IfmsProductId.Value)));
+			}
+
 			// Protect DPT sales from accidental duplicate rows for the same report
 			// date and business key. Historical report dates remain additive sales.
 			var deduplicatedDptQuery = dptQuery.Where(current =>
@@ -447,6 +555,7 @@ namespace Spic.Infrastructure.Services
 					(candidate.CompanyId ?? 0) == (current.CompanyId ?? 0) &&
 					(candidate.PlantId ?? 0) == (current.PlantId ?? 0) &&
 					(candidate.ProductId ?? 0) == (current.ProductId ?? 0) &&
+					(candidate.IfmsProductId ?? 0) == (current.IfmsProductId ?? 0) &&
 					(
 						candidate.UpdatedAt > current.UpdatedAt ||
 						(candidate.UpdatedAt == current.UpdatedAt &&
@@ -679,6 +788,46 @@ namespace Spic.Infrastructure.Services
 			};
 		}
 
+		private static ProductIdSelection SplitProductKeys(StockDetailsFilter filter)
+		{
+			var approvedIds = filter.ProductIds
+				.Where(x => x > 0)
+				.ToList();
+
+			var ifmsIds = new List<int>();
+
+			foreach (var key in filter.ProductKeys)
+			{
+				if (string.IsNullOrWhiteSpace(key))
+				{
+					continue;
+				}
+
+				var parts = key.Split(':', 2, StringSplitOptions.TrimEntries);
+				if (parts.Length != 2 ||
+					!int.TryParse(parts[1], out var id) ||
+					id <= 0)
+				{
+					continue;
+				}
+
+				if (string.Equals(parts[0], "P", StringComparison.OrdinalIgnoreCase))
+				{
+					approvedIds.Add(id);
+				}
+				else if (string.Equals(parts[0], "I", StringComparison.OrdinalIgnoreCase))
+				{
+					ifmsIds.Add(id);
+				}
+			}
+
+			return new ProductIdSelection
+			{
+				ApprovedIds = approvedIds.Distinct().ToList(),
+				IfmsIds = ifmsIds.Distinct().ToList()
+			};
+		}
+
 		private static ReportingPeriod ResolvePeriod(StockDetailsFilter filter)
 		{
 			var today = DateTime.UtcNow.Date;
@@ -766,6 +915,8 @@ namespace Spic.Infrastructure.Services
 		{
 			filter.StateIds ??= new List<int>();
 			filter.FinancialYearIds ??= new List<int>();
+			filter.ProductIds ??= new List<int>();
+			filter.ProductKeys ??= new List<string>();
 
 			filter.StateIds = filter.StateIds
 				.Where(x => x > 0)
@@ -775,6 +926,17 @@ namespace Spic.Infrastructure.Services
 			filter.FinancialYearIds = filter.FinancialYearIds
 				.Where(x => x > 0)
 				.Distinct()
+				.ToList();
+
+			filter.ProductIds = filter.ProductIds
+				.Where(x => x > 0)
+				.Distinct()
+				.ToList();
+
+			filter.ProductKeys = filter.ProductKeys
+				.Where(x => !string.IsNullOrWhiteSpace(x))
+				.Select(x => x.Trim())
+				.Distinct(StringComparer.OrdinalIgnoreCase)
 				.ToList();
 
 			filter.Page = Math.Max(1, filter.Page);
@@ -792,6 +954,13 @@ namespace Spic.Infrastructure.Services
 				StringComparison.OrdinalIgnoreCase)
 				? "desc"
 				: "asc";
+		}
+
+		private sealed class ProductIdSelection
+		{
+			public List<int> ApprovedIds { get; set; } = new();
+			public List<int> IfmsIds { get; set; } = new();
+			public bool HasAny => ApprovedIds.Count > 0 || IfmsIds.Count > 0;
 		}
 
 		private sealed class ReportingPeriod

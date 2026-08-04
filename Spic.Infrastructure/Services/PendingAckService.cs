@@ -36,6 +36,17 @@ namespace Spic.Infrastructure.Services
 	/// </summary>
 	public sealed class PendingAckService : IPendingAckService
 	{
+		private static readonly HashSet<string> InvalidDealerNameTokens =
+			new(StringComparer.OrdinalIgnoreCase)
+			{
+				"0", "00", "000", "0000",
+				"NA", "N/A", "NONE", "NULL", "NIL",
+				"NOT AVAILABLE", "UNKNOWN", "-", "--", "."
+			};
+
+		private static readonly char[] DealerNameEdgeCharacters =
+			".,;:-_/\\|\"'`~*#".ToCharArray();
+
 		private readonly AppDbContext _db;
 
 		private const int SourceCompany = 1;
@@ -211,34 +222,78 @@ namespace Spic.Infrastructure.Services
 				.ToListAsync(cancellationToken);
 		}
 
+		public async Task<List<PendingAckProductDto>> GetProductsAsync(
+			CancellationToken cancellationToken = default)
+		{
+			// Keep the existing Product master and add IFMS products as a second
+			// typed source. The prefixes prevent identical numeric IDs in the two
+			// tables from being treated as the same product.
+			var products = await _db.Set<Product>()
+				.AsNoTracking()
+				.Where(x => x.Name != null && x.Name != string.Empty)
+				.Select(x => new PendingAckProductDto
+				{
+					Key = "P:" + x.Id,
+					Name = x.Name!,
+					Source = "Product"
+				})
+				.ToListAsync(cancellationToken);
+
+			var ifmsProducts = await _db.Set<IfmsProduct>()
+				.AsNoTracking()
+				.Where(x => x.Name != null && x.Name != string.Empty)
+				.Select(x => new PendingAckProductDto
+				{
+					Key = "I:" + x.Id,
+					Name = x.Name! + " (IFMS)",
+					Source = "IFMS"
+				})
+				.ToListAsync(cancellationToken);
+
+			return products
+				.Concat(ifmsProducts)
+				.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+				.ToList();
+		}
+
 		public async Task<List<PendingAckDealerDto>> GetDealersAsync(
 			CancellationToken cancellationToken = default)
 		{
-			// Keep the existing DealerRegistration + IFMS dealer combination.
-			// Only the two fields required by the dropdown are selected.
+			// Read only the required columns in SQL. Cleaning and validation are done
+			// in memory because the helper methods are not SQL-translatable.
 			var registeredDealers = await _db.Set<DealerRegistration>()
 				.AsNoTracking()
 				.Where(x => x.FirmName != null && x.FirmName != string.Empty)
-				.Select(x => new PendingAckDealerDto
+				.Select(x => new
 				{
 					Key = "R" + x.Id,
-					Name = x.FirmName!
+					RawName = x.FirmName
 				})
 				.ToListAsync(cancellationToken);
 
 			var ifmsDealers = await _db.Set<IfmsDealer>()
 				.AsNoTracking()
 				.Where(x => x.Name != null && x.Name != string.Empty)
-				.Select(x => new PendingAckDealerDto
+				.Select(x => new
 				{
 					Key = "I" + x.Id,
-					Name = x.Name!
+					RawName = x.Name
 				})
 				.ToListAsync(cancellationToken);
 
 			return registeredDealers
 				.Concat(ifmsDealers)
+				.Select(x => new PendingAckDealerDto
+				{
+					Key = x.Key,
+					Name = CleanDealerName(x.RawName)
+				})
+				.Where(x => IsValidDealerName(x.Name))
+				.GroupBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+				.Select(group => group.First())
 				.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
 				.ToList();
 		}
 
@@ -313,6 +368,7 @@ namespace Spic.Infrastructure.Services
 					StateId = x.StateId,
 					DistrictId = x.DistrictId,
 					ProductId = x.ProductId,
+					IfmsProductId = x.IfmsProductId,
 					QuantityMT = x.QuantityMT,
 					ReceivedQuantity = x.ReceivedQuantity,
 					MobileNo = x.MobileNo,
@@ -363,6 +419,7 @@ namespace Spic.Infrastructure.Services
 					StateId = x.StateId,
 					DistrictId = x.BuyerDistrictId,
 					ProductId = x.ProductId,
+					IfmsProductId = x.IfmsProductId,
 					QuantityMT = x.QuantityMT,
 					ReceivedQuantity = x.ReceivedQuantityMT,
 					MobileNo = x.MobileNo,
@@ -417,6 +474,7 @@ namespace Spic.Infrastructure.Services
 					StateId = x.StateId,
 					DistrictId = x.DistrictId,
 					ProductId = x.ProductId,
+					IfmsProductId = x.IfmsProductId,
 					QuantityMT = x.SoldQuantity,
 					ReceivedQuantity = 0m,
 					MobileNo = x.MobileNo,
@@ -498,11 +556,15 @@ namespace Spic.Infrastructure.Services
 					filter.DealerTypeIds.Contains(x.DealerTypeId.Value));
 			}
 
-			if (filter.ProductIds.Count > 0)
+			var (productIds, ifmsProductIds) = SplitProductKeys(filter);
+
+			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
 				query = query.Where(x =>
-					x.ProductId.HasValue &&
-					filter.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue &&
+					 productIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue &&
+					 ifmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			if (registrationIds.Count > 0 || ifmsIds.Count > 0)
@@ -561,11 +623,15 @@ namespace Spic.Infrastructure.Services
 					filter.DealerTypeIds.Contains(x.DealerTypeId.Value));
 			}
 
-			if (filter.ProductIds.Count > 0)
+			var (productIds, ifmsProductIds) = SplitProductKeys(filter);
+
+			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
 				query = query.Where(x =>
-					x.ProductId.HasValue &&
-					filter.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue &&
+					 productIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue &&
+					 ifmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			if (registrationIds.Count > 0 || ifmsIds.Count > 0)
@@ -613,11 +679,15 @@ namespace Spic.Infrastructure.Services
 					filter.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
-			if (filter.ProductIds.Count > 0)
+			var (productIds, ifmsProductIds) = SplitProductKeys(filter);
+
+			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
 				query = query.Where(x =>
-					x.ProductId.HasValue &&
-					filter.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue &&
+					 productIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue &&
+					 ifmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			if (registrationIds.Count > 0 || ifmsIds.Count > 0)
@@ -768,6 +838,10 @@ namespace Spic.Infrastructure.Services
 					on row.ProductId equals (int?)productValue.Id into productJoin
 				from product in productJoin.DefaultIfEmpty()
 
+				join ifmsProductValue in _db.Set<IfmsProduct>().AsNoTracking()
+					on row.IfmsProductId equals (int?)ifmsProductValue.Id into ifmsProductJoin
+				from ifmsProduct in ifmsProductJoin.DefaultIfEmpty()
+
 				join registrationValue in _db.Set<DealerRegistration>().AsNoTracking()
 					on row.RegistrationId equals (int?)registrationValue.Id into registrationJoin
 				from registration in registrationJoin.DefaultIfEmpty()
@@ -802,9 +876,12 @@ namespace Spic.Infrastructure.Services
 						? district.DistrictName
 						: null,
 					ProductId = row.ProductId,
+					IfmsProductId = row.IfmsProductId,
 					ProductName = product != null
 						? product.Name
-						: null,
+						: ifmsProduct != null
+							? ifmsProduct.Name
+							: null,
 					QuantityMT = row.QuantityMT,
 					ReceivedQuantity = row.ReceivedQuantity,
 					DdNo = row.DdNo,
@@ -1034,6 +1111,11 @@ namespace Spic.Infrastructure.Services
 				? row.DealerCode
 				: row.RegistrationId?.ToString();
 
+			var cleanedDealerName = CleanDealerName(row.AgencyName);
+			var displayDealerName = IsValidDealerName(cleanedDealerName)
+				? cleanedDealerName
+				: "Unknown Dealer";
+
 			return new PendingAckRowDto
 			{
 				SNo = serialNumber,
@@ -1056,6 +1138,7 @@ namespace Spic.Infrastructure.Services
 				DistrictId = row.DistrictId,
 				District = row.DistrictName,
 				ProductId = row.ProductId,
+				IfmsProductId = row.IfmsProductId,
 				ProductName = row.ProductName,
 				QuantityMT = row.QuantityMT,
 				ReceivedQuantity = row.ReceivedQuantity,
@@ -1195,6 +1278,52 @@ namespace Spic.Infrastructure.Services
 		}
 
 		private static (
+			List<int> ProductIds,
+			List<int> IfmsProductIds) SplitProductKeys(
+			PendingAckFilter filter)
+		{
+			// ProductIds is retained for backward compatibility with older clients.
+			var productIds = new HashSet<int>(
+				filter.ProductIds.Where(id => id > 0));
+			var ifmsProductIds = new HashSet<int>();
+
+			foreach (var rawKey in filter.ProductKeys ?? Enumerable.Empty<string>())
+			{
+				if (string.IsNullOrWhiteSpace(rawKey))
+				{
+					continue;
+				}
+
+				var key = rawKey.Trim();
+				var colonIndex = key.IndexOf(':');
+				var prefix = colonIndex >= 0
+					? key[..colonIndex]
+					: key[..1];
+				var idText = colonIndex >= 0
+					? key[(colonIndex + 1)..]
+					: key[1..];
+
+				if (!int.TryParse(idText, out var id) || id <= 0)
+				{
+					continue;
+				}
+
+				if (string.Equals(prefix, "P", StringComparison.OrdinalIgnoreCase))
+				{
+					productIds.Add(id);
+				}
+				else if (string.Equals(prefix, "I", StringComparison.OrdinalIgnoreCase))
+				{
+					ifmsProductIds.Add(id);
+				}
+			}
+
+			return (
+				productIds.ToList(),
+				ifmsProductIds.ToList());
+		}
+
+		private static (
 			List<int> RegistrationIds,
 			List<int> IfmsIds) SplitDealerKeys(
 			IEnumerable<string>? dealerKeys)
@@ -1229,12 +1358,44 @@ namespace Spic.Infrastructure.Services
 				ifmsIds.ToList());
 		}
 
+		private static string CleanDealerName(string? rawName)
+		{
+			if (string.IsNullOrWhiteSpace(rawName))
+				return string.Empty;
+
+			var withoutControls = new string(rawName
+				.Where(character => !char.IsControl(character) &&
+					character != '\uFEFF' &&
+					character != '\u200B')
+				.ToArray());
+
+			var normalizedSpacing = string.Join(
+				" ",
+				withoutControls.Split(
+					new[] { ' ', '\t', '\r', '\n' },
+					StringSplitOptions.RemoveEmptyEntries));
+
+			return normalizedSpacing
+				.Trim()
+				.Trim(DealerNameEdgeCharacters)
+				.Trim();
+		}
+
+		private static bool IsValidDealerName(string? dealerName)
+		{
+			var cleaned = CleanDealerName(dealerName);
+			return cleaned.Length >= 2 &&
+				!InvalidDealerNameTokens.Contains(cleaned) &&
+				cleaned.Any(char.IsLetter);
+		}
+
 		private static void NormalizeFilter(PendingAckFilter filter)
 		{
 			filter.StateIds ??= new List<int>();
 			filter.DistrictIds ??= new List<int>();
 			filter.DealerTypeIds ??= new List<int>();
 			filter.ProductIds ??= new List<int>();
+			filter.ProductKeys ??= new List<string>();
 			filter.DealerKeys ??= new List<string>();
 			filter.AgeStatuses ??= new List<string>();
 
@@ -1261,6 +1422,7 @@ namespace Spic.Infrastructure.Services
 			public int? StateId { get; set; }
 			public int? DistrictId { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public decimal QuantityMT { get; set; }
 			public decimal ReceivedQuantity { get; set; }
 			public string? MobileNo { get; set; }
@@ -1291,6 +1453,7 @@ namespace Spic.Infrastructure.Services
 			public int? DistrictId { get; set; }
 			public string? DistrictName { get; set; }
 			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 			public string? ProductName { get; set; }
 			public decimal QuantityMT { get; set; }
 			public decimal ReceivedQuantity { get; set; }

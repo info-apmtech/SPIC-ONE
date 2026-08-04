@@ -115,6 +115,8 @@ namespace SpicAPI.Controllers
 
 				for (var index = 0; index < productCount; index++)
 				{
+					// ProductId is the collision-safe pivot key returned by the service.
+					// Existing Product keys remain positive; IFMS keys are negative.
 					var productId = data.Columns[index].ProductId;
 
 					worksheet.Cell(rowIndex, stockStartColumn + index).Value =

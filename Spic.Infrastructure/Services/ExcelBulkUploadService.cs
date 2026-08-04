@@ -21,6 +21,26 @@ namespace Spic.Infrastructure.Services
 		private readonly AppDbContext _db;
 		private readonly ILogger<ExcelBulkUploadService> _logger;
 
+		// Dealer names come from external Excel/CSV files. These values must never
+		// create IFMS masters such as "0", "00", "000", "NA" or punctuation-only names.
+		private static readonly HashSet<string> InvalidDealerNameTokens =
+			new(StringComparer.OrdinalIgnoreCase)
+			{
+				"0", "00", "000", "0000",
+				"NA", "N/A", "NONE", "NULL", "NIL",
+				"NOT AVAILABLE", "UNKNOWN", "-", "--", "."
+			};
+
+		private static readonly char[] DealerNameEdgeCharacters =
+			".,;:-_/\\|\"'`~*#".ToCharArray();
+
+		private static readonly HashSet<string> InvalidProductNameTokens =
+			new(StringComparer.OrdinalIgnoreCase)
+			{
+				"0", "00", "000", "NA", "N/A", "NONE", "NULL", "NIL",
+				"NOT AVAILABLE", "UNKNOWN", "-", "--", "."
+			};
+
 		public ExcelBulkUploadService(AppDbContext db, ILogger<ExcelBulkUploadService> logger)
 		{
 			_db = db;
@@ -644,15 +664,14 @@ namespace Spic.Infrastructure.Services
 					int rowNumber,
 					string roleName)
 				{
+					var cleanedDealerName = CleanDealerName(dealerName);
 					var externalKeys = ExternalDealerIdKeys(externalDealerId);
 					var primaryExternalKey = externalKeys.FirstOrDefault() ?? string.Empty;
 
-					if (string.IsNullOrWhiteSpace(dealerName) && externalKeys.Count == 0)
+					if (string.IsNullOrWhiteSpace(cleanedDealerName) && externalKeys.Count == 0)
 						return (null, null);
 
-					var displayDealerName = string.IsNullOrWhiteSpace(dealerName)
-						? NormalizeExternalDealerId(externalDealerId)
-						: dealerName.Trim();
+					var displayDealerName = cleanedDealerName;
 
 					/*
 					 * When Excel supplies an ID, that ID is authoritative for checking
@@ -673,8 +692,8 @@ namespace Spic.Infrastructure.Services
 								.Where(x => registrationIds.Contains(x.Id))
 								.Where(x => !dealerStateId.HasValue || x.StateId == dealerStateId)
 								.Where(x => !dealerDistrictId.HasValue || x.DistrictId == dealerDistrictId)
-								.Where(x => string.IsNullOrWhiteSpace(dealerName) ||
-									NormalizeKey(x.FirmName) == NormalizeKey(dealerName))
+								.Where(x => string.IsNullOrWhiteSpace(cleanedDealerName) ||
+									NormalizeDealerNameKey(x.FirmName) == NormalizeDealerNameKey(cleanedDealerName))
 								.Select(x => x.Id)
 								.Distinct()
 								.ToList();
@@ -710,11 +729,22 @@ namespace Spic.Infrastructure.Services
 						if (mappedIfmsDealers.Count == 1)
 						{
 							ifmsDealer = mappedIfmsDealers[0];
+							if (!IsValidDealerName(displayDealerName))
+								displayDealerName = CleanDealerName(ifmsDealer.Name);
 						}
 						else
 						{
+							// An unmatched external ID must not be used as the IFMS dealer name.
+							// A valid textual dealer name is required before an IFMS master can be created.
+							if (!IsValidDealerName(cleanedDealerName))
+							{
+								throw new InvalidDataException(
+									$"Row {rowNumber}: Invalid {roleName} name '{dealerName}'. " +
+									$"Excel ID '{externalDealerId}' did not match DealerRegistration, so a valid name containing letters is required.");
+							}
+
 							var compositeKey = IfmsDealerCompositeKey(
-								dealerName,
+								cleanedDealerName,
 								dealerStateId,
 								dealerDistrictId,
 								mobileNo,
@@ -729,7 +759,7 @@ namespace Spic.Infrastructure.Services
 							if (candidates.Count == 0)
 							{
 								var locationKey = DealerLocationKey(
-									dealerName,
+									cleanedDealerName,
 									dealerStateId,
 									dealerDistrictId);
 
@@ -797,11 +827,18 @@ namespace Spic.Infrastructure.Services
 					 * Legacy templates without Dealer ID use the existing name/location
 					 * resolution. This path cannot separate two otherwise identical dealers.
 					 */
-					if (string.IsNullOrWhiteSpace(dealerName))
+					if (string.IsNullOrWhiteSpace(cleanedDealerName))
 						return (null, null);
 
+					if (!IsValidDealerName(cleanedDealerName))
+					{
+						throw new InvalidDataException(
+							$"Row {rowNumber}: Invalid {roleName} name '{dealerName}'. " +
+							"Use a real dealer/agency name containing letters.");
+					}
+
 					var dealerLookupKey = DealerLocationKey(
-						dealerName,
+						cleanedDealerName,
 						dealerStateId,
 						dealerDistrictId);
 
@@ -810,26 +847,26 @@ namespace Spic.Infrastructure.Services
 						if (registeredMatches.Count > 1)
 						{
 							throw new InvalidDataException(
-								$"Row {rowNumber}: Multiple DealerRegistration rows match {roleName} '{dealerName}' " +
+								$"Row {rowNumber}: Multiple DealerRegistration rows match {roleName} '{cleanedDealerName}' " +
 								$"for StateId={dealerStateId?.ToString() ?? "null"}, DistrictId={dealerDistrictId?.ToString() ?? "null"}.");
 						}
 
 						return (registeredMatches[0].Id, null);
 					}
 
-					var dealerNameStateKey = DealerNameStateKey(dealerName, dealerStateId);
+					var dealerNameStateKey = DealerNameStateKey(cleanedDealerName, dealerStateId);
 					if (dealerRegByNameState.TryGetValue(dealerNameStateKey, out var nameStateMatches) &&
 						nameStateMatches.Count == 1)
 					{
 						AddWarningOnce(
 							"dealer:fallback:" + dealerLookupKey,
-							$"Row {rowNumber}: {roleName} '{dealerName}' matched DealerRegistration by name and state because the district did not match exactly.");
+							$"Row {rowNumber}: {roleName} '{cleanedDealerName}' matched DealerRegistration by name and state because the district did not match exactly.");
 						return (nameStateMatches[0].Id, null);
 					}
 
 					TrackUploadedMobile(
 						"location:" + dealerLookupKey,
-						dealerName,
+						cleanedDealerName,
 						mobileNo,
 						rowNumber);
 
@@ -846,7 +883,7 @@ namespace Spic.Infrastructure.Services
 						{
 							AddWarningOnce(
 								"ifms:duplicate:" + dealerLookupKey,
-								$"Multiple IFMS dealer masters exist for '{dealerName}' in the same state/district. " +
+								$"Multiple IFMS dealer masters exist for '{cleanedDealerName}' in the same state/district. " +
 								$"The latest row (Id {legacyIfmsDealer.Id}) was used.");
 						}
 					}
@@ -854,7 +891,7 @@ namespace Spic.Infrastructure.Services
 					{
 						legacyIfmsDealer = new IfmsDealer
 						{
-							Name = dealerName.Trim(),
+							Name = cleanedDealerName,
 							MobileNo = mobileNo,
 							StateId = dealerStateId,
 							DistrictId = dealerDistrictId,
@@ -873,7 +910,7 @@ namespace Spic.Infrastructure.Services
 					ApplyIfmsDealerMobile(
 						legacyIfmsDealer,
 						"location:" + dealerLookupKey,
-						dealerName,
+						cleanedDealerName,
 						mobileNo,
 						rowNumber);
 
@@ -912,6 +949,10 @@ namespace Spic.Infrastructure.Services
 				var companyDict = await LoadNameDictAsync(_db.Companies, c => c.Name, c => c.Id);
 				var plantDict = await LoadNameDictAsync(_db.Plants, p => p.Name, p => p.Id);
 				var productDict = await LoadNameDictAsync(_db.Products, p => p.Name, p => p.Id);
+				var ifmsProductDict = await LoadNameDictAsync(
+					_db.Set<IfmsProduct>(),
+					p => p.Name,
+					p => p.Id);
 
 				var txnTypeDict = await LoadNameDictAsync(_db.TxnTypes, t => t.Name, t => t.Id);
 				var unitDict = await LoadNameDictAsync(_db.Units, u => u.Name, u => u.Id);
@@ -949,11 +990,12 @@ namespace Spic.Infrastructure.Services
 					var preloadDealerId = categoryId == "One"
 						? GetCell(sourceRow, "retailerid")
 						: GetCell(sourceRow, "dealerid");
-					var preloadDealerName = categoryId == "One"
-						? GetCell(sourceRow, "retailername")
-						: categoryId == "Two"
-							? GetCell(sourceRow, "dealername")
-							: GetCell(sourceRow, "agencyname");
+					var preloadDealerName = CleanDealerName(
+						categoryId == "One"
+							? GetCell(sourceRow, "retailername")
+							: categoryId == "Two"
+								? GetCell(sourceRow, "dealername")
+								: GetCell(sourceRow, "agencyname"));
 
 					if (categoryId == "Seven")
 					{
@@ -1004,7 +1046,7 @@ namespace Spic.Infrastructure.Services
 						"phoneno",
 						"phonenumber");
 
-					var wholesalerName = GetCell(sourceRow, "wholesaleragencyname");
+					var wholesalerName = CleanDealerName(GetCell(sourceRow, "wholesaleragencyname"));
 					var wholesalerMobile = ParseOptionalMobile(
 						sourceRow,
 						preloadRowNumber,
@@ -1020,6 +1062,35 @@ namespace Spic.Infrastructure.Services
 					{
 						wholesalerMobile = preloadDealerMobile;
 					}
+
+					if (categoryId is "One" or "Two" or "Three" or "Five")
+					{
+						EnsureValidDealerName(preloadDealerName, preloadRowNumber, "Dealer/Retailer/Agency");
+					}
+
+					if (categoryId == "Four")
+					{
+						EnsureValidDealerName(wholesalerName, preloadRowNumber, "Wholesaler agency");
+
+						// Buyer/retailer name can be omitted only when a usable external ID resolves
+						// to an existing DealerRegistration. A supplied invalid name is rejected.
+						if (!string.IsNullOrWhiteSpace(preloadDealerName) &&
+							!IsValidDealerName(preloadDealerName))
+						{
+							throw new InvalidDataException(
+								$"Row {preloadRowNumber}: Invalid buyer dealer name '{preloadDealerName}'.");
+						}
+					}
+
+					var preloadProductName = CleanProductName(
+						categoryId is "Six" or "Seven"
+							? globalProductStr ?? string.Empty
+							: categoryId is "Two" or "Four"
+								? GetCell(sourceRow, "companyproduct")
+								: GetCell(sourceRow, "product"));
+
+					if (!preloadSkip)
+						EnsureValidProductName(preloadProductName, preloadRowNumber);
 
 					preparedMasterRows.Add(new PreparedMasterRow
 					{
@@ -1044,11 +1115,12 @@ namespace Spic.Infrastructure.Services
 						PlantName = categoryId is "Six" or "Seven"
 							? globalPlantStr ?? string.Empty
 							: GetCell(sourceRow, "plant"),
-						ProductName = categoryId is "Six" or "Seven"
-							? globalProductStr ?? string.Empty
-							: categoryId is "Two" or "Four"
-								? GetCell(sourceRow, "companyproduct")
-								: GetCell(sourceRow, "product"),
+						ProductName = CleanProductName(
+							categoryId is "Six" or "Seven"
+								? globalProductStr ?? string.Empty
+								: categoryId is "Two" or "Four"
+									? GetCell(sourceRow, "companyproduct")
+									: GetCell(sourceRow, "product")),
 						MarketerName = categoryId is "Two" or "Four"
 							? OptionalText(sourceRow, "marketer")
 							: string.Empty,
@@ -1300,9 +1372,10 @@ namespace Spic.Infrastructure.Services
 						UpdatedBy = currentUserId
 					})
 					.ToList();
-				var newProducts = productNames
+				var newIfmsProducts = productNames
 					.Where(x => !productDict.ContainsKey(x.Key))
-					.Select(x => new Product
+					.Where(x => !ifmsProductDict.ContainsKey(x.Key))
+					.Select(x => new IfmsProduct
 					{
 						Name = x.Value,
 						CategoryId = 1,
@@ -1373,7 +1446,7 @@ namespace Spic.Infrastructure.Services
 				if (newNatures.Count > 0) _db.DealershipNatures.AddRange(newNatures);
 				if (newCompanies.Count > 0) _db.Companies.AddRange(newCompanies);
 				if (newPlants.Count > 0) _db.Plants.AddRange(newPlants);
-				if (newProducts.Count > 0) _db.Products.AddRange(newProducts);
+				if (newIfmsProducts.Count > 0) _db.Set<IfmsProduct>().AddRange(newIfmsProducts);
 				if (newTxnTypes.Count > 0) _db.TxnTypes.AddRange(newTxnTypes);
 				if (newUnits.Count > 0) _db.Units.AddRange(newUnits);
 				if (newStatuses.Count > 0) _db.Statuses.AddRange(newStatuses);
@@ -1382,7 +1455,7 @@ namespace Spic.Infrastructure.Services
 
 				var independentMasterCount =
 					newDealerTypes.Count + newNatures.Count + newCompanies.Count +
-					newPlants.Count + newProducts.Count + newTxnTypes.Count +
+					newPlants.Count + newIfmsProducts.Count + newTxnTypes.Count +
 					newUnits.Count + newStatuses.Count + newAckThroughs.Count +
 					newWarehouses.Count;
 
@@ -1393,7 +1466,7 @@ namespace Spic.Infrastructure.Services
 					foreach (var item in newNatures) natureDict[NormalizeKey(item.Name)] = item.Id;
 					foreach (var item in newCompanies) companyDict[NormalizeKey(item.Name)] = item.Id;
 					foreach (var item in newPlants) plantDict[NormalizeKey(item.Name)] = item.Id;
-					foreach (var item in newProducts) productDict[NormalizeKey(item.Name)] = item.Id;
+					foreach (var item in newIfmsProducts) ifmsProductDict[NormalizeKey(item.Name)] = item.Id;
 					foreach (var item in newTxnTypes) txnTypeDict[NormalizeKey(item.Name)] = item.Id;
 					foreach (var item in newUnits) unitDict[NormalizeKey(item.Name)] = item.Id;
 					foreach (var item in newStatuses) statusDict[NormalizeKey(item.Name)] = item.Id;
@@ -1404,7 +1477,7 @@ namespace Spic.Infrastructure.Services
 					result.NewMastersCreated.DealershipNatures += newNatures.Count;
 					result.NewMastersCreated.Companies += newCompanies.Count;
 					result.NewMastersCreated.Plants += newPlants.Count;
-					result.NewMastersCreated.Products += newProducts.Count;
+					result.NewMastersCreated.IfmsProducts += newIfmsProducts.Count;
 					result.NewMastersCreated.TxnTypes += newTxnTypes.Count;
 					result.NewMastersCreated.Units += newUnits.Count;
 					result.NewMastersCreated.Statuses += newStatuses.Count;
@@ -1422,6 +1495,25 @@ namespace Spic.Infrastructure.Services
 						prepared.WholesalerNatureId = natureDict[NormalizeKey(prepared.WholesalerNatureName)];
 					if (!string.IsNullOrWhiteSpace(prepared.DealerNatureName))
 						prepared.DealerNatureId = natureDict[NormalizeKey(prepared.DealerNatureName)];
+					if (!string.IsNullOrWhiteSpace(prepared.ProductName))
+					{
+						var productKey = NormalizeKey(prepared.ProductName);
+						if (productDict.TryGetValue(productKey, out var masterProductId))
+						{
+							prepared.ProductId = masterProductId;
+							prepared.IfmsProductId = null;
+						}
+						else if (ifmsProductDict.TryGetValue(productKey, out var ifmsProductId))
+						{
+							prepared.ProductId = null;
+							prepared.IfmsProductId = ifmsProductId;
+						}
+						else
+						{
+							throw new InvalidOperationException(
+								$"Row {prepared.RowNumber}: Product '{prepared.ProductName}' was not resolved.");
+						}
+					}
 				}
 
 				var dealerResolutionByRow = new Dictionary<int, (int? RegistrationId, IfmsDealer? IfmsDealer)>();
@@ -1609,7 +1701,12 @@ namespace Spic.Infrastructure.Services
 						var stateStr = categoryId == "One" ? GetCell(row, "statename") : GetCell(row, "state");
 						var districtStr = categoryId == "One" ? GetCell(row, "districtname") : GetCell(row, "district");
 						var dealerIdStr = categoryId == "One" ? GetCell(row, "retailerid") : GetCell(row, "dealerid");
-						var agencyNameStr = categoryId == "One" ? GetCell(row, "retailername") : categoryId == "Two" ? GetCell(row, "dealername") : GetCell(row, "agencyname");
+						var agencyNameStr = CleanDealerName(
+							categoryId == "One"
+								? GetCell(row, "retailername")
+								: categoryId == "Two"
+									? GetCell(row, "dealername")
+									: GetCell(row, "agencyname"));
 						var dealerTypeStr = categoryId == "One" ? "" : GetCell(row, "dealertype");
 						var natureStr = categoryId == "Three" ? OptionalText(row, "dealernature") : GetCell(row, "dealershipnature");
 						var companyStr = (categoryId == "Four" || categoryId == "Two") ? GetCell(row, "manufacturer") : GetCell(row, "company");
@@ -1629,12 +1726,16 @@ namespace Spic.Infrastructure.Services
 
 						if (categoryId is "One" or "Two" or "Three" or "Five")
 						{
-							if (string.IsNullOrWhiteSpace(agencyNameStr))
-								throw new InvalidDataException($"Row {rowNumber}: Dealer/Retailer/Agency name is required.");
+							EnsureValidDealerName(agencyNameStr, rowNumber, "Dealer/Retailer/Agency");
 						}
 
-						if (categoryId == "Four" && string.IsNullOrWhiteSpace(GetCell(row, "wholesaleragencyname")))
-							throw new InvalidDataException($"Row {rowNumber}: wholesaleragencyname is required.");
+						if (categoryId == "Four")
+						{
+							EnsureValidDealerName(
+								CleanDealerName(GetCell(row, "wholesaleragencyname")),
+								rowNumber,
+								"Wholesaler agency");
+						}
 
 						if (categoryId is "One" or "Two" or "Three" or "Four" or "Five")
 						{
@@ -1804,21 +1905,13 @@ namespace Spic.Infrastructure.Services
 							plantId = id;
 						}
 
-						int? productId = null;
-						if (!string.IsNullOrEmpty(productStr))
-						{
-							var key = productStr.ToLowerInvariant();
-							if (!productDict.TryGetValue(key, out var id))
-							{
-								var newProd = new Product { Name = productStr, CategoryId = 1, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-								_db.Products.Add(newProd);
-								await _db.SaveChangesAsync(cancellationToken);
-								id = newProd.Id;
-								productDict[key] = id;
-								result.NewMastersCreated.Products++;
-							}
-							productId = id;
-						}
+						var preparedProduct = preparedMasterRows[i];
+						int? productId = preparedProduct.ProductId;
+						int? ifmsProductId = preparedProduct.IfmsProductId;
+
+						if (!productId.HasValue && !ifmsProductId.HasValue)
+							throw new InvalidOperationException(
+								$"Row {rowNumber}: Product '{productStr}' was not resolved.");
 
 						if (categoryId == "One")
 						{
@@ -1831,7 +1924,7 @@ namespace Spic.Infrastructure.Services
 
 							var dptBusinessKey = DptKey(
 								dealerRegistrationId, ifmsDealerId, agencyNameStr,
-								productId, stateId, districtId, companyId, plantId,
+								productId, ifmsProductId, productStr, stateId, districtId, companyId, plantId,
 								reportDateUtc!.Value);
 							if (!ShouldProcessUploadedKey(uploadedBusinessKeys, dptBusinessKey, RowFingerprint(row), rowNumber, result))
 								continue;
@@ -1863,6 +1956,7 @@ namespace Spic.Infrastructure.Services
 							dptRecord.CompanyId = companyId;
 							dptRecord.PlantId = plantId;
 							dptRecord.ProductId = productId;
+							dptRecord.IfmsProductId = ifmsProductId;
 							dptRecord.OpeningBalance = openBal;
 							dptRecord.ReceivedQuantity = recvQty;
 							dptRecord.SoldQuantity = soldQty;
@@ -1877,7 +1971,7 @@ namespace Spic.Infrastructure.Services
 							var stockDate = ToUtcDate(ParseRequiredDate(row, "stockdate", rowNumber));
 							var stockBusinessKey = WholesalerStockKey(
 								dealerRegistrationId, ifmsDealerId, agencyNameStr,
-								productId, stateId, districtId, companyId, plantId, stockDate);
+								productId, ifmsProductId, productStr, stateId, districtId, companyId, plantId, stockDate);
 							if (!ShouldProcessUploadedKey(uploadedBusinessKeys, stockBusinessKey, RowFingerprint(row), rowNumber, result))
 								continue;
 
@@ -1906,6 +2000,7 @@ namespace Spic.Infrastructure.Services
 							stockRecord.CompanyId = companyId;
 							stockRecord.PlantId = plantId;
 							stockRecord.ProductId = productId;
+							stockRecord.IfmsProductId = ifmsProductId;
 							stockRecord.Stock = stockValue;
 							stockRecord.StockDate = stockDate;
 							stockRecord.UpdatedAt = now;
@@ -1930,7 +2025,7 @@ namespace Spic.Infrastructure.Services
 
 							var salesReceiptBusinessKey = SalesReceiptKey(
 								dealerRegistrationId, ifmsDealerId, agencyNameStr,
-								productId, stateId, districtId, companyId, plantId,
+								productId, ifmsProductId, productStr, stateId, districtId, companyId, plantId,
 								reportDateUtc!.Value);
 							if (!ShouldProcessUploadedKey(uploadedBusinessKeys, salesReceiptBusinessKey, RowFingerprint(row), rowNumber, result))
 								continue;
@@ -1950,6 +2045,7 @@ namespace Spic.Infrastructure.Services
 							srRecord.CompanyId = companyId;
 							srRecord.PlantId = plantId;
 							srRecord.ProductId = productId;
+							srRecord.IfmsProductId = ifmsProductId;
 							srRecord.StateId = stateId;
 							srRecord.DistrictId = districtId;
 							srRecord.DealershipNatureId = natureId;
@@ -1984,7 +2080,7 @@ namespace Spic.Infrastructure.Services
 							var txnTypeStr = OptionalText(row, "txntype");
 
 							var wholesalerExternalId = GetCell(row, "wholesalerid");
-							var wholesalerAgencyStr = GetCell(row, "wholesaleragencyname");
+							var wholesalerAgencyStr = CleanDealerName(GetCell(row, "wholesaleragencyname"));
 							var sellerDistrictStr = GetCell(row, "sellerdistrict");
 							var buyerDistrictStr = GetCell(row, "buyerdistrict");
 							var wholesalerMobileNo = ParseOptionalMobile(
@@ -2178,7 +2274,7 @@ namespace Spic.Infrastructure.Services
 							var wholesalerSaleBusinessKey = WholesalerSaleKey(
 								transactionId,
 								invoiceNo,
-								productId);
+								productId, ifmsProductId, productStr);
 							if (!ShouldProcessUploadedKey(uploadedBusinessKeys, wholesalerSaleBusinessKey, RowFingerprint(row), rowNumber, result))
 								continue;
 
@@ -2215,6 +2311,7 @@ namespace Spic.Infrastructure.Services
 							if (!string.IsNullOrWhiteSpace(dealerMobileNo))
 								salesWholesaler.MobileNo = dealerMobileNo;
 							salesWholesaler.ProductId = productId;
+							salesWholesaler.IfmsProductId = ifmsProductId;
 							salesWholesaler.UnitId = unitId;
 							salesWholesaler.Quantity = qty;
 							salesWholesaler.QuantityMT = qtymt;
@@ -2332,7 +2429,7 @@ namespace Spic.Infrastructure.Services
 							var companySaleBusinessKey = CompanySaleKey(
 								transactionId,
 								invoiceNo,
-								productId);
+								productId, ifmsProductId, productStr);
 							if (!ShouldProcessUploadedKey(uploadedBusinessKeys, companySaleBusinessKey, RowFingerprint(row), rowNumber, result))
 								continue;
 
@@ -2364,6 +2461,7 @@ namespace Spic.Infrastructure.Services
 							salesCompany.StateId = stateId;
 							salesCompany.DistrictId = districtId;
 							salesCompany.ProductId = productId;
+							salesCompany.IfmsProductId = ifmsProductId;
 							salesCompany.UnitId = unitId;
 							salesCompany.Quantity = qty;
 							salesCompany.QuantityMT = qtymt;
@@ -2404,20 +2502,6 @@ namespace Spic.Infrastructure.Services
 								plantId = id;
 							}
 
-							if (!string.IsNullOrEmpty(globalProductStr))
-							{
-								var key = globalProductStr.ToLowerInvariant();
-								if (!productDict.TryGetValue(key, out var id))
-								{
-									var newProd = new Product { Name = globalProductStr, CategoryId = 1, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Products.Add(newProd);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newProd.Id;
-									productDict[key] = id;
-									result.NewMastersCreated.Products++;
-								}
-								productId = id;
-							}
 
 							if (string.Equals(stateStr, "plant", StringComparison.OrdinalIgnoreCase))
 							{
@@ -2449,7 +2533,7 @@ namespace Spic.Infrastructure.Services
 							var closingGit = ParseDecimal(row, "closinggit", rowNumber);
 							var closingStock = ParseDecimal(row, "closingstock", rowNumber);
 
-							var stateReconciliationBusinessKey = StateReconciliationKey(stateId, plantId, productId, reportDateUtc!.Value);
+							var stateReconciliationBusinessKey = StateReconciliationKey(stateId, plantId, productId, ifmsProductId, productStr, reportDateUtc!.Value);
 							if (!ShouldProcessUploadedKey(uploadedBusinessKeys, stateReconciliationBusinessKey, RowFingerprint(row), rowNumber, result))
 								continue;
 							if (!stateReconByKey.TryGetValue(stateReconciliationBusinessKey, out var recon))
@@ -2466,6 +2550,7 @@ namespace Spic.Infrastructure.Services
 
 							recon.PlantId = plantId;
 							recon.ProductId = productId;
+							recon.IfmsProductId = ifmsProductId;
 							recon.StateId = stateId;
 							recon.OpeningStock = openingStock;
 							recon.OpeningGIT = openingGit;
@@ -2497,20 +2582,6 @@ namespace Spic.Infrastructure.Services
 								plantId = id;
 							}
 
-							if (!string.IsNullOrEmpty(globalProductStr))
-							{
-								var key = globalProductStr.ToLowerInvariant();
-								if (!productDict.TryGetValue(key, out var id))
-								{
-									var newProd = new Product { Name = globalProductStr, CategoryId = 1, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Products.Add(newProd);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newProd.Id;
-									productDict[key] = id;
-									result.NewMastersCreated.Products++;
-								}
-								productId = id;
-							}
 
 							if (stateStr.Trim().Equals("plant", StringComparison.OrdinalIgnoreCase))
 							{
@@ -2580,7 +2651,7 @@ namespace Spic.Infrastructure.Services
 							var closingStock = ParseDecimal(row, "closingstock", rowNumber);
 
 							var warehouseReconciliationBusinessKey = WarehouseReconciliationKey(
-								whseId, stateId, distId, plantId, productId, reportDateUtc!.Value);
+								whseId, stateId, distId, plantId, productId, ifmsProductId, productStr, reportDateUtc!.Value);
 							if (!ShouldProcessUploadedKey(uploadedBusinessKeys, warehouseReconciliationBusinessKey, RowFingerprint(row), rowNumber, result))
 								continue;
 
@@ -2598,6 +2669,7 @@ namespace Spic.Infrastructure.Services
 
 							recon.PlantId = plantId;
 							recon.ProductId = productId;
+							recon.IfmsProductId = ifmsProductId;
 							recon.StateId = stateId;
 							recon.DistrictId = distId;
 							recon.WarehouseId = whseId;
@@ -2681,6 +2753,8 @@ namespace Spic.Infrastructure.Services
 			public int? NatureId { get; set; }
 			public int? WholesalerNatureId { get; set; }
 			public int? DealerNatureId { get; set; }
+			public int? ProductId { get; set; }
+			public int? IfmsProductId { get; set; }
 		}
 
 		private sealed class ReferenceComparer<T> : IEqualityComparer<T>
@@ -2711,6 +2785,92 @@ namespace Spic.Infrastructure.Services
 		private static string NormalizeKey(string? value) =>
 			(value ?? string.Empty).Trim().ToLowerInvariant();
 
+		private static string CleanDealerName(string? rawName)
+		{
+			if (string.IsNullOrWhiteSpace(rawName))
+				return string.Empty;
+
+			var withoutControls = new string(rawName
+				.Where(character => !char.IsControl(character) &&
+					character != '\uFEFF' &&
+					character != '\u200B')
+				.ToArray());
+
+			var normalizedSpacing = string.Join(
+				" ",
+				withoutControls.Split(
+					new[] { ' ', '\t', '\r', '\n' },
+					StringSplitOptions.RemoveEmptyEntries));
+
+			return normalizedSpacing
+				.Trim()
+				.Trim(DealerNameEdgeCharacters)
+				.Trim();
+		}
+
+		private static string NormalizeDealerNameKey(string? value) =>
+			CleanDealerName(value).ToLowerInvariant();
+
+		private static bool IsValidDealerName(string? dealerName)
+		{
+			var cleaned = CleanDealerName(dealerName);
+			if (cleaned.Length < 2 || InvalidDealerNameTokens.Contains(cleaned))
+				return false;
+
+			// Unicode-aware: Tamil and other local-language letters are also accepted.
+			// Numeric-only values and punctuation-only placeholders are rejected.
+			return cleaned.Any(char.IsLetter);
+		}
+
+		private static void EnsureValidDealerName(
+			string? dealerName,
+			int rowNumber,
+			string fieldLabel)
+		{
+			if (IsValidDealerName(dealerName))
+				return;
+
+			throw new InvalidDataException(
+				$"Row {rowNumber}: {fieldLabel} name '{dealerName}' is invalid. " +
+				"Use a real name containing letters; values such as 0, 00, 000, NA, NULL or punctuation-only text are not allowed.");
+		}
+
+		private static string CleanProductName(string? rawName)
+		{
+			if (string.IsNullOrWhiteSpace(rawName))
+				return string.Empty;
+
+			var withoutControls = new string(rawName
+				.Where(character => !char.IsControl(character) &&
+					character != '\uFEFF' &&
+					character != '\u200B')
+				.ToArray());
+
+			return string.Join(
+				" ",
+				withoutControls.Split(
+					new[] { ' ', '\t', '\r', '\n' },
+					StringSplitOptions.RemoveEmptyEntries))
+				.Trim();
+		}
+
+		private static bool IsValidProductName(string? productName)
+		{
+			var cleaned = CleanProductName(productName);
+			return cleaned.Length > 0 && !InvalidProductNameTokens.Contains(cleaned);
+		}
+
+		private static void EnsureValidProductName(
+			string? productName,
+			int rowNumber)
+		{
+			if (IsValidProductName(productName))
+				return;
+
+			throw new InvalidDataException(
+				$"Row {rowNumber}: Product name '{productName}' is invalid.");
+		}
+
 		private static string NormalizeExternalDealerId(string? rawValue)
 		{
 			if (string.IsNullOrWhiteSpace(rawValue))
@@ -2731,6 +2891,22 @@ namespace Spic.Infrastructure.Services
 			{
 				value = Math.Round(scientific, 0, MidpointRounding.AwayFromZero)
 					.ToString("0", CultureInfo.InvariantCulture);
+			}
+
+			if (value.Length == 0 ||
+				InvalidDealerNameTokens.Contains(value) ||
+				value is "N/A" or "NA" or "NONE" or "NULL" or "NIL")
+			{
+				return string.Empty;
+			}
+
+			var digitsOnly = new string(value.Where(char.IsDigit).ToArray());
+			var containsLetter = value.Any(char.IsLetter);
+			if (!containsLetter &&
+				digitsOnly.Length > 0 &&
+				digitsOnly.All(character => character == '0'))
+			{
+				return string.Empty;
 			}
 
 			return value;
@@ -2767,7 +2943,7 @@ namespace Spic.Infrastructure.Services
 			string? mobileNo,
 			int? dealerTypeId,
 			int? dealerNatureId) => string.Join('|',
-			NormalizeKey(dealerName),
+			NormalizeDealerNameKey(dealerName),
 			IdPart(stateId),
 			IdPart(districtId),
 			NormalizeKey(mobileNo),
@@ -2777,14 +2953,14 @@ namespace Spic.Infrastructure.Services
 		private static string DealerNameStateKey(
 			string? dealerName,
 			int? stateId) => string.Join('|',
-			NormalizeKey(dealerName),
+			NormalizeDealerNameKey(dealerName),
 			IdPart(stateId));
 
 		private static string DealerLocationKey(
 			string? dealerName,
 			int? stateId,
 			int? districtId) => string.Join('|',
-			NormalizeKey(dealerName),
+			NormalizeDealerNameKey(dealerName),
 			IdPart(stateId),
 			IdPart(districtId));
 
@@ -2833,85 +3009,114 @@ namespace Spic.Infrastructure.Services
 		{
 			if (registrationId.HasValue) return "R:" + registrationId.Value;
 			if (ifmsId.HasValue) return "I:" + ifmsId.Value;
-			return "N:" + NormalizeKey(name);
+			return "N:" + NormalizeDealerNameKey(name);
 		}
 
 		private static string DayKey(DateTime value) => ToUtcDate(value).ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 		private static string IdPart(int? value) => value?.ToString(CultureInfo.InvariantCulture) ?? "0";
 
+		private static string ProductIdentity(
+			int? productId,
+			int? ifmsProductId,
+			string? productName)
+		{
+			if (productId.HasValue) return "P:" + productId.Value;
+			if (ifmsProductId.HasValue) return "I:" + ifmsProductId.Value;
+			return "N:" + NormalizeKey(productName);
+		}
+
 		private static string DptKey(DptReport x) => DptKey(
 			x.DealerRegistrationId, x.IfmsDealerId, x.RetailerName,
-			x.ProductId, x.StateId, x.DistrictId, x.CompanyId, x.PlantId, x.CreatedAt);
+			x.ProductId, x.IfmsProductId, null,
+			x.StateId, x.DistrictId, x.CompanyId, x.PlantId, x.CreatedAt);
 
 		private static string DptKey(
 			int? registrationId, int? ifmsId, string? dealerName,
-			int? productId, int? stateId, int? districtId, int? companyId, int? plantId,
+			int? productId, int? ifmsProductId, string? productName,
+			int? stateId, int? districtId, int? companyId, int? plantId,
 			DateTime reportDate) => string.Join('|',
 			DealerIdentity(registrationId, ifmsId, dealerName),
-			IdPart(stateId), IdPart(districtId), IdPart(productId),
+			IdPart(stateId), IdPart(districtId),
+			ProductIdentity(productId, ifmsProductId, productName),
 			IdPart(companyId), IdPart(plantId), DayKey(reportDate));
 
 		private static string WholesalerStockKey(WholesalerStockAsOnToday x) => WholesalerStockKey(
 			x.DealerRegistrationId, x.IfmsDealerId, x.AgencyName,
-			x.ProductId, x.StateId, x.DistrictId, x.CompanyId, x.PlantId, x.StockDate);
+			x.ProductId, x.IfmsProductId, null,
+			x.StateId, x.DistrictId, x.CompanyId, x.PlantId, x.StockDate);
 
 		private static string WholesalerStockKey(
 			int? registrationId, int? ifmsId, string? dealerName,
-			int? productId, int? stateId, int? districtId, int? companyId, int? plantId,
+			int? productId, int? ifmsProductId, string? productName,
+			int? stateId, int? districtId, int? companyId, int? plantId,
 			DateTime stockDate) => string.Join('|',
 			DealerIdentity(registrationId, ifmsId, dealerName),
-			IdPart(stateId), IdPart(districtId), IdPart(productId),
+			IdPart(stateId), IdPart(districtId),
+			ProductIdentity(productId, ifmsProductId, productName),
 			IdPart(companyId), IdPart(plantId), DayKey(stockDate));
 
 		private static string SalesReceiptKey(SalesAndReceipt x) => SalesReceiptKey(
 			x.DealerRegistrationId, x.IfmsDealerId, x.AgencyName,
-			x.ProductId, x.StateId, x.DistrictId, x.CompanyId, x.PlantId, x.CreatedAt);
+			x.ProductId, x.IfmsProductId, null,
+			x.StateId, x.DistrictId, x.CompanyId, x.PlantId, x.CreatedAt);
 
 		private static string SalesReceiptKey(
 			int? registrationId, int? ifmsId, string? dealerName,
-			int? productId, int? stateId, int? districtId, int? companyId, int? plantId,
+			int? productId, int? ifmsProductId, string? productName,
+			int? stateId, int? districtId, int? companyId, int? plantId,
 			DateTime reportDate) => string.Join('|',
 			DealerIdentity(registrationId, ifmsId, dealerName),
-			IdPart(stateId), IdPart(districtId), IdPart(productId),
+			IdPart(stateId), IdPart(districtId),
+			ProductIdentity(productId, ifmsProductId, productName),
 			IdPart(companyId), IdPart(plantId), DayKey(reportDate));
 
 		private static string CompanySaleKey(SalesCompanySale x) =>
-			CompanySaleKey(x.TransactionId, x.InvoiceNo, x.ProductId);
+			CompanySaleKey(x.TransactionId, x.InvoiceNo, x.ProductId, x.IfmsProductId, null);
 
 		private static string CompanySaleKey(
 			string? transactionId,
 			string? invoiceNo,
-			int? productId) => string.Join('|',
+			int? productId,
+			int? ifmsProductId,
+			string? productName) => string.Join('|',
 			NormalizeKey(transactionId),
 			NormalizeKey(invoiceNo),
-			IdPart(productId));
+			ProductIdentity(productId, ifmsProductId, productName));
 
 		private static string WholesalerSaleKey(SalesWholesaler x) =>
-			WholesalerSaleKey(x.TransactionId, x.InvoiceNo, x.ProductId);
+			WholesalerSaleKey(x.TransactionId, x.InvoiceNo, x.ProductId, x.IfmsProductId, null);
 
 		private static string WholesalerSaleKey(
 			string? transactionId,
 			string? invoiceNo,
-			int? productId) => string.Join('|',
+			int? productId,
+			int? ifmsProductId,
+			string? productName) => string.Join('|',
 			NormalizeKey(transactionId),
 			NormalizeKey(invoiceNo),
-			IdPart(productId));
+			ProductIdentity(productId, ifmsProductId, productName));
 
 		private static string StateReconciliationKey(StateGlobalStockReconciliation x) =>
-			StateReconciliationKey(x.StateId, x.PlantId, x.ProductId, x.CreatedAt);
+			StateReconciliationKey(
+				x.StateId, x.PlantId, x.ProductId, x.IfmsProductId, null, x.CreatedAt);
 
 		private static string StateReconciliationKey(
-			int? stateId, int? plantId, int? productId, DateTime reportDate) => string.Join('|',
-			IdPart(stateId), IdPart(plantId), IdPart(productId), DayKey(reportDate));
+			int? stateId, int? plantId, int? productId, int? ifmsProductId,
+			string? productName, DateTime reportDate) => string.Join('|',
+			IdPart(stateId), IdPart(plantId),
+			ProductIdentity(productId, ifmsProductId, productName), DayKey(reportDate));
 
 		private static string WarehouseReconciliationKey(WarehouseDistrictGlobalStockReconciliation x) =>
-			WarehouseReconciliationKey(x.WarehouseId, x.StateId, x.DistrictId, x.PlantId, x.ProductId, x.CreatedAt);
+			WarehouseReconciliationKey(
+				x.WarehouseId, x.StateId, x.DistrictId, x.PlantId,
+				x.ProductId, x.IfmsProductId, null, x.CreatedAt);
 
 		private static string WarehouseReconciliationKey(
-			int? warehouseId, int? stateId, int? districtId, int? plantId, int? productId,
+			int? warehouseId, int? stateId, int? districtId, int? plantId,
+			int? productId, int? ifmsProductId, string? productName,
 			DateTime reportDate) => string.Join('|',
-			IdPart(warehouseId), IdPart(stateId), IdPart(districtId),
-			IdPart(plantId), IdPart(productId), DayKey(reportDate));
+			IdPart(warehouseId), IdPart(stateId), IdPart(districtId), IdPart(plantId),
+			ProductIdentity(productId, ifmsProductId, productName), DayKey(reportDate));
 
 		private static void BuildLatest<TEntity>(
 			IEnumerable<TEntity> rows,

@@ -1,4 +1,5 @@
-﻿using System.Threading;
+﻿using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +17,13 @@ namespace SpicAPI.Controllers
 		public LiquidationCycleController(ILiquidationCycleService svc)
 		{
 			_svc = svc;
+		}
+
+		[HttpGet("products")]
+		public async Task<ActionResult<List<LiqCycleProductDto>>> Products(
+			CancellationToken cancellationToken)
+		{
+			return Ok(await _svc.GetProductsAsync(cancellationToken));
 		}
 
 		[HttpPost("dashboard")]

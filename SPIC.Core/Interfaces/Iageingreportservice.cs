@@ -14,5 +14,8 @@ namespace SPIC.Core.Interfaces
 		Task<List<AgeingRowDto>> GetAllRowsAsync(
 			AgeingReportFilter filter,
 			CancellationToken cancellationToken = default);
+
+		Task<List<AgeingReportProductDto>> GetProductsAsync(
+			CancellationToken cancellationToken = default);
 	}
 }

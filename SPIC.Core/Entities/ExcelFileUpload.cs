@@ -24,8 +24,9 @@ namespace SPIC.Core.Entities
         public int? PlantId { get; set; }
 
         public int? ProductId { get; set; }
+		public int? IfmsProductId { get; set; }
 
-        public decimal Stock { get; set; }
+		public decimal Stock { get; set; }
 
         public DateTime StockDate { get; set; }
 
@@ -68,8 +69,9 @@ namespace SPIC.Core.Entities
         public string? MobileNo { get; set; }
 
         public int? ProductId { get; set; }
+		public int? IfmsProductId { get; set; }
 
-        public int? UnitId { get; set; }
+		public int? UnitId { get; set; }
 
         public decimal Quantity { get; set; }
 
@@ -115,8 +117,9 @@ namespace SPIC.Core.Entities
         public int? PlantId { get; set; }
 
         public int? ProductId { get; set; }
+		public int? IfmsProductId { get; set; }
 
-        public int? StateId { get; set; }
+		public int? StateId { get; set; }
 
         public int? DistrictId { get; set; }
 
@@ -185,8 +188,9 @@ namespace SPIC.Core.Entities
         public int? DistrictId { get; set; }
 
         public int? ProductId { get; set; }
+		public int? IfmsProductId { get; set; }
 
-        public int? UnitId { get; set; }
+		public int? UnitId { get; set; }
 
         public decimal Quantity { get; set; }
 
@@ -244,8 +248,9 @@ namespace SPIC.Core.Entities
         public int? PlantId { get; set; }
 
         public int? ProductId { get; set; }
+		public int? IfmsProductId { get; set; }
 
-        public decimal OpeningBalance { get; set; }
+		public decimal OpeningBalance { get; set; }
 
         public decimal ReceivedQuantity { get; set; }
 
@@ -266,8 +271,9 @@ namespace SPIC.Core.Entities
 
         public int? PlantId { get; set; }
         public int? ProductId { get; set; }
+		public int? IfmsProductId { get; set; }
 
-        public int? StateId { get; set; }
+		public int? StateId { get; set; }
 
         public decimal OpeningStock { get; set; }
         public decimal OpeningGIT { get; set; }
@@ -292,8 +298,9 @@ namespace SPIC.Core.Entities
 
         public int? PlantId { get; set; }
         public int? ProductId { get; set; }
+		public int? IfmsProductId { get; set; }
 
-        public int? StateId { get; set; }
+		public int? StateId { get; set; }
         public int? DistrictId { get; set; }
         public int? WarehouseId { get; set; }
 

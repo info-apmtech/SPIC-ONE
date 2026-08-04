@@ -233,4 +233,14 @@ namespace SPIC.Core.Entities
         public DateTime UpdatedAt { get; set; }
         public required string UpdatedBy { get; set; }
     }
+	public class IfmsProduct
+	{
+		public int Id { get; set; }
+		public string? Name { get; set; }
+		public int? CategoryId { get; set; }
+		public bool IsActive { get; set; } = true;
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public string? UpdatedBy { get; set; }
+	}
 }

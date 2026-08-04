@@ -19,6 +19,17 @@ namespace SpicAPI.Controllers
 			_service = service;
 		}
 
+		/// <summary>
+		/// Returns the existing Product master and the new IfmsProduct master in
+		/// one dropdown-safe list. P:id and I:id prevent ID collisions.
+		/// </summary>
+		[HttpGet("products")]
+		public async Task<ActionResult> Products()
+		{
+			var products = await _service.GetProductOptionsAsync();
+			return Ok(products);
+		}
+
 		[HttpPost("dashboard")]
 		public async Task<ActionResult<StockDashboardDto>> Dashboard(
 			[FromBody] StockReportFilter? filter)
@@ -33,8 +44,8 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> ExportExcel(
 			[FromBody] StockReportFilter? filter)
 		{
-			// GetAllRowsAsync now returns the latest Wholesaler, Retailer/DPT and
-			// Warehouse stock rows. Existing Excel columns and flow are unchanged.
+			// GetAllRowsAsync still uses the same latest-snapshot flow. It now also
+			// resolves rows whose product is stored in IfmsProducts.
 			var rows = await _service.GetAllRowsAsync(
 				filter ?? new StockReportFilter());
 
@@ -70,6 +81,7 @@ namespace SpicAPI.Controllers
 				worksheet.Cell(rowNumber, 3).Value = row.ProductName;
 				worksheet.Cell(rowNumber, 4).Value = row.Quantity;
 				worksheet.Cell(rowNumber, 5).Value = row.LyingWith;
+
 				if (row.HasAckAgeing)
 				{
 					worksheet.Cell(rowNumber, 6).Value = row.AgeingDays;
@@ -78,6 +90,7 @@ namespace SpicAPI.Controllers
 				{
 					worksheet.Cell(rowNumber, 6).Value = "N/A";
 				}
+
 				worksheet.Cell(rowNumber, 7).Value = row.Status;
 				rowNumber++;
 			}
