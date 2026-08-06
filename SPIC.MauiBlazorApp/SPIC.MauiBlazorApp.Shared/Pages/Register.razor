@@ -212,29 +212,32 @@
                                         <div class="field-error">@_errors["HQ"]</div>
                                     }
                                 </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Status</label>
+                                @if (!IsNewDealerFlow)
+                                {
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label-custom">Status</label>
 
-                                    <div class="status-btn-group">
-                                        <button type="button"
-                                                class="btn btn_active @(status == "Active" ? "active" : "")"
-                                                @onclick='() => SelectStatus("Active")'>
-                                            Active
-                                        </button>
+                                        <div class="status-btn-group">
+                                            <button type="button"
+                                                    class="btn btn_active @(status == "Active" ? "active" : "")"
+                                                    @onclick='() => SelectStatus("Active")'>
+                                                Active
+                                            </button>
 
-                                        <button type="button"
-                                                class="btn btn_inactive @(status == "Inactive" ? "active" : "")"
-                                                @onclick='() => SelectStatus("Inactive")'>
-                                            Inactive
-                                        </button>
+                                            <button type="button"
+                                                    class="btn btn_inactive @(status == "Inactive" ? "active" : "")"
+                                                    @onclick='() => SelectStatus("Inactive")'>
+                                                Inactive
+                                            </button>
 
-                                        <button type="button"
-                                                class="btn btn_terminated @(status == "Terminated" ? "active" : "")"
-                                                @onclick='() => SelectStatus("Terminated")'>
-                                            Terminated
-                                        </button>
+                                            <button type="button"
+                                                    class="btn btn_terminated @(status == "Terminated" ? "active" : "")"
+                                                    @onclick='() => SelectStatus("Terminated")'>
+                                                Terminated
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
+                                }
                             </div>
                         </div>
                     </div>
@@ -264,58 +267,73 @@
 
                 <div class="business-info-body">
                     <div class="row g-3 mb-3">
-                        <div class="col-12 col-md-6">
-                            <label class="form-label-custom">Dealer Code & Name</label>
-                            <div class="position-relative">
-                                <input type="text" class="form-select-custom searchable-select-input w-100"
-                                       placeholder="-- New Entry --"
-                                       @bind="_dealerSearchText"
-                                       @bind:event="oninput"
-                                       @onfocus="() => _showDealerDropdown = true"
-                                       @onblur="HideDealerDropdown" />
-                                @if (_showDealerDropdown)
-                                {
-                                    <div class="searchable-dropdown-container">
-                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(0, "")'>
-                                            -- New Entry --
-                                        </div>
-                                        @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_dealerSearchText) ||
-                                            $"{d.DealerCode} - {d.FirmName}".Contains(_dealerSearchText, StringComparison.OrdinalIgnoreCase)))
-                                        {
-                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
-                                                @dealer.DealerCode - @dealer.FirmName
-                                            </div>
-                                        }
-                                    </div>
-                                }
+                        @if (IsNewDealerFlow)
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">Dealer ID</label>
+                                <input type="text" class="form-control-custom w-100" readonly
+                                       value="@(_model.Id > 0 ? _model.Id.ToString() : "Generated after first save")" />
                             </div>
-                        </div>
-                        <div class="col-12 col-md-6">
-                            <label class="form-label-custom">Parent Dealer Code & Name</label>
-                            <div class="position-relative">
-                                <input type="text" class="form-select-custom searchable-select-input w-100"
-                                       placeholder="-- Select Parent Dealer --"
-                                       @bind="_parentDealerSearchText"
-                                       @bind:event="oninput"
-                                       @onfocus="() => _showParentDealerDropdown = true"
-                                       @onblur="HideParentDealerDropdown" />
-                                @if (_showParentDealerDropdown)
-                                {
-                                    <div class="searchable-dropdown-container">
-                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(0, "")'>
-                                            -- Select Parent Dealer --
-                                        </div>
-                                        @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_parentDealerSearchText) ||
-                                            $"{d.DealerCode} - {d.FirmName}".Contains(_parentDealerSearchText, StringComparison.OrdinalIgnoreCase)))
-                                        {
-                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
-                                                @dealer.DealerCode - @dealer.FirmName
-                                            </div>
-                                        }
-                                    </div>
-                                }
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">Dealer Code</label>
+                                <input type="text" class="form-control-custom w-100" readonly value="Not Generated" />
                             </div>
-                        </div>
+                        }
+                        else
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">Dealer Code & Name</label>
+                                <div class="position-relative">
+                                    <input type="text" class="form-select-custom searchable-select-input w-100"
+                                           placeholder="-- New Entry --"
+                                           @bind="_dealerSearchText"
+                                           @bind:event="oninput"
+                                           @onfocus="() => _showDealerDropdown = true"
+                                           @onblur="HideDealerDropdown" />
+                                    @if (_showDealerDropdown)
+                                    {
+                                        <div class="searchable-dropdown-container">
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(0, "")'>
+                                                -- New Entry --
+                                            </div>
+                                            @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_dealerSearchText) ||
+                                                $"{d.DealerCode} - {d.FirmName}".Contains(_dealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                            {
+                                                <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
+                                                    @dealer.DealerCode - @dealer.FirmName
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">Parent Dealer Code & Name</label>
+                                <div class="position-relative">
+                                    <input type="text" class="form-select-custom searchable-select-input w-100"
+                                           placeholder="-- Select Parent Dealer --"
+                                           @bind="_parentDealerSearchText"
+                                           @bind:event="oninput"
+                                           @onfocus="() => _showParentDealerDropdown = true"
+                                           @onblur="HideParentDealerDropdown" />
+                                    @if (_showParentDealerDropdown)
+                                    {
+                                        <div class="searchable-dropdown-container">
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(0, "")'>
+                                                -- Select Parent Dealer --
+                                            </div>
+                                            @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_parentDealerSearchText) ||
+                                                $"{d.DealerCode} - {d.FirmName}".Contains(_parentDealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                            {
+                                                <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
+                                                    @dealer.DealerCode - @dealer.FirmName
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
                     </div>
 
                     <div class="row g-3">
@@ -497,6 +515,28 @@
                                     <input type="text" class="form-control-custom w-100" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Click map or Paste Google Maps link">
                                 </div>
                                 <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Latitude</label>
+                                    <input type="number" step="any" class="form-control-custom w-100 @(_errors.ContainsKey("Latitude") ? "is-invalid" : "")"
+                                           @bind="_model.Latitude"
+                                           @bind:after="OnLatitudeChanged"
+                                           placeholder="e.g. 10.7905">
+                                    @if (_errors.ContainsKey("Latitude"))
+                                    {
+                                        <div class="field-error">@_errors["Latitude"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Longitude</label>
+                                    <input type="number" step="any" class="form-control-custom w-100 @(_errors.ContainsKey("Longitude") ? "is-invalid" : "")"
+                                           @bind="_model.Longitude"
+                                           @bind:after="OnLongitudeChanged"
+                                           placeholder="e.g. 78.7047">
+                                    @if (_errors.ContainsKey("Longitude"))
+                                    {
+                                        <div class="field-error">@_errors["Longitude"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
                                     <label class="form-label-custom">Shop No / Room No / Block No</label>
                                     <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("ShopNo") ? "is-invalid" : "")" @bind="_model.ShopNoORRoomNoOrBlockNo" @bind:after='() => ValidateFieldOnChange("ShopNo", !string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo))' placeholder="">
                                     @if (_errors.ContainsKey("ShopNo"))
@@ -669,7 +709,7 @@
                     </div>
                 </div>
 
-                @if (isSpic)
+                @if (isSpic && !IsNewDealerFlow)
                 {
                     <div class="basic-info-card">
                         <div class="card-header-title mb-2">
@@ -699,7 +739,7 @@
                     </div>
                 }
 
-                @if (isGreenStar)
+                @if (isGreenStar && !IsNewDealerFlow)
                 {
                     <div class="basic-info-card">
                         <div class="card-header-title mb-2">
@@ -1118,27 +1158,30 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-12 col-md-6">
-                        <div class="small-card h-100">
-                            <div class="fw-bold mb-3 card-header-title">
-                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/EnrollmentStatus.svg"
-                                     class="formicon" /> Enrollment Status
-                            </div>
-                            <label class="form text-muted mb-2 d-block">Are you Enrolled in SDWA?</label>
-                            <div class="yes-no-group">
-                                <button type="button"
-                                        class="btn-yes @(_model.IsSDWA == true ? "active" : "")"
-                                        @onclick='() => _model.IsSDWA = true'>
-                                    Yes
-                                </button>
-                                <button type="button"
-                                        class="btn-no @(_model.IsSDWA == false ? "active" : "")"
-                                        @onclick='() => _model.IsSDWA = false'>
-                                    No
-                                </button>
+                    @if (!IsNewDealerFlow)
+                    {
+                        <div class="col-12 col-md-6">
+                            <div class="small-card h-100">
+                                <div class="fw-bold mb-3 card-header-title">
+                                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/EnrollmentStatus.svg"
+                                         class="formicon" /> Enrollment Status
+                                </div>
+                                <label class="form text-muted mb-2 d-block">Are you Enrolled in SDWA?</label>
+                                <div class="yes-no-group">
+                                    <button type="button"
+                                            class="btn-yes @(_model.IsSDWA == true ? "active" : "")"
+                                            @onclick='() => _model.IsSDWA = true'>
+                                        Yes
+                                    </button>
+                                    <button type="button"
+                                            class="btn-no @(_model.IsSDWA == false ? "active" : "")"
+                                            @onclick='() => _model.IsSDWA = false'>
+                                        No
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    }
                 </div>
             }
 
@@ -1180,8 +1223,15 @@
     public int? DealerIdFromQuery { get; set; }
     [SupplyParameterFromQuery(Name = "mode")]
     public string? Mode { get; set; }
+    [SupplyParameterFromQuery(Name = "flow")]
+    public string? Flow { get; set; }
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+    // New Dealer Creation flow: no existing dealer is selected. Dealer ID is generated
+    // when the record is first saved and Dealer Code is only assigned after final approval.
+    private bool IsNewDealerFlow =>
+        string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) || _model.IsNewDealerRegistration;
 
     // Controls whether the FULL registration page (Location/Bank/Tax/License/etc.) is hidden.
     // Only pure Terminated status hides these — Inactive+Terminated still shows the full page.
@@ -1343,6 +1393,12 @@
 
             await LoadData();
             ApplyEmployeeLocationDefaults();
+
+            if (IsNewDealerFlow && !_isEditMode)
+            {
+                isSpic = false;
+                isGreenStar = false;
+            }
 
             if (dealerTask != null)
             {
@@ -1950,6 +2006,11 @@
         {
             if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
             if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";
+            if (IsNewDealerFlow)
+            {
+                if (!_model.Latitude.HasValue) _errors["Latitude"] = "Latitude is required (click the map or use current location)";
+                if (!_model.Longitude.HasValue) _errors["Longitude"] = "Longitude is required (click the map or use current location)";
+            }
             if (string.IsNullOrWhiteSpace(_model.PinCode)) _errors["PinCode"] = "Pincode is required";
             else if (_model.PinCode.Length != 6) _errors["PinCode"] = "Pincode must be 6 digits";
            if ((_model.DistrictId ?? 0) == 0) _errors["DistrictId"] = "District is required in Primary Location";
@@ -2010,6 +2071,8 @@
         try
         {
             _model.IsDealer = selected == "Dealer";
+
+            _model.IsNewDealerRegistration = IsNewDealerFlow;
 
             _model.DealerType = selected switch
             {
@@ -2179,7 +2242,7 @@
                 return;
             }
 
-            Nav.NavigateTo($"/Experience?dealerId={_model.Id}&mode=view");
+            Nav.NavigateTo($"/Experience?dealerId={_model.Id}&mode=view{(IsNewDealerFlow ? "&flow=new" : "")}");
             return;
         }
 
@@ -2226,7 +2289,8 @@
         {
             SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, false);
             Loading.Show();
-            Nav.NavigateTo($"/Experience?dealerId={_model.Id}");
+            var flowParam = IsNewDealerFlow ? "&flow=new" : "";
+            Nav.NavigateTo($"/Experience?dealerId={_model.Id}{flowParam}");
         }
         else
         {
@@ -2737,6 +2801,22 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         }
     }
 
+    private async Task OnLatitudeChanged()
+    {
+        if (_model.Latitude.HasValue)
+            _errors.Remove("Latitude");
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+    }
+
+    private async Task OnLongitudeChanged()
+    {
+        if (_model.Longitude.HasValue)
+            _errors.Remove("Longitude");
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+    }
+
     private async Task UseCurrentLocation()
     {
         _isGettingLocation = true;
@@ -3006,6 +3086,20 @@ public string? GSTConstitutionofBusiness { get; set; }
 public DealerStatus Status { get; set; }
 public FutureBusinessProposal? InactiveProposal { get; set; }
 public bool? IsSubmittedForReview { get; set; } = false;
+public bool IsNewDealerRegistration { get; set; }
+public int? DealershipApplicationFeeBankId { get; set; }
+public string? DealershipApplicationFeeDDNumber { get; set; }
+public DateTime? DealershipApplicationFeeDDDate { get; set; }
+public decimal? DealershipApplicationFeeAmount { get; set; }
+public string? DealershipApplicationFeePayableAt { get; set; }
+public string? SpicTradeDepositDDNumber { get; set; }
+public int? SpicTradeDepositDDBankId { get; set; }
+public DateTime? SpicTradeDepositDDDate { get; set; }
+public decimal? SpicTradeDepositDDAmount { get; set; }
+public string? GflTradeDepositDDNumber { get; set; }
+public int? GflTradeDepositDDBankId { get; set; }
+public DateTime? GflTradeDepositDDDate { get; set; }
+public decimal? GflTradeDepositDDAmount { get; set; }
     }
 
     

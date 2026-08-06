@@ -134,6 +134,8 @@
 	}
 	<!-- Dealer Summary -->
 	<_Creditlimitdealersummary_Card Dealer="_dealer" LandTotal="LandTotal" BuildingTotal="BuildingTotal" />
+	@if (!IsNewDealerFlow)
+	{
 	<!-- Existing Credit Limit -->
 	<div class="form-card">
 		<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
@@ -570,6 +572,86 @@
 			</div>
 		</div>
 	}
+	}
+
+	@if (IsNewDealerFlow)
+	{
+		<div class="form-card">
+			<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+				<div class="card-header-title mb-0">
+					<i class="bi bi-cash-coin" style="color:#2563EB;"></i> SPIC Trade Deposit Details
+				</div>
+			</div>
+
+			<div class="mb-4">
+				<h6 class="fw-bold mb-3">Application Fee</h6>
+				<div class="row g-3 align-items-end">
+					<div class="col-md-4">
+						<label class="form-label">Bank</label>
+						<select class="form-control-custom w-100" @bind="_dealer.DealershipApplicationFeeBankId">
+							<option value="">-- Select Bank --</option>
+							@foreach (var bank in _banks)
+							{
+								<option value="@bank.Id">@bank.Name</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">DD Number</label>
+						<input type="text" class="form-control-custom w-100" placeholder="Enter DD Number" @bind="_dealer.DealershipApplicationFeeDDNumber" />
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">DD Date</label>
+						<input type="date" class="form-control-custom w-100" value="@FormatDate(_dealer.DealershipApplicationFeeDDDate)" @onchange="OnApplicationFeeDDDateChanged" />
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">Amount (₹)</label>
+						<input type="number" class="form-control-custom w-100" step="0.01" @bind="_dealer.DealershipApplicationFeeAmount" />
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">Payable At</label>
+						<select class="form-control-custom w-100" @bind="_dealer.DealershipApplicationFeePayableAt">
+							<option value="">-- Select --</option>
+							<option value="Tuticorin">Tuticorin</option>
+							<option value="Chennai">Chennai</option>
+						</select>
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">Pay in the Name of</label>
+						<input type="text" class="form-control-custom w-100" value="SPIC Limited" disabled />
+					</div>
+				</div>
+			</div>
+
+			<div>
+				<h6 class="fw-bold mb-3">Trade Deposit Details</h6>
+				<div class="row g-3 align-items-end">
+					<div class="col-md-4">
+						<label class="form-label">DD Number</label>
+						<input type="text" class="form-control-custom w-100" placeholder="Enter DD Number" @bind="_dealer.SpicTradeDepositDDNumber" />
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">Bank</label>
+						<select class="form-control-custom w-100" @bind="_dealer.SpicTradeDepositDDBankId">
+							<option value="">-- Select Bank --</option>
+							@foreach (var bank in _banks)
+							{
+								<option value="@bank.Id">@bank.Name</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">DD Date</label>
+						<input type="date" class="form-control-custom w-100" value="@FormatDate(_dealer.SpicTradeDepositDDDate)" @onchange="OnSpicTradeDepositDDDateChanged" />
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">Amount (₹)</label>
+						<input type="number" class="form-control-custom w-100" step="0.01" @bind="_dealer.SpicTradeDepositDDAmount" />
+					</div>
+				</div>
+			</div>
+		</div>
+	}
 
 	</fieldset>
 	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
@@ -580,11 +662,18 @@
 	public int? DealerId { get; set; }
 	[SupplyParameterFromQuery(Name = "mode")]
 	public string? Mode { get; set; }
+	[SupplyParameterFromQuery(Name = "flow")]
+	public string? Flow { get; set; }
 
 	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+	private bool IsNewDealerFlow =>
+		string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) ||
+		_dealer.IsNewDealerRegistration;
+	private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
 	public string? SelectedCompany { get; set; }
 
 	private DealerReg _dealer = new();
+	private List<Bank> _banks = new();
 	private List<DealerAssetBank> _bankAssets = new();
 	private List<DealerAssetLand> _landAssets = new();
 	private List<DealerAssetBuilding> _buildingAssets = new();
@@ -706,6 +795,7 @@ private string _spicValidToText   = "2026-03-31";
 			var unitTask = SafeGetAsync<List<Unit>>("api/Unit");
 			var prodTask = SafeGetAsync<List<Product>>("api/Product");
 			var prodGroupTask = SafeGetAsync<List<ProductGroup>>("api/ProductGroup");
+			var banksMasterTask = SafeGetAsync<List<Bank>>("api/Bank");
 
 			if (DealerId.HasValue && DealerId.Value > 0)
 {
@@ -719,8 +809,8 @@ private string _spicValidToText   = "2026-03-31";
     var annualTask     = SafeGetAsync<List<AnnualSaleDataLastFYofDealerRegistration>>($"api/AnnualSaleDataLastFY/byDealer/{DealerId}");
 
     await Task.WhenAll(
-        fyTask, catTask, unitTask, prodTask, prodGroupTask,
-        dealerTask, bankTask, landTask, buildingTask,
+        fyTask, catTask, unitTask, prodTask, prodGroupTask, banksMasterTask,
+        dealerTask, landTask, buildingTask,
         loanTask, salesPlanTask, proposalTask, annualTask
     );
 
@@ -729,6 +819,7 @@ private string _spicValidToText   = "2026-03-31";
     _units          = unitTask.Result ?? new();
     _products       = prodTask.Result ?? new();
     _productGroups  = prodGroupTask.Result ?? new();
+    _banks          = banksMasterTask.Result ?? new();
 
     _dealer          = dealerTask.Result ?? new();
     _bankAssets      = bankTask.Result ?? new();      // server already filtered — no .Where
@@ -753,13 +844,14 @@ if (_proposal.SpicExistingCreditLimitTo == DateTime.MinValue)
 }
 			else
 			{
-				await Task.WhenAll(fyTask, catTask, unitTask, prodTask, prodGroupTask);
+				await Task.WhenAll(fyTask, catTask, unitTask, prodTask, prodGroupTask, banksMasterTask);
 
 				_financialYears = fyTask.Result ?? new();
 				_categories = catTask.Result ?? new();
 				_units = unitTask.Result ?? new();
 				_products = prodTask.Result ?? new();
 				_productGroups = prodGroupTask.Result ?? new();
+				_banks = banksMasterTask.Result ?? new();
 			}
 
 			if (_categories.Count > 0)
@@ -999,6 +1091,25 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 		_spicValidToText = Fmt(_proposal.SpicExistingCreditLimitTo);
 	}
 
+	private static string FormatDate(DateTime? d) =>
+		d.HasValue && d.Value != DateTime.MinValue ? d.Value.ToString("yyyy-MM-dd") : "";
+
+	private void OnApplicationFeeDDDateChanged(ChangeEventArgs e)
+	{
+		if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+			_dealer.DealershipApplicationFeeDDDate = dt;
+		else
+			_dealer.DealershipApplicationFeeDDDate = null;
+	}
+
+	private void OnSpicTradeDepositDDDateChanged(ChangeEventArgs e)
+	{
+		if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+			_dealer.SpicTradeDepositDDDate = dt;
+		else
+			_dealer.SpicTradeDepositDDDate = null;
+	}
+
 	private void OnSpicFDAmountChanged(ChangeEventArgs e)
 	{
 		_proposal.SpicFDAmount = ParseDecimal(e);
@@ -1098,7 +1209,7 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 		if (IsViewOnly)
 		{
 			Loading.Show();
-			Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}&mode=view");
+			Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}&mode=view{FlowParam}");
 			return;
 		}
 		if (!DealerId.HasValue || DealerId.Value <= 0)
@@ -1110,6 +1221,19 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 		_isSaving = true;
 		try
 		{
+			if (IsNewDealerFlow)
+			{
+				var dealerSave = await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", _dealer);
+				dealerSave.EnsureSuccessStatusCode();
+
+				var hasError = _dealer.InSpic &&
+							   (string.IsNullOrWhiteSpace(_dealer.DealershipApplicationFeeDDNumber) ||
+							   string.IsNullOrWhiteSpace(_dealer.SpicTradeDepositDDNumber));
+				FormStepData.MarkStepError(10, hasError);
+				Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}{FlowParam}");
+				return;
+			}
+
 			_proposal.DealerId = DealerId.Value;
 			_proposal.Q1Mark = GetSpicMark(0);
 			_proposal.Q2Mark = GetSpicMark(1);
@@ -1141,7 +1265,7 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 			}
 
 			FormStepData.MarkStepError(11, false);
-			Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}");
+			Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}{FlowParam}");
 		}
 		catch (Exception ex)
 		{
@@ -1155,7 +1279,7 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 
 	private void HandleSkip()
 	{
-		Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}");
+		Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}{FlowParam}");
 	}
 
 	private void ShowMessage(string message, bool isError)

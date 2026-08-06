@@ -82,7 +82,12 @@
     [SupplyParameterFromQuery(Name = "mode")]
     public string? Mode { get; set; }
 
+    [SupplyParameterFromQuery(Name = "flow")]
+    public string? Flow { get; set; }
+
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+    private bool IsNewDealerFlow => string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase);
+    private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
 
     private bool isSpic;
     private bool isGreenStar;
@@ -178,7 +183,7 @@
         if (IsViewOnly)
         {
             Loading.Show();
-            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}&mode=view");
+            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}&mode=view{FlowParam}");
             return;
         }
 
@@ -218,7 +223,7 @@
             FormStepData.MarkStepError(6, hasError);
 
             Loading.Show();
-            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}");
+            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}{FlowParam}");
         }
         catch (Exception ex)
         {

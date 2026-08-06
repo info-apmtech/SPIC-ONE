@@ -414,8 +414,12 @@
     public int? DealerId { get; set; }
     [SupplyParameterFromQuery(Name = "mode")]
     public string? Mode { get; set; }
+    [SupplyParameterFromQuery(Name = "flow")]
+    public string? Flow { get; set; }
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+    private bool IsNewDealerFlow => string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase);
+    private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
     private List<Crop> _crops = new();
     private string[] _monthValues = Enum.GetNames<Months>();
 
@@ -751,7 +755,7 @@
         if (IsViewOnly)
         {
             Loading.Show();
-            Nav.NavigateTo($"/Companies?dealerId={DealerId}&mode=view");
+            Nav.NavigateTo($"/Companies?dealerId={DealerId}&mode=view{FlowParam}");
             return;
         }
         if (!DealerId.HasValue || DealerId.Value <= 0)
@@ -767,7 +771,7 @@
             var hasError = _savedBlocks.Count == 0;
             FormStepData.MarkStepError(5, hasError);
             Loading.Show();
-            Nav.NavigateTo($"/Companies?dealerId={DealerId}");
+            Nav.NavigateTo($"/Companies?dealerId={DealerId}{FlowParam}");
         }
         catch (Exception ex)
         {

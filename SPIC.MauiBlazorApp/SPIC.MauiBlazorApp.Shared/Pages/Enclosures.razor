@@ -1965,6 +1965,82 @@
 			</div>
 		</div>
 
+		@if (IsNewDealerFlow)
+		{
+			<div class="col-md-6">
+				<div class="doc-card">
+					<div class="doc-header">
+						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.RequestLetterFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+							<i class="bi bi-file-earmark-text"></i>
+						</div>
+						<div class="doc-title-row">
+							<div>
+								<div class="doc-title">Request Letter for Dealership</div>
+								<div class="doc-desc">On the firm's letterhead with seal and signature</div>
+							</div>
+							<div class="badge-group">
+								<span class="badge-req">Required</span>
+								@if (!string.IsNullOrEmpty(_docs.RequestLetterFilePath))
+								{
+									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+								}
+								else
+								{
+									<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+								}
+							</div>
+						</div>
+					</div>
+					@if (!string.IsNullOrEmpty(_docs.RequestLetterFilePath))
+					{
+						<div class="file-uploaded-box">
+							<div class="file-info">
+								<i class="bi bi-file-earmark-pdf"></i>
+								<div>
+									<div class="file-name">
+										@GetFileName(_docs.RequestLetterFilePath) @if (CanDelete)
+										{
+											<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveRequestLetter" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+										}
+									</div>
+									<div class="file-meta">Request Letter for Dealership</div>
+								</div>
+							</div>
+							<div class="file-actions">
+								<a href="@GetFileUrl(_docs.RequestLetterFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+								@if (CanEdit)
+								{
+									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+										<i class="bi bi-arrow-repeat"></i> Replace
+										<InputFile hidden OnChange="OnRequestLetterSelected" accept=".pdf,.jpg,.jpeg,.png" />
+									</label>
+								}
+							</div>
+						</div>
+					}
+					else
+					{
+						<div class="file-missing-box">
+							<div class="missing-info">
+								<i class="bi bi-upload" style="color:#059669;"></i>
+								<div>
+									<div class="missing-title" style="color:#059669;">Click to upload</div>
+									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+								</div>
+							</div>
+							@if (CanAdd)
+							{
+								<label class="btn-green-solid mb-0" style="cursor:pointer;">
+									<i class="bi bi-upload me-1"></i> Upload Document
+									<InputFile hidden OnChange="OnRequestLetterSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+							}
+						</div>
+					}
+				</div>
+			</div>
+		}
+
 		<div class="col-md-6">
 			<div class="doc-card">
 				<div class="doc-header">
@@ -2285,8 +2361,14 @@
 	public int DealerId { get; set; }
 	[SupplyParameterFromQuery(Name = "mode")]
 	public string? Mode { get; set; }
+	[SupplyParameterFromQuery(Name = "flow")]
+	public string? Flow { get; set; }
 
 	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+	private bool IsNewDealerFlow =>
+		string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) ||
+		_dealer.IsNewDealerRegistration;
+	private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
 	private DealerReg _dealer = new();
 	private DealerRegistrationDocuments _docs = new();
 	private List<DealerOwnershipInfo> _partners = new();
@@ -2460,6 +2542,8 @@
 			requiredPaths.Add(_docs.SpecimanFilePath);
 		if (_dealer.InGreenStar)
 			requiredPaths.Add(_docs.GreenstarSpecimanFilePath);
+		if (IsNewDealerFlow)
+			requiredPaths.Add(_docs.RequestLetterFilePath);
 		if (_isDeedOfGuaranteeRequired)
 			requiredPaths.Add(_docs.DeedOfGuaranteeFilePath);
 		if (_hasWholesaleLicense)
@@ -2916,6 +3000,24 @@
 		});
 	}
 
+	private async Task OnRequestLetterSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId, "RequestLetter", e.File);
+		if (path != null) { _docs.RequestLetterFilePath = path; await SaveDocuments(); CalculateProgress(); }
+	}
+
+	private void RemoveRequestLetter()
+	{
+		OpenDeleteModal("Request Letter for Dealership", _docs.RequestLetterFilePath ?? "", async () =>
+		{
+			var path = _docs.RequestLetterFilePath!;
+			_docs.RequestLetterFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
 	private async Task OnDeedOfGuaranteeSelected(InputFileChangeEventArgs e)
 	{
 		var path = await UploadFileToServer(DealerId, "DeedOfGuarantee", e.File);
@@ -3276,9 +3378,13 @@
 		var gst = System.Net.WebUtility.HtmlEncode(_dealer.GSTNumber ?? "—");
 		var partnerNames = string.Join(", ", _partners.Select(p => System.Net.WebUtility.HtmlEncode(p.Name)));
 		var dateStr = DateTime.Now.ToString("dd-MM-yyyy");
-		var dealerCodeDisplay = System.Net.WebUtility.HtmlEncode(
-			!string.IsNullOrWhiteSpace(_dealer.SPICCode) ? _dealer.SPICCode :
-			!string.IsNullOrWhiteSpace(_dealer.DealerCode) ? _dealer.DealerCode : "—");
+		var dealerIdDisplay = System.Net.WebUtility.HtmlEncode(_dealer.Id > 0 ? _dealer.Id.ToString() : "—");
+		var dealerCodeValue = !string.IsNullOrWhiteSpace(_dealer.SPICCode) ? _dealer.SPICCode :
+			!string.IsNullOrWhiteSpace(_dealer.DealerCode) ? _dealer.DealerCode : "";
+		var dealerCodeDisplay = System.Net.WebUtility.HtmlEncode(dealerCodeValue);
+		var dealerCodeInfoItem = !string.IsNullOrWhiteSpace(dealerCodeValue)
+			? $"<div class='info-item'><span class='label'>Dealer Code</span><span class='value'>{dealerCodeDisplay}</span></div>"
+			: "";
 
 		return $@"<!DOCTYPE html>
 <html>
@@ -3350,7 +3456,8 @@
 </div>
 
 	<div class='info-grid'>
-<div class='info-item'><span class='label'>Dealer ID</span><span class='value'>{dealerCodeDisplay}</span></div>
+<div class='info-item'><span class='label'>Dealer ID</span><span class='value'>{dealerIdDisplay}</span></div>
+{dealerCodeInfoItem}
 <div class='info-item'><span class='label'>Firm Name</span><span class='value'>M/s.{firmName}</span></div>
 		<div class='info-item'><span class='label'>GST Number</span><span class='value'>{gst}</span></div>
 		<div class='info-item'><span class='label'>Date</span><span class='value'>{dateStr}</span></div>
@@ -3441,9 +3548,13 @@
 		var firmName = System.Net.WebUtility.HtmlEncode(_dealer.FirmName ?? "\u2014");
 		var gst = System.Net.WebUtility.HtmlEncode(_dealer.GSTNumber ?? "\u2014");
 		var dateStr = DateTime.Now.ToString("dd-MM-yyyy");
-		var dealerCodeDisplay = System.Net.WebUtility.HtmlEncode(
-			!string.IsNullOrWhiteSpace(_dealer.GreenStarCode) ? _dealer.GreenStarCode :
-			!string.IsNullOrWhiteSpace(_dealer.DealerCode) ? _dealer.DealerCode : "\u2014");
+		var dealerIdDisplay = System.Net.WebUtility.HtmlEncode(_dealer.Id > 0 ? _dealer.Id.ToString() : "\u2014");
+		var dealerCodeValue = !string.IsNullOrWhiteSpace(_dealer.GreenStarCode) ? _dealer.GreenStarCode :
+			!string.IsNullOrWhiteSpace(_dealer.DealerCode) ? _dealer.DealerCode : "";
+		var dealerCodeDisplay = System.Net.WebUtility.HtmlEncode(dealerCodeValue);
+		var dealerCodeInfoItem = !string.IsNullOrWhiteSpace(dealerCodeValue)
+			? $"<div class='info-item'><span class='label'>Dealer Code</span><span class='value'>{dealerCodeDisplay}</span></div>"
+			: "";
 
 		return $@"<!DOCTYPE html>
 <html>
@@ -3510,7 +3621,8 @@
 </div>
 
 	<div class='info-grid'>
-<div class='info-item'><span class='label'>Dealer ID</span><span class='value'>{dealerCodeDisplay}</span></div>
+<div class='info-item'><span class='label'>Dealer ID</span><span class='value'>{dealerIdDisplay}</span></div>
+{dealerCodeInfoItem}
 <div class='info-item'><span class='label'>Firm Name</span><span class='value'>M/s.{firmName}</span></div>
 		<div class='info-item'><span class='label'>GST Number</span><span class='value'>{gst}</span></div>
 		<div class='info-item'><span class='label'>Date</span><span class='value'>{dateStr}</span></div>
@@ -3569,7 +3681,7 @@
 		if (IsViewOnly)
 		{
 			Loading.Show();
-			Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}&mode=view");
+			Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}&mode=view{FlowParam}");
 			return;
 		}
 		_isSaving = true;
@@ -3578,8 +3690,8 @@
 		try
 		{
 			await SaveDocuments();
-			FormStepData.MarkStepError(11, _pendingCount > 0);
-			Nav.NavigateTo($"/FinalSubmission?dealerId={DealerId}");
+			FormStepData.MarkStepError(12, _pendingCount > 0);
+			Nav.NavigateTo($"/FinalSubmission?dealerId={DealerId}{FlowParam}");
 		}
 		catch (Exception ex)
 		{

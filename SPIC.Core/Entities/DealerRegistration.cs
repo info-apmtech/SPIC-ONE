@@ -181,6 +181,29 @@ namespace SPIC.Core.Entities
         public FutureBusinessProposal? InactiveProposal { get; set; }
         public bool? IsSubmittedForReview { get; set; } = false;
 
+        // True when this registration was created through the "Create New Dealer" flow.
+        // New dealers have no DealerCode until the final approval generates one.
+        public bool IsNewDealerRegistration { get; set; }
+
+        // Dealership Application Fee (New Dealer flow — SPIC)
+        public int? DealershipApplicationFeeBankId { get; set; }
+        public string? DealershipApplicationFeeDDNumber { get; set; }
+        public DateTime? DealershipApplicationFeeDDDate { get; set; }
+        public decimal? DealershipApplicationFeeAmount { get; set; }
+        public string? DealershipApplicationFeePayableAt { get; set; }
+
+        // Trade Deposit Details — SPIC (New Dealer flow)
+        public string? SpicTradeDepositDDNumber { get; set; }
+        public int? SpicTradeDepositDDBankId { get; set; }
+        public DateTime? SpicTradeDepositDDDate { get; set; }
+        public decimal? SpicTradeDepositDDAmount { get; set; }
+
+        // Trade Deposit Details — GFL / Greenstar (New Dealer flow)
+        public string? GflTradeDepositDDNumber { get; set; }
+        public int? GflTradeDepositDDBankId { get; set; }
+        public DateTime? GflTradeDepositDDDate { get; set; }
+        public decimal? GflTradeDepositDDAmount { get; set; }
+
     }
     public class DealerApprovalHistory
     {
@@ -573,7 +596,8 @@ namespace SPIC.Core.Entities
         public string? LlpAgreementFilePath { get; set; }
 		public string? ArticlesOfAssociationFilePath { get; set; }   // AOA
 		public string? MemorandumOfAssociationFilePath { get; set; } // MOA
-		public string? ByLaw { get; set; } 
+		public string? ByLaw { get; set; }
+		public string? RequestLetterFilePath { get; set; }
 
 	}
     public class DealerCreditLimitSales

@@ -247,17 +247,41 @@ namespace SpicAPI.Controllers
             bool step9 = bank || land || building;
             result.Add(new { StepNo = 9, IsComplete = step9 });
 
-            // Step 10: Credit limit proposal
+            // Step 10: Credit limit proposal (SPIC). New-dealer flow instead records
+            // the SPIC Trade Deposit Details (Dealership Application Fee + Trade Deposit DD).
             bool credit = _creditRepo != null && await _creditRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             bool step10 = credit;
+            if (dealer?.IsNewDealerRegistration == true)
+            {
+                step10 = dealer.InSpic
+                    && (!string.IsNullOrWhiteSpace(dealer.SpicTradeDepositDDNumber)
+                        || dealer.SpicTradeDepositDDBankId > 0
+                        || (dealer.SpicTradeDepositDDAmount ?? 0) > 0
+                        || !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeDDNumber)
+                        || dealer.DealershipApplicationFeeBankId > 0
+                        || (dealer.DealershipApplicationFeeAmount ?? 0) > 0);
+            }
             result.Add(new { StepNo = 10, IsComplete = step10 });
 
-            // Step 11: Credit limit for GreenStar (same check as step 10)
+            // Step 11: Credit limit for GreenStar (same check as step 10).
+            // New-dealer flow instead records the GFL Trade Deposit Details.
             bool step11 = credit;
+            if (dealer?.IsNewDealerRegistration == true)
+            {
+                step11 = dealer.InGreenStar
+                    && (!string.IsNullOrWhiteSpace(dealer.GflTradeDepositDDNumber)
+                        || dealer.GflTradeDepositDDBankId > 0
+                        || (dealer.GflTradeDepositDDAmount ?? 0) > 0);
+            }
             result.Add(new { StepNo = 11, IsComplete = step11 });
 
             // Step 12: Documents
             bool step12 = _docsRepo != null && await _docsRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            if (dealer?.IsNewDealerRegistration == true && _docsRepo != null)
+            {
+                var docsRow = await _docsRepo.GetAll().FirstOrDefaultAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+                step12 = docsRow != null && !string.IsNullOrWhiteSpace(docsRow.RequestLetterFilePath);
+            }
             result.Add(new { StepNo = 12, IsComplete = step12 });
 
             // Step 13: Final submission (dealer record exists)
@@ -306,71 +330,138 @@ namespace SpicAPI.Controllers
 
             if (string.IsNullOrEmpty(dealer.UserTableId) && !string.IsNullOrEmpty(dealer.DealerCode))
             {
-                // 1. Check if the user ALREADY EXISTS in the database by their DealerCode
-                var existingAppUser = await _userInfoRepo.GetAll()
-                    .FirstOrDefaultAsync(u => u.NormalizedUserName == dealer.DealerCode.ToUpper());
-
-                if (existingAppUser != null)
-                {
-                    // 2. The account already exists! Just link the existing ID to the dealer.
-                    // If it has no designation yet, assign the default Dealer designation.
-                    if (existingAppUser.DesignationId == null)
-                    {
-                        var dealerDesignationId = await ResolveDealerDesignationIdAsync();
-                        if (dealerDesignationId != null)
-                        {
-                            existingAppUser.DesignationId = dealerDesignationId;
-                            existingAppUser.UpdatedAt = DateTime.UtcNow;
-                            existingAppUser.UpdatedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System";
-                            await _userManager.UpdateAsync(existingAppUser);
-                        }
-                    }
-
-                    dealer.UserTableId = existingAppUser.Id;
-                }
-                else
-                {
-                    // 3. The account truly doesn't exist. Create it safely.
-                    var newUserId = Guid.NewGuid().ToString();
-                    var phonePass = string.IsNullOrWhiteSpace(dealer.OfficialContactNumber)
-                        ? "1234567890"
-                        : dealer.OfficialContactNumber;
-
-                    var dealerDesignationId = await ResolveDealerDesignationIdAsync();
-
-                    var newUser = new UserInfo
-                    {
-                        Id = newUserId,
-                        UserName = dealer.DealerCode,
-                        NormalizedUserName = dealer.DealerCode.ToUpper(),
-                        PhoneNumber = dealer.OfficialContactNumber,
-                        Password = phonePass,
-                        Name = dealer.FirmName,
-                        Role = (SPIC.Core.Entities.AppRole)11,
-                        DesignationId = dealerDesignationId,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow,
-                        CreatedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System",
-                        UpdatedAt = DateTime.UtcNow,
-                        UpdatedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System"
-                    };
-
-                    var createUserResult = await _userManager.CreateAsync(newUser, phonePass);
-
-                    if (!createUserResult.Succeeded)
-                    {
-                        return BadRequest(string.Join(", ", createUserResult.Errors.Select(e => e.Description)));
-                    }
-
-                    await EnsureRoleAndAssignAsync(newUser, newUser.Role);
-                    dealer.UserTableId = newUserId;
-                }
+                var userError = await EnsureDealerUserAsync(dealer);
+                if (!string.IsNullOrEmpty(userError))
+                    return BadRequest(userError);
             }
 
             // Save the DealerRegistration changes
             await _repo.UpdateAsync(dealer);
 
             return Ok(dealer);
+        }
+
+        /// <summary>
+        /// Creates (or links) the login account for a dealer identified by its DealerCode.
+        /// Returns an error message on failure, or null on success.
+        /// </summary>
+        private async Task<string?> EnsureDealerUserAsync(DealerRegistration dealer)
+        {
+            // 1. Check if the user ALREADY EXISTS in the database by their DealerCode
+            var existingAppUser = await _userInfoRepo.GetAll()
+                .FirstOrDefaultAsync(u => u.NormalizedUserName == dealer.DealerCode.ToUpper());
+
+            if (existingAppUser != null)
+            {
+                // 2. The account already exists! Just link the existing ID to the dealer.
+                // If it has no designation yet, assign the default Dealer designation.
+                if (existingAppUser.DesignationId == null)
+                {
+                    var existingUserDesignationId = await ResolveDealerDesignationIdAsync();
+                    if (existingUserDesignationId != null)
+                    {
+                        existingAppUser.DesignationId = existingUserDesignationId;
+                        existingAppUser.UpdatedAt = DateTime.UtcNow;
+                        existingAppUser.UpdatedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System";
+                        await _userManager.UpdateAsync(existingAppUser);
+                    }
+                }
+
+                dealer.UserTableId = existingAppUser.Id;
+                return null;
+            }
+
+            // 3. The account truly doesn't exist. Create it safely.
+            var newUserId = Guid.NewGuid().ToString();
+            var phonePass = string.IsNullOrWhiteSpace(dealer.OfficialContactNumber)
+                ? "1234567890"
+                : dealer.OfficialContactNumber;
+
+            var dealerDesignationId = await ResolveDealerDesignationIdAsync();
+
+            var newUser = new UserInfo
+            {
+                Id = newUserId,
+                UserName = dealer.DealerCode,
+                NormalizedUserName = dealer.DealerCode.ToUpper(),
+                PhoneNumber = dealer.OfficialContactNumber,
+                Password = phonePass,
+                Name = dealer.FirmName,
+                Role = (SPIC.Core.Entities.AppRole)11,
+                DesignationId = dealerDesignationId,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System",
+                UpdatedAt = DateTime.UtcNow,
+                UpdatedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System"
+            };
+
+            var createUserResult = await _userManager.CreateAsync(newUser, phonePass);
+
+            if (!createUserResult.Succeeded)
+            {
+                return string.Join(", ", createUserResult.Errors.Select(e => e.Description));
+            }
+
+            await EnsureRoleAndAssignAsync(newUser, newUser.Role);
+            dealer.UserTableId = newUserId;
+            return null;
+        }
+
+        /// <summary>
+        /// Assigns a unique sequential numeric DealerCode to a new-flow dealer once its
+        /// registration is finally approved. The code is the largest existing numeric
+        /// DealerCode + 1, and is checked for uniqueness before being saved.
+        /// </summary>
+        [HttpPost("{id}/generate-dealer-code")]
+        public async Task<IActionResult> GenerateDealerCode(int id)
+        {
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (!IsWriteRole(role))
+                return Forbid();
+
+            var dealer = await _repo.GetByIdAsync(id);
+            if (dealer == null) return NotFound();
+
+            if (string.IsNullOrWhiteSpace(dealer.DealerCode))
+            {
+                var existingCodes = await _repo.GetAllWithInactive()
+                    .Where(x => x.DealerCode != null)
+                    .Select(x => x.DealerCode!)
+                    .ToListAsync();
+
+                long max = 0;
+                foreach (var code in existingCodes)
+                {
+                    if (long.TryParse(code, out var numeric) && numeric > max)
+                        max = numeric;
+                }
+
+                string candidate;
+                do
+                {
+                    max++;
+                    candidate = max.ToString();
+                }
+                while (existingCodes.Any(c => string.Equals(c, candidate, StringComparison.OrdinalIgnoreCase)));
+
+                dealer.DealerCode = candidate;
+                dealer.Status = DealerStatus.Active;
+                dealer.UpdatedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System";
+                dealer.UpdatedAt = DateTime.Now;
+                await _repo.UpdateAsync(dealer);
+            }
+
+            if (string.IsNullOrEmpty(dealer.UserTableId) && !string.IsNullOrEmpty(dealer.DealerCode))
+            {
+                var userError = await EnsureDealerUserAsync(dealer);
+                if (!string.IsNullOrEmpty(userError))
+                    return BadRequest(userError);
+
+                await _repo.UpdateAsync(dealer);
+            }
+
+            return Ok(new { dealer.Id, dealer.DealerCode });
         }
         [HttpPost("{id}/send-back")]
         public async Task<IActionResult> SendBack(int id, [FromBody] DealerSendBackRequest request)

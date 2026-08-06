@@ -480,8 +480,12 @@
 	public int? DealerId { get; set; }
 	[SupplyParameterFromQuery(Name = "mode")]
 	public string? Mode { get; set; }
+	[SupplyParameterFromQuery(Name = "flow")]
+	public string? Flow { get; set; }
 
 	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+	private bool IsNewDealerFlow => string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase);
+	private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
 
 	// Lookup lists
 	private List<WarehouseEntity> _warehouses = new();
@@ -1145,7 +1149,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		if (IsViewOnly)
 		{
 			Loading.Show();
-			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}&mode=view");
+			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}&mode=view{FlowParam}");
 			return;
 		}
 		if (!DealerId.HasValue || DealerId.Value <= 0)
@@ -1168,7 +1172,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 			}
 
 			Loading.Show();
-			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}");
+			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}{FlowParam}");
 		}
 		catch (Exception ex)
 		{

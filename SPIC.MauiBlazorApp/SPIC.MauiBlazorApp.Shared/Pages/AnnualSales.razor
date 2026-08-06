@@ -468,8 +468,12 @@
 	public int? DealerId { get; set; }
 	[SupplyParameterFromQuery(Name = "mode")]
 	public string? Mode { get; set; }
+	[SupplyParameterFromQuery(Name = "flow")]
+	public string? Flow { get; set; }
 
 	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+	private bool IsNewDealerFlow => string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase);
+	private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
 	private bool CanAdd => LoginState.Can("AnnualSales", "Entry");
 	private List<Category> _categories = new();
 	private List<Unit> _units = new();
@@ -747,7 +751,7 @@
 		if (IsViewOnly)
 		{
 			Loading.Show();
-			Nav.NavigateTo($"/Warehouse?dealerId={DealerId}&mode=view");
+			Nav.NavigateTo($"/Warehouse?dealerId={DealerId}&mode=view{FlowParam}");
 			return;
 		}
 		if (!DealerId.HasValue || DealerId.Value <= 0)
@@ -784,7 +788,7 @@
 			var hasError = _allSalesData.All(r => r.OwnRetailsSaleQty == 0 && r.OwnRetailsSaleAmount == 0 && r.SaleToDealerQty == 0 && r.SaleToDealerAmount == 0);
 			FormStepData.MarkStepError(3, hasError);
 			Loading.Show();
-			Nav.NavigateTo($"/Warehouse?dealerId={DealerId}");
+			Nav.NavigateTo($"/Warehouse?dealerId={DealerId}{FlowParam}");
 		}
 		catch (Exception ex)
 		{

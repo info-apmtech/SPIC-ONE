@@ -138,6 +138,8 @@
 		<!-- Dealer Summary -->
 		<_Creditlimitdealersummary_Card Dealer="_dealer" LandTotal="LandTotal" BuildingTotal="BuildingTotal" SelectedCompany="GreenStar" />
 
+		@if (!IsNewDealerFlow)
+		{
 		<!-- Existing Credit Limit -->
 		<div class="form-card">
 			<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
@@ -635,6 +637,41 @@
 				</div>
 			</div>
 		}
+		}
+		@if (IsNewDealerFlow)
+		{
+			<div class="form-card">
+				<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+					<div class="card-header-title mb-0">
+						<i class="bi bi-cash-coin" style="color:#2563EB;"></i> GFL Trade Deposit Details
+					</div>
+				</div>
+				<div class="row g-3 align-items-end">
+					<div class="col-md-4">
+						<label class="form-label">DD Number</label>
+						<input type="text" class="form-control-custom w-100" placeholder="Enter DD Number" @bind="_dealer.GflTradeDepositDDNumber" />
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">Bank</label>
+						<select class="form-control-custom w-100" @bind="_dealer.GflTradeDepositDDBankId">
+							<option value="">-- Select Bank --</option>
+							@foreach (var bank in _banks)
+							{
+								<option value="@bank.Id">@bank.Name</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">DD Date</label>
+						<input type="date" class="form-control-custom w-100" value="@FormatDate(_dealer.GflTradeDepositDDDate)" @onchange="OnGflTradeDepositDDDateChanged" />
+					</div>
+					<div class="col-md-4">
+						<label class="form-label">Amount (₹)</label>
+						<input type="number" class="form-control-custom w-100" step="0.01" @bind="_dealer.GflTradeDepositDDAmount" />
+					</div>
+				</div>
+			</div>
+		}
 		</fieldset>
 		<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 	</div>
@@ -645,11 +682,18 @@
 	public int? DealerId { get; set; }
 	[SupplyParameterFromQuery(Name = "mode")]
 	public string? Mode { get; set; }
+	[SupplyParameterFromQuery(Name = "flow")]
+	public string? Flow { get; set; }
 
 	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+	private bool IsNewDealerFlow =>
+		string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) ||
+		_dealer.IsNewDealerRegistration;
+	private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
 	public string? SelectedCompany { get; set; }
 
 	private DealerReg _dealer = new();
+	private List<Bank> _banks = new();
 	private List<DealerAssetBank> _bankAssets = new();
 	private List<DealerAssetLand> _landAssets = new();
 	private List<DealerAssetBuilding> _buildingAssets = new();
@@ -855,7 +899,7 @@ private bool IsFertilizerSalesPlanRow(SalesPlanningInDealerRegistration row)
 
 	if (!DealerId.HasValue || DealerId.Value <= 0)
 	{
-		Nav.NavigateTo($"/Enclosures?dealerId={DealerId}", replace: true);
+		Nav.NavigateTo($"/Enclosures?dealerId={DealerId}{FlowParam}", replace: true);
 		return;
 	}
 
@@ -867,7 +911,7 @@ private bool IsFertilizerSalesPlanRow(SalesPlanningInDealerRegistration row)
 
 		if (!_dealer.InGreenStar)
 		{
-			Nav.NavigateTo($"/Enclosures?dealerId={DealerId}", replace: true);
+			Nav.NavigateTo($"/Enclosures?dealerId={DealerId}{FlowParam}", replace: true);
 			return;
 		}
 
@@ -887,11 +931,12 @@ var loanTask      = SafeGetAsync<List<DealerLoanLiabilities>>($"api/DealerLoanLi
 var salesPlanTask = SafeGetAsync<List<SalesPlanningInDealerRegistration>>($"api/SalesPlanning/byDealer/{DealerId}");
 var proposalTask  = SafeGetAsync<List<DealerCreditLimitProposal>>($"api/DealerCreditLimitProposal/byDealer/{DealerId}");
 var annualTask    = SafeGetAsync<List<AnnualSaleDataLastFYofDealerRegistration>>($"api/AnnualSaleDataLastFY/byDealer/{DealerId}");
+var bankLookupTask = SafeGetAsync<List<Bank>>("api/Bank");
 
 await Task.WhenAll(
     fyTask, catTask, unitTask, prodTask, prodGroupTask,
     bankTask, landTask, buildingTask,
-    loanTask, salesPlanTask, proposalTask, annualTask
+    loanTask, salesPlanTask, proposalTask, annualTask, bankLookupTask
 );
 
 _financialYears = fyTask.Result ?? new();
@@ -899,6 +944,7 @@ _categories     = catTask.Result ?? new();
 _units          = unitTask.Result ?? new();
 _products       = prodTask.Result ?? new();
 _productGroups  = prodGroupTask.Result ?? new();
+_banks          = bankLookupTask.Result ?? new();
 
 _bankAssets      = bankTask.Result ?? new();      // server filtered — no .Where
 _landAssets      = landTask.Result ?? new();
@@ -1212,6 +1258,17 @@ private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx)
 		string Fmt(DateTime? d) => d.HasValue && d.Value != DateTime.MinValue ? d.Value.ToString("yyyy-MM-dd") : "";
 		_gsValidFromText = Fmt(_proposal.GSExistingCreditLimitFrom);
 		_gsValidToText = Fmt(_proposal.GSExistingCreditLimitTo);
+	}
+
+	private static string FormatDate(DateTime? d) =>
+		d.HasValue && d.Value != DateTime.MinValue ? d.Value.ToString("yyyy-MM-dd") : "";
+
+	private void OnGflTradeDepositDDDateChanged(ChangeEventArgs e)
+	{
+		if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+			_dealer.GflTradeDepositDDDate = dt;
+		else
+			_dealer.GflTradeDepositDDDate = null;
 	}
 	private void OnGreenstarFDAmountChanged(ChangeEventArgs e)
 	{
@@ -1666,7 +1723,7 @@ if (dealerTenure > 0 && !_greenstarValueEntered[5])
 		if (IsViewOnly)
 		{
 			Loading.Show();
-			Nav.NavigateTo($"/Enclosures?dealerId={DealerId}&mode=view");
+			Nav.NavigateTo($"/Enclosures?dealerId={DealerId}&mode=view{FlowParam}");
 			return;
 		}
 		if (!DealerId.HasValue || DealerId.Value <= 0)
@@ -1678,6 +1735,17 @@ if (dealerTenure > 0 && !_greenstarValueEntered[5])
 		_isSaving = true;
 		try
 		{
+			if (IsNewDealerFlow)
+			{
+				var dealerSave = await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", _dealer);
+				dealerSave.EnsureSuccessStatusCode();
+
+				var hasError = _dealer.InGreenStar && string.IsNullOrWhiteSpace(_dealer.GflTradeDepositDDNumber);
+				FormStepData.MarkStepError(11, hasError);
+				Nav.NavigateTo($"/Enclosures?dealerId={DealerId}{FlowParam}");
+				return;
+			}
+
 			_proposal.DealerId = DealerId.Value;
 			// _proposal.Q1Mark = GetSpicMark(0);
 			// _proposal.Q2Mark = GetSpicMark(1);
@@ -1743,7 +1811,7 @@ if (dealerTenure > 0 && !_greenstarValueEntered[5])
 			// }
 
 			FormStepData.MarkStepError(11, false);
-			Nav.NavigateTo($"/Enclosures?dealerId={DealerId}");
+			Nav.NavigateTo($"/Enclosures?dealerId={DealerId}{FlowParam}");
 		}
 		catch (Exception ex)
 		{
@@ -1757,7 +1825,7 @@ if (dealerTenure > 0 && !_greenstarValueEntered[5])
 
 	private void HandleSkip()
 	{
-		Nav.NavigateTo($"/Enclosures?dealerId={DealerId}");
+		Nav.NavigateTo($"/Enclosures?dealerId={DealerId}{FlowParam}");
 	}
 
 	private void ShowMessage(string message, bool isError)

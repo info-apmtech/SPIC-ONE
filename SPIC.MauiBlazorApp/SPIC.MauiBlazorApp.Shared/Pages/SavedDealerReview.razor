@@ -881,6 +881,19 @@ private async Task ApproveDealer()
             };
             try { await Http.PostAsJsonAsync("api/DealerApprovalHistory", history); } catch { }
 
+            if ((LoginState.IsDirectorOrAVP || LoginState.IsAdmin) && _dealer.IsNewDealerRegistration)
+            {
+                try
+                {
+                    var codeResp = await Http.PostAsJsonAsync($"api/DealerRegistration/{_dealer.Id}/generate-dealer-code", new { });
+                    if (codeResp.IsSuccessStatusCode)
+                    {
+                        _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{_dealer.Id}");
+                    }
+                }
+                catch { }
+            }
+
             IsConfirmProceedPopupVisible = false;
             _showSuccessNotification = true;
             StateHasChanged();
