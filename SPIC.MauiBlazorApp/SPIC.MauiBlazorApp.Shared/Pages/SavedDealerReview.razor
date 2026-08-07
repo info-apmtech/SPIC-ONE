@@ -73,6 +73,8 @@
     private Dictionary<int, string> _financialYearNames = new();
 
     private string? _submittedByName;
+    private string? _submittedByRole;
+    private string SubmittedByRoleDisplay => string.IsNullOrWhiteSpace(_submittedByRole) ? "-" : _submittedByRole!;
     private Dictionary<string, string> _userNames = new();
     private List<UserInfoDto> _users = new();
 
@@ -255,32 +257,132 @@
         try
         {
             if (_dealer == null) return;
-            var id = _dealer.UpdatedBy ?? _dealer.CreatedBy;
+
+            // The first "Submitted" action belongs to the dealer creator.
+            // Do not use UpdatedBy here because later approval actions can change UpdatedBy.
+            var id = !string.IsNullOrWhiteSpace(_dealer.CreatedBy)
+                ? _dealer.CreatedBy
+                : _dealer.UpdatedBy;
+
             if (string.IsNullOrWhiteSpace(id)) return;
-            // Ensure we have the user list cached (optimization similar to EmployeeManagement page)
+
+            // Load the same UserInfo list already used by this page.
+            // This is display-only; approval permissions/flow are unchanged.
             await LoadAllUsersIfNeeded();
 
-            if (_userNames.ContainsKey(id))
+            var cachedUser = _users.FirstOrDefault(u =>
+                !string.IsNullOrWhiteSpace(u.Id) &&
+                string.Equals(u.Id, id, StringComparison.OrdinalIgnoreCase));
+
+            if (cachedUser?.Role.HasValue == true)
+                _submittedByRole = cachedUser.Role.Value.ToString();
+
+            if (_userNames.TryGetValue(id, out var cachedName))
+                _submittedByName = cachedName;
+
+            // If the role was not included by UserInfo/all, try the existing per-user endpoint.
+            if (string.IsNullOrWhiteSpace(_submittedByName) || string.IsNullOrWhiteSpace(_submittedByRole))
             {
-                _submittedByName = _userNames[id];
-                return;
+                try
+                {
+                    var resp = await Http.GetAsync($"api/User/{id}");
+                    if (resp.IsSuccessStatusCode)
+                    {
+                        var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                        if (json.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+                        {
+                            if (string.IsNullOrWhiteSpace(_submittedByName) && TryGetJsonProperty(json, "Name", out var nameValue))
+                            {
+                                var nm = nameValue.ValueKind == System.Text.Json.JsonValueKind.String
+                                    ? nameValue.GetString()
+                                    : nameValue.ToString();
+
+                                if (!string.IsNullOrWhiteSpace(nm))
+                                {
+                                    _submittedByName = nm;
+                                    _userNames[id] = nm;
+                                }
+                            }
+
+                            if (string.IsNullOrWhiteSpace(_submittedByRole))
+                                _submittedByRole = TryResolveUserRole(json);
+                        }
+                    }
+                }
+                catch { }
             }
 
-            // Fallback to per-user API if not found in the list
-            var resp = await Http.GetAsync($"api/User/{id}");
-            if (!resp.IsSuccessStatusCode) return;
-            var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-            if (json.ValueKind != System.Text.Json.JsonValueKind.Undefined && json.TryGetProperty("Name", out var nameProp))
+            // Safe fallback only when the creator is the currently logged-in user.
+            // This fixes Admin-created registrations without incorrectly using the viewer's role
+            // when another user (RM/SMM/AVP/etc.) opens the same application later.
+            if (string.IsNullOrWhiteSpace(_submittedByRole) &&
+                !string.IsNullOrWhiteSpace(LoginState.UserId) &&
+                string.Equals(id, LoginState.UserId, StringComparison.OrdinalIgnoreCase))
             {
-                var nm = nameProp.GetString();
-                if (!string.IsNullOrEmpty(nm))
-                {
-                    _submittedByName = nm;
-                    _userNames[id] = nm;
-                }
+                var currentRole = LoginState.UserRole?.ToString();
+                if (!string.IsNullOrWhiteSpace(currentRole))
+                    _submittedByRole = currentRole;
             }
         }
         catch { }
+    }
+
+    private static bool TryGetJsonProperty(System.Text.Json.JsonElement json, string propertyName, out System.Text.Json.JsonElement value)
+    {
+        value = default;
+        if (json.ValueKind != System.Text.Json.JsonValueKind.Object) return false;
+
+        foreach (var property in json.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string? TryResolveUserRole(System.Text.Json.JsonElement json)
+    {
+        // Different user endpoints/DTOs may expose the same value under different names.
+        // Read only for display; do not use this helper for authorization decisions.
+        foreach (var propertyName in new[] { "Role", "UserRole", "RoleName" })
+        {
+            if (!TryGetJsonProperty(json, propertyName, out var roleValue))
+                continue;
+
+            if (roleValue.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var roleText = roleValue.GetString();
+                if (!string.IsNullOrWhiteSpace(roleText))
+                    return roleText;
+            }
+
+            if (roleValue.ValueKind == System.Text.Json.JsonValueKind.Number &&
+                roleValue.TryGetInt32(out var roleNumber) &&
+                Enum.IsDefined(typeof(DR.AppRole), roleNumber))
+            {
+                return ((DR.AppRole)roleNumber).ToString();
+            }
+        }
+
+        if (TryGetJsonProperty(json, "Roles", out var rolesValue) &&
+            rolesValue.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            foreach (var roleItem in rolesValue.EnumerateArray())
+            {
+                if (roleItem.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var roleText = roleItem.GetString();
+                    if (!string.IsNullOrWhiteSpace(roleText))
+                        return roleText;
+                }
+            }
+        }
+
+        return null;
     }
 
     private async Task LoadApprovalUserNames()
@@ -338,6 +440,7 @@
         public string? UserName { get; set; }
         public string? Name { get; set; }
         public string? Email { get; set; }
+        public DR.AppRole? Role { get; set; }
     }
    private string FyName(int id) => _financialYearNames.TryGetValue(id, out var n) ? n : id.ToString();
 
@@ -440,6 +543,10 @@
             list.Add(("Affidavit", _documents.AffidavitFilePath));
             list.Add(("Authorization Letter", _documents.AuthorizationLetterFilePath));
             list.Add(("Deed of Guarantee", _documents.DeedOfGuaranteeFilePath));
+
+            // New Dealer only: Request Letter uploaded from the Enclosures page.
+            if (_isNewDealer)
+                list.Add(("Request Letter for Dealership", _documents.RequestLetterFilePath));
         }
         return list;
     }
@@ -1502,10 +1609,13 @@ private async Task ApproveDealer()
                                     <span class="cp-summary-label">Ref No</span>
                                     <span class="cp-summary-value">@(_dealer?.DealerCode ?? $"DL-{_dealer?.Id}")</span>
                                 </div> *@
-                                <div class="cp-summary-item">
-                                    <span class="cp-summary-label">@(_isNewDealer ? "Application ID" : "Dealer ID")</span>
-                                    <span class="cp-summary-value">@(_dealer?.DealerCode ?? (_dealer != null ? $"DL-{_dealer.Id}" : "-"))</span>
-                                </div>
+                                @if (!_isNewDealer)
+                                {
+                                    <div class="cp-summary-item">
+                                        <span class="cp-summary-label">Dealer Code</span>
+                                        <span class="cp-summary-value">@(_dealer?.DealerCode ?? "-")</span>
+                                    </div>
+                                }
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Dealer Name</span>
                                     <span class="cp-summary-value">@(_dealer?.FirmName ?? "-")</span>
@@ -1855,7 +1965,7 @@ private async Task ApproveDealer()
                 <h5>Action Details</h5>
                 <div class="info-row"><span>Action</span><strong>Submitted</strong></div>
                 <div class="info-row"><span>Action By</span><strong>@(_submittedByName ?? _dealer?.UpdatedBy ?? _dealer?.CreatedBy ?? "-")</strong></div>
-                <div class="info-row"><span>Role</span><strong>MO</strong></div>
+                <div class="info-row"><span>Role</span><strong>@SubmittedByRoleDisplay</strong></div>
                 <div class="info-row"><span>Date & Time</span><strong>@(_dealer != null ? (_dealer.UpdatedAt.Year > 2000 ? _dealer.UpdatedAt.ToString("dd-MMM-yyyy, hh:mm tt") : _dealer.CreatedAt.ToString("dd-MMM-yyyy, hh:mm tt")) : "-")</strong></div>
                 <div class="info-row"><span>Stage</span><strong>MO Review</strong></div>
                 @if (_showBusinessInfo && !_isNewDealer)
@@ -1868,7 +1978,7 @@ private async Task ApproveDealer()
         <div class="col-12 col-lg-6">
             <div class="detail-box">
                 <h5>Remarks</h5>
-                <ul class="remarks"><li>Application submitted by MO for review.</li></ul>
+                <ul class="remarks"><li>Application submitted by @SubmittedByRoleDisplay for review.</li></ul>
             </div>
         </div>
     </div>
