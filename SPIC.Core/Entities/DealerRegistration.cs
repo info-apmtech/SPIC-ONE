@@ -9,7 +9,7 @@ namespace SPIC.Core.Entities
     public class DealerRegistration
     {
         public int Id { get; set; }
-        public string UserTableId { get; set; }
+        public string? UserTableId { get; set; }
         [Display(Name = "Dealar / Department")]
         public bool IsDealer { get; set; }
         // NEW: Keep old IsDealer for backward compatibility. Add DealerType enum to support Institution.
@@ -95,7 +95,7 @@ namespace SPIC.Core.Entities
         //Trade Deposit Details
         public decimal TradeDepositAmount { get; set; }
         public string? TradeDepositReceiptNo { get; set; }
-        public DateTime TradeDepositDate { get; set; }
+        public DateTime? TradeDepositDate { get; set; }
 
         //Trade Deposit Details - Greenstar
         public decimal? GreenstarTradeDepositAmountReg { get; set; }

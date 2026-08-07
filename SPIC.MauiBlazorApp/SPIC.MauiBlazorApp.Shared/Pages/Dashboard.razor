@@ -310,7 +310,7 @@
                                     *@
                                     @if (ShowEditButton(dealer))
                                     {
-                                        <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
+                                        <button class="btn-continue-blue" @onclick="() => EditDealer(dealer)">
                                             <i class="bi bi-pencil-square me-1"></i> Edit
                                         </button>
                                     }
@@ -358,7 +358,7 @@
                                 </div>
                                 <div class="d-flex flex-wrap justify-content-end gap-2 card-action-row">
 
-                                    <button class="btn-view" @onclick="() => ViewDealer(dealer.Id)"><i class="bi bi-eye"></i></button>
+                                    <button class="btn-view" @onclick="() => ViewDealer(dealer)"><i class="bi bi-eye"></i></button>
 
                                         @if (dealer.InSpic)
                                         {
@@ -382,7 +382,11 @@
                             </div>
                         </div>
                         <div class="tags-row mb-2">
-                            <div class="reg-id">REG #@(dealer.DealerCode ?? $"DL-{dealer.Id}")</div>
+                            <div class="reg-id">
+                                @(dealer.IsNewDealerRegistration
+                                    ? "NEW"
+                                    : $"REG #{dealer.DealerCode ?? $"DL-{dealer.Id}"}")
+                            </div>
                             <h3 class="company-name">@(dealer.FirmName ?? "Unnamed Firm")</h3>
                             <div class="location-info">
                                 <div><i class="bi bi-geo-alt"></i> Region: @regionName</div>
@@ -1440,9 +1444,16 @@ private string GetStatusName(int status) => status switch
         }
     }
 
-    private void EditDealer(int dealerId) => NavManager.NavigateTo($"/Register?dealerId={dealerId}");
+    private void EditDealer(DealerDto dealer) =>
+        NavManager.NavigateTo($"/Register?dealerId={dealer.Id}{GetDealerFlowParameter(dealer)}");
+
     private void ReviewDealer(int dealerId) => NavManager.NavigateTo($"/SavedDealerReview?dealerId={dealerId}");
-    private void ViewDealer(int dealerId) => NavManager.NavigateTo($"/Register?dealerId={dealerId}&mode=view");
+
+    private void ViewDealer(DealerDto dealer) =>
+        NavManager.NavigateTo($"/Register?dealerId={dealer.Id}&mode=view{GetDealerFlowParameter(dealer)}");
+
+    private static string GetDealerFlowParameter(DealerDto dealer) =>
+        dealer.IsNewDealerRegistration ? "&flow=new" : string.Empty;
 
     private void ConfirmDelete(DealerDto dealer)
     {
@@ -1594,6 +1605,7 @@ private string GetStatusName(int status) => status switch
         public bool IsDealer { get; set; }
         public bool InSpic { get; set; }
         public bool InGreenStar { get; set; }
+        public bool IsNewDealerRegistration { get; set; }
         public string? DealerCode { get; set; }
         public string? CreatedBy { get; set; }
         public string? SPICCode { get; set; }

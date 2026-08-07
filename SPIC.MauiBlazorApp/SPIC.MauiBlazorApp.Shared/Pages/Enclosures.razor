@@ -3378,11 +3378,10 @@
 		var gst = System.Net.WebUtility.HtmlEncode(_dealer.GSTNumber ?? "—");
 		var partnerNames = string.Join(", ", _partners.Select(p => System.Net.WebUtility.HtmlEncode(p.Name)));
 		var dateStr = DateTime.Now.ToString("dd-MM-yyyy");
-		var dealerIdDisplay = System.Net.WebUtility.HtmlEncode(_dealer.Id > 0 ? _dealer.Id.ToString() : "—");
-		var dealerCodeValue = !string.IsNullOrWhiteSpace(_dealer.SPICCode) ? _dealer.SPICCode :
-			!string.IsNullOrWhiteSpace(_dealer.DealerCode) ? _dealer.DealerCode : "";
-		var dealerCodeDisplay = System.Net.WebUtility.HtmlEncode(dealerCodeValue);
-		var dealerCodeInfoItem = !string.IsNullOrWhiteSpace(dealerCodeValue)
+		// Never print the internal Dealer ID in the specimen template.
+		// Existing dealers show DealerCode; new dealers show no dealer identifier.
+		var dealerCodeDisplay = System.Net.WebUtility.HtmlEncode(_dealer.DealerCode ?? "");
+		var dealerCodeInfoItem = !IsNewDealerFlow && !string.IsNullOrWhiteSpace(_dealer.DealerCode)
 			? $"<div class='info-item'><span class='label'>Dealer Code</span><span class='value'>{dealerCodeDisplay}</span></div>"
 			: "";
 
@@ -3456,7 +3455,6 @@
 </div>
 
 	<div class='info-grid'>
-<div class='info-item'><span class='label'>Dealer ID</span><span class='value'>{dealerIdDisplay}</span></div>
 {dealerCodeInfoItem}
 <div class='info-item'><span class='label'>Firm Name</span><span class='value'>M/s.{firmName}</span></div>
 		<div class='info-item'><span class='label'>GST Number</span><span class='value'>{gst}</span></div>
@@ -3548,11 +3546,10 @@
 		var firmName = System.Net.WebUtility.HtmlEncode(_dealer.FirmName ?? "\u2014");
 		var gst = System.Net.WebUtility.HtmlEncode(_dealer.GSTNumber ?? "\u2014");
 		var dateStr = DateTime.Now.ToString("dd-MM-yyyy");
-		var dealerIdDisplay = System.Net.WebUtility.HtmlEncode(_dealer.Id > 0 ? _dealer.Id.ToString() : "\u2014");
-		var dealerCodeValue = !string.IsNullOrWhiteSpace(_dealer.GreenStarCode) ? _dealer.GreenStarCode :
-			!string.IsNullOrWhiteSpace(_dealer.DealerCode) ? _dealer.DealerCode : "";
-		var dealerCodeDisplay = System.Net.WebUtility.HtmlEncode(dealerCodeValue);
-		var dealerCodeInfoItem = !string.IsNullOrWhiteSpace(dealerCodeValue)
+		// Never print the internal Dealer ID in the specimen template.
+		// Existing dealers show DealerCode; new dealers show no dealer identifier.
+		var dealerCodeDisplay = System.Net.WebUtility.HtmlEncode(_dealer.DealerCode ?? "");
+		var dealerCodeInfoItem = !IsNewDealerFlow && !string.IsNullOrWhiteSpace(_dealer.DealerCode)
 			? $"<div class='info-item'><span class='label'>Dealer Code</span><span class='value'>{dealerCodeDisplay}</span></div>"
 			: "";
 
@@ -3621,7 +3618,6 @@
 </div>
 
 	<div class='info-grid'>
-<div class='info-item'><span class='label'>Dealer ID</span><span class='value'>{dealerIdDisplay}</span></div>
 {dealerCodeInfoItem}
 <div class='info-item'><span class='label'>Firm Name</span><span class='value'>M/s.{firmName}</span></div>
 		<div class='info-item'><span class='label'>GST Number</span><span class='value'>{gst}</span></div>
@@ -3681,7 +3677,7 @@
 		if (IsViewOnly)
 		{
 			Loading.Show();
-			Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}&mode=view{FlowParam}");
+			Nav.NavigateTo($"/FinalSubmission?dealerId={DealerId}&mode=view{FlowParam}");
 			return;
 		}
 		_isSaving = true;
