@@ -38,6 +38,10 @@
     private bool _showEnclosures =>
         !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isInactiveTerminatedRestricted && !_isDepartmentDealer;
 
+    // True for New Dealer registrations (Dealer Code is not yet assigned).
+    // New Dealers follow a separate approval chain and do NOT carry Credit Limit data.
+    private bool _isNewDealer => _dealer?.IsNewDealerRegistration == true;
+
     // Related data
     private List<DR.DealerExperience> _experiences = new();
     private List<DR.AnnualSaleDataLastFYofDealerRegistration> _annualSales = new();
@@ -80,6 +84,7 @@
     private decimal? _avpCreditLimitGfl;
     private decimal? _previousRmCreditLimitGfl;
     private decimal? _previousSmCreditLimitGfl;
+    private string? _approvalError;
 
     // Lookup names
     private string? _stateName;
@@ -774,6 +779,7 @@ private decimal GetGflProposedLimit() =>
 private void ShowConfirmProceedPopup()
 {
     ConfirmRemarks = ""; 
+    _approvalError = null;
     _rmCreditLimitSpic = null;
     _rmCreditLimitGfl = null;
     _smCreditLimitSpic = null;
@@ -816,6 +822,18 @@ private void HideConfirmProceedPopup()
         StateHasChanged();
     }
 
+    private async Task<string?> ReadErrorAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var payload = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+            if (payload != null && payload.TryGetValue("message", out var msg) && !string.IsNullOrWhiteSpace(msg))
+                return msg;
+        }
+        catch { }
+        return $"Request failed ({(int)response.StatusCode}). Please try again.";
+    }
+
     private string GetCurrentStageTarget()
     {
         if (LoginState == null) return "Review";
@@ -843,6 +861,37 @@ private async Task ApproveDealer()
 
     try
     {
+        // New Dealer flow: remarks are mandatory at every approval stage.
+        if (_isNewDealer && string.IsNullOrWhiteSpace(ConfirmRemarks))
+        {
+            _approvalError = "Remarks are required for New Dealer approval.";
+            return;
+        }
+
+        // New Dealer final (AVP) approval: handled atomically on the server
+        // (validates workflow + sequence, saves AVP remarks and allocates the
+        // Dealer Code in a single transaction).
+        if (_isNewDealer && (LoginState.IsDirectorOrAVP || LoginState.IsAdmin))
+        {
+            var approveResp = await Http.PostAsJsonAsync(
+                $"api/DealerRegistration/{_dealer.Id}/final-approve",
+                new { Remarks = ConfirmRemarks });
+            if (!approveResp.IsSuccessStatusCode)
+            {
+                _approvalError = await ReadErrorAsync(approveResp);
+                return;
+            }
+
+            _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{_dealer.Id}");
+            IsConfirmProceedPopupVisible = false;
+            _showSuccessNotification = true;
+            StateHasChanged();
+            await Task.Delay(3000);
+            _showSuccessNotification = false;
+            Nav.NavigateTo("/Dashboard");
+            return;
+        }
+
         if (LoginState.IsRMGroup)
         {
             _dealer.RMApproved = true;
@@ -880,19 +929,6 @@ private async Task ApproveDealer()
                 AvpCreditLimitGfl = _avpCreditLimitGfl
             };
             try { await Http.PostAsJsonAsync("api/DealerApprovalHistory", history); } catch { }
-
-            if ((LoginState.IsDirectorOrAVP || LoginState.IsAdmin) && _dealer.IsNewDealerRegistration)
-            {
-                try
-                {
-                    var codeResp = await Http.PostAsJsonAsync($"api/DealerRegistration/{_dealer.Id}/generate-dealer-code", new { });
-                    if (codeResp.IsSuccessStatusCode)
-                    {
-                        _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{_dealer.Id}");
-                    }
-                }
-                catch { }
-            }
 
             IsConfirmProceedPopupVisible = false;
             _showSuccessNotification = true;
@@ -1356,7 +1392,7 @@ private async Task ApproveDealer()
                     <div class="title">
                         Application Successfully Approved ! 🎉
                     </div>
-                    <div class="subtitle">The Credit Limit has been approved and activated</div>
+                    <div class="subtitle">@(_dealer?.IsNewDealerRegistration == true ? "Dealer Registration approved. Dealer Code generated and activated." : "The Credit Limit has been approved and activated")</div>
                 </div>
             </div>
 
@@ -1424,6 +1460,12 @@ private async Task ApproveDealer()
             .cp-info-alert { background-color: #f0f9ff; border: 1px solid #e0f2fe; border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
             .cp-alert-icon { width: 28px; height: 28px; background-color: #dbeafe; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
             .cp-alert-text { color: #6b7280; font-size: 0.8rem; margin: 0; line-height: 1.4; }
+            .cp-error-alert { background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 16px; color: #b91c1c; font-size: 0.85rem; font-weight: 500; margin-bottom: 12px; }
+            .cp-remarks-history { background: #f9fafb; border-radius: 8px; padding: 10px 16px; margin-bottom: 12px; }
+            .cp-remarks-history ul { list-style: none; margin: 0; padding: 0; }
+            .cp-remarks-history li { font-size: 0.8rem; color: #4b5563; padding: 5px 0; }
+            .cp-remarks-history li + li { border-top: 1px solid #e5e7eb; }
+            .cp-remarks-history strong { color: #1f2937; }
             .cp-modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 12px 28px 18px; }
             .cp-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
             .cp-btn-cancel { background-color: #ffffff; border: 1px solid #d1d5db; color: #4b5563; }
@@ -1461,14 +1503,14 @@ private async Task ApproveDealer()
                                     <span class="cp-summary-value">@(_dealer?.DealerCode ?? $"DL-{_dealer?.Id}")</span>
                                 </div> *@
                                 <div class="cp-summary-item">
-                                    <span class="cp-summary-label">Dealer ID</span>
+                                    <span class="cp-summary-label">@(_isNewDealer ? "Application ID" : "Dealer ID")</span>
                                     <span class="cp-summary-value">@(_dealer?.DealerCode ?? (_dealer != null ? $"DL-{_dealer.Id}" : "-"))</span>
                                 </div>
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Dealer Name</span>
                                     <span class="cp-summary-value">@(_dealer?.FirmName ?? "-")</span>
                                 </div>
-                                @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo)
+                                @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo && !_isNewDealer)
                                 {
                                     <div class="cp-summary-item">
                                         <span class="cp-summary-label">MO Recommended CreditLimit  (SPIC)</span>
@@ -1491,11 +1533,11 @@ private async Task ApproveDealer()
                         </section>
 
                         <section class="cp-remarks-section">
-                            <h2 class="cp-section-title">Remarks <span class="cp-optional-text">(optional)</span></h2>
-                            <textarea class="cp-remarks-input" @bind="ConfirmRemarks" placeholder="Enter Remarks Optional"></textarea>
+                            <h2 class="cp-section-title">Remarks <span class="cp-optional-text">@(_isNewDealer ? "(required)" : "(optional)")</span></h2>
+                            <textarea class="cp-remarks-input" @bind="ConfirmRemarks" placeholder="@(_isNewDealer ? "Remarks are required for this stage" : "Enter Remarks Optional")"></textarea>
                         </section>
 
-                       @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo)
+                       @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo && !_isNewDealer)
                        {
                            @if (LoginState.IsRMGroup)
 {
@@ -1590,6 +1632,26 @@ private async Task ApproveDealer()
 }
 }
 
+                       @if (_isNewDealer && _approvalHistory != null && _approvalHistory.Any())
+                       {
+                           <div class="cp-remarks-history">
+                               <h2 class="cp-section-title">Previous Approval Remarks</h2>
+                               <ul>
+                                   @foreach (var h in _approvalHistory.OrderBy(x => x.ApprovedAt))
+                                   {
+                                       <li>
+                                           <strong>@h.Role</strong> (@h.ApprovedAt.ToString("dd-MMM-yyyy, hh:mm tt")): @(string.IsNullOrWhiteSpace(h.Remarks) ? "No remarks" : h.Remarks)
+                                       </li>
+                                   }
+                               </ul>
+                           </div>
+                       }
+
+                       @if (!string.IsNullOrEmpty(_approvalError))
+                       {
+                           <div class="cp-error-alert">@_approvalError</div>
+                       }
+
                         <div class="cp-info-alert">
                             <div class="cp-alert-icon">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1642,7 +1704,7 @@ private async Task ApproveDealer()
             <div class="info-card">
                 <div>
                     <div class="info-label">Dealer Code</div>
-                    <div class="info-value">@(_dealer?.DealerCode ?? ($"DL-{_dealer?.Id}"))</div>
+                    <div class="info-value">@(_dealer?.DealerCode ?? (_dealer?.IsNewDealerRegistration == true ? "Generated after final approval" : $"DL-{_dealer?.Id}"))</div>
                 </div>
                 <div class="info-icon orange">
                     <i class="bi bi-upc-scan"></i>
@@ -1796,7 +1858,7 @@ private async Task ApproveDealer()
                 <div class="info-row"><span>Role</span><strong>MO</strong></div>
                 <div class="info-row"><span>Date & Time</span><strong>@(_dealer != null ? (_dealer.UpdatedAt.Year > 2000 ? _dealer.UpdatedAt.ToString("dd-MMM-yyyy, hh:mm tt") : _dealer.CreatedAt.ToString("dd-MMM-yyyy, hh:mm tt")) : "-")</strong></div>
                 <div class="info-row"><span>Stage</span><strong>MO Review</strong></div>
-                @if (_showBusinessInfo)
+                @if (_showBusinessInfo && !_isNewDealer)
                 {
                     <div class="info-row"><span>MO Recommended Credit Limit (SPIC)</span><strong>₹ @GetSpicMoRecommendedLimit().ToString("N2")</strong></div>
                     <div class="info-row"><span>MO Recommended Credit Limit (GFL)</span><strong>₹ @GetGflMoRecommendedLimit().ToString("N2")</strong></div>
@@ -1873,6 +1935,8 @@ private async Task ApproveDealer()
                             }
 
                          var limitWord = rolePrefix == "AVP" ? "Approved" : "Recommended";
+                            if (!_isNewDealer)
+                            {
                             if (spicLimit.HasValue)
                             {
                                 <div class="info-row">
@@ -1886,6 +1950,7 @@ private async Task ApproveDealer()
                                     <span>@rolePrefix @limitWord Credit Limit (GFL)</span>
                                     <strong>₹ @gflLimit.Value.ToString("N2")</strong>
                                 </div>
+                            }
                             }
                         }
                     </div>
@@ -1979,7 +2044,7 @@ private async Task ApproveDealer()
                         </div>
                         <div class="detail-card-body">
                             <div class="data-row"><div class="data-label">Firm Name</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">@(_dealer?.DealerCode ?? (_dealer != null ? $"DL-{_dealer.Id}" : "-"))</div></div>
+                            <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">@(_dealer?.DealerCode ?? (_dealer?.IsNewDealerRegistration == true ? "Pending — generated after final approval" : (_dealer != null ? $"DL-{_dealer.Id}" : "-")))</div></div>
                             @if (_dealer?.InSpic ?? false)
                             {
                                 <div class="data-row"><div class="data-label">Date of Appointment (SPIC)</div><div class="data-value">@(_dealer?.DateOfAppointment.ToString("dd MMM yyyy") ?? "-")</div></div>
@@ -2765,7 +2830,7 @@ private async Task ApproveDealer()
     </div>
 
     }
-    @if (_showBusinessInfo)
+    @if (_showBusinessInfo && !_isNewDealer)
     {
     <div class="custom-accordion @(IsCreditLimitOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsCreditLimitOpen = !IsCreditLimitOpen">

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using Spic.Infrastructure.Data;
 using System.Security.Claims;
 using System.Collections.Generic;
 using static System.Net.WebRequestMethods;
@@ -35,12 +36,14 @@ namespace SpicAPI.Controllers
 		private readonly IGenericRepository<UserInfo> _userInfoRepo;
 		private readonly UserManager<UserInfo> _userManager;
 		private readonly RoleManager<IdentityRole> _roleManager;
+		private readonly AppDbContext _db;
 		// Single constructor: optional repositories are injected when registered. Defaults to null to avoid breaking DI.
 		public DealerRegistrationController(
 			IGenericRepository<DealerRegistration> repo,
 			IGenericRepository<UserInfo> userInfoRepo,
 			UserManager<UserInfo> userManager,
 			RoleManager<IdentityRole> roleManager,
+			AppDbContext db,
 			IGenericRepository<DealerApprovalHistory>? historyRepo = null,
 			IGenericRepository<DealerExperience>? expRepo = null,
 			IGenericRepository<AnnualSaleDataLastFYofDealerRegistration>? annualRepo = null,
@@ -66,6 +69,7 @@ namespace SpicAPI.Controllers
 			_userInfoRepo = userInfoRepo;
 			_userManager = userManager;
 			_roleManager = roleManager;
+			_db = db;
 			_expRepo = expRepo;
 			_annualRepo = annualRepo;
 			_whRepo = whRepo;
@@ -547,6 +551,13 @@ namespace SpicAPI.Controllers
 		/// Assigns a unique sequential numeric DealerCode to a new-flow dealer once its
 		/// registration is finally approved. The code is the largest existing numeric
 		/// DealerCode + 1, and is checked for uniqueness before being saved.
+		///
+		/// Safety rules (New Dealer workflow):
+		///  - Only NEW_DEALER records (IsNewDealerRegistration == true) may receive a code here.
+		///  - MO (RM), SMM (SM) and AVP approvals must all be complete.
+		///  - The allocation is idempotent: a code is generated only once per dealer.
+		///  - Generation happens inside a database transaction and never replaces an
+		///    existing Dealer Code.
 		/// </summary>
 		[HttpPost("{id}/generate-dealer-code")]
 		public async Task<IActionResult> GenerateDealerCode(int id)
@@ -555,48 +566,252 @@ namespace SpicAPI.Controllers
 			if (!IsWriteRole(role))
 				return Forbid();
 
+			var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System";
+
 			var dealer = await _repo.GetByIdAsync(id);
-			if (dealer == null) return NotFound();
+			if (dealer == null)
+				return NotFound(new { message = "Dealer registration was not found." });
 
-			if (string.IsNullOrWhiteSpace(dealer.DealerCode))
+			if (!dealer.IsNewDealerRegistration)
 			{
-				var existingCodes = await _repo.GetAllWithInactive()
-					.Where(x => x.DealerCode != null)
-					.Select(x => x.DealerCode!)
-					.ToListAsync();
-
-				long max = 0;
-				foreach (var code in existingCodes)
-				{
-					if (long.TryParse(code, out var numeric) && numeric > max)
-						max = numeric;
-				}
-
-				string candidate;
-				do
-				{
-					max++;
-					candidate = max.ToString();
-				}
-				while (existingCodes.Any(c => string.Equals(c, candidate, StringComparison.OrdinalIgnoreCase)));
-
-				dealer.DealerCode = candidate;
-				dealer.Status = DealerStatus.Active;
-				dealer.UpdatedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System";
-				dealer.UpdatedAt = DateTime.Now;
-				await _repo.UpdateAsync(dealer);
+				// Existing Dealer records already have a code; never regenerate/reallocate it.
+				return Ok(new { dealer.Id, dealer.DealerCode, alreadyAllocated = !string.IsNullOrWhiteSpace(dealer.DealerCode) });
 			}
 
-			if (string.IsNullOrEmpty(dealer.UserTableId) && !string.IsNullOrEmpty(dealer.DealerCode))
+			// Dealer Code must only be generated after the complete approval chain.
+			if (dealer.RMApproved != true || dealer.SMApproved != true || dealer.AVPApproved != true)
 			{
-				var userError = await EnsureDealerUserAsync(dealer);
-				if (!string.IsNullOrEmpty(userError))
-					return BadRequest(userError);
-
-				await _repo.UpdateAsync(dealer);
+				return BadRequest(new
+				{
+					message = "Dealer Code can only be generated after MO, SMM and AVP approvals are complete."
+				});
 			}
 
-			return Ok(new { dealer.Id, dealer.DealerCode });
+			// Idempotent: one New Dealer = one Dealer Code.
+			if (!string.IsNullOrWhiteSpace(dealer.DealerCode))
+				return Ok(new { dealer.Id, dealer.DealerCode, alreadyAllocated = true });
+
+			await using var transaction = await _db.Database.BeginTransactionAsync();
+			try
+			{
+				var fresh = await _db.DealerRegistrations.FirstOrDefaultAsync(x => x.Id == id);
+				if (fresh == null)
+				{
+					await transaction.RollbackAsync();
+					return NotFound(new { message = "Dealer registration was not found." });
+				}
+
+				// Re-check inside the transaction to guard against concurrent allocation.
+				if (!string.IsNullOrWhiteSpace(fresh.DealerCode))
+				{
+					await transaction.RollbackAsync();
+					return Ok(new { fresh.Id, fresh.DealerCode, alreadyAllocated = true });
+				}
+
+				string candidate = await GetNextDealerCodeAsync();
+
+				bool inUse = await _db.DealerRegistrations
+					.AnyAsync(x => x.DealerCode != null && x.DealerCode == candidate);
+				if (inUse)
+				{
+					await transaction.RollbackAsync();
+					return StatusCode(500, new
+					{
+						message = "Dealer Code allocation failed: generated code is already in use. Please retry."
+					});
+				}
+
+				fresh.DealerCode = candidate;
+				fresh.Status = DealerStatus.Active;
+				fresh.UpdatedBy = userId;
+				fresh.UpdatedAt = DateTime.Now;
+
+				await _db.SaveChangesAsync();
+				await transaction.CommitAsync();
+
+				if (string.IsNullOrEmpty(fresh.UserTableId) && !string.IsNullOrEmpty(fresh.DealerCode))
+				{
+					var userError = await EnsureDealerUserAsync(fresh);
+					if (!string.IsNullOrEmpty(userError))
+						return BadRequest(new { message = userError });
+
+					// Persist the dealer's login account link (UserTableId).
+					await _db.SaveChangesAsync();
+				}
+
+				return Ok(new { fresh.Id, fresh.DealerCode, alreadyAllocated = false });
+			}
+			catch
+			{
+				try { await transaction.RollbackAsync(); } catch { }
+				return StatusCode(500, new
+				{
+					message = "Dealer Code allocation failed. The record was not modified. Please retry."
+				});
+			}
+		}
+
+		/// <summary>
+		/// Final AVP approval for a New Dealer. Performs the entire final step atomically:
+		/// validates the workflow and approval sequence, saves the AVP approval and remarks,
+		/// allocates the Dealer Code and activates the dealer — all inside one transaction.
+		///
+		/// Idempotent: calling it again after a successful approval returns the already
+		/// allocated code without generating another one.
+		/// </summary>
+		[HttpPost("{id}/final-approve")]
+		public async Task<IActionResult> FinalApprove(int id, [FromBody] FinalApproveRequest request)
+		{
+			var role = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+			if (role != "AVP" && role != "Director" && role != "CorporateAdmin" && role != "Admin")
+				return Forbid();
+
+			var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "System";
+
+			var dealer = await _repo.GetByIdAsync(id);
+			if (dealer == null)
+				return NotFound(new { message = "Dealer registration was not found." });
+
+			if (!dealer.IsNewDealerRegistration)
+				return BadRequest(new { message = "This dealer is not a New Dealer registration." });
+
+			if (dealer.RMApproved != true || dealer.SMApproved != true)
+				return BadRequest(new
+				{
+					message = "Dealer must be approved by MO and SMM before final AVP approval."
+				});
+
+			// Idempotent: already finally approved → return the allocated code.
+			if (dealer.AVPApproved == true && !string.IsNullOrWhiteSpace(dealer.DealerCode))
+				return Ok(new { dealer.Id, dealer.DealerCode, alreadyApproved = true });
+
+			if (dealer.AVPApproved == true)
+				return Conflict(new
+				{
+					message = "Dealer is already marked AVP approved but has no Dealer Code. Please resolve manually."
+				});
+
+			if (!string.IsNullOrWhiteSpace(dealer.DealerCode))
+				return BadRequest(new { message = "Dealer Code has already been allocated. Cannot allocate again." });
+
+			var remarks = string.IsNullOrWhiteSpace(request?.Remarks) ? "" : request.Remarks.Trim();
+
+			await using var transaction = await _db.Database.BeginTransactionAsync();
+			try
+			{
+				// Reload with tracking inside the transaction to guard against
+				// concurrent / duplicate final approvals.
+				var fresh = await _db.DealerRegistrations.FirstOrDefaultAsync(x => x.Id == id);
+				if (fresh == null)
+				{
+					await transaction.RollbackAsync();
+					return NotFound(new { message = "Dealer registration was not found." });
+				}
+
+				if (fresh.AVPApproved == true && !string.IsNullOrWhiteSpace(fresh.DealerCode))
+				{
+					await transaction.RollbackAsync();
+					return Ok(new { fresh.Id, fresh.DealerCode, alreadyApproved = true });
+				}
+				if (fresh.AVPApproved == true || !string.IsNullOrWhiteSpace(fresh.DealerCode))
+				{
+					await transaction.RollbackAsync();
+					return Conflict(new
+					{
+						message = "This dealer has already been finally approved. Dealer Code cannot be generated twice."
+					});
+				}
+
+				// Allocate a code and confirm it is not already used.
+				string candidate = await GetNextDealerCodeAsync();
+				bool inUse = await _db.DealerRegistrations
+					.AnyAsync(x => x.DealerCode != null && x.DealerCode == candidate);
+				if (inUse)
+				{
+					await transaction.RollbackAsync();
+					return StatusCode(500, new
+					{
+						message = "Dealer Code allocation failed: generated code is already in use. The approval was not saved. Please retry."
+					});
+				}
+
+				fresh.AVPApproved = true;
+				fresh.Status = DealerStatus.Active;
+				fresh.DealerCode = candidate;
+				fresh.IsSubmittedForReview = true;
+				fresh.UpdatedBy = userId;
+				fresh.UpdatedAt = DateTime.Now;
+
+				if (_historyRepo != null)
+				{
+					await _historyRepo.CreateAsync(new DealerApprovalHistory
+					{
+						DealerId = fresh.Id,
+						ApprovedBy = userId,
+						Role = role,
+						ApprovedAt = DateTime.Now,
+						Remarks = remarks,
+						IsApproved = true
+					});
+				}
+
+				await _db.SaveChangesAsync();
+				await transaction.CommitAsync();
+
+				// Create/link the dealer login account once the code is final.
+				if (string.IsNullOrEmpty(fresh.UserTableId) && !string.IsNullOrWhiteSpace(fresh.DealerCode))
+				{
+					var userError = await EnsureDealerUserAsync(fresh);
+					if (!string.IsNullOrEmpty(userError))
+						return BadRequest(new { message = userError });
+
+					await _db.SaveChangesAsync();
+				}
+
+				return Ok(new { fresh.Id, fresh.DealerCode, alreadyApproved = false });
+			}
+			catch
+			{
+				try { await transaction.RollbackAsync(); } catch { }
+				return StatusCode(500, new
+				{
+					message = "Final approval failed and was rolled back. The Dealer Code was not allocated. Please retry."
+				});
+			}
+		}
+
+		/// <summary>
+		/// Returns the next available numeric DealerCode (largest existing numeric code + 1).
+		/// Only used inside an active transaction so the same code cannot be handed out twice.
+		/// </summary>
+		private async Task<string> GetNextDealerCodeAsync()
+		{
+			var existingCodes = await _db.DealerRegistrations
+				.Where(x => x.DealerCode != null)
+				.Select(x => x.DealerCode!)
+				.ToListAsync();
+
+			long max = 0;
+			foreach (var code in existingCodes)
+			{
+				if (long.TryParse(code, out var numeric) && numeric > max)
+					max = numeric;
+			}
+
+			string candidate;
+			do
+			{
+				max++;
+				candidate = max.ToString();
+			}
+			while (existingCodes.Any(c => string.Equals(c, candidate, StringComparison.OrdinalIgnoreCase)));
+
+			return candidate;
+		}
+
+		public class FinalApproveRequest
+		{
+			public string? Remarks { get; set; }
 		}
 		[HttpPost("{id}/send-back")]
 		public async Task<IActionResult> SendBack(int id, [FromBody] DealerSendBackRequest request)
