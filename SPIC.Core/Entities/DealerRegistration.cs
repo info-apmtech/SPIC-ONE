@@ -197,14 +197,17 @@ namespace SPIC.Core.Entities
         public int? SpicTradeDepositDDBankId { get; set; }
         public DateTime? SpicTradeDepositDDDate { get; set; }
         public decimal? SpicTradeDepositDDAmount { get; set; }
+		public string? DealershipApplicationFeeFilePath { get; set; }
+		public string? SpicTradeDepositFilePath { get; set; }
 
-        // Trade Deposit Details — GFL / Greenstar (New Dealer flow)
-        public string? GflTradeDepositDDNumber { get; set; }
+		// Trade Deposit Details — GFL / Greenstar (New Dealer flow)
+		public string? GflTradeDepositDDNumber { get; set; }
         public int? GflTradeDepositDDBankId { get; set; }
         public DateTime? GflTradeDepositDDDate { get; set; }
         public decimal? GflTradeDepositDDAmount { get; set; }
+		public string? GflTradeDepositFilePath { get; set; }
 
-    }
+	}
     public class DealerApprovalHistory
     {
         public int Id { get; set; }

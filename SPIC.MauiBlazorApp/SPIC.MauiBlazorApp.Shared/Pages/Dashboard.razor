@@ -19,6 +19,68 @@
     .badge-status-insmm { background:#EDE9FE; color:#7C3AED; }
     .badge-status-inavp { background:#E0E7FF; color:#4338CA; }
 
+    /* Dealer identity badges - visual distinction only */
+    .dealer-kind-new {
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:5px 10px;
+        border-radius:999px;
+        background:#F3E8FF;
+        color:#7E22CE;
+        border:1px solid #E9D5FF;
+        font-size:0.78rem;
+        font-weight:700;
+        letter-spacing:0.02em;
+    }
+
+    .dealer-kind-code {
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:5px 10px;
+        border-radius:999px;
+        background:#DBEAFE;
+        color:#1D4ED8;
+        border:1px solid #BFDBFE;
+        font-size:0.78rem;
+        font-weight:700;
+        letter-spacing:0.01em;
+    }
+
+    .dealer-kind-pending {
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:5px 10px;
+        border-radius:999px;
+        background:#F3F4F6;
+        color:#6B7280;
+        border:1px solid #E5E7EB;
+        font-size:0.78rem;
+        font-weight:700;
+    }
+
+    .btn-credit-limit {
+        border:1px solid #A7F3D0;
+        background:#ECFDF5;
+        color:#047857;
+        border-radius:8px;
+        padding:6px 10px;
+        font-size:0.82rem;
+        font-weight:600;
+        display:inline-flex;
+        align-items:center;
+        gap:5px;
+        transition:all .15s ease-in-out;
+    }
+
+    .btn-credit-limit:hover {
+        background:#D1FAE5;
+        border-color:#6EE7B7;
+        color:#065F46;
+    }
+
     .btn-completed-badge {
         background:#F3F4F6;
         color:#6B7280;
@@ -360,6 +422,17 @@
 
                                     <button class="btn-view" @onclick="() => ViewDealer(dealer)"><i class="bi bi-eye"></i></button>
 
+                                    @if (CanShowCreditLimitButton(dealer))
+                                    {
+                                        <button type="button"
+                                                class="btn-credit-limit"
+                                                title="Add / Edit Credit Limit"
+                                                @onclick="() => OpenCreditLimit(dealer)">
+                                            <i class="bi bi-credit-card-2-front"></i>
+                                            <span>Credit Limit</span>
+                                        </button>
+                                    }
+
                                         @if (dealer.InSpic)
                                         {
                                             <a class="btn-view text-decoration-none" href="@($"/DealershipPDF/{dealer.Id}?company=SPIC")">
@@ -382,11 +455,27 @@
                             </div>
                         </div>
                         <div class="tags-row mb-2">
-                            <div class="reg-id">
-                                @(dealer.IsNewDealerRegistration
-                                    ? "NEW"
-                                    : $"REG #{dealer.DealerCode ?? $"DL-{dealer.Id}"}")
-                            </div>
+                            @if (dealer.IsNewDealerRegistration && string.IsNullOrWhiteSpace(dealer.DealerCode))
+                            {
+                                <div class="dealer-kind-new">
+                                    <i class="bi bi-person-plus-fill"></i>
+                                    <span>NEW DEALER</span>
+                                </div>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(dealer.DealerCode))
+                            {
+                                <div class="dealer-kind-code">
+                                    <i class="bi bi-person-badge-fill"></i>
+                                    <span>Dealer Code: @dealer.DealerCode</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="dealer-kind-pending">
+                                    <i class="bi bi-hourglass-split"></i>
+                                    <span>Dealer Code Pending</span>
+                                </div>
+                            }
                             <h3 class="company-name">@(dealer.FirmName ?? "Unnamed Firm")</h3>
                             <div class="location-info">
                                 <div><i class="bi bi-geo-alt"></i> Region: @regionName</div>
@@ -873,6 +962,21 @@
     // Header action buttons (Create/Import/Add/Export) — Admin and AVP only
     private bool CanShowHeaderActions => LoginState.UserRole == AppRole.Admin || LoginState.UserRole == AppRole.AVP;
     private bool CanShowcreatebutton => LoginState.UserRole == AppRole.MO || LoginState.UserRole == AppRole.MDO || LoginState.UserRole == AppRole.JMDO|| LoginState.IsAdmin;
+
+    // Standalone Credit Limit action is available only after a real Dealer Code exists.
+    // Page-level CreditLimit permissions are reused; approval/edit/review routing is untouched.
+    private bool CanShowCreditLimitButton(DealerDto dealer)
+    {
+        if (dealer == null || string.IsNullOrWhiteSpace(dealer.DealerCode)) return false;
+
+        var canSpic = dealer.InSpic &&
+            (LoginState.Can("CreditLimit", "Entry") || LoginState.Can("CreditLimit", "Update"));
+
+        var canGreenStar = dealer.InGreenStar &&
+            (LoginState.Can("CreditLimitForGreenStar", "Entry") || LoginState.Can("CreditLimitForGreenStar", "Update"));
+
+        return canSpic || canGreenStar;
+    }
 
     private async Task<List<TItem>> SafeGet<TItem>(string url)
     {
@@ -1451,6 +1555,27 @@ private string GetStatusName(int status) => status switch
 
     private void ViewDealer(DealerDto dealer) =>
         NavManager.NavigateTo($"/Register?dealerId={dealer.Id}&mode=view{GetDealerFlowParameter(dealer)}");
+
+    // Dashboard Credit Limit entry/edit mode.
+    // `source=dashboard` lets approved New Dealers use the normal Credit Limit form
+    // instead of the New Dealer registration trade-deposit form.
+    private void OpenCreditLimit(DealerDto dealer)
+    {
+        if (dealer == null || string.IsNullOrWhiteSpace(dealer.DealerCode)) return;
+
+        if (dealer.InSpic &&
+            (LoginState.Can("CreditLimit", "Entry") || LoginState.Can("CreditLimit", "Update")))
+        {
+            NavManager.NavigateTo($"/CreditLimit?dealerId={dealer.Id}&source=dashboard");
+            return;
+        }
+
+        if (dealer.InGreenStar &&
+            (LoginState.Can("CreditLimitForGreenStar", "Entry") || LoginState.Can("CreditLimitForGreenStar", "Update")))
+        {
+            NavManager.NavigateTo($"/CreditLimitForGreenStar?dealerId={dealer.Id}&source=dashboard");
+        }
+    }
 
     private static string GetDealerFlowParameter(DealerDto dealer) =>
         dealer.IsNewDealerRegistration ? "&flow=new" : string.Empty;

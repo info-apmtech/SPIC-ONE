@@ -58,7 +58,12 @@ namespace SpicAPI.Controllers
 				"LandEC", "LandPropertyDoc", "LandValuationCert",
 				"BuildingEC", "BuildingPropertyDoc", "BuildingValuationCert",
 				// Company / Society constitution docs
-				"ArticlesOfAssociation", "MemorandumOfAssociation", "ByLaw" };
+				"ArticlesOfAssociation", "MemorandumOfAssociation", "ByLaw",   
+				// New Dealer - SPIC
+               "DealershipApplicationFee",
+	           "SpicTradeDeposit",
+               // New Dealer - Greenstar / GFL
+              "GflTradeDeposit"};
 			var imageDocTypes = new[] { "ProprietorImage" };
 			var excelCsvDocTypes = new[] { "RetailerList" };
 

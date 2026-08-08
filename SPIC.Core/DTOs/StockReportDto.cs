@@ -86,8 +86,9 @@ namespace SPIC.Core.DTOs
 		public int AgeingDays { get; set; }
 
 		/// <summary>
-		/// True only when AgeingDays was calculated from a matching sales row
-		/// whose workflow Status.Name is Ack and RetailerReceiptDate is present.
+		/// Legacy compatibility flag retained for existing UI/export code.
+		/// The Stock Report now resolves a usable ageing value with ACK/receipt
+		/// ageing first and the source snapshot/report date as the fallback.
 		/// </summary>
 		public bool HasAckAgeing { get; set; }
 
