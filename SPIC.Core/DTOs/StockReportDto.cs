@@ -11,10 +11,7 @@ namespace SPIC.Core.DTOs
 		public List<int> SubDistrictIds { get; set; } = new();
 		public List<int> LyingWithIds { get; set; } = new();
 
-		// Existing approved Product master selections.
 		public List<int> ProductIds { get; set; } = new();
-
-		// New IFMS product master selections.
 		public List<int> IfmsProductIds { get; set; } = new();
 
 		public List<string> AgeingRanges { get; set; } = new();
@@ -26,11 +23,6 @@ namespace SPIC.Core.DTOs
 		public int PageSize { get; set; } = 16;
 	}
 
-	/// <summary>
-	/// One option in the Stock Report product filter.
-	/// Value uses P:&lt;id&gt; for Product and I:&lt;id&gt; for IfmsProduct so
-	/// matching numeric IDs in the two tables can never collide.
-	/// </summary>
 	public class ProductFilterOptionDto
 	{
 		public string Value { get; set; } = string.Empty;
@@ -85,11 +77,6 @@ namespace SPIC.Core.DTOs
 		public string LyingWith { get; set; } = string.Empty;
 		public int AgeingDays { get; set; }
 
-		/// <summary>
-		/// Legacy compatibility flag retained for existing UI/export code.
-		/// The Stock Report now resolves a usable ageing value with ACK/receipt
-		/// ageing first and the source snapshot/report date as the fallback.
-		/// </summary>
 		public bool HasAckAgeing { get; set; }
 
 		public string AgeingDisplay => HasAckAgeing

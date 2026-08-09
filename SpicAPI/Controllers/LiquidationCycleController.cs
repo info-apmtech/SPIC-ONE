@@ -26,6 +26,13 @@ namespace SpicAPI.Controllers
 			return Ok(await _svc.GetProductsAsync(cancellationToken));
 		}
 
+		[HttpGet("dealers")]
+		public async Task<ActionResult<List<AckLookupItemDto>>> Dealers(
+			CancellationToken cancellationToken)
+		{
+			return Ok(await _svc.GetDealersAsync(cancellationToken));
+		}
+
 		[HttpPost("dashboard")]
 		public async Task<ActionResult<LiqCycleDashboardDto>> Dashboard(
 			[FromBody] LiqCycleFilter? filter,

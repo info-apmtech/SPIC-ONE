@@ -17,5 +17,10 @@ namespace SPIC.Core.Interfaces
 
 		Task<List<LiqCycleProductDto>> GetProductsAsync(
 			CancellationToken cancellationToken = default);
+
+		// Same hidden dealer-key contract already used by the existing page:
+		// R{id} = DealerRegistration, I{id} = IfmsDealer.
+		Task<List<AckLookupItemDto>> GetDealersAsync(
+			CancellationToken cancellationToken = default);
 	}
 }

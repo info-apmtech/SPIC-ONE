@@ -106,7 +106,7 @@
 					<select id="product-select" class="sr-form-select" multiple="multiple">
 						@foreach (var p in _products)
 						{
-							<option value="@p.Id" selected="@(_selectedProducts.Contains(p.Id))">@p.Name</option>
+							<option value="@p.Value" selected="@(_selectedProducts.Contains(p.Value))">@p.Name</option>
 						}
 					</select>
 				</div>
@@ -559,7 +559,7 @@
 	private List<LocationDto> _districts = new();
 	private List<LocationDto> _subDistricts = new();
 
-	private List<LocationDto> _products = new();
+	private List<ProductFilterOptionDto> _products = new();
 	private List<LocationDto> _lyingWith = new();
 
 	private List<int> _selectedStates = new();
@@ -567,7 +567,7 @@
 	private List<int> _selectedHqs = new();
 	private List<int> _selectedDistricts = new();
 	private List<int> _selectedSubDistricts = new();
-	private List<int> _selectedProducts = new();
+	private List<string> _selectedProducts = new();
 	private List<int> _selectedLyingWiths = new();
 	private List<string> _selectedAgeings = new();
 
@@ -643,7 +643,7 @@
 		var hqTask = FetchData("api/Headquarter/all");
 		var districtsTask = FetchData("api/District/all");
 		var subDistrictsTask = FetchData("api/SubDistrict/all");
-		var productsTask = FetchData("api/Product/all");
+		var productsTask = FetchProductOptions();
 		var lyingWithTask = FetchData("api/LyingWithMaster/all");
 
 		await Task.WhenAll(
@@ -809,7 +809,8 @@
 		_filter.DistrictIds = _selectedDistricts.ToList();
 		_filter.SubDistrictIds = _selectedSubDistricts.ToList();
 		_filter.LyingWithIds = _selectedLyingWiths.ToList();
-		_filter.ProductIds = _selectedProducts.ToList();
+		_filter.ProductIds = ParseSelectedProductIds(_selectedProducts, "P:");
+		_filter.IfmsProductIds = ParseSelectedProductIds(_selectedProducts, "I:");
 		_filter.AgeingRanges = _selectedAgeings.ToList();
 	}
 
@@ -1047,6 +1048,24 @@
 			.ToList();
 	}
 
+	private static List<int> ParseSelectedProductIds(
+		IEnumerable<string>? values,
+		string prefix)
+	{
+		if (values is null)
+			return new List<int>();
+
+		return values
+			.Where(value =>
+				!string.IsNullOrWhiteSpace(value) &&
+				value.StartsWith(prefix, StringComparison.Ordinal))
+			.Select(value => value[prefix.Length..])
+			.Where(value => int.TryParse(value, out _))
+			.Select(int.Parse)
+			.Distinct()
+			.ToList();
+	}
+
 	[JSInvokable]
 	public async Task OnStateChanged(List<string>? values)
 	{
@@ -1102,7 +1121,10 @@
 	[JSInvokable]
 	public void OnProductChanged(List<string>? values)
 	{
-		_selectedProducts = ParseSelectedIds(values);
+		_selectedProducts = values?
+			.Where(value => !string.IsNullOrWhiteSpace(value))
+			.Distinct(StringComparer.Ordinal)
+			.ToList() ?? new List<string>();
 		StateHasChanged();
 	}
 
@@ -1228,6 +1250,24 @@
 		};
 
 		await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+	}
+
+	private async Task<List<ProductFilterOptionDto>> FetchProductOptions()
+	{
+		try
+		{
+			using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+
+			return await Http.GetFromJsonAsync<List<ProductFilterOptionDto>>(
+				"api/StockReport/products",
+				cts.Token)
+				?? new List<ProductFilterOptionDto>();
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"[StockReport] products: {ex}");
+			return new List<ProductFilterOptionDto>();
+		}
 	}
 
 	private async Task<List<LocationDto>> FetchData(string url)

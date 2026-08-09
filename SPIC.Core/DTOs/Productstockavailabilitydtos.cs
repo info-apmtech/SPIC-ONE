@@ -1,25 +1,5 @@
 ﻿// ============================================================================
 //  SPIC.Core / DTOs / ProductStockAvailabilityDtos.cs
-//
-//  State x Product pivot for current stock and sales.
-//
-//  Current stock sources:
-//    * WholesalerStockAsOnToday.Stock
-//    * DptReport.ClosingBalance
-//    * WarehouseDistrictGlobalStockReconciliation.ClosingStock
-//
-//  Sales sources:
-//    * SalesWholesaler.QuantityMT
-//    * SalesCompanySale.QuantityMT
-//    * DptReport.SoldQuantity from the latest DPT snapshot
-//
-//  Product identity:
-//    * Product table rows keep their existing positive ProductId pivot key.
-//    * IfmsProduct rows use a negative ProductId pivot key internally so equal
-//      numeric IDs from the two product tables never collide.
-//    * ApprovedProductId and IfmsProductId expose the real database identity.
-//
-//  Reuses PagedResult<T> from StockReportDtos.cs.
 // ============================================================================
 
 using System;
@@ -56,10 +36,7 @@ namespace SPIC.Core.DTOs
 	{
 		public int TotalStates { get; set; }
 		public int TotalProducts { get; set; }
-
-		// Backward-compatible name: this is the current stock total.
 		public decimal TotalQuantity { get; set; }
-
 		public decimal TotalSales { get; set; }
 		public string HighestStockState { get; set; } = "-";
 		public decimal HighestStockQuantity { get; set; }
@@ -68,24 +45,11 @@ namespace SPIC.Core.DTOs
 
 	public class ProdStockColumnDto
 	{
-		/// <summary>
-		/// Pivot/dictionary key retained for compatibility with the existing UI and
-		/// Excel export. Product table keys are positive. IFMS product keys are negative.
-		/// </summary>
+		// Positive = Product.Id, negative = -IfmsProduct.Id.
 		public int ProductId { get; set; }
-
-		/// <summary>
-		/// Real Products.Id value when this column belongs to the approved Product table.
-		/// </summary>
 		public int? ApprovedProductId { get; set; }
-
-		/// <summary>
-		/// Real IfmsProducts.Id value when this column belongs to the IFMS product table.
-		/// </summary>
 		public int? IfmsProductId { get; set; }
-
 		public bool IsIfmsProduct => IfmsProductId.HasValue;
-
 		public string ProductName { get; set; } = "";
 		public string Group { get; set; } = "Products";
 	}
@@ -94,18 +58,9 @@ namespace SPIC.Core.DTOs
 	{
 		public int StateId { get; set; }
 		public string StateName { get; set; } = "";
-
-		// Current stock values by pivot ProductId.
-		// Positive key = Products.Id; negative key = -IfmsProducts.Id.
 		public Dictionary<int, decimal> Quantities { get; set; } = new();
-
-		// Sales values by the same collision-safe pivot ProductId.
 		public Dictionary<int, decimal> SalesQuantities { get; set; } = new();
-
-		// Current stock total for the state.
 		public decimal Total { get; set; }
-
-		// Sales total for the state.
 		public decimal TotalSales { get; set; }
 	}
 }

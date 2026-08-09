@@ -65,9 +65,10 @@ namespace Spic.Infrastructure.Services
 			CancellationToken cancellationToken = default)
 		{
 			var f = NormalizeFilter(filter);
-			var today = Today();
+			var reportDate = ResolveReportDate(f);
 
 			// Load only the latest available stock day from each snapshot source.
+			// With no date filter this is the same current/latest flow as before.
 			var snapshots = await LoadCurrentSnapshotsAsync(f, cancellationToken);
 
 			// Build dealer + product acknowledgement dates only for the current
@@ -75,13 +76,14 @@ namespace Spic.Infrastructure.Services
 			var acknowledgementLookup = await BuildAcknowledgementLookupAsync(
 				snapshots.WholesalerRows,
 				snapshots.DptRows,
+				reportDate,
 				cancellationToken);
 
 			var allAgeableRows = await BuildAgeableStockRowsAsync(
 				snapshots.WholesalerRows,
 				snapshots.DptRows,
 				acknowledgementLookup,
-				today,
+				reportDate,
 				cancellationToken);
 
 			// Search and ageing-range filters apply to ageing rows, just as in the
@@ -109,7 +111,7 @@ namespace Spic.Infrastructure.Services
 			var currentStockByState = BuildCurrentStockByState(snapshots);
 			var salesByState = await LoadSalesByStateAsync(
 				f,
-				today,
+				reportDate,
 				cancellationToken);
 
 			var stateNames = await LoadStateNamesAsync(
@@ -162,19 +164,20 @@ namespace Spic.Infrastructure.Services
 			CancellationToken cancellationToken = default)
 		{
 			var f = NormalizeFilter(filter);
-			var today = Today();
+			var reportDate = ResolveReportDate(f);
 
 			var snapshots = await LoadCurrentSnapshotsAsync(f, cancellationToken);
 			var acknowledgementLookup = await BuildAcknowledgementLookupAsync(
 				snapshots.WholesalerRows,
 				snapshots.DptRows,
+				reportDate,
 				cancellationToken);
 
 			var rows = await BuildAgeableStockRowsAsync(
 				snapshots.WholesalerRows,
 				snapshots.DptRows,
 				acknowledgementLookup,
-				today,
+				reportDate,
 				cancellationToken);
 
 			return ApplySorting(ApplyAgeingRowFilters(rows, f), f)
@@ -239,9 +242,23 @@ namespace Spic.Infrastructure.Services
 		{
 			var result = new CurrentSnapshotBundle();
 
-			var latestWholesalerTimestamp = await _db
+			var wholesalerCandidates = _db
 				.Set<WholesalerStockAsOnToday>()
-				.AsNoTracking()
+				.AsNoTracking();
+
+			if (f.DateFrom.HasValue)
+			{
+				var from = f.DateFrom.Value.Date;
+				wholesalerCandidates = wholesalerCandidates.Where(x => x.StockDate >= from);
+			}
+
+			if (f.DateTo.HasValue)
+			{
+				var toExclusive = f.DateTo.Value.Date.AddDays(1);
+				wholesalerCandidates = wholesalerCandidates.Where(x => x.StockDate < toExclusive);
+			}
+
+			var latestWholesalerTimestamp = await wholesalerCandidates
 				.MaxAsync(x => (DateTime?)x.StockDate, cancellationToken);
 
 			if (latestWholesalerTimestamp.HasValue)
@@ -260,9 +277,23 @@ namespace Spic.Infrastructure.Services
 				result.WholesalerRows = await query.ToListAsync(cancellationToken);
 			}
 
-			var latestDptTimestamp = await _db
+			var dptCandidates = _db
 				.Set<DptReport>()
-				.AsNoTracking()
+				.AsNoTracking();
+
+			if (f.DateFrom.HasValue)
+			{
+				var from = f.DateFrom.Value.Date;
+				dptCandidates = dptCandidates.Where(x => x.CreatedAt >= from);
+			}
+
+			if (f.DateTo.HasValue)
+			{
+				var toExclusive = f.DateTo.Value.Date.AddDays(1);
+				dptCandidates = dptCandidates.Where(x => x.CreatedAt < toExclusive);
+			}
+
+			var latestDptTimestamp = await dptCandidates
 				.MaxAsync(x => (DateTime?)x.CreatedAt, cancellationToken);
 
 			if (latestDptTimestamp.HasValue)
@@ -281,9 +312,23 @@ namespace Spic.Infrastructure.Services
 				result.DptRows = await query.ToListAsync(cancellationToken);
 			}
 
-			var latestWarehouseTimestamp = await _db
+			var warehouseCandidates = _db
 				.Set<WarehouseDistrictGlobalStockReconciliation>()
-				.AsNoTracking()
+				.AsNoTracking();
+
+			if (f.DateFrom.HasValue)
+			{
+				var from = f.DateFrom.Value.Date;
+				warehouseCandidates = warehouseCandidates.Where(x => x.CreatedAt >= from);
+			}
+
+			if (f.DateTo.HasValue)
+			{
+				var toExclusive = f.DateTo.Value.Date.AddDays(1);
+				warehouseCandidates = warehouseCandidates.Where(x => x.CreatedAt < toExclusive);
+			}
+
+			var latestWarehouseTimestamp = await warehouseCandidates
 				.MaxAsync(x => (DateTime?)x.CreatedAt, cancellationToken);
 
 			if (latestWarehouseTimestamp.HasValue)
@@ -436,8 +481,10 @@ namespace Spic.Infrastructure.Services
 		private async Task<AcknowledgementLookup> BuildAcknowledgementLookupAsync(
 			IEnumerable<WholesalerStockAsOnToday> wholesalerRows,
 			IEnumerable<DptReport> dptRows,
+			DateTime reportDate,
 			CancellationToken cancellationToken)
 		{
+			var reportDateExclusive = reportDate.Date.AddDays(1);
 			var keys = wholesalerRows
 				.Select(x => new DealerProductKey
 				{
@@ -511,6 +558,7 @@ namespace Spic.Infrastructure.Services
 						x.StatusId.HasValue &&
 						ackStatusIds.Contains(x.StatusId.Value) &&
 						x.RetailerReceiptDate.HasValue &&
+						x.RetailerReceiptDate.Value < reportDateExclusive &&
 						((x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
 						 (x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value))));
 
@@ -549,6 +597,7 @@ namespace Spic.Infrastructure.Services
 						x.StatusId.HasValue &&
 						ackStatusIds.Contains(x.StatusId.Value) &&
 						x.RetailerReceiptDate.HasValue &&
+						x.RetailerReceiptDate.Value < reportDateExclusive &&
 						((x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
 						 (x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value))));
 
@@ -590,7 +639,7 @@ namespace Spic.Infrastructure.Services
 					x.SoldQuantity > 0m &&
 					((x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
 					 (x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value))) &&
-					x.CreatedAt < DateTime.UtcNow.Date.AddDays(1));
+					x.CreatedAt < reportDateExclusive);
 
 			dptSalesQuery = ApplyDptDealerScope(
 				dptSalesQuery,
@@ -1106,6 +1155,7 @@ namespace Spic.Infrastructure.Services
 			if (f.LyingWithIds.Count > 0)
 				query = query.Where(x => x.DealershipNatureId.HasValue && f.LyingWithIds.Contains(x.DealershipNatureId.Value));
 
+			query = ApplyCompanySaleDateRange(query, f.DateFrom, f.DateTo);
 			return ApplyCompanySaleAgeRange(query, f.AgeingRanges, today);
 		}
 
@@ -1130,6 +1180,7 @@ namespace Spic.Infrastructure.Services
 			if (f.LyingWithIds.Count > 0)
 				query = query.Where(x => x.DealerNatureId.HasValue && f.LyingWithIds.Contains(x.DealerNatureId.Value));
 
+			query = ApplyWholesalerSaleDateRange(query, f.DateFrom, f.DateTo);
 			return ApplyWholesalerSaleAgeRange(query, f.AgeingRanges, today);
 		}
 
@@ -1139,7 +1190,72 @@ namespace Spic.Infrastructure.Services
 			DateTime today)
 		{
 			query = ApplyDptStockFilters(query, f);
+			query = ApplyDptSaleDateRange(query, f.DateFrom, f.DateTo);
 			return ApplyDptSaleAgeRange(query, f.AgeingRanges, today);
+		}
+
+		private static IQueryable<SalesCompanySale> ApplyCompanySaleDateRange(
+			IQueryable<SalesCompanySale> query,
+			DateTime? dateFrom,
+			DateTime? dateTo)
+		{
+			if (dateFrom.HasValue)
+			{
+				var from = dateFrom.Value.Date;
+				query = query.Where(x =>
+					(x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) >= from);
+			}
+
+			if (dateTo.HasValue)
+			{
+				var toExclusive = dateTo.Value.Date.AddDays(1);
+				query = query.Where(x =>
+					(x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) < toExclusive);
+			}
+
+			return query;
+		}
+
+		private static IQueryable<SalesWholesaler> ApplyWholesalerSaleDateRange(
+			IQueryable<SalesWholesaler> query,
+			DateTime? dateFrom,
+			DateTime? dateTo)
+		{
+			if (dateFrom.HasValue)
+			{
+				var from = dateFrom.Value.Date;
+				query = query.Where(x =>
+					(x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) >= from);
+			}
+
+			if (dateTo.HasValue)
+			{
+				var toExclusive = dateTo.Value.Date.AddDays(1);
+				query = query.Where(x =>
+					(x.InvoiceDate ?? x.EntryDate ?? x.CreatedAt) < toExclusive);
+			}
+
+			return query;
+		}
+
+		private static IQueryable<DptReport> ApplyDptSaleDateRange(
+			IQueryable<DptReport> query,
+			DateTime? dateFrom,
+			DateTime? dateTo)
+		{
+			if (dateFrom.HasValue)
+			{
+				var from = dateFrom.Value.Date;
+				query = query.Where(x => x.CreatedAt >= from);
+			}
+
+			if (dateTo.HasValue)
+			{
+				var toExclusive = dateTo.Value.Date.AddDays(1);
+				query = query.Where(x => x.CreatedAt < toExclusive);
+			}
+
+			return query;
 		}
 
 		private static IQueryable<SalesCompanySale> ApplyCompanySaleAgeRange(
@@ -1574,7 +1690,35 @@ namespace Spic.Infrastructure.Services
 				? "asc"
 				: "desc";
 
+			if (f.DateFrom.HasValue)
+			{
+				f.DateFrom = f.DateFrom.Value.Date;
+			}
+
+			if (f.DateTo.HasValue)
+			{
+				f.DateTo = f.DateTo.Value.Date;
+			}
+
+			if (f.DateFrom.HasValue &&
+				f.DateTo.HasValue &&
+				f.DateFrom.Value > f.DateTo.Value)
+			{
+				var originalFrom = f.DateFrom;
+				f.DateFrom = f.DateTo;
+				f.DateTo = originalFrom;
+			}
+
 			return f;
+		}
+
+		private static DateTime ResolveReportDate(AgeingReportFilter filter)
+		{
+			var today = Today();
+			var requested = filter.DateTo?.Date ?? today;
+
+			// Avoid negative ageing when a future date is entered.
+			return requested > today ? today : requested;
 		}
 
 		private static (List<int> ProductIds, List<int> IfmsProductIds) SplitProductKeys(

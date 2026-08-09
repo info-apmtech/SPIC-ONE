@@ -18,7 +18,6 @@ namespace SPIC.Core.Interfaces
 		Task<List<PendingAckDealerTypeDto>> GetDealerTypesAsync(
 			CancellationToken cancellationToken = default);
 
-		// Product + IFMS Product dropdown options.
 		Task<List<PendingAckProductDto>> GetProductsAsync(
 			CancellationToken cancellationToken = default);
 

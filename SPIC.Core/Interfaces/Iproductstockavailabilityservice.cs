@@ -1,8 +1,4 @@
-﻿// ============================================================================
-//  SPIC.Core / Interfaces / IProductStockAvailabilityService.cs
-// ============================================================================
-
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using SPIC.Core.DTOs;
 

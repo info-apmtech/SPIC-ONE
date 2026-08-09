@@ -129,13 +129,13 @@ namespace SpicAPI.Controllers
 		}
 
 		[HttpPost("export/pdf")]
-		public IActionResult ExportPdf([FromBody] PendingAckFilter filter)
+		public IActionResult ExportPdf([FromBody] PendingAckFilter? filter)
 		{
 			return StatusCode(501, "PDF export not implemented yet. Suggest QuestPDF.");
 		}
 
 		[HttpPost("send-mail")]
-		public IActionResult SendMail([FromBody] PendingAckFilter filter)
+		public IActionResult SendMail([FromBody] PendingAckFilter? filter)
 		{
 			return StatusCode(501, "Send mail not implemented yet.");
 		}

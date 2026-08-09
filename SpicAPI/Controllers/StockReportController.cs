@@ -19,10 +19,6 @@ namespace SpicAPI.Controllers
 			_service = service;
 		}
 
-		/// <summary>
-		/// Returns the existing Product master and the new IfmsProduct master in
-		/// one dropdown-safe list. P:id and I:id prevent ID collisions.
-		/// </summary>
 		[HttpGet("products")]
 		public async Task<ActionResult> Products()
 		{
@@ -44,8 +40,6 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> ExportExcel(
 			[FromBody] StockReportFilter? filter)
 		{
-			// GetAllRowsAsync still uses the same latest-snapshot flow. It now also
-			// resolves rows whose product is stored in IfmsProducts.
 			var rows = await _service.GetAllRowsAsync(
 				filter ?? new StockReportFilter());
 
