@@ -772,13 +772,41 @@
 	public string? Source { get; set; }
 
 	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
 	private bool IsDashboardCreditLimitMode =>
 		string.Equals(Source, "dashboard", StringComparison.OrdinalIgnoreCase);
+
+	// Approved New Dealer maintenance is a separate UI mode. It behaves like the
+	// Existing Dealer credit-limit flow, while IsNewDealerRegistration stays true in DB.
+	private bool IsExistingMaintenanceFlow =>
+		string.Equals(Flow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
+
+	// Recovery guard: if an older intermediate page drops flow=existing-maintenance,
+	// an already-approved New Dealer with a real DealerCode must still open the normal
+	// credit-limit content. Explicit flow=new always keeps the original New Dealer form.
+	private bool IsApprovedNewDealerMaintenanceFallback =>
+		!string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) &&
+		_dealer.IsNewDealerRegistration &&
+		_dealer.AVPApproved == true &&
+		!string.IsNullOrWhiteSpace(_dealer.DealerCode);
+
+	private bool UseExistingDealerCreditLimitFlow =>
+		IsDashboardCreditLimitMode ||
+		IsExistingMaintenanceFlow ||
+		IsApprovedNewDealerMaintenanceFallback;
+
 	private bool IsNewDealerFlow =>
-		!IsDashboardCreditLimitMode &&
+		!UseExistingDealerCreditLimitFlow &&
 		(string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) ||
 		 _dealer.IsNewDealerRegistration);
-	private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
+
+	private string FlowParam =>
+		IsExistingMaintenanceFlow || IsApprovedNewDealerMaintenanceFallback
+			? "&flow=existing-maintenance"
+			: IsNewDealerFlow
+				? "&flow=new"
+				: "";
+
 	private string SourceParam => IsDashboardCreditLimitMode ? "&source=dashboard" : "";
 	public string? SelectedCompany { get; set; }
 
@@ -809,7 +837,7 @@
 	private bool _isSaving;
 	private bool _isUploadingApplicationFeeAttachment;
 	private bool _isUploadingSpicTradeDepositAttachment;
-	private const decimal NewDealerApplicationFeeAmount = 10000m;
+	private const decimal NewDealerApplicationFeeAmount = 1000m;
 	private string? _message;
 	private bool _isError;
 	private string _spicValidFromText = "2025-04-01";

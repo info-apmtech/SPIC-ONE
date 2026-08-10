@@ -2365,10 +2365,24 @@
 	public string? Flow { get; set; }
 
 	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+	// A permanently New-Dealer record can later be maintained through the Existing
+	// Dealer flow after its first AVP approval. Do not re-enable New-Dealer-only
+	// enclosures (Request Letter) during that maintenance cycle.
+	private bool IsExistingMaintenanceFlow =>
+		string.Equals(Flow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
+
 	private bool IsNewDealerFlow =>
-		string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) ||
-		_dealer.IsNewDealerRegistration;
-	private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
+		!IsExistingMaintenanceFlow &&
+		(string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) ||
+		 (_dealer.IsNewDealerRegistration && string.IsNullOrWhiteSpace(_dealer.DealerCode)));
+
+	private string FlowParam =>
+		IsExistingMaintenanceFlow
+			? "&flow=existing-maintenance"
+			: IsNewDealerFlow
+				? "&flow=new"
+				: "";
 	private DealerReg _dealer = new();
 	private DealerRegistrationDocuments _docs = new();
 	private List<DealerOwnershipInfo> _partners = new();

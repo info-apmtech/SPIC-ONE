@@ -108,6 +108,35 @@ namespace SpicAPI.Controllers
 		private bool IsAdminRole(string role) => _adminRoles.Contains(role);
 		private bool IsHqCreatorRole(string role) => _hqCreatorRoles.Contains(role);
 
+		// Backward-compatible New Dealer identity recovery.
+		// Some already-approved New Dealers may have had IsNewDealerRegistration
+		// accidentally cleared by an older maintenance UI. The dedicated New Dealer
+		// application-fee / trade-deposit fields are not used by the normal Existing
+		// Dealer creation flow, so they provide a safe recovery signal without using
+		// DealerCode as the dealer-type discriminator.
+		private static bool HasNewDealerRegistrationEvidence(DealerRegistration dealer)
+		{
+			if (dealer.IsNewDealerRegistration)
+				return true;
+
+			return
+				dealer.DealershipApplicationFeeBankId.HasValue ||
+				!string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeDDNumber) ||
+				dealer.DealershipApplicationFeeDDDate.HasValue ||
+				(dealer.DealershipApplicationFeeAmount ?? 0m) > 0m ||
+				!string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeFilePath) ||
+				dealer.SpicTradeDepositDDBankId.HasValue ||
+				!string.IsNullOrWhiteSpace(dealer.SpicTradeDepositDDNumber) ||
+				dealer.SpicTradeDepositDDDate.HasValue ||
+				(dealer.SpicTradeDepositDDAmount ?? 0m) > 0m ||
+				!string.IsNullOrWhiteSpace(dealer.SpicTradeDepositFilePath) ||
+				dealer.GflTradeDepositDDBankId.HasValue ||
+				!string.IsNullOrWhiteSpace(dealer.GflTradeDepositDDNumber) ||
+				dealer.GflTradeDepositDDDate.HasValue ||
+				(dealer.GflTradeDepositDDAmount ?? 0m) > 0m ||
+				!string.IsNullOrWhiteSpace(dealer.GflTradeDepositFilePath);
+		}
+
 		[HttpPost]
 		public override async Task<IActionResult> Create([FromBody] DealerRegistration entity)
 		{
@@ -420,7 +449,9 @@ namespace SpicAPI.Controllers
 		/// model-binding validation errors in the New Dealer flow.
 		/// </summary>
 		[HttpPost("{id:int}/submit-for-review")]
-		public async Task<IActionResult> SubmitForReview(int id)
+		public async Task<IActionResult> SubmitForReview(
+			int id,
+			[FromQuery] string? flow = null)
 		{
 			var role = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
 			if (!IsWriteRole(role))
@@ -430,10 +461,40 @@ namespace SpicAPI.Controllers
 			if (dealer == null)
 				return NotFound(new { message = "Dealer registration was not found." });
 
-			// New Dealer Creation reuses the two Credit Limit routes for the
-			// SPIC/GFL trade-deposit forms. Validate those saved fields instead
-			// of the Existing Dealer credit-limit proposal.
-			if (dealer.IsNewDealerRegistration)
+			var maintenanceRequested = string.Equals(
+				flow,
+				"existing-maintenance",
+				StringComparison.OrdinalIgnoreCase);
+
+			// existing-maintenance is valid only for a New Dealer that already completed
+			// its first AVP approval and therefore already owns a real DealerCode. The
+			// permanent IsNewDealerRegistration flag is deliberately NOT changed.
+			var isExistingMaintenance =
+				maintenanceRequested &&
+				HasNewDealerRegistrationEvidence(dealer) &&
+				!string.IsNullOrWhiteSpace(dealer.DealerCode);
+
+			if (maintenanceRequested && !isExistingMaintenance)
+			{
+				return BadRequest(new
+				{
+					message = "Existing Dealer maintenance is available only after the New Dealer has received a Dealer Code."
+				});
+			}
+
+			// If an older maintenance build cleared the permanent flag, restore it only
+			// when this request is an authenticated approved-New-Dealer maintenance cycle.
+			// This makes the correction persistent without changing normal Existing Dealers.
+			if (isExistingMaintenance && !dealer.IsNewDealerRegistration)
+				dealer.IsNewDealerRegistration = true;
+
+			var isOriginalNewDealerSubmission =
+				dealer.IsNewDealerRegistration && !isExistingMaintenance;
+
+			// Initial New Dealer Creation reuses the two Credit Limit routes for the
+			// SPIC/GFL trade-deposit forms. Validate those saved fields only for the
+			// initial New Dealer submission, never for approved-dealer maintenance.
+			if (isOriginalNewDealerSubmission)
 			{
 				var errors = new Dictionary<string, string[]>();
 
@@ -506,27 +567,41 @@ namespace SpicAPI.Controllers
 				}
 			}
 
-			// Preserve the existing rejection/resubmission workflow. The record
-			// returns only to the approval level that rejected it.
-			if (dealer.AVPApproved == false)
+			if (isExistingMaintenance)
 			{
-				dealer.AVPApproved = null;
-			}
-			else if (dealer.SMApproved == false)
-			{
-				dealer.SMApproved = null;
-				dealer.AVPApproved = null;
-			}
-			else if (dealer.RMApproved == false)
-			{
+				// This is a NEW approval cycle for an already-approved New Dealer that is
+				// now being maintained as an Existing Dealer. Reset all approval stages so
+				// Dashboard immediately becomes In RM, then follows RM -> SMM -> AVP.
 				dealer.RMApproved = null;
 				dealer.SMApproved = null;
 				dealer.AVPApproved = null;
 			}
+			else
+			{
+				// Preserve the existing rejection/resubmission workflow exactly. The
+				// record returns only to the approval level that rejected it.
+				if (dealer.AVPApproved == false)
+				{
+					dealer.AVPApproved = null;
+				}
+				else if (dealer.SMApproved == false)
+				{
+					dealer.SMApproved = null;
+					dealer.AVPApproved = null;
+				}
+				else if (dealer.RMApproved == false)
+				{
+					dealer.RMApproved = null;
+					dealer.SMApproved = null;
+					dealer.AVPApproved = null;
+				}
+			}
 
-			// Keep the Existing Dealer status behavior unchanged. A New Dealer
-			// receives its DealerCode and active status only after final approval.
-			if (!dealer.IsNewDealerRegistration &&
+			// Existing Dealer behavior remains unchanged. Maintenance records are already
+			// active approved dealers, so keep them active while their credit-limit update
+			// passes through a fresh approval cycle. Initial New Dealers still receive
+			// active status only at their first final AVP approval.
+			if ((!dealer.IsNewDealerRegistration || isExistingMaintenance) &&
 				dealer.Status != DealerStatus.InActive &&
 				dealer.Status != DealerStatus.Terminated)
 			{
@@ -652,12 +727,61 @@ namespace SpicAPI.Controllers
 		}
 
 		/// <summary>
-		/// Final AVP approval for a New Dealer. Performs the entire final step atomically:
-		/// validates the workflow and approval sequence, saves the AVP approval and remarks,
-		/// allocates the Dealer Code and activates the dealer — all inside one transaction.
-		///
-		/// Idempotent: calling it again after a successful approval returns the already
-		/// allocated code without generating another one.
+		/// Returns the next numeric DealerCode preview for final New Dealer AVP review.
+		/// This endpoint is read-only: it does not save DealerCode or any company code.
+		/// The optional legacy greenStarPrefix query is retained for older clients, but
+		/// the current AVP UI supports selecting multiple N/Z/T prefixes after preview.
+		/// </summary>
+		[HttpGet("{id}/dealer-code-preview")]
+		public async Task<IActionResult> GetDealerCodePreview(
+			int id,
+			[FromQuery] string? greenStarPrefix = null)
+		{
+			var role = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+			if (role != "AVP" && role != "Director" && role != "CorporateAdmin" && role != "Admin")
+				return Forbid();
+
+			var dealer = await _repo.GetByIdAsync(id);
+			if (dealer == null)
+				return NotFound(new { message = "Dealer registration was not found." });
+
+			if (!dealer.IsNewDealerRegistration)
+				return BadRequest(new { message = "Dealer Code preview is only available for New Dealer registrations." });
+
+			if (dealer.RMApproved != true || dealer.SMApproved != true || dealer.AVPApproved != null)
+				return BadRequest(new { message = "Dealer Code preview is available only at pending final AVP approval." });
+
+			if (!dealer.InSpic && !dealer.InGreenStar)
+				return BadRequest(new { message = "The registration has no SPIC or GreenStar selection." });
+
+			string? legacyPrefix = null;
+			if (!string.IsNullOrWhiteSpace(greenStarPrefix))
+			{
+				legacyPrefix = NormalizeGreenStarPrefix(greenStarPrefix);
+				if (legacyPrefix == null)
+					return BadRequest(new { message = "GreenStar prefix must be N, Z or T." });
+			}
+
+			var dealerCode = await GetNextDealerCodeAsync();
+
+			return Ok(new
+			{
+				DealerCode = dealerCode,
+				SPICCode = dealer.InSpic ? $"D{dealerCode}" : null,
+				GreenStarCode = dealer.InGreenStar && legacyPrefix != null
+					? $"{legacyPrefix}{dealerCode}"
+					: null,
+				GreenStarPrefix = legacyPrefix,
+				dealer.InSpic,
+				dealer.InGreenStar
+			});
+		}
+
+		/// <summary>
+		/// Final AVP approval for a New Dealer. The next DealerCode is previewed by
+		/// the UI and AVP may edit the numeric value before approval. The server
+		/// validates uniqueness and all company-code mappings before saving.
+		/// Existing RM/SMM approval, send-back and Existing Dealer flows are unchanged.
 		/// </summary>
 		[HttpPost("{id}/final-approve")]
 		public async Task<IActionResult> FinalApprove(int id, [FromBody] FinalApproveRequest request)
@@ -681,9 +805,18 @@ namespace SpicAPI.Controllers
 					message = "Dealer must be approved by MO and SMM before final AVP approval."
 				});
 
-			// Idempotent: already finally approved → return the allocated code.
+			// Idempotent: already finally approved -> return the saved codes.
 			if (dealer.AVPApproved == true && !string.IsNullOrWhiteSpace(dealer.DealerCode))
-				return Ok(new { dealer.Id, dealer.DealerCode, alreadyApproved = true });
+				return Ok(new
+				{
+					dealer.Id,
+					dealer.DealerCode,
+					dealer.SPICCode,
+					dealer.GreenStarCode,
+					dealer.NCode,
+					dealer.TnCode,
+					alreadyApproved = true
+				});
 
 			if (dealer.AVPApproved == true)
 				return Conflict(new
@@ -694,13 +827,41 @@ namespace SpicAPI.Controllers
 			if (!string.IsNullOrWhiteSpace(dealer.DealerCode))
 				return BadRequest(new { message = "Dealer Code has already been allocated. Cannot allocate again." });
 
-			var remarks = string.IsNullOrWhiteSpace(request?.Remarks) ? "" : request.Remarks.Trim();
+			if (!dealer.InSpic && !dealer.InGreenStar)
+				return BadRequest(new { message = "The registration has no SPIC or GreenStar selection." });
 
-			await using var transaction = await _db.Database.BeginTransactionAsync();
+			var reviewedDealerCode = (request?.DealerCode ?? string.Empty).Trim();
+			if (string.IsNullOrWhiteSpace(reviewedDealerCode) ||
+				reviewedDealerCode.Any(ch => !char.IsDigit(ch)))
+			{
+				return BadRequest(new
+				{
+					message = "Dealer Code is required and must contain numbers only."
+				});
+			}
+
+			if (!TryNormalizeGreenStarPrefixes(
+				request?.GreenStarPrefixes,
+				request?.GreenStarPrefix,
+				out var greenStarPrefixes))
+			{
+				return BadRequest(new { message = "GreenStar prefixes may contain only N, Z or T." });
+			}
+
+			if (dealer.InGreenStar && greenStarPrefixes.Count == 0)
+				return BadRequest(new { message = "Select at least one GreenStar prefix: N, Z or T." });
+
+			var remarks = string.IsNullOrWhiteSpace(request?.Remarks)
+				? string.Empty
+				: request.Remarks.Trim();
+
+			await using var transaction = await _db.Database.BeginTransactionAsync(
+				System.Data.IsolationLevel.Serializable);
+
 			try
 			{
-				// Reload with tracking inside the transaction to guard against
-				// concurrent / duplicate final approvals.
+				// Reload with tracking inside the transaction to guard against duplicate
+				// final approvals and company-selection changes.
 				var fresh = await _db.DealerRegistrations.FirstOrDefaultAsync(x => x.Id == id);
 				if (fresh == null)
 				{
@@ -711,8 +872,18 @@ namespace SpicAPI.Controllers
 				if (fresh.AVPApproved == true && !string.IsNullOrWhiteSpace(fresh.DealerCode))
 				{
 					await transaction.RollbackAsync();
-					return Ok(new { fresh.Id, fresh.DealerCode, alreadyApproved = true });
+					return Ok(new
+					{
+						fresh.Id,
+						fresh.DealerCode,
+						fresh.SPICCode,
+						fresh.GreenStarCode,
+						fresh.NCode,
+						fresh.TnCode,
+						alreadyApproved = true
+					});
 				}
+
 				if (fresh.AVPApproved == true || !string.IsNullOrWhiteSpace(fresh.DealerCode))
 				{
 					await transaction.RollbackAsync();
@@ -722,23 +893,128 @@ namespace SpicAPI.Controllers
 					});
 				}
 
-				// Allocate a code and confirm it is not already used.
-				string candidate = await GetNextDealerCodeAsync();
-				bool inUse = await _db.DealerRegistrations
-					.AnyAsync(x => x.DealerCode != null && x.DealerCode == candidate);
-				if (inUse)
+				if (!fresh.InSpic && !fresh.InGreenStar)
 				{
 					await transaction.RollbackAsync();
-					return StatusCode(500, new
+					return BadRequest(new { message = "The registration has no SPIC or GreenStar selection." });
+				}
+
+				if (fresh.InGreenStar && greenStarPrefixes.Count == 0)
+				{
+					await transaction.RollbackAsync();
+					return BadRequest(new { message = "Select at least one GreenStar prefix: N, Z or T." });
+				}
+
+				// DealerCode is auto-suggested from the existing sequence, but AVP may edit
+				// the numeric value. Do not force it to equal the current next sequence;
+				// the uniqueness checks below are the final authority inside this serializable
+				// transaction. This keeps manual AVP correction possible without changing
+				// any other approval flow.
+
+				var spicCode = fresh.InSpic
+					? $"D{reviewedDealerCode}"
+					: null;
+
+				// Each GreenStar prefix has its own destination field. Multiple prefixes may
+				// be approved together and all use the same reviewed numeric DealerCode.
+				var nCode = fresh.InGreenStar && greenStarPrefixes.Contains("N")
+					? $"N{reviewedDealerCode}"
+					: null;
+				var zCode = fresh.InGreenStar && greenStarPrefixes.Contains("Z")
+					? $"Z{reviewedDealerCode}"
+					: null;
+				var tnCode = fresh.InGreenStar && greenStarPrefixes.Contains("T")
+					? $"T{reviewedDealerCode}"
+					: null;
+
+				// Never overwrite an already populated company code on an inconsistent
+				// pending record. For GreenStar, N/Z/T now have separate destination fields.
+				if (fresh.InSpic && !string.IsNullOrWhiteSpace(fresh.SPICCode))
+				{
+					await transaction.RollbackAsync();
+					return Conflict(new { message = "SPICCode is already present for this pending dealer. Please resolve it before AVP approval." });
+				}
+
+				if (fresh.InGreenStar &&
+					(!string.IsNullOrWhiteSpace(fresh.GreenStarCode) ||
+					 !string.IsNullOrWhiteSpace(fresh.NCode) ||
+					 !string.IsNullOrWhiteSpace(fresh.TnCode)))
+				{
+					await transaction.RollbackAsync();
+					return Conflict(new
 					{
-						message = "Dealer Code allocation failed: generated code is already in use. The approval was not saved. Please retry."
+						message = "A GreenStar code is already present for this pending dealer. Please resolve it before AVP approval."
 					});
+				}
+
+				var dealerCodeInUse = await _db.DealerRegistrations.AnyAsync(x =>
+					x.Id != fresh.Id &&
+					x.DealerCode != null &&
+					x.DealerCode == reviewedDealerCode);
+
+				if (dealerCodeInUse)
+				{
+					await transaction.RollbackAsync();
+					return Conflict(new { message = "Dealer Code is already in use. Enter a different numeric Dealer Code or reload the suggested code, then approve again." });
+				}
+
+				if (spicCode != null)
+				{
+					var spicCodeInUse = await _db.DealerRegistrations.AnyAsync(x =>
+						x.Id != fresh.Id &&
+						x.SPICCode != null &&
+						x.SPICCode == spicCode);
+
+					if (spicCodeInUse)
+					{
+						await transaction.RollbackAsync();
+						return Conflict(new { message = "Generated SPICCode is already in use. Refresh and try again." });
+					}
+				}
+
+				foreach (var generatedGreenStarCode in new[] { nCode, zCode, tnCode }
+					.Where(code => !string.IsNullOrWhiteSpace(code))
+					.Cast<string>())
+				{
+					// Check all GreenStar destination columns to prevent the same full code from
+					// existing in a different legacy/new GreenStar field on another dealer.
+					var greenStarCodeInUse = await _db.DealerRegistrations.AnyAsync(x =>
+						x.Id != fresh.Id &&
+						((x.GreenStarCode != null && x.GreenStarCode == generatedGreenStarCode) ||
+						 (x.NCode != null && x.NCode == generatedGreenStarCode) ||
+						 (x.TnCode != null && x.TnCode == generatedGreenStarCode)));
+
+					if (greenStarCodeInUse)
+					{
+						await transaction.RollbackAsync();
+						return Conflict(new
+						{
+							message = $"GreenStar code {generatedGreenStarCode} is already in use. Enter a different Dealer Code or change the prefix selection."
+						});
+					}
 				}
 
 				fresh.AVPApproved = true;
 				fresh.Status = DealerStatus.Active;
-				fresh.DealerCode = candidate;
+				fresh.DealerCode = reviewedDealerCode;
 				fresh.IsSubmittedForReview = true;
+
+				// Company selection was already made during registration. Final AVP approval
+				// must not change InSpic/InGreenStar; it only saves the reviewed codes.
+				if (spicCode != null)
+				{
+					fresh.SPICCode = spicCode;
+				}
+
+				if (fresh.InGreenStar)
+				{
+					// Multiple selected prefixes are saved independently. Unselected fields stay
+					// empty on this New Dealer record.
+					fresh.NCode = nCode;
+					fresh.GreenStarCode = zCode;
+					fresh.TnCode = tnCode;
+				}
+
 				fresh.UpdatedBy = userId;
 				fresh.UpdatedAt = DateTime.Now;
 
@@ -758,7 +1034,7 @@ namespace SpicAPI.Controllers
 				await _db.SaveChangesAsync();
 				await transaction.CommitAsync();
 
-				// Create/link the dealer login account once the code is final.
+				// Preserve the existing post-final-approval login creation/link flow.
 				if (string.IsNullOrEmpty(fresh.UserTableId) && !string.IsNullOrWhiteSpace(fresh.DealerCode))
 				{
 					var userError = await EnsureDealerUserAsync(fresh);
@@ -768,7 +1044,18 @@ namespace SpicAPI.Controllers
 					await _db.SaveChangesAsync();
 				}
 
-				return Ok(new { fresh.Id, fresh.DealerCode, alreadyApproved = false });
+				return Ok(new
+				{
+					fresh.Id,
+					fresh.DealerCode,
+					fresh.SPICCode,
+					fresh.GreenStarCode,
+					fresh.NCode,
+					fresh.TnCode,
+					fresh.InSpic,
+					fresh.InGreenStar,
+					alreadyApproved = false
+				});
 			}
 			catch
 			{
@@ -780,9 +1067,45 @@ namespace SpicAPI.Controllers
 			}
 		}
 
+		private static string? NormalizeGreenStarPrefix(string? prefix)
+		{
+			var value = (prefix ?? string.Empty).Trim().ToUpperInvariant();
+			return value == "N" || value == "Z" || value == "T"
+				? value
+				: null;
+		}
+
+		private static bool TryNormalizeGreenStarPrefixes(
+			IEnumerable<string>? prefixes,
+			string? legacyPrefix,
+			out List<string> normalizedPrefixes)
+		{
+			var raw = prefixes?
+				.Where(x => !string.IsNullOrWhiteSpace(x))
+				.Select(x => x.Trim())
+				.ToList() ?? new List<string>();
+
+			// Backward compatibility for the previous single-prefix client contract.
+			if (raw.Count == 0 && !string.IsNullOrWhiteSpace(legacyPrefix))
+				raw.Add(legacyPrefix.Trim());
+
+			normalizedPrefixes = new List<string>();
+			foreach (var item in raw)
+			{
+				var normalized = NormalizeGreenStarPrefix(item);
+				if (normalized == null)
+					return false;
+
+				if (!normalizedPrefixes.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+					normalizedPrefixes.Add(normalized);
+			}
+
+			return true;
+		}
+
 		/// <summary>
 		/// Returns the next available numeric DealerCode (largest existing numeric code + 1).
-		/// Only used inside an active transaction so the same code cannot be handed out twice.
+		/// This intentionally preserves the existing DealerCode sequence and storage format.
 		/// </summary>
 		private async Task<string> GetNextDealerCodeAsync()
 		{
@@ -812,7 +1135,15 @@ namespace SpicAPI.Controllers
 		public class FinalApproveRequest
 		{
 			public string? Remarks { get; set; }
+			public string? DealerCode { get; set; }
+
+			// Current UI: supports selecting any combination of N/Z/T.
+			public List<string> GreenStarPrefixes { get; set; } = new();
+
+			// Kept so an older deployed UI using the single-prefix contract does not break.
+			public string? GreenStarPrefix { get; set; }
 		}
+
 		[HttpPost("{id}/send-back")]
 		public async Task<IActionResult> SendBack(int id, [FromBody] DealerSendBackRequest request)
 		{
@@ -1040,6 +1371,30 @@ namespace SpicAPI.Controllers
 					query = query.Where(x => x.CreatedBy == userId);
 			}
 
+			// Dashboard needs to distinguish the FIRST New Dealer final approval from an
+			// approved New Dealer that later completed the Existing Dealer maintenance cycle.
+			// Use existing data only; no new DB column is introduced.
+			var creditLimitDealerIds = _creditRepo == null
+				? new List<int>()
+				: await _creditRepo.GetAll()
+					.Select(x => x.DealerId)
+					.Distinct()
+					.ToListAsync();
+
+			var twiceFinalApprovedDealerIds = _historyRepo == null
+				? new List<int>()
+				: await _historyRepo.GetAll()
+					.Where(h =>
+						h.IsApproved == true &&
+						(h.Role == "AVP" ||
+						 h.Role == "Director" ||
+						 h.Role == "CorporateAdmin" ||
+						 h.Role == "Admin"))
+					.GroupBy(h => h.DealerId)
+					.Where(g => g.Count() >= 2)
+					.Select(g => g.Key)
+					.ToListAsync();
+
 			// Return only the fields used by Dashboard. This prevents newly added
 			// registration columns from breaking the existing-dealer list when a
 			// database migration is pending. A new dealer has no DealerCode until
@@ -1052,11 +1407,40 @@ namespace SpicAPI.Controllers
 					x.IsDealer,
 					x.InSpic,
 					x.InGreenStar,
-					IsNewDealerRegistration = x.DealerCode == null || x.DealerCode == "",
+					// Permanent DB flag is the primary source. The remaining conditions are a
+					// backward-compatible recovery only for historical New Dealer records whose
+					// flag was accidentally cleared by an older maintenance page.
+					IsNewDealerRegistration =
+						x.IsNewDealerRegistration ||
+						x.DealershipApplicationFeeBankId != null ||
+						x.DealershipApplicationFeeDDNumber != null ||
+						x.DealershipApplicationFeeDDDate != null ||
+						x.DealershipApplicationFeeAmount != null ||
+						x.DealershipApplicationFeeFilePath != null ||
+						x.SpicTradeDepositDDBankId != null ||
+						x.SpicTradeDepositDDNumber != null ||
+						x.SpicTradeDepositDDDate != null ||
+						x.SpicTradeDepositDDAmount != null ||
+						x.SpicTradeDepositFilePath != null ||
+						x.GflTradeDepositDDBankId != null ||
+						x.GflTradeDepositDDNumber != null ||
+						x.GflTradeDepositDDDate != null ||
+						x.GflTradeDepositDDAmount != null ||
+						x.GflTradeDepositFilePath != null,
+
+					// First New Dealer approval has no completed Existing Dealer maintenance cycle.
+					// Maintenance is considered complete only after Credit Limit data exists AND
+					// a second successful final-level approval has been recorded.
+					HasCompletedExistingMaintenance =
+						creditLimitDealerIds.Contains(x.Id) &&
+						twiceFinalApprovedDealerIds.Contains(x.Id),
+
 					x.DealerCode,
 					x.CreatedBy,
 					x.SPICCode,
-					x.GreenStarCode,
+					GreenStarCode = x.GreenStarCode ?? x.NCode ?? x.TnCode,
+					x.NCode,
+					x.TnCode,
 					x.StateId,
 					x.Region,
 					x.HQ,
@@ -1068,6 +1452,8 @@ namespace SpicAPI.Controllers
 					x.WholeSaleFertilizerLicenseNumber,
 					x.RetailFertilizerLicenseNumber,
 					x.PinCode,
+					x.Latitude,
+					x.Longitude,
 					x.RMApproved,
 					x.SMApproved,
 					x.AVPApproved,
