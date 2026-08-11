@@ -1548,5 +1548,8 @@ namespace SpicAPI.Controllers
 	[Route("api/[controller]")]
 	public class DealerApprovalHistoryController(IGenericRepository<DealerApprovalHistory> repo) : GenericCrudController<DealerApprovalHistory>(repo);
 
+	[Route("api/[controller]")]
+	public class CreditLimitHistoryController(IGenericRepository<CreditLimitHistory> repo) : GenericCrudController<CreditLimitHistory>(repo);
+
 
 }

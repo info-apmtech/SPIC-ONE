@@ -1265,6 +1265,8 @@ private async Task ApproveDealer()
             };
             try { await Http.PostAsJsonAsync("api/DealerApprovalHistory", history); } catch { }
 
+            await SaveCreditLimitHistoryApprovalsAsync();
+
             IsConfirmProceedPopupVisible = false;
             _showSuccessNotification = true;
             StateHasChanged();
@@ -1278,7 +1280,47 @@ private async Task ApproveDealer()
         _isApproving = false;
         StateHasChanged();
     }
-}    public record TimelineItem(
+}
+
+    private async Task SaveCreditLimitHistoryApprovalsAsync()
+    {
+        if (_dealer == null) return;
+
+        try
+        {
+            var histories = await Http.GetFromJsonAsync<List<DR.CreditLimitHistory>>($"api/CreditLimitHistory/byDealer/{_dealer.Id}") ?? new();
+
+            await UpdateApprovalForCreditTypeAsync(histories, DR.CreditType.SPIC, _rmCreditLimitSpic, _smCreditLimitSpic, _avpCreditLimitSpic);
+            await UpdateApprovalForCreditTypeAsync(histories, DR.CreditType.Greenstar, _rmCreditLimitGfl, _smCreditLimitGfl, _avpCreditLimitGfl);
+        }
+        catch { }
+    }
+
+    private async Task UpdateApprovalForCreditTypeAsync(
+        List<DR.CreditLimitHistory> histories,
+        DR.CreditType creditType,
+        decimal? rmLimit,
+        decimal? smLimit,
+        decimal? avpLimit)
+    {
+        if (!rmLimit.HasValue && !smLimit.HasValue && !avpLimit.HasValue)
+            return;
+
+        var record = histories
+            .Where(h => h.CreditType == creditType)
+            .OrderByDescending(h => h.CreatedAt)
+            .FirstOrDefault();
+
+        if (record == null) return;
+
+        if (rmLimit.HasValue) record.RMApprovedCreditLimit = rmLimit;
+        if (smLimit.HasValue) record.SMApprovedCreditLimit = smLimit;
+        if (avpLimit.HasValue) record.AVPApprovedCreditLimit = avpLimit;
+
+        await Http.PutAsJsonAsync($"api/CreditLimitHistory/{record.Id}", record);
+    }
+
+    public record TimelineItem(
         string Title,
         string Status,
         string UserName,
