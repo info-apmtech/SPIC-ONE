@@ -158,8 +158,11 @@
         </div>
     }
 
-    <!-- Keep the user's existing LogisticsMaster tab keys/handlers unchanged:
-         Warehouse = PVT WH, RakePoint = C&F WH, Port = Rake Point. -->
+    <!-- Keep the existing menu/tab keys and visual flow unchanged.
+         Data is now stored separately:
+         Warehouse = PVT WH -> PvtWarehouse table/API
+         RakePoint = C&F WH -> CandFWarehouse table/API
+         Port = Rake Point -> RackPoint table/API -->
     <div class="tabs-wrapper">
         <div class="tabs-container">
             <div class="tab-item @(ActiveTab == "Warehouse" ? "active" : "")" @onclick="SelectWarehouseTab">
@@ -912,15 +915,12 @@
 }
 
 @code {
-    private const string PvtCategory = "PVT";
-    private const string CandFCategory = "C&F";
-
-    // Preserve the current LogisticsMaster internal tab values.
+    // Preserve the current LogisticsMaster internal tab values / menu behaviour.
+    // Only the API/table behind each tab is separated now.
     private string ActiveTab { get; set; } = "Warehouse";
     private bool IsPvtWarehouseTab => ActiveTab == "Warehouse";
     private bool IsCandFWarehouseTab => ActiveTab == "RakePoint";
     private bool IsRakePointTab => ActiveTab == "Port";
-    private bool IsWarehouseTab => IsPvtWarehouseTab || IsCandFWarehouseTab;
     private string ActiveTabDisplayName => ActiveTab switch
     {
         "Warehouse" => "PVT WH",
@@ -928,7 +928,13 @@
         "Port" => "Rake Point",
         _ => ActiveTab
     };
-    private string CurrentApiBase => IsWarehouseTab ? "api/Warehouse" : "api/RackPoint";
+    private string CurrentApiBase => ActiveTab switch
+    {
+        "Warehouse" => "api/PvtWarehouse",
+        "RakePoint" => "api/CandFWarehouse",
+        "Port" => "api/RackPoint",
+        _ => ""
+    };
     private string CurrentFileName => ActiveTabDisplayName.Replace(" ", "_").Replace("&", "and");
     private string CurrentNamePlaceholder => ActiveTab switch
     {
@@ -948,14 +954,15 @@
     private List<HeadquarterDto> _filteredHeadquarters = new();
     private List<DistrictDto> _filteredDistricts = new();
 
-    private List<LogisticsItemDto> _warehouseAll = new();
+    private List<LogisticsItemDto> _pvtWarehouseAll = new();
+    private List<LogisticsItemDto> _candFWarehouseAll = new();
     private List<LogisticsItemDto> _rakePointAll = new();
     private List<LogisticsItemDto> _filteredItems = new();
 
     private List<LogisticsItemDto> CurrentAllItems => ActiveTab switch
     {
-        "Warehouse" => _warehouseAll.Where(IsPvtWarehouse).ToList(),
-        "RakePoint" => _warehouseAll.Where(IsCandFWarehouse).ToList(),
+        "Warehouse" => _pvtWarehouseAll,
+        "RakePoint" => _candFWarehouseAll,
         "Port" => _rakePointAll,
         _ => new()
     };
@@ -1036,15 +1043,6 @@
         IsActive = true
     };
 
-    private static bool IsPvtWarehouse(LogisticsItemDto item) =>
-        string.IsNullOrWhiteSpace(item.WarehouseCategory) ||
-        string.Equals(item.WarehouseCategory, PvtCategory, StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsCandFWarehouse(LogisticsItemDto item) =>
-        string.Equals(item.WarehouseCategory, CandFCategory, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(item.WarehouseCategory, "C&F WH", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(item.WarehouseCategory, "CNF", StringComparison.OrdinalIgnoreCase);
-
     private async Task LoadLookups()
     {
         try
@@ -1073,13 +1071,17 @@
         {
             _isLoading = true;
 
-            if (IsWarehouseTab)
+            switch (ActiveTab)
             {
-                _warehouseAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/Warehouse/all") ?? new();
-            }
-            else
-            {
-                _rakePointAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/RackPoint/all") ?? new();
+                case "Warehouse":
+                    _pvtWarehouseAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/PvtWarehouse/all") ?? new();
+                    break;
+                case "RakePoint":
+                    _candFWarehouseAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/CandFWarehouse/all") ?? new();
+                    break;
+                case "Port":
+                    _rakePointAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/RackPoint/all") ?? new();
+                    break;
             }
 
             ApplyFilter();
@@ -1174,9 +1176,13 @@
             _message = null;
             _editingCreatedAt ??= DateTime.Now;
 
-            HttpResponseMessage response = IsWarehouseTab
-                ? await SaveWarehouse()
-                : await SaveRakePoint();
+            HttpResponseMessage response = ActiveTab switch
+            {
+                "Warehouse" => await SavePvtWarehouse(),
+                "RakePoint" => await SaveCandFWarehouse(),
+                "Port" => await SaveRakePoint(),
+                _ => throw new InvalidOperationException("Invalid Logistics Master tab.")
+            };
 
             if (!response.IsSuccessStatusCode)
             {
@@ -1207,9 +1213,13 @@
                 }
 
                 // Persist the uploaded file paths after the physical files are saved.
-                HttpResponseMessage documentPathUpdate = IsWarehouseTab
-                    ? await SaveWarehouse(forceUpdate: true, forcedId: recordId)
-                    : await SaveRakePoint(forceUpdate: true, forcedId: recordId);
+                HttpResponseMessage documentPathUpdate = ActiveTab switch
+                {
+                    "Warehouse" => await SavePvtWarehouse(forceUpdate: true, forcedId: recordId),
+                    "RakePoint" => await SaveCandFWarehouse(forceUpdate: true, forcedId: recordId),
+                    "Port" => await SaveRakePoint(forceUpdate: true, forcedId: recordId),
+                    _ => throw new InvalidOperationException("Invalid Logistics Master tab.")
+                };
 
                 if (!documentPathUpdate.IsSuccessStatusCode)
                 {
@@ -1238,22 +1248,21 @@
         }
     }
 
-    private async Task<HttpResponseMessage> SaveWarehouse(bool forceUpdate = false, int? forcedId = null)
+    private async Task<HttpResponseMessage> SavePvtWarehouse(bool forceUpdate = false, int? forcedId = null)
     {
         var now = DateTime.Now;
-        var payload = new WarehouseSaveModel
+        var payload = new PvtWarehouseSaveModel
         {
             Id = forcedId ?? _editingId ?? 0,
             Name = _form.Name.Trim(),
             WarehouseCode = _form.SapCode.Trim(),
-            WarehouseCategory = IsCandFWarehouseTab ? CandFCategory : PvtCategory,
             InSpic = _form.InSpic,
             InGreenStar = _form.InGreenStar,
             BasicStateId = ToNullableId(_form.BasicStateId),
             RegionId = ToNullableId(_form.RegionId),
             HeadquarterId = ToNullableId(_form.HeadquarterId),
             OperatedBy = _form.OperatedBy,
-            WarehouseType = IsCandFWarehouseTab ? null : _form.WarehouseType,
+            WarehouseType = _form.WarehouseType,
             GoogleURL = NullIfWhiteSpace(_form.GoogleURL),
             Latitude = _form.Latitude,
             Longitude = _form.Longitude,
@@ -1268,20 +1277,16 @@
             DistrictId = _form.DistrictId,
             ContactNumber = NullIfWhiteSpace(_form.ContactNumber),
 
-            // Reservation quantities. PVT uses separate SPIC/GFL approved + additional MT fields.
-            SpicApprovedReservationQuantityMT = IsPvtWarehouseTab ? _form.SpicApprovedReservationQuantityMT : null,
-            SpicAdditionalReservationQuantityMT = IsPvtWarehouseTab ? _form.SpicAdditionalReservationQuantityMT : null,
-            GflApprovedReservationQuantityMT = IsPvtWarehouseTab ? _form.GflApprovedReservationQuantityMT : null,
-            GflAdditionalReservationQuantityMT = IsPvtWarehouseTab ? _form.GflAdditionalReservationQuantityMT : null,
+            // PVT WH: separate reservation quantities for SPIC and GFL.
+            SpicApprovedReservationQuantityMT = _form.SpicApprovedReservationQuantityMT,
+            SpicAdditionalReservationQuantityMT = _form.SpicAdditionalReservationQuantityMT,
+            GflApprovedReservationQuantityMT = _form.GflApprovedReservationQuantityMT,
+            GflAdditionalReservationQuantityMT = _form.GflAdditionalReservationQuantityMT,
 
-            // C&F WH quantities are GFL-only.
-            GflReservationQuantityMT = IsCandFWarehouseTab ? _form.GflReservationQuantityMT : null,
-            GflAdditionalReservationQuantityLitres = IsCandFWarehouseTab ? _form.GflAdditionalReservationQuantityLitres : null,
-
-            // Documents. Required PVT documents are null for C&F. Other documents are supported by both.
-            GstDocumentPath = IsPvtWarehouseTab ? NullIfWhiteSpace(_form.GstDocumentPath) : null,
-            InsuranceDocumentPath = IsPvtWarehouseTab ? NullIfWhiteSpace(_form.InsuranceDocumentPath) : null,
-            FertilizerLicenseDocumentPath = IsPvtWarehouseTab ? NullIfWhiteSpace(_form.FertilizerLicenseDocumentPath) : null,
+            // PVT WH required highlighted documents + optional other documents.
+            GstDocumentPath = NullIfWhiteSpace(_form.GstDocumentPath),
+            InsuranceDocumentPath = NullIfWhiteSpace(_form.InsuranceDocumentPath),
+            FertilizerLicenseDocumentPath = NullIfWhiteSpace(_form.FertilizerLicenseDocumentPath),
             OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths),
 
             IsActive = _form.IsActive,
@@ -1292,8 +1297,55 @@
 
         var updateId = forcedId ?? _editingId;
         return (forceUpdate || (_isEditing && updateId.HasValue)) && updateId.HasValue
-            ? await Http.PutAsJsonAsync($"api/Warehouse/{updateId.Value}", payload)
-            : await Http.PostAsJsonAsync("api/Warehouse", payload);
+            ? await Http.PutAsJsonAsync($"api/PvtWarehouse/{updateId.Value}", payload)
+            : await Http.PostAsJsonAsync("api/PvtWarehouse", payload);
+    }
+
+    private async Task<HttpResponseMessage> SaveCandFWarehouse(bool forceUpdate = false, int? forcedId = null)
+    {
+        var now = DateTime.Now;
+        var payload = new CandFWarehouseSaveModel
+        {
+            Id = forcedId ?? _editingId ?? 0,
+            Name = _form.Name.Trim(),
+            WarehouseCode = _form.SapCode.Trim(),
+            InSpic = _form.InSpic,
+            InGreenStar = _form.InGreenStar,
+            BasicStateId = ToNullableId(_form.BasicStateId),
+            RegionId = ToNullableId(_form.RegionId),
+            HeadquarterId = ToNullableId(_form.HeadquarterId),
+            OperatedBy = _form.OperatedBy,
+            GoogleURL = NullIfWhiteSpace(_form.GoogleURL),
+            Latitude = _form.Latitude,
+            Longitude = _form.Longitude,
+            DoorNo = NullIfWhiteSpace(_form.DoorNo),
+            Street = NullIfWhiteSpace(_form.Street),
+            SubVillage = NullIfWhiteSpace(_form.SubVillage),
+            PinCode = NullIfWhiteSpace(_form.PinCode),
+            Village = NullIfWhiteSpace(_form.Village),
+            Block = NullIfWhiteSpace(_form.Block),
+            Taluk = NullIfWhiteSpace(_form.Taluk),
+            StateId = _form.StateId,
+            DistrictId = _form.DistrictId,
+            ContactNumber = NullIfWhiteSpace(_form.ContactNumber),
+
+            // C&F WH: GFL-only reservation quantities.
+            GflReservationQuantityMT = _form.GflReservationQuantityMT,
+            GflAdditionalReservationQuantityLitres = _form.GflAdditionalReservationQuantityLitres,
+
+            // C&F WH: other documents are optional.
+            OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths),
+
+            IsActive = _form.IsActive,
+            CreatedAt = _editingCreatedAt ?? now,
+            UpdatedAt = now,
+            UpdatedBy = _currentUserId ?? "current-user"
+        };
+
+        var updateId = forcedId ?? _editingId;
+        return (forceUpdate || (_isEditing && updateId.HasValue)) && updateId.HasValue
+            ? await Http.PutAsJsonAsync($"api/CandFWarehouse/{updateId.Value}", payload)
+            : await Http.PostAsJsonAsync("api/CandFWarehouse", payload);
     }
 
     private async Task<HttpResponseMessage> SaveRakePoint(bool forceUpdate = false, int? forcedId = null)
@@ -1593,7 +1645,13 @@
     {
         try
         {
-            var entityType = IsWarehouseTab ? "Warehouse" : "RackPoint";
+            var entityType = ActiveTab switch
+            {
+                "Warehouse" => "PvtWarehouse",
+                "RakePoint" => "CandFWarehouse",
+                "Port" => "RackPoint",
+                _ => throw new InvalidOperationException("Invalid Logistics Master tab.")
+            };
 
             if (IsPvtWarehouseTab && _gstDocumentFile != null)
                 _form.GstDocumentPath = await UploadLogisticsFileAsync(entityType, recordId, "GST", _gstDocumentFile);
@@ -2026,7 +2084,6 @@
         public int Id { get; set; }
         public string Name { get; set; } = "";
         public string? WarehouseCode { get; set; }
-        public string? WarehouseCategory { get; set; }
         public string? RailwayCode { get; set; }
         public string? SAPCode { get; set; }
         public bool? InSpic { get; set; }
@@ -2065,12 +2122,11 @@
         public string UpdatedBy { get; set; } = "";
     }
 
-    public class WarehouseSaveModel
+    public class PvtWarehouseSaveModel
     {
         public int Id { get; set; }
         public string Name { get; set; } = "";
         public string WarehouseCode { get; set; } = "";
-        public string? WarehouseCategory { get; set; }
         public bool? InSpic { get; set; }
         public bool? InGreenStar { get; set; }
         public int? BasicStateId { get; set; }
@@ -2095,11 +2151,42 @@
         public decimal? SpicAdditionalReservationQuantityMT { get; set; }
         public decimal? GflApprovedReservationQuantityMT { get; set; }
         public decimal? GflAdditionalReservationQuantityMT { get; set; }
-        public decimal? GflReservationQuantityMT { get; set; }
-        public decimal? GflAdditionalReservationQuantityLitres { get; set; }
         public string? GstDocumentPath { get; set; }
         public string? InsuranceDocumentPath { get; set; }
         public string? FertilizerLicenseDocumentPath { get; set; }
+        public string? OtherDocumentPathsJson { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string UpdatedBy { get; set; } = "";
+    }
+
+    public class CandFWarehouseSaveModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string WarehouseCode { get; set; } = "";
+        public bool? InSpic { get; set; }
+        public bool? InGreenStar { get; set; }
+        public int? BasicStateId { get; set; }
+        public int? RegionId { get; set; }
+        public int? HeadquarterId { get; set; }
+        public LogisticsOperatedBy? OperatedBy { get; set; }
+        public string? GoogleURL { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+        public string? DoorNo { get; set; }
+        public string? Street { get; set; }
+        public string? SubVillage { get; set; }
+        public string? PinCode { get; set; }
+        public string? Village { get; set; }
+        public string? Block { get; set; }
+        public string? Taluk { get; set; }
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public string? ContactNumber { get; set; }
+        public decimal? GflReservationQuantityMT { get; set; }
+        public decimal? GflAdditionalReservationQuantityLitres { get; set; }
         public string? OtherDocumentPathsJson { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }

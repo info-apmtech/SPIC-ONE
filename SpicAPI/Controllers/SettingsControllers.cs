@@ -25,12 +25,20 @@ namespace SpicAPI.Controllers
 	[Route("api/[controller]")]
 	public class ProductController(IGenericRepository<Product> repo) : GenericCrudController<Product>(repo);
 
-	// PVT WH and C&F WH both use this controller/table.
-	// WarehouseCategory separates PVT from C&F.
+	// Legacy Warehouse controller is intentionally preserved for any existing module
+	// that still uses api/Warehouse. LogisticsMaster no longer uses this endpoint.
 	[Route("api/[controller]")]
 	public class WarehouseController(IGenericRepository<Warehouse> repo) : GenericCrudController<Warehouse>(repo);
 
-	// Rake Point uses the existing RackPoint controller/table.
+	// NEW: PVT WH is now stored in its own table/entity.
+	[Route("api/[controller]")]
+	public class PvtWarehouseController(IGenericRepository<Warehouse> repo) : GenericCrudController<Warehouse>(repo);
+
+	// NEW: C&F WH is now stored in its own table/entity.
+	[Route("api/[controller]")]
+	public class CandFWarehouseController(IGenericRepository<CandFWarehouse> repo) : GenericCrudController<CandFWarehouse>(repo);
+
+	// Rake Point keeps the existing RackPoint table/entity.
 	[Route("api/[controller]")]
 	public class RackPointController(IGenericRepository<RackPoint> repo) : GenericCrudController<RackPoint>(repo);
 

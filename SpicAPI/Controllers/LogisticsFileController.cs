@@ -46,7 +46,7 @@ namespace SpicAPI.Controllers
 				return BadRequest("A valid Logistics record id is required.");
 
 			if (!IsSupportedEntity(entityType))
-				return BadRequest("entityType must be Warehouse or RackPoint.");
+				return BadRequest("entityType must be Warehouse, CandFWarehouse or RackPoint.");
 
 			if (file == null || file.Length == 0)
 				return BadRequest("Please select a file.");
@@ -99,6 +99,7 @@ namespace SpicAPI.Controllers
 
 		private static bool IsSupportedEntity(string value) =>
 			string.Equals(value, "Warehouse", StringComparison.OrdinalIgnoreCase) ||
+			string.Equals(value, "CandFWarehouse", StringComparison.OrdinalIgnoreCase) ||
 			string.Equals(value, "RackPoint", StringComparison.OrdinalIgnoreCase);
 
 		private static string SanitizeSegment(string value)

@@ -92,37 +92,31 @@ namespace SPIC.Core.Entities
 	}
 
 	/// <summary>
-	/// Used by both PVT WH and C&F WH in Logistics Master.
-	/// WarehouseCategory distinguishes the two views without creating another table.
-	/// Legacy rows with null/empty WarehouseCategory are treated as PVT WH by the UI.
+	/// PVT Warehouse master. This is a dedicated table/entity and is no longer
+	/// mixed with C&F Warehouse rows.
 	/// </summary>
-	public class Warehouse
+	public class Warehouse//PVT Warehouse master
 	{
 		public int Id { get; set; }
 		public required string Name { get; set; }
 
-		// Existing field. The current UI labels this as "SAP Code".
+		// Current Logistics Master UI label: SAP Code.
 		public string WarehouseCode { get; set; } = string.Empty;
 
-		// "PVT" or "C&F". Nullable for safe legacy-row compatibility.
-		public string? WarehouseCategory { get; set; }
-
-		// Company selection shown in Basic Information.
+		// Company selection.
 		public bool? InSpic { get; set; }
 		public bool? InGreenStar { get; set; }
 
-		// Basic Information location selection.
+		// Basic Information cascading location.
 		public int? BasicStateId { get; set; }
 		public int? RegionId { get; set; }
 		public int? HeadquarterId { get; set; }
 
-		// Dropdown values: Dealer / Others.
+		// Dropdowns.
 		public LogisticsOperatedBy? OperatedBy { get; set; }
-
-		// Dropdown values: Field WH / EPT WH.
-		// C&F WH intentionally stores null because WH Type is hidden for that tab.
 		public LogisticsWarehouseType? WarehouseType { get; set; }
 
+		// Primary Location.
 		public string? GoogleURL { get; set; }
 		public double? Latitude { get; set; }
 		public double? Longitude { get; set; }
@@ -133,31 +127,22 @@ namespace SPIC.Core.Entities
 		public string? Village { get; set; }
 		public string? Block { get; set; }
 		public string? Taluk { get; set; }
-
 		public int StateId { get; set; } = 0;
 		public int DistrictId { get; set; } = 0;
-
-		// PVT WH = Contact No; C&F WH = C&F Operator Contact No.
 		public string? ContactNumber { get; set; }
 
-		// PVT WH reservation quantities (number fields, stored as decimal).
-		// Separate values are maintained for SPIC and GFL.
+		// PVT WH reservation quantities - separate for SPIC and GFL.
 		public decimal? SpicApprovedReservationQuantityMT { get; set; }
 		public decimal? SpicAdditionalReservationQuantityMT { get; set; }
 		public decimal? GflApprovedReservationQuantityMT { get; set; }
 		public decimal? GflAdditionalReservationQuantityMT { get; set; }
 
-		// C&F WH reservation quantities. These are GFL-only as per the current requirement.
-		public decimal? GflReservationQuantityMT { get; set; }
-		public decimal? GflAdditionalReservationQuantityLitres { get; set; }
-
-		// PVT WH required documents. C&F WH leaves these null.
+		// PVT WH required highlighted documents.
 		public string? GstDocumentPath { get; set; }
 		public string? InsuranceDocumentPath { get; set; }
 		public string? FertilizerLicenseDocumentPath { get; set; }
 
-		// Optional multiple documents for both PVT WH and C&F WH.
-		// Stored as a JSON string containing an array of relative file paths.
+		// Optional multiple documents stored as JSON array of relative paths.
 		public string? OtherDocumentPathsJson { get; set; }
 
 		public bool IsActive { get; set; }
@@ -167,9 +152,62 @@ namespace SPIC.Core.Entities
 	}
 
 	/// <summary>
-	/// Used by the Rake Point tab.
-	/// Existing RailwayCode is preserved. SAPCode is used by the current UI.
-	/// The page writes the same SAP code to both properties for backward compatibility.
+	/// C&F Warehouse master. Dedicated table/entity.
+	/// WH Type is intentionally not present because the C&F UI hides it.
+	/// </summary>
+	public class CandFWarehouse
+	{
+		public int Id { get; set; }
+		public required string Name { get; set; }
+
+		// Current Logistics Master UI label: SAP Code.
+		public string WarehouseCode { get; set; } = string.Empty;
+
+		// Company selection.
+		public bool? InSpic { get; set; }
+		public bool? InGreenStar { get; set; }
+
+		// Basic Information cascading location.
+		public int? BasicStateId { get; set; }
+		public int? RegionId { get; set; }
+		public int? HeadquarterId { get; set; }
+
+		// C&F still uses Operated By. WH Type is not applicable.
+		public LogisticsOperatedBy? OperatedBy { get; set; }
+
+		// Primary Location.
+		public string? GoogleURL { get; set; }
+		public double? Latitude { get; set; }
+		public double? Longitude { get; set; }
+		public string? DoorNo { get; set; }
+		public string? Street { get; set; }
+		public string? SubVillage { get; set; }
+		public string? PinCode { get; set; }
+		public string? Village { get; set; }
+		public string? Block { get; set; }
+		public string? Taluk { get; set; }
+		public int StateId { get; set; } = 0;
+		public int DistrictId { get; set; } = 0;
+
+		// UI label: C&F Operator Contact No.
+		public string? ContactNumber { get; set; }
+
+		// GFL-only C&F reservation quantities.
+		public decimal? GflReservationQuantityMT { get; set; }
+		public decimal? GflAdditionalReservationQuantityLitres { get; set; }
+
+		// C&F supports optional other documents only.
+		public string? OtherDocumentPathsJson { get; set; }
+
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public required string UpdatedBy { get; set; }
+	}
+
+	/// <summary>
+	/// Existing Rake Point table/entity retained. DoorNo and Street are intentionally
+	/// absent because the current Logistics Master hides those fields for Rake Point.
 	/// </summary>
 	public class RackPoint
 	{
@@ -178,7 +216,10 @@ namespace SPIC.Core.Entities
 
 		public string? GoogleURL { get; set; }
 
+		// Existing field preserved for backward compatibility.
 		public string? RailwayCode { get; set; }
+
+		// Current UI SAP Code field. The page writes the same value to RailwayCode.
 		public string? SAPCode { get; set; }
 
 		public bool? InSpic { get; set; }
@@ -188,16 +229,11 @@ namespace SPIC.Core.Entities
 		public int? RegionId { get; set; }
 		public int? HeadquarterId { get; set; }
 
-		// Dropdown values: Dealer / Others.
 		public LogisticsOperatedBy? OperatedBy { get; set; }
-
-		// Dropdown values: Field WH / EPT WH.
 		public LogisticsWarehouseType? WarehouseType { get; set; }
 
 		public double? Latitude { get; set; }
 		public double? Longitude { get; set; }
-
-		// DoorNo and Street intentionally remain absent for Rake Point.
 		public string? SubVillage { get; set; }
 		public string? PinCode { get; set; }
 		public string? Village { get; set; }
@@ -205,8 +241,7 @@ namespace SPIC.Core.Entities
 		public string? Taluk { get; set; }
 		public string? ContactNumber { get; set; }
 
-		// Rake Point supports optional multiple documents only.
-		// Stored as a JSON string containing an array of relative file paths.
+		// Optional multiple documents only.
 		public string? OtherDocumentPathsJson { get; set; }
 
 		public int StateId { get; set; } = 0;
