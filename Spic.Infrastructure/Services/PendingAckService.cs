@@ -23,10 +23,11 @@ namespace Spic.Infrastructure.Services
 	/// - Age status: Latest 0-10, Critical 11-20, Overdue 21+, or Consent of Buyer.
 	/// - Completed is retained for acknowledged rows to preserve the existing dashboard.
 	/// - The last grid status column displays the exact Status master name uploaded
-	///   from Excel (for example New or Ack). Retailer Sales has no StatusId and
-	///   therefore displays Reported.
-	/// - Cards and state chart ignore Source/AgeStatuses filters.
-	/// - Grid and export apply Source/AgeStatuses filters.
+	///   from Excel (for example New or Ack). Retailer Sales has no StatusId, so it
+	///   uses the existing New fallback instead of introducing a synthetic status.
+	/// - Age-status selections apply to cards, the state chart, grid and export.
+	/// - Source tabs continue to affect the grid/export only, preserving the existing
+	///   source-card comparison behaviour.
 	/// - Search still affects cards, chart and grid.
 	///
 	/// Main performance improvement:
@@ -79,8 +80,8 @@ namespace Spic.Infrastructure.Services
 
 			var workflowRules = await LoadWorkflowStatusRulesAsync(cancellationToken);
 
-			// The base scope intentionally ignores Source and AgeStatuses so the
-			// source cards and state chart keep their existing behaviour.
+			// Build all three sources for the dashboard. Source tabs remain grid-only,
+			// while the explicit Status (By Age) filter must affect cards and chart too.
 			var baseQuery = BuildRawQuery(
 				filter,
 				today,
@@ -88,8 +89,12 @@ namespace Spic.Infrastructure.Services
 				workflowRules.AckStatusIds,
 				workflowRules.ConsentStatusIds);
 
+			var dashboardQuery = ApplyAgeStatusFilter(
+				baseQuery,
+				filter.AgeStatuses);
+
 			// Query 1: compact summary aggregates only.
-			var summaryAggregates = await baseQuery
+			var summaryAggregates = await dashboardQuery
 				.GroupBy(x => new { x.SourceCode, x.StatusCode })
 				.Select(group => new SummaryAggregateRow
 				{
@@ -110,7 +115,7 @@ namespace Spic.Infrastructure.Services
 			// Query 2: state/status aggregates only. This replaces materializing
 			// every transaction and then grouping the full list in memory.
 			var stateAggregates = await (
-				from row in baseQuery
+				from row in dashboardQuery
 				join state in _db.Set<State>().AsNoTracking()
 					on row.StateId equals (int?)state.Id
 				group row by new
@@ -132,7 +137,7 @@ namespace Spic.Infrastructure.Services
 
 			var stateWise = BuildStateWise(stateAggregates);
 
-			// Grid alone applies the active source tab and status selections.
+			// Grid applies the active source tab and the same status selections.
 			var filteredGridQuery = ApplyGridFilters(baseQuery, filter);
 
 			// Query 3: count only.
@@ -483,7 +488,9 @@ namespace Spic.Infrastructure.Services
 					RegistrationId = x.DealerRegistrationId,
 					IfmsId = x.IfmsDealerId,
 					WorkflowStatusId = null,
-					WorkflowStatusOverride = "Reported",
+					// DPT has no workflow StatusId. Leave the override null so ToDto
+					// uses the existing non-completed fallback: "New".
+					WorkflowStatusOverride = null,
 					StatusCode = x.CreatedAt >= latestFrom
 						? StatusLatest
 						: x.CreatedAt >= criticalFrom
@@ -763,6 +770,30 @@ namespace Spic.Infrastructure.Services
 		// Grid filters, joins and sorting
 		// =====================================================================
 
+		private static IQueryable<RawQueryRow> ApplyAgeStatusFilter(
+			IQueryable<RawQueryRow> query,
+			IEnumerable<string>? ageStatuses)
+		{
+			var selectedStatuses = (ageStatuses ?? Enumerable.Empty<string>())
+				.Where(x => !string.IsNullOrWhiteSpace(x))
+				.Select(x => x.Trim())
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
+
+			if (selectedStatuses.Count == 0)
+			{
+				return query;
+			}
+
+			var statusCodes = ResolveStatusCodes(selectedStatuses);
+			if (statusCodes.Count == 0)
+			{
+				return query.Where(x => false);
+			}
+
+			return query.Where(x => statusCodes.Contains(x.StatusCode));
+		}
+
 		private static IQueryable<RawQueryRow> ApplyGridFilters(
 			IQueryable<RawQueryRow> query,
 			PendingAckFilter filter)
@@ -802,19 +833,7 @@ namespace Spic.Infrastructure.Services
 				return query.Where(x => false);
 			}
 
-			if (filter.AgeStatuses.Count > 0)
-			{
-				var statusCodes = ResolveStatusCodes(filter.AgeStatuses);
-
-				if (statusCodes.Count == 0)
-				{
-					return query.Where(x => false);
-				}
-
-				query = query.Where(x => statusCodes.Contains(x.StatusCode));
-			}
-
-			return query;
+			return ApplyAgeStatusFilter(query, filter.AgeStatuses);
 		}
 
 		private IQueryable<EnrichedQueryRow> BuildEnrichedQuery(
@@ -1333,21 +1352,30 @@ namespace Spic.Infrastructure.Services
 
 			foreach (var rawKey in dealerKeys ?? Enumerable.Empty<string>())
 			{
-				if (string.IsNullOrWhiteSpace(rawKey) || rawKey.Length < 2)
+				if (string.IsNullOrWhiteSpace(rawKey))
 				{
 					continue;
 				}
 
-				if (!int.TryParse(rawKey[1..], out var id) || id <= 0)
+				var key = rawKey.Trim();
+				var colonIndex = key.IndexOf(':');
+				var prefix = colonIndex >= 0
+					? key[..colonIndex]
+					: key[..1];
+				var idText = colonIndex >= 0
+					? key[(colonIndex + 1)..]
+					: key[1..];
+
+				if (!int.TryParse(idText, out var id) || id <= 0)
 				{
 					continue;
 				}
 
-				if (rawKey.StartsWith("R", StringComparison.OrdinalIgnoreCase))
+				if (string.Equals(prefix, "R", StringComparison.OrdinalIgnoreCase))
 				{
 					registrationIds.Add(id);
 				}
-				else if (rawKey.StartsWith("I", StringComparison.OrdinalIgnoreCase))
+				else if (string.Equals(prefix, "I", StringComparison.OrdinalIgnoreCase))
 				{
 					ifmsIds.Add(id);
 				}

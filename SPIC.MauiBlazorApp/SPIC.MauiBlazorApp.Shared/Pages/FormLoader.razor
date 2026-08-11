@@ -7,7 +7,7 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 
-@if (CurrentStep is not null)
+@if (CurrentStep is not null && !IsDashboardCreditLimitModeFromUrl)
 {
     var steps = StepsList;
     var currentIndex = CurrentIndex;
@@ -52,6 +52,14 @@
     private bool _isRestrictedFlow;
     private bool _hasGreenStar;
     private bool _isNewDealerFlow;
+    private bool _isExistingMaintenanceFlow;
+    private bool _isDashboardCreditLimitMode;
+
+    // Standalone Credit Limit entry from the Dealer Dashboard: hides the Dealer
+    // Creation 13-step header/progress so only the Credit Limit content shows.
+    private bool IsDashboardCreditLimitModeFromUrl =>
+        GetQueryValues().TryGetValue("source", out var source) &&
+        string.Equals(source, "dashboard", StringComparison.OrdinalIgnoreCase);
 
     [Parameter] public bool IsSingleStep { get; set; }
     [Parameter] public bool IsRestrictedFlow { get; set; }
@@ -101,13 +109,30 @@
         var urlFlow = GetFlowValue();
 
         _isRestrictedFlow = string.Equals(urlFlow, "restricted", StringComparison.OrdinalIgnoreCase);
+        _isExistingMaintenanceFlow = string.Equals(urlFlow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
         _isNewDealerFlow = string.Equals(urlFlow, "new", StringComparison.OrdinalIgnoreCase);
+        _isDashboardCreditLimitMode = IsDashboardCreditLimitModeFromUrl;
 
         if (dealerId > 0)
         {
             var dealer = await GetDealer(dealerId);
             _hasGreenStar = dealer?.InGreenStar ?? false;
-            _isNewDealerFlow = _isNewDealerFlow || dealer?.IsNewDealerRegistration == true;
+
+            if (dealer != null)
+            {
+                var approvedNewDealerMaintenance =
+                    !_isDashboardCreditLimitMode &&
+                    !_isNewDealerFlow &&
+                    dealer.IsNewDealerRegistration &&
+                    dealer.AVPApproved == true &&
+                    !string.IsNullOrWhiteSpace(dealer.DealerCode);
+
+                if (!_isExistingMaintenanceFlow && approvedNewDealerMaintenance)
+                    _isExistingMaintenanceFlow = true;
+
+                if (!_isExistingMaintenanceFlow)
+                    _isNewDealerFlow = _isNewDealerFlow || dealer.IsNewDealerRegistration;
+            }
 
             if (!_isRestrictedFlow && dealer != null)
             {
@@ -240,6 +265,12 @@
     {
         if (_isRestrictedFlow && !queryString.Contains("flow=restricted", StringComparison.OrdinalIgnoreCase))
             return AppendQuery(queryString, "flow=restricted");
+
+        if (_isExistingMaintenanceFlow &&
+            !queryString.Contains("flow=existing-maintenance", StringComparison.OrdinalIgnoreCase))
+        {
+            return AppendQuery(queryString, "flow=existing-maintenance");
+        }
 
         if (_isNewDealerFlow && !queryString.Contains("flow=new", StringComparison.OrdinalIgnoreCase))
             return AppendQuery(queryString, "flow=new");

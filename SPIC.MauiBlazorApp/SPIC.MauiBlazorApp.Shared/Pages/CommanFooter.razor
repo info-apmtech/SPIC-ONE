@@ -9,7 +9,7 @@
 {
     <div class="footer-nav">
         <div>
-            @if (CurrentIndex > 0)
+            @if (!_isDashboardCreditLimitMode && CurrentIndex > 0)
             {
                 <button type="button" class="btn btn-prev" @onclick="GoToPrevious">
                     <i class="bi bi-chevron-left"></i>
@@ -19,7 +19,7 @@
         </div>
 
         <div>
-            @if (CurrentIndex < TotalSteps - 1)
+            @if (_isDashboardCreditLimitMode || CurrentIndex < TotalSteps - 1)
             {
                 @if (OnNextClick.HasDelegate)
                 {
@@ -32,14 +32,14 @@
                             <span class="spinner-border spinner-border-sm me-1"></span>
                         }
 
-                        @(NextButtonText ?? "Next")
+                        @(NextButtonText ?? (_isDashboardCreditLimitMode ? "Submit" : "Next"))
                         <i class="bi bi-chevron-right"></i>
                     </button>
                 }
                 else
                 {
                     <button type="button" class="btn btn-next" @onclick="GoToNext">
-                        @(NextButtonText ?? "Next")
+                        @(NextButtonText ?? (_isDashboardCreditLimitMode ? "Submit" : "Next"))
                         <i class="bi bi-chevron-right"></i>
                     </button>
                 }
@@ -89,6 +89,8 @@
     private bool _hasGreenStar;
     private bool _isRestrictedFlow;
     private bool _isNewDealerFlow;
+    private bool _isExistingMaintenanceFlow;
+    private bool _isDashboardCreditLimitMode;
 
     private int TotalSteps => VisibleSteps.Count;
 
@@ -113,8 +115,13 @@
 
         var urlFlow = GetFlowValue();
         var statusRestricted = false;
+        var queryValues = GetQueryValues();
+
         _isRestrictedFlow = string.Equals(urlFlow, "restricted", StringComparison.OrdinalIgnoreCase);
+        _isExistingMaintenanceFlow = string.Equals(urlFlow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
         _isNewDealerFlow = string.Equals(urlFlow, "new", StringComparison.OrdinalIgnoreCase);
+        _isDashboardCreditLimitMode = queryValues.TryGetValue("source", out var source) &&
+            string.Equals(source, "dashboard", StringComparison.OrdinalIgnoreCase);
 
         var dealerId = GetDealerIdFromQuery();
         if (dealerId > 0)
@@ -123,10 +130,22 @@
             {
                 var dealer = await Http.GetFromJsonAsync<DealerRegistration>($"api/DealerRegistration/{dealerId}");
                 _hasGreenStar = dealer?.InGreenStar ?? false;
-                _isNewDealerFlow = _isNewDealerFlow || dealer?.IsNewDealerRegistration == true;
 
                 if (dealer != null)
                 {
+                    var approvedNewDealerMaintenance =
+                        !_isDashboardCreditLimitMode &&
+                        !_isNewDealerFlow &&
+                        dealer.IsNewDealerRegistration &&
+                        dealer.AVPApproved == true &&
+                        !string.IsNullOrWhiteSpace(dealer.DealerCode);
+
+                    if (!_isExistingMaintenanceFlow && approvedNewDealerMaintenance)
+                        _isExistingMaintenanceFlow = true;
+
+                    if (!_isExistingMaintenanceFlow)
+                        _isNewDealerFlow = _isNewDealerFlow || dealer.IsNewDealerRegistration;
+
                     statusRestricted = dealer.Status == DealerStatus.Terminated ||
                         (dealer.Status == DealerStatus.InActive &&
                          dealer.InactiveProposal == FutureBusinessProposal.Terminated);
@@ -219,6 +238,12 @@
     {
         if (_isRestrictedFlow && !queryString.Contains("flow=restricted", StringComparison.OrdinalIgnoreCase))
             return AppendQuery(queryString, "flow=restricted");
+
+        if (_isExistingMaintenanceFlow &&
+            !queryString.Contains("flow=existing-maintenance", StringComparison.OrdinalIgnoreCase))
+        {
+            return AppendQuery(queryString, "flow=existing-maintenance");
+        }
 
         if (_isNewDealerFlow && !queryString.Contains("flow=new", StringComparison.OrdinalIgnoreCase))
             return AppendQuery(queryString, "flow=new");

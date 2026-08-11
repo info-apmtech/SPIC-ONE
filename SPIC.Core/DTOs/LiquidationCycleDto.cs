@@ -7,8 +7,13 @@ namespace SPIC.Core.DTOs
 	{
 		public DateTime? DateFrom { get; set; }
 		public DateTime? DateTo { get; set; }
+
 		public List<int> StateIds { get; set; } = new();
 		public List<int> DistrictIds { get; set; } = new();
+
+		// Additive: DPT/Retailer rows have SubDistrictId. Other sources continue to
+		// use the effective parent DistrictIds so the previous flow remains compatible.
+		public List<int> SubDistrictIds { get; set; } = new();
 
 		// Backward-compatible approved Product IDs used by existing clients.
 		public List<int> ProductIds { get; set; } = new();
@@ -49,7 +54,7 @@ namespace SPIC.Core.DTOs
 		public decimal Liquidated { get; set; }
 		public decimal BalanceStock => TotalStock - Liquidated;
 
-		// No false hard-coded percentages. Keep the existing fields for API compatibility.
+		// Kept for API compatibility. The service does not invent trend percentages.
 		public double StockTrendPct { get; set; }
 		public double LiquidatedTrendPct { get; set; }
 		public double BalanceTrendPct { get; set; }
@@ -57,6 +62,8 @@ namespace SPIC.Core.DTOs
 
 	public class LiqCycleStatDto
 	{
+		// Retained name for API compatibility. State-wise statistics also use this
+		// property as their display label in the existing chart contract.
 		public string DealerName { get; set; } = "";
 		public decimal TotalStock { get; set; }
 		public decimal FastLiquidated { get; set; }

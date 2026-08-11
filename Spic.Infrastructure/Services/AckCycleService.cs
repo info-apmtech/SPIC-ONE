@@ -117,6 +117,7 @@ namespace Spic.Infrastructure.Services
 			}
 
 			var (registrationIds, ifmsIds) = SplitDealerKeys(filter.DealerKeys);
+			var (productIds, ifmsProductIds) = SplitProductKeys(filter);
 			var dateFrom = ToUtcDate(filter.DateFrom);
 			var dateToExclusive = ToUtcDate(filter.DateTo)?.AddDays(1);
 
@@ -141,10 +142,11 @@ namespace Spic.Infrastructure.Services
 					x.DistrictId.HasValue && filter.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
-			if (filter.ProductIds.Count > 0)
+			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
 				companySales = companySales.Where(x =>
-					x.ProductId.HasValue && filter.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			if (registrationIds.Count > 0 || ifmsIds.Count > 0)
@@ -179,6 +181,9 @@ namespace Spic.Infrastructure.Services
 				join product in _db.Set<Product>().AsNoTracking()
 					on sale.ProductId equals (int?)product.Id into productJoin
 				from product in productJoin.DefaultIfEmpty()
+				join ifmsProduct in _db.Set<IfmsProduct>().AsNoTracking()
+					on sale.IfmsProductId equals (int?)ifmsProduct.Id into ifmsProductJoin
+				from ifmsProduct in ifmsProductJoin.DefaultIfEmpty()
 				join dealer in _db.Set<DealerRegistration>().AsNoTracking()
 					on sale.DealerRegistrationId equals (int?)dealer.Id into dealerJoin
 				from dealer in dealerJoin.DefaultIfEmpty()
@@ -202,7 +207,9 @@ namespace Spic.Infrastructure.Services
 					IfmsId = sale.IfmsDealerId,
 					StateName = state != null ? state.StateName : "-",
 					DistrictName = district != null ? district.DistrictName : "-",
-					ProductName = product != null ? product.Name : "-",
+					ProductName = product != null
+						? product.Name
+						: ifmsProduct != null ? ifmsProduct.Name : "-",
 					QuantityMT = sale.QuantityMT,
 					ReceivedQuantity = sale.ReceivedQuantity,
 					WorkflowStatus = AckStatusName,
@@ -228,16 +235,15 @@ namespace Spic.Infrastructure.Services
 			if (filter.DistrictIds.Count > 0)
 			{
 				wholesalerSales = wholesalerSales.Where(x =>
-					(x.BuyerDistrictId.HasValue &&
-					 filter.DistrictIds.Contains(x.BuyerDistrictId.Value)) ||
-					(x.SellerDistrictId.HasValue &&
-					 filter.DistrictIds.Contains(x.SellerDistrictId.Value)));
+					filter.DistrictIds.Contains(
+						x.BuyerDistrictId ?? x.SellerDistrictId ?? 0));
 			}
 
-			if (filter.ProductIds.Count > 0)
+			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
 				wholesalerSales = wholesalerSales.Where(x =>
-					x.ProductId.HasValue && filter.ProductIds.Contains(x.ProductId.Value));
+					(x.ProductId.HasValue && productIds.Contains(x.ProductId.Value)) ||
+					(x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
 			if (registrationIds.Count > 0 || ifmsIds.Count > 0)
@@ -271,6 +277,9 @@ namespace Spic.Infrastructure.Services
 				join product in _db.Set<Product>().AsNoTracking()
 					on sale.ProductId equals (int?)product.Id into productJoin
 				from product in productJoin.DefaultIfEmpty()
+				join ifmsProduct in _db.Set<IfmsProduct>().AsNoTracking()
+					on sale.IfmsProductId equals (int?)ifmsProduct.Id into ifmsProductJoin
+				from ifmsProduct in ifmsProductJoin.DefaultIfEmpty()
 				join dealer in _db.Set<DealerRegistration>().AsNoTracking()
 					on sale.DealerId equals (int?)dealer.Id into dealerJoin
 				from dealer in dealerJoin.DefaultIfEmpty()
@@ -295,7 +304,9 @@ namespace Spic.Infrastructure.Services
 					IfmsId = sale.IfmsDealerId,
 					StateName = state != null ? state.StateName : "-",
 					DistrictName = district != null ? district.DistrictName : "-",
-					ProductName = product != null ? product.Name : "-",
+					ProductName = product != null
+						? product.Name
+						: ifmsProduct != null ? ifmsProduct.Name : "-",
 					QuantityMT = sale.QuantityMT,
 					ReceivedQuantity = sale.ReceivedQuantityMT,
 					WorkflowStatus = AckStatusName,
@@ -648,7 +659,11 @@ namespace Spic.Infrastructure.Services
 			var cycle = GetCycle(row.InvoiceDate, row.ReceiptDate);
 			var dealerCode = !string.IsNullOrWhiteSpace(row.DealerCode)
 				? row.DealerCode.Trim()
-				: row.RegistrationId?.ToString() ?? row.IfmsId?.ToString() ?? "-";
+				: row.RegistrationId.HasValue
+					? $"R{row.RegistrationId.Value}"
+					: row.IfmsId.HasValue
+						? $"I{row.IfmsId.Value}"
+						: "-";
 
 			return new AckCycleRowDto
 			{
@@ -803,17 +818,32 @@ namespace Spic.Infrastructure.Services
 		public async Task<List<AckLookupItemDto>> GetProductsAsync(
 			CancellationToken cancellationToken = default)
 		{
-			var rows = await _db.Set<Product>()
+			var approvedRows = await _db.Set<Product>()
 				.AsNoTracking()
-				.OrderBy(x => x.Name)
+				.Where(x => x.Name != null && x.Name != "")
 				.Select(x => new { x.Id, x.Name })
 				.ToListAsync(cancellationToken);
 
-			return rows.Select(x => new AckLookupItemDto
-			{
-				Id = x.Id.ToString(),
-				Name = x.Name
-			}).ToList();
+			var ifmsRows = await _db.Set<IfmsProduct>()
+				.AsNoTracking()
+				.Where(x => x.Name != null && x.Name != "")
+				.Select(x => new { x.Id, x.Name })
+				.ToListAsync(cancellationToken);
+
+			return approvedRows
+				.Select(x => new AckLookupItemDto
+				{
+					Id = $"P:{x.Id}",
+					Name = x.Name!.Trim()
+				})
+				.Concat(ifmsRows.Select(x => new AckLookupItemDto
+				{
+					Id = $"I:{x.Id}",
+					Name = $"{x.Name!.Trim()} (IFMS)"
+				}))
+				.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+				.ToList();
 		}
 
 		public async Task<List<AckLookupItemDto>> GetStatusesAsync(
@@ -842,6 +872,13 @@ namespace Spic.Infrastructure.Services
 		public async Task<List<AckLookupItemDto>> GetDealersAsync(
 			CancellationToken cancellationToken = default)
 		{
+			// Keep the existing dealer identity contract unchanged:
+			// R{id} = DealerRegistration.Id, I{id} = IfmsDealer.Id.
+			//
+			// Dealer names originate from uploaded/master data. Some legacy rows can
+			// contain leading punctuation (for example ".VIMAL...") or placeholder
+			// zero-only values ("0", "00", "000"). We clean the DISPLAY NAME only.
+			// Database values and filter keys are not modified.
 			var registeredDealers = await _db.Set<DealerRegistration>()
 				.AsNoTracking()
 				.Where(x => x.FirmName != null && x.FirmName != "")
@@ -854,26 +891,85 @@ namespace Spic.Infrastructure.Services
 				.Select(x => new { x.Id, x.Name })
 				.ToListAsync(cancellationToken);
 
-			var result = new List<AckLookupItemDto>(
+			var raw = new List<AckLookupItemDto>(
 				registeredDealers.Count + ifmsDealers.Count);
 
-			result.AddRange(registeredDealers.Select(x => new AckLookupItemDto
+			foreach (var dealer in registeredDealers)
 			{
-				Id = $"R{x.Id}",
-				Name = x.FirmName!
-			}));
+				var displayName = NormalizeDealerLookupName(dealer.FirmName);
+				if (displayName is null)
+					continue;
 
-			result.AddRange(ifmsDealers.Select(x => new AckLookupItemDto
+				raw.Add(new AckLookupItemDto
+				{
+					Id = $"R{dealer.Id}",
+					Name = displayName
+				});
+			}
+
+			foreach (var dealer in ifmsDealers)
 			{
-				Id = $"I{x.Id}",
-				Name = x.Name!
-			}));
+				var displayName = NormalizeDealerLookupName(dealer.Name);
+				if (displayName is null)
+					continue;
 
-			return result
-				.OrderBy(x => x.Name)
-				.ThenBy(x => x.Id)
+				raw.Add(new AckLookupItemDto
+				{
+					Id = $"I{dealer.Id}",
+					Name = displayName
+				});
+			}
+
+			// Keep R{id}/I{id} only as the hidden option value used by filtering.
+			// The user-facing dropdown shows the cleaned dealer name only.
+			// Do not append "Registered", "IFMS", R-id or I-id to the visible label.
+			// Duplicate display names are intentionally retained because each option can
+			// represent a different transaction identity and removing one could hide data.
+			return raw
+				.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
 				.ToList();
 		}
+
+		private static string? NormalizeDealerLookupName(string? value)
+		{
+			if (string.IsNullOrWhiteSpace(value))
+				return null;
+
+			var name = value.Trim();
+
+			// Remove punctuation accidentally prefixed/suffixed by uploaded files.
+			// Digits are intentionally NOT trimmed because names such as
+			// "7 Hills Fertilisers" can be valid dealer names.
+			name = name.Trim(DealerNameNoiseCharacters);
+
+			// Collapse repeated whitespace without changing the actual words.
+			name = string.Join(
+				" ",
+				name.Split(
+					new[] { ' ', '	', '\r', '\n' },
+					StringSplitOptions.RemoveEmptyEntries));
+
+			if (string.IsNullOrWhiteSpace(name))
+				return null;
+
+			// Do not show legacy placeholder rows such as 0 / 00 / 000.
+			// Non-zero numeric names are kept to avoid silently removing a potentially
+			// valid legacy dealer identifier.
+			if (name.All(char.IsDigit) && name.All(ch => ch == '0'))
+				return null;
+
+			// Punctuation-only values are not meaningful dropdown options.
+			if (!name.Any(char.IsLetterOrDigit))
+				return null;
+
+			return name;
+		}
+
+		private static readonly char[] DealerNameNoiseCharacters =
+		{
+			'.', ',', ';', ':', '_', '-', '|', '/', '\\', '\'', '"', '`', '~'
+		};
 
 		// --------------------------------------------------------------------
 		// Helpers.
@@ -883,9 +979,45 @@ namespace Spic.Infrastructure.Services
 			filter.StateIds ??= new List<int>();
 			filter.DistrictIds ??= new List<int>();
 			filter.ProductIds ??= new List<int>();
+			filter.ProductKeys ??= new List<string>();
 			filter.StatusIds ??= new List<int>();
 			filter.DealerKeys ??= new List<string>();
 			filter.Buckets ??= new List<string>();
+
+			filter.StateIds = filter.StateIds.Where(x => x > 0).Distinct().ToList();
+			filter.DistrictIds = filter.DistrictIds.Where(x => x > 0).Distinct().ToList();
+			filter.ProductIds = filter.ProductIds.Where(x => x > 0).Distinct().ToList();
+			filter.ProductKeys = filter.ProductKeys
+				.Where(x => !string.IsNullOrWhiteSpace(x))
+				.Select(x => x.Trim())
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
+			filter.StatusIds = filter.StatusIds.Where(x => x > 0).Distinct().ToList();
+			filter.DealerKeys = filter.DealerKeys
+				.Where(x => !string.IsNullOrWhiteSpace(x))
+				.Select(x => x.Trim())
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
+			filter.Buckets = filter.Buckets
+				.Where(x => !string.IsNullOrWhiteSpace(x))
+				.Select(x => x.Trim())
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
+
+			if (filter.DateFrom.HasValue)
+				filter.DateFrom = filter.DateFrom.Value.Date;
+			if (filter.DateTo.HasValue)
+				filter.DateTo = filter.DateTo.Value.Date;
+
+			if (filter.DateFrom.HasValue &&
+				filter.DateTo.HasValue &&
+				filter.DateFrom.Value > filter.DateTo.Value)
+			{
+				var originalFrom = filter.DateFrom;
+				filter.DateFrom = filter.DateTo;
+				filter.DateTo = originalFrom;
+			}
+
 			filter.GroupBy = string.IsNullOrWhiteSpace(filter.GroupBy)
 				? "State"
 				: filter.GroupBy.Trim();
@@ -906,6 +1038,40 @@ namespace Spic.Infrastructure.Services
 				x?.Trim(),
 				target,
 				StringComparison.OrdinalIgnoreCase));
+
+		private static (List<int> ProductIds, List<int> IfmsProductIds) SplitProductKeys(
+			AckCycleFilter filter)
+		{
+			var productIds = new HashSet<int>(
+				(filter.ProductIds ?? new List<int>()).Where(x => x > 0));
+			var ifmsProductIds = new HashSet<int>();
+
+			foreach (var rawKey in filter.ProductKeys ?? Enumerable.Empty<string>())
+			{
+				var key = rawKey?.Trim();
+				if (string.IsNullOrWhiteSpace(key))
+					continue;
+
+				if (key.StartsWith("P:", StringComparison.OrdinalIgnoreCase) &&
+					int.TryParse(key[2..], out var productId) &&
+					productId > 0)
+				{
+					productIds.Add(productId);
+				}
+				else if (key.StartsWith("I:", StringComparison.OrdinalIgnoreCase) &&
+					int.TryParse(key[2..], out var ifmsProductId) &&
+					ifmsProductId > 0)
+				{
+					ifmsProductIds.Add(ifmsProductId);
+				}
+				else if (int.TryParse(key, out var legacyProductId) && legacyProductId > 0)
+				{
+					productIds.Add(legacyProductId);
+				}
+			}
+
+			return (productIds.ToList(), ifmsProductIds.ToList());
+		}
 
 		private static (List<int> RegistrationIds, List<int> IfmsIds) SplitDealerKeys(
 			IEnumerable<string> keys)

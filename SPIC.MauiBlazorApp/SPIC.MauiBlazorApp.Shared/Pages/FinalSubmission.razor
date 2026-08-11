@@ -547,10 +547,25 @@
     public string? Flow { get; set; }
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+    // Approved New Dealer -> Existing Dealer maintenance is intentionally separate
+    // from the original New Dealer creation flow. The permanent DB identity flag
+    // IsNewDealerRegistration remains true; only this maintenance UI/submit cycle
+    // behaves like the Existing Dealer flow.
+    private bool IsExistingMaintenanceFlow =>
+        string.Equals(Flow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
+
     private bool IsNewDealerFlow =>
-        string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) ||
-        _dealer.IsNewDealerRegistration;
-    private string FlowParam => IsNewDealerFlow ? "&flow=new" : string.Empty;
+        !IsExistingMaintenanceFlow &&
+        (string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) ||
+         (_dealer.IsNewDealerRegistration && string.IsNullOrWhiteSpace(_dealer.DealerCode)));
+
+    private string FlowParam =>
+        IsExistingMaintenanceFlow
+            ? "&flow=existing-maintenance"
+            : IsNewDealerFlow
+                ? "&flow=new"
+                : string.Empty;
 
     private DealerReg _dealer = new();
     private DealerRegistrationDocuments? _docs;
@@ -593,7 +608,7 @@
                 if (_dealer.InSpic)
                 {
                     list.Add(new SectionItem(
-                        "SPIC Trade Deposit Details",
+                        "SPIC Application Fee & Trade Deposit",
                         "/CreditLimit",
                         "bi bi-cash-coin",
                         () => _spicCommercialComplete));
@@ -1148,9 +1163,14 @@
             // No DTO and no full DealerRegistration body are sent. The API loads
             // the saved dealer by route ID, validates the correct flow, and only
             // changes submission/approval state.
-            var resp = await Http.PostAsync(
-                $"api/DealerRegistration/{DealerId}/submit-for-review",
-                content: null);
+            // Initial New Dealer submission and approved-New-Dealer maintenance must
+            // remain different server workflows. Maintenance explicitly asks the API
+            // to start a fresh Existing Dealer approval cycle (RM -> SMM -> AVP).
+            var submitUrl = IsExistingMaintenanceFlow
+                ? $"api/DealerRegistration/{DealerId}/submit-for-review?flow=existing-maintenance"
+                : $"api/DealerRegistration/{DealerId}/submit-for-review";
+
+            var resp = await Http.PostAsync(submitUrl, content: null);
 
             if (!resp.IsSuccessStatusCode)
             {

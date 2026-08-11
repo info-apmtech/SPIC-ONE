@@ -1,0 +1,239 @@
+@page "/SavedDealers"
+@using System.Net.Http.Json
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject HttpClient Http
+@inject NavigationManager NavManager
+@inject LoginState LoginState
+
+@code {
+    private List<DealerDto> _allDealers = new();
+    private List<DealerDto> _pendingDealers = new();
+    private bool _isLoading;
+
+    private bool IsApprovingRole =>
+        LoginState.IsRMGroup || LoginState.IsSMGroup || LoginState.IsDirectorOrAVP || LoginState.IsAdmin;
+
+    // Each role sees only the dealers currently awaiting its own approval.
+    private int CurrentStage =>
+        LoginState.IsRMGroup ? 1
+        : LoginState.IsSMGroup ? 2
+        : 3;
+
+    private string CurrentStageText => CurrentStage switch
+    {
+        1 => "RM",
+        2 => "SMM",
+        _ => "AVP"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!IsApprovingRole)
+        {
+            NavManager.NavigateTo("/Dashboard", replace: true);
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            _allDealers = await Http.GetFromJsonAsync<List<DealerDto>>("api/DealerRegistration/submitted") ?? new();
+            ApplyFilter();
+        }
+        catch { }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        _pendingDealers = _allDealers
+            .Where(d => d.HasPendingCreditLimitCycle && d.CreditLimitCycleStage == CurrentStage)
+            .OrderBy(d => d.FirmName)
+            .ToList();
+    }
+
+    private static string StageText(int stage) => stage switch
+    {
+        1 => "In RM",
+        2 => "In SMM",
+        _ => "In AVP"
+    };
+
+    private static string StageBadgeClass(int stage) => stage switch
+    {
+        1 => "sd-badge-inrm",
+        2 => "sd-badge-insmm",
+        _ => "sd-badge-inavp"
+    };
+
+    private string GetCompanyLabel(DealerDto d) =>
+        d.InSpic && d.InGreenStar ? "SPIC + GreenStar"
+        : d.InSpic ? "SPIC"
+        : d.InGreenStar ? "GreenStar"
+        : "-";
+
+    private void Review(DealerDto dealer) =>
+        NavManager.NavigateTo($"/SavedDealerReview?dealerId={dealer.Id}");
+
+    public class DealerDto
+    {
+        public int Id { get; set; }
+        public bool InSpic { get; set; }
+        public bool InGreenStar { get; set; }
+        public string? DealerCode { get; set; }
+        public string? SPICCode { get; set; }
+        public string? GreenStarCode { get; set; }
+        public string? FirmName { get; set; }
+        public bool HasPendingCreditLimitCycle { get; set; }
+        public bool HasPendingSpicCreditLimitCycle { get; set; }
+        public bool HasPendingGreenstarCreditLimitCycle { get; set; }
+        public int CreditLimitCycleStage { get; set; }
+        public decimal? PendingSpicCreditLimit { get; set; }
+        public decimal? PendingGreenstarCreditLimit { get; set; }
+    }
+}
+
+<style>
+    .sd-wrapper { padding: 8px 4px; }
+    .sd-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    .sd-header-title { color: #1F2937; font-weight: 700; font-size: 1.4rem; margin: 0; }
+    .sd-header-desc { font-size: 0.85rem; color: #6B7280; margin-top: 4px; }
+    .sd-badge-role { background: #ECFDF5; color: #065F46; font-size: 0.75rem; font-weight: 600; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
+
+    .sd-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .sd-summary-card { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px 16px; }
+    .sd-summary-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+    .sd-summary-title { font-size: 0.72rem; color: #6B7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; margin: 0; }
+    .sd-summary-value { font-size: 1.25rem; font-weight: 700; color: #1F2937; margin: 0; line-height: 1.1; }
+    .sd-icon-blue { background: #EFF6FF; color: #2563EB; }
+    .sd-icon-amber { background: #FFF7ED; color: #EA580C; }
+    .sd-icon-green { background: #ECFDF5; color: #059669; }
+    .sd-icon-violet { background: #F5F3FF; color: #7C3AED; }
+
+    .sd-list { display: flex; flex-direction: column; gap: 12px; }
+    .sd-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .sd-card:hover { border-color: #115E59; box-shadow: 0 2px 8px rgba(17, 94, 89, 0.08); }
+    .sd-card-main { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .sd-dealer-avatar { width: 42px; height: 42px; border-radius: 10px; background: #EFF6FF; color: #1D4ED8; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; flex-shrink: 0; }
+    .sd-dealer-name { font-weight: 700; color: #111827; font-size: 0.95rem; margin: 0; }
+    .sd-dealer-code { font-size: 0.75rem; color: #6B7280; margin-top: 2px; }
+    .sd-chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .sd-chip { font-size: 0.72rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+    .sd-chip-spic { background: #F0FDF4; color: #15803D; border: 1px solid #BBF7D0; }
+    .sd-chip-gstar { background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
+    .sd-chip-company { background: #F3F4F6; color: #4B5563; border: 1px solid #E5E7EB; }
+    .sd-badge-inrm { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+    .sd-badge-insmm { background: #FFF7ED; color: #C2410C; border: 1px solid #FED7AA; }
+    .sd-badge-inavp { background: #F5F3FF; color: #6D28D9; border: 1px solid #DDD6FE; }
+    .sd-review-btn { display: inline-flex; align-items: center; gap: 6px; background: #115E59; border: 1px solid #115E59; color: #fff; font-size: 0.82rem; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+    .sd-review-btn:hover { background: #0F514E; }
+    .sd-empty { text-align: center; padding: 48px 16px; color: #6B7280; background: #fff; border: 1px dashed #D1D5DB; border-radius: 12px; }
+    .sd-empty i { font-size: 2.6rem; color: #D1D5DB; }
+
+    @@media (max-width: 640px) { .sd-card { flex-direction: column; align-items: flex-start; } .sd-review-btn { width: 100%; justify-content: center; } }
+</style>
+
+<main class="sd-wrapper">
+    <div class="sd-header">
+        <div>
+            <h1 class="sd-header-title">Saved Dealer</h1>
+            <p class="sd-header-desc">
+                Dealers with a submitted Credit Limit cycle awaiting @CurrentStageText approval
+            </p>
+        </div>
+        <span class="sd-badge-role">@(LoginState.UserRole?.ToString() ?? "User")</span>
+    </div>
+
+    <div class="sd-summary-grid">
+        <div class="sd-summary-card">
+            <div class="sd-summary-icon sd-icon-blue"><i class="bi bi-hourglass-split"></i></div>
+            <div>
+                <p class="sd-summary-title">Total Pending</p>
+                <p class="sd-summary-value">@_allDealers.Count(d => d.HasPendingCreditLimitCycle)</p>
+            </div>
+        </div>
+        <div class="sd-summary-card">
+            <div class="sd-summary-icon sd-icon-amber"><i class="bi bi-person-check"></i></div>
+            <div>
+                <p class="sd-summary-title">Awaiting @CurrentStageText</p>
+                <p class="sd-summary-value">@_pendingDealers.Count</p>
+            </div>
+        </div>
+        <div class="sd-summary-card">
+            <div class="sd-summary-icon sd-icon-green"><i class="bi bi-credit-card-2-front"></i></div>
+            <div>
+                <p class="sd-summary-title">SPIC Pending</p>
+                <p class="sd-summary-value">@_allDealers.Count(d => d.HasPendingSpicCreditLimitCycle)</p>
+            </div>
+        </div>
+        <div class="sd-summary-card">
+            <div class="sd-summary-icon sd-icon-violet"><i class="bi bi-stars"></i></div>
+            <div>
+                <p class="sd-summary-title">GreenStar Pending</p>
+                <p class="sd-summary-value">@_allDealers.Count(d => d.HasPendingGreenstarCreditLimitCycle)</p>
+            </div>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-success" role="status"></div>
+            <p class="text-muted mt-2">Loading saved dealers...</p>
+        </div>
+    }
+    else if (!_pendingDealers.Any())
+    {
+        <div class="sd-empty">
+            <i class="bi bi-inbox"></i>
+            <p class="mt-2 mb-0">No Credit Limit cycles awaiting @CurrentStageText approval.</p>
+        </div>
+    }
+    else
+    {
+        <div class="sd-list">
+            @foreach (var dealer in _pendingDealers)
+            {
+                <div class="sd-card">
+                    <div class="sd-card-main">
+                        <div class="sd-dealer-avatar"><i class="bi bi-person"></i></div>
+                        <div>
+                            <p class="sd-dealer-name">@dealer.FirmName</p>
+                            <p class="sd-dealer-code">
+                                Dealer Code: @(string.IsNullOrWhiteSpace(dealer.DealerCode) ? "-" : dealer.DealerCode)
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="sd-chips">
+                        @if (dealer.HasPendingSpicCreditLimitCycle)
+                        {
+                            <span class="sd-chip sd-chip-spic" title="MO recommended (SPIC)">
+                                SPIC: ₹ @(dealer.PendingSpicCreditLimit?.ToString("N2") ?? "-")
+                            </span>
+                        }
+                        @if (dealer.HasPendingGreenstarCreditLimitCycle)
+                        {
+                            <span class="sd-chip sd-chip-gstar" title="MO recommended (GreenStar)">
+                                GreenStar: ₹ @(dealer.PendingGreenstarCreditLimit?.ToString("N2") ?? "-")
+                            </span>
+                        }
+                        @if (!dealer.HasPendingSpicCreditLimitCycle && !dealer.HasPendingGreenstarCreditLimitCycle)
+                        {
+                            <span class="sd-chip sd-chip-company">@GetCompanyLabel(dealer)</span>
+                        }
+                        <span class="sd-chip @StageBadgeClass(dealer.CreditLimitCycleStage)">@StageText(dealer.CreditLimitCycleStage)</span>
+                    </div>
+
+                    <button type="button" class="sd-review-btn" @onclick="() => Review(dealer)">
+                        <i class="bi bi-search"></i> Review
+                    </button>
+                </div>
+            }
+        </div>
+    }
+</main>

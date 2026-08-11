@@ -144,6 +144,8 @@ namespace SpicAPI.Controllers
 				$"AcknowledgementCycle_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
 		}
 
+		// Existing flow retained. These endpoints remain placeholders until the
+		// project adds real PDF generation and mail delivery.
 		[HttpPost("export/pdf")]
 		public IActionResult ExportPdf([FromBody] AckCycleFilter? filter)
 			=> NoContent();

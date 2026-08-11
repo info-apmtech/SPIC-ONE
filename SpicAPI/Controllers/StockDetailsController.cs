@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,13 @@ namespace SpicAPI.Controllers
 		public StockDetailsController(IStockDetailsService service)
 		{
 			_service = service;
+		}
+
+		[HttpGet("products")]
+		public async Task<ActionResult<List<StockDetailsProductDto>>> Products(
+			CancellationToken cancellationToken)
+		{
+			return Ok(await _service.GetProductsAsync(cancellationToken));
 		}
 
 		[HttpPost("dashboard")]

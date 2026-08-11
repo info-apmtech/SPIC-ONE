@@ -52,6 +52,7 @@ namespace Spic.Infrastructure.Services
 		{
 			filter ??= new ProductStockAvailabilityFilter();
 			NormalizeFilter(filter);
+			NormalizeDateRange(filter);
 
 			var page = filter.Page;
 			var pageSize = ResolvePageSize(filter.PageSize);
@@ -282,8 +283,21 @@ namespace Spic.Infrastructure.Services
 			var start = ToUtcDate(latestDate.Value);
 			var end = start.AddDays(1);
 
-			return await query
+			// Same-day file re-uploads can create more than one row for the same
+			// dealer/product/location business key. Keep only the latest revision.
+			var snapshotRows = await query
 				.Where(row => row.StockDate >= start && row.StockDate < end)
+				.ToListAsync(cancellationToken);
+
+			var latestRows = snapshotRows
+				.GroupBy(WholesalerBusinessKey)
+				.Select(group => group
+					.OrderByDescending(row => row.UpdatedAt)
+					.ThenByDescending(row => row.Id)
+					.First())
+				.ToList();
+
+			return latestRows
 				.GroupBy(row => new
 				{
 					StateId = row.StateId!.Value,
@@ -298,7 +312,7 @@ namespace Spic.Infrastructure.Services
 					Stock = group.Sum(row => row.Stock),
 					Sales = 0m
 				})
-				.ToListAsync(cancellationToken);
+				.ToList();
 		}
 
 		private async Task<List<SourceAggregate>> LoadLatestDptStockAndSalesAsync(
@@ -341,8 +355,19 @@ namespace Spic.Infrastructure.Services
 			var start = ToUtcDate(latestDate.Value);
 			var end = start.AddDays(1);
 
-			return await query
+			var snapshotRows = await query
 				.Where(row => row.CreatedAt >= start && row.CreatedAt < end)
+				.ToListAsync(cancellationToken);
+
+			var latestRows = snapshotRows
+				.GroupBy(DptBusinessKey)
+				.Select(group => group
+					.OrderByDescending(row => row.UpdatedAt)
+					.ThenByDescending(row => row.Id)
+					.First())
+				.ToList();
+
+			return latestRows
 				.GroupBy(row => new
 				{
 					StateId = row.StateId!.Value,
@@ -357,7 +382,7 @@ namespace Spic.Infrastructure.Services
 					Stock = group.Sum(row => row.ClosingBalance),
 					Sales = group.Sum(row => row.SoldQuantity)
 				})
-				.ToListAsync(cancellationToken);
+				.ToList();
 		}
 
 		private async Task<List<SourceAggregate>> LoadLatestWarehouseStockAsync(
@@ -400,8 +425,19 @@ namespace Spic.Infrastructure.Services
 			var start = ToUtcDate(latestDate.Value);
 			var end = start.AddDays(1);
 
-			return await query
+			var snapshotRows = await query
 				.Where(row => row.CreatedAt >= start && row.CreatedAt < end)
+				.ToListAsync(cancellationToken);
+
+			var latestRows = snapshotRows
+				.GroupBy(WarehouseBusinessKey)
+				.Select(group => group
+					.OrderByDescending(row => row.UpdatedAt)
+					.ThenByDescending(row => row.Id)
+					.First())
+				.ToList();
+
+			return latestRows
 				.GroupBy(row => new
 				{
 					StateId = row.StateId!.Value,
@@ -416,7 +452,7 @@ namespace Spic.Infrastructure.Services
 					Stock = group.Sum(row => row.ClosingStock),
 					Sales = 0m
 				})
-				.ToListAsync(cancellationToken);
+				.ToList();
 		}
 
 		// --------------------------------------------------------------------
@@ -738,6 +774,116 @@ namespace Spic.Infrastructure.Services
 					PageSize = pageSize
 				}
 			};
+		}
+
+		private static void NormalizeDateRange(ProductStockAvailabilityFilter filter)
+		{
+			if (!filter.DateFrom.HasValue || !filter.DateTo.HasValue)
+			{
+				return;
+			}
+
+			var from = filter.DateFrom.Value.Date;
+			var to = filter.DateTo.Value.Date;
+
+			if (from <= to)
+			{
+				filter.DateFrom = from;
+				filter.DateTo = to;
+				return;
+			}
+
+			// Production-safe handling for accidentally reversed dates.
+			filter.DateFrom = to;
+			filter.DateTo = from;
+		}
+
+		// Business keys used only to remove same-day re-upload revisions. They do
+		// not merge different dealers, warehouses, products, plants or locations.
+		private static string WholesalerBusinessKey(WholesalerStockAsOnToday row)
+		{
+			return string.Join(
+				"|",
+				DealerBusinessKey(row.DealerRegistrationId, row.IfmsDealerId, row.AgencyName),
+				ProductIdentity(row.ProductId, row.IfmsProductId),
+				IdPart(row.StateId),
+				IdPart(row.DistrictId),
+				IdPart(row.CompanyId),
+				IdPart(row.PlantId));
+		}
+
+		private static string DptBusinessKey(DptReport row)
+		{
+			return string.Join(
+				"|",
+				DealerBusinessKey(row.DealerRegistrationId, row.IfmsDealerId, row.RetailerName),
+				ProductIdentity(row.ProductId, row.IfmsProductId),
+				IdPart(row.StateId),
+				IdPart(row.DistrictId),
+				IdPart(row.CompanyId),
+				IdPart(row.PlantId));
+		}
+
+		private static string WarehouseBusinessKey(WarehouseDistrictGlobalStockReconciliation row)
+		{
+			return string.Join(
+				"|",
+				IdPart(row.WarehouseId),
+				IdPart(row.StateId),
+				IdPart(row.DistrictId),
+				IdPart(row.PlantId),
+				ProductIdentity(row.ProductId, row.IfmsProductId));
+		}
+
+		private static string DealerBusinessKey(
+			int? dealerRegistrationId,
+			int? ifmsDealerId,
+			string? dealerName)
+		{
+			if (dealerRegistrationId.HasValue)
+			{
+				return "R:" + dealerRegistrationId.Value;
+			}
+
+			if (ifmsDealerId.HasValue)
+			{
+				return "I:" + ifmsDealerId.Value;
+			}
+
+			return "N:" + NormalizeBusinessText(dealerName);
+		}
+
+		private static string ProductIdentity(int? productId, int? ifmsProductId)
+		{
+			if (productId.HasValue && productId.Value > 0)
+			{
+				return "P:" + productId.Value;
+			}
+
+			if (ifmsProductId.HasValue && ifmsProductId.Value > 0)
+			{
+				return "I:" + ifmsProductId.Value;
+			}
+
+			return "-";
+		}
+
+		private static string IdPart(int? value)
+		{
+			return value.HasValue ? value.Value.ToString() : "0";
+		}
+
+		private static string NormalizeBusinessText(string? value)
+		{
+			return string.IsNullOrWhiteSpace(value)
+				? string.Empty
+				: string.Join(
+					" ",
+					value.Trim()
+						.ToLowerInvariant()
+						.Split(
+							new[] { ' ', '\t', '\r', '\n' },
+							StringSplitOptions.RemoveEmptyEntries));
 		}
 
 		private static void NormalizeFilter(ProductStockAvailabilityFilter filter)

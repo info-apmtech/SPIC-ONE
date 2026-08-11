@@ -197,14 +197,17 @@ namespace SPIC.Core.Entities
         public int? SpicTradeDepositDDBankId { get; set; }
         public DateTime? SpicTradeDepositDDDate { get; set; }
         public decimal? SpicTradeDepositDDAmount { get; set; }
+		public string? DealershipApplicationFeeFilePath { get; set; }
+		public string? SpicTradeDepositFilePath { get; set; }
 
-        // Trade Deposit Details — GFL / Greenstar (New Dealer flow)
-        public string? GflTradeDepositDDNumber { get; set; }
+		// Trade Deposit Details — GFL / Greenstar (New Dealer flow)
+		public string? GflTradeDepositDDNumber { get; set; }
         public int? GflTradeDepositDDBankId { get; set; }
         public DateTime? GflTradeDepositDDDate { get; set; }
         public decimal? GflTradeDepositDDAmount { get; set; }
+		public string? GflTradeDepositFilePath { get; set; }
 
-    }
+	}
     public class DealerApprovalHistory
     {
         public int Id { get; set; }
@@ -561,6 +564,32 @@ namespace SPIC.Core.Entities
         // Raw valuation values (manually entered, not calculated marks)
         public double? SpicMonthlyAvgNetOverdues { get; set; }
         public double? GreenstarMonthlyAvgNetOverdues { get; set; }
+    }
+    public enum CreditType
+    {
+        SPIC,
+        Greenstar
+    }
+    public class CreditLimitHistory
+    {
+        public int Id { get; set; }
+        public int DealerId { get; set; }
+        public CreditType? CreditType { get; set; }
+        [Display(Name = "Existing Credit Limit Amount (₹) In Lakhs")]
+        public decimal? ExistingCreditLimit { get; set; }
+        [Display(Name = "Existing Valid From")]
+        public DateTime ExistingValidFrom { get; set; }
+        [Display(Name = "Existing Valid To")]
+        public DateTime ExistingValidTo { get; set; }
+        [Display(Name = "Additional Credit Limit (₹) In Lakhs")]
+        public decimal? AdditionalCreditLimit { get; set; }
+        [Display(Name = "MO Recommended Credit Limit (₹) In Lakhs")]
+        public decimal? MORecommendedCreditLimit { get; set; }
+        public decimal? RMApprovedCreditLimit { get; set; }
+        public decimal? SMApprovedCreditLimit { get; set; }
+        public decimal? AVPApprovedCreditLimit { get; set; }
+        public string? CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
     }
     public class DealerCreditLimitSalesPerformance
     {

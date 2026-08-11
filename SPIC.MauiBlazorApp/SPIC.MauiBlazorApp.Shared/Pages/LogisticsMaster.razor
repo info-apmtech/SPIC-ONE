@@ -1,0 +1,2297 @@
+﻿@page "/LogisticsMaster"
+@implements IDisposable
+@using System.Net.Http.Json
+@using System.Text.RegularExpressions
+@using System.Text.Json
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components
+@using SPIC.Core.Entities
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+<style>
+    .lm-field-error {
+        color: #dc3545;
+        font-size: .78rem;
+        margin-top: 4px;
+    }
+
+    .lm-message {
+        margin-bottom: 1rem;
+    }
+
+    .lm-company-card {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .lm-save-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin: 18px 0 24px;
+    }
+
+    .lm-location-note {
+        font-size: .8rem;
+        margin-top: 6px;
+    }
+
+    .lm-table-code {
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .lm-reservation-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px;
+        background: #fff;
+        height: 100%;
+    }
+
+    .lm-reservation-title {
+        font-size: .9rem;
+        font-weight: 700;
+        color: #374151;
+        margin-bottom: 12px;
+    }
+
+    .lm-doc-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .lm-doc-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 14px;
+        background: #fff;
+        min-height: 150px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+        .lm-doc-card.required {
+            border: 2px solid #f59e0b;
+            background: #fffaf0;
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, .08);
+        }
+
+    .lm-doc-card-title {
+        font-size: .9rem;
+        font-weight: 700;
+        color: #374151;
+    }
+
+    .lm-doc-required-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: .7rem;
+        font-weight: 700;
+        color: #92400e;
+        background: #fef3c7;
+        margin-left: 6px;
+    }
+
+    .lm-doc-selected {
+        font-size: .78rem;
+        color: #198754;
+        margin-top: 8px;
+        overflow-wrap: anywhere;
+    }
+
+    .lm-doc-existing-list {
+        margin: 8px 0 0;
+        padding-left: 18px;
+        font-size: .78rem;
+        color: #4b5563;
+    }
+
+        .lm-doc-existing-list li {
+            margin-bottom: 4px;
+            overflow-wrap: anywhere;
+        }
+
+    .lm-upload-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border: 1px dashed #059669;
+        color: #047857;
+        border-radius: 8px;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-size: .82rem;
+        font-weight: 600;
+        background: #f0fdf4;
+        margin-top: 10px;
+    }
+
+    @@media (max-width: 991.98px) {
+        .lm-doc-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 575.98px) {
+        .lm-doc-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="container-fluid py-4 px-0">
+    <h5 class="fw-bold mb-4 reg-page-heading">Logistics Master</h5>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show lm-message" role="alert">
+            @_message
+            <button type="button" class="btn-close" @onclick="() => _message = null"></button>
+        </div>
+    }
+
+    <!-- Keep the existing menu/tab keys and visual flow unchanged.
+         Data is now stored separately:
+         Warehouse = PVT WH -> PvtWarehouse table/API
+         RakePoint = C&F WH -> CandFWarehouse table/API
+         Port = Rake Point -> RackPoint table/API -->
+    <div class="tabs-wrapper">
+        <div class="tabs-container">
+            <div class="tab-item @(ActiveTab == "Warehouse" ? "active" : "")" @onclick="SelectWarehouseTab">
+                PVT WH
+            </div>
+            <div class="tab-item @(ActiveTab == "RakePoint" ? "active" : "")" @onclick="SelectRakePointTab">
+                C&amp;F WH
+            </div>
+            <div class="tab-item @(ActiveTab == "Port" ? "active" : "")" @onclick="SelectPortTab">
+                Rake Point
+            </div>
+        </div>
+    </div>
+
+    <!-- No native <form>. This avoids Blazor's form-name POST issue. -->
+    <div>
+        <!-- Basic Information -->
+        <div class="basic-info-card">
+            <div class="basic-info-header">
+                <h3 class="basic-info-title">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                         class="formicon"
+                         alt="icon" /> Basic Information
+                </h3>
+            </div>
+
+            <div class="row g-4 align-items-center">
+                <div class="col-12 col-md-5">
+                    <div class="row g-3 h-100">
+                        <div class="col-6">
+                            <div class="logo-card spic lm-company-card @(_form.InSpic ? "active" : "")"
+                                 @onclick="ToggleSpic">
+                                <div class="card-checkbox">
+                                    <i class="bi bi-check-lg"></i>
+                                </div>
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" />
+                                <span>SPIC</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6">
+                            <div class="logo-card green-star lm-company-card @(_form.InGreenStar ? "active" : "")"
+                                 @onclick="ToggleGreenStar">
+                                <div class="card-checkbox">
+                                    <i class="bi bi-check-lg"></i>
+                                </div>
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" />
+                                <span>GREEN STAR</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-7">
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label-custom">State</label>
+                            <select class="form-select-custom w-100"
+                                    @bind="_form.BasicStateId"
+                                    @bind:after="OnBasicStateChanged">
+                                <option value="0">-- Select State --</option>
+                                @foreach (var state in _states)
+                                {
+                                    <option value="@state.Id">@state.StateName</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label-custom">Region</label>
+                            <select class="form-select-custom w-100"
+                                    @bind="_form.RegionId"
+                                    @bind:after="OnRegionChanged">
+                                <option value="0">-- Select Region --</option>
+                                @foreach (var region in _filteredRegions)
+                                {
+                                    <option value="@region.Id">@region.RegionName</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label-custom">HQ</label>
+                            <select class="form-select-custom w-100" @bind="_form.HeadquarterId">
+                                <option value="0">-- Select HQ --</option>
+                                @foreach (var hq in _filteredHeadquarters)
+                                {
+                                    <option value="@hq.Id">@hq.HeadquarterName</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label-custom">Status</label>
+                            <div class="status-btn-group">
+                                <button type="button"
+                                        class="btn btn_active @(_form.IsActive ? "active" : "")"
+                                        @onclick="() => _form.IsActive = true">
+                                    Active
+                                </button>
+                                <button type="button"
+                                        class="btn btn_inactive @(!_form.IsActive ? "active" : "")"
+                                        @onclick="() => _form.IsActive = false">
+                                    Inactive
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-3">
+                    <label class="form-label-custom">
+                        SAP Code <span class="text-danger">*</span>
+                    </label>
+                    <input @ref="_firstInputRef"
+                           type="text"
+                           class="form-control-custom w-100 @(_errors.ContainsKey("SapCode") ? "is-invalid" : "")"
+                           placeholder="SAP Code"
+                           @bind="_form.SapCode" />
+                    @if (_errors.TryGetValue("SapCode", out var sapError))
+                    {
+                        <div class="lm-field-error">@sapError</div>
+                    }
+                </div>
+
+                <div class="col-12 col-md-3">
+                    <label class="form-label-custom">
+                        Name <span class="text-danger">*</span>
+                    </label>
+                    <input type="text"
+                           class="form-control-custom w-100 @(_errors.ContainsKey("Name") ? "is-invalid" : "")"
+                           placeholder="@CurrentNamePlaceholder"
+                           @bind="_form.Name" />
+                    @if (_errors.TryGetValue("Name", out var nameError))
+                    {
+                        <div class="lm-field-error">@nameError</div>
+                    }
+                </div>
+
+                <div class="col-12 col-md-3">
+                    <label class="form-label-custom">
+                        Operated By <span class="text-danger">*</span>
+                    </label>
+                    <select class="form-select-custom w-100 @(_errors.ContainsKey("OperatedBy") ? "is-invalid" : "")"
+                            @bind="_form.OperatedBy">
+                        <option value="">-- Select Operated By --</option>
+                        @foreach (var option in Enum.GetValues<LogisticsOperatedBy>())
+                        {
+                            <option value="@option">@GetOperatedByDisplay(option)</option>
+                        }
+                    </select>
+                    @if (_errors.TryGetValue("OperatedBy", out var operatedByError))
+                    {
+                        <div class="lm-field-error">@operatedByError</div>
+                    }
+                </div>
+
+                <!-- Requirement: C&F WH hides only WH Type. PVT WH and Rake Point show it. -->
+                @if (!IsCandFWarehouseTab)
+                {
+                    <div class="col-12 col-md-3">
+                        <label class="form-label-custom">
+                            WH Type <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select-custom w-100 @(_errors.ContainsKey("WarehouseType") ? "is-invalid" : "")"
+                                @bind="_form.WarehouseType">
+                            <option value="">-- Select WH Type --</option>
+                            @foreach (var option in Enum.GetValues<LogisticsWarehouseType>())
+                            {
+                                <option value="@option">@GetWarehouseTypeDisplay(option)</option>
+                            }
+                        </select>
+                        @if (_errors.TryGetValue("WarehouseType", out var typeError))
+                        {
+                            <div class="lm-field-error">@typeError</div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Reservation Quantity -->
+        @if (IsPvtWarehouseTab || IsCandFWarehouseTab)
+        {
+            <div class="basic-info-card">
+                <div class="basic-info-header">
+                    <h3 class="basic-info-title">
+                        <i class="bi bi-box-seam me-2"></i> Reservation Quantity
+                    </h3>
+                </div>
+
+                @if (IsPvtWarehouseTab)
+                {
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-6">
+                            <div class="lm-reservation-card">
+                                <div class="lm-reservation-title">SPIC Reservation</div>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label-custom">Approved Reservation Quantity (MT)</label>
+                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                               @bind="_form.SpicApprovedReservationQuantityMT" />
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label-custom">Additional Reservation Quantity (MT)</label>
+                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                               @bind="_form.SpicAdditionalReservationQuantityMT" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-lg-6">
+                            <div class="lm-reservation-card">
+                                <div class="lm-reservation-title">GFL Reservation</div>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label-custom">Approved Reservation Quantity (MT)</label>
+                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                               @bind="_form.GflApprovedReservationQuantityMT" />
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label-custom">Additional Reservation Quantity (MT)</label>
+                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                               @bind="_form.GflAdditionalReservationQuantityMT" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="lm-reservation-card">
+                                <div class="lm-reservation-title">GFL Reservation <span class="text-muted fw-normal">(C&amp;F WH only)</span></div>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label-custom">Reservation Quantity (MT)</label>
+                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                               @bind="_form.GflReservationQuantityMT" />
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label-custom">Additional Reservation Quantity (Litres)</label>
+                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                               @bind="_form.GflAdditionalReservationQuantityLitres" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- Primary Location -->
+        <div class="form-card">
+            <div class="primary-location-header">
+                <div class="card-header-title mb-0">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LocationIcon.svg"
+                         alt="Location"
+                         class="formicon" />Primary Location
+                </div>
+
+                <button type="button"
+                        class="btn btn-outline-success btn-sm rounded-pill px-3 card-header-title use-current-loc-btn"
+                        @onclick="UseCurrentLocation"
+                        disabled="@_isGettingLocation">
+                    @if (_isGettingLocation)
+                    {
+                        <i class="bi bi-arrow-repeat spin"></i>
+                        <span>Getting Location...</span>
+                    }
+                    else
+                    {
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CurrentLocation.svg"
+                             alt="Current Location"
+                             class="verifyicon" />
+                        <span>Use Current Location</span>
+                    }
+                </button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_locationMessage))
+            {
+                <div class="alert @(_locationSuccess ? "alert-success" : "alert-warning") py-1 px-2 small mb-2">
+                    @_locationMessage
+                </div>
+            }
+
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <div class="map-box-wrap">
+                        <div id="leafletMap" class="leaflet-map-el"></div>
+                        <button type="button"
+                                class="btn btn-sm btn-success rounded-pill px-3 shadow-sm map-loc-btn"
+                                @onclick="UseCurrentLocation"
+                                disabled="@_isGettingLocation">
+                            <i class="bi bi-crosshair"></i> Use current location
+                        </button>
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-8">
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label-custom">Google Map URL</label>
+                            <input type="text"
+                                   class="form-control-custom w-100"
+                                   placeholder="Click map or Paste Google Maps link"
+                                   @bind="_form.GoogleURL"
+                                   @bind:after="OnGoogleMapUrlChanged" />
+                        </div>
+
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label-custom">Latitude</label>
+                            <input type="number"
+                                   step="any"
+                                   class="form-control-custom w-100"
+                                   placeholder="e.g. 10.7905"
+                                   @bind="_form.Latitude"
+                                   @bind:after="OnLatitudeChanged" />
+                        </div>
+
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label-custom">Longitude</label>
+                            <input type="number"
+                                   step="any"
+                                   class="form-control-custom w-100"
+                                   placeholder="e.g. 78.7047"
+                                   @bind="_form.Longitude"
+                                   @bind:after="OnLongitudeChanged" />
+                        </div>
+
+                        <!-- Requirement: Rake Point hides Door No + Street only. -->
+                        @if (!IsRakePointTab)
+                        {
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">Door No / Shop No / Room No / Block No</label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       placeholder="Enter Door / Shop / Room No"
+                                       @bind="_form.DoorNo" />
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">Street / Area / Locality</label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       placeholder="Enter Street / Area / Locality"
+                                       @bind="_form.Street" />
+                            </div>
+                        }
+
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label-custom">Sub Village</label>
+                            <input type="text"
+                                   class="form-control-custom w-100"
+                                   placeholder="Enter Sub Village"
+                                   @bind="_form.SubVillage" />
+                        </div>
+
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label-custom">Pincode</label>
+                            <input type="text"
+                                   class="form-control-custom w-100"
+                                   placeholder="Enter Pincode"
+                                   maxlength="6"
+                                   inputmode="numeric"
+                                   @bind="_form.PinCode"
+                                   @bind:event="oninput"
+                                   @bind:after="OnPincodeChanged" />
+                            @if (_isPincodeLookup)
+                            {
+                                <div class="small text-muted mt-1">
+                                    <i class="bi bi-arrow-repeat spin"></i> Looking up pincode...
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_pincodeMessage))
+                            {
+                                <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">
+                                    @_pincodeMessage
+                                </div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label-custom">Village</label>
+                            <input type="text"
+                                   class="form-control-custom w-100"
+                                   placeholder="Village"
+                                   @bind="_form.Village" />
+                        </div>
+
+                        <div class="col-6 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Block</label>
+                            <input type="text"
+                                   class="form-control-custom w-100"
+                                   placeholder="Enter Block"
+                                   @bind="_form.Block" />
+                        </div>
+
+                        <div class="col-6 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Taluk</label>
+                            <input type="text"
+                                   class="form-control-custom w-100"
+                                   placeholder="Enter Taluk"
+                                   @bind="_form.Taluk" />
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">District</label>
+                            <select class="form-select-custom w-100" @bind="_form.DistrictId">
+                                <option value="0">-- Select District --</option>
+                                @foreach (var district in _filteredDistricts)
+                                {
+                                    <option value="@district.Id">@district.DistrictName</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">State</label>
+                            <select class="form-select-custom w-100"
+                                    @bind="_form.StateId"
+                                    @bind:after="OnLocationStateChanged">
+                                <option value="0">-- Select State --</option>
+                                @foreach (var state in _states)
+                                {
+                                    <option value="@state.Id">@state.StateName</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label class="form-label-custom">
+                                @(IsCandFWarehouseTab ? "C&F Operator Contact No" : "Contact No")
+                            </label>
+                            <input type="tel"
+                                   inputmode="numeric"
+                                   class="form-control-custom w-100"
+                                   placeholder="10-digit mobile number"
+                                   maxlength="10"
+                                   @bind="_form.ContactNumber" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documents -->
+        <div class="basic-info-card">
+            <div class="basic-info-header">
+                <h3 class="basic-info-title">
+                    <i class="bi bi-file-earmark-arrow-up me-2"></i> Documents
+                </h3>
+            </div>
+
+            @if (IsPvtWarehouseTab)
+            {
+                <div class="alert alert-warning py-2 px-3 small mb-3">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    GST, Insurance and Fertilizer License documents are required for PVT WH.
+                </div>
+
+                <div class="lm-doc-grid">
+                    <div class="lm-doc-card required @(_errors.ContainsKey("GstDocument") ? "border-danger" : "")">
+                        <div>
+                            <div class="lm-doc-card-title">GST Document <span class="lm-doc-required-badge">Required</span></div>
+                            @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath))
+                            {
+                                <div class="lm-doc-selected"><i class="bi bi-check-circle-fill me-1"></i>@GetFileName(_form.GstDocumentPath)</div>
+                            }
+                            @if (_gstDocumentFile != null)
+                            {
+                                <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_gstDocumentFile.Name</div>
+                            }
+                            @if (_errors.TryGetValue("GstDocument", out var gstDocError))
+                            {
+                                <div class="lm-field-error">@gstDocError</div>
+                            }
+                        </div>
+                        <label class="lm-upload-btn">
+                            <i class="bi bi-cloud-arrow-up"></i> Choose GST File
+                            <InputFile OnChange="OnGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                        </label>
+                    </div>
+
+                    <div class="lm-doc-card required @(_errors.ContainsKey("InsuranceDocument") ? "border-danger" : "")">
+                        <div>
+                            <div class="lm-doc-card-title">Insurance Document <span class="lm-doc-required-badge">Required</span></div>
+                            @if (!string.IsNullOrWhiteSpace(_form.InsuranceDocumentPath))
+                            {
+                                <div class="lm-doc-selected"><i class="bi bi-check-circle-fill me-1"></i>@GetFileName(_form.InsuranceDocumentPath)</div>
+                            }
+                            @if (_insuranceDocumentFile != null)
+                            {
+                                <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_insuranceDocumentFile.Name</div>
+                            }
+                            @if (_errors.TryGetValue("InsuranceDocument", out var insuranceDocError))
+                            {
+                                <div class="lm-field-error">@insuranceDocError</div>
+                            }
+                        </div>
+                        <label class="lm-upload-btn">
+                            <i class="bi bi-cloud-arrow-up"></i> Choose Insurance File
+                            <InputFile OnChange="OnInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                        </label>
+                    </div>
+
+                    <div class="lm-doc-card required @(_errors.ContainsKey("FertilizerLicenseDocument") ? "border-danger" : "")">
+                        <div>
+                            <div class="lm-doc-card-title">Fertilizer License <span class="lm-doc-required-badge">Required</span></div>
+                            @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath))
+                            {
+                                <div class="lm-doc-selected"><i class="bi bi-check-circle-fill me-1"></i>@GetFileName(_form.FertilizerLicenseDocumentPath)</div>
+                            }
+                            @if (_fertilizerLicenseDocumentFile != null)
+                            {
+                                <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_fertilizerLicenseDocumentFile.Name</div>
+                            }
+                            @if (_errors.TryGetValue("FertilizerLicenseDocument", out var fertilizerDocError))
+                            {
+                                <div class="lm-field-error">@fertilizerDocError</div>
+                            }
+                        </div>
+                        <label class="lm-upload-btn">
+                            <i class="bi bi-cloud-arrow-up"></i> Choose License File
+                            <InputFile OnChange="OnFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                        </label>
+                    </div>
+
+                    <div class="lm-doc-card">
+                        <div>
+                            <div class="lm-doc-card-title">Other Documents <span class="text-muted fw-normal">(Optional)</span></div>
+                            @if (_otherDocumentPaths.Count > 0)
+                            {
+                                <ul class="lm-doc-existing-list">
+                                    @foreach (var path in _otherDocumentPaths)
+                                    {
+                                        <li>@GetFileName(path)</li>
+                                    }
+                                </ul>
+                            }
+                            @if (_otherDocumentFiles.Count > 0)
+                            {
+                                <ul class="lm-doc-existing-list text-success">
+                                    @foreach (var file in _otherDocumentFiles)
+                                    {
+                                        <li>@file.Name</li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                        <label class="lm-upload-btn">
+                            <i class="bi bi-cloud-arrow-up"></i> Choose Other Documents
+                            <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
+                        </label>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="lm-doc-grid">
+                    <div class="lm-doc-card">
+                        <div>
+                            <div class="lm-doc-card-title">Other Documents <span class="text-muted fw-normal">(Optional)</span></div>
+                            @if (_otherDocumentPaths.Count > 0)
+                            {
+                                <ul class="lm-doc-existing-list">
+                                    @foreach (var path in _otherDocumentPaths)
+                                    {
+                                        <li>@GetFileName(path)</li>
+                                    }
+                                </ul>
+                            }
+                            @if (_otherDocumentFiles.Count > 0)
+                            {
+                                <ul class="lm-doc-existing-list text-success">
+                                    @foreach (var file in _otherDocumentFiles)
+                                    {
+                                        <li>@file.Name</li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                        <label class="lm-upload-btn">
+                            <i class="bi bi-cloud-arrow-up"></i> Choose Other Documents
+                            <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
+                        </label>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="lm-save-row">
+            <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
+                <i class="bi bi-x"></i> Cancel
+            </button>
+
+            @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) ||
+                             (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update")))
+            {
+                <button type="button"
+                        class="btn-save"
+                        @onclick="HandleSave"
+                        disabled="@(_isSaving || _isUploadingDocuments)">
+                    <i class="bi bi-save"></i>
+                    @(_isUploadingDocuments ? "Uploading Documents..." : (_isSaving ? "Saving..." : (_isEditing ? "Update" : "Save")))
+                </button>
+            }
+        </div>
+    </div>
+
+    <!-- Preserve old CRUD/list functionality under the new Register-style form. -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="metric-card bg-blue-light">
+                <div class="metric-header">
+                    <h4 class="metric-title">Total @ActiveTabDisplayName</h4>
+                </div>
+                <div class="metric-val">@CurrentAllItems.Count</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="metric-card bg-mint-light">
+                <div class="metric-header">
+                    <h4 class="metric-title">Active</h4>
+                </div>
+                <div class="metric-val">@CurrentAllItems.Count(x => x.IsActive)</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="metric-card bg-gray-light">
+                <div class="metric-header">
+                    <h4 class="metric-title">Inactive</h4>
+                </div>
+                <div class="metric-val">@CurrentAllItems.Count(x => !x.IsActive)</div>
+            </div>
+        </div>
+    </div>
+
+    <SpicDataTable Items="_filteredItems"
+                   IsLoading="_isLoading"
+                   Title="@($"Existing {ActiveTabDisplayName}")"
+                   FileName="@CurrentFileName"
+                   ExportColumns="GetExportColumns()"
+                   SearchText="@_searchText">
+
+        <FilterControls>
+            <div class="search-box">
+                <i class="bi bi-search"></i>
+                <input type="text"
+                       placeholder="Search @ActiveTabDisplayName.ToLowerInvariant()..."
+                       @bind="_searchText"
+                       @bind:event="oninput"
+                       @bind:after="StateHasChanged" />
+            </div>
+
+            <select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+                <option value="All">All Status</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+            </select>
+        </FilterControls>
+
+        <TableHeader>
+            <th>Name</th>
+            <th>SAP Code</th>
+            <th>Operated By</th>
+            @if (!IsCandFWarehouseTab)
+            {
+                <th>WH Type</th>
+            }
+            <th>State</th>
+            <th>District</th>
+            <th>@(IsCandFWarehouseTab ? "C&F Operator Contact No" : "Contact No")</th>
+            <th>Status</th>
+            <th>Created At</th>
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") ||
+                             LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+            {
+                <th>Action</th>
+            }
+        </TableHeader>
+
+        <TableRow Context="item">
+            <td>@item.Name</td>
+            <td><span class="lm-table-code">@GetDisplayCode(item)</span></td>
+            <td>@GetOperatedByDisplay(item.OperatedBy)</td>
+            @if (!IsCandFWarehouseTab)
+            {
+                <td>@GetWarehouseTypeDisplay(item.WarehouseType)</td>
+            }
+            <td>@GetStateName(item.StateId)</td>
+            <td>@GetDistrictName(item.DistrictId)</td>
+            <td>@item.ContactNumber</td>
+            <td>
+                <span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+                      style="cursor:pointer"
+                      @onclick="() => ToggleStatus(item)">
+                    @(item.IsActive ? "Active" : "Inactive")
+                </span>
+            </td>
+            <td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") ||
+                             LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+            {
+                <td>
+                    <div class="action-icons">
+                        @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+                        {
+                            <i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+                        }
+                        @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update"))
+                        {
+                            <i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+                        }
+                    </div>
+                </td>
+            }
+        </TableRow>
+    </SpicDataTable>
+</div>
+
+@if (_showDeleteConfirm)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                    <button type="button" class="btn-close" @onclick="CancelDelete"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete <strong>@_deleteTarget?.Name</strong>?</p>
+                    <p class="text-muted mb-0">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+                        @(_isDeleting ? "Deleting..." : "Delete")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    // Preserve the current LogisticsMaster internal tab values / menu behaviour.
+    // Only the API/table behind each tab is separated now.
+    private string ActiveTab { get; set; } = "Warehouse";
+    private bool IsPvtWarehouseTab => ActiveTab == "Warehouse";
+    private bool IsCandFWarehouseTab => ActiveTab == "RakePoint";
+    private bool IsRakePointTab => ActiveTab == "Port";
+    private string ActiveTabDisplayName => ActiveTab switch
+    {
+        "Warehouse" => "PVT WH",
+        "RakePoint" => "C&F WH",
+        "Port" => "Rake Point",
+        _ => ActiveTab
+    };
+    private string CurrentApiBase => ActiveTab switch
+    {
+        "Warehouse" => "api/PvtWarehouse",
+        "RakePoint" => "api/CandFWarehouse",
+        "Port" => "api/RackPoint",
+        _ => ""
+    };
+    private string CurrentFileName => ActiveTabDisplayName.Replace(" ", "_").Replace("&", "and");
+    private string CurrentNamePlaceholder => ActiveTab switch
+    {
+        "Warehouse" => "Enter PVT Warehouse Name",
+        "RakePoint" => "Enter C&F Warehouse Name",
+        _ => "Enter Rake Point Name"
+    };
+
+    private LogisticsFormModel _form = NewForm();
+    private readonly Dictionary<string, string> _errors = new();
+
+    private List<StateDto> _states = new();
+    private List<DistrictDto> _districts = new();
+    private List<RegionDto> _regions = new();
+    private List<HeadquarterDto> _headquarters = new();
+    private List<RegionDto> _filteredRegions = new();
+    private List<HeadquarterDto> _filteredHeadquarters = new();
+    private List<DistrictDto> _filteredDistricts = new();
+
+    private List<LogisticsItemDto> _pvtWarehouseAll = new();
+    private List<LogisticsItemDto> _candFWarehouseAll = new();
+    private List<LogisticsItemDto> _rakePointAll = new();
+    private List<LogisticsItemDto> _filteredItems = new();
+
+    private List<LogisticsItemDto> CurrentAllItems => ActiveTab switch
+    {
+        "Warehouse" => _pvtWarehouseAll,
+        "RakePoint" => _candFWarehouseAll,
+        "Port" => _rakePointAll,
+        _ => new()
+    };
+
+    private ElementReference _firstInputRef;
+    private bool _isEditing;
+    private int? _editingId;
+    private DateTime? _editingCreatedAt;
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private bool _isDeleting;
+    private bool _showDeleteConfirm;
+    private LogisticsItemDto? _deleteTarget;
+    private string? _message;
+    private bool _isError;
+    private string _searchText = "";
+    private string _statusFilter = "All";
+    private string? _currentUserId;
+
+    private bool _isGettingLocation;
+    private string? _locationMessage;
+    private bool _locationSuccess;
+
+    // Same pincode lookup behaviour used by Register.
+    private bool _isPincodeLookup;
+    private string? _pincodeMessage;
+    private bool _pincodeSuccess;
+
+    // Document upload state. PVT WH requires GST, Insurance and Fertilizer License.
+    private IBrowserFile? _gstDocumentFile;
+    private IBrowserFile? _insuranceDocumentFile;
+    private IBrowserFile? _fertilizerLicenseDocumentFile;
+    private List<IBrowserFile> _otherDocumentFiles = new();
+    private List<string> _otherDocumentPaths = new();
+    private bool _isUploadingDocuments;
+
+    private DotNetObjectReference<LogisticsMaster>? _objRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _objRef = DotNetObjectReference.Create(this);
+
+        try
+        {
+            var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+            if (!string.IsNullOrWhiteSpace(token))
+                _currentUserId = GetUserIdFromToken(token);
+        }
+        catch
+        {
+            // Keep previous fallback behaviour.
+        }
+
+        await LoadLookups();
+        await LoadData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("initLeafletMap", "leafletMap", _objRef);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Logistics map initialization failed: {ex.Message}");
+        }
+    }
+
+    public void Dispose() => _objRef?.Dispose();
+
+    private static LogisticsFormModel NewForm() => new()
+    {
+        InSpic = true,
+        InGreenStar = true,
+        IsActive = true
+    };
+
+    private async Task LoadLookups()
+    {
+        try
+        {
+            var statesTask = Http.GetFromJsonAsync<List<StateDto>>("api/State/all");
+            var districtsTask = Http.GetFromJsonAsync<List<DistrictDto>>("api/District/all");
+            var regionsTask = Http.GetFromJsonAsync<List<RegionDto>>("api/Region/all");
+            var hqTask = Http.GetFromJsonAsync<List<HeadquarterDto>>("api/Headquarter/all");
+
+            await Task.WhenAll(statesTask, districtsTask, regionsTask, hqTask);
+
+            _states = statesTask.Result ?? new();
+            _districts = districtsTask.Result ?? new();
+            _regions = regionsTask.Result ?? new();
+            _headquarters = hqTask.Result ?? new();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load location lookups: {ex.Message}", true);
+        }
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _isLoading = true;
+
+            switch (ActiveTab)
+            {
+                case "Warehouse":
+                    _pvtWarehouseAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/PvtWarehouse/all") ?? new();
+                    break;
+                case "RakePoint":
+                    _candFWarehouseAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/CandFWarehouse/all") ?? new();
+                    break;
+                case "Port":
+                    _rakePointAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/RackPoint/all") ?? new();
+                    break;
+            }
+
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load {ActiveTabDisplayName}: {ex.Message}", true);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    // Keep the current page's tab handler names intact.
+    private async Task SelectWarehouseTab() => await SetActiveTab("Warehouse");
+    private async Task SelectRakePointTab() => await SetActiveTab("RakePoint");
+    private async Task SelectPortTab() => await SetActiveTab("Port");
+
+    private async Task SetActiveTab(string tabName)
+    {
+        if (ActiveTab == tabName) return;
+
+        ActiveTab = tabName;
+        _searchText = "";
+        _statusFilter = "All";
+        ResetForm();
+        await LoadData();
+    }
+
+    private void ToggleSpic() => _form.InSpic = !_form.InSpic;
+    private void ToggleGreenStar() => _form.InGreenStar = !_form.InGreenStar;
+
+    private void OnBasicStateChanged()
+    {
+        _form.RegionId = 0;
+        _form.HeadquarterId = 0;
+        _filteredRegions = _regions.Where(x => x.StateId == _form.BasicStateId).ToList();
+        _filteredHeadquarters = new();
+    }
+
+    private void OnRegionChanged()
+    {
+        _form.HeadquarterId = 0;
+        _filteredHeadquarters = _headquarters.Where(x => x.RegionId == _form.RegionId).ToList();
+    }
+
+    private void OnLocationStateChanged()
+    {
+        _form.DistrictId = 0;
+        _filteredDistricts = _districts.Where(x => x.StateId == _form.StateId).ToList();
+    }
+
+    private bool Validate()
+    {
+        _errors.Clear();
+
+        if (string.IsNullOrWhiteSpace(_form.SapCode))
+            _errors["SapCode"] = "SAP Code is required.";
+
+        if (string.IsNullOrWhiteSpace(_form.Name))
+            _errors["Name"] = $"{ActiveTabDisplayName} name is required.";
+
+        if (!_form.OperatedBy.HasValue)
+            _errors["OperatedBy"] = "Operated By is required.";
+
+        if (!IsCandFWarehouseTab && !_form.WarehouseType.HasValue)
+            _errors["WarehouseType"] = "WH Type is required.";
+
+        if (IsPvtWarehouseTab)
+        {
+            if (string.IsNullOrWhiteSpace(_form.GstDocumentPath) && _gstDocumentFile == null)
+                _errors["GstDocument"] = "GST document is required for PVT WH.";
+
+            if (string.IsNullOrWhiteSpace(_form.InsuranceDocumentPath) && _insuranceDocumentFile == null)
+                _errors["InsuranceDocument"] = "Insurance document is required for PVT WH.";
+
+            if (string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath) && _fertilizerLicenseDocumentFile == null)
+                _errors["FertilizerLicenseDocument"] = "Fertilizer License document is required for PVT WH.";
+        }
+
+        return _errors.Count == 0;
+    }
+
+    private async Task HandleSave()
+    {
+        if (!Validate()) return;
+
+        try
+        {
+            _isSaving = true;
+            _message = null;
+            _editingCreatedAt ??= DateTime.Now;
+
+            HttpResponseMessage response = ActiveTab switch
+            {
+                "Warehouse" => await SavePvtWarehouse(),
+                "RakePoint" => await SaveCandFWarehouse(),
+                "Port" => await SaveRakePoint(),
+                _ => throw new InvalidOperationException("Invalid Logistics Master tab.")
+            };
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                ShowMessage($"Save failed: {body}", true);
+                return;
+            }
+
+            if (HasFilesWaitingForUpload)
+            {
+                var recordId = _editingId ?? await ReadCreatedIdAsync(response);
+                if (recordId <= 0)
+                {
+                    ShowMessage("Record saved, but the new record id was not returned. Documents were not uploaded.", true);
+                    await LoadData();
+                    return;
+                }
+
+                _isUploadingDocuments = true;
+                var uploadOk = await UploadSelectedDocumentsAsync(recordId);
+                _isUploadingDocuments = false;
+
+                if (!uploadOk)
+                {
+                    ShowMessage($"{ActiveTabDisplayName} saved, but one or more documents failed to upload. Please edit the record and upload again.", true);
+                    await LoadData();
+                    return;
+                }
+
+                // Persist the uploaded file paths after the physical files are saved.
+                HttpResponseMessage documentPathUpdate = ActiveTab switch
+                {
+                    "Warehouse" => await SavePvtWarehouse(forceUpdate: true, forcedId: recordId),
+                    "RakePoint" => await SaveCandFWarehouse(forceUpdate: true, forcedId: recordId),
+                    "Port" => await SaveRakePoint(forceUpdate: true, forcedId: recordId),
+                    _ => throw new InvalidOperationException("Invalid Logistics Master tab.")
+                };
+
+                if (!documentPathUpdate.IsSuccessStatusCode)
+                {
+                    var body = await documentPathUpdate.Content.ReadAsStringAsync();
+                    ShowMessage($"Documents uploaded, but saving document paths failed: {body}", true);
+                    await LoadData();
+                    return;
+                }
+            }
+
+            ShowMessage(_isEditing
+                ? $"{ActiveTabDisplayName} updated successfully."
+                : $"{ActiveTabDisplayName} created successfully.", false);
+
+            ResetForm(clearMessage: false);
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
+            _isUploadingDocuments = false;
+        }
+    }
+
+    private async Task<HttpResponseMessage> SavePvtWarehouse(bool forceUpdate = false, int? forcedId = null)
+    {
+        var now = DateTime.Now;
+        var payload = new PvtWarehouseSaveModel
+        {
+            Id = forcedId ?? _editingId ?? 0,
+            Name = _form.Name.Trim(),
+            WarehouseCode = _form.SapCode.Trim(),
+            InSpic = _form.InSpic,
+            InGreenStar = _form.InGreenStar,
+            BasicStateId = ToNullableId(_form.BasicStateId),
+            RegionId = ToNullableId(_form.RegionId),
+            HeadquarterId = ToNullableId(_form.HeadquarterId),
+            OperatedBy = _form.OperatedBy,
+            WarehouseType = _form.WarehouseType,
+            GoogleURL = NullIfWhiteSpace(_form.GoogleURL),
+            Latitude = _form.Latitude,
+            Longitude = _form.Longitude,
+            DoorNo = NullIfWhiteSpace(_form.DoorNo),
+            Street = NullIfWhiteSpace(_form.Street),
+            SubVillage = NullIfWhiteSpace(_form.SubVillage),
+            PinCode = NullIfWhiteSpace(_form.PinCode),
+            Village = NullIfWhiteSpace(_form.Village),
+            Block = NullIfWhiteSpace(_form.Block),
+            Taluk = NullIfWhiteSpace(_form.Taluk),
+            StateId = _form.StateId,
+            DistrictId = _form.DistrictId,
+            ContactNumber = NullIfWhiteSpace(_form.ContactNumber),
+
+            // PVT WH: separate reservation quantities for SPIC and GFL.
+            SpicApprovedReservationQuantityMT = _form.SpicApprovedReservationQuantityMT,
+            SpicAdditionalReservationQuantityMT = _form.SpicAdditionalReservationQuantityMT,
+            GflApprovedReservationQuantityMT = _form.GflApprovedReservationQuantityMT,
+            GflAdditionalReservationQuantityMT = _form.GflAdditionalReservationQuantityMT,
+
+            // PVT WH required highlighted documents + optional other documents.
+            GstDocumentPath = NullIfWhiteSpace(_form.GstDocumentPath),
+            InsuranceDocumentPath = NullIfWhiteSpace(_form.InsuranceDocumentPath),
+            FertilizerLicenseDocumentPath = NullIfWhiteSpace(_form.FertilizerLicenseDocumentPath),
+            OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths),
+
+            IsActive = _form.IsActive,
+            CreatedAt = _editingCreatedAt ?? now,
+            UpdatedAt = now,
+            UpdatedBy = _currentUserId ?? "current-user"
+        };
+
+        var updateId = forcedId ?? _editingId;
+        return (forceUpdate || (_isEditing && updateId.HasValue)) && updateId.HasValue
+            ? await Http.PutAsJsonAsync($"api/PvtWarehouse/{updateId.Value}", payload)
+            : await Http.PostAsJsonAsync("api/PvtWarehouse", payload);
+    }
+
+    private async Task<HttpResponseMessage> SaveCandFWarehouse(bool forceUpdate = false, int? forcedId = null)
+    {
+        var now = DateTime.Now;
+        var payload = new CandFWarehouseSaveModel
+        {
+            Id = forcedId ?? _editingId ?? 0,
+            Name = _form.Name.Trim(),
+            WarehouseCode = _form.SapCode.Trim(),
+            InSpic = _form.InSpic,
+            InGreenStar = _form.InGreenStar,
+            BasicStateId = ToNullableId(_form.BasicStateId),
+            RegionId = ToNullableId(_form.RegionId),
+            HeadquarterId = ToNullableId(_form.HeadquarterId),
+            OperatedBy = _form.OperatedBy,
+            GoogleURL = NullIfWhiteSpace(_form.GoogleURL),
+            Latitude = _form.Latitude,
+            Longitude = _form.Longitude,
+            DoorNo = NullIfWhiteSpace(_form.DoorNo),
+            Street = NullIfWhiteSpace(_form.Street),
+            SubVillage = NullIfWhiteSpace(_form.SubVillage),
+            PinCode = NullIfWhiteSpace(_form.PinCode),
+            Village = NullIfWhiteSpace(_form.Village),
+            Block = NullIfWhiteSpace(_form.Block),
+            Taluk = NullIfWhiteSpace(_form.Taluk),
+            StateId = _form.StateId,
+            DistrictId = _form.DistrictId,
+            ContactNumber = NullIfWhiteSpace(_form.ContactNumber),
+
+            // C&F WH: GFL-only reservation quantities.
+            GflReservationQuantityMT = _form.GflReservationQuantityMT,
+            GflAdditionalReservationQuantityLitres = _form.GflAdditionalReservationQuantityLitres,
+
+            // C&F WH: other documents are optional.
+            OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths),
+
+            IsActive = _form.IsActive,
+            CreatedAt = _editingCreatedAt ?? now,
+            UpdatedAt = now,
+            UpdatedBy = _currentUserId ?? "current-user"
+        };
+
+        var updateId = forcedId ?? _editingId;
+        return (forceUpdate || (_isEditing && updateId.HasValue)) && updateId.HasValue
+            ? await Http.PutAsJsonAsync($"api/CandFWarehouse/{updateId.Value}", payload)
+            : await Http.PostAsJsonAsync("api/CandFWarehouse", payload);
+    }
+
+    private async Task<HttpResponseMessage> SaveRakePoint(bool forceUpdate = false, int? forcedId = null)
+    {
+        var now = DateTime.Now;
+        var payload = new RackPointSaveModel
+        {
+            Id = forcedId ?? _editingId ?? 0,
+            Name = _form.Name.Trim(),
+            SAPCode = _form.SapCode.Trim(),
+
+            // Keep old RailwayCode functionality alive for any previous consumer.
+            RailwayCode = _form.SapCode.Trim(),
+
+            InSpic = _form.InSpic,
+            InGreenStar = _form.InGreenStar,
+            BasicStateId = ToNullableId(_form.BasicStateId),
+            RegionId = ToNullableId(_form.RegionId),
+            HeadquarterId = ToNullableId(_form.HeadquarterId),
+            OperatedBy = _form.OperatedBy,
+            WarehouseType = _form.WarehouseType,
+            GoogleURL = NullIfWhiteSpace(_form.GoogleURL),
+            Latitude = _form.Latitude,
+            Longitude = _form.Longitude,
+            SubVillage = NullIfWhiteSpace(_form.SubVillage),
+            PinCode = NullIfWhiteSpace(_form.PinCode),
+            Village = NullIfWhiteSpace(_form.Village),
+            Block = NullIfWhiteSpace(_form.Block),
+            Taluk = NullIfWhiteSpace(_form.Taluk),
+            StateId = _form.StateId,
+            DistrictId = _form.DistrictId,
+            ContactNumber = NullIfWhiteSpace(_form.ContactNumber),
+            OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths),
+            IsActive = _form.IsActive,
+            CreatedAt = _editingCreatedAt ?? now,
+            UpdatedAt = now,
+            UpdatedBy = _currentUserId ?? "current-user"
+        };
+
+        var updateId = forcedId ?? _editingId;
+        return (forceUpdate || (_isEditing && updateId.HasValue)) && updateId.HasValue
+            ? await Http.PutAsJsonAsync($"api/RackPoint/{updateId.Value}", payload)
+            : await Http.PostAsJsonAsync("api/RackPoint", payload);
+    }
+
+    private async Task EditItem(LogisticsItemDto item)
+    {
+        _isEditing = true;
+        _editingId = item.Id;
+        _editingCreatedAt = item.CreatedAt;
+
+        _form = new LogisticsFormModel
+        {
+            SapCode = IsRakePointTab
+                ? (!string.IsNullOrWhiteSpace(item.SAPCode) ? item.SAPCode! : item.RailwayCode ?? "")
+                : item.WarehouseCode ?? "",
+            Name = item.Name,
+            InSpic = item.InSpic ?? true,
+            InGreenStar = item.InGreenStar ?? true,
+            BasicStateId = item.BasicStateId ?? 0,
+            RegionId = item.RegionId ?? 0,
+            HeadquarterId = item.HeadquarterId ?? 0,
+            OperatedBy = item.OperatedBy,
+            WarehouseType = IsCandFWarehouseTab ? null : item.WarehouseType,
+            GoogleURL = item.GoogleURL,
+            Latitude = item.Latitude,
+            Longitude = item.Longitude,
+            DoorNo = IsRakePointTab ? "" : item.DoorNo ?? "",
+            Street = IsRakePointTab ? "" : item.Street ?? "",
+            SubVillage = item.SubVillage ?? "",
+            PinCode = item.PinCode ?? "",
+            Village = item.Village ?? "",
+            Block = item.Block ?? "",
+            Taluk = item.Taluk ?? "",
+            StateId = item.StateId,
+            DistrictId = item.DistrictId,
+            ContactNumber = item.ContactNumber ?? "",
+
+            SpicApprovedReservationQuantityMT = item.SpicApprovedReservationQuantityMT,
+            SpicAdditionalReservationQuantityMT = item.SpicAdditionalReservationQuantityMT,
+            GflApprovedReservationQuantityMT = item.GflApprovedReservationQuantityMT,
+            GflAdditionalReservationQuantityMT = item.GflAdditionalReservationQuantityMT,
+            GflReservationQuantityMT = item.GflReservationQuantityMT,
+            GflAdditionalReservationQuantityLitres = item.GflAdditionalReservationQuantityLitres,
+
+            GstDocumentPath = item.GstDocumentPath,
+            InsuranceDocumentPath = item.InsuranceDocumentPath,
+            FertilizerLicenseDocumentPath = item.FertilizerLicenseDocumentPath,
+            OtherDocumentPathsJson = item.OtherDocumentPathsJson,
+            IsActive = item.IsActive
+        };
+
+        _otherDocumentPaths = DeserializeDocumentPaths(_form.OtherDocumentPathsJson);
+        ClearSelectedDocumentFiles();
+
+        _filteredRegions = _regions.Where(x => x.StateId == _form.BasicStateId).ToList();
+        _filteredHeadquarters = _headquarters.Where(x => x.RegionId == _form.RegionId).ToList();
+        _filteredDistricts = _districts.Where(x => x.StateId == _form.StateId).ToList();
+
+        if (_form.Latitude.HasValue && _form.Longitude.HasValue)
+            await TriggerMapUpdate(_form.Latitude.Value, _form.Longitude.Value);
+
+        try { await _firstInputRef.FocusAsync(); } catch { }
+    }
+
+    private void DeleteItem(LogisticsItemDto item)
+    {
+        _deleteTarget = item;
+        _showDeleteConfirm = true;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (_deleteTarget is null) return;
+
+        try
+        {
+            _isDeleting = true;
+            var response = await Http.DeleteAsync($"{CurrentApiBase}/{_deleteTarget.Id}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                ShowMessage($"Delete failed: {body}", true);
+                return;
+            }
+
+            ShowMessage($"'{_deleteTarget.Name}' deleted successfully.", false);
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error: {ex.Message}", true);
+        }
+        finally
+        {
+            _isDeleting = false;
+            CancelDelete();
+        }
+    }
+
+    private void CancelDelete()
+    {
+        _showDeleteConfirm = false;
+        _deleteTarget = null;
+    }
+
+    private async Task ToggleStatus(LogisticsItemDto item)
+    {
+        try
+        {
+            var newStatus = !item.IsActive;
+            var response = await Http.PatchAsync($"{CurrentApiBase}/{item.Id}/status?isActive={newStatus}", null);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                ShowMessage($"Status change failed: {body}", true);
+                return;
+            }
+
+            item.IsActive = newStatus;
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error: {ex.Message}", true);
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        _filteredItems = CurrentAllItems
+            .Where(x => _statusFilter switch
+            {
+                "Active" => x.IsActive,
+                "Inactive" => !x.IsActive,
+                _ => true
+            })
+            .OrderByDescending(x => x.CreatedAt)
+            .ToList();
+    }
+
+    private List<ExportColumn<LogisticsItemDto>> GetExportColumns()
+    {
+        var columns = new List<ExportColumn<LogisticsItemDto>>
+        {
+            new() { Header = "S:No", ValueSelector = item => (_filteredItems.IndexOf(item) + 1).ToString() },
+            new() { Header = "Name", ValueSelector = item => item.Name },
+            new() { Header = "SAP Code", ValueSelector = GetDisplayCode },
+            new() { Header = "Operated By", ValueSelector = item => GetOperatedByDisplay(item.OperatedBy) }
+        };
+
+        if (!IsCandFWarehouseTab)
+            columns.Add(new ExportColumn<LogisticsItemDto> { Header = "WH Type", ValueSelector = item => GetWarehouseTypeDisplay(item.WarehouseType) });
+
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "State", ValueSelector = item => GetStateName(item.StateId) });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "District", ValueSelector = item => GetDistrictName(item.DistrictId) });
+        columns.Add(new ExportColumn<LogisticsItemDto>
+        {
+            Header = IsCandFWarehouseTab ? "C&F Operator Contact No" : "Contact No",
+            ValueSelector = item => item.ContactNumber ?? ""
+        });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Status", ValueSelector = item => item.IsActive ? "Active" : "Inactive" });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Created At", ValueSelector = item => item.CreatedAt.ToString("yyyy-MM-dd") });
+
+        return columns;
+    }
+
+    private string GetDisplayCode(LogisticsItemDto item)
+    {
+        if (IsRakePointTab)
+            return !string.IsNullOrWhiteSpace(item.SAPCode)
+                ? item.SAPCode!
+                : item.RailwayCode ?? "";
+
+        return item.WarehouseCode ?? "";
+    }
+
+    private static string GetOperatedByDisplay(LogisticsOperatedBy? value) => value switch
+    {
+        LogisticsOperatedBy.Dealer => "Dealer",
+        LogisticsOperatedBy.Others => "Others",
+        _ => ""
+    };
+
+    private static string GetWarehouseTypeDisplay(LogisticsWarehouseType? value) => value switch
+    {
+        LogisticsWarehouseType.FieldWH => "Field WH",
+        LogisticsWarehouseType.EPTWH => "EPT WH",
+        _ => ""
+    };
+
+    private void ResetForm() => ResetForm(clearMessage: true);
+
+    private void ResetForm(bool clearMessage)
+    {
+        _form = NewForm();
+        _errors.Clear();
+        _filteredRegions = new();
+        _filteredHeadquarters = new();
+        _filteredDistricts = new();
+        _isEditing = false;
+        _editingId = null;
+        _editingCreatedAt = null;
+        _locationMessage = null;
+        _locationSuccess = false;
+        _isPincodeLookup = false;
+        _pincodeMessage = null;
+        _pincodeSuccess = false;
+        _otherDocumentPaths = new();
+        ClearSelectedDocumentFiles();
+        _isUploadingDocuments = false;
+
+        if (clearMessage)
+            _message = null;
+    }
+
+    private bool HasFilesWaitingForUpload =>
+        _gstDocumentFile != null ||
+        _insuranceDocumentFile != null ||
+        _fertilizerLicenseDocumentFile != null ||
+        _otherDocumentFiles.Count > 0;
+
+    private void OnGstDocumentSelected(InputFileChangeEventArgs e)
+    {
+        _gstDocumentFile = e.File;
+        _errors.Remove("GstDocument");
+    }
+
+    private void OnInsuranceDocumentSelected(InputFileChangeEventArgs e)
+    {
+        _insuranceDocumentFile = e.File;
+        _errors.Remove("InsuranceDocument");
+    }
+
+    private void OnFertilizerLicenseDocumentSelected(InputFileChangeEventArgs e)
+    {
+        _fertilizerLicenseDocumentFile = e.File;
+        _errors.Remove("FertilizerLicenseDocument");
+    }
+
+    private void OnOtherDocumentsSelected(InputFileChangeEventArgs e)
+    {
+        _otherDocumentFiles = e.GetMultipleFiles(10).ToList();
+    }
+
+    private void ClearSelectedDocumentFiles()
+    {
+        _gstDocumentFile = null;
+        _insuranceDocumentFile = null;
+        _fertilizerLicenseDocumentFile = null;
+        _otherDocumentFiles = new();
+    }
+
+    private async Task<bool> UploadSelectedDocumentsAsync(int recordId)
+    {
+        try
+        {
+            var entityType = ActiveTab switch
+            {
+                "Warehouse" => "PvtWarehouse",
+                "RakePoint" => "CandFWarehouse",
+                "Port" => "RackPoint",
+                _ => throw new InvalidOperationException("Invalid Logistics Master tab.")
+            };
+
+            if (IsPvtWarehouseTab && _gstDocumentFile != null)
+                _form.GstDocumentPath = await UploadLogisticsFileAsync(entityType, recordId, "GST", _gstDocumentFile);
+
+            if (IsPvtWarehouseTab && _insuranceDocumentFile != null)
+                _form.InsuranceDocumentPath = await UploadLogisticsFileAsync(entityType, recordId, "Insurance", _insuranceDocumentFile);
+
+            if (IsPvtWarehouseTab && _fertilizerLicenseDocumentFile != null)
+                _form.FertilizerLicenseDocumentPath = await UploadLogisticsFileAsync(entityType, recordId, "FertilizerLicense", _fertilizerLicenseDocumentFile);
+
+            foreach (var file in _otherDocumentFiles)
+            {
+                var path = await UploadLogisticsFileAsync(entityType, recordId, "Other", file);
+                if (!string.IsNullOrWhiteSpace(path) && !_otherDocumentPaths.Contains(path, StringComparer.OrdinalIgnoreCase))
+                    _otherDocumentPaths.Add(path);
+            }
+
+            _form.OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths);
+            ClearSelectedDocumentFiles();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Logistics document upload failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private async Task<string> UploadLogisticsFileAsync(string entityType, int recordId, string documentType, IBrowserFile file)
+    {
+        using var content = new MultipartFormDataContent();
+        await using var stream = file.OpenReadStream(10 * 1024 * 1024);
+        using var fileContent = new StreamContent(stream);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
+            string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
+        content.Add(fileContent, "file", file.Name);
+
+        var response = await Http.PostAsync($"api/LogisticsFile/upload/{entityType}/{recordId}/{documentType}", content);
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            throw new InvalidOperationException($"{documentType} upload failed: {body}");
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<LogisticsFileUploadResponse>();
+        if (string.IsNullOrWhiteSpace(result?.FilePath))
+            throw new InvalidOperationException($"{documentType} upload did not return a file path.");
+
+        return result.FilePath;
+    }
+
+    private static async Task<int> ReadCreatedIdAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<CreateLogisticsResponse>();
+            return body?.Data?.Id ?? 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static string? SerializeDocumentPaths(List<string> paths) =>
+        paths.Count == 0 ? null : JsonSerializer.Serialize(paths);
+
+    private static List<string> DeserializeDocumentPaths(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new();
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json)
+                ?.Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList() ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    private static string GetFileName(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        var normalized = path.Replace('\\', '/');
+        return normalized[(normalized.LastIndexOf('/') + 1)..];
+    }
+
+    private static int? ToNullableId(int value) => value > 0 ? value : null;
+    private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private string GetStateName(int id) => _states.FirstOrDefault(x => x.Id == id)?.StateName ?? "";
+    private string GetDistrictName(int id) => _districts.FirstOrDefault(x => x.Id == id)?.DistrictName ?? "";
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+    private async Task TriggerMapUpdate(double lat, double lng)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("updateLeafletMap", "leafletMap", lat, lng);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Logistics map update failed: {ex.Message}");
+        }
+    }
+
+    [JSInvokable]
+    public void UpdateLocationFromMap(double lat, double lng)
+    {
+        _form.Latitude = lat;
+        _form.Longitude = lng;
+        _form.GoogleURL = $"http://maps.google.com/maps?q={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        _locationMessage = $"Location selected from Map: {lat:F6}, {lng:F6}";
+        _locationSuccess = true;
+        StateHasChanged();
+    }
+
+    private async Task OnPincodeChanged()
+    {
+        _pincodeMessage = null;
+        _pincodeSuccess = false;
+
+        if (!string.IsNullOrEmpty(_form.PinCode))
+        {
+            var digitsOnly = new string(_form.PinCode.Where(char.IsDigit).ToArray());
+            if (digitsOnly.Length > 6)
+                digitsOnly = digitsOnly[..6];
+
+            if (digitsOnly != _form.PinCode)
+                _form.PinCode = digitsOnly;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.PinCode) || _form.PinCode.Length != 6)
+            return;
+
+        _isPincodeLookup = true;
+        StateHasChanged();
+
+        try
+        {
+            using var response = await Http.GetAsync($"api/PincodeLookup/{_form.PinCode}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _pincodeMessage = $"Lookup failed (HTTP {(int)response.StatusCode}): {body}";
+                return;
+            }
+
+            var results = await response.Content.ReadFromJsonAsync<List<PincodeApiResponse>>();
+            var result = results?.FirstOrDefault();
+
+            if (result == null ||
+                !string.Equals(result.Status, "Success", StringComparison.OrdinalIgnoreCase) ||
+                result.PostOffice == null ||
+                result.PostOffice.Count == 0)
+            {
+                _pincodeMessage = $"No data found for pincode {_form.PinCode}";
+                return;
+            }
+
+            // Match Register behaviour: use the first post office returned.
+            var postOffice = result.PostOffice[0];
+
+            var apiState = NormalizeLocationName(postOffice.State);
+            var matchedState = _states.FirstOrDefault(s =>
+                NormalizeLocationName(s.StateName)
+                    .Equals(apiState, StringComparison.OrdinalIgnoreCase));
+
+            if (matchedState != null)
+            {
+                _form.StateId = matchedState.Id;
+                _filteredDistricts = _districts
+                    .Where(d => d.StateId == matchedState.Id)
+                    .ToList();
+            }
+
+            var apiDistrict = NormalizeLocationName(postOffice.District);
+            var matchedDistrict = _districts.FirstOrDefault(d =>
+                NormalizeLocationName(d.DistrictName)
+                    .Equals(apiDistrict, StringComparison.OrdinalIgnoreCase) &&
+                (matchedState == null || d.StateId == matchedState.Id));
+
+            if (matchedDistrict != null)
+                _form.DistrictId = matchedDistrict.Id;
+
+            if (!string.IsNullOrWhiteSpace(postOffice.Block) &&
+                !string.Equals(postOffice.Block, "NA", StringComparison.OrdinalIgnoreCase))
+            {
+                _form.Block = postOffice.Block;
+                _form.Taluk = postOffice.Block;
+            }
+            else if (!string.IsNullOrWhiteSpace(postOffice.Division))
+            {
+                _form.Taluk = postOffice.Division;
+            }
+
+            if (!string.IsNullOrWhiteSpace(postOffice.Name))
+                _form.Village = postOffice.Name;
+
+            var details = new List<string>();
+            if (!string.IsNullOrWhiteSpace(postOffice.Name))
+                details.Add($"Village: {postOffice.Name}");
+            if (!string.IsNullOrWhiteSpace(postOffice.Block) &&
+                !string.Equals(postOffice.Block, "NA", StringComparison.OrdinalIgnoreCase))
+                details.Add($"Block: {postOffice.Block}");
+            if (!string.IsNullOrWhiteSpace(_form.Taluk))
+                details.Add($"Taluk: {_form.Taluk}");
+            if (matchedDistrict != null)
+                details.Add($"District: {matchedDistrict.DistrictName}");
+            if (matchedState != null)
+                details.Add($"State: {matchedState.StateName}");
+
+            _pincodeSuccess = true;
+            _pincodeMessage = "Auto-filled: " + string.Join(", ", details);
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _pincodeMessage = $"Network error: {httpEx.Message}";
+        }
+        catch (TaskCanceledException)
+        {
+            _pincodeMessage = "Lookup timed out - try again.";
+        }
+        catch (Exception ex)
+        {
+            _pincodeMessage = $"{ex.GetType().Name}: {ex.Message}";
+        }
+        finally
+        {
+            _isPincodeLookup = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string NormalizeLocationName(string? value) =>
+        (value ?? string.Empty).Trim().Replace(" ", string.Empty);
+
+    private async Task OnGoogleMapUrlChanged()
+    {
+        _locationMessage = null;
+
+        if (string.IsNullOrWhiteSpace(_form.GoogleURL))
+        {
+            _form.Latitude = null;
+            _form.Longitude = null;
+            return;
+        }
+
+        var url = _form.GoogleURL.Trim();
+
+        if (url.Contains("goo.gl", StringComparison.OrdinalIgnoreCase) ||
+            url.Contains("maps.app.goo.gl", StringComparison.OrdinalIgnoreCase))
+        {
+            _locationMessage = "Shortened URL detected. Open the link, copy the full Google Maps URL, and paste it here.";
+            _locationSuccess = false;
+            return;
+        }
+
+        var match = Regex.Match(url, @"@(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"/dir//(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"(-?\d+\.\d+),\s*(-?\d+\.\d+)");
+
+        if (match.Success &&
+            double.TryParse(match.Groups[1].Value,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var lat) &&
+            double.TryParse(match.Groups[2].Value,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var lng))
+        {
+            _form.Latitude = lat;
+            _form.Longitude = lng;
+            _locationMessage = $"Coordinates extracted: {lat:F6}, {lng:F6}";
+            _locationSuccess = true;
+            await TriggerMapUpdate(lat, lng);
+        }
+        else
+        {
+            _form.Latitude = null;
+            _form.Longitude = null;
+            _locationMessage = "Could not extract coordinates from this URL. Try the full Google Maps URL.";
+            _locationSuccess = false;
+        }
+    }
+
+    private async Task OnLatitudeChanged()
+    {
+        if (_form.Latitude.HasValue && _form.Longitude.HasValue)
+            await TriggerMapUpdate(_form.Latitude.Value, _form.Longitude.Value);
+    }
+
+    private async Task OnLongitudeChanged()
+    {
+        if (_form.Latitude.HasValue && _form.Longitude.HasValue)
+            await TriggerMapUpdate(_form.Latitude.Value, _form.Longitude.Value);
+    }
+
+    private async Task UseCurrentLocation()
+    {
+        _isGettingLocation = true;
+        _locationMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await JS.InvokeAsync<GeoLocationResult>("getCurrentPosition");
+
+            if (!string.IsNullOrWhiteSpace(result.Error))
+            {
+                _locationMessage = $"Location error: {result.Error}";
+                _locationSuccess = false;
+            }
+            else
+            {
+                _form.Latitude = result.Latitude;
+                _form.Longitude = result.Longitude;
+                _form.GoogleURL = $"http://maps.google.com/maps?q={result.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{result.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+                _locationMessage = $"Location captured: {result.Latitude:F6}, {result.Longitude:F6}";
+                _locationSuccess = true;
+                await TriggerMapUpdate(result.Latitude, result.Longitude);
+            }
+        }
+        catch (Exception ex)
+        {
+            _locationMessage = $"Failed to get location: {ex.Message}";
+            _locationSuccess = false;
+        }
+        finally
+        {
+            _isGettingLocation = false;
+            StateHasChanged();
+        }
+    }
+
+    private string? GetUserIdFromToken(string token)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(token)) return null;
+
+            var raw = token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                ? token.Substring("Bearer ".Length)
+                : token;
+
+            var parts = raw.Split('.');
+            if (parts.Length < 2) return null;
+
+            var payload = parts[1];
+            switch (payload.Length % 4)
+            {
+                case 2: payload += "=="; break;
+                case 3: payload += "="; break;
+            }
+
+            payload = payload.Replace('-', '+').Replace('_', '/');
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("sub", out var sub)) return sub.GetString();
+            if (root.TryGetProperty("nameid", out var nid)) return nid.GetString();
+            if (root.TryGetProperty("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", out var id2)) return id2.GetString();
+            if (root.TryGetProperty("spic:user_id", out var sup)) return sup.GetString();
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    public class LogisticsFormModel
+    {
+        public string SapCode { get; set; } = "";
+        public string Name { get; set; } = "";
+        public bool InSpic { get; set; } = true;
+        public bool InGreenStar { get; set; } = true;
+        public int BasicStateId { get; set; }
+        public int RegionId { get; set; }
+        public int HeadquarterId { get; set; }
+        public LogisticsOperatedBy? OperatedBy { get; set; }
+        public LogisticsWarehouseType? WarehouseType { get; set; }
+        public string? GoogleURL { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+        public string DoorNo { get; set; } = "";
+        public string Street { get; set; } = "";
+        public string SubVillage { get; set; } = "";
+        public string PinCode { get; set; } = "";
+        public string Village { get; set; } = "";
+        public string Block { get; set; } = "";
+        public string Taluk { get; set; } = "";
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public string ContactNumber { get; set; } = "";
+
+        // PVT WH reservation quantities (separate SPIC & GFL).
+        public decimal? SpicApprovedReservationQuantityMT { get; set; }
+        public decimal? SpicAdditionalReservationQuantityMT { get; set; }
+        public decimal? GflApprovedReservationQuantityMT { get; set; }
+        public decimal? GflAdditionalReservationQuantityMT { get; set; }
+
+        // C&F WH reservation quantities (GFL only).
+        public decimal? GflReservationQuantityMT { get; set; }
+        public decimal? GflAdditionalReservationQuantityLitres { get; set; }
+
+        public string? GstDocumentPath { get; set; }
+        public string? InsuranceDocumentPath { get; set; }
+        public string? FertilizerLicenseDocumentPath { get; set; }
+        public string? OtherDocumentPathsJson { get; set; }
+
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class LogisticsItemDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? WarehouseCode { get; set; }
+        public string? RailwayCode { get; set; }
+        public string? SAPCode { get; set; }
+        public bool? InSpic { get; set; }
+        public bool? InGreenStar { get; set; }
+        public int? BasicStateId { get; set; }
+        public int? RegionId { get; set; }
+        public int? HeadquarterId { get; set; }
+        public LogisticsOperatedBy? OperatedBy { get; set; }
+        public LogisticsWarehouseType? WarehouseType { get; set; }
+        public string? GoogleURL { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+        public string? DoorNo { get; set; }
+        public string? Street { get; set; }
+        public string? SubVillage { get; set; }
+        public string? PinCode { get; set; }
+        public string? Village { get; set; }
+        public string? Block { get; set; }
+        public string? Taluk { get; set; }
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public string? ContactNumber { get; set; }
+        public decimal? SpicApprovedReservationQuantityMT { get; set; }
+        public decimal? SpicAdditionalReservationQuantityMT { get; set; }
+        public decimal? GflApprovedReservationQuantityMT { get; set; }
+        public decimal? GflAdditionalReservationQuantityMT { get; set; }
+        public decimal? GflReservationQuantityMT { get; set; }
+        public decimal? GflAdditionalReservationQuantityLitres { get; set; }
+        public string? GstDocumentPath { get; set; }
+        public string? InsuranceDocumentPath { get; set; }
+        public string? FertilizerLicenseDocumentPath { get; set; }
+        public string? OtherDocumentPathsJson { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string UpdatedBy { get; set; } = "";
+    }
+
+    public class PvtWarehouseSaveModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string WarehouseCode { get; set; } = "";
+        public bool? InSpic { get; set; }
+        public bool? InGreenStar { get; set; }
+        public int? BasicStateId { get; set; }
+        public int? RegionId { get; set; }
+        public int? HeadquarterId { get; set; }
+        public LogisticsOperatedBy? OperatedBy { get; set; }
+        public LogisticsWarehouseType? WarehouseType { get; set; }
+        public string? GoogleURL { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+        public string? DoorNo { get; set; }
+        public string? Street { get; set; }
+        public string? SubVillage { get; set; }
+        public string? PinCode { get; set; }
+        public string? Village { get; set; }
+        public string? Block { get; set; }
+        public string? Taluk { get; set; }
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public string? ContactNumber { get; set; }
+        public decimal? SpicApprovedReservationQuantityMT { get; set; }
+        public decimal? SpicAdditionalReservationQuantityMT { get; set; }
+        public decimal? GflApprovedReservationQuantityMT { get; set; }
+        public decimal? GflAdditionalReservationQuantityMT { get; set; }
+        public string? GstDocumentPath { get; set; }
+        public string? InsuranceDocumentPath { get; set; }
+        public string? FertilizerLicenseDocumentPath { get; set; }
+        public string? OtherDocumentPathsJson { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string UpdatedBy { get; set; } = "";
+    }
+
+    public class CandFWarehouseSaveModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string WarehouseCode { get; set; } = "";
+        public bool? InSpic { get; set; }
+        public bool? InGreenStar { get; set; }
+        public int? BasicStateId { get; set; }
+        public int? RegionId { get; set; }
+        public int? HeadquarterId { get; set; }
+        public LogisticsOperatedBy? OperatedBy { get; set; }
+        public string? GoogleURL { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+        public string? DoorNo { get; set; }
+        public string? Street { get; set; }
+        public string? SubVillage { get; set; }
+        public string? PinCode { get; set; }
+        public string? Village { get; set; }
+        public string? Block { get; set; }
+        public string? Taluk { get; set; }
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public string? ContactNumber { get; set; }
+        public decimal? GflReservationQuantityMT { get; set; }
+        public decimal? GflAdditionalReservationQuantityLitres { get; set; }
+        public string? OtherDocumentPathsJson { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string UpdatedBy { get; set; } = "";
+    }
+
+    public class RackPointSaveModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? GoogleURL { get; set; }
+        public string? RailwayCode { get; set; }
+        public string? SAPCode { get; set; }
+        public bool? InSpic { get; set; }
+        public bool? InGreenStar { get; set; }
+        public int? BasicStateId { get; set; }
+        public int? RegionId { get; set; }
+        public int? HeadquarterId { get; set; }
+        public LogisticsOperatedBy? OperatedBy { get; set; }
+        public LogisticsWarehouseType? WarehouseType { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+        public string? SubVillage { get; set; }
+        public string? PinCode { get; set; }
+        public string? Village { get; set; }
+        public string? Block { get; set; }
+        public string? Taluk { get; set; }
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public string? ContactNumber { get; set; }
+        public string? OtherDocumentPathsJson { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string UpdatedBy { get; set; } = "";
+    }
+
+    public class StateDto
+    {
+        public int Id { get; set; }
+        public string StateName { get; set; } = "";
+    }
+
+    public class DistrictDto
+    {
+        public int Id { get; set; }
+        public string DistrictName { get; set; } = "";
+        public int StateId { get; set; }
+    }
+
+    public class RegionDto
+    {
+        public int Id { get; set; }
+        public string RegionName { get; set; } = "";
+        public int StateId { get; set; }
+    }
+
+    public class HeadquarterDto
+    {
+        public int Id { get; set; }
+        public string HeadquarterName { get; set; } = "";
+        public int RegionId { get; set; }
+    }
+
+    public class LogisticsFileUploadResponse
+    {
+        public string FilePath { get; set; } = "";
+        public string FileName { get; set; } = "";
+    }
+
+    public class CreateLogisticsResponse
+    {
+        public string? Message { get; set; }
+        public CreatedIdDto? Data { get; set; }
+    }
+
+    public class CreatedIdDto
+    {
+        public int Id { get; set; }
+    }
+
+    public class PincodeApiResponse
+    {
+        public string Status { get; set; } = "";
+        public string Message { get; set; } = "";
+        public List<PostOfficeDto>? PostOffice { get; set; }
+    }
+
+    public class PostOfficeDto
+    {
+        public string Name { get; set; } = "";
+        public string District { get; set; } = "";
+        public string State { get; set; } = "";
+        public string Block { get; set; } = "";
+        public string Division { get; set; } = "";
+        public string Region { get; set; } = "";
+        public string Country { get; set; } = "";
+        public string Pincode { get; set; } = "";
+    }
+
+    public class GeoLocationResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+}

@@ -1,0 +1,873 @@
+﻿@page "/DealerStateSummary"
+@using System.Net.Http.Json
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject HttpClient Http
+@inject NavigationManager NavManager
+@inject LoginState LoginState
+
+<style>
+    .state-summary-page {
+        padding: 24px 0 40px;
+    }
+
+    .state-summary-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 22px;
+    }
+
+    .state-summary-title {
+        margin: 0;
+        color: #111827;
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .state-summary-subtitle {
+        margin: 5px 0 0;
+        color: #6B7280;
+        font-size: 0.9rem;
+    }
+
+    .state-summary-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .state-summary-btn {
+        min-height: 40px;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid #D1D5DB;
+        background: #fff;
+        color: #374151;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        text-decoration: none;
+        transition: all .15s ease-in-out;
+    }
+
+        .state-summary-btn:hover {
+            background: #F9FAFB;
+            color: #111827;
+        }
+
+    .state-summary-btn-primary {
+        background: #2563EB;
+        border-color: #2563EB;
+        color: #fff;
+    }
+
+        .state-summary-btn-primary:hover {
+            background: #1D4ED8;
+            border-color: #1D4ED8;
+            color: #fff;
+        }
+
+    .state-summary-kpis {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(220px, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+
+    .state-summary-kpi {
+        background: #fff;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        padding: 16px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+    }
+
+    .state-summary-kpi-label {
+        color: #6B7280;
+        font-size: 0.82rem;
+        font-weight: 600;
+    }
+
+    .state-summary-kpi-value {
+        margin-top: 3px;
+        color: #111827;
+        font-size: 1.45rem;
+        font-weight: 700;
+    }
+
+    .state-summary-kpi-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.15rem;
+        flex-shrink: 0;
+    }
+
+    .state-summary-kpi-blue {
+        background: #EFF6FF;
+        color: #2563EB;
+    }
+
+    .state-summary-kpi-green {
+        background: #ECFDF5;
+        color: #059669;
+    }
+
+    .state-summary-card {
+        background: #fff;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .state-summary-card-head {
+        padding: 15px 18px;
+        border-bottom: 1px solid #E5E7EB;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .state-summary-card-title {
+        margin: 0;
+        color: #1F2937;
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    .state-summary-card-note {
+        color: #6B7280;
+        font-size: 0.78rem;
+    }
+
+    .state-summary-table-wrap {
+        overflow-x: auto;
+    }
+
+    .state-summary-table {
+        min-width: 1450px;
+        width: 100%;
+        margin: 0;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+        .state-summary-table th,
+        .state-summary-table td {
+            border-bottom: 1px solid #F1F5F9;
+            vertical-align: middle;
+        }
+
+        .state-summary-table thead th {
+            background: #F8FAFC;
+            color: #374151;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .state-summary-table tbody td {
+            color: #374151;
+            font-size: 0.82rem;
+        }
+
+    .state-summary-sort {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+        .state-summary-sort:hover {
+            background: #F1F5F9;
+        }
+
+    .state-summary-total-row td {
+        background: #F8FAFC;
+        border-top: 2px solid #E5E7EB;
+        font-weight: 700;
+        color: #1F2937;
+    }
+
+    .state-summary-footer {
+        padding: 14px 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+        border-top: 1px solid #E5E7EB;
+    }
+
+    .state-summary-page-size {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.82rem;
+        color: #4B5563;
+    }
+
+        .state-summary-page-size select {
+            min-height: 34px;
+            padding: 4px 28px 4px 9px;
+            border-radius: 7px;
+            border: 1px solid #D1D5DB;
+            background: #fff;
+            color: #374151;
+        }
+
+    .state-summary-pagination {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .state-summary-page-btn {
+        min-width: 34px;
+        height: 34px;
+        border-radius: 7px;
+        border: 1px solid #D1D5DB;
+        background: #fff;
+        color: #374151;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+        .state-summary-page-btn:hover:not(:disabled) {
+            background: #F3F4F6;
+        }
+
+        .state-summary-page-btn.active {
+            background: #2563EB;
+            border-color: #2563EB;
+            color: #fff;
+        }
+
+        .state-summary-page-btn:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+        }
+
+    .state-summary-loading,
+    .state-summary-empty,
+    .state-summary-denied {
+        min-height: 320px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 10px;
+        color: #6B7280;
+        text-align: center;
+        background: #fff;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+    }
+
+    .state-summary-error {
+        border: 1px solid #FECACA;
+        background: #FEF2F2;
+        color: #B91C1C;
+        padding: 10px 14px;
+        border-radius: 8px;
+        margin-bottom: 14px;
+        font-size: 0.85rem;
+    }
+
+    @@media (max-width: 768px) {
+        .state-summary-page {
+            padding-top: 16px;
+        }
+
+        .state-summary-kpis {
+            grid-template-columns: 1fr;
+        }
+
+        .state-summary-header {
+            align-items: stretch;
+        }
+
+        .state-summary-actions {
+            width: 100%;
+        }
+
+            .state-summary-actions .state-summary-btn {
+                flex: 1;
+                justify-content: center;
+            }
+    }
+</style>
+
+<div class="container-fluid state-summary-page px-0">
+    @if (!LoginState.IsAdmin)
+    {
+        <div class="state-summary-denied">
+            <i class="bi bi-shield-lock" style="font-size:2.2rem;"></i>
+            <div class="fw-semibold text-dark">Access restricted</div>
+            <div class="small">The State Wise Dealer Summary is available only to the same Admin users who could view it on Dashboard.</div>
+            <NavLink href="/Dashboard" class="state-summary-btn mt-2">
+                <i class="bi bi-arrow-left"></i>
+                Back to Dashboard
+            </NavLink>
+        </div>
+    }
+    else
+    {
+        <div class="state-summary-header">
+            <div>
+                <h1 class="state-summary-title">Total Dealers — State Wise</h1>
+                <p class="state-summary-subtitle">
+                    State-wise SAP, saved dealer and approval-stage summary. This report loads only when this page is opened.
+                </p>
+            </div>
+
+            <div class="state-summary-actions">
+                <NavLink href="/Dashboard" class="state-summary-btn">
+                    <i class="bi bi-arrow-left"></i>
+                    Back to Dashboard
+                </NavLink>
+
+                <button type="button"
+                        class="state-summary-btn state-summary-btn-primary"
+                        @onclick="LoadData"
+                        disabled="@_isLoading">
+                    @if (_isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm"></span>
+                        <span>Refreshing...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-arrow-clockwise"></i>
+                        <span>Refresh</span>
+                    }
+                </button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="state-summary-error">
+                <i class="bi bi-exclamation-circle me-1"></i>
+                @_errorMessage
+            </div>
+        }
+
+        @if (_isLoading && !_hasLoaded)
+        {
+            <div class="state-summary-loading">
+                <div class="spinner-border text-primary" role="status"></div>
+                <div class="fw-semibold text-dark">Loading State Wise Dealer Summary...</div>
+                <div class="small">Dashboard is not blocked by this report anymore.</div>
+            </div>
+        }
+        else
+        {
+            <div class="state-summary-kpis">
+                <div class="state-summary-kpi">
+                    <div>
+                        <div class="state-summary-kpi-label">TOTAL DEALERS</div>
+                        <div class="state-summary-kpi-value">@_trueTotalDealerCount</div>
+                    </div>
+                    <div class="state-summary-kpi-icon state-summary-kpi-blue">
+                        <i class="bi bi-people-fill"></i>
+                    </div>
+                </div>
+
+                <div class="state-summary-kpi">
+                    <div>
+                        <div class="state-summary-kpi-label">COMPLETED</div>
+                        <div class="state-summary-kpi-value">@_allDealers.Count(d => d.AVPApproved == true)</div>
+                    </div>
+                    <div class="state-summary-kpi-icon state-summary-kpi-green">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                </div>
+            </div>
+
+            @if (!GetCachedStateWiseSummary().Any())
+            {
+                <div class="state-summary-empty">
+                    <i class="bi bi-inbox" style="font-size:2.2rem;"></i>
+                    <div class="fw-semibold text-dark">No state-wise dealer data found</div>
+                </div>
+            }
+            else
+            {
+                <div class="state-summary-card">
+                    <div class="state-summary-card-head">
+                        <h2 class="state-summary-card-title">Dealer Summary</h2>
+                        <div class="state-summary-card-note">
+                            Click any column heading to sort. Scroll horizontally to view all SPIC / GFL columns.
+                        </div>
+                    </div>
+
+                    <div class="state-summary-table-wrap">
+                        <table class="state-summary-table">
+                            <thead>
+                                <tr>
+                                    <th rowspan="2" style="padding:12px 16px; width:65px;">S.No</th>
+                                    <th rowspan="2"
+                                        class="state-summary-sort"
+                                        style="padding:12px 16px; min-width:180px;"
+                                        @onclick="@(() => SortStateTable("State"))">
+                                        State
+                                        @if (_stateTableSortColumn == "State")
+                                        {
+                                            <i class="bi bi-arrow-@(_stateTableSortAscending ? "up" : "down") ms-1"></i>
+                                        }
+                                    </th>
+                                    <th colspan="2" class="text-center" style="padding:9px 12px;">As Per SAP Data</th>
+                                    <th colspan="2" class="text-center" style="padding:9px 12px;">Saved Dealers</th>
+                                    <th colspan="2" class="text-center" style="padding:9px 12px;">MO</th>
+                                    <th colspan="2" class="text-center" style="padding:9px 12px;">RM</th>
+                                    <th colspan="2" class="text-center" style="padding:9px 12px;">SMM</th>
+                                    <th colspan="2" class="text-center" style="padding:9px 12px;">AVP</th>
+                                    <th colspan="2" class="text-center" style="padding:9px 12px;">Completed</th>
+                                </tr>
+                                <tr>
+                                    @foreach (var category in new[] { "AsPerSap", "SavedDealers", "Mo", "Rm", "Smm", "Avp", "Completed" })
+                                    {
+                                        <th class="state-summary-sort text-center"
+                                            style="padding:9px 12px;"
+                                            @onclick="@(() => SortStateTable(category + "Spic"))">
+                                            SPIC
+                                            @if (_stateTableSortColumn == category + "Spic")
+                                            {
+                                                <i class="bi bi-arrow-@(_stateTableSortAscending ? "up" : "down") ms-1"></i>
+                                            }
+                                        </th>
+                                        <th class="state-summary-sort text-center"
+                                            style="padding:9px 12px;"
+                                            @onclick="@(() => SortStateTable(category + "Gfl"))">
+                                            GFL
+                                            @if (_stateTableSortColumn == category + "Gfl")
+                                            {
+                                                <i class="bi bi-arrow-@(_stateTableSortAscending ? "up" : "down") ms-1"></i>
+                                            }
+                                        </th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var (row, idx) in StateTablePagedRows.Select((value, index) => (value, index)))
+                                {
+                                    <tr>
+                                        <td style="padding:10px 16px; color:#6B7280;">@((_stateTableCurrentPage - 1) * _stateTablePageSize + idx + 1)</td>
+                                        <td style="padding:10px 16px; font-weight:600; color:#1F2937;">@row.StateName</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.AsPerSapSpic)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.AsPerSapGfl)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.SavedDealersSpic)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.SavedDealersGfl)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.MoSpic)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.MoGfl)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.RmSpic)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.RmGfl)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.SmmSpic)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.SmmGfl)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.AvpSpic)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.AvpGfl)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.CompletedSpic)</td>
+                                        <td class="text-center" style="padding:10px 12px;">@Dash(row.CompletedGfl)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                @{
+                                    var allRows = GetCachedStateWiseSummary();
+                                }
+                                <tr class="state-summary-total-row">
+                                    <td style="padding:10px 16px;"></td>
+                                    <td style="padding:10px 16px;">Total</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.AsPerSapSpic))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.AsPerSapGfl))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.SavedDealersSpic))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.SavedDealersGfl))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.MoSpic))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.MoGfl))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.RmSpic))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.RmGfl))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.SmmSpic))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.SmmGfl))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.AvpSpic))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.AvpGfl))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.CompletedSpic))</td>
+                                    <td class="text-center" style="padding:10px 12px;">@Dash(allRows.Sum(r => r.CompletedGfl))</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="state-summary-footer">
+                        <div class="state-summary-page-size">
+                            <span>Items Per Page</span>
+                            <select @bind="_stateTablePageSize" @bind:after="StateTableOnPageSizeChanged">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                            <span class="text-muted">@GetCachedStateWiseSummary().Count states</span>
+                        </div>
+
+                        <div class="state-summary-pagination">
+                            <button class="state-summary-page-btn"
+                                    disabled="@(_stateTableCurrentPage <= 1)"
+                                    @onclick="StateTablePreviousPage">
+                                <i class="bi bi-chevron-left"></i>
+                            </button>
+
+                            @foreach (var pageNum in StateTablePageNumbers)
+                            {
+                                @if (pageNum == -1)
+                                {
+                                    <span class="px-1 text-muted">...</span>
+                                }
+                                else
+                                {
+                                    <button class="state-summary-page-btn @(pageNum == _stateTableCurrentPage ? "active" : "")"
+                                            @onclick="() => StateTableGoToPage(pageNum)">
+                                        @pageNum
+                                    </button>
+                                }
+                            }
+
+                            <button class="state-summary-page-btn"
+                                    disabled="@(_stateTableCurrentPage >= StateTableTotalPages)"
+                                    @onclick="StateTableNextPage">
+                                <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    private List<DealerDto> _allDealers = new();
+    private List<StateDto> _statesAll = new();
+    private SapCountsResponse _sapCounts = new();
+    private List<StateWiseSummary> _stateWiseSummaryCache = new();
+
+    private int _trueTotalDealerCount;
+    private int _stateTableCurrentPage = 1;
+    private int _stateTablePageSize = 10;
+    private string _stateTableSortColumn = "State";
+    private bool _stateTableSortAscending = true;
+
+    private bool _isLoading = true;
+    private bool _hasLoaded;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!LoginState.IsAdmin)
+        {
+            _isLoading = false;
+            return;
+        }
+
+        await LoadData();
+    }
+
+    private async Task<List<TItem>> SafeGet<TItem>(string url)
+    {
+        try
+        {
+            return await Http.GetFromJsonAsync<List<TItem>>(url) ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    private async Task<TItem?> SafeGetObject<TItem>(string url) where TItem : class
+    {
+        try
+        {
+            return await Http.GetFromJsonAsync<TItem>(url);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task LoadData()
+    {
+        if (!LoginState.IsAdmin)
+            return;
+
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            // Important: these report calls now run only on this dedicated page,
+            // not during normal Dashboard loading.
+            var dealersTask = SafeGet<DealerDto>("api/DealerRegistration/submitted");
+            var statesTask = SafeGet<StateDto>("api/State/all");
+            var sapCountsTask = SafeGetObject<SapCountsResponse>("api/DealerRegistration/dashboard-sap-counts");
+
+            await Task.WhenAll(dealersTask, statesTask, sapCountsTask);
+
+            _allDealers = await dealersTask;
+            _statesAll = await statesTask;
+            _sapCounts = await sapCountsTask ?? new SapCountsResponse();
+            _trueTotalDealerCount = _sapCounts.TotalDealers;
+
+            _stateWiseSummaryCache = new();
+            _stateTableCurrentPage = 1;
+            _hasLoaded = true;
+
+            if (_statesAll.Count == 0 && _allDealers.Count > 0)
+                _errorMessage = "State master data could not be loaded. Dealer counts are available, but some state names may appear as Unknown.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Unable to load State Wise Dealer Summary: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private string GetApprovalStatus(DealerDto d)
+    {
+        // Copied from Dashboard so the moved table keeps the exact existing stage rules.
+        if (d.IsSubmittedForReview != true) return "Draft";
+
+        if (d.RMApproved == false) return "Rejected by RM";
+        if (d.SMApproved == false) return "Rejected by SMM";
+        if (d.AVPApproved == false) return "Rejected by AVP";
+        if (d.AVPApproved == true) return "Approved";
+        if (d.RMApproved == null) return "In RM";
+        if (d.RMApproved == true && d.SMApproved == null) return "In SMM";
+        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return "In AVP";
+        return "Submitted";
+    }
+
+    private List<StateWiseSummary> GetStateWiseSummary()
+    {
+        // This is the same calculation used by the previous inline Dashboard table.
+        var sapSpicByState = _sapCounts.SpicByState;
+        var sapGflByState = _sapCounts.GflByState;
+        var allSapStateIds = _sapCounts.AllStateIds.ToHashSet();
+
+        var savedByState = _allDealers
+            .GroupBy(d => d.StateId)
+            .Select(g =>
+            {
+                var stateName = _statesAll.FirstOrDefault(s => s.Id == g.Key)?.StateName ?? "Unknown";
+                var dealers = g.ToList();
+
+                bool IsMo(DealerDto d) => GetApprovalStatus(d) == "Draft";
+                bool IsRm(DealerDto d) => GetApprovalStatus(d) == "In RM" || GetApprovalStatus(d) == "Rejected by RM";
+                bool IsSmm(DealerDto d) => GetApprovalStatus(d) == "In SMM" || GetApprovalStatus(d) == "Rejected by SMM";
+                bool IsAvp(DealerDto d) => GetApprovalStatus(d) == "In AVP" || GetApprovalStatus(d) == "Rejected by AVP";
+                bool IsCompleted(DealerDto d) => d.AVPApproved == true;
+
+                return new StateWiseSummary
+                {
+                    StateName = stateName,
+                    AsPerSapSpic = sapSpicByState.TryGetValue(g.Key, out var ss) ? ss : 0,
+                    AsPerSapGfl = sapGflByState.TryGetValue(g.Key, out var sg) ? sg : 0,
+                    SavedDealersSpic = dealers.Count(d => d.InSpic),
+                    SavedDealersGfl = dealers.Count(d => d.InGreenStar),
+                    MoSpic = dealers.Count(d => IsMo(d) && d.InSpic),
+                    MoGfl = dealers.Count(d => IsMo(d) && d.InGreenStar),
+                    RmSpic = dealers.Count(d => IsRm(d) && d.InSpic),
+                    RmGfl = dealers.Count(d => IsRm(d) && d.InGreenStar),
+                    SmmSpic = dealers.Count(d => IsSmm(d) && d.InSpic),
+                    SmmGfl = dealers.Count(d => IsSmm(d) && d.InGreenStar),
+                    AvpSpic = dealers.Count(d => IsAvp(d) && d.InSpic),
+                    AvpGfl = dealers.Count(d => IsAvp(d) && d.InGreenStar),
+                    CompletedSpic = dealers.Count(d => IsCompleted(d) && d.InSpic),
+                    CompletedGfl = dealers.Count(d => IsCompleted(d) && d.InGreenStar)
+                };
+            })
+            .ToList();
+
+        // Preserve states that exist in SAP counts even when no submitted dealer row exists.
+        var missingStates = allSapStateIds
+            .Where(stateId => !savedByState.Any(s => _statesAll.FirstOrDefault(st => st.StateName == s.StateName)?.Id == stateId))
+            .Select(stateId => new StateWiseSummary
+            {
+                StateName = _statesAll.FirstOrDefault(s => s.Id == stateId)?.StateName ?? "Unknown",
+                AsPerSapSpic = sapSpicByState.TryGetValue(stateId, out var ss) ? ss : 0,
+                AsPerSapGfl = sapGflByState.TryGetValue(stateId, out var sg) ? sg : 0
+            });
+
+        return savedByState
+            .Concat(missingStates)
+            .OrderBy(s => s.StateName)
+            .ToList();
+    }
+
+    private List<StateWiseSummary> GetCachedStateWiseSummary()
+    {
+        if (_stateWiseSummaryCache.Count == 0)
+            _stateWiseSummaryCache = GetStateWiseSummary();
+
+        return _stateWiseSummaryCache;
+    }
+
+    private int StateTableTotalPages =>
+        Math.Max(1, (int)Math.Ceiling(GetCachedStateWiseSummary().Count / (double)_stateTablePageSize));
+
+    private void SortStateTable(string column)
+    {
+        if (_stateTableSortColumn == column)
+            _stateTableSortAscending = !_stateTableSortAscending;
+        else
+        {
+            _stateTableSortColumn = column;
+            _stateTableSortAscending = true;
+        }
+
+        _stateTableCurrentPage = 1;
+    }
+
+    private IEnumerable<StateWiseSummary> StateTablePagedRows
+    {
+        get
+        {
+            var data = GetCachedStateWiseSummary().AsEnumerable();
+
+            data = _stateTableSortColumn switch
+            {
+                "State" => _stateTableSortAscending ? data.OrderBy(x => x.StateName) : data.OrderByDescending(x => x.StateName),
+                "AsPerSapSpic" => _stateTableSortAscending ? data.OrderBy(x => x.AsPerSapSpic) : data.OrderByDescending(x => x.AsPerSapSpic),
+                "AsPerSapGfl" => _stateTableSortAscending ? data.OrderBy(x => x.AsPerSapGfl) : data.OrderByDescending(x => x.AsPerSapGfl),
+                "SavedDealersSpic" => _stateTableSortAscending ? data.OrderBy(x => x.SavedDealersSpic) : data.OrderByDescending(x => x.SavedDealersSpic),
+                "SavedDealersGfl" => _stateTableSortAscending ? data.OrderBy(x => x.SavedDealersGfl) : data.OrderByDescending(x => x.SavedDealersGfl),
+                "MoSpic" => _stateTableSortAscending ? data.OrderBy(x => x.MoSpic) : data.OrderByDescending(x => x.MoSpic),
+                "MoGfl" => _stateTableSortAscending ? data.OrderBy(x => x.MoGfl) : data.OrderByDescending(x => x.MoGfl),
+                "RmSpic" => _stateTableSortAscending ? data.OrderBy(x => x.RmSpic) : data.OrderByDescending(x => x.RmSpic),
+                "RmGfl" => _stateTableSortAscending ? data.OrderBy(x => x.RmGfl) : data.OrderByDescending(x => x.RmGfl),
+                "SmmSpic" => _stateTableSortAscending ? data.OrderBy(x => x.SmmSpic) : data.OrderByDescending(x => x.SmmSpic),
+                "SmmGfl" => _stateTableSortAscending ? data.OrderBy(x => x.SmmGfl) : data.OrderByDescending(x => x.SmmGfl),
+                "AvpSpic" => _stateTableSortAscending ? data.OrderBy(x => x.AvpSpic) : data.OrderByDescending(x => x.AvpSpic),
+                "AvpGfl" => _stateTableSortAscending ? data.OrderBy(x => x.AvpGfl) : data.OrderByDescending(x => x.AvpGfl),
+                "CompletedSpic" => _stateTableSortAscending ? data.OrderBy(x => x.CompletedSpic) : data.OrderByDescending(x => x.CompletedSpic),
+                "CompletedGfl" => _stateTableSortAscending ? data.OrderBy(x => x.CompletedGfl) : data.OrderByDescending(x => x.CompletedGfl),
+                _ => data.OrderBy(x => x.StateName)
+            };
+
+            return data
+                .Skip((_stateTableCurrentPage - 1) * _stateTablePageSize)
+                .Take(_stateTablePageSize);
+        }
+    }
+
+    private void StateTableGoToPage(int page)
+    {
+        if (page < 1 || page > StateTableTotalPages) return;
+        _stateTableCurrentPage = page;
+    }
+
+    private void StateTablePreviousPage()
+    {
+        if (_stateTableCurrentPage > 1)
+            _stateTableCurrentPage--;
+    }
+
+    private void StateTableNextPage()
+    {
+        if (_stateTableCurrentPage < StateTableTotalPages)
+            _stateTableCurrentPage++;
+    }
+
+    private void StateTableOnPageSizeChanged()
+    {
+        _stateTableCurrentPage = 1;
+    }
+
+    private IEnumerable<int> StateTablePageNumbers
+    {
+        get
+        {
+            var total = StateTableTotalPages;
+            if (total <= 7)
+                return Enumerable.Range(1, total);
+
+            var pages = new List<int> { 1 };
+            var start = Math.Max(2, _stateTableCurrentPage - 1);
+            var end = Math.Min(total - 1, _stateTableCurrentPage + 1);
+
+            if (start > 2) pages.Add(-1);
+            for (var i = start; i <= end; i++) pages.Add(i);
+            if (end < total - 1) pages.Add(-1);
+            pages.Add(total);
+
+            return pages;
+        }
+    }
+
+    private static string Dash(int value) => value == 0 ? "-" : value.ToString();
+
+    public class DealerDto
+    {
+        public int Id { get; set; }
+        public bool InSpic { get; set; }
+        public bool InGreenStar { get; set; }
+        public int StateId { get; set; }
+        public int Status { get; set; }
+        public bool? RMApproved { get; set; }
+        public bool? SMApproved { get; set; }
+        public bool? AVPApproved { get; set; }
+        public bool? IsSubmittedForReview { get; set; }
+    }
+
+    public class StateDto
+    {
+        public int Id { get; set; }
+        public string StateName { get; set; } = "";
+    }
+
+    public class StateWiseSummary
+    {
+        public string StateName { get; set; } = "";
+        public int AsPerSapSpic { get; set; }
+        public int AsPerSapGfl { get; set; }
+        public int SavedDealersSpic { get; set; }
+        public int SavedDealersGfl { get; set; }
+        public int MoSpic { get; set; }
+        public int MoGfl { get; set; }
+        public int RmSpic { get; set; }
+        public int RmGfl { get; set; }
+        public int SmmSpic { get; set; }
+        public int SmmGfl { get; set; }
+        public int AvpSpic { get; set; }
+        public int AvpGfl { get; set; }
+        public int CompletedSpic { get; set; }
+        public int CompletedGfl { get; set; }
+    }
+
+    public class SapCountsResponse
+    {
+        public int TotalDealers { get; set; }
+        public Dictionary<int, int> SpicByState { get; set; } = new();
+        public Dictionary<int, int> GflByState { get; set; } = new();
+        public List<int> AllStateIds { get; set; } = new();
+    }
+}

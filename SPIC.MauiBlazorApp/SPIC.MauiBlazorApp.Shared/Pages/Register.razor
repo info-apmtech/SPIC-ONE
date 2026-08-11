@@ -336,7 +336,7 @@
                                 <div class="field-error">@_errors["FirmName"]</div>
                             }
                         </div>
-                        @if (isSpic)
+                        @if (isSpic && !IsNewDealerFlow)
                         {
                             <div class="col-12 col-md-3">
                                 <label class="form-label-custom">Date of Appointment for SPIC</label>
@@ -345,7 +345,7 @@
                                        @onchange="OnDateOfAppointmentChanged">
                             </div>
                         }
-                        @if (isGreenStar)
+                        @if (isGreenStar && !IsNewDealerFlow)
                         {
                             <div class="col-12 col-md-3">
                                 <label class="form-label-custom">Date of Appointment for Greenstar</label>
@@ -1216,10 +1216,60 @@
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 
+    // Dashboard-only maintenance route used after a New Dealer has completed AVP approval.
+    // It intentionally renders this approved record through the normal Existing Dealer UI,
+    // but does NOT erase its permanent IsNewDealerRegistration source/history flag.
+    private bool IsApprovedNewDealerMaintenanceRequested =>
+        string.Equals(Flow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
+
+    private bool _approvedNewDealerMaintenanceMode;
+
+    private bool IsApprovedNewDealerExistingMaintenanceFlow =>
+        _approvedNewDealerMaintenanceMode;
+
+    // Backward-compatible recovery for approved New Dealers that were created in
+    // the New Dealer flow but whose permanent flag was accidentally cleared by an
+    // older maintenance build. These fields belong only to the New Dealer commercial
+    // application/trade-deposit flow, so normal Existing Dealers are not reclassified.
+    private static bool HasNewDealerRegistrationEvidence(DealerFormModel dealer)
+    {
+        if (dealer.IsNewDealerRegistration)
+            return true;
+
+        return
+            dealer.DealershipApplicationFeeBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeDDNumber) ||
+            dealer.DealershipApplicationFeeDDDate.HasValue ||
+            (dealer.DealershipApplicationFeeAmount ?? 0m) > 0m ||
+            !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeFilePath) ||
+            dealer.SpicTradeDepositDDBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.SpicTradeDepositDDNumber) ||
+            dealer.SpicTradeDepositDDDate.HasValue ||
+            (dealer.SpicTradeDepositDDAmount ?? 0m) > 0m ||
+            !string.IsNullOrWhiteSpace(dealer.SpicTradeDepositFilePath) ||
+            dealer.GflTradeDepositDDBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.GflTradeDepositDDNumber) ||
+            dealer.GflTradeDepositDDDate.HasValue ||
+            (dealer.GflTradeDepositDDAmount ?? 0m) > 0m ||
+            !string.IsNullOrWhiteSpace(dealer.GflTradeDepositFilePath);
+    }
+
     // New Dealer Creation flow: no existing dealer is selected. Dealer ID is generated
     // when the record is first saved and Dealer Code is only assigned after final approval.
+    // An approved New Dealer opened from Dashboard with flow=existing-maintenance is the
+    // only exception: it uses Existing Dealer maintenance fields after approval.
     private bool IsNewDealerFlow =>
-        string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) || _model.IsNewDealerRegistration;
+        !IsApprovedNewDealerExistingMaintenanceFlow &&
+        (string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) || _model.IsNewDealerRegistration);
+
+    // Preserve the maintenance marker while the approved New Dealer moves through the
+    // normal Existing Dealer registration pages. The permanent DB source flag remains true.
+    private string RegistrationFlowParam =>
+        IsApprovedNewDealerExistingMaintenanceFlow
+            ? "&flow=existing-maintenance"
+            : IsNewDealerFlow
+                ? "&flow=new"
+                : string.Empty;
 
     // Controls whether the FULL registration page (Location/Bank/Tax/License/etc.) is hidden.
     // Only pure Terminated status hides these — Inactive+Terminated still shows the full page.
@@ -1426,6 +1476,16 @@
         if (dealer == null) return;
 
         _model = dealer;
+
+        // Only a genuinely approved New Dealer with an allocated Dealer Code may switch
+        // to Existing Dealer maintenance UI. A manually crafted query string cannot turn
+        // a pending New Dealer into the Existing Dealer flow.
+        _approvedNewDealerMaintenanceMode =
+            IsApprovedNewDealerMaintenanceRequested &&
+            HasNewDealerRegistrationEvidence(_model) &&
+            _model.AVPApproved == true &&
+            !string.IsNullOrWhiteSpace(_model.DealerCode);
+
         if (!_model.DateOfAppointment.HasValue || _model.DateOfAppointment.Value == DateTime.MinValue)
             _model.DateOfAppointment = DateTime.Today;
         if (!_model.GreenstarDateOfAppointment.HasValue || _model.GreenstarDateOfAppointment.Value == DateTime.MinValue)
@@ -1994,10 +2054,18 @@
         {
             if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
             if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";
-            if (IsNewDealerFlow)
+            // Location is mandatory for both:
+            // 1) the existing New Dealer flow, and
+            // 2) an Existing Dealer selected/edited from Dealer Code & Name.
+            // Keep Institution/Department legacy behaviour unchanged unless it is already
+            // part of the New Dealer flow.
+            if (IsNewDealerFlow || IsDealerSelected)
             {
-                if (!_model.Latitude.HasValue) _errors["Latitude"] = "Latitude is required (click the map or use current location)";
-                if (!_model.Longitude.HasValue) _errors["Longitude"] = "Longitude is required (click the map or use current location)";
+                if (!_model.Latitude.HasValue)
+                    _errors["Latitude"] = "Latitude is required (click the map or use current location)";
+
+                if (!_model.Longitude.HasValue)
+                    _errors["Longitude"] = "Longitude is required (click the map or use current location)";
             }
             if (string.IsNullOrWhiteSpace(_model.PinCode)) _errors["PinCode"] = "Pincode is required";
             else if (_model.PinCode.Length != 6) _errors["PinCode"] = "Pincode must be 6 digits";
@@ -2060,7 +2128,14 @@
         {
             _model.IsDealer = selected == "Dealer";
 
-            _model.IsNewDealerRegistration = IsNewDealerFlow;
+            // Preserve the permanent source identity for an approved dealer that originally
+            // came through Create New Dealer. The maintenance screen behaves like Existing
+            // Dealer, but the New/Existing Dashboard filter must continue to classify it by
+            // how it was originally registered. All other flows keep the previous assignment.
+            if (IsApprovedNewDealerExistingMaintenanceFlow)
+                _model.IsNewDealerRegistration = true;
+            else
+                _model.IsNewDealerRegistration = IsNewDealerFlow;
 
             _model.DealerType = selected switch
             {
@@ -2230,7 +2305,7 @@
                 return;
             }
 
-            Nav.NavigateTo($"/Experience?dealerId={_model.Id}&mode=view{(IsNewDealerFlow ? "&flow=new" : "")}");
+            Nav.NavigateTo($"/Experience?dealerId={_model.Id}&mode=view{RegistrationFlowParam}");
             return;
         }
 
@@ -2277,7 +2352,7 @@
         {
             SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, false);
             Loading.Show();
-            var flowParam = IsNewDealerFlow ? "&flow=new" : "";
+            var flowParam = RegistrationFlowParam;
             Nav.NavigateTo($"/Experience?dealerId={_model.Id}{flowParam}");
         }
         else
@@ -3088,6 +3163,9 @@ public string? GflTradeDepositDDNumber { get; set; }
 public int? GflTradeDepositDDBankId { get; set; }
 public DateTime? GflTradeDepositDDDate { get; set; }
 public decimal? GflTradeDepositDDAmount { get; set; }
+public string? DealershipApplicationFeeFilePath { get; set; }
+public string? SpicTradeDepositFilePath { get; set; }
+public string? GflTradeDepositFilePath { get; set; }
     }
 
     

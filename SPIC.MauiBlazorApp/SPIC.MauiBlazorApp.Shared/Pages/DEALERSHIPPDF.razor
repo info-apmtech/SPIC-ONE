@@ -785,6 +785,28 @@
                             <label>Dealer Code & Name</label>
                             <div class="inline-val">@_model.DealerCode - @_model.FirmName</div>
                         </div>
+                        @if (_showNewDealerSavedDetails && _model.InSpic && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
+                        {
+                            <div class="inline-field">
+                                <label>SPIC Code</label>
+                                <div class="inline-val">@(_model.SPICCode ?? "-")</div>
+                            </div>
+                        }
+                        @if (_showNewDealerSavedDetails && _model.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
+                        {
+                            @if (!string.IsNullOrWhiteSpace(_model.NCode))
+                            {
+                                <div class="inline-field"><label>GreenStar N Code</label><div class="inline-val">@_model.NCode</div></div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_model.GreenStarCode))
+                            {
+                                <div class="inline-field"><label>GreenStar Z Code</label><div class="inline-val">@_model.GreenStarCode</div></div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_model.TnCode))
+                            {
+                                <div class="inline-field"><label>GreenStar T Code</label><div class="inline-val">@_model.TnCode</div></div>
+                            }
+                        }
                         <div class="inline-field">
                             <label>Parent Dealer Code & Name</label>
                             <div class="inline-val">@GetDealerCodeAndName(_model.ParentDealer)</div>
@@ -823,6 +845,100 @@
 </div>
                     </div>
                 </div>
+
+                @if (_showNewDealerSavedDetails)
+                {
+                    <div class="dpdf-section">
+                        <div class="dpdf-section-title mb-2">
+                            <div class="dpdf-section-icon">🆕</div>
+                            <div class="dpdf-section-text">New Dealer Saved Details</div>
+                        </div>
+
+                        <div class="grid-2" style="row-gap: 12px; margin-bottom: 10px;">
+                            <div class="inline-field"><label>Registration Type</label><div class="inline-val">New Dealer</div></div>
+                            <div class="inline-field"><label>Dealer Code</label><div class="inline-val">@(string.IsNullOrWhiteSpace(_model.DealerCode) ? "Pending - generated after final approval" : _model.DealerCode)</div></div>
+                        </div>
+
+                        @if (_model.InSpic && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
+                        {
+                            <div class="sub-card" style="padding: 12px; margin-bottom: 10px;">
+                                <h3 class="sub-card-title">SPIC Dealership Application Fee</h3>
+                                <div class="grid-2" style="row-gap: 10px;">
+                                    <div class="inline-field"><label>Bank</label><div class="inline-val">@GetBankName(_model.DealershipApplicationFeeBankId)</div></div>
+                                    <div class="inline-field"><label>DD Number</label><div class="inline-val">@(_model.DealershipApplicationFeeDDNumber ?? "-")</div></div>
+                                    <div class="inline-field"><label>DD Date</label><div class="inline-val">@(_model.DealershipApplicationFeeDDDate?.ToString("dd MMMM yyyy") ?? "-")</div></div>
+                                    <div class="inline-field"><label>Amount</label><div class="inline-val">@PdfMoneyOrDash(_model.DealershipApplicationFeeAmount)</div></div>
+                                    <div class="inline-field"><label>Payable At</label><div class="inline-val">@(_model.DealershipApplicationFeePayableAt ?? "-")</div></div>
+                                    <div class="inline-field">
+                                        <label>Attachment</label>
+                                        <div class="inline-val">
+                                            @if (!string.IsNullOrWhiteSpace(_model.DealershipApplicationFeeFilePath))
+                                            {
+                                                <span>@GetFileName(_model.DealershipApplicationFeeFilePath)</span>
+                                                <a class="view-file-btn enclosure-action-col" href="@GetFileUrl(_model.DealershipApplicationFeeFilePath)" target="_blank" rel="noopener noreferrer"><i class="bi @GetFileKindIcon(_model.DealershipApplicationFeeFilePath)"></i> @GetFileKindLabel(_model.DealershipApplicationFeeFilePath)</a>
+                                            }
+                                            else
+                                            {
+                                                <span>-</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sub-card" style="padding: 12px; margin-bottom: 10px;">
+                                <h3 class="sub-card-title">SPIC Trade Deposit - New Dealer</h3>
+                                <div class="grid-2" style="row-gap: 10px;">
+                                    <div class="inline-field"><label>Bank</label><div class="inline-val">@GetBankName(_model.SpicTradeDepositDDBankId)</div></div>
+                                    <div class="inline-field"><label>DD Number</label><div class="inline-val">@(_model.SpicTradeDepositDDNumber ?? "-")</div></div>
+                                    <div class="inline-field"><label>DD Date</label><div class="inline-val">@(_model.SpicTradeDepositDDDate?.ToString("dd MMMM yyyy") ?? "-")</div></div>
+                                    <div class="inline-field"><label>Amount</label><div class="inline-val">@PdfMoneyOrDash(_model.SpicTradeDepositDDAmount)</div></div>
+                                    <div class="inline-field">
+                                        <label>Attachment</label>
+                                        <div class="inline-val">
+                                            @if (!string.IsNullOrWhiteSpace(_model.SpicTradeDepositFilePath))
+                                            {
+                                                <span>@GetFileName(_model.SpicTradeDepositFilePath)</span>
+                                                <a class="view-file-btn enclosure-action-col" href="@GetFileUrl(_model.SpicTradeDepositFilePath)" target="_blank" rel="noopener noreferrer"><i class="bi @GetFileKindIcon(_model.SpicTradeDepositFilePath)"></i> @GetFileKindLabel(_model.SpicTradeDepositFilePath)</a>
+                                            }
+                                            else
+                                            {
+                                                <span>-</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (_model.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
+                        {
+                            <div class="sub-card" style="padding: 12px; margin-bottom: 10px;">
+                                <h3 class="sub-card-title">GFL / GreenStar Trade Deposit - New Dealer</h3>
+                                <div class="grid-2" style="row-gap: 10px;">
+                                    <div class="inline-field"><label>Bank</label><div class="inline-val">@GetBankName(_model.GflTradeDepositDDBankId)</div></div>
+                                    <div class="inline-field"><label>DD Number</label><div class="inline-val">@(_model.GflTradeDepositDDNumber ?? "-")</div></div>
+                                    <div class="inline-field"><label>DD Date</label><div class="inline-val">@(_model.GflTradeDepositDDDate?.ToString("dd MMMM yyyy") ?? "-")</div></div>
+                                    <div class="inline-field"><label>Amount</label><div class="inline-val">@PdfMoneyOrDash(_model.GflTradeDepositDDAmount)</div></div>
+                                    <div class="inline-field">
+                                        <label>Attachment</label>
+                                        <div class="inline-val">
+                                            @if (!string.IsNullOrWhiteSpace(_model.GflTradeDepositFilePath))
+                                            {
+                                                <span>@GetFileName(_model.GflTradeDepositFilePath)</span>
+                                                <a class="view-file-btn enclosure-action-col" href="@GetFileUrl(_model.GflTradeDepositFilePath)" target="_blank" rel="noopener noreferrer"><i class="bi @GetFileKindIcon(_model.GflTradeDepositFilePath)"></i> @GetFileKindLabel(_model.GflTradeDepositFilePath)</a>
+                                            }
+                                            else
+                                            {
+                                                <span>-</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
 
                 @if (_isTerminatedRestricted)
                 {
@@ -2778,6 +2894,20 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         if (_hasWholesaleLicense) Add("Wholesale Fertilizers License", _model?.WholesaleLicenseFilePath);
         if (_hasRetailLicense) Add("Retail Fertilizers License", _model?.RetailLicenseFilePath);
 
+        if (_showNewDealerSavedDetails)
+        {
+            if (_model.InSpic && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC"))
+            {
+                Add("New Dealer - Dealership Application Fee", _model.DealershipApplicationFeeFilePath);
+                Add("New Dealer - SPIC Trade Deposit", _model.SpicTradeDepositFilePath);
+            }
+
+            if (_model.InGreenStar && (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar"))
+                Add("New Dealer - GFL Trade Deposit", _model.GflTradeDepositFilePath);
+
+            Add("Request Letter for Dealership", _docs?.RequestLetterFilePath);
+        }
+
         // Partner / proprietor documents
         if (_savedPartners != null && _showProprietorAndInvestment)
         {
@@ -3183,6 +3313,32 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
     private bool _showProprietorAndInvestment =>
         !_isTerminatedRestricted && !_isNotTraceableRestricted;
 
+    // Display-only New Dealer identity. It deliberately does not change any approval,
+    // credit-limit, or maintenance routing. Historical rows whose old source flag was
+    // accidentally cleared can still show their New Dealer commercial fields when those
+    // dedicated saved values are present.
+    private bool _showNewDealerSavedDetails =>
+        _model.IsNewDealerRegistration ||
+        _model.DealershipApplicationFeeBankId.HasValue ||
+        !string.IsNullOrWhiteSpace(_model.DealershipApplicationFeeDDNumber) ||
+        _model.DealershipApplicationFeeDDDate.HasValue ||
+        _model.DealershipApplicationFeeAmount.HasValue ||
+        !string.IsNullOrWhiteSpace(_model.DealershipApplicationFeePayableAt) ||
+        !string.IsNullOrWhiteSpace(_model.DealershipApplicationFeeFilePath) ||
+        _model.SpicTradeDepositDDBankId.HasValue ||
+        !string.IsNullOrWhiteSpace(_model.SpicTradeDepositDDNumber) ||
+        _model.SpicTradeDepositDDDate.HasValue ||
+        _model.SpicTradeDepositDDAmount.HasValue ||
+        !string.IsNullOrWhiteSpace(_model.SpicTradeDepositFilePath) ||
+        _model.GflTradeDepositDDBankId.HasValue ||
+        !string.IsNullOrWhiteSpace(_model.GflTradeDepositDDNumber) ||
+        _model.GflTradeDepositDDDate.HasValue ||
+        _model.GflTradeDepositDDAmount.HasValue ||
+        !string.IsNullOrWhiteSpace(_model.GflTradeDepositFilePath);
+
+    private static string PdfMoneyOrDash(decimal? value) =>
+        value.HasValue ? $"₹ {value.Value:N2}" : "-";
+
     // Safely gets the file name from a full path
     private string GetFileName(string? path)
     {
@@ -3202,6 +3358,19 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         if (!string.IsNullOrWhiteSpace(_model?.AadhaarFilePath)) return true;
         if (!string.IsNullOrWhiteSpace(_model?.WholesaleLicenseFilePath)) return true;
         if (!string.IsNullOrWhiteSpace(_model?.RetailLicenseFilePath)) return true;
+
+        if (_showNewDealerSavedDetails)
+        {
+            var showSpicNewDealerFiles = _model.InSpic &&
+                (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "SPIC");
+            var showGreenStarNewDealerFiles = _model.InGreenStar &&
+                (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar");
+
+            if (showSpicNewDealerFiles && !string.IsNullOrWhiteSpace(_model.DealershipApplicationFeeFilePath)) return true;
+            if (showSpicNewDealerFiles && !string.IsNullOrWhiteSpace(_model.SpicTradeDepositFilePath)) return true;
+            if (showGreenStarNewDealerFiles && !string.IsNullOrWhiteSpace(_model.GflTradeDepositFilePath)) return true;
+            if (!string.IsNullOrWhiteSpace(_docs?.RequestLetterFilePath)) return true;
+        }
 
         // Proprietor page docs
         if (_savedPartners != null && _savedPartners.Any(p =>
@@ -4046,6 +4215,7 @@ private decimal GetMoRecommendedLimit()
         public string? SPICCode { get; set; }
         public string? GreenStarCode { get; set; }
         public string? TnCode { get; set; }
+        public string? NCode { get; set; }
         public int StateId { get; set; }
         public int Region { get; set; }
         public int HQ { get; set; }
@@ -4130,6 +4300,29 @@ private decimal GetMoRecommendedLimit()
         public decimal? GreenstarTradeDepositAmountReg { get; set; }
         public string? GreenstarTradeDepositReceiptNoReg { get; set; }
         public DateTime? GreenstarTradeDepositDateReg { get; set; }
+
+        // New Dealer source-flow flag and saved commercial details.
+        // These properties are display-only in this PDF component; persistence remains in
+        // DealerRegistration and the existing API flow.
+        public bool IsNewDealerRegistration { get; set; }
+        public int? DealershipApplicationFeeBankId { get; set; }
+        public string? DealershipApplicationFeeDDNumber { get; set; }
+        public DateTime? DealershipApplicationFeeDDDate { get; set; }
+        public decimal? DealershipApplicationFeeAmount { get; set; }
+        public string? DealershipApplicationFeePayableAt { get; set; }
+        public string? DealershipApplicationFeeFilePath { get; set; }
+
+        public string? SpicTradeDepositDDNumber { get; set; }
+        public int? SpicTradeDepositDDBankId { get; set; }
+        public DateTime? SpicTradeDepositDDDate { get; set; }
+        public decimal? SpicTradeDepositDDAmount { get; set; }
+        public string? SpicTradeDepositFilePath { get; set; }
+
+        public string? GflTradeDepositDDNumber { get; set; }
+        public int? GflTradeDepositDDBankId { get; set; }
+        public DateTime? GflTradeDepositDDDate { get; set; }
+        public decimal? GflTradeDepositDDAmount { get; set; }
+        public string? GflTradeDepositFilePath { get; set; }
     }
 
     public class LocationItemDto
@@ -4583,6 +4776,7 @@ public int FY3 { get; set; }
         public string? ArticlesOfAssociationFilePath { get; set; }
         public string? MemorandumOfAssociationFilePath { get; set; }
         public string? ByLaw { get; set; }
+        public string? RequestLetterFilePath { get; set; }
 
     }
     public class FinancialYear

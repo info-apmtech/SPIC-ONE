@@ -94,6 +94,11 @@ namespace Spic.Infrastructure.Services
 			filter ??= new StockDetailsFilter();
 			NormalizeFilter(filter);
 
+			// Existing Razor converts Financial Year selections to DateFrom/DateTo.
+			// This fallback keeps direct API clients compatible when they send only
+			// FinancialYearIds. Explicit dates always take precedence.
+			await ApplyFinancialYearRangeAsync(filter, cancellationToken);
+
 			var productIds = SplitProductKeys(filter);
 			var period = ResolvePeriod(filter);
 
@@ -828,6 +833,42 @@ namespace Spic.Infrastructure.Services
 			};
 		}
 
+		private async Task ApplyFinancialYearRangeAsync(
+			StockDetailsFilter filter,
+			CancellationToken cancellationToken)
+		{
+			if (filter.FinancialYearIds.Count == 0 ||
+				(filter.DateFrom.HasValue && filter.DateTo.HasValue))
+			{
+				return;
+			}
+
+			var ranges = await _db.Set<FinancialYear>()
+				.AsNoTracking()
+				.Where(x => filter.FinancialYearIds.Contains(x.Id))
+				.Select(x => new
+				{
+					x.StartDate,
+					x.EndDate
+				})
+				.ToListAsync(cancellationToken);
+
+			if (ranges.Count == 0)
+			{
+				return;
+			}
+
+			if (!filter.DateFrom.HasValue)
+			{
+				filter.DateFrom = ranges.Min(x => x.StartDate);
+			}
+
+			if (!filter.DateTo.HasValue)
+			{
+				filter.DateTo = ranges.Max(x => x.EndDate);
+			}
+		}
+
 		private static ReportingPeriod ResolvePeriod(StockDetailsFilter filter)
 		{
 			var today = DateTime.UtcNow.Date;
@@ -839,7 +880,9 @@ namespace Spic.Infrastructure.Services
 
 			if (rangeEnd < rangeStart)
 			{
-				rangeEnd = rangeStart;
+				// Normalize an accidentally reversed range instead of silently
+				// collapsing it to one day. Valid ranges keep the exact old flow.
+				(rangeStart, rangeEnd) = (rangeEnd, rangeStart);
 			}
 
 			var periodStart = DateTime.SpecifyKind(

@@ -28,8 +28,9 @@ namespace SPIC.Core.DTOs
 		// P:10 = Product.Id 10, I:10 = IfmsProduct.Id 10.
 		public List<string> ProductKeys { get; set; } = new();
 
-		// Combined dealer keys:
-		// R:10 = DealerRegistration.Id 10, I:10 = IfmsDealer.Id 10.
+		// Combined dealer keys used by the current dropdown:
+		// R10 = DealerRegistration.Id 10, I10 = IfmsDealer.Id 10.
+		// The backend parser also accepts R:10 / I:10 for compatibility.
 		public List<string> DealerKeys { get; set; } = new();
 
 		public string? Source { get; set; }
@@ -183,7 +184,7 @@ namespace SPIC.Core.DTOs
 		public string AgeStatus { get; set; } = string.Empty;
 
 		// Exact Status master value uploaded from Excel for company/wholesaler rows.
-		// Retailer Sales (DPT) has no StatusId, so it displays "Reported".
+		// Retailer Sales (DPT) has no StatusId, so it uses the normal "New" fallback.
 		public string WorkflowStatus { get; set; } = "New";
 		public string BuyerConsentStatus { get; set; } = "Not Required";
 	}

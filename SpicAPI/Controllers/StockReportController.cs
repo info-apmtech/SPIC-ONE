@@ -19,10 +19,6 @@ namespace SpicAPI.Controllers
 			_service = service;
 		}
 
-		/// <summary>
-		/// Returns the existing Product master and the new IfmsProduct master in
-		/// one dropdown-safe list. P:id and I:id prevent ID collisions.
-		/// </summary>
 		[HttpGet("products")]
 		public async Task<ActionResult> Products()
 		{
@@ -44,8 +40,6 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> ExportExcel(
 			[FromBody] StockReportFilter? filter)
 		{
-			// GetAllRowsAsync still uses the same latest-snapshot flow. It now also
-			// resolves rows whose product is stored in IfmsProducts.
 			var rows = await _service.GetAllRowsAsync(
 				filter ?? new StockReportFilter());
 
@@ -91,7 +85,7 @@ namespace SpicAPI.Controllers
 					worksheet.Cell(rowNumber, 6).Value = "N/A";
 				}
 
-				worksheet.Cell(rowNumber, 7).Value = row.Status;
+				worksheet.Cell(rowNumber, 7).Value = FormatAgeingStatus(row.Status);
 				rowNumber++;
 			}
 
@@ -105,6 +99,19 @@ namespace SpicAPI.Controllers
 				stream.ToArray(),
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 				$"StockReport_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
+		}
+
+		private static string FormatAgeingStatus(string? status)
+		{
+			return status?.Trim() switch
+			{
+				"Fresh" => "Fresh (0-30)",
+				"Medium" => "Medium (30-90)",
+				"Slow Moving" => "Slow Moving (90-180)",
+				"Long Aged" => "Long Aged (180-365)",
+				"Critical" => "Critical (365+)",
+				_ => status ?? string.Empty
+			};
 		}
 
 		[HttpPost("export/pdf")]

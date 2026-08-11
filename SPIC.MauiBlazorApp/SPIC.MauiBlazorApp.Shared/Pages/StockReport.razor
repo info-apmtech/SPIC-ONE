@@ -106,18 +106,18 @@
 					<select id="product-select" class="sr-form-select" multiple="multiple">
 						@foreach (var p in _products)
 						{
-							<option value="@p.Id" selected="@(_selectedProducts.Contains(p.Id))">@p.Name</option>
+							<option value="@p.Value" selected="@(_selectedProducts.Contains(p.Value))">@p.Name</option>
 						}
 					</select>
 				</div>
 				<div class="sr-form-group">
 					<label class="sr-form-label">Ageing Range (Days)</label>
 					<select id="ageing-select" class="sr-form-select" multiple="multiple">
-						<option value="0-30" selected="@(_selectedAgeings.Contains("0-30"))">0–30 Days</option>
-						<option value="31-60" selected="@(_selectedAgeings.Contains("31-60"))">31–60 Days</option>
-						<option value="61-90" selected="@(_selectedAgeings.Contains("61-90"))">61–90 Days</option>
-						<option value="91-120" selected="@(_selectedAgeings.Contains("91-120"))">91–120 Days</option>
-						<option value="Above 120" selected="@(_selectedAgeings.Contains("Above 120"))">Above 120 Days</option>
+						<option value="0-30" selected="@(_selectedAgeings.Contains("0-30"))">Fresh (0-30)</option>
+						<option value="31-90" selected="@(_selectedAgeings.Contains("31-90"))">Medium (30-90)</option>
+						<option value="91-180" selected="@(_selectedAgeings.Contains("91-180"))">Slow Moving (90-180)</option>
+						<option value="181-364" selected="@(_selectedAgeings.Contains("181-364"))">Long Aged (180-365)</option>
+						<option value="365+" selected="@(_selectedAgeings.Contains("365+"))">Critical (365+)</option>
 					</select>
 				</div>
 			</div>
@@ -129,7 +129,7 @@
 				</button>
 				<button class="sr-btn sr-btn-solid" @onclick="ApplyFilters" disabled="@(!_select2Initialized || _isLoading)">
 					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg>
-                    Search
+					Search
 				</button>
 			</div>
 		</div>
@@ -461,7 +461,7 @@
 										<td>@row.Quantity</td>
 										<td>@row.LyingWith</td>
 										<td class="@AgeingClass(row.AgeingDays)">@row.AgeingDays</td>
-										<td><div class="sr-status @StatusClass(row.Status)"><div class="dot"></div>@row.Status</div></td>
+										<td><div class="sr-status @StatusClass(row.Status)"><div class="dot"></div>@StatusName(row.Status)</div></td>
 										<td style="white-space:nowrap;">
 											<button class="sr-action-btn" title="View" @onclick="() => OpenSalesDetails(row)">
 												<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -559,7 +559,7 @@
 	private List<LocationDto> _districts = new();
 	private List<LocationDto> _subDistricts = new();
 
-	private List<LocationDto> _products = new();
+	private List<ProductFilterOptionDto> _products = new();
 	private List<LocationDto> _lyingWith = new();
 
 	private List<int> _selectedStates = new();
@@ -567,7 +567,7 @@
 	private List<int> _selectedHqs = new();
 	private List<int> _selectedDistricts = new();
 	private List<int> _selectedSubDistricts = new();
-	private List<int> _selectedProducts = new();
+	private List<string> _selectedProducts = new();
 	private List<int> _selectedLyingWiths = new();
 	private List<string> _selectedAgeings = new();
 
@@ -643,7 +643,7 @@
 		var hqTask = FetchData("api/Headquarter/all");
 		var districtsTask = FetchData("api/District/all");
 		var subDistrictsTask = FetchData("api/SubDistrict/all");
-		var productsTask = FetchData("api/Product/all");
+		var productsTask = FetchProductOptions();
 		var lyingWithTask = FetchData("api/LyingWithMaster/all");
 
 		await Task.WhenAll(
@@ -675,7 +675,7 @@
 				subDistrict.StateId = parentDistrict.StateId;
 		}
 
-       // Apply role-based visibility similar to DealerRegistration: admins/director/avp see all,
+		// Apply role-based visibility similar to DealerRegistration: admins/director/avp see all,
 		// other roles should be restricted to their assigned State/Region/HQ.
 		ApplyRoleRestrictions();
 
@@ -809,7 +809,8 @@
 		_filter.DistrictIds = _selectedDistricts.ToList();
 		_filter.SubDistrictIds = _selectedSubDistricts.ToList();
 		_filter.LyingWithIds = _selectedLyingWiths.ToList();
-		_filter.ProductIds = _selectedProducts.ToList();
+		_filter.ProductIds = ParseSelectedProductIds(_selectedProducts, "P:");
+		_filter.IfmsProductIds = ParseSelectedProductIds(_selectedProducts, "I:");
 		_filter.AgeingRanges = _selectedAgeings.ToList();
 	}
 
@@ -928,13 +929,45 @@
 	}
 
 	// ---------- Status / ageing pill colours ----------
-	private string StatusClass(string status) => status switch
+	private static string StatusName(string? status)
 	{
-		"Fresh" => "st-green",
-		"Medium" => "st-light-green",
-		"Slow Moving" => "st-orange",
-		_ => "st-red"   // Dead Stock
-	};
+		var value = status?.Trim() ?? string.Empty;
+
+		if (value.StartsWith("Fresh", StringComparison.OrdinalIgnoreCase))
+			return "Fresh";
+		if (value.StartsWith("Medium", StringComparison.OrdinalIgnoreCase))
+			return "Medium";
+		if (value.StartsWith("Slow Moving", StringComparison.OrdinalIgnoreCase))
+			return "Slow Moving";
+		if (value.StartsWith("Long Aged", StringComparison.OrdinalIgnoreCase))
+			return "Long Aged";
+		if (value.StartsWith("Critical", StringComparison.OrdinalIgnoreCase))
+			return "Critical";
+
+		return value;
+	}
+
+	private string StatusClass(string status)
+	{
+		var value = status?.Trim() ?? string.Empty;
+
+		if (value.StartsWith("Fresh", StringComparison.OrdinalIgnoreCase))
+			return "st-green";
+
+		if (value.StartsWith("Medium", StringComparison.OrdinalIgnoreCase))
+			return "st-teal";
+
+		if (value.StartsWith("Slow Moving", StringComparison.OrdinalIgnoreCase))
+			return "st-orange";
+
+		if (value.StartsWith("Long Aged", StringComparison.OrdinalIgnoreCase))
+			return "st-amber";
+
+		if (value.StartsWith("Critical", StringComparison.OrdinalIgnoreCase))
+			return "st-critical";
+
+		return "st-neutral";
+	}
 
 	private string AgeingClass(int days) => days <= 30 ? "txt-green" : days <= 60 ? "txt-orange" : "txt-red";
 
@@ -1015,6 +1048,24 @@
 			.ToList();
 	}
 
+	private static List<int> ParseSelectedProductIds(
+		IEnumerable<string>? values,
+		string prefix)
+	{
+		if (values is null)
+			return new List<int>();
+
+		return values
+			.Where(value =>
+				!string.IsNullOrWhiteSpace(value) &&
+				value.StartsWith(prefix, StringComparison.Ordinal))
+			.Select(value => value[prefix.Length..])
+			.Where(value => int.TryParse(value, out _))
+			.Select(int.Parse)
+			.Distinct()
+			.ToList();
+	}
+
 	[JSInvokable]
 	public async Task OnStateChanged(List<string>? values)
 	{
@@ -1070,7 +1121,10 @@
 	[JSInvokable]
 	public void OnProductChanged(List<string>? values)
 	{
-		_selectedProducts = ParseSelectedIds(values);
+		_selectedProducts = values?
+			.Where(value => !string.IsNullOrWhiteSpace(value))
+			.Distinct(StringComparer.Ordinal)
+			.ToList() ?? new List<string>();
 		StateHasChanged();
 	}
 
@@ -1196,6 +1250,24 @@
 		};
 
 		await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+	}
+
+	private async Task<List<ProductFilterOptionDto>> FetchProductOptions()
+	{
+		try
+		{
+			using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+
+			return await Http.GetFromJsonAsync<List<ProductFilterOptionDto>>(
+				"api/StockReport/products",
+				cts.Token)
+				?? new List<ProductFilterOptionDto>();
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"[StockReport] products: {ex}");
+			return new List<ProductFilterOptionDto>();
+		}
 	}
 
 	private async Task<List<LocationDto>> FetchData(string url)

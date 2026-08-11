@@ -255,6 +255,106 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("Banks");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.CandFWarehouse", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("BasicStateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Block")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactNumber")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DoorNo")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("GflAdditionalReservationQuantityLitres")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("GflReservationQuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("GoogleURL")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("InGreenStar")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("InSpic")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("OperatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OtherDocumentPathsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PinCode")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Street")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubVillage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Taluk")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Village")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WarehouseCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CandFWarehouses");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
                 {
                     b.Property<int>("Id")
@@ -351,6 +451,55 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Competitors");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CreditLimitHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("AVPApprovedCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("AdditionalCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("CreditType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("ExistingCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("ExistingValidFrom")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("ExistingValidTo")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal?>("MORecommendedCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("RMApprovedCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("SMApprovedCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CreditLimitHistories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Crop", b =>
@@ -1202,6 +1351,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("DealershipApplicationFeeDDNumber")
                         .HasColumnType("text");
 
+                    b.Property<string>("DealershipApplicationFeeFilePath")
+                        .HasColumnType("text");
+
                     b.Property<string>("DealershipApplicationFeePayableAt")
                         .HasColumnType("text");
 
@@ -1249,6 +1401,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("GflTradeDepositDDNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GflTradeDepositFilePath")
                         .HasColumnType("text");
 
                     b.Property<string>("GoogleMapURL")
@@ -1388,6 +1543,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("SpicTradeDepositDDNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SpicTradeDepositFilePath")
                         .HasColumnType("text");
 
                     b.Property<int>("StateId")
@@ -2267,6 +2425,15 @@ namespace Spic.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("BasicStateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Block")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactNumber")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -2276,18 +2443,54 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("GoogleURL")
                         .HasColumnType("text");
 
+                    b.Property<int?>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("InGreenStar")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("InSpic")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("OperatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OtherDocumentPathsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PinCode")
+                        .HasColumnType("text");
+
                     b.Property<string>("RailwayCode")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SAPCode")
                         .HasColumnType("text");
 
                     b.Property<int>("StateId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("SubVillage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Taluk")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -2295,6 +2498,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("UpdatedBy")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("Village")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("WarehouseType")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -3197,17 +3406,92 @@ namespace Spic.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("BasicStateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Block")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactNumber")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<int>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DoorNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FertilizerLicenseDocumentPath")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("GflAdditionalReservationQuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("GflApprovedReservationQuantityMT")
+                        .HasColumnType("numeric");
+
                     b.Property<string>("GoogleURL")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GstDocumentPath")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("InGreenStar")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("InSpic")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("InsuranceDocumentPath")
                         .HasColumnType("text");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("OperatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OtherDocumentPathsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PinCode")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("SpicAdditionalReservationQuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("SpicApprovedReservationQuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Street")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubVillage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Taluk")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -3217,9 +3501,15 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Village")
+                        .HasColumnType("text");
+
                     b.Property<string>("WarehouseCode")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("WarehouseType")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

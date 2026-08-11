@@ -38,6 +38,71 @@
     private bool _showEnclosures =>
         !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isInactiveTerminatedRestricted && !_isDepartmentDealer;
 
+    // Only the INITIAL New Dealer approval (before DealerCode allocation) uses the
+    // trade-deposit/no-credit-limit review path. After first AVP approval the permanent
+    // IsNewDealerRegistration flag remains true, but a record with DealerCode is handled
+    // like an Existing Dealer for future maintenance/re-approval so Credit Limit values
+    // are reviewed and the DealerCode is never generated again.
+    private bool _isNewDealer =>
+        _dealer?.IsNewDealerRegistration == true &&
+        string.IsNullOrWhiteSpace(_dealer?.DealerCode);
+
+    // Display-only identity for every registration that originated from the New Dealer flow.
+    // Keep this separate from _isNewDealer because _isNewDealer intentionally means only the
+    // first approval cycle before DealerCode allocation. Approved New Dealers and their later
+    // Existing Dealer maintenance/re-approval cycles must still show the originally saved
+    // New Dealer application fee / trade-deposit values.
+    private bool _showNewDealerSavedDetails =>
+        _dealer?.IsNewDealerRegistration == true || HasNewDealerRegistrationEvidence(_dealer);
+
+    private static bool HasNewDealerRegistrationEvidence(DR.DealerRegistration? dealer)
+    {
+        if (dealer == null)
+            return false;
+
+        return
+            dealer.DealershipApplicationFeeBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeDDNumber) ||
+            dealer.DealershipApplicationFeeDDDate.HasValue ||
+            dealer.DealershipApplicationFeeAmount.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeePayableAt) ||
+            !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeFilePath) ||
+            dealer.SpicTradeDepositDDBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.SpicTradeDepositDDNumber) ||
+            dealer.SpicTradeDepositDDDate.HasValue ||
+            dealer.SpicTradeDepositDDAmount.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.SpicTradeDepositFilePath) ||
+            dealer.GflTradeDepositDDBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.GflTradeDepositDDNumber) ||
+            dealer.GflTradeDepositDDDate.HasValue ||
+            dealer.GflTradeDepositDDAmount.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.GflTradeDepositFilePath);
+    }
+
+    private string GetReviewBankName(int? bankId)
+    {
+        if (!bankId.HasValue || bankId.Value <= 0)
+            return "-";
+
+        return _bankNames.TryGetValue(bankId.Value, out var name)
+            ? name
+            : bankId.Value.ToString();
+    }
+
+    private static string MoneyOrDash(decimal? value) =>
+        value.HasValue ? $"₹{value.Value:N2}" : "-";
+
+    private string GetSelectedCompanyDisplay()
+    {
+        if (_dealer == null)
+            return "-";
+
+        var companies = new List<string>();
+        if (_dealer.InSpic) companies.Add("SPIC");
+        if (_dealer.InGreenStar) companies.Add("GreenStar");
+        return companies.Count > 0 ? string.Join(" + ", companies) : "-";
+    }
+
     // Related data
     private List<DR.DealerExperience> _experiences = new();
     private List<DR.AnnualSaleDataLastFYofDealerRegistration> _annualSales = new();
@@ -69,6 +134,8 @@
     private Dictionary<int, string> _financialYearNames = new();
 
     private string? _submittedByName;
+    private string? _submittedByRole;
+    private string SubmittedByRoleDisplay => string.IsNullOrWhiteSpace(_submittedByRole) ? "-" : _submittedByRole!;
     private Dictionary<string, string> _userNames = new();
     private List<UserInfoDto> _users = new();
 
@@ -80,6 +147,12 @@
     private decimal? _avpCreditLimitGfl;
     private decimal? _previousRmCreditLimitGfl;
     private decimal? _previousSmCreditLimitGfl;
+    private string? _approvalError;
+
+    // Stage of the Credit Limit cycle for an already-approved dealer whose Credit
+    // Limit form was re-submitted: 0 = none, 1 = awaiting RM, 2 = awaiting SMM,
+    // 3 = awaiting AVP. Computed from the latest CreditLimitHistory record.
+    private int _creditLimitCycleStage;
 
     // Lookup names
     private string? _stateName;
@@ -106,12 +179,13 @@
             _isLoading = true;
             try
             {
-               _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{dealerId}");
+                _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{dealerId}");
                 if (_dealer != null)
                 {
                     await FetchRelatedData(_dealer.Id);
                     await LoadLookups();
                     await LoadCreditLimitSalesData(_dealer.Id);
+                    await LoadCreditLimitCycleStage(_dealer.Id);
                 }
             }
             catch { }
@@ -182,7 +256,10 @@
                 var district = await Http.GetFromJsonAsync<DR.District>($"api/District/{_dealer.DistrictId}");
                 _districtName = district?.DistrictName;
             }
-            if (_dealer.BankId > 0)
+            if ((_dealer.BankId ?? 0) > 0 ||
+                _dealer.DealershipApplicationFeeBankId.HasValue ||
+                _dealer.SpicTradeDepositDDBankId.HasValue ||
+                _dealer.GflTradeDepositDDBankId.HasValue)
             {
                 try
                 {
@@ -250,32 +327,132 @@
         try
         {
             if (_dealer == null) return;
-            var id = _dealer.UpdatedBy ?? _dealer.CreatedBy;
+
+            // The first "Submitted" action belongs to the dealer creator.
+            // Do not use UpdatedBy here because later approval actions can change UpdatedBy.
+            var id = !string.IsNullOrWhiteSpace(_dealer.CreatedBy)
+                ? _dealer.CreatedBy
+                : _dealer.UpdatedBy;
+
             if (string.IsNullOrWhiteSpace(id)) return;
-            // Ensure we have the user list cached (optimization similar to EmployeeManagement page)
+
+            // Load the same UserInfo list already used by this page.
+            // This is display-only; approval permissions/flow are unchanged.
             await LoadAllUsersIfNeeded();
 
-            if (_userNames.ContainsKey(id))
+            var cachedUser = _users.FirstOrDefault(u =>
+                !string.IsNullOrWhiteSpace(u.Id) &&
+                string.Equals(u.Id, id, StringComparison.OrdinalIgnoreCase));
+
+            if (cachedUser?.Role.HasValue == true)
+                _submittedByRole = cachedUser.Role.Value.ToString();
+
+            if (_userNames.TryGetValue(id, out var cachedName))
+                _submittedByName = cachedName;
+
+            // If the role was not included by UserInfo/all, try the existing per-user endpoint.
+            if (string.IsNullOrWhiteSpace(_submittedByName) || string.IsNullOrWhiteSpace(_submittedByRole))
             {
-                _submittedByName = _userNames[id];
-                return;
+                try
+                {
+                    var resp = await Http.GetAsync($"api/User/{id}");
+                    if (resp.IsSuccessStatusCode)
+                    {
+                        var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                        if (json.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+                        {
+                            if (string.IsNullOrWhiteSpace(_submittedByName) && TryGetJsonProperty(json, "Name", out var nameValue))
+                            {
+                                var nm = nameValue.ValueKind == System.Text.Json.JsonValueKind.String
+                                    ? nameValue.GetString()
+                                    : nameValue.ToString();
+
+                                if (!string.IsNullOrWhiteSpace(nm))
+                                {
+                                    _submittedByName = nm;
+                                    _userNames[id] = nm;
+                                }
+                            }
+
+                            if (string.IsNullOrWhiteSpace(_submittedByRole))
+                                _submittedByRole = TryResolveUserRole(json);
+                        }
+                    }
+                }
+                catch { }
             }
 
-            // Fallback to per-user API if not found in the list
-            var resp = await Http.GetAsync($"api/User/{id}");
-            if (!resp.IsSuccessStatusCode) return;
-            var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-            if (json.ValueKind != System.Text.Json.JsonValueKind.Undefined && json.TryGetProperty("Name", out var nameProp))
+            // Safe fallback only when the creator is the currently logged-in user.
+            // This fixes Admin-created registrations without incorrectly using the viewer's role
+            // when another user (RM/SMM/AVP/etc.) opens the same application later.
+            if (string.IsNullOrWhiteSpace(_submittedByRole) &&
+                !string.IsNullOrWhiteSpace(LoginState.UserId) &&
+                string.Equals(id, LoginState.UserId, StringComparison.OrdinalIgnoreCase))
             {
-                var nm = nameProp.GetString();
-                if (!string.IsNullOrEmpty(nm))
-                {
-                    _submittedByName = nm;
-                    _userNames[id] = nm;
-                }
+                var currentRole = LoginState.UserRole?.ToString();
+                if (!string.IsNullOrWhiteSpace(currentRole))
+                    _submittedByRole = currentRole;
             }
         }
         catch { }
+    }
+
+    private static bool TryGetJsonProperty(System.Text.Json.JsonElement json, string propertyName, out System.Text.Json.JsonElement value)
+    {
+        value = default;
+        if (json.ValueKind != System.Text.Json.JsonValueKind.Object) return false;
+
+        foreach (var property in json.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string? TryResolveUserRole(System.Text.Json.JsonElement json)
+    {
+        // Different user endpoints/DTOs may expose the same value under different names.
+        // Read only for display; do not use this helper for authorization decisions.
+        foreach (var propertyName in new[] { "Role", "UserRole", "RoleName" })
+        {
+            if (!TryGetJsonProperty(json, propertyName, out var roleValue))
+                continue;
+
+            if (roleValue.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var roleText = roleValue.GetString();
+                if (!string.IsNullOrWhiteSpace(roleText))
+                    return roleText;
+            }
+
+            if (roleValue.ValueKind == System.Text.Json.JsonValueKind.Number &&
+                roleValue.TryGetInt32(out var roleNumber) &&
+                Enum.IsDefined(typeof(DR.AppRole), roleNumber))
+            {
+                return ((DR.AppRole)roleNumber).ToString();
+            }
+        }
+
+        if (TryGetJsonProperty(json, "Roles", out var rolesValue) &&
+            rolesValue.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            foreach (var roleItem in rolesValue.EnumerateArray())
+            {
+                if (roleItem.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var roleText = roleItem.GetString();
+                    if (!string.IsNullOrWhiteSpace(roleText))
+                        return roleText;
+                }
+            }
+        }
+
+        return null;
     }
 
     private async Task LoadApprovalUserNames()
@@ -333,6 +510,7 @@
         public string? UserName { get; set; }
         public string? Name { get; set; }
         public string? Email { get; set; }
+        public DR.AppRole? Role { get; set; }
     }
    private string FyName(int id) => _financialYearNames.TryGetValue(id, out var n) ? n : id.ToString();
 
@@ -406,6 +584,14 @@
         list.Add(("Aadhaar Copy", _dealer?.AadhaarFilePath));
         list.Add(("Wholesale License", _dealer?.WholesaleLicenseFilePath));
         list.Add(("Retail License", _dealer?.RetailLicenseFilePath));
+
+        if (_showNewDealerSavedDetails)
+        {
+            list.Add(("New Dealer - Dealership Application Fee", _dealer?.DealershipApplicationFeeFilePath));
+            list.Add(("New Dealer - SPIC Trade Deposit", _dealer?.SpicTradeDepositFilePath));
+            list.Add(("New Dealer - GFL Trade Deposit", _dealer?.GflTradeDepositFilePath));
+        }
+
         if (_showProprietorAndInvestment)
         {
             list.Add(("Proprietor Photograph", _ownership?.ProprietorImagePath));
@@ -435,6 +621,12 @@
             list.Add(("Affidavit", _documents.AffidavitFilePath));
             list.Add(("Authorization Letter", _documents.AuthorizationLetterFilePath));
             list.Add(("Deed of Guarantee", _documents.DeedOfGuaranteeFilePath));
+
+            // New Dealer documents remain visible after first AVP approval and during
+            // Existing Dealer maintenance/re-approval. This is display-only and does not alter
+            // the approval-flow meaning of _isNewDealer.
+            if (_showNewDealerSavedDetails)
+                list.Add(("Request Letter for Dealership", _documents.RequestLetterFilePath));
         }
         return list;
     }
@@ -771,9 +963,32 @@ private decimal GetGflProposedLimit() =>
     private decimal? _previousRmCreditLimit;
     private decimal? _previousSmCreditLimit;
 
-private void ShowConfirmProceedPopup()
+    // New Dealer final AVP approval: the AVP chooses the code prefix and reviews
+    // the server-generated Dealer Code before approving. RM/SM and existing-dealer
+    // approval flows do not use these fields.
+    private static readonly string[] _dealerCodePrefixes = { "D", "N", "Z", "T" };
+    private string _selectedDealerCodePrefix = "D";
+    private string _avpDealerCode = string.Empty;
+    private bool _isDealerCodePreviewLoading;
+    private string? _dealerCodePreviewError;
+
+    private bool IsNewDealerFinalApproval =>
+        _isNewDealer && (LoginState.IsDirectorOrAVP || LoginState.IsAdmin);
+
+    private sealed class DealerCodePreviewDto
+    {
+        public int DealerId { get; set; }
+        public string Prefix { get; set; } = string.Empty;
+        public string DealerCode { get; set; } = string.Empty;
+        public string TargetField { get; set; } = string.Empty;
+        public string? LegacyField { get; set; }
+    }
+
+private async Task ShowConfirmProceedPopup()
 {
-    ConfirmRemarks = ""; 
+    ConfirmRemarks = "";
+    _approvalError = null;
+    _dealerCodePreviewError = null;
     _rmCreditLimitSpic = null;
     _rmCreditLimitGfl = null;
     _smCreditLimitSpic = null;
@@ -807,13 +1022,131 @@ private void ShowConfirmProceedPopup()
         .FirstOrDefault(h => h.SmCreditLimitGfl.HasValue && h.SmCreditLimitGfl > 0);
     _previousSmCreditLimitGfl = smGflApproval?.SmCreditLimitGfl;
 
+    if (IsNewDealerFinalApproval)
+    {
+        _selectedDealerCodePrefix = GetDefaultDealerCodePrefix();
+        _avpDealerCode = string.Empty;
+    }
+
     IsConfirmProceedPopupVisible = true;
     StateHasChanged();
+
+    // Only the final New Dealer AVP/Admin popup needs a Dealer Code preview.
+    // Existing Dealer, RM and SM approval popup behaviour stays unchanged.
+    if (IsNewDealerFinalApproval)
+        await LoadDealerCodePreviewAsync();
 }
+
+private string GetDefaultDealerCodePrefix()
+{
+    if (_dealer == null)
+        return "D";
+
+    // If an earlier migration/manual record already contains a company code,
+    // prefer its prefix. New Dealer records normally reach AVP with these empty.
+    foreach (var code in new[]
+    {
+        _dealer.SPICCode,
+        _dealer.GreenStarCode,
+        _dealer.NCode,
+        _dealer.TnCode
+    })
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            continue;
+
+        var prefix = code.Trim().Substring(0, 1).ToUpperInvariant();
+        if (_dealerCodePrefixes.Contains(prefix, StringComparer.OrdinalIgnoreCase))
+            return prefix;
+    }
+
+    // Preserve the applicant's company selection as the default suggestion.
+    // AVP can still choose any allowed prefix in the dropdown.
+    if (_dealer.InSpic)
+        return "D";
+
+    if (_dealer.InGreenStar)
+        return "N";
+
+    return "D";
+}
+
+private async Task OnDealerCodePrefixChanged(ChangeEventArgs args)
+{
+    var prefix = args.Value?.ToString()?.Trim().ToUpperInvariant();
+    if (string.IsNullOrWhiteSpace(prefix) ||
+        !_dealerCodePrefixes.Contains(prefix, StringComparer.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    _selectedDealerCodePrefix = prefix;
+    await LoadDealerCodePreviewAsync();
+}
+
+private async Task LoadDealerCodePreviewAsync()
+{
+    if (_dealer == null || !IsNewDealerFinalApproval)
+        return;
+
+    _isDealerCodePreviewLoading = true;
+    _dealerCodePreviewError = null;
+    _avpDealerCode = string.Empty;
+    StateHasChanged();
+
+    try
+    {
+        var prefix = Uri.EscapeDataString(_selectedDealerCodePrefix);
+        using var response = await Http.GetAsync(
+            $"api/DealerRegistration/{_dealer.Id}/dealer-code-preview?prefix={prefix}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _dealerCodePreviewError = await ReadErrorAsync(response);
+            return;
+        }
+
+        var preview = await response.Content.ReadFromJsonAsync<DealerCodePreviewDto>();
+        if (preview == null || string.IsNullOrWhiteSpace(preview.DealerCode))
+        {
+            _dealerCodePreviewError = "Dealer Code preview was empty. Please select the prefix again.";
+            return;
+        }
+
+        _selectedDealerCodePrefix = string.IsNullOrWhiteSpace(preview.Prefix)
+            ? _selectedDealerCodePrefix
+            : preview.Prefix.Trim().ToUpperInvariant();
+
+        _avpDealerCode = preview.DealerCode.Trim().ToUpperInvariant();
+    }
+    catch (Exception ex)
+    {
+        _dealerCodePreviewError = "Could not generate Dealer Code preview. Please try again.";
+        Console.WriteLine($"[SavedDealerReview] dealer-code-preview: {ex}");
+    }
+    finally
+    {
+        _isDealerCodePreviewLoading = false;
+        StateHasChanged();
+    }
+}
+
 private void HideConfirmProceedPopup()
     {
         IsConfirmProceedPopupVisible = false;
         StateHasChanged();
+    }
+
+    private async Task<string?> ReadErrorAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var payload = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+            if (payload != null && payload.TryGetValue("message", out var msg) && !string.IsNullOrWhiteSpace(msg))
+                return msg;
+        }
+        catch { }
+        return $"Request failed ({(int)response.StatusCode}). Please try again.";
     }
 
     private string GetCurrentStageTarget()
@@ -843,6 +1176,63 @@ private async Task ApproveDealer()
 
     try
     {
+        // New Dealer flow: remarks are mandatory at every approval stage.
+        if (_isNewDealer && string.IsNullOrWhiteSpace(ConfirmRemarks))
+        {
+            _approvalError = "Remarks are required for New Dealer approval.";
+            return;
+        }
+
+        // New Dealer final (AVP) approval: AVP must review the generated code
+        // shown in this popup. The server validates the selected prefix, confirms
+        // that the reviewed code is still the next available code, then saves the
+        // approval + DealerCode + company code fields in one final-approval step.
+        if (IsNewDealerFinalApproval)
+        {
+            if (_isDealerCodePreviewLoading)
+            {
+                _approvalError = "Please wait until the Dealer Code preview is generated.";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_avpDealerCode))
+            {
+                _approvalError = "Select a Dealer Code prefix and review the generated Dealer Code before approval.";
+                return;
+            }
+
+            var approveResp = await Http.PostAsJsonAsync(
+                $"api/DealerRegistration/{_dealer.Id}/final-approve",
+                new
+                {
+                    Remarks = ConfirmRemarks,
+                    Prefix = _selectedDealerCodePrefix,
+                    DealerCode = _avpDealerCode
+                });
+
+            if (!approveResp.IsSuccessStatusCode)
+            {
+                _approvalError = await ReadErrorAsync(approveResp);
+
+                // A preview can become stale if another New Dealer is approved in
+                // parallel. Refresh only the preview; do not close the popup or
+                // change any of the previous approval flow.
+                if (approveResp.StatusCode == System.Net.HttpStatusCode.Conflict)
+                    await LoadDealerCodePreviewAsync();
+
+                return;
+            }
+
+            _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{_dealer.Id}");
+            IsConfirmProceedPopupVisible = false;
+            _showSuccessNotification = true;
+            StateHasChanged();
+            await Task.Delay(3000);
+            _showSuccessNotification = false;
+            Nav.NavigateTo("/Dashboard");
+            return;
+        }
+
         if (LoginState.IsRMGroup)
         {
             _dealer.RMApproved = true;
@@ -881,18 +1271,7 @@ private async Task ApproveDealer()
             };
             try { await Http.PostAsJsonAsync("api/DealerApprovalHistory", history); } catch { }
 
-            if ((LoginState.IsDirectorOrAVP || LoginState.IsAdmin) && _dealer.IsNewDealerRegistration)
-            {
-                try
-                {
-                    var codeResp = await Http.PostAsJsonAsync($"api/DealerRegistration/{_dealer.Id}/generate-dealer-code", new { });
-                    if (codeResp.IsSuccessStatusCode)
-                    {
-                        _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{_dealer.Id}");
-                    }
-                }
-                catch { }
-            }
+            await SaveCreditLimitHistoryApprovalsAsync();
 
             IsConfirmProceedPopupVisible = false;
             _showSuccessNotification = true;
@@ -907,7 +1286,75 @@ private async Task ApproveDealer()
         _isApproving = false;
         StateHasChanged();
     }
-}    public record TimelineItem(
+}
+
+    private async Task SaveCreditLimitHistoryApprovalsAsync()
+    {
+        if (_dealer == null) return;
+
+        try
+        {
+            var histories = await Http.GetFromJsonAsync<List<DR.CreditLimitHistory>>($"api/CreditLimitHistory/byDealer/{_dealer.Id}") ?? new();
+
+            await UpdateApprovalForCreditTypeAsync(histories, DR.CreditType.SPIC, _rmCreditLimitSpic, _smCreditLimitSpic, _avpCreditLimitSpic);
+            await UpdateApprovalForCreditTypeAsync(histories, DR.CreditType.Greenstar, _rmCreditLimitGfl, _smCreditLimitGfl, _avpCreditLimitGfl);
+        }
+        catch { }
+    }
+
+    private async Task UpdateApprovalForCreditTypeAsync(
+        List<DR.CreditLimitHistory> histories,
+        DR.CreditType creditType,
+        decimal? rmLimit,
+        decimal? smLimit,
+        decimal? avpLimit)
+    {
+        if (!rmLimit.HasValue && !smLimit.HasValue && !avpLimit.HasValue)
+            return;
+
+        var record = histories
+            .Where(h => h.CreditType == creditType)
+            .OrderByDescending(h => h.CreatedAt)
+            .FirstOrDefault();
+
+        if (record == null) return;
+
+        if (rmLimit.HasValue) record.RMApprovedCreditLimit = rmLimit;
+        if (smLimit.HasValue) record.SMApprovedCreditLimit = smLimit;
+        if (avpLimit.HasValue) record.AVPApprovedCreditLimit = avpLimit;
+
+        await Http.PutAsJsonAsync($"api/CreditLimitHistory/{record.Id}", record);
+    }
+
+    // For an already-approved dealer, the approval button must follow the pending
+    // Credit Limit cycle stage instead of the (final) registration flags. Uses the
+    // same latest-record rule as the API: 1 = awaiting RM, 2 = awaiting SMM, 3 = awaiting AVP.
+    private async Task LoadCreditLimitCycleStage(int dealerId)
+    {
+        _creditLimitCycleStage = 0;
+        try
+        {
+            var histories = await Http.GetFromJsonAsync<List<DR.CreditLimitHistory>>($"api/CreditLimitHistory/byDealer/{dealerId}") ?? new();
+
+            var pending = histories
+                .GroupBy(h => h.CreditType)
+                .Select(g => g
+                    .OrderByDescending(h => h.CreatedAt)
+                    .ThenByDescending(h => h.Id)
+                    .First())
+                .Where(h => h.MORecommendedCreditLimit != null && h.AVPApprovedCreditLimit == null)
+                .ToList();
+
+            if (pending.Count == 0) return;
+
+            _creditLimitCycleStage = pending.Any(h => h.RMApprovedCreditLimit == null) ? 1
+                : pending.Any(h => h.SMApprovedCreditLimit == null) ? 2
+                : 3;
+        }
+        catch { }
+    }
+
+    public record TimelineItem(
         string Title,
         string Status,
         string UserName,
@@ -969,6 +1416,17 @@ private async Task ApproveDealer()
     {
         if (_dealer == null)
             return false;
+
+        // Credit Limit cycle pending on an already-approved dealer: the registration
+        // flags are final, so the role that owns the current cycle stage gets the
+        // approval button to review only the Credit Limit values.
+        if (_dealer.AVPApproved == true && _creditLimitCycleStage > 0)
+        {
+            if (LoginState.IsRMGroup) return _creditLimitCycleStage == 1;
+            if (LoginState.IsSMGroup) return _creditLimitCycleStage == 2;
+            if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return _creditLimitCycleStage == 3;
+            return false;
+        }
 
         if (LoginState.IsRMGroup)
             return _dealer.RMApproved == null || (_dealer.RMApproved == true && _dealer.SMApproved == false);
@@ -1356,7 +1814,7 @@ private async Task ApproveDealer()
                     <div class="title">
                         Application Successfully Approved ! 🎉
                     </div>
-                    <div class="subtitle">The Credit Limit has been approved and activated</div>
+                    <div class="subtitle">@(_dealer?.IsNewDealerRegistration == true ? "Dealer Registration approved. Dealer Code generated and activated." : "The Credit Limit has been approved and activated")</div>
                 </div>
             </div>
 
@@ -1418,12 +1876,29 @@ private async Task ApproveDealer()
             .cp-credit-field input, .cp-credit-field .cp-credit-readonly { margin-top: auto; }
             .cp-credit-field input:focus { border-color: #115e59; box-shadow: 0 0 0 2px rgba(17, 94, 89, 0.1); }
             .cp-credit-field .cp-credit-readonly { background: #f3f4f6; color: #4b5563; font-weight: 600; display: flex; align-items: center; }
+            .cp-code-section { margin-bottom: 14px; padding: 14px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+            .cp-code-row { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 12px; align-items: end; }
+            .cp-code-field { display: flex; flex-direction: column; gap: 5px; }
+            .cp-code-field label { font-size: 0.75rem; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.3px; }
+            .cp-code-select, .cp-code-input { width: 100%; min-height: 40px; padding: 8px 11px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #111827; font-size: 0.88rem; outline: none; }
+            .cp-code-select:focus, .cp-code-input:focus { border-color: #115e59; box-shadow: 0 0 0 2px rgba(17, 94, 89, 0.08); }
+            .cp-code-input[readonly] { background: #ecfdf5; color: #065f46; font-weight: 700; letter-spacing: 0.5px; }
+            .cp-code-help { margin-top: 9px; font-size: 0.76rem; color: #64748b; line-height: 1.45; }
+            .cp-code-help strong { color: #334155; }
+            .cp-code-loading { color: #0369a1; font-size: 0.78rem; margin-top: 8px; }
+            .cp-code-error { color: #b91c1c; font-size: 0.78rem; margin-top: 8px; }
             .cp-remarks-section { margin-bottom: 12px; }
             .cp-remarks-input { width: 100%; min-height: 56px; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 6px; resize: vertical; font-size: 0.85rem; color: #374151; outline: none; transition: border-color 0.2s; }
             .cp-remarks-input:focus { border-color: #d1d5db; }
             .cp-info-alert { background-color: #f0f9ff; border: 1px solid #e0f2fe; border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
             .cp-alert-icon { width: 28px; height: 28px; background-color: #dbeafe; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
             .cp-alert-text { color: #6b7280; font-size: 0.8rem; margin: 0; line-height: 1.4; }
+            .cp-error-alert { background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 16px; color: #b91c1c; font-size: 0.85rem; font-weight: 500; margin-bottom: 12px; }
+            .cp-remarks-history { background: #f9fafb; border-radius: 8px; padding: 10px 16px; margin-bottom: 12px; }
+            .cp-remarks-history ul { list-style: none; margin: 0; padding: 0; }
+            .cp-remarks-history li { font-size: 0.8rem; color: #4b5563; padding: 5px 0; }
+            .cp-remarks-history li + li { border-top: 1px solid #e5e7eb; }
+            .cp-remarks-history strong { color: #1f2937; }
             .cp-modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 12px 28px 18px; }
             .cp-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
             .cp-btn-cancel { background-color: #ffffff; border: 1px solid #d1d5db; color: #4b5563; }
@@ -1431,7 +1906,7 @@ private async Task ApproveDealer()
             .cp-btn-confirm { background-color: #115e59; border: 1px solid #115e59; color: #ffffff; }
             .cp-btn-confirm:hover { background-color: #0f514e; }
             .cp-btn-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
-            @@media (max-width: 768px) { .cp-summary-grid { grid-template-columns: 1fr; row-gap: 4px; padding: 10px 14px; } .cp-summary-label { flex: 0 0 110px; } .cp-modal-header, .cp-modal-body, .cp-modal-footer { padding-left: 16px; padding-right: 16px; } .cp-credit-field { min-width: 100%; } }
+            @@media (max-width: 768px) { .cp-summary-grid { grid-template-columns: 1fr; row-gap: 4px; padding: 10px 14px; } .cp-summary-label { flex: 0 0 110px; } .cp-modal-header, .cp-modal-body, .cp-modal-footer { padding-left: 16px; padding-right: 16px; } .cp-credit-field { min-width: 100%; } .cp-code-row { grid-template-columns: 1fr; } }
         </style>
 
         <div class="cp-wrapper">
@@ -1460,15 +1935,18 @@ private async Task ApproveDealer()
                                     <span class="cp-summary-label">Ref No</span>
                                     <span class="cp-summary-value">@(_dealer?.DealerCode ?? $"DL-{_dealer?.Id}")</span>
                                 </div> *@
-                                <div class="cp-summary-item">
-                                    <span class="cp-summary-label">Dealer ID</span>
-                                    <span class="cp-summary-value">@(_dealer?.DealerCode ?? (_dealer != null ? $"DL-{_dealer.Id}" : "-"))</span>
-                                </div>
+                                @if (!_isNewDealer)
+                                {
+                                    <div class="cp-summary-item">
+                                        <span class="cp-summary-label">Dealer Code</span>
+                                        <span class="cp-summary-value">@(_dealer?.DealerCode ?? "-")</span>
+                                    </div>
+                                }
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Dealer Name</span>
                                     <span class="cp-summary-value">@(_dealer?.FirmName ?? "-")</span>
                                 </div>
-                                @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo)
+                                @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo && !_isNewDealer)
                                 {
                                     <div class="cp-summary-item">
                                         <span class="cp-summary-label">MO Recommended CreditLimit  (SPIC)</span>
@@ -1490,12 +1968,54 @@ private async Task ApproveDealer()
                             </div>
                         </section>
 
+                        @if (IsNewDealerFinalApproval)
+                        {
+                            <section class="cp-code-section">
+                                <h2 class="cp-section-title">Dealer Code Review</h2>
+                                <div class="cp-code-row">
+                                    <div class="cp-code-field">
+                                        <label>Code Prefix</label>
+                                        <select class="cp-code-select"
+                                                value="@_selectedDealerCodePrefix"
+                                                @onchange="OnDealerCodePrefixChanged"
+                                                disabled="@(_isApproving || _isDealerCodePreviewLoading)">
+                                            <option value="D">D - SPIC</option>
+                                            <option value="N">N - GreenStar</option>
+                                            <option value="Z">Z - GreenStar</option>
+                                            <option value="T">T - GreenStar</option>
+                                        </select>
+                                    </div>
+                                    <div class="cp-code-field">
+                                        <label>Proposed Dealer Code</label>
+                                        <input class="cp-code-input"
+                                               value="@_avpDealerCode"
+                                               readonly
+                                               placeholder="Select prefix to generate Dealer Code" />
+                                    </div>
+                                </div>
+                                <div class="cp-code-help">
+                                    <strong>D</strong> saves the reviewed code to <strong>DealerCode + SPICCode</strong>.
+                                    <strong>N / Z / T</strong> save it to <strong>DealerCode + GreenStarCode</strong>.
+                                    For compatibility, <strong>N</strong> also mirrors to <strong>NCode</strong> and
+                                    <strong>T</strong> also mirrors to <strong>TnCode</strong>.
+                                </div>
+                                @if (_isDealerCodePreviewLoading)
+                                {
+                                    <div class="cp-code-loading">Generating Dealer Code preview...</div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_dealerCodePreviewError))
+                                {
+                                    <div class="cp-code-error">@_dealerCodePreviewError</div>
+                                }
+                            </section>
+                        }
+
                         <section class="cp-remarks-section">
-                            <h2 class="cp-section-title">Remarks <span class="cp-optional-text">(optional)</span></h2>
-                            <textarea class="cp-remarks-input" @bind="ConfirmRemarks" placeholder="Enter Remarks Optional"></textarea>
+                            <h2 class="cp-section-title">Remarks <span class="cp-optional-text">@(_isNewDealer ? "(required)" : "(optional)")</span></h2>
+                            <textarea class="cp-remarks-input" @bind="ConfirmRemarks" placeholder="@(_isNewDealer ? "Remarks are required for this stage" : "Enter Remarks Optional")"></textarea>
                         </section>
 
-                       @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo)
+                       @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo && !_isNewDealer)
                        {
                            @if (LoginState.IsRMGroup)
 {
@@ -1590,6 +2110,26 @@ private async Task ApproveDealer()
 }
 }
 
+                       @if (_isNewDealer && _approvalHistory != null && _approvalHistory.Any())
+                       {
+                           <div class="cp-remarks-history">
+                               <h2 class="cp-section-title">Previous Approval Remarks</h2>
+                               <ul>
+                                   @foreach (var h in _approvalHistory.OrderBy(x => x.ApprovedAt))
+                                   {
+                                       <li>
+                                           <strong>@h.Role</strong> (@h.ApprovedAt.ToString("dd-MMM-yyyy, hh:mm tt")): @(string.IsNullOrWhiteSpace(h.Remarks) ? "No remarks" : h.Remarks)
+                                       </li>
+                                   }
+                               </ul>
+                           </div>
+                       }
+
+                       @if (!string.IsNullOrEmpty(_approvalError))
+                       {
+                           <div class="cp-error-alert">@_approvalError</div>
+                       }
+
                         <div class="cp-info-alert">
                             <div class="cp-alert-icon">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1610,7 +2150,9 @@ private async Task ApproveDealer()
                             </svg>
                             Cancel
                         </button>
-                        <button class="cp-btn cp-btn-confirm" @onclick="ApproveDealer" disabled="@_isApproving">
+                        <button class="cp-btn cp-btn-confirm"
+                                @onclick="ApproveDealer"
+                                disabled="@(_isApproving || (IsNewDealerFinalApproval && (_isDealerCodePreviewLoading || string.IsNullOrWhiteSpace(_avpDealerCode))))">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
@@ -1642,7 +2184,7 @@ private async Task ApproveDealer()
             <div class="info-card">
                 <div>
                     <div class="info-label">Dealer Code</div>
-                    <div class="info-value">@(_dealer?.DealerCode ?? ($"DL-{_dealer?.Id}"))</div>
+                    <div class="info-value">@(_dealer?.DealerCode ?? (_dealer?.IsNewDealerRegistration == true ? "Generated after final approval" : $"DL-{_dealer?.Id}"))</div>
                 </div>
                 <div class="info-icon orange">
                     <i class="bi bi-upc-scan"></i>
@@ -1793,10 +2335,10 @@ private async Task ApproveDealer()
                 <h5>Action Details</h5>
                 <div class="info-row"><span>Action</span><strong>Submitted</strong></div>
                 <div class="info-row"><span>Action By</span><strong>@(_submittedByName ?? _dealer?.UpdatedBy ?? _dealer?.CreatedBy ?? "-")</strong></div>
-                <div class="info-row"><span>Role</span><strong>MO</strong></div>
+                <div class="info-row"><span>Role</span><strong>@SubmittedByRoleDisplay</strong></div>
                 <div class="info-row"><span>Date & Time</span><strong>@(_dealer != null ? (_dealer.UpdatedAt.Year > 2000 ? _dealer.UpdatedAt.ToString("dd-MMM-yyyy, hh:mm tt") : _dealer.CreatedAt.ToString("dd-MMM-yyyy, hh:mm tt")) : "-")</strong></div>
                 <div class="info-row"><span>Stage</span><strong>MO Review</strong></div>
-                @if (_showBusinessInfo)
+                @if (_showBusinessInfo && !_isNewDealer)
                 {
                     <div class="info-row"><span>MO Recommended Credit Limit (SPIC)</span><strong>₹ @GetSpicMoRecommendedLimit().ToString("N2")</strong></div>
                     <div class="info-row"><span>MO Recommended Credit Limit (GFL)</span><strong>₹ @GetGflMoRecommendedLimit().ToString("N2")</strong></div>
@@ -1806,7 +2348,7 @@ private async Task ApproveDealer()
         <div class="col-12 col-lg-6">
             <div class="detail-box">
                 <h5>Remarks</h5>
-                <ul class="remarks"><li>Application submitted by MO for review.</li></ul>
+                <ul class="remarks"><li>Application submitted by @SubmittedByRoleDisplay for review.</li></ul>
             </div>
         </div>
     </div>
@@ -1873,6 +2415,8 @@ private async Task ApproveDealer()
                             }
 
                          var limitWord = rolePrefix == "AVP" ? "Approved" : "Recommended";
+                            if (!_isNewDealer)
+                            {
                             if (spicLimit.HasValue)
                             {
                                 <div class="info-row">
@@ -1886,6 +2430,7 @@ private async Task ApproveDealer()
                                     <span>@rolePrefix @limitWord Credit Limit (GFL)</span>
                                     <strong>₹ @gflLimit.Value.ToString("N2")</strong>
                                 </div>
+                            }
                             }
                         }
                     </div>
@@ -1979,7 +2524,7 @@ private async Task ApproveDealer()
                         </div>
                         <div class="detail-card-body">
                             <div class="data-row"><div class="data-label">Firm Name</div><div class="data-value">@(_dealer?.FirmName ?? "-")</div></div>
-                            <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">@(_dealer?.DealerCode ?? (_dealer != null ? $"DL-{_dealer.Id}" : "-"))</div></div>
+                            <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">@(_dealer?.DealerCode ?? (_dealer?.IsNewDealerRegistration == true ? "Pending — generated after final approval" : (_dealer != null ? $"DL-{_dealer.Id}" : "-")))</div></div>
                             @if (_dealer?.InSpic ?? false)
                             {
                                 <div class="data-row"><div class="data-label">Date of Appointment (SPIC)</div><div class="data-value">@(_dealer?.DateOfAppointment.ToString("dd MMM yyyy") ?? "-")</div></div>
@@ -1996,6 +2541,97 @@ private async Task ApproveDealer()
                             }</div>
                     </div>
                 </div>
+                @if (_showNewDealerSavedDetails)
+                {
+                    <div class="col-12">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-person-badge"></i> New Dealer Saved Details</h4>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="row g-4">
+                                    <div class="col-12 col-lg-6">
+                                        <div class="newdealer-review-box">
+                                            <div class="newdealer-review-title">Registration & Generated Codes</div>
+                                            <div class="data-row"><div class="data-label">Registration Type</div><div class="data-value">New Dealer</div></div>
+                                            <div class="data-row"><div class="data-label">Selected Company</div><div class="data-value">@GetSelectedCompanyDisplay()</div></div>
+                                            <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">@(_dealer?.DealerCode ?? "Pending - generated after final approval")</div></div>
+                                            @if (_dealer?.InSpic == true || !string.IsNullOrWhiteSpace(_dealer?.SPICCode))
+                                            {
+                                                <div class="data-row"><div class="data-label">SPIC Code</div><div class="data-value">@(_dealer?.SPICCode ?? "-")</div></div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(_dealer?.NCode))
+                                            {
+                                                <div class="data-row"><div class="data-label">GreenStar N Code</div><div class="data-value">@(_dealer?.NCode ?? "-")</div></div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(_dealer?.GreenStarCode))
+                                            {
+                                                <div class="data-row"><div class="data-label">GreenStar Z Code</div><div class="data-value">@(_dealer?.GreenStarCode ?? "-")</div></div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(_dealer?.TnCode))
+                                            {
+                                                <div class="data-row"><div class="data-label">GreenStar T Code</div><div class="data-value">@(_dealer?.TnCode ?? "-")</div></div>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    @if (_dealer?.InSpic == true ||
+                                         _dealer?.DealershipApplicationFeeBankId.HasValue == true ||
+                                         !string.IsNullOrWhiteSpace(_dealer?.DealershipApplicationFeeDDNumber) ||
+                                         _dealer?.DealershipApplicationFeeAmount.HasValue == true)
+                                    {
+                                        <div class="col-12 col-lg-6">
+                                            <div class="newdealer-review-box">
+                                                <div class="newdealer-review-title">SPIC Dealership Application Fee</div>
+                                                <div class="data-row"><div class="data-label">Bank</div><div class="data-value">@GetReviewBankName(_dealer?.DealershipApplicationFeeBankId)</div></div>
+                                                <div class="data-row"><div class="data-label">DD Number</div><div class="data-value">@(_dealer?.DealershipApplicationFeeDDNumber ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">DD Date</div><div class="data-value">@(_dealer?.DealershipApplicationFeeDDDate?.ToString("dd MMM yyyy") ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">Amount</div><div class="data-value">@MoneyOrDash(_dealer?.DealershipApplicationFeeAmount)</div></div>
+                                                <div class="data-row"><div class="data-label">Payable At</div><div class="data-value">@(_dealer?.DealershipApplicationFeePayableAt ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">Attachment</div><div class="data-value">@RenderFileRow(_dealer?.DealershipApplicationFeeFilePath)</div></div>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @if (_dealer?.InSpic == true ||
+                                         _dealer?.SpicTradeDepositDDBankId.HasValue == true ||
+                                         !string.IsNullOrWhiteSpace(_dealer?.SpicTradeDepositDDNumber) ||
+                                         _dealer?.SpicTradeDepositDDAmount.HasValue == true)
+                                    {
+                                        <div class="col-12 col-lg-6">
+                                            <div class="newdealer-review-box">
+                                                <div class="newdealer-review-title">SPIC Trade Deposit - New Dealer</div>
+                                                <div class="data-row"><div class="data-label">Bank</div><div class="data-value">@GetReviewBankName(_dealer?.SpicTradeDepositDDBankId)</div></div>
+                                                <div class="data-row"><div class="data-label">DD Number</div><div class="data-value">@(_dealer?.SpicTradeDepositDDNumber ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">DD Date</div><div class="data-value">@(_dealer?.SpicTradeDepositDDDate?.ToString("dd MMM yyyy") ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">Amount</div><div class="data-value">@MoneyOrDash(_dealer?.SpicTradeDepositDDAmount)</div></div>
+                                                <div class="data-row"><div class="data-label">Attachment</div><div class="data-value">@RenderFileRow(_dealer?.SpicTradeDepositFilePath)</div></div>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @if (_dealer?.InGreenStar == true ||
+                                         _dealer?.GflTradeDepositDDBankId.HasValue == true ||
+                                         !string.IsNullOrWhiteSpace(_dealer?.GflTradeDepositDDNumber) ||
+                                         _dealer?.GflTradeDepositDDAmount.HasValue == true)
+                                    {
+                                        <div class="col-12 col-lg-6">
+                                            <div class="newdealer-review-box">
+                                                <div class="newdealer-review-title">GFL / GreenStar Trade Deposit - New Dealer</div>
+                                                <div class="data-row"><div class="data-label">Bank</div><div class="data-value">@GetReviewBankName(_dealer?.GflTradeDepositDDBankId)</div></div>
+                                                <div class="data-row"><div class="data-label">DD Number</div><div class="data-value">@(_dealer?.GflTradeDepositDDNumber ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">DD Date</div><div class="data-value">@(_dealer?.GflTradeDepositDDDate?.ToString("dd MMM yyyy") ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">Amount</div><div class="data-value">@MoneyOrDash(_dealer?.GflTradeDepositDDAmount)</div></div>
+                                                <div class="data-row"><div class="data-label">Attachment</div><div class="data-value">@RenderFileRow(_dealer?.GflTradeDepositFilePath)</div></div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
 @*                 <div class="col-md-6">
                     <div class="detail-card">
                         <div class="detail-card-header">
@@ -2765,7 +3401,7 @@ private async Task ApproveDealer()
     </div>
 
     }
-    @if (_showBusinessInfo)
+    @if (_showBusinessInfo && !_isNewDealer)
     {
     <div class="custom-accordion @(IsCreditLimitOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsCreditLimitOpen = !IsCreditLimitOpen">
@@ -3322,6 +3958,8 @@ private async Task ApproveDealer()
     </div>
 }
 <style>
+    .newdealer-review-box { height: 100%; border: 1px solid #dbeafe; background: #f8fbff; border-radius: 10px; padding: 14px 16px; }
+    .newdealer-review-title { color: #1f3b64; font-weight: 700; font-size: 0.82rem; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #dbeafe; }
     .file-view-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
 .file-view-name { color: #059669; font-weight: 600; word-break: break-word; flex: 1; min-width: 0; font-size: 0.75rem; }
 .file-view-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #1f2937; text-decoration: none; font-size: 0.72rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; }

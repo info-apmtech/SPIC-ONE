@@ -1,8 +1,4 @@
-﻿// ============================================================================
-//  SpicAPI / Controllers / ProductStockAvailabilityController.cs
-// ============================================================================
-
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,8 +15,7 @@ namespace SpicAPI.Controllers
 	{
 		private readonly IProductStockAvailabilityService _service;
 
-		public ProductStockAvailabilityController(
-			IProductStockAvailabilityService service)
+		public ProductStockAvailabilityController(IProductStockAvailabilityService service)
 		{
 			_service = service;
 		}
@@ -45,9 +40,7 @@ namespace SpicAPI.Controllers
 			var exportFilter = CloneForExport(
 				filter ?? new ProductStockAvailabilityFilter());
 
-			var data = await _service.GetDashboardAsync(
-				exportFilter,
-				cancellationToken);
+			var data = await _service.GetDashboardAsync(exportFilter, cancellationToken);
 
 			using var workbook = new XLWorkbook();
 			var worksheet = workbook.Worksheets.Add("Product-wise Stock");
@@ -115,19 +108,13 @@ namespace SpicAPI.Controllers
 
 				for (var index = 0; index < productCount; index++)
 				{
-					// ProductId is the collision-safe pivot key returned by the service.
-					// Existing Product keys remain positive; IFMS keys are negative.
 					var productId = data.Columns[index].ProductId;
 
 					worksheet.Cell(rowIndex, stockStartColumn + index).Value =
-						row.Quantities.TryGetValue(productId, out var stock)
-							? stock
-							: 0m;
+						row.Quantities.TryGetValue(productId, out var stock) ? stock : 0m;
 
 					worksheet.Cell(rowIndex, salesStartColumn + index).Value =
-						row.SalesQuantities.TryGetValue(productId, out var sales)
-							? sales
-							: 0m;
+						row.SalesQuantities.TryGetValue(productId, out var sales) ? sales : 0m;
 				}
 
 				worksheet.Cell(rowIndex, totalStockColumn).Value = row.Total;
@@ -142,14 +129,10 @@ namespace SpicAPI.Controllers
 				var productId = data.Columns[index].ProductId;
 
 				worksheet.Cell(rowIndex, stockStartColumn + index).Value =
-					data.GrandTotal.Quantities.TryGetValue(productId, out var stock)
-						? stock
-						: 0m;
+					data.GrandTotal.Quantities.TryGetValue(productId, out var stock) ? stock : 0m;
 
 				worksheet.Cell(rowIndex, salesStartColumn + index).Value =
-					data.GrandTotal.SalesQuantities.TryGetValue(productId, out var sales)
-						? sales
-						: 0m;
+					data.GrandTotal.SalesQuantities.TryGetValue(productId, out var sales) ? sales : 0m;
 			}
 
 			worksheet.Cell(rowIndex, totalStockColumn).Value = data.GrandTotal.Total;
@@ -187,15 +170,13 @@ namespace SpicAPI.Controllers
 		}
 
 		[HttpPost("export/pdf")]
-		public IActionResult ExportPdf(
-			[FromBody] ProductStockAvailabilityFilter? filter)
+		public IActionResult ExportPdf([FromBody] ProductStockAvailabilityFilter? filter)
 		{
 			return StatusCode(501, "PDF export is not implemented yet.");
 		}
 
 		[HttpPost("send-mail")]
-		public IActionResult SendMail(
-			[FromBody] ProductStockAvailabilityFilter? filter)
+		public IActionResult SendMail([FromBody] ProductStockAvailabilityFilter? filter)
 		{
 			return StatusCode(501, "Send mail is not implemented yet.");
 		}
@@ -209,9 +190,7 @@ namespace SpicAPI.Controllers
 				DateTo = source.DateTo,
 				StateIds = source.StateIds is null ? new() : new(source.StateIds),
 				RegionIds = source.RegionIds is null ? new() : new(source.RegionIds),
-				HeadQuarterIds = source.HeadQuarterIds is null
-					? new()
-					: new(source.HeadQuarterIds),
+				HeadQuarterIds = source.HeadQuarterIds is null ? new() : new(source.HeadQuarterIds),
 				Search = source.Search,
 				SortColumn = source.SortColumn,
 				SortDir = source.SortDir,

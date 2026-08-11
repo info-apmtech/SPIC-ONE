@@ -20,7 +20,7 @@ namespace SPIC.Core.DTOs
 		// Backward-compatible approved Product IDs used by the previous page/client.
 		public List<int> ProductIds { get; set; } = new();
 
-		// New combined product keys:
+		// Combined product keys:
 		// P:10 = Product.Id 10, I:10 = IfmsProduct.Id 10.
 		public List<string> ProductKeys { get; set; } = new();
 

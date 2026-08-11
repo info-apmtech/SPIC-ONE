@@ -44,9 +44,6 @@ namespace Spic.Infrastructure.Services
 		private const int SlowMax = 180;
 		private const int CriticalMin = 365;
 
-		private const string AckPendingStatus = "ACK Pending";
-		private const string AckUnavailableStatus = "ACK Not Available";
-
 		private const string WholesalerStockSource = "Wholesaler Stock";
 		private const string RetailerStockSource = "Retailer Stock";
 		private const string WarehouseStockSource = "Warehouse Stock";
@@ -276,9 +273,10 @@ namespace Spic.Infrastructure.Services
 					.Concat(lastMonthDptRows)
 					.Concat(previousYearDptRows));
 
-			// Ageing filters apply only to rows having a valid Status=Ack receipt
-			// date. Warehouse rows have no confirmed dealer ACK relationship and
-			// are therefore excluded only when an ageing filter is selected.
+			// Ageing keeps the existing ACK/receipt date as first priority.
+			// When an ACK ageing anchor is not available, use the source snapshot/report
+			// date only for Stock Report ageing classification. This keeps every current
+			// stock row in one of the five business ageing buckets.
 			currentWholesalerRows = ApplyWholesalerAgeingFilter(
 				currentWholesalerRows, filter, today, acknowledgementLookup);
 			yesterdayWholesalerRows = ApplyWholesalerAgeingFilter(
@@ -297,13 +295,14 @@ namespace Spic.Infrastructure.Services
 			previousYearDptRows = ApplyDptAgeingFilter(
 				previousYearDptRows, filter, today, acknowledgementLookup);
 
-			if (filter.AgeingRanges.Count > 0)
-			{
-				currentWarehouseRows.Clear();
-				yesterdayWarehouseRows.Clear();
-				lastMonthWarehouseRows.Clear();
-				previousYearWarehouseRows.Clear();
-			}
+			currentWarehouseRows = ApplyWarehouseAgeingFilter(
+				currentWarehouseRows, filter, today);
+			yesterdayWarehouseRows = ApplyWarehouseAgeingFilter(
+				yesterdayWarehouseRows, filter, today);
+			lastMonthWarehouseRows = ApplyWarehouseAgeingFilter(
+				lastMonthWarehouseRows, filter, today);
+			previousYearWarehouseRows = ApplyWarehouseAgeingFilter(
+				previousYearWarehouseRows, filter, today);
 
 			// -----------------------------------------------------------------
 			// 4. Summary cards - current snapshots only, never historical sums.
@@ -607,10 +606,8 @@ namespace Spic.Infrastructure.Services
 			currentDptRows = ApplyDptAgeingFilter(
 				currentDptRows, filter, today, acknowledgementLookup);
 
-			if (filter.AgeingRanges.Count > 0)
-			{
-				currentWarehouseRows.Clear();
-			}
+			currentWarehouseRows = ApplyWarehouseAgeingFilter(
+				currentWarehouseRows, filter, today);
 
 			var result = await BuildGridAsync(
 				currentWholesalerRows,
@@ -1519,6 +1516,55 @@ namespace Spic.Infrastructure.Services
 			return ageingDays < 0 ? 0 : ageingDays;
 		}
 
+		private static int ResolveWholesalerAgeingDays(
+			StockAgeingLookup acknowledgementLookup,
+			DateTime today,
+			WholesalerStockAsOnToday row)
+		{
+			var ackAgeingDays = AckAgeForWholesalerRow(
+				acknowledgementLookup,
+				today,
+				row.DealerRegistrationId,
+				row.IfmsDealerId,
+				row.ProductId,
+				row.IfmsProductId);
+
+			// Preserve the existing ACK-based ageing whenever it exists.
+			// Only missing ACK rows fall back to the stock snapshot date.
+			return ackAgeingDays
+				?? CalculateAgeingDays(today, row.StockDate)
+				?? 0;
+		}
+
+		private static int ResolveDptAgeingDays(
+			StockAgeingLookup acknowledgementLookup,
+			DateTime today,
+			DptReport row)
+		{
+			var ackAgeingDays = AckAgeForDptRow(
+				acknowledgementLookup,
+				today,
+				row.DealerRegistrationId,
+				row.IfmsDealerId,
+				row.ProductId,
+				row.IfmsProductId);
+
+			// DPT strict/fallback ACK logic stays first. If no ageing anchor is
+			// available, use the DPT report snapshot date.
+			return ackAgeingDays
+				?? CalculateAgeingDays(today, row.CreatedAt)
+				?? 0;
+		}
+
+		private static int ResolveWarehouseAgeingDays(
+			DateTime today,
+			WarehouseDistrictGlobalStockReconciliation row)
+		{
+			// Warehouse rows do not contain dealer/status/receipt linkage. Use the
+			// warehouse report snapshot date for Stock Report ageing classification.
+			return CalculateAgeingDays(today, row.CreatedAt) ?? 0;
+		}
+
 		private static List<WholesalerStockAsOnToday> ApplyWholesalerAgeingFilter(
 			List<WholesalerStockAsOnToday> rows,
 			StockReportFilter filter,
@@ -1531,19 +1577,12 @@ namespace Spic.Infrastructure.Services
 			}
 
 			return rows
-				.Where(row =>
-				{
-					var ageingDays = AckAgeForWholesalerRow(
+				.Where(row => MatchesAgeingRange(
+					ResolveWholesalerAgeingDays(
 						acknowledgementLookup,
 						today,
-						row.DealerRegistrationId,
-						row.IfmsDealerId,
-						row.ProductId,
-						row.IfmsProductId);
-
-					return ageingDays.HasValue &&
-						   MatchesAgeingRange(ageingDays.Value, filter.AgeingRanges);
-				})
+						row),
+					filter.AgeingRanges))
 				.ToList();
 		}
 
@@ -1559,19 +1598,30 @@ namespace Spic.Infrastructure.Services
 			}
 
 			return rows
-				.Where(row =>
-				{
-					var ageingDays = AckAgeForDptRow(
+				.Where(row => MatchesAgeingRange(
+					ResolveDptAgeingDays(
 						acknowledgementLookup,
 						today,
-						row.DealerRegistrationId,
-						row.IfmsDealerId,
-						row.ProductId,
-						row.IfmsProductId);
+						row),
+					filter.AgeingRanges))
+				.ToList();
+		}
 
-					return ageingDays.HasValue &&
-						   MatchesAgeingRange(ageingDays.Value, filter.AgeingRanges);
-				})
+		private static List<WarehouseDistrictGlobalStockReconciliation>
+			ApplyWarehouseAgeingFilter(
+				List<WarehouseDistrictGlobalStockReconciliation> rows,
+				StockReportFilter filter,
+				DateTime today)
+		{
+			if (filter.AgeingRanges.Count == 0)
+			{
+				return rows;
+			}
+
+			return rows
+				.Where(row => MatchesAgeingRange(
+					ResolveWarehouseAgeingDays(today, row),
+					filter.AgeingRanges))
 				.ToList();
 		}
 
@@ -1736,13 +1786,10 @@ namespace Spic.Infrastructure.Services
 					row.IfmsDealerId ?? 0,
 					out var ifmsDealer);
 
-				var ageingDays = AckAgeForWholesalerRow(
+				var ageingDays = ResolveWholesalerAgeingDays(
 					acknowledgementLookup,
 					today,
-					row.DealerRegistrationId,
-					row.IfmsDealerId,
-					row.ProductId,
-					row.IfmsProductId);
+					row);
 
 				var whatsapp = Blank(registeredDealer?.WhatsAppNumber);
 				var official = Blank(registeredDealer?.OfficialContactNumber);
@@ -1767,11 +1814,11 @@ namespace Spic.Infrastructure.Services
 					LyingWith = FirstNonBlank(
 						GetLookupName(natureNames, row.DealershipNatureId),
 						"Wholesaler") ?? "Wholesaler",
-					AgeingDays = ageingDays ?? 0,
-					HasAckAgeing = ageingDays.HasValue,
-					Status = ageingDays.HasValue
-						? MapStatus(ageingDays.Value)
-						: AckPendingStatus,
+					AgeingDays = ageingDays,
+					// Kept for DTO/export compatibility. It now means that a usable
+					// ageing value was resolved (ACK first, snapshot fallback second).
+					HasAckAgeing = true,
+					Status = MapStatus(ageingDays),
 					WhatsAppNumber = whatsapp,
 					OfficialContactNumber = official,
 					AlternativeNumber = alternative,
@@ -1793,13 +1840,10 @@ namespace Spic.Infrastructure.Services
 					row.IfmsDealerId ?? 0,
 					out var ifmsDealer);
 
-				var ageingDays = AckAgeForDptRow(
+				var ageingDays = ResolveDptAgeingDays(
 					acknowledgementLookup,
 					today,
-					row.DealerRegistrationId,
-					row.IfmsDealerId,
-					row.ProductId,
-					row.IfmsProductId);
+					row);
 				var whatsapp = Blank(registeredDealer?.WhatsAppNumber);
 				var official = Blank(registeredDealer?.OfficialContactNumber);
 				var alternative = Blank(registeredDealer?.AlternativeNumber);
@@ -1823,11 +1867,11 @@ namespace Spic.Infrastructure.Services
 					LyingWith = FirstNonBlank(
 						GetLookupName(natureNames, row.DealershipNatureId),
 						"Retailer") ?? "Retailer",
-					AgeingDays = ageingDays ?? 0,
-					HasAckAgeing = ageingDays.HasValue,
-					Status = ageingDays.HasValue
-						? MapStatus(ageingDays.Value)
-						: AckPendingStatus,
+					AgeingDays = ageingDays,
+					// Kept for DTO/export compatibility. It now means that a usable
+					// ageing value was resolved (ACK first, snapshot fallback second).
+					HasAckAgeing = true,
+					Status = MapStatus(ageingDays),
 					WhatsAppNumber = whatsapp,
 					OfficialContactNumber = official,
 					AlternativeNumber = alternative,
@@ -1852,6 +1896,8 @@ namespace Spic.Infrastructure.Services
 							? $"Warehouse {row.WarehouseId.Value}"
 							: "Warehouse";
 
+				var ageingDays = ResolveWarehouseAgeingDays(today, row);
+
 				projections.Add(new GridProjection
 				{
 					Source = WarehouseStockSource,
@@ -1864,20 +1910,18 @@ namespace Spic.Infrastructure.Services
 						row.IfmsProductId),
 					Quantity = row.ClosingStock,
 					LyingWith = "Warehouse",
-					AgeingDays = 0,
-					HasAckAgeing = false,
-					Status = AckUnavailableStatus
+					AgeingDays = ageingDays,
+					HasAckAgeing = true,
+					Status = MapStatus(ageingDays)
 				});
 			}
 
 			if (filter.AgeingRanges.Count > 0)
 			{
 				projections = projections
-					.Where(x =>
-						x.HasAckAgeing &&
-						MatchesAgeingRange(
-							x.AgeingDays,
-							filter.AgeingRanges))
+					.Where(x => MatchesAgeingRange(
+						x.AgeingDays,
+						filter.AgeingRanges))
 					.ToList();
 			}
 
@@ -2282,10 +2326,7 @@ namespace Spic.Infrastructure.Services
 
 		private static string MapStatus(int ageingDays)
 		{
-			if (ageingDays < 0)
-			{
-				return AckPendingStatus;
-			}
+			ageingDays = Math.Max(0, ageingDays);
 
 			if (ageingDays <= FreshMax)
 			{

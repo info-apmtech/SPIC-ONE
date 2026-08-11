@@ -54,8 +54,8 @@ namespace Spic.Infrastructure.Services
 			return new LiqCycleDashboardDto
 			{
 				Summary = BuildSummary(rows),
-				TopFastDealers = BuildTopGroups(rows, x => x.DealerName, delayed: false),
-				TopSlowDealers = BuildTopGroups(rows, x => x.DealerName, delayed: true),
+				TopFastDealers = BuildTopDealerGroups(rows, delayed: false),
+				TopSlowDealers = BuildTopDealerGroups(rows, delayed: true),
 				TopFastStates = BuildTopGroups(rows, x => x.StateName, delayed: false),
 				TopSlowStates = BuildTopGroups(rows, x => x.StateName, delayed: true),
 				Grid = BuildGrid(rows, filter, paged: true)
@@ -107,6 +107,91 @@ namespace Spic.Infrastructure.Services
 				.ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
 				.ToList();
 		}
+
+		public async Task<List<AckLookupItemDto>> GetDealersAsync(
+			CancellationToken cancellationToken = default)
+		{
+			// Keep the existing dealer-key contract used by every report:
+			// R{id} = DealerRegistration.Id, I{id} = IfmsDealer.Id.
+			// Only the visible name is cleaned; database values are never changed here.
+			var registeredDealers = await _db.Set<DealerRegistration>()
+				.AsNoTracking()
+				.Where(x => x.FirmName != null && x.FirmName != string.Empty)
+				.Select(x => new { x.Id, x.FirmName })
+				.ToListAsync(cancellationToken);
+
+			var ifmsDealers = await _db.Set<IfmsDealer>()
+				.AsNoTracking()
+				.Where(x => x.Name != null && x.Name != string.Empty)
+				.Select(x => new { x.Id, x.Name })
+				.ToListAsync(cancellationToken);
+
+			var result = new List<AckLookupItemDto>(
+				registeredDealers.Count + ifmsDealers.Count);
+
+			foreach (var dealer in registeredDealers)
+			{
+				var name = NormalizeDealerLookupName(dealer.FirmName);
+				if (name is null)
+					continue;
+
+				result.Add(new AckLookupItemDto
+				{
+					Id = $"R{dealer.Id}",
+					Name = name
+				});
+			}
+
+			foreach (var dealer in ifmsDealers)
+			{
+				var name = NormalizeDealerLookupName(dealer.Name);
+				if (name is null)
+					continue;
+
+				result.Add(new AckLookupItemDto
+				{
+					Id = $"I{dealer.Id}",
+					Name = name
+				});
+			}
+
+			// Do not expose Registered/IFMS or R/I ids in the visible dropdown label.
+			// Duplicate names are retained because their hidden keys can refer to
+			// different transaction identities.
+			return result
+				.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+				.ToList();
+		}
+
+		private static string? NormalizeDealerLookupName(string? value)
+		{
+			if (string.IsNullOrWhiteSpace(value))
+				return null;
+
+			var name = value.Trim().Trim(DealerNameNoiseCharacters);
+			name = string.Join(
+				" ",
+				name.Split(
+					new[] { ' ', '\t', '\r', '\n' },
+					StringSplitOptions.RemoveEmptyEntries));
+
+			if (string.IsNullOrWhiteSpace(name))
+				return null;
+
+			if (name.All(char.IsDigit) && name.All(ch => ch == '0'))
+				return null;
+
+			if (!name.Any(char.IsLetterOrDigit))
+				return null;
+
+			return name;
+		}
+
+		private static readonly char[] DealerNameNoiseCharacters =
+		{
+			'.', ',', ';', ':', '_', '-', '|', '/', '\\', '\'', '"', '`', '~'
+		};
 
 		// =====================================================================
 		// Unified compact loading
@@ -728,6 +813,12 @@ namespace Spic.Infrastructure.Services
 					x.DistrictId.HasValue && filter.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
+			if (filter.SubDistrictIds.Count > 0)
+			{
+				filteredBase = filteredBase.Where(x =>
+					x.SubDistrictId.HasValue && filter.SubDistrictIds.Contains(x.SubDistrictId.Value));
+			}
+
 			if (productIds.HasAny)
 			{
 				filteredBase = filteredBase.Where(x =>
@@ -1067,6 +1158,51 @@ namespace Spic.Infrastructure.Services
 			};
 		}
 
+		private static List<LiqCycleStatDto> BuildTopDealerGroups(
+			List<LiqCycleRowDto> rows,
+			bool delayed)
+		{
+			return rows
+				.Where(x => !string.IsNullOrWhiteSpace(x.DealerName) && x.DealerName != "-")
+				.GroupBy(BuildDealerGroupKey)
+				.Select(group =>
+				{
+					var totalStock = group.Sum(x => x.Stock + x.Sales);
+					var fastLiquidated = group
+						.Where(x => x.Bucket == "Fast")
+						.Sum(x => x.Sales);
+					var slowLiquidated = group
+						.Where(x => x.Bucket == "Slow" || x.Bucket == "Critical")
+						.Sum(x => x.Sales);
+					var selectedLiquidated = delayed ? slowLiquidated : fastLiquidated;
+
+					return new LiqCycleStatDto
+					{
+						DealerName = group
+							.Select(x => x.DealerName)
+							.FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ?? "-",
+						TotalStock = totalStock,
+						FastLiquidated = fastLiquidated,
+						SlowLiquidated = slowLiquidated,
+						Rate = totalStock == 0m
+							? 0d
+							: Math.Round((double)(selectedLiquidated * 100m / totalStock), 2)
+					};
+				})
+				.OrderByDescending(x => x.Rate)
+				.ThenByDescending(x => x.TotalStock)
+				.Take(5)
+				.ToList();
+		}
+
+		private static string BuildDealerGroupKey(LiqCycleRowDto row)
+		{
+			if (!string.IsNullOrWhiteSpace(row.DealerCode) && row.DealerCode != "-")
+				return row.DealerCode.Trim().ToUpperInvariant();
+
+			return $"N:{NormalizeText(row.DealerName)}";
+		}
+
 		private static List<LiqCycleStatDto> BuildTopGroups(
 			List<LiqCycleRowDto> rows,
 			Func<LiqCycleRowDto, string> keySelector,
@@ -1199,6 +1335,7 @@ namespace Spic.Infrastructure.Services
 		{
 			filter.StateIds ??= new List<int>();
 			filter.DistrictIds ??= new List<int>();
+			filter.SubDistrictIds ??= new List<int>();
 			filter.ProductIds ??= new List<int>();
 			filter.ProductKeys ??= new List<string>();
 			filter.StatusIds ??= new List<int>();
@@ -1206,6 +1343,7 @@ namespace Spic.Infrastructure.Services
 
 			filter.StateIds = filter.StateIds.Where(x => x > 0).Distinct().ToList();
 			filter.DistrictIds = filter.DistrictIds.Where(x => x > 0).Distinct().ToList();
+			filter.SubDistrictIds = filter.SubDistrictIds.Where(x => x > 0).Distinct().ToList();
 			filter.ProductIds = filter.ProductIds.Where(x => x > 0).Distinct().ToList();
 			filter.ProductKeys = filter.ProductKeys
 				.Where(x => !string.IsNullOrWhiteSpace(x))
