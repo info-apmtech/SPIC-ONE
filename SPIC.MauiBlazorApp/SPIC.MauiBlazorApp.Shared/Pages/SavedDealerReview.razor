@@ -149,6 +149,11 @@
     private decimal? _previousSmCreditLimitGfl;
     private string? _approvalError;
 
+    // Stage of the Credit Limit cycle for an already-approved dealer whose Credit
+    // Limit form was re-submitted: 0 = none, 1 = awaiting RM, 2 = awaiting SMM,
+    // 3 = awaiting AVP. Computed from the latest CreditLimitHistory record.
+    private int _creditLimitCycleStage;
+
     // Lookup names
     private string? _stateName;
     private string? _regionName;
@@ -174,12 +179,13 @@
             _isLoading = true;
             try
             {
-               _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{dealerId}");
+                _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{dealerId}");
                 if (_dealer != null)
                 {
                     await FetchRelatedData(_dealer.Id);
                     await LoadLookups();
                     await LoadCreditLimitSalesData(_dealer.Id);
+                    await LoadCreditLimitCycleStage(_dealer.Id);
                 }
             }
             catch { }
@@ -1320,6 +1326,34 @@ private async Task ApproveDealer()
         await Http.PutAsJsonAsync($"api/CreditLimitHistory/{record.Id}", record);
     }
 
+    // For an already-approved dealer, the approval button must follow the pending
+    // Credit Limit cycle stage instead of the (final) registration flags. Uses the
+    // same latest-record rule as the API: 1 = awaiting RM, 2 = awaiting SMM, 3 = awaiting AVP.
+    private async Task LoadCreditLimitCycleStage(int dealerId)
+    {
+        _creditLimitCycleStage = 0;
+        try
+        {
+            var histories = await Http.GetFromJsonAsync<List<DR.CreditLimitHistory>>($"api/CreditLimitHistory/byDealer/{dealerId}") ?? new();
+
+            var pending = histories
+                .GroupBy(h => h.CreditType)
+                .Select(g => g
+                    .OrderByDescending(h => h.CreatedAt)
+                    .ThenByDescending(h => h.Id)
+                    .First())
+                .Where(h => h.MORecommendedCreditLimit != null && h.AVPApprovedCreditLimit == null)
+                .ToList();
+
+            if (pending.Count == 0) return;
+
+            _creditLimitCycleStage = pending.Any(h => h.RMApprovedCreditLimit == null) ? 1
+                : pending.Any(h => h.SMApprovedCreditLimit == null) ? 2
+                : 3;
+        }
+        catch { }
+    }
+
     public record TimelineItem(
         string Title,
         string Status,
@@ -1382,6 +1416,17 @@ private async Task ApproveDealer()
     {
         if (_dealer == null)
             return false;
+
+        // Credit Limit cycle pending on an already-approved dealer: the registration
+        // flags are final, so the role that owns the current cycle stage gets the
+        // approval button to review only the Credit Limit values.
+        if (_dealer.AVPApproved == true && _creditLimitCycleStage > 0)
+        {
+            if (LoginState.IsRMGroup) return _creditLimitCycleStage == 1;
+            if (LoginState.IsSMGroup) return _creditLimitCycleStage == 2;
+            if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return _creditLimitCycleStage == 3;
+            return false;
+        }
 
         if (LoginState.IsRMGroup)
             return _dealer.RMApproved == null || (_dealer.RMApproved == true && _dealer.SMApproved == false);

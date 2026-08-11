@@ -33,6 +33,7 @@ namespace SpicAPI.Controllers
 		private readonly IGenericRepository<PartnerFamilyDetails>? _partnerRepo;
 		private readonly IGenericRepository<PartnerOccupation>? _occRepo;
 		private readonly IGenericRepository<DealerLoanLiabilities>? _loanRepo;
+		private readonly IGenericRepository<CreditLimitHistory>? _creditLimitHistoryRepo;
 		private readonly IGenericRepository<UserInfo> _userInfoRepo;
 		private readonly UserManager<UserInfo> _userManager;
 		private readonly RoleManager<IdentityRole> _roleManager;
@@ -62,7 +63,8 @@ namespace SpicAPI.Controllers
 			IGenericRepository<Designation>? designationRepo = null,
 			IGenericRepository<PartnerFamilyDetails>? partnerRepo = null,
 			IGenericRepository<PartnerOccupation>? occRepo = null,
-			IGenericRepository<DealerLoanLiabilities>? loanRepo = null
+			IGenericRepository<DealerLoanLiabilities>? loanRepo = null,
+			IGenericRepository<CreditLimitHistory>? creditLimitHistoryRepo = null
 			) : base(repo)
 		{
 			_historyRepo = historyRepo;
@@ -88,6 +90,7 @@ namespace SpicAPI.Controllers
 			_partnerRepo = partnerRepo;
 			_occRepo = occRepo;
 			_loanRepo = loanRepo;
+			_creditLimitHistoryRepo = creditLimitHistoryRepo;
 		}
 		private static readonly HashSet<string> _writeRoles = new(StringComparer.OrdinalIgnoreCase)
 		{
@@ -1395,6 +1398,52 @@ namespace SpicAPI.Controllers
 					.Select(g => g.Key)
 					.ToListAsync();
 
+			// ── Pending Credit Limit cycles (MO submitted, not yet AVP approved) ──
+			// Derived from CreditLimitHistory only; no new DB column. The approval
+			// popup writes RM/SM/AVP amounts onto the LATEST record per dealer + credit
+			// type, so the same rule decides whether a cycle is awaiting RM / SM / AVP.
+			var pendingCreditLimit = new Dictionary<int, PendingCreditLimitInfo>();
+			if (_creditLimitHistoryRepo != null)
+			{
+				var creditHistories = await _creditLimitHistoryRepo.GetAll()
+					.Select(h => new
+					{
+						h.Id,
+						h.DealerId,
+						h.CreditType,
+						h.CreatedAt,
+						h.MORecommendedCreditLimit,
+						h.RMApprovedCreditLimit,
+						h.SMApprovedCreditLimit,
+						h.AVPApprovedCreditLimit
+					})
+					.ToListAsync();
+
+				pendingCreditLimit = creditHistories
+					.GroupBy(h => new { h.DealerId, h.CreditType })
+					.Select(g => g
+						.OrderByDescending(h => h.CreatedAt)
+						.ThenByDescending(h => h.Id)
+						.First())
+					.Where(h => h.MORecommendedCreditLimit != null && h.AVPApprovedCreditLimit == null)
+					.GroupBy(h => h.DealerId)
+					.ToDictionary(
+						g => g.Key,
+						g =>
+						{
+							var pending = g.ToList();
+							var stage = pending.Any(h => h.RMApprovedCreditLimit == null) ? 1
+									  : pending.Any(h => h.SMApprovedCreditLimit == null) ? 2
+									  : 3;
+							return new PendingCreditLimitInfo(
+								stage,
+								pending.FirstOrDefault(h => h.CreditType == CreditType.SPIC)?.MORecommendedCreditLimit,
+								pending.FirstOrDefault(h => h.CreditType == CreditType.Greenstar)?.MORecommendedCreditLimit,
+								pending.Any(h => h.CreditType == CreditType.SPIC),
+								pending.Any(h => h.CreditType == CreditType.Greenstar));
+						});
+			}
+
 			// Return only the fields used by Dashboard. This prevents newly added
 			// registration columns from breaking the existing-dealer list when a
 			// database migration is pending. A new dealer has no DealerCode until
@@ -1463,8 +1512,58 @@ namespace SpicAPI.Controllers
 				})
 				.ToListAsync();
 
-			return Ok(dashboardDealers);
+			// Enrich with Credit Limit cycle state (computed from CreditLimitHistory).
+			// Additive only — existing consumers ignore the new fields.
+			var dashboardDealersResult = dashboardDealers.Select(x =>
+			{
+				pendingCreditLimit.TryGetValue(x.Id, out var p);
+
+				return new
+				{
+					x.Id,
+					x.IsDealer,
+					x.InSpic,
+					x.InGreenStar,
+					x.IsNewDealerRegistration,
+					x.HasCompletedExistingMaintenance,
+					x.DealerCode,
+					x.CreatedBy,
+					x.SPICCode,
+					x.GreenStarCode,
+					x.NCode,
+					x.TnCode,
+					x.StateId,
+					x.Region,
+					x.HQ,
+					x.Status,
+					x.InactiveProposal,
+					x.FirmName,
+					x.BusinessEntityType,
+					x.EntityType,
+					x.WholeSaleFertilizerLicenseNumber,
+					x.RetailFertilizerLicenseNumber,
+					x.PinCode,
+					x.Latitude,
+					x.Longitude,
+					x.RMApproved,
+					x.SMApproved,
+					x.AVPApproved,
+					x.IsSubmittedForReview,
+					x.IsFinalAmountSettled,
+					x.UpdatedAt,
+					HasPendingCreditLimitCycle = p != null,
+					HasPendingSpicCreditLimitCycle = p?.HasSpic == true,
+					HasPendingGreenstarCreditLimitCycle = p?.HasGreenstar == true,
+					CreditLimitCycleStage = p?.Stage ?? 0,
+					PendingSpicCreditLimit = p?.SpicMO,
+					PendingGreenstarCreditLimit = p?.GreenstarMO
+				};
+			}).ToList();
+
+			return Ok(dashboardDealersResult);
 		}
+
+		private sealed record PendingCreditLimitInfo(int Stage, decimal? SpicMO, decimal? GreenstarMO, bool HasSpic, bool HasGreenstar);
 	}
 	[Route("api/[controller]")]
 	public class DealerExperienceController(IGenericRepository<DealerExperience> repo) : GenericCrudController<DealerExperience>(repo);
