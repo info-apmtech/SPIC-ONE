@@ -506,7 +506,7 @@
                                                 title="Update this approved New Dealer using the Existing Dealer form"
                                                 @onclick="() => UpdateApprovedNewDealerAsExisting(dealer)">
                                             <i class="bi bi-arrow-repeat"></i>
-                                            <span>Update Existing Dealer</span>
+                                            <span>Update Dealer</span>
                                         </button>
                                     }
 
@@ -946,11 +946,20 @@
             && !dealer.HasCompletedExistingMaintenance;
     }
 
-    // Standalone Credit Limit action is available only after a real Dealer Code exists.
+    // Standalone Credit Limit action is available only after the application has
+    // been submitted for review AND fully approved by the AVP (both must be true),
+    // and a real Dealer Code exists.
+    // Visibility is restricted to Admin and MO roles only.
     // Page-level CreditLimit permissions are reused; approval/edit/review routing is untouched.
     private bool CanShowCreditLimitButton(DealerDto dealer)
     {
-        if (dealer == null || string.IsNullOrWhiteSpace(dealer.DealerCode)) return false;
+        if (dealer == null) return false;
+
+        if (LoginState.UserRole != AppRole.Admin && LoginState.UserRole != AppRole.MO) return false;
+
+        if (dealer.IsSubmittedForReview != true || dealer.AVPApproved != true) return false;
+
+        if (string.IsNullOrWhiteSpace(dealer.DealerCode)) return false;
 
         var canSpic = dealer.InSpic &&
             (LoginState.Can("CreditLimit", "Entry") || LoginState.Can("CreditLimit", "Update"));
