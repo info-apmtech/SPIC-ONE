@@ -1983,6 +1983,8 @@ if (dealerTenure > 0 && !_greenstarValueEntered[5])
 				}
 			}
 
+			await SaveGreenstarCreditLimitHistoryAsync();
+
 			// foreach (var row in _allSalesPerfData)
 			// {
 			// 	row.CreditLimitId = _proposal.Id;
@@ -2215,6 +2217,29 @@ private double GetDealerTenureYearMonthValue()
 }
 private decimal GreenstarMORecommendedCreditLimit =>
     GreenstarProposedLimit + _proposal.GreenstarAdditionalCreditLimit;
+
+	private async Task SaveGreenstarCreditLimitHistoryAsync()
+	{
+		try
+		{
+			if (!DealerId.HasValue || DealerId.Value <= 0) return;
+
+			var history = new CreditLimitHistory
+			{
+				DealerId = DealerId.Value,
+				CreditType = CreditType.Greenstar,
+				ExistingCreditLimit = _proposal.GSExistingCreditLimitAmount,
+				ExistingValidFrom = _proposal.GSExistingCreditLimitFrom,
+				ExistingValidTo = _proposal.GSExistingCreditLimitTo,
+				AdditionalCreditLimit = _proposal.GreenstarAdditionalCreditLimit,
+				MORecommendedCreditLimit = GreenstarMORecommendedCreditLimit,
+				CreatedBy = LoginState?.UserId,
+				CreatedAt = DateTime.Now
+			};
+			await Http.PostAsJsonAsync("api/CreditLimitHistory", history);
+		}
+		catch { }
+	}
 
 	private bool CanAdd => LoginState.Can("CreditLimitForGreenStar", "Entry");
 	private bool CanEdit => LoginState.Can("CreditLimitForGreenStar", "Update");

@@ -88,6 +88,13 @@
 
         if (_alwaysOpen.Contains(firstSegment)) return;
 
+        // Saved Dealer (Credit Limit cycle approvals) is available to the approving
+        // roles by role, independent of the page-permission tokens stored for a
+        // designation, so no database RoleAccess change is required.
+        if (firstSegment.Equals("SavedDealers", StringComparison.OrdinalIgnoreCase)
+            && (LoginState.IsRMGroup || LoginState.IsSMGroup || LoginState.IsDirectorOrAVP || LoginState.IsAdmin))
+            return;
+
         // CanAccess understands "Page.Action" tokens (page reachable if any action
         // is granted) as well as legacy bare page tokens.
         if (!LoginState.CanAccess(firstSegment))

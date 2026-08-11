@@ -565,6 +565,32 @@ namespace SPIC.Core.Entities
         public double? SpicMonthlyAvgNetOverdues { get; set; }
         public double? GreenstarMonthlyAvgNetOverdues { get; set; }
     }
+    public enum CreditType
+    {
+        SPIC,
+        Greenstar
+    }
+    public class CreditLimitHistory
+    {
+        public int Id { get; set; }
+        public int DealerId { get; set; }
+        public CreditType? CreditType { get; set; }
+        [Display(Name = "Existing Credit Limit Amount (₹) In Lakhs")]
+        public decimal? ExistingCreditLimit { get; set; }
+        [Display(Name = "Existing Valid From")]
+        public DateTime ExistingValidFrom { get; set; }
+        [Display(Name = "Existing Valid To")]
+        public DateTime ExistingValidTo { get; set; }
+        [Display(Name = "Additional Credit Limit (₹) In Lakhs")]
+        public decimal? AdditionalCreditLimit { get; set; }
+        [Display(Name = "MO Recommended Credit Limit (₹) In Lakhs")]
+        public decimal? MORecommendedCreditLimit { get; set; }
+        public decimal? RMApprovedCreditLimit { get; set; }
+        public decimal? SMApprovedCreditLimit { get; set; }
+        public decimal? AVPApprovedCreditLimit { get; set; }
+        public string? CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
     public class DealerCreditLimitSalesPerformance
     {
         public int Id { get; set; }

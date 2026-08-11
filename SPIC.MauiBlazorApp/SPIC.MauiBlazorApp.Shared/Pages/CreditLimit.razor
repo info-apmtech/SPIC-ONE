@@ -1454,7 +1454,17 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 		if (IsViewOnly)
 		{
 			Loading.Show();
-			Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}&mode=view{FlowParam}{SourceParam}");
+			// Dashboard entry uses separate pages: SPIC review "Next" forwards to
+			// the standalone GreenStar page when the dealer also has GreenStar.
+			if (IsDashboardCreditLimitMode)
+			{
+				if (_dealer.InGreenStar)
+					Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}&mode=view{SourceParam}");
+				else
+					Nav.NavigateTo("/Dashboard");
+			}
+			else
+				Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}&mode=view{FlowParam}{SourceParam}");
 			return;
 		}
 		if (!DealerId.HasValue || DealerId.Value <= 0)
@@ -1527,14 +1537,21 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 				}
 			}
 
+			await SaveSpicCreditLimitHistoryAsync();
+
 			FormStepData.MarkStepError(11, false);
 
 			if (IsDashboardCreditLimitMode)
 			{
+				// Separate-page flow: after SPIC is saved, forward to the standalone
+				// GreenStar page (its own Next returns to the Dashboard).
 				if (_dealer.InGreenStar)
-					Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}&source=dashboard");
-				else
-					Nav.NavigateTo("/Dashboard");
+				{
+					Nav.NavigateTo($"/CreditLimitForGreenStar?dealerId={DealerId}{SourceParam}");
+					return;
+				}
+
+				Nav.NavigateTo("/Dashboard");
 				return;
 			}
 
@@ -1833,6 +1850,29 @@ private DealerCreditLimitSales? GetCreditLimitSales(int productId, int financial
 	}
 	private decimal SpicMORecommendedCreditLimit =>
     SpicProposedLimit + _proposal.AdditionalCreditLimit;
+
+	private async Task SaveSpicCreditLimitHistoryAsync()
+	{
+		try
+		{
+			if (!DealerId.HasValue || DealerId.Value <= 0) return;
+
+			var history = new CreditLimitHistory
+			{
+				DealerId = DealerId.Value,
+				CreditType = CreditType.SPIC,
+				ExistingCreditLimit = _proposal.SpicExistingCreditLimitAmount,
+				ExistingValidFrom = _proposal.SpicExistingCreditLimitFrom,
+				ExistingValidTo = _proposal.SpicExistingCreditLimitTo,
+				AdditionalCreditLimit = _proposal.AdditionalCreditLimit,
+				MORecommendedCreditLimit = SpicMORecommendedCreditLimit,
+				CreatedBy = LoginState?.UserId,
+				CreatedAt = DateTime.Now
+			};
+			await Http.PostAsJsonAsync("api/CreditLimitHistory", history);
+		}
+		catch { }
+	}
 
 	private bool CanAdd => LoginState.Can("CreditLimit", "Entry");
 	private bool CanEdit => LoginState.Can("CreditLimit", "Update");
