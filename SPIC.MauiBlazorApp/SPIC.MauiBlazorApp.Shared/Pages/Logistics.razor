@@ -1271,7 +1271,7 @@
                 <th>Status</th>
                 <th>Created At</th>
                 @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") ||
-                                 LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+                                 CanDeleteLogistics)
                 {
                     <th>Action</th>
                 }
@@ -1322,7 +1322,7 @@
                 {
                     <td>
                         <div class="action-icons">
-                            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+                            @if (CanDeleteLogistics)
                             {
                                 <i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
                             }
@@ -1378,7 +1378,7 @@
                                     @(_approvingId == item.Id ? "Approving..." : GetApproveButtonText(item))
                                 </button>
                             }
-                            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+                            @if (CanDeleteLogistics)
                             {
                                 <i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
                             }
@@ -2137,9 +2137,17 @@
         LoginState.UserRole == AppRole.CorporateAdmin ||
         LoginState.UserRole == AppRole.Director;
 
+    // Delete is intentionally restricted to admin-level roles only.
+    // This affects only the Delete option in the Logistics page.
+    private bool CanDeleteLogistics =>
+        LoginState.UserRole == AppRole.Admin ||
+        LoginState.UserRole == AppRole.CorporateAdmin ||
+        LoginState.UserRole == AppRole.AVP ||
+        LoginState.UserRole == AppRole.Director;
+
     private bool CanShowLogisticsActionColumn =>
         LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") ||
-        LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete") ||
+        CanDeleteLogistics ||
         IsApprovalRole;
 
     private bool CanApprove(LogisticsItemDto item)
