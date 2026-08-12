@@ -66,7 +66,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<ProductGroup> ProductGroups { get; set; }
         public DbSet<Product> Products { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
-        public DbSet<CandFWarehouse> CandFWarehouses { get; set; }
+        //public DbSet<CandFWarehouse> CandFWarehouses { get; set; }
         public DbSet<LyingWithMaster> LyingWithMasters { get; set; }
 
         public DbSet<SalesWholesaler> SalesWholesalers { get; set; }//  IFMS Wholesaler sales
@@ -116,5 +116,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<Employeelogin> Employeelogins { get; set; }
         public DbSet<DealerCreditLimitSales> DealerCreditLimitSalesData { get; set; }
         public DbSet<IfmsProduct> IfmsProducts { get; set; }
-    }
+		public DbSet<PVTMaster> PVTMasters { get; set; }
+
+	}
 }
