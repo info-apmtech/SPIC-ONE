@@ -2,10 +2,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
-using Spic.Infrastructure.Data;
-
 
 namespace SPIC.Api.Controllers;
 
@@ -15,7 +14,7 @@ public class SubDealerRegistrationController : ControllerBase
 {
 	private const long MaxExcelImportSize = 10 * 1024 * 1024;
 
-	private readonly AppDbContext _db;
+	private readonly AppDbContext	 _db;
 
 	public SubDealerRegistrationController(AppDbContext db)
 	{

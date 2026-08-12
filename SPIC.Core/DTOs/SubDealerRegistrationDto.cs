@@ -110,4 +110,3 @@ public class SubDealerBulkImportResponse
 	public int Updated { get; set; }
 	public List<string> Errors { get; set; } = new();
 }
-

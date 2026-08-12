@@ -59,7 +59,7 @@ namespace SPIC.Core.Entities
         [PageModule("Employee Management")] EmployeeRegistration, 
         dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
         CompanySales, SalesReport, AgeingReport, Acknowledgement, LiquidationCycle, BudgetSubmissions, WelfareSchemes, Purchases, Rewards, CropAdvice, YieldPrediction, DiseaseDetection,
-        Community, Notifications, Profile, CSR1Create, CSR1Management, TopRankingDistrict, TopRankingRetailers, TopRankingWholesalers, ProductWiseStockAvailability, StockDetails
+        Community, Notifications, Profile, CSR1Create, CSR1Management, TopRankingDistrict, TopRankingRetailers, TopRankingWholesalers, ProductWiseStockAvailability, StockDetails, SubDealerRegistration
 
 	}
 }
