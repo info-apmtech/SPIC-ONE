@@ -961,11 +961,6 @@
 
         if (string.IsNullOrWhiteSpace(dealer.DealerCode)) return false;
 
-        // A submitted Credit Limit cycle is locked for approval; the button returns
-        // only after the AVP approves the cycle (persisted state derived from
-        // CreditLimitHistory, not just a refresh-time toggle).
-        if (dealer.HasPendingCreditLimitCycle) return false;
-
         var canSpic = dealer.InSpic &&
             (LoginState.Can("CreditLimit", "Entry") || LoginState.Can("CreditLimit", "Update"));
 
@@ -1603,15 +1598,6 @@ private string GetStatusName(int status) => status switch
         // True only after an originally New Dealer completed the Existing Dealer
         // maintenance cycle and received the second final-level approval.
         public bool HasCompletedExistingMaintenance { get; set; }
-        // Credit Limit cycle state (supplied by the API from CreditLimitHistory):
-        // a submitted-but-not-AVP-approved cycle hides the Credit Limit button until
-        // the AVP approves it. Stage: 1=In RM, 2=In SMM, 3=In AVP.
-        public bool HasPendingCreditLimitCycle { get; set; }
-        public bool HasPendingSpicCreditLimitCycle { get; set; }
-        public bool HasPendingGreenstarCreditLimitCycle { get; set; }
-        public int CreditLimitCycleStage { get; set; }
-        public decimal? PendingSpicCreditLimit { get; set; }
-        public decimal? PendingGreenstarCreditLimit { get; set; }
         public string? DealerCode { get; set; }
         public string? CreatedBy { get; set; }
         public string? SPICCode { get; set; }
