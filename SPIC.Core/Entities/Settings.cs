@@ -390,4 +390,35 @@ namespace SPIC.Core.Entities
 		[StringLength(100)]
 		public string UpdatedBy { get; set; }
 	}
+
+	/// <summary>
+	/// Rake Point Master loaded via the PVT Master page's file upload.
+	/// Mirrors the PVTMaster structure. Table created manually - no EF migration.
+	/// </summary>
+	public class RakePointMaster
+	{
+		[Key]
+		public int Id { get; set; }
+
+		[Required]
+		public string RakePointCode { get; set; }
+
+		[Required]
+		public string Name { get; set; }
+
+		[Required]
+		public bool IsActive { get; set; } = true;
+
+		[Required]
+		public DateTime CreatedAt { get; set; }
+
+		[Required]
+		public DateTime UpdatedAt { get; set; }
+
+		[StringLength(100)]
+		public string CreatedBy { get; set; }
+
+		[StringLength(100)]
+		public string UpdatedBy { get; set; }
+	}
 }

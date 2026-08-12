@@ -449,32 +449,21 @@
                         <label class="form-label-custom">
                             SAP Code <span class="text-danger">*</span>
                         </label>
-                        @if (IsWarehouseTab)
-                        {
-                            <select @ref="_firstInputRef"
-                                    class="form-select-custom w-100 @(_errors.ContainsKey("SapCode") ? "is-invalid" : "")"
-                                    @bind="_form.SapCode"
-                                    @bind:after="OnSapCodeChanged">
-                                <option value="">-- Select SAP Code --</option>
-                                @if (!string.IsNullOrWhiteSpace(_form.SapCode) &&
-                                     !_pvtMasterAll.Any(p => string.Equals(p.Code, _form.SapCode, StringComparison.OrdinalIgnoreCase)))
-                                {
-                                    <option value="@_form.SapCode">@_form.SapCode</option>
-                                }
-                                @foreach (var pvt in _pvtMasterAll)
-                                {
-                                    <option value="@pvt.Code">@pvt.Code</option>
-                                }
-                            </select>
-                        }
-                        else
-                        {
-                            <input @ref="_firstInputRef"
-                                   type="text"
-                                   class="form-control-custom w-100 @(_errors.ContainsKey("SapCode") ? "is-invalid" : "")"
-                                   placeholder="SAP Code"
-                                   @bind="_form.SapCode" />
-                        }
+                        <select @ref="_firstInputRef"
+                                class="form-select-custom w-100 @(_errors.ContainsKey("SapCode") ? "is-invalid" : "")"
+                                @bind="_form.SapCode"
+                                @bind:after="OnSapCodeChanged">
+                            <option value="">-- Select SAP Code --</option>
+                            @if (!string.IsNullOrWhiteSpace(_form.SapCode) &&
+                                 !CurrentSapCodeOptions.Any(o => string.Equals(o.Code, _form.SapCode, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <option value="@_form.SapCode">@_form.SapCode</option>
+                            }
+                            @foreach (var opt in CurrentSapCodeOptions)
+                            {
+                                <option value="@opt.Code">@opt.Code</option>
+                            }
+                        </select>
                         @if (_errors.TryGetValue("SapCode", out var sapError))
                         {
                             <div class="lm-field-error">@sapError</div>
@@ -1289,8 +1278,14 @@
     private bool _locationSuccess;
     private string _latitudeLongitudeText = "";
 
-    // PVT Master records used for the SAP Code dropdown on the Warehouse tab.
-    private List<PVTMasterItemDto> _pvtMasterAll = new();
+    // PVT Master and Rake Point Master records used for the SAP Code dropdown.
+    // The active tab decides which master feeds it: Warehouse -> PVT Master,
+    // Rake Point -> RakePointMaster.
+    private List<SapCodeOptionDto> _pvtMasterAll = new();
+    private List<SapCodeOptionDto> _rakePointMasterAll = new();
+
+    private List<SapCodeOptionDto> CurrentSapCodeOptions =>
+        IsRakePointTab ? _rakePointMasterAll : _pvtMasterAll;
 
     // Same pincode lookup behaviour used by Register.
     private bool _isPincodeLookup;
@@ -1324,6 +1319,7 @@
 
         await LoadLookups();
         await LoadPvtMasters();
+        await LoadRakePointMasters();
         ApplyAssignedMoLocation();
         await LoadData();
     }
@@ -1347,8 +1343,8 @@
     private static LogisticsFormModel NewForm() => new()
     {
         WarehouseCategory = LogisticsWarehouseCategory.PvtWH,
-        InSpic = true,
-        InGreenStar = true,
+        InSpic = false,
+        InGreenStar = false,
         IsActive = true
     };
 
@@ -1378,7 +1374,7 @@
     {
         try
         {
-            _pvtMasterAll = await Http.GetFromJsonAsync<List<PVTMasterItemDto>>("api/PVTMaster/all") ?? new();
+            _pvtMasterAll = await Http.GetFromJsonAsync<List<SapCodeOptionDto>>("api/PVTMaster/all") ?? new();
         }
         catch (Exception ex)
         {
@@ -1386,10 +1382,25 @@
         }
     }
 
+    private async Task LoadRakePointMasters()
+    {
+        try
+        {
+            var data = await Http.GetFromJsonAsync<List<RakePointMasterItemDto>>("api/RakePointMaster/all") ?? new();
+            _rakePointMasterAll = data
+                .Select(x => new SapCodeOptionDto { Id = x.Id, Code = x.RakePointCode, Name = x.Name })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load Rake Point Master data: {ex.Message}", true);
+        }
+    }
+
     private void OnSapCodeChanged()
     {
-        var match = _pvtMasterAll.FirstOrDefault(p =>
-            string.Equals(p.Code, _form.SapCode, StringComparison.OrdinalIgnoreCase));
+        var match = CurrentSapCodeOptions.FirstOrDefault(o =>
+            string.Equals(o.Code, _form.SapCode, StringComparison.OrdinalIgnoreCase));
 
         if (match != null)
         {
@@ -2535,10 +2546,17 @@
         return null;
     }
 
-    public class PVTMasterItemDto
+    public class SapCodeOptionDto
     {
         public int Id { get; set; }
         public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class RakePointMasterItemDto
+    {
+        public int Id { get; set; }
+        public string RakePointCode { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
     }
 
@@ -2547,8 +2565,8 @@
         public LogisticsWarehouseCategory? WarehouseCategory { get; set; } = LogisticsWarehouseCategory.PvtWH;
         public string SapCode { get; set; } = "";
         public string Name { get; set; } = "";
-        public bool InSpic { get; set; } = true;
-        public bool InGreenStar { get; set; } = true;
+        public bool InSpic { get; set; } = false;
+        public bool InGreenStar { get; set; } = false;
         public int BasicStateId { get; set; }
         public int RegionId { get; set; }
         public int HeadquarterId { get; set; }
