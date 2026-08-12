@@ -1,7 +1,10 @@
 ﻿@page "/PVTMaster"
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http.Json
 @inject NavigationManager Nav
+@inject HttpClient Http
+@inject IJSRuntime JS
 
 <style>
     .page-title {
@@ -49,6 +52,36 @@
 
         .btn-outline-green:hover {
             background-color: #f0fdf4;
+        }
+
+    .mode-switch {
+        display: inline-flex;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .mode-btn {
+        padding: 0.625rem 1.5rem;
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #374151;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+        .mode-btn:hover {
+            border-color: #059669;
+            color: #047857;
+            background: #f0fdf4;
+        }
+
+        .mode-btn.active {
+            border-color: #059669;
+            background: #059669;
+            color: #ffffff;
+            box-shadow: 0 2px 6px rgba(5, 150, 105, 0.18);
         }
 
     .upload-area {
@@ -199,6 +232,16 @@
 <div class="container-fluid">
     <h2 class="page-title">PVT Master Management</h2>
 
+    <!-- Mode Toggle: switch between PVT Master and Rake Point Master upload/import. -->
+    <div class="mode-switch">
+        <button type="button" class="mode-btn @(_activeMode == "PVT" ? "active" : "")" @onclick="SelectPvtMode">
+            PVT Master
+        </button>
+        <button type="button" class="mode-btn @(_activeMode == "RakePoint" ? "active" : "")" @onclick="SelectRakePointMode">
+            Rake Point
+        </button>
+    </div>
+
     @if (!string.IsNullOrEmpty(_message))
     {
         <div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">
@@ -206,103 +249,200 @@
         </div>
     }
 
-    <!-- Upload Section -->
-    <div class="main-card">
-        <div class="section-header">
-            <h3 class="section-title">Upload PVT Master Data</h3>
-            <button type="button" class="btn-outline-green" @onclick="DownloadSampleTemplate">
-                <i class="bi bi-file-earmark-excel"></i> Sample Format
-            </button>
-        </div>
-
-        <!--
-            IMPORTANT COMPILE FIX:
-            Use Blazor InputFile instead of a raw <input type="file" @onchange=...>.
-            The label/for pair opens the file picker without JS, so no ValueTask.ContinueWith is needed.
-        -->
-        <label class="upload-area" for="fileUpload">
-            <i class="bi bi-cloud-arrow-up"></i>
-            <span>Click to upload or drag and drop</span>
-            <small style="color: #9ca3af; display: block; margin-top: 0.5rem;">Excel file (.xlsx, .xls)</small>
-        </label>
-
-        <InputFile id="fileUpload"
-                   OnChange="OnFileSelected"
-                   accept=".xlsx,.xls"
-                   style="display:none;" />
-
-        @if (_isUploading)
-        {
-            <div class="upload-result">
-                <div class="d-flex">
-                    <span class="spinner"></span>
-                    <span style="color: #6b7280;">Uploading and processing... please wait</span>
-                </div>
+    @if (_activeMode == "PVT")
+    {
+        <!-- Upload Section -->
+        <div class="main-card">
+            <div class="section-header">
+                <h3 class="section-title">Upload PVT Master Data</h3>
+                <button type="button" class="btn-outline-green" @onclick="DownloadSampleTemplate">
+                    <i class="bi bi-file-earmark-excel"></i> Sample Format
+                </button>
             </div>
-        }
-    </div>
 
-    <!-- Metrics -->
-    <div class="row">
-        <div class="metric-card bg-blue-light">
-            <h4 class="metric-title">Total Records</h4>
-            <div class="metric-val">@_totalRecords</div>
-        </div>
-        <div class="metric-card bg-mint-light">
-            <h4 class="metric-title">Uploaded Today</h4>
-            <div class="metric-val">@_uploadedToday</div>
-        </div>
-    </div>
+            <!--
+                IMPORTANT COMPILE FIX:
+                Use Blazor InputFile instead of a raw <input type="file" @onchange=...>.
+                The label/for pair opens the file picker without JS, so no ValueTask.ContinueWith is needed.
+            -->
+            <label class="upload-area" for="fileUpload">
+                <i class="bi bi-cloud-arrow-up"></i>
+                <span>Click to upload or drag and drop</span>
+                <small style="color: #9ca3af; display: block; margin-top: 0.5rem;">Excel file (.xlsx, .xls)</small>
+            </label>
 
-    <!-- Data Table -->
-    <div class="main-card">
-        <div class="section-header">
-            <h3 class="section-title">PVT Master List</h3>
-            <input type="text"
-                   placeholder="Search by code or name..."
-                   @bind="_searchText"
-                   @bind:event="oninput"
-                   style="padding: 0.5rem 1rem; border: 1px solid #d1d5db; border-radius: 6px; width: 300px;" />
+            <InputFile id="fileUpload"
+                       OnChange="OnFileSelected"
+                       accept=".xlsx,.xls"
+                       style="display:none;" />
+
+            @if (_isUploading)
+            {
+                <div class="upload-result">
+                    <div class="d-flex">
+                        <span class="spinner"></span>
+                        <span style="color: #6b7280;">Uploading and processing... please wait</span>
+                    </div>
+                </div>
+            }
         </div>
 
-        <div class="table-responsive">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>S.No</th>
-                        <th>Code</th>
-                        <th>Name</th>
-                        <th>Created At</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (_filteredData.Any())
-                    {
-                        @foreach (var (item, index) in _filteredData.Select((x, i) => (x, i + 1)))
+        <!-- Metrics -->
+        <div class="row">
+            <div class="metric-card bg-blue-light">
+                <h4 class="metric-title">Total Records</h4>
+                <div class="metric-val">@_totalRecords</div>
+            </div>
+            <div class="metric-card bg-mint-light">
+                <h4 class="metric-title">Uploaded Today</h4>
+                <div class="metric-val">@_uploadedToday</div>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="main-card">
+            <div class="section-header">
+                <h3 class="section-title">PVT Master List</h3>
+                <input type="text"
+                       placeholder="Search by code or name..."
+                       @bind="_searchText"
+                       @bind:event="oninput"
+                       style="padding: 0.5rem 1rem; border: 1px solid #d1d5db; border-radius: 6px; width: 300px;" />
+            </div>
+
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>S.No</th>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Created At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_filteredData.Any())
+                        {
+                            @foreach (var (item, index) in _filteredData.Select((x, i) => (x, i + 1)))
+                            {
+                                <tr>
+                                    <td>@index</td>
+                                    <td>@item.Code</td>
+                                    <td>@item.Name</td>
+                                    <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
+                                </tr>
+                            }
+                        }
+                        else
                         {
                             <tr>
-                                <td>@index</td>
-                                <td>@item.Code</td>
-                                <td>@item.Name</td>
-                                <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
+                                <td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">
+                                    No data available
+                                </td>
                             </tr>
                         }
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">
-                                No data available
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
+    }
+    else
+    {
+        <!-- Rake Point Master Upload Section -->
+        <div class="main-card">
+            <div class="section-header">
+                <h3 class="section-title">Upload Rake Point Master Data</h3>
+                <button type="button" class="btn-outline-green" @onclick="DownloadRakePointSampleTemplate">
+                    <i class="bi bi-file-earmark-excel"></i> Sample Format
+                </button>
+            </div>
+
+            <label class="upload-area" for="rakePointFileUpload">
+                <i class="bi bi-cloud-arrow-up"></i>
+                <span>Click to upload or drag and drop</span>
+                <small style="color: #9ca3af; display: block; margin-top: 0.5rem;">Excel file (.xlsx, .xls)</small>
+            </label>
+
+            <InputFile id="rakePointFileUpload"
+                       OnChange="OnRakePointFileSelected"
+                       accept=".xlsx,.xls"
+                       style="display:none;" />
+
+            @if (_isRakePointUploading)
+            {
+                <div class="upload-result">
+                    <div class="d-flex">
+                        <span class="spinner"></span>
+                        <span style="color: #6b7280;">Uploading and processing... please wait</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Rake Point Master Metrics -->
+        <div class="row">
+            <div class="metric-card bg-blue-light">
+                <h4 class="metric-title">Total Records</h4>
+                <div class="metric-val">@_rakePointTotalRecords</div>
+            </div>
+            <div class="metric-card bg-mint-light">
+                <h4 class="metric-title">Uploaded Today</h4>
+                <div class="metric-val">@_rakePointUploadedToday</div>
+            </div>
+        </div>
+
+        <!-- Rake Point Master Data Table -->
+        <div class="main-card">
+            <div class="section-header">
+                <h3 class="section-title">Rake Point Master List</h3>
+                <input type="text"
+                       placeholder="Search by code or name..."
+                       @bind="_rakePointSearchText"
+                       @bind:event="oninput"
+                       style="padding: 0.5rem 1rem; border: 1px solid #d1d5db; border-radius: 6px; width: 300px;" />
+            </div>
+
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>S.No</th>
+                            <th>Rake Point Code</th>
+                            <th>Name</th>
+                            <th>Created At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_rakePointFilteredData.Any())
+                        {
+                            @foreach (var (item, index) in _rakePointFilteredData.Select((x, i) => (x, i + 1)))
+                            {
+                                <tr>
+                                    <td>@index</td>
+                                    <td>@item.RakePointCode</td>
+                                    <td>@item.Name</td>
+                                    <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">
+                                    No data available
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
 </div>
 
 @code {
+    private string _activeMode = "PVT";
+
     private bool _isUploading = false;
     private string _message = "";
     private bool _isError = false;
@@ -319,6 +459,67 @@
                     (x.Name?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false))
         .OrderByDescending(x => x.CreatedAt)
         .ToList();
+
+    private bool _isRakePointUploading = false;
+    private string _rakePointSearchText = "";
+    private int _rakePointTotalRecords = 0;
+    private int _rakePointUploadedToday = 0;
+
+    private List<RakePointMasterDto> _rakePointAllData = new();
+
+    private List<RakePointMasterDto> _rakePointFilteredData => _rakePointAllData
+        .Where(x => string.IsNullOrEmpty(_rakePointSearchText) ||
+                    (x.RakePointCode?.Contains(_rakePointSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (x.Name?.Contains(_rakePointSearchText, StringComparison.OrdinalIgnoreCase) ?? false))
+        .OrderByDescending(x => x.CreatedAt)
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        await LoadRakePointData();
+    }
+
+    private void SetMode(string mode)
+    {
+        if (_activeMode == mode)
+            return;
+
+        _activeMode = mode;
+        _message = "";
+    }
+
+    private void SelectPvtMode() => SetMode("PVT");
+
+    private void SelectRakePointMode() => SetMode("RakePoint");
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _allData = await Http.GetFromJsonAsync<List<PVTMasterDto>>("api/PVTMaster/all") ?? new();
+            _totalRecords = _allData.Count;
+            _uploadedToday = _allData.Count(x => x.CreatedAt?.Date == DateTime.Today);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load PVT Master data: {ex.Message}", true);
+        }
+    }
+
+    private async Task LoadRakePointData()
+    {
+        try
+        {
+            _rakePointAllData = await Http.GetFromJsonAsync<List<RakePointMasterDto>>("api/RakePointMaster/all") ?? new();
+            _rakePointTotalRecords = _rakePointAllData.Count;
+            _rakePointUploadedToday = _rakePointAllData.Count(x => x.CreatedAt?.Date == DateTime.Today);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load Rake Point Master data: {ex.Message}", true);
+        }
+    }
 
     private async Task OnFileSelected(InputFileChangeEventArgs e)
     {
@@ -371,10 +572,78 @@
         }
     }
 
+    private async Task OnRakePointFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null)
+            return;
+
+        _isRakePointUploading = true;
+        _message = "";
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+
+            await using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            using var streamContent = new StreamContent(stream);
+
+            var extension = Path.GetExtension(file.Name);
+            var contentType = string.Equals(extension, ".xls", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.ms-excel"
+                : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+            streamContent.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+
+            content.Add(streamContent, "file", file.Name);
+
+            var response = await Http.PostAsync("api/RakePointMaster/bulk-upload", content);
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                ShowMessage($"Upload failed: {error}", true);
+                return;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<RakePointBulkUploadResponse>();
+            ShowMessage(
+                $"Successfully processed {file.Name}: {result?.InsertedCount} inserted, {result?.UpdatedCount} updated, {result?.RejectedCount} rejected.",
+                false);
+
+            await LoadRakePointData();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Upload failed: {ex.Message}", true);
+        }
+        finally
+        {
+            _isRakePointUploading = false;
+        }
+    }
+
     private void DownloadSampleTemplate()
     {
         ShowMessage("Sample template download - Implement in your API controller", false);
         // TODO: Implement download from API.
+    }
+
+    private async Task DownloadRakePointSampleTemplate()
+    {
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync("api/RakePointMaster/sample-template");
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadFileFromBytes",
+                "RakePointMaster_Sample_Template.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                base64);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Sample template download failed: {ex.Message}", true);
+        }
     }
 
     private void ShowMessage(string message, bool isError)
@@ -392,5 +661,21 @@
 
         public string Name { get; set; } = string.Empty;
         public DateTime? CreatedAt { get; set; }
+    }
+
+    public class RakePointMasterDto
+    {
+        public int Id { get; set; }
+        public string RakePointCode { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public DateTime? CreatedAt { get; set; }
+    }
+
+    public class RakePointBulkUploadResponse
+    {
+        public int TotalRecords { get; set; }
+        public int InsertedCount { get; set; }
+        public int UpdatedCount { get; set; }
+        public int RejectedCount { get; set; }
     }
 }
