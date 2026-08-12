@@ -55,6 +55,15 @@
     private bool _showNewDealerSavedDetails =>
         _dealer?.IsNewDealerRegistration == true || HasNewDealerRegistrationEvidence(_dealer);
 
+    // Credit Limit fields in the Approval popup are shown only for the
+    // company/companies the dealer registered with. Dealers with missing or null
+    // company info fall back to showing no credit limit fields safely.
+    private bool _showSpicCreditLimit =>
+        _dealer?.InSpic == true;
+
+    private bool _showGreenstarCreditLimit =>
+        _dealer?.InGreenStar == true;
+
     private static bool HasNewDealerRegistrationEvidence(DR.DealerRegistration? dealer)
     {
         if (dealer == null)
@@ -1903,14 +1912,20 @@ private async Task ApproveDealer()
                                 </div>
                                 @if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo && !_isNewDealer)
                                 {
-                                    <div class="cp-summary-item">
-                                        <span class="cp-summary-label">MO Recommended CreditLimit  (SPIC)</span>
-                                        <span class="cp-summary-value">₹ @GetSpicMoRecommendedLimit().ToString("N2")</span>
-                                    </div>
-                                    <div class="cp-summary-item">
-                                        <span class="cp-summary-label">MO Recommended CreditLimit (GFL)</span>
-                                        <span class="cp-summary-value">₹ @GetGflMoRecommendedLimit().ToString("N2")</span>
-                                    </div>
+                                    @if (_showSpicCreditLimit)
+                                    {
+                                        <div class="cp-summary-item">
+                                            <span class="cp-summary-label">MO Recommended CreditLimit  (SPIC)</span>
+                                            <span class="cp-summary-value">₹ @GetSpicMoRecommendedLimit().ToString("N2")</span>
+                                        </div>
+                                    }
+                                    @if (_showGreenstarCreditLimit)
+                                    {
+                                        <div class="cp-summary-item">
+                                            <span class="cp-summary-label">MO Recommended CreditLimit (GFL)</span>
+                                            <span class="cp-summary-value">₹ @GetGflMoRecommendedLimit().ToString("N2")</span>
+                                        </div>
+                                    }
                                 }
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Current Stage</span>
@@ -1975,14 +1990,20 @@ private async Task ApproveDealer()
                            @if (LoginState.IsRMGroup)
 {
     <section class="cp-credit-section">
-        <div class="cp-credit-field">
-            <label>RM Credit Limit (SPIC)</label>
-            <input type="number" step="0.01" @bind="_rmCreditLimitSpic" placeholder="Enter RM Credit Limit (SPIC)" />
-        </div>
-        <div class="cp-credit-field">
-            <label>RM Credit Limit (GFL)</label>
-            <input type="number" step="0.01" @bind="_rmCreditLimitGfl" placeholder="Enter RM Credit Limit (GFL)" />
-        </div>
+        @if (_showSpicCreditLimit)
+        {
+            <div class="cp-credit-field">
+                <label>RM Credit Limit (SPIC)</label>
+                <input type="number" step="0.01" @bind="_rmCreditLimitSpic" placeholder="Enter RM Credit Limit (SPIC)" />
+            </div>
+        }
+        @if (_showGreenstarCreditLimit)
+        {
+            <div class="cp-credit-field">
+                <label>RM Credit Limit (GFL)</label>
+                <input type="number" step="0.01" @bind="_rmCreditLimitGfl" placeholder="Enter RM Credit Limit (GFL)" />
+            </div>
+        }
     </section>
 }
 @if (LoginState.IsSMGroup)
@@ -1992,28 +2013,34 @@ private async Task ApproveDealer()
             var rmSpicApproval = _approvalHistory?.FirstOrDefault(h => h.RmCreditLimit.HasValue && h.IsApproved);
             var rmGflApproval = _approvalHistory?.FirstOrDefault(h => h.RmCreditLimitGfl.HasValue && h.IsApproved);
         }
-        @if (rmSpicApproval?.RmCreditLimit.HasValue == true)
+        @if (_showSpicCreditLimit && rmSpicApproval?.RmCreditLimit.HasValue == true)
         {
             <div class="cp-credit-field">
                 <label>RM Credit Limit (SPIC) (Approved)</label>
                 <div class="cp-credit-readonly">₹ @rmSpicApproval.RmCreditLimit.Value.ToString("N2")</div>
             </div>
         }
-        @if (rmGflApproval?.RmCreditLimitGfl.HasValue == true)
+        @if (_showGreenstarCreditLimit && rmGflApproval?.RmCreditLimitGfl.HasValue == true)
         {
             <div class="cp-credit-field">
                 <label>RM Credit Limit (GFL) (Approved)</label>
                 <div class="cp-credit-readonly">₹ @rmGflApproval.RmCreditLimitGfl.Value.ToString("N2")</div>
             </div>
         }
-        <div class="cp-credit-field">
-            <label>SM Credit Limit (SPIC)</label>
-            <input type="number" step="0.01" @bind="_smCreditLimitSpic" placeholder="Enter SM Credit Limit (SPIC)" />
-        </div>
-        <div class="cp-credit-field">
-            <label>SM Credit Limit (GFL)</label>
-            <input type="number" step="0.01" @bind="_smCreditLimitGfl" placeholder="Enter SM Credit Limit (GFL)" />
-        </div>
+        @if (_showSpicCreditLimit)
+        {
+            <div class="cp-credit-field">
+                <label>SM Credit Limit (SPIC)</label>
+                <input type="number" step="0.01" @bind="_smCreditLimitSpic" placeholder="Enter SM Credit Limit (SPIC)" />
+            </div>
+        }
+        @if (_showGreenstarCreditLimit)
+        {
+            <div class="cp-credit-field">
+                <label>SM Credit Limit (GFL)</label>
+                <input type="number" step="0.01" @bind="_smCreditLimitGfl" placeholder="Enter SM Credit Limit (GFL)" />
+            </div>
+        }
     </section>
 }
 @if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
@@ -2025,42 +2052,48 @@ private async Task ApproveDealer()
             var smSpicApproval = _approvalHistory?.FirstOrDefault(h => h.SmCreditLimit.HasValue && h.IsApproved);
             var smGflApproval = _approvalHistory?.FirstOrDefault(h => h.SmCreditLimitGfl.HasValue && h.IsApproved);
         }
-        @if (rmSpicApproval?.RmCreditLimit.HasValue == true)
+        @if (_showSpicCreditLimit && rmSpicApproval?.RmCreditLimit.HasValue == true)
         {
             <div class="cp-credit-field">
                 <label>RM Credit Limit (SPIC) (Approved)</label>
                 <div class="cp-credit-readonly">₹ @rmSpicApproval.RmCreditLimit.Value.ToString("N2")</div>
             </div>
         }
-        @if (rmGflApproval?.RmCreditLimitGfl.HasValue == true)
+        @if (_showGreenstarCreditLimit && rmGflApproval?.RmCreditLimitGfl.HasValue == true)
         {
             <div class="cp-credit-field">
                 <label>RM Credit Limit (GFL) (Approved)</label>
                 <div class="cp-credit-readonly">₹ @rmGflApproval.RmCreditLimitGfl.Value.ToString("N2")</div>
             </div>
         }
-        @if (smSpicApproval?.SmCreditLimit.HasValue == true)
+        @if (_showSpicCreditLimit && smSpicApproval?.SmCreditLimit.HasValue == true)
         {
             <div class="cp-credit-field">
                 <label>SM Credit Limit (SPIC) (Approved)</label>
                 <div class="cp-credit-readonly">₹ @smSpicApproval.SmCreditLimit.Value.ToString("N2")</div>
             </div>
         }
-        @if (smGflApproval?.SmCreditLimitGfl.HasValue == true)
+        @if (_showGreenstarCreditLimit && smGflApproval?.SmCreditLimitGfl.HasValue == true)
         {
             <div class="cp-credit-field">
                 <label>SM Credit Limit (GFL) (Approved)</label>
                 <div class="cp-credit-readonly">₹ @smGflApproval.SmCreditLimitGfl.Value.ToString("N2")</div>
             </div>
         }
-        <div class="cp-credit-field">
-            <label>AVP Credit Limit (SPIC)</label>
-            <input type="number" step="0.01" @bind="_avpCreditLimitSpic" placeholder="Enter AVP Credit Limit (SPIC)" />
-        </div>
-        <div class="cp-credit-field">
-            <label>AVP Credit Limit (GFL)</label>
-            <input type="number" step="0.01" @bind="_avpCreditLimitGfl" placeholder="Enter AVP Credit Limit (GFL)" />
-        </div>
+        @if (_showSpicCreditLimit)
+        {
+            <div class="cp-credit-field">
+                <label>AVP Credit Limit (SPIC)</label>
+                <input type="number" step="0.01" @bind="_avpCreditLimitSpic" placeholder="Enter AVP Credit Limit (SPIC)" />
+            </div>
+        }
+        @if (_showGreenstarCreditLimit)
+        {
+            <div class="cp-credit-field">
+                <label>AVP Credit Limit (GFL)</label>
+                <input type="number" step="0.01" @bind="_avpCreditLimitGfl" placeholder="Enter AVP Credit Limit (GFL)" />
+            </div>
+        }
     </section>
 }
 }
