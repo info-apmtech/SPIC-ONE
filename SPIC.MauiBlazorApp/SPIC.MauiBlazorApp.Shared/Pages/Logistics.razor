@@ -206,9 +206,12 @@
             <div class="tab-item @(ActiveTab == "Port" ? "active" : "")" @onclick="SelectPortTab">
                 Rake Point
             </div>
-            <div class="tab-item @(ActiveTab == "PortMaster" ? "active" : "")" @onclick="SelectActualPortTab">
-                Port
-            </div>
+            @if (LoginState.UserRole != AppRole.MO)
+            {
+                <div class="tab-item @(ActiveTab == "PortMaster" ? "active" : "")" @onclick="SelectActualPortTab">
+                    Port
+                </div>
+            }
         </div>
     </div>
 
@@ -444,11 +447,32 @@
                         <label class="form-label-custom">
                             SAP Code <span class="text-danger">*</span>
                         </label>
-                        <input @ref="_firstInputRef"
-                               type="text"
-                               class="form-control-custom w-100 @(_errors.ContainsKey("SapCode") ? "is-invalid" : "")"
-                               placeholder="SAP Code"
-                               @bind="_form.SapCode" />
+                        @if (IsWarehouseTab)
+                        {
+                            <select @ref="_firstInputRef"
+                                    class="form-select-custom w-100 @(_errors.ContainsKey("SapCode") ? "is-invalid" : "")"
+                                    @bind="_form.SapCode"
+                                    @bind:after="OnSapCodeChanged">
+                                <option value="">-- Select SAP Code --</option>
+                                @if (!string.IsNullOrWhiteSpace(_form.SapCode) &&
+                                     !_pvtMasterAll.Any(p => string.Equals(p.Code, _form.SapCode, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    <option value="@_form.SapCode">@_form.SapCode</option>
+                                }
+                                @foreach (var pvt in _pvtMasterAll)
+                                {
+                                    <option value="@pvt.Code">@pvt.Code</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <input @ref="_firstInputRef"
+                                   type="text"
+                                   class="form-control-custom w-100 @(_errors.ContainsKey("SapCode") ? "is-invalid" : "")"
+                                   placeholder="SAP Code"
+                                   @bind="_form.SapCode" />
+                        }
                         @if (_errors.TryGetValue("SapCode", out var sapError))
                         {
                             <div class="lm-field-error">@sapError</div>
@@ -653,23 +677,12 @@
                             </div>
 
                             <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Latitude</label>
-                                <input type="number"
-                                       step="any"
+                                <label class="form-label-custom">Latitude & Longitude</label>
+                                <input type="text"
                                        class="form-control-custom w-100"
-                                       placeholder="e.g. 10.7905"
-                                       @bind="_form.Latitude"
-                                       @bind:after="OnLatitudeChanged" />
-                            </div>
-
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Longitude</label>
-                                <input type="number"
-                                       step="any"
-                                       class="form-control-custom w-100"
-                                       placeholder="e.g. 78.7047"
-                                       @bind="_form.Longitude"
-                                       @bind:after="OnLongitudeChanged" />
+                                       value="@_latitudeLongitudeText"
+                                       @onchange="OnLatitudeLongitudeChanged"
+                                       placeholder="e.g. 10.7905, 78.7047" />
                             </div>
 
                             <!-- Requirement: Rake Point hides Door No + Street only. -->
@@ -1266,6 +1279,10 @@
     private bool _isGettingLocation;
     private string? _locationMessage;
     private bool _locationSuccess;
+    private string _latitudeLongitudeText = "";
+
+    // PVT Master records used for the SAP Code dropdown on the Warehouse tab.
+    private List<PVTMasterItemDto> _pvtMasterAll = new();
 
     // Same pincode lookup behaviour used by Register.
     private bool _isPincodeLookup;
@@ -1298,6 +1315,7 @@
         }
 
         await LoadLookups();
+        await LoadPvtMasters();
         await LoadData();
     }
 
@@ -1344,6 +1362,30 @@
         catch (Exception ex)
         {
             ShowMessage($"Failed to load location lookups: {ex.Message}", true);
+        }
+    }
+
+    private async Task LoadPvtMasters()
+    {
+        try
+        {
+            _pvtMasterAll = await Http.GetFromJsonAsync<List<PVTMasterItemDto>>("api/PVTMaster/all") ?? new();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load PVT Master data: {ex.Message}", true);
+        }
+    }
+
+    private void OnSapCodeChanged()
+    {
+        var match = _pvtMasterAll.FirstOrDefault(p =>
+            string.Equals(p.Code, _form.SapCode, StringComparison.OrdinalIgnoreCase));
+
+        if (match != null)
+        {
+            _form.Name = match.Name;
+            _errors.Remove("SapCode");
         }
     }
 
@@ -1709,6 +1751,7 @@
         if (IsPortTab)
         {
             _form = NewForm();
+            SyncLatitudeLongitudeText();
             _form.Name = item.Name;
             _form.GoogleURL = item.GoogleURL;
             _form.StateId = item.StateId;
@@ -1774,6 +1817,7 @@
 
         if (_form.Latitude.HasValue && _form.Longitude.HasValue)
             await TriggerMapUpdate(_form.Latitude.Value, _form.Longitude.Value);
+        SyncLatitudeLongitudeText();
 
         try { await _firstInputRef.FocusAsync(); } catch { }
     }
@@ -1960,6 +2004,7 @@
         _editingCreatedAt = null;
         _locationMessage = null;
         _locationSuccess = false;
+        _latitudeLongitudeText = "";
         _isPincodeLookup = false;
         _pincodeMessage = null;
         _pincodeSuccess = false;
@@ -2137,6 +2182,7 @@
     {
         _form.Latitude = lat;
         _form.Longitude = lng;
+        SyncLatitudeLongitudeText();
         _form.GoogleURL = $"http://maps.google.com/maps?q={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         _locationMessage = $"Location selected from Map: {lat:F6}, {lng:F6}";
         _locationSuccess = true;
@@ -2272,6 +2318,7 @@
         {
             _form.Latitude = null;
             _form.Longitude = null;
+            SyncLatitudeLongitudeText();
             return;
         }
 
@@ -2303,6 +2350,7 @@
         {
             _form.Latitude = lat;
             _form.Longitude = lng;
+            SyncLatitudeLongitudeText();
             _locationMessage = $"Coordinates extracted: {lat:F6}, {lng:F6}";
             _locationSuccess = true;
             await TriggerMapUpdate(lat, lng);
@@ -2311,6 +2359,7 @@
         {
             _form.Latitude = null;
             _form.Longitude = null;
+            SyncLatitudeLongitudeText();
             _locationMessage = "Could not extract coordinates from this URL. Try the full Google Maps URL.";
             _locationSuccess = false;
         }
@@ -2326,6 +2375,43 @@
     {
         if (_form.Latitude.HasValue && _form.Longitude.HasValue)
             await TriggerMapUpdate(_form.Latitude.Value, _form.Longitude.Value);
+    }
+
+    private void OnLatitudeLongitudeChanged(ChangeEventArgs e)
+    {
+        _latitudeLongitudeText = e.Value?.ToString() ?? "";
+
+        var text = _latitudeLongitudeText.Trim();
+        var parts = text.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        double? lat = null;
+        double? lng = null;
+        if (parts.Length >= 2
+            && double.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedLat)
+            && double.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedLng))
+        {
+            lat = parsedLat;
+            lng = parsedLng;
+        }
+
+        _form.Latitude = lat;
+        _form.Longitude = lng;
+
+        if (lat.HasValue && lng.HasValue)
+            _ = TriggerMapUpdate(lat.Value, lng.Value);
+    }
+
+    private void SyncLatitudeLongitudeText()
+    {
+        string Fmt(double d) => d.ToString("G17", System.Globalization.CultureInfo.InvariantCulture);
+
+        if (_form.Latitude.HasValue && _form.Longitude.HasValue)
+            _latitudeLongitudeText = $"{Fmt(_form.Latitude.Value)}, {Fmt(_form.Longitude.Value)}";
+        else if (_form.Latitude.HasValue)
+            _latitudeLongitudeText = Fmt(_form.Latitude.Value);
+        else if (_form.Longitude.HasValue)
+            _latitudeLongitudeText = Fmt(_form.Longitude.Value);
+        else
+            _latitudeLongitudeText = "";
     }
 
     private async Task UseCurrentLocation()
@@ -2347,6 +2433,7 @@
             {
                 _form.Latitude = result.Latitude;
                 _form.Longitude = result.Longitude;
+                SyncLatitudeLongitudeText();
                 _form.GoogleURL = $"http://maps.google.com/maps?q={result.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{result.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
                 _locationMessage = $"Location captured: {result.Latitude:F6}, {result.Longitude:F6}";
                 _locationSuccess = true;
@@ -2400,6 +2487,13 @@
         }
 
         return null;
+    }
+
+    public class PVTMasterItemDto
+    {
+        public int Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
     }
 
     public class LogisticsFormModel

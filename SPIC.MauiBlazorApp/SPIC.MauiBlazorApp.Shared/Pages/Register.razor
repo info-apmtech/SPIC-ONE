@@ -503,22 +503,15 @@
                                     <input type="text" class="form-control-custom w-100" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Click map or Paste Google Maps link">
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Latitude</label>
-                                    <input type="number" step="any" class="form-control-custom w-100 @(_errors.ContainsKey("Latitude") ? "is-invalid" : "")"
-                                           @bind="_model.Latitude"
-                                           @bind:after="OnLatitudeChanged"
-                                           placeholder="e.g. 10.7905">
+                                    <label class="form-label-custom">Latitude & Longitude</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Latitude") || _errors.ContainsKey("Longitude") ? "is-invalid" : "")"
+                                           value="@_latitudeLongitudeText"
+                                           @onchange="OnLatitudeLongitudeChanged"
+                                           placeholder="e.g. 10.7905, 78.7047">
                                     @if (_errors.ContainsKey("Latitude"))
                                     {
                                         <div class="field-error">@_errors["Latitude"]</div>
                                     }
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Longitude</label>
-                                    <input type="number" step="any" class="form-control-custom w-100 @(_errors.ContainsKey("Longitude") ? "is-invalid" : "")"
-                                           @bind="_model.Longitude"
-                                           @bind:after="OnLongitudeChanged"
-                                           placeholder="e.g. 78.7047">
                                     @if (_errors.ContainsKey("Longitude"))
                                     {
                                         <div class="field-error">@_errors["Longitude"]</div>
@@ -1411,6 +1404,7 @@
     private string _greenstarTradeDepositDateText = "";
     private string _wholesaleLicenseExpiryDateText = "";
     private string _retailLicenseExpiryDateText = "";
+    private string _latitudeLongitudeText = "";
     protected override void OnInitialized()
     {
         SyncDateBuffersFromModel();
@@ -1505,6 +1499,7 @@
         if (!_model.RetailLicenseExpiryDate.HasValue || _model.RetailLicenseExpiryDate.Value == DateTime.MinValue)
             _model.RetailLicenseExpiryDate = DateTime.Today;
         SyncDateBuffersFromModel();
+        SyncLatitudeLongitudeText();
 
         _isEditMode = true;
         _originalStatus = _model.Status;
@@ -1572,6 +1567,7 @@
     {
         _model.Latitude = lat;
         _model.Longitude = lng;
+        SyncLatitudeLongitudeText();
         _model.GoogleMapURL = $"http://maps.google.com/maps?q={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         _locationMessage = $"Location selected from Map: {lat:F6}, {lng:F6}";
         _locationSuccess = true;
@@ -1633,7 +1629,11 @@
         _filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
         _filteredHeadquarters = new();
         _filteredDealers = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
-        if (!_isEditMode) _model = new();
+        if (!_isEditMode)
+        {
+            _model = new();
+            SyncLatitudeLongitudeText();
+        }
     }
 
     private void OnBasicInfoRegionChanged()
@@ -1865,6 +1865,7 @@
                 RetailLicenseExpiryDate = DateTime.Today
             };
             SyncDateBuffersFromModel();
+            SyncLatitudeLongitudeText();
 
             isSpic = true;
             isGreenStar = true;
@@ -2827,6 +2828,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         {
             _model.Latitude = null;
             _model.Longitude = null;
+            SyncLatitudeLongitudeText();
             return;
         }
 
@@ -2851,6 +2853,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         {
             _model.Latitude = lat;
             _model.Longitude = lng;
+            SyncLatitudeLongitudeText();
             _locationMessage = $"Coordinates extracted: {lat:F6}, {lng:F6}";
             _locationSuccess = true;
             await TriggerMapUpdate(lat, lng);
@@ -2859,6 +2862,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         {
             _model.Latitude = null;
             _model.Longitude = null;
+            SyncLatitudeLongitudeText();
             _locationMessage = "Could not extract coordinates from this URL. Try pasting the full Google Maps link.";
             _locationSuccess = false;
         }
@@ -2880,6 +2884,52 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
             await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
     }
 
+    private void OnLatitudeLongitudeChanged(ChangeEventArgs e)
+    {
+        _latitudeLongitudeText = e.Value?.ToString() ?? "";
+        _errors.Remove("Latitude");
+        _errors.Remove("Longitude");
+
+        var text = _latitudeLongitudeText.Trim();
+        var parts = text.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        double? lat = null;
+        double? lng = null;
+        if (parts.Length >= 2
+            && double.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedLat)
+            && double.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedLng))
+        {
+            lat = parsedLat;
+            lng = parsedLng;
+        }
+
+        _model.Latitude = lat;
+        _model.Longitude = lng;
+
+        if (!lat.HasValue || !lng.HasValue)
+        {
+            _errors["Latitude"] = "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+            _errors["Longitude"] = "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+        }
+        else
+        {
+            _ = TriggerMapUpdate(lat.Value, lng.Value);
+        }
+    }
+
+    private void SyncLatitudeLongitudeText()
+    {
+        string Fmt(double d) => d.ToString("G17", System.Globalization.CultureInfo.InvariantCulture);
+
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            _latitudeLongitudeText = $"{Fmt(_model.Latitude.Value)}, {Fmt(_model.Longitude.Value)}";
+        else if (_model.Latitude.HasValue)
+            _latitudeLongitudeText = Fmt(_model.Latitude.Value);
+        else if (_model.Longitude.HasValue)
+            _latitudeLongitudeText = Fmt(_model.Longitude.Value);
+        else
+            _latitudeLongitudeText = "";
+    }
+
     private async Task UseCurrentLocation()
     {
         _isGettingLocation = true;
@@ -2898,6 +2948,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
             {
                 _model.Latitude = result.Latitude;
                 _model.Longitude = result.Longitude;
+                SyncLatitudeLongitudeText();
                 _model.GoogleMapURL = $"http://maps.google.com/maps?q={result.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{result.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
                 _locationMessage = $"Location captured: {result.Latitude:F6}, {result.Longitude:F6}";
                 _locationSuccess = true;
