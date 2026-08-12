@@ -118,6 +118,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<IfmsProduct> IfmsProducts { get; set; }
 		public DbSet<PVTMaster> PVTMasters { get; set; }
 		public DbSet<RakePointMaster> RakePointMasters { get; set; }
+		public DbSet<SubDealerRegistration> SubDealerRegistrations { get; set; }
 
 	}
 }
