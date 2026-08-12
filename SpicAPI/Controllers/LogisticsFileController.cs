@@ -9,17 +9,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace SpicAPI.Controllers
 {
-	/// <summary>
-	/// Upload endpoint used only by Logistics Master documents.
-	/// It does not change the existing GenericCrudController flow.
-	/// </summary>
 	[Authorize]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class LogisticsFileController : ControllerBase
 	{
 		private const long MaxFileSize = 10 * 1024 * 1024; // 10 MB
-		private const long MaxRequestSize = 12 * 1024 * 1024; // multipart overhead included
+		private const long MaxRequestSize = 12 * 1024 * 1024;
 
 		private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
 		{
@@ -46,7 +42,7 @@ namespace SpicAPI.Controllers
 				return BadRequest("A valid Logistics record id is required.");
 
 			if (!IsSupportedEntity(entityType))
-				return BadRequest("entityType must be Warehouse, CandFWarehouse or RackPoint.");
+				return BadRequest("entityType must be Warehouse, RackPoint or Port.");
 
 			if (file == null || file.Length == 0)
 				return BadRequest("Please select a file.");
@@ -99,8 +95,8 @@ namespace SpicAPI.Controllers
 
 		private static bool IsSupportedEntity(string value) =>
 			string.Equals(value, "Warehouse", StringComparison.OrdinalIgnoreCase) ||
-			string.Equals(value, "CandFWarehouse", StringComparison.OrdinalIgnoreCase) ||
-			string.Equals(value, "RackPoint", StringComparison.OrdinalIgnoreCase);
+			string.Equals(value, "RackPoint", StringComparison.OrdinalIgnoreCase) ||
+			string.Equals(value, "Port", StringComparison.OrdinalIgnoreCase);
 
 		private static string SanitizeSegment(string value)
 		{

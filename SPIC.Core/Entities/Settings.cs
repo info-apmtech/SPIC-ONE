@@ -122,7 +122,8 @@ namespace SPIC.Core.Entities
 		public string WarehouseCode { get; set; } = string.Empty;
 
 		// Single-table category discriminator.
-		public LogisticsWarehouseCategory WarehouseCategory { get; set; } = LogisticsWarehouseCategory.PvtWH;
+		public LogisticsWarehouseCategory WarehouseCategory { get; set; }
+			= LogisticsWarehouseCategory.PvtWH;
 
 		// Company selection.
 		public bool? InSpic { get; set; }
@@ -136,7 +137,7 @@ namespace SPIC.Core.Entities
 		// Shared dropdown.
 		public LogisticsOperatedBy? OperatedBy { get; set; }
 
-		// Used by PVT WH and Both. Pure C&F WH saves null.
+		// WH Type is used only by exact PVT WH. C&F/Both save null.
 		public LogisticsWarehouseType? WarehouseType { get; set; }
 
 		// Primary Location.
@@ -164,13 +165,31 @@ namespace SPIC.Core.Entities
 		public decimal? GflReservationQuantityMT { get; set; }
 		public decimal? GflAdditionalReservationQuantityLitres { get; set; }
 
-		// Required for PVT WH and Both.
+		// Legacy document-path columns. Exact PVT WH upload is currently inactive; Both can retain the previous document flow.
 		public string? GstDocumentPath { get; set; }
 		public string? InsuranceDocumentPath { get; set; }
 		public string? FertilizerLicenseDocumentPath { get; set; }
 
 		// Optional for all Warehouse categories.
 		public string? OtherDocumentPathsJson { get; set; }
+
+		// Logistics approval metadata.
+		// MO/MDO/JMDO creation starts RM -> SMM -> AVP approval.
+		public string? CreatedBy { get; set; }
+		public string? CreatedByName { get; set; }
+		public bool IsSubmittedForReview { get; set; } = false;
+
+		public bool? RMApproved { get; set; }
+		public bool? SMApproved { get; set; }
+		public bool? AVPApproved { get; set; }
+
+		public string? RMApprovedBy { get; set; }
+		public DateTime? RMApprovedAt { get; set; }
+		public string? SMApprovedBy { get; set; }
+		public DateTime? SMApprovedAt { get; set; }
+		public string? AVPApprovedBy { get; set; }
+		public DateTime? AVPApprovedAt { get; set; }
+		public string? ApprovalRemarks { get; set; }
 
 		public bool IsActive { get; set; }
 		public DateTime CreatedAt { get; set; }
@@ -198,7 +217,6 @@ namespace SPIC.Core.Entities
 		public int? HeadquarterId { get; set; }
 
 		public LogisticsOperatedBy? OperatedBy { get; set; }
-		public LogisticsWarehouseType? WarehouseType { get; set; }
 
 		public double? Latitude { get; set; }
 		public double? Longitude { get; set; }
@@ -215,6 +233,24 @@ namespace SPIC.Core.Entities
 		public State? State { get; set; }
 		public int DistrictId { get; set; } = 0;
 		public District? District { get; set; }
+
+		// Logistics approval metadata.
+		// MO/MDO/JMDO creation starts RM -> SMM -> AVP approval.
+		public string? CreatedBy { get; set; }
+		public string? CreatedByName { get; set; }
+		public bool IsSubmittedForReview { get; set; } = false;
+
+		public bool? RMApproved { get; set; }
+		public bool? SMApproved { get; set; }
+		public bool? AVPApproved { get; set; }
+
+		public string? RMApprovedBy { get; set; }
+		public DateTime? RMApprovedAt { get; set; }
+		public string? SMApprovedBy { get; set; }
+		public DateTime? SMApprovedAt { get; set; }
+		public string? AVPApprovedBy { get; set; }
+		public DateTime? AVPApprovedAt { get; set; }
+		public string? ApprovalRemarks { get; set; }
 
 		public bool IsActive { get; set; }
 		public DateTime CreatedAt { get; set; }
