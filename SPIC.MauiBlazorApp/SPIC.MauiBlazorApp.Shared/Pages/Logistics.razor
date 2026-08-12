@@ -392,7 +392,8 @@
                                 <label class="form-label-custom">State</label>
                                 <select class="form-select-custom w-100"
                                         @bind="_form.BasicStateId"
-                                        @bind:after="OnBasicStateChanged">
+                                        @bind:after="OnBasicStateChanged"
+                                        disabled="@_isStateLocked">
                                     <option value="0">-- Select State --</option>
                                     @foreach (var state in _states)
                                     {
@@ -405,7 +406,8 @@
                                 <label class="form-label-custom">Region</label>
                                 <select class="form-select-custom w-100"
                                         @bind="_form.RegionId"
-                                        @bind:after="OnRegionChanged">
+                                        @bind:after="OnRegionChanged"
+                                        disabled="@_isRegionLocked">
                                     <option value="0">-- Select Region --</option>
                                     @foreach (var region in _filteredRegions)
                                     {
@@ -416,7 +418,7 @@
 
                             <div class="col-12 col-sm-6">
                                 <label class="form-label-custom">HQ</label>
-                                <select class="form-select-custom w-100" @bind="_form.HeadquarterId">
+                                <select class="form-select-custom w-100" @bind="_form.HeadquarterId" disabled="@_isHqLocked">
                                     <option value="0">-- Select HQ --</option>
                                     @foreach (var hq in _filteredHeadquarters)
                                     {
@@ -1246,6 +1248,12 @@
     private List<HeadquarterDto> _filteredHeadquarters = new();
     private List<DistrictDto> _filteredDistricts = new();
 
+    // Lock flags reused from Register: when the assigned MO has State/Region/HQ,
+    // those Basic Information fields are pre-filled and read-only.
+    private bool _isStateLocked;
+    private bool _isRegionLocked;
+    private bool _isHqLocked;
+
     private List<LogisticsItemDto> _warehouseAll = new();
     private List<LogisticsItemDto> _rakePointAll = new();
     private List<LogisticsItemDto> _portAll = new();
@@ -1316,6 +1324,7 @@
 
         await LoadLookups();
         await LoadPvtMasters();
+        ApplyAssignedMoLocation();
         await LoadData();
     }
 
@@ -1480,6 +1489,42 @@
     {
         _form.HeadquarterId = 0;
         _filteredHeadquarters = _headquarters.Where(x => x.RegionId == _form.RegionId).ToList();
+    }
+
+    // Reuses the Registration page's MO -> State -> Region -> HQ logic
+    // (Register.razor ApplyLockedEmployeeLocation): when the logged-in/assigned
+    // MO has a State/Region/HQ, pre-fill and lock those fields.
+    private void ApplyAssignedMoLocation()
+    {
+        if (LoginState.IsAdmin)
+            return;
+
+        if (LoginState.StateId > 0)
+        {
+            _form.BasicStateId = LoginState.StateId;
+
+            _filteredRegions = _regions
+                .Where(r => r.StateId == _form.BasicStateId)
+                .ToList();
+        }
+
+        if (LoginState.RegionId > 0)
+        {
+            _form.RegionId = LoginState.RegionId;
+
+            _filteredHeadquarters = _headquarters
+                .Where(h => h.RegionId == _form.RegionId)
+                .ToList();
+        }
+
+        if (LoginState.HQId > 0)
+        {
+            _form.HeadquarterId = LoginState.HQId;
+        }
+
+        _isStateLocked = LoginState.StateId > 0;
+        _isRegionLocked = LoginState.RegionId > 0;
+        _isHqLocked = LoginState.HQId > 0;
     }
 
     private void OnLocationStateChanged()
@@ -2011,6 +2056,7 @@
         _otherDocumentPaths = new();
         ClearSelectedDocumentFiles();
         _isUploadingDocuments = false;
+        ApplyAssignedMoLocation();
 
         if (clearMessage)
             _message = null;
