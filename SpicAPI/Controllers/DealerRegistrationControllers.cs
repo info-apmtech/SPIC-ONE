@@ -997,10 +997,23 @@ namespace SpicAPI.Controllers
 					}
 				}
 
+				// Capture the final AVP approval timestamp once so the New Dealer's
+				// appointment date, approval history and UpdatedAt stay exactly aligned.
+				var avpApprovalDate = DateTime.Now;
+
 				fresh.AVPApproved = true;
 				fresh.Status = DealerStatus.Active;
 				fresh.DealerCode = reviewedDealerCode;
 				fresh.IsSubmittedForReview = true;
+
+				// INITIAL NEW DEALER ONLY: this FinalApprove endpoint is used only for the
+				// first final AVP/Admin approval before DealerCode allocation. Therefore this
+				// does not overwrite appointment dates during Existing Dealer maintenance.
+				if (fresh.InSpic)
+					fresh.DateOfAppointment = avpApprovalDate;
+
+				if (fresh.InGreenStar)
+					fresh.GreenstarDateOfAppointment = avpApprovalDate;
 
 				// Company selection was already made during registration. Final AVP approval
 				// must not change InSpic/InGreenStar; it only saves the reviewed codes.
@@ -1019,7 +1032,7 @@ namespace SpicAPI.Controllers
 				}
 
 				fresh.UpdatedBy = userId;
-				fresh.UpdatedAt = DateTime.Now;
+				fresh.UpdatedAt = avpApprovalDate;
 
 				if (_historyRepo != null)
 				{
@@ -1028,7 +1041,7 @@ namespace SpicAPI.Controllers
 						DealerId = fresh.Id,
 						ApprovedBy = userId,
 						Role = role,
-						ApprovedAt = DateTime.Now,
+						ApprovedAt = avpApprovalDate,
 						Remarks = remarks,
 						IsApproved = true
 					});

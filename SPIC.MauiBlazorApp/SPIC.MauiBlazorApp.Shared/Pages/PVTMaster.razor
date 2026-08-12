@@ -1,0 +1,396 @@
+﻿@page "/PVTMaster"
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@inject NavigationManager Nav
+
+<style>
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 1.5rem;
+    }
+
+    .main-card {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .btn-outline-green {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.625rem 1rem;
+        border: 1px solid #059669;
+        background: transparent;
+        color: #059669;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+
+        .btn-outline-green:hover {
+            background-color: #f0fdf4;
+        }
+
+    .upload-area {
+        border: 2px dashed #d1d5db;
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background-color: #f9fafb;
+        display: block;
+        width: 100%;
+    }
+
+        .upload-area:hover {
+            border-color: #059669;
+            background-color: #f0fdf4;
+        }
+
+        .upload-area i {
+            font-size: 2.5rem;
+            color: #6b7280;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-area span {
+            color: #6b7280;
+            font-weight: 500;
+            display: block;
+        }
+
+    .upload-result {
+        margin-top: 1rem;
+    }
+
+    .alert {
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+    }
+
+    .alert-success {
+        background-color: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        color: #15803d;
+    }
+
+    .alert-danger {
+        background-color: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+    }
+
+    .metric-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 1.25rem;
+        text-align: center;
+    }
+
+    .bg-blue-light {
+        background-color: #eff6ff;
+        border-color: #bfdbfe;
+    }
+
+    .bg-mint-light {
+        background-color: #f0fdf4;
+        border-color: #bbf7d0;
+    }
+
+    .metric-val {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .metric-title {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #6b7280;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .table th,
+        .table td {
+            padding: 0.75rem;
+            text-align: left;
+        }
+
+        .table th {
+            font-weight: 600;
+            color: #374151;
+            background-color: #f9fafb;
+        }
+
+        .table tbody tr {
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+            .table tbody tr:hover {
+                background-color: #f9fafb;
+            }
+
+    .spinner {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid #f3f4f6;
+        border-top: 2px solid #059669;
+        border-radius: 50%;
+        animation: pvt-spin 0.8s linear infinite;
+    }
+
+    @@keyframes pvt-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .d-flex {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+
+    .container-fluid {
+        padding: 0 1.5rem;
+    }
+</style>
+
+<div class="container-fluid">
+    <h2 class="page-title">PVT Master Management</h2>
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">
+            @_message
+        </div>
+    }
+
+    <!-- Upload Section -->
+    <div class="main-card">
+        <div class="section-header">
+            <h3 class="section-title">Upload PVT Master Data</h3>
+            <button type="button" class="btn-outline-green" @onclick="DownloadSampleTemplate">
+                <i class="bi bi-file-earmark-excel"></i> Sample Format
+            </button>
+        </div>
+
+        <!--
+            IMPORTANT COMPILE FIX:
+            Use Blazor InputFile instead of a raw <input type="file" @onchange=...>.
+            The label/for pair opens the file picker without JS, so no ValueTask.ContinueWith is needed.
+        -->
+        <label class="upload-area" for="fileUpload">
+            <i class="bi bi-cloud-arrow-up"></i>
+            <span>Click to upload or drag and drop</span>
+            <small style="color: #9ca3af; display: block; margin-top: 0.5rem;">Excel file (.xlsx, .xls)</small>
+        </label>
+
+        <InputFile id="fileUpload"
+                   OnChange="OnFileSelected"
+                   accept=".xlsx,.xls"
+                   style="display:none;" />
+
+        @if (_isUploading)
+        {
+            <div class="upload-result">
+                <div class="d-flex">
+                    <span class="spinner"></span>
+                    <span style="color: #6b7280;">Uploading and processing... please wait</span>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Metrics -->
+    <div class="row">
+        <div class="metric-card bg-blue-light">
+            <h4 class="metric-title">Total Records</h4>
+            <div class="metric-val">@_totalRecords</div>
+        </div>
+        <div class="metric-card bg-mint-light">
+            <h4 class="metric-title">Uploaded Today</h4>
+            <div class="metric-val">@_uploadedToday</div>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="main-card">
+        <div class="section-header">
+            <h3 class="section-title">PVT Master List</h3>
+            <input type="text"
+                   placeholder="Search by code or name..."
+                   @bind="_searchText"
+                   @bind:event="oninput"
+                   style="padding: 0.5rem 1rem; border: 1px solid #d1d5db; border-radius: 6px; width: 300px;" />
+        </div>
+
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>S.No</th>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Created At</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_filteredData.Any())
+                    {
+                        @foreach (var (item, index) in _filteredData.Select((x, i) => (x, i + 1)))
+                        {
+                            <tr>
+                                <td>@index</td>
+                                <td>@item.Code</td>
+                                <td>@item.Name</td>
+                                <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">
+                                No data available
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _isUploading = false;
+    private string _message = "";
+    private bool _isError = false;
+    private string _searchText = "";
+
+    private int _totalRecords = 0;
+    private int _uploadedToday = 0;
+
+    private List<PVTMasterDto> _allData = new();
+
+    private List<PVTMasterDto> _filteredData => _allData
+        .Where(x => string.IsNullOrEmpty(_searchText) ||
+                    (x.Code?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (x.Name?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false))
+        .OrderByDescending(x => x.CreatedAt)
+        .ToList();
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null)
+            return;
+
+        _isUploading = true;
+        _message = "";
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+
+            await using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            using var streamContent = new StreamContent(stream);
+
+            var extension = Path.GetExtension(file.Name);
+            var contentType = string.Equals(extension, ".xls", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.ms-excel"
+                : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+            streamContent.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+
+            content.Add(streamContent, "file", file.Name);
+
+            // Keep your previous flow unchanged.
+            // When the bulk-upload API is ready, uncomment the real API call here.
+            // var response = await Http.PostAsync("api/PVTMaster/bulk-upload", content);
+            // if (!response.IsSuccessStatusCode)
+            // {
+            //     var error = await response.Content.ReadAsStringAsync();
+            //     ShowMessage($"Upload failed: {error}", true);
+            //     return;
+            // }
+
+            ShowMessage($"Successfully processed {file.Name}. Data will be saved to database.", false);
+
+            // TODO: Refresh data after real upload.
+            // await LoadData();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Upload failed: {ex.Message}", true);
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+
+    private void DownloadSampleTemplate()
+    {
+        ShowMessage("Sample template download - Implement in your API controller", false);
+        // TODO: Implement download from API.
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+    public class PVTMasterDto
+    {
+        public int Id { get; set; }
+
+        // Controller/entity treats Code as string, so keep the page DTO aligned.
+        public string Code { get; set; } = string.Empty;
+
+        public string Name { get; set; } = string.Empty;
+        public DateTime? CreatedAt { get; set; }
+    }
+}

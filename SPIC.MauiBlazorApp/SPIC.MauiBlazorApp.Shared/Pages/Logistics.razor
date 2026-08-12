@@ -134,6 +134,39 @@
         margin-top: 10px;
     }
 
+
+    .lm-category-selector {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        max-width: 620px;
+    }
+
+    .lm-category-btn {
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #374151;
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: .88rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all .2s ease;
+    }
+
+        .lm-category-btn:hover {
+            border-color: #059669;
+            color: #047857;
+            background: #f0fdf4;
+        }
+
+        .lm-category-btn.active {
+            border-color: #059669;
+            background: #059669;
+            color: #ffffff;
+            box-shadow: 0 2px 6px rgba(5, 150, 105, .18);
+        }
+
     @@media (max-width: 991.98px) {
         .lm-doc-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -142,6 +175,10 @@
 
     @@media (max-width: 575.98px) {
         .lm-doc-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .lm-category-selector {
             grid-template-columns: 1fr;
         }
     }
@@ -158,19 +195,13 @@
         </div>
     }
 
-    <!-- Keep the existing menu/tab keys and visual flow unchanged.
-         Data is now stored separately:
-         Warehouse = PVT WH -> existing Warehouse table/API
-         RakePoint = C&F WH -> CandFWarehouse table/API
-         Port = Rake Point -> RackPoint table/API
-         PortMaster = Port -> existing Port table/API -->
+    <!-- Warehouse now uses ONE entity/table/API.
+         WarehouseCategory decides whether the record is PVT WH, C&F WH or Both.
+         Rake Point and Port flows remain on their existing APIs. -->
     <div class="tabs-wrapper">
         <div class="tabs-container">
             <div class="tab-item @(ActiveTab == "Warehouse" ? "active" : "")" @onclick="SelectWarehouseTab">
-                PVT WH
-            </div>
-            <div class="tab-item @(ActiveTab == "RakePoint" ? "active" : "")" @onclick="SelectRakePointTab">
-                C&amp;F WH
+                Warehouse
             </div>
             <div class="tab-item @(ActiveTab == "Port" ? "active" : "")" @onclick="SelectPortTab">
                 Rake Point
@@ -265,7 +296,7 @@
                 </button>
 
                 @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) ||
-                                 (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update")))
+                                                 (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update")))
                 {
                     <button type="button"
                             class="btn-save"
@@ -280,605 +311,646 @@
     }
     else
     {
-    <div>
-        <!-- Basic Information -->
-        <div class="basic-info-card">
-            <div class="basic-info-header">
-                <h3 class="basic-info-title">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
-                         class="formicon"
-                         alt="icon" /> Basic Information
-                </h3>
-            </div>
+        <div>
+            @if (IsWarehouseTab)
+            {
+                <!-- Warehouse Category drives PVT / C&F / Both-specific content. -->
+                <div class="basic-info-card">
+                    <div class="basic-info-header">
+                        <h3 class="basic-info-title">
+                            <i class="bi bi-diagram-3 me-2"></i> Warehouse Category
+                        </h3>
+                    </div>
 
-            <div class="row g-4 align-items-center">
-                <div class="col-12 col-md-5">
-                    <div class="row g-3 h-100">
-                        <div class="col-6">
-                            <div class="logo-card spic lm-company-card @(_form.InSpic ? "active" : "")"
-                                 @onclick="ToggleSpic">
-                                <div class="card-checkbox">
-                                    <i class="bi bi-check-lg"></i>
-                                </div>
-                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" />
-                                <span>SPIC</span>
-                            </div>
-                        </div>
+                    <div class="lm-category-selector">
+                        <button type="button"
+                                class="lm-category-btn @(IsPvtWarehouseCategory ? "active" : "")"
+                                @onclick="() => SetWarehouseCategory(LogisticsWarehouseCategory.PvtWH)">
+                            PVT WH
+                        </button>
+                        <button type="button"
+                                class="lm-category-btn @(IsCandFWarehouseCategory ? "active" : "")"
+                                @onclick="() => SetWarehouseCategory(LogisticsWarehouseCategory.CandFWH)">
+                            C&amp;F WH
+                        </button>
+                        <button type="button"
+                                class="lm-category-btn @(IsBothWarehouseCategory ? "active" : "")"
+                                @onclick="() => SetWarehouseCategory(LogisticsWarehouseCategory.Both)">
+                            Both
+                        </button>
+                    </div>
 
-                        <div class="col-6">
-                            <div class="logo-card green-star lm-company-card @(_form.InGreenStar ? "active" : "")"
-                                 @onclick="ToggleGreenStar">
-                                <div class="card-checkbox">
-                                    <i class="bi bi-check-lg"></i>
-                                </div>
-                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" />
-                                <span>GREEN STAR</span>
-                            </div>
-                        </div>
+                    <div class="small text-muted mt-2">
+                        @GetWarehouseCategoryDescription()
                     </div>
                 </div>
+            }
 
-                <div class="col-12 col-md-7">
-                    <div class="row g-3">
-                        <div class="col-12 col-sm-6">
-                            <label class="form-label-custom">State</label>
-                            <select class="form-select-custom w-100"
-                                    @bind="_form.BasicStateId"
-                                    @bind:after="OnBasicStateChanged">
-                                <option value="0">-- Select State --</option>
-                                @foreach (var state in _states)
-                                {
-                                    <option value="@state.Id">@state.StateName</option>
-                                }
-                            </select>
-                        </div>
-
-                        <div class="col-12 col-sm-6">
-                            <label class="form-label-custom">Region</label>
-                            <select class="form-select-custom w-100"
-                                    @bind="_form.RegionId"
-                                    @bind:after="OnRegionChanged">
-                                <option value="0">-- Select Region --</option>
-                                @foreach (var region in _filteredRegions)
-                                {
-                                    <option value="@region.Id">@region.RegionName</option>
-                                }
-                            </select>
-                        </div>
-
-                        <div class="col-12 col-sm-6">
-                            <label class="form-label-custom">HQ</label>
-                            <select class="form-select-custom w-100" @bind="_form.HeadquarterId">
-                                <option value="0">-- Select HQ --</option>
-                                @foreach (var hq in _filteredHeadquarters)
-                                {
-                                    <option value="@hq.Id">@hq.HeadquarterName</option>
-                                }
-                            </select>
-                        </div>
-
-                        <div class="col-12 col-sm-6">
-                            <label class="form-label-custom">Status</label>
-                            <div class="status-btn-group">
-                                <button type="button"
-                                        class="btn btn_active @(_form.IsActive ? "active" : "")"
-                                        @onclick="() => _form.IsActive = true">
-                                    Active
-                                </button>
-                                <button type="button"
-                                        class="btn btn_inactive @(!_form.IsActive ? "active" : "")"
-                                        @onclick="() => _form.IsActive = false">
-                                    Inactive
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-md-3">
-                    <label class="form-label-custom">
-                        SAP Code <span class="text-danger">*</span>
-                    </label>
-                    <input @ref="_firstInputRef"
-                           type="text"
-                           class="form-control-custom w-100 @(_errors.ContainsKey("SapCode") ? "is-invalid" : "")"
-                           placeholder="SAP Code"
-                           @bind="_form.SapCode" />
-                    @if (_errors.TryGetValue("SapCode", out var sapError))
-                    {
-                        <div class="lm-field-error">@sapError</div>
-                    }
-                </div>
-
-                <div class="col-12 col-md-3">
-                    <label class="form-label-custom">
-                        Name <span class="text-danger">*</span>
-                    </label>
-                    <input type="text"
-                           class="form-control-custom w-100 @(_errors.ContainsKey("Name") ? "is-invalid" : "")"
-                           placeholder="@CurrentNamePlaceholder"
-                           @bind="_form.Name" />
-                    @if (_errors.TryGetValue("Name", out var nameError))
-                    {
-                        <div class="lm-field-error">@nameError</div>
-                    }
-                </div>
-
-                <div class="col-12 col-md-3">
-                    <label class="form-label-custom">
-                        Operated By <span class="text-danger">*</span>
-                    </label>
-                    <select class="form-select-custom w-100 @(_errors.ContainsKey("OperatedBy") ? "is-invalid" : "")"
-                            @bind="_form.OperatedBy">
-                        <option value="">-- Select Operated By --</option>
-                        @foreach (var option in Enum.GetValues<LogisticsOperatedBy>())
-                        {
-                            <option value="@option">@GetOperatedByDisplay(option)</option>
-                        }
-                    </select>
-                    @if (_errors.TryGetValue("OperatedBy", out var operatedByError))
-                    {
-                        <div class="lm-field-error">@operatedByError</div>
-                    }
-                </div>
-
-                <!-- Requirement: C&F WH hides only WH Type. PVT WH and Rake Point show it. -->
-                @if (!IsCandFWarehouseTab)
-                {
-                    <div class="col-12 col-md-3">
-                        <label class="form-label-custom">
-                            WH Type <span class="text-danger">*</span>
-                        </label>
-                        <select class="form-select-custom w-100 @(_errors.ContainsKey("WarehouseType") ? "is-invalid" : "")"
-                                @bind="_form.WarehouseType">
-                            <option value="">-- Select WH Type --</option>
-                            @foreach (var option in Enum.GetValues<LogisticsWarehouseType>())
-                            {
-                                <option value="@option">@GetWarehouseTypeDisplay(option)</option>
-                            }
-                        </select>
-                        @if (_errors.TryGetValue("WarehouseType", out var typeError))
-                        {
-                            <div class="lm-field-error">@typeError</div>
-                        }
-                    </div>
-                }
-            </div>
-        </div>
-
-        <!-- Reservation Quantity -->
-        @if (IsPvtWarehouseTab || IsCandFWarehouseTab)
-        {
+            <!-- Basic Information -->
             <div class="basic-info-card">
                 <div class="basic-info-header">
                     <h3 class="basic-info-title">
-                        <i class="bi bi-box-seam me-2"></i> Reservation Quantity
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                             class="formicon"
+                             alt="icon" /> Basic Information
                     </h3>
                 </div>
 
-                @if (IsPvtWarehouseTab)
-                {
-                    <div class="row g-3">
-                        <div class="col-12 col-lg-6">
-                            <div class="lm-reservation-card">
-                                <div class="lm-reservation-title">SPIC Reservation</div>
-                                <div class="row g-3">
-                                    <div class="col-12 col-md-6">
-                                        <label class="form-label-custom">Approved Reservation Quantity (MT)</label>
-                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
-                                               @bind="_form.SpicApprovedReservationQuantityMT" />
+                <div class="row g-4 align-items-center">
+                    <div class="col-12 col-md-5">
+                        <div class="row g-3 h-100">
+                            <div class="col-6">
+                                <div class="logo-card spic lm-company-card @(_form.InSpic ? "active" : "")"
+                                     @onclick="ToggleSpic">
+                                    <div class="card-checkbox">
+                                        <i class="bi bi-check-lg"></i>
                                     </div>
-                                    <div class="col-12 col-md-6">
-                                        <label class="form-label-custom">Additional Reservation Quantity (MT)</label>
-                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
-                                               @bind="_form.SpicAdditionalReservationQuantityMT" />
+                                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" />
+                                    <span>SPIC</span>
+                                </div>
+                            </div>
+
+                            <div class="col-6">
+                                <div class="logo-card green-star lm-company-card @(_form.InGreenStar ? "active" : "")"
+                                     @onclick="ToggleGreenStar">
+                                    <div class="card-checkbox">
+                                        <i class="bi bi-check-lg"></i>
+                                    </div>
+                                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" />
+                                    <span>GREEN STAR</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-7">
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">State</label>
+                                <select class="form-select-custom w-100"
+                                        @bind="_form.BasicStateId"
+                                        @bind:after="OnBasicStateChanged">
+                                    <option value="0">-- Select State --</option>
+                                    @foreach (var state in _states)
+                                    {
+                                        <option value="@state.Id">@state.StateName</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">Region</label>
+                                <select class="form-select-custom w-100"
+                                        @bind="_form.RegionId"
+                                        @bind:after="OnRegionChanged">
+                                    <option value="0">-- Select Region --</option>
+                                    @foreach (var region in _filteredRegions)
+                                    {
+                                        <option value="@region.Id">@region.RegionName</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">HQ</label>
+                                <select class="form-select-custom w-100" @bind="_form.HeadquarterId">
+                                    <option value="0">-- Select HQ --</option>
+                                    @foreach (var hq in _filteredHeadquarters)
+                                    {
+                                        <option value="@hq.Id">@hq.HeadquarterName</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">Status</label>
+                                <div class="status-btn-group">
+                                    <button type="button"
+                                            class="btn btn_active @(_form.IsActive ? "active" : "")"
+                                            @onclick="() => _form.IsActive = true">
+                                        Active
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn_inactive @(!_form.IsActive ? "active" : "")"
+                                            @onclick="() => _form.IsActive = false">
+                                        Inactive
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-3">
+                        <label class="form-label-custom">
+                            SAP Code <span class="text-danger">*</span>
+                        </label>
+                        <input @ref="_firstInputRef"
+                               type="text"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("SapCode") ? "is-invalid" : "")"
+                               placeholder="SAP Code"
+                               @bind="_form.SapCode" />
+                        @if (_errors.TryGetValue("SapCode", out var sapError))
+                        {
+                            <div class="lm-field-error">@sapError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-md-3">
+                        <label class="form-label-custom">
+                            Name <span class="text-danger">*</span>
+                        </label>
+                        <input type="text"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("Name") ? "is-invalid" : "")"
+                               placeholder="@CurrentNamePlaceholder"
+                               @bind="_form.Name" />
+                        @if (_errors.TryGetValue("Name", out var nameError))
+                        {
+                            <div class="lm-field-error">@nameError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-md-3">
+                        <label class="form-label-custom">
+                            Operated By <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select-custom w-100 @(_errors.ContainsKey("OperatedBy") ? "is-invalid" : "")"
+                                @bind="_form.OperatedBy">
+                            <option value="">-- Select Operated By --</option>
+                            @foreach (var option in Enum.GetValues<LogisticsOperatedBy>())
+                            {
+                                <option value="@option">@GetOperatedByDisplay(option)</option>
+                            }
+                        </select>
+                        @if (_errors.TryGetValue("OperatedBy", out var operatedByError))
+                        {
+                            <div class="lm-field-error">@operatedByError</div>
+                        }
+                    </div>
+
+                    <!-- Requirement: C&F WH hides only WH Type. PVT WH and Rake Point show it. -->
+                    @if (!IsCandFOnlyWarehouse)
+                    {
+                        <div class="col-12 col-md-3">
+                            <label class="form-label-custom">
+                                WH Type <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select-custom w-100 @(_errors.ContainsKey("WarehouseType") ? "is-invalid" : "")"
+                                    @bind="_form.WarehouseType">
+                                <option value="">-- Select WH Type --</option>
+                                @foreach (var option in Enum.GetValues<LogisticsWarehouseType>())
+                                {
+                                    <option value="@option">@GetWarehouseTypeDisplay(option)</option>
+                                }
+                            </select>
+                            @if (_errors.TryGetValue("WarehouseType", out var typeError))
+                            {
+                                <div class="lm-field-error">@typeError</div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Reservation Quantity -->
+            @if (IsWarehouseTab)
+            {
+                <div class="basic-info-card">
+                    <div class="basic-info-header">
+                        <h3 class="basic-info-title">
+                            <i class="bi bi-box-seam me-2"></i> Reservation Quantity
+                        </h3>
+                    </div>
+
+                    @if (ShowsPvtWarehouseContent)
+                    {
+                        <div class="mb-3">
+                            <div class="small fw-semibold text-success mb-2">PVT WH Reservation</div>
+                            <div class="row g-3">
+                                <div class="col-12 col-lg-6">
+                                    <div class="lm-reservation-card">
+                                        <div class="lm-reservation-title">SPIC Reservation</div>
+                                        <div class="row g-3">
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label-custom">Approved Reservation Quantity (MT)</label>
+                                                <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                                       @bind="_form.SpicApprovedReservationQuantityMT" />
+                                            </div>
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label-custom">Additional Reservation Quantity (MT)</label>
+                                                <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                                       @bind="_form.SpicAdditionalReservationQuantityMT" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-lg-6">
+                                    <div class="lm-reservation-card">
+                                        <div class="lm-reservation-title">GFL Reservation</div>
+                                        <div class="row g-3">
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label-custom">Approved Reservation Quantity (MT)</label>
+                                                <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                                       @bind="_form.GflApprovedReservationQuantityMT" />
+                                            </div>
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label-custom">Additional Reservation Quantity (MT)</label>
+                                                <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                                       @bind="_form.GflAdditionalReservationQuantityMT" />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                    }
 
-                        <div class="col-12 col-lg-6">
-                            <div class="lm-reservation-card">
-                                <div class="lm-reservation-title">GFL Reservation</div>
-                                <div class="row g-3">
-                                    <div class="col-12 col-md-6">
-                                        <label class="form-label-custom">Approved Reservation Quantity (MT)</label>
-                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
-                                               @bind="_form.GflApprovedReservationQuantityMT" />
-                                    </div>
-                                    <div class="col-12 col-md-6">
-                                        <label class="form-label-custom">Additional Reservation Quantity (MT)</label>
-                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
-                                               @bind="_form.GflAdditionalReservationQuantityMT" />
+                    @if (ShowsCandFWarehouseContent)
+                    {
+                        <div class="@(ShowsPvtWarehouseContent ? "mt-4" : "")">
+                            <div class="small fw-semibold text-success mb-2">C&amp;F WH Reservation</div>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="lm-reservation-card">
+                                        <div class="lm-reservation-title">GFL Reservation <span class="text-muted fw-normal">(C&amp;F WH)</span></div>
+                                        <div class="row g-3">
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label-custom">Reservation Quantity (MT)</label>
+                                                <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                                       @bind="_form.GflReservationQuantityMT" />
+                                            </div>
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label-custom">Additional Reservation Quantity (Litres)</label>
+                                                <input type="number" min="0" step="0.01" class="form-control-custom w-100"
+                                                       @bind="_form.GflAdditionalReservationQuantityLitres" />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Primary Location -->
+            <div class="form-card">
+                <div class="primary-location-header">
+                    <div class="card-header-title mb-0">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LocationIcon.svg"
+                             alt="Location"
+                             class="formicon" />Primary Location
+                    </div>
+
+                    <button type="button"
+                            class="btn btn-outline-success btn-sm rounded-pill px-3 card-header-title use-current-loc-btn"
+                            @onclick="UseCurrentLocation"
+                            disabled="@_isGettingLocation">
+                        @if (_isGettingLocation)
+                        {
+                            <i class="bi bi-arrow-repeat spin"></i>
+                            <span>Getting Location...</span>
+                        }
+                        else
+                        {
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CurrentLocation.svg"
+                                 alt="Current Location"
+                                 class="verifyicon" />
+                            <span>Use Current Location</span>
+                        }
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_locationMessage))
+                {
+                    <div class="alert @(_locationSuccess ? "alert-success" : "alert-warning") py-1 px-2 small mb-2">
+                        @_locationMessage
+                    </div>
+                }
+
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <div class="map-box-wrap">
+                            <div id="leafletMap" class="leaflet-map-el"></div>
+                            <button type="button"
+                                    class="btn btn-sm btn-success rounded-pill px-3 shadow-sm map-loc-btn"
+                                    @onclick="UseCurrentLocation"
+                                    disabled="@_isGettingLocation">
+                                <i class="bi bi-crosshair"></i> Use current location
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-8">
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">Google Map URL</label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       placeholder="Click map or Paste Google Maps link"
+                                       @bind="_form.GoogleURL"
+                                       @bind:after="OnGoogleMapUrlChanged" />
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">Latitude</label>
+                                <input type="number"
+                                       step="any"
+                                       class="form-control-custom w-100"
+                                       placeholder="e.g. 10.7905"
+                                       @bind="_form.Latitude"
+                                       @bind:after="OnLatitudeChanged" />
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">Longitude</label>
+                                <input type="number"
+                                       step="any"
+                                       class="form-control-custom w-100"
+                                       placeholder="e.g. 78.7047"
+                                       @bind="_form.Longitude"
+                                       @bind:after="OnLongitudeChanged" />
+                            </div>
+
+                            <!-- Requirement: Rake Point hides Door No + Street only. -->
+                            @if (!IsRakePointTab)
+                            {
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Door No / Shop No / Room No / Block No</label>
+                                    <input type="text"
+                                           class="form-control-custom w-100"
+                                           placeholder="Enter Door / Shop / Room No"
+                                           @bind="_form.DoorNo" />
+                                </div>
+
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Street / Area / Locality</label>
+                                    <input type="text"
+                                           class="form-control-custom w-100"
+                                           placeholder="Enter Street / Area / Locality"
+                                           @bind="_form.Street" />
+                                </div>
+                            }
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">Sub Village</label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       placeholder="Enter Sub Village"
+                                       @bind="_form.SubVillage" />
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">Pincode</label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       placeholder="Enter Pincode"
+                                       maxlength="6"
+                                       inputmode="numeric"
+                                       @bind="_form.PinCode"
+                                       @bind:event="oninput"
+                                       @bind:after="OnPincodeChanged" />
+                                @if (_isPincodeLookup)
+                                {
+                                    <div class="small text-muted mt-1">
+                                        <i class="bi bi-arrow-repeat spin"></i> Looking up pincode...
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_pincodeMessage))
+                                {
+                                    <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">
+                                        @_pincodeMessage
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">Village</label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       placeholder="Village"
+                                       @bind="_form.Village" />
+                            </div>
+
+                            <div class="col-6 col-sm-6 col-md-3">
+                                <label class="form-label-custom">Block</label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       placeholder="Enter Block"
+                                       @bind="_form.Block" />
+                            </div>
+
+                            <div class="col-6 col-sm-6 col-md-3">
+                                <label class="form-label-custom">Taluk</label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       placeholder="Enter Taluk"
+                                       @bind="_form.Taluk" />
+                            </div>
+
+                            <div class="col-12 col-sm-6 col-md-3">
+                                <label class="form-label-custom">District</label>
+                                <select class="form-select-custom w-100" @bind="_form.DistrictId">
+                                    <option value="0">-- Select District --</option>
+                                    @foreach (var district in _filteredDistricts)
+                                    {
+                                        <option value="@district.Id">@district.DistrictName</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-sm-6 col-md-3">
+                                <label class="form-label-custom">State</label>
+                                <select class="form-select-custom w-100"
+                                        @bind="_form.StateId"
+                                        @bind:after="OnLocationStateChanged">
+                                    <option value="0">-- Select State --</option>
+                                    @foreach (var state in _states)
+                                    {
+                                        <option value="@state.Id">@state.StateName</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-md-4">
+                                <label class="form-label-custom">
+                                    @CurrentContactLabel
+                                </label>
+                                <input type="tel"
+                                       inputmode="numeric"
+                                       class="form-control-custom w-100"
+                                       placeholder="10-digit mobile number"
+                                       maxlength="10"
+                                       @bind="_form.ContactNumber" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Documents -->
+            <div class="basic-info-card">
+                <div class="basic-info-header">
+                    <h3 class="basic-info-title">
+                        <i class="bi bi-file-earmark-arrow-up me-2"></i> Documents
+                    </h3>
+                </div>
+
+                @if (ShowsPvtWarehouseContent)
+                {
+                    <div class="alert alert-warning py-2 px-3 small mb-3">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        GST, Insurance and Fertilizer License documents are required for PVT WH.
+                    </div>
+
+                    <div class="lm-doc-grid">
+                        <div class="lm-doc-card required @(_errors.ContainsKey("GstDocument") ? "border-danger" : "")">
+                            <div>
+                                <div class="lm-doc-card-title">GST Document <span class="lm-doc-required-badge">Required</span></div>
+                                @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath))
+                                {
+                                    <div class="lm-doc-selected"><i class="bi bi-check-circle-fill me-1"></i>@GetFileName(_form.GstDocumentPath)</div>
+                                }
+                                @if (_gstDocumentFile != null)
+                                {
+                                    <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_gstDocumentFile.Name</div>
+                                }
+                                @if (_errors.TryGetValue("GstDocument", out var gstDocError))
+                                {
+                                    <div class="lm-field-error">@gstDocError</div>
+                                }
+                            </div>
+                            <label class="lm-upload-btn">
+                                <i class="bi bi-cloud-arrow-up"></i> Choose GST File
+                                <InputFile OnChange="OnGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                            </label>
+                        </div>
+
+                        <div class="lm-doc-card required @(_errors.ContainsKey("InsuranceDocument") ? "border-danger" : "")">
+                            <div>
+                                <div class="lm-doc-card-title">Insurance Document <span class="lm-doc-required-badge">Required</span></div>
+                                @if (!string.IsNullOrWhiteSpace(_form.InsuranceDocumentPath))
+                                {
+                                    <div class="lm-doc-selected"><i class="bi bi-check-circle-fill me-1"></i>@GetFileName(_form.InsuranceDocumentPath)</div>
+                                }
+                                @if (_insuranceDocumentFile != null)
+                                {
+                                    <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_insuranceDocumentFile.Name</div>
+                                }
+                                @if (_errors.TryGetValue("InsuranceDocument", out var insuranceDocError))
+                                {
+                                    <div class="lm-field-error">@insuranceDocError</div>
+                                }
+                            </div>
+                            <label class="lm-upload-btn">
+                                <i class="bi bi-cloud-arrow-up"></i> Choose Insurance File
+                                <InputFile OnChange="OnInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                            </label>
+                        </div>
+
+                        <div class="lm-doc-card required @(_errors.ContainsKey("FertilizerLicenseDocument") ? "border-danger" : "")">
+                            <div>
+                                <div class="lm-doc-card-title">Fertilizer License <span class="lm-doc-required-badge">Required</span></div>
+                                @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath))
+                                {
+                                    <div class="lm-doc-selected"><i class="bi bi-check-circle-fill me-1"></i>@GetFileName(_form.FertilizerLicenseDocumentPath)</div>
+                                }
+                                @if (_fertilizerLicenseDocumentFile != null)
+                                {
+                                    <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_fertilizerLicenseDocumentFile.Name</div>
+                                }
+                                @if (_errors.TryGetValue("FertilizerLicenseDocument", out var fertilizerDocError))
+                                {
+                                    <div class="lm-field-error">@fertilizerDocError</div>
+                                }
+                            </div>
+                            <label class="lm-upload-btn">
+                                <i class="bi bi-cloud-arrow-up"></i> Choose License File
+                                <InputFile OnChange="OnFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                            </label>
+                        </div>
+
+                        <div class="lm-doc-card">
+                            <div>
+                                <div class="lm-doc-card-title">Other Documents <span class="text-muted fw-normal">(Optional)</span></div>
+                                @if (_otherDocumentPaths.Count > 0)
+                                {
+                                    <ul class="lm-doc-existing-list">
+                                        @foreach (var path in _otherDocumentPaths)
+                                        {
+                                            <li>@GetFileName(path)</li>
+                                        }
+                                    </ul>
+                                }
+                                @if (_otherDocumentFiles.Count > 0)
+                                {
+                                    <ul class="lm-doc-existing-list text-success">
+                                        @foreach (var file in _otherDocumentFiles)
+                                        {
+                                            <li>@file.Name</li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                            <label class="lm-upload-btn">
+                                <i class="bi bi-cloud-arrow-up"></i> Choose Other Documents
+                                <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
+                            </label>
                         </div>
                     </div>
                 }
                 else
                 {
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <div class="lm-reservation-card">
-                                <div class="lm-reservation-title">GFL Reservation <span class="text-muted fw-normal">(C&amp;F WH only)</span></div>
-                                <div class="row g-3">
-                                    <div class="col-12 col-md-6">
-                                        <label class="form-label-custom">Reservation Quantity (MT)</label>
-                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
-                                               @bind="_form.GflReservationQuantityMT" />
-                                    </div>
-                                    <div class="col-12 col-md-6">
-                                        <label class="form-label-custom">Additional Reservation Quantity (Litres)</label>
-                                        <input type="number" min="0" step="0.01" class="form-control-custom w-100"
-                                               @bind="_form.GflAdditionalReservationQuantityLitres" />
-                                    </div>
-                                </div>
+                    <div class="lm-doc-grid">
+                        <div class="lm-doc-card">
+                            <div>
+                                <div class="lm-doc-card-title">Other Documents <span class="text-muted fw-normal">(Optional)</span></div>
+                                @if (_otherDocumentPaths.Count > 0)
+                                {
+                                    <ul class="lm-doc-existing-list">
+                                        @foreach (var path in _otherDocumentPaths)
+                                        {
+                                            <li>@GetFileName(path)</li>
+                                        }
+                                    </ul>
+                                }
+                                @if (_otherDocumentFiles.Count > 0)
+                                {
+                                    <ul class="lm-doc-existing-list text-success">
+                                        @foreach (var file in _otherDocumentFiles)
+                                        {
+                                            <li>@file.Name</li>
+                                        }
+                                    </ul>
+                                }
                             </div>
+                            <label class="lm-upload-btn">
+                                <i class="bi bi-cloud-arrow-up"></i> Choose Other Documents
+                                <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
+                            </label>
                         </div>
                     </div>
                 }
             </div>
-        }
 
-        <!-- Primary Location -->
-        <div class="form-card">
-            <div class="primary-location-header">
-                <div class="card-header-title mb-0">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LocationIcon.svg"
-                         alt="Location"
-                         class="formicon" />Primary Location
-                </div>
-
-                <button type="button"
-                        class="btn btn-outline-success btn-sm rounded-pill px-3 card-header-title use-current-loc-btn"
-                        @onclick="UseCurrentLocation"
-                        disabled="@_isGettingLocation">
-                    @if (_isGettingLocation)
-                    {
-                        <i class="bi bi-arrow-repeat spin"></i>
-                        <span>Getting Location...</span>
-                    }
-                    else
-                    {
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CurrentLocation.svg"
-                             alt="Current Location"
-                             class="verifyicon" />
-                        <span>Use Current Location</span>
-                    }
+            <div class="lm-save-row">
+                <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
+                    <i class="bi bi-x"></i> Cancel
                 </button>
-            </div>
 
-            @if (!string.IsNullOrWhiteSpace(_locationMessage))
-            {
-                <div class="alert @(_locationSuccess ? "alert-success" : "alert-warning") py-1 px-2 small mb-2">
-                    @_locationMessage
-                </div>
-            }
-
-            <div class="row g-3">
-                <div class="col-12 col-md-4">
-                    <div class="map-box-wrap">
-                        <div id="leafletMap" class="leaflet-map-el"></div>
-                        <button type="button"
-                                class="btn btn-sm btn-success rounded-pill px-3 shadow-sm map-loc-btn"
-                                @onclick="UseCurrentLocation"
-                                disabled="@_isGettingLocation">
-                            <i class="bi bi-crosshair"></i> Use current location
-                        </button>
-                    </div>
-                </div>
-
-                <div class="col-12 col-md-8">
-                    <div class="row g-3">
-                        <div class="col-12 col-sm-6">
-                            <label class="form-label-custom">Google Map URL</label>
-                            <input type="text"
-                                   class="form-control-custom w-100"
-                                   placeholder="Click map or Paste Google Maps link"
-                                   @bind="_form.GoogleURL"
-                                   @bind:after="OnGoogleMapUrlChanged" />
-                        </div>
-
-                        <div class="col-12 col-sm-6">
-                            <label class="form-label-custom">Latitude</label>
-                            <input type="number"
-                                   step="any"
-                                   class="form-control-custom w-100"
-                                   placeholder="e.g. 10.7905"
-                                   @bind="_form.Latitude"
-                                   @bind:after="OnLatitudeChanged" />
-                        </div>
-
-                        <div class="col-12 col-sm-6">
-                            <label class="form-label-custom">Longitude</label>
-                            <input type="number"
-                                   step="any"
-                                   class="form-control-custom w-100"
-                                   placeholder="e.g. 78.7047"
-                                   @bind="_form.Longitude"
-                                   @bind:after="OnLongitudeChanged" />
-                        </div>
-
-                        <!-- Requirement: Rake Point hides Door No + Street only. -->
-                        @if (!IsRakePointTab)
-                        {
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Door No / Shop No / Room No / Block No</label>
-                                <input type="text"
-                                       class="form-control-custom w-100"
-                                       placeholder="Enter Door / Shop / Room No"
-                                       @bind="_form.DoorNo" />
-                            </div>
-
-                            <div class="col-12 col-sm-6">
-                                <label class="form-label-custom">Street / Area / Locality</label>
-                                <input type="text"
-                                       class="form-control-custom w-100"
-                                       placeholder="Enter Street / Area / Locality"
-                                       @bind="_form.Street" />
-                            </div>
-                        }
-
-                        <div class="col-12 col-sm-6">
-                            <label class="form-label-custom">Sub Village</label>
-                            <input type="text"
-                                   class="form-control-custom w-100"
-                                   placeholder="Enter Sub Village"
-                                   @bind="_form.SubVillage" />
-                        </div>
-
-                        <div class="col-12 col-sm-6">
-                            <label class="form-label-custom">Pincode</label>
-                            <input type="text"
-                                   class="form-control-custom w-100"
-                                   placeholder="Enter Pincode"
-                                   maxlength="6"
-                                   inputmode="numeric"
-                                   @bind="_form.PinCode"
-                                   @bind:event="oninput"
-                                   @bind:after="OnPincodeChanged" />
-                            @if (_isPincodeLookup)
-                            {
-                                <div class="small text-muted mt-1">
-                                    <i class="bi bi-arrow-repeat spin"></i> Looking up pincode...
-                                </div>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(_pincodeMessage))
-                            {
-                                <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">
-                                    @_pincodeMessage
-                                </div>
-                            }
-                        </div>
-
-                        <div class="col-12 col-sm-6">
-                            <label class="form-label-custom">Village</label>
-                            <input type="text"
-                                   class="form-control-custom w-100"
-                                   placeholder="Village"
-                                   @bind="_form.Village" />
-                        </div>
-
-                        <div class="col-6 col-sm-6 col-md-3">
-                            <label class="form-label-custom">Block</label>
-                            <input type="text"
-                                   class="form-control-custom w-100"
-                                   placeholder="Enter Block"
-                                   @bind="_form.Block" />
-                        </div>
-
-                        <div class="col-6 col-sm-6 col-md-3">
-                            <label class="form-label-custom">Taluk</label>
-                            <input type="text"
-                                   class="form-control-custom w-100"
-                                   placeholder="Enter Taluk"
-                                   @bind="_form.Taluk" />
-                        </div>
-
-                        <div class="col-12 col-sm-6 col-md-3">
-                            <label class="form-label-custom">District</label>
-                            <select class="form-select-custom w-100" @bind="_form.DistrictId">
-                                <option value="0">-- Select District --</option>
-                                @foreach (var district in _filteredDistricts)
-                                {
-                                    <option value="@district.Id">@district.DistrictName</option>
-                                }
-                            </select>
-                        </div>
-
-                        <div class="col-12 col-sm-6 col-md-3">
-                            <label class="form-label-custom">State</label>
-                            <select class="form-select-custom w-100"
-                                    @bind="_form.StateId"
-                                    @bind:after="OnLocationStateChanged">
-                                <option value="0">-- Select State --</option>
-                                @foreach (var state in _states)
-                                {
-                                    <option value="@state.Id">@state.StateName</option>
-                                }
-                            </select>
-                        </div>
-
-                        <div class="col-12 col-md-4">
-                            <label class="form-label-custom">
-                                @(IsCandFWarehouseTab ? "C&F Operator Contact No" : "Contact No")
-                            </label>
-                            <input type="tel"
-                                   inputmode="numeric"
-                                   class="form-control-custom w-100"
-                                   placeholder="10-digit mobile number"
-                                   maxlength="10"
-                                   @bind="_form.ContactNumber" />
-                        </div>
-                    </div>
-                </div>
+                @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) ||
+                                             (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update")))
+                {
+                    <button type="button"
+                            class="btn-save"
+                            @onclick="HandleSave"
+                            disabled="@(_isSaving || _isUploadingDocuments)">
+                        <i class="bi bi-save"></i>
+                        @(_isUploadingDocuments ? "Uploading Documents..." : (_isSaving ? "Saving..." : (_isEditing ? "Update" : "Save")))
+                    </button>
+                }
             </div>
         </div>
-
-        <!-- Documents -->
-        <div class="basic-info-card">
-            <div class="basic-info-header">
-                <h3 class="basic-info-title">
-                    <i class="bi bi-file-earmark-arrow-up me-2"></i> Documents
-                </h3>
-            </div>
-
-            @if (IsPvtWarehouseTab)
-            {
-                <div class="alert alert-warning py-2 px-3 small mb-3">
-                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                    GST, Insurance and Fertilizer License documents are required for PVT WH.
-                </div>
-
-                <div class="lm-doc-grid">
-                    <div class="lm-doc-card required @(_errors.ContainsKey("GstDocument") ? "border-danger" : "")">
-                        <div>
-                            <div class="lm-doc-card-title">GST Document <span class="lm-doc-required-badge">Required</span></div>
-                            @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath))
-                            {
-                                <div class="lm-doc-selected"><i class="bi bi-check-circle-fill me-1"></i>@GetFileName(_form.GstDocumentPath)</div>
-                            }
-                            @if (_gstDocumentFile != null)
-                            {
-                                <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_gstDocumentFile.Name</div>
-                            }
-                            @if (_errors.TryGetValue("GstDocument", out var gstDocError))
-                            {
-                                <div class="lm-field-error">@gstDocError</div>
-                            }
-                        </div>
-                        <label class="lm-upload-btn">
-                            <i class="bi bi-cloud-arrow-up"></i> Choose GST File
-                            <InputFile OnChange="OnGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                        </label>
-                    </div>
-
-                    <div class="lm-doc-card required @(_errors.ContainsKey("InsuranceDocument") ? "border-danger" : "")">
-                        <div>
-                            <div class="lm-doc-card-title">Insurance Document <span class="lm-doc-required-badge">Required</span></div>
-                            @if (!string.IsNullOrWhiteSpace(_form.InsuranceDocumentPath))
-                            {
-                                <div class="lm-doc-selected"><i class="bi bi-check-circle-fill me-1"></i>@GetFileName(_form.InsuranceDocumentPath)</div>
-                            }
-                            @if (_insuranceDocumentFile != null)
-                            {
-                                <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_insuranceDocumentFile.Name</div>
-                            }
-                            @if (_errors.TryGetValue("InsuranceDocument", out var insuranceDocError))
-                            {
-                                <div class="lm-field-error">@insuranceDocError</div>
-                            }
-                        </div>
-                        <label class="lm-upload-btn">
-                            <i class="bi bi-cloud-arrow-up"></i> Choose Insurance File
-                            <InputFile OnChange="OnInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                        </label>
-                    </div>
-
-                    <div class="lm-doc-card required @(_errors.ContainsKey("FertilizerLicenseDocument") ? "border-danger" : "")">
-                        <div>
-                            <div class="lm-doc-card-title">Fertilizer License <span class="lm-doc-required-badge">Required</span></div>
-                            @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath))
-                            {
-                                <div class="lm-doc-selected"><i class="bi bi-check-circle-fill me-1"></i>@GetFileName(_form.FertilizerLicenseDocumentPath)</div>
-                            }
-                            @if (_fertilizerLicenseDocumentFile != null)
-                            {
-                                <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_fertilizerLicenseDocumentFile.Name</div>
-                            }
-                            @if (_errors.TryGetValue("FertilizerLicenseDocument", out var fertilizerDocError))
-                            {
-                                <div class="lm-field-error">@fertilizerDocError</div>
-                            }
-                        </div>
-                        <label class="lm-upload-btn">
-                            <i class="bi bi-cloud-arrow-up"></i> Choose License File
-                            <InputFile OnChange="OnFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                        </label>
-                    </div>
-
-                    <div class="lm-doc-card">
-                        <div>
-                            <div class="lm-doc-card-title">Other Documents <span class="text-muted fw-normal">(Optional)</span></div>
-                            @if (_otherDocumentPaths.Count > 0)
-                            {
-                                <ul class="lm-doc-existing-list">
-                                    @foreach (var path in _otherDocumentPaths)
-                                    {
-                                        <li>@GetFileName(path)</li>
-                                    }
-                                </ul>
-                            }
-                            @if (_otherDocumentFiles.Count > 0)
-                            {
-                                <ul class="lm-doc-existing-list text-success">
-                                    @foreach (var file in _otherDocumentFiles)
-                                    {
-                                        <li>@file.Name</li>
-                                    }
-                                </ul>
-                            }
-                        </div>
-                        <label class="lm-upload-btn">
-                            <i class="bi bi-cloud-arrow-up"></i> Choose Other Documents
-                            <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
-                        </label>
-                    </div>
-                </div>
-            }
-            else
-            {
-                <div class="lm-doc-grid">
-                    <div class="lm-doc-card">
-                        <div>
-                            <div class="lm-doc-card-title">Other Documents <span class="text-muted fw-normal">(Optional)</span></div>
-                            @if (_otherDocumentPaths.Count > 0)
-                            {
-                                <ul class="lm-doc-existing-list">
-                                    @foreach (var path in _otherDocumentPaths)
-                                    {
-                                        <li>@GetFileName(path)</li>
-                                    }
-                                </ul>
-                            }
-                            @if (_otherDocumentFiles.Count > 0)
-                            {
-                                <ul class="lm-doc-existing-list text-success">
-                                    @foreach (var file in _otherDocumentFiles)
-                                    {
-                                        <li>@file.Name</li>
-                                    }
-                                </ul>
-                            }
-                        </div>
-                        <label class="lm-upload-btn">
-                            <i class="bi bi-cloud-arrow-up"></i> Choose Other Documents
-                            <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
-                        </label>
-                    </div>
-                </div>
-            }
-        </div>
-
-        <div class="lm-save-row">
-            <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
-                <i class="bi bi-x"></i> Cancel
-            </button>
-
-            @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) ||
-                             (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update")))
-            {
-                <button type="button"
-                        class="btn-save"
-                        @onclick="HandleSave"
-                        disabled="@(_isSaving || _isUploadingDocuments)">
-                    <i class="bi bi-save"></i>
-                    @(_isUploadingDocuments ? "Uploading Documents..." : (_isSaving ? "Saving..." : (_isEditing ? "Update" : "Save")))
-                </button>
-            }
-        </div>
-    </div>
     }
 
     <!-- Preserve old CRUD/list functionality under the new Register-style form. -->
@@ -942,7 +1014,7 @@
                 <th>Status</th>
                 <th>Created At</th>
                 @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") ||
-                                 LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+                                                 LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
                 {
                     <th>Action</th>
                 }
@@ -951,18 +1023,22 @@
             {
                 <th>Name</th>
                 <th>SAP Code</th>
+                @if (IsWarehouseTab)
+                {
+                    <th>Category</th>
+                }
                 <th>Operated By</th>
-                @if (!IsCandFWarehouseTab)
+                @if (!IsCandFOnlyWarehouse)
                 {
                     <th>WH Type</th>
                 }
                 <th>State</th>
                 <th>District</th>
-                <th>@(IsCandFWarehouseTab ? "C&F Operator Contact No" : "Contact No")</th>
+                <th>@CurrentContactLabel</th>
                 <th>Status</th>
                 <th>Created At</th>
                 @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") ||
-                                 LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+                                                 LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
                 {
                     <th>Action</th>
                 }
@@ -984,7 +1060,7 @@
                 </td>
                 <td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
                 @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") ||
-                                 LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+                                                 LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
                 {
                     <td>
                         <div class="action-icons">
@@ -1004,8 +1080,12 @@
             {
                 <td>@item.Name</td>
                 <td><span class="lm-table-code">@GetDisplayCode(item)</span></td>
+                @if (IsWarehouseTab)
+                {
+                    <td>@GetWarehouseCategoryDisplay(GetWarehouseCategory(item))</td>
+                }
                 <td>@GetOperatedByDisplay(item.OperatedBy)</td>
-                @if (!IsCandFWarehouseTab)
+                @if (!IsCandFOnlyWarehouse)
                 {
                     <td>@GetWarehouseTypeDisplay(item.WarehouseType)</td>
                 }
@@ -1021,7 +1101,7 @@
                 </td>
                 <td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
                 @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") ||
-                                 LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+                                                 LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
                 {
                     <td>
                         <div class="action-icons">
@@ -1067,34 +1147,77 @@
 }
 
 @code {
-    // Preserve the current LogisticsMaster internal tab values / menu behaviour.
-    // Only the API/table behind each tab is separated now.
+    // Warehouse is now one tab and one entity/table/API.
+    // WarehouseCategory decides whether PVT, C&F or Both-specific content is shown/saved.
     private string ActiveTab { get; set; } = "Warehouse";
-    private bool IsPvtWarehouseTab => ActiveTab == "Warehouse";
-    private bool IsCandFWarehouseTab => ActiveTab == "RakePoint";
+
+    private bool IsWarehouseTab => ActiveTab == "Warehouse";
     private bool IsRakePointTab => ActiveTab == "Port";
     private bool IsPortTab => ActiveTab == "PortMaster";
+
+    private LogisticsWarehouseCategory CurrentWarehouseCategory =>
+        _form.WarehouseCategory ?? LogisticsWarehouseCategory.PvtWH;
+
+    private bool IsPvtWarehouseCategory =>
+        IsWarehouseTab && CurrentWarehouseCategory == LogisticsWarehouseCategory.PvtWH;
+
+    private bool IsCandFWarehouseCategory =>
+        IsWarehouseTab && CurrentWarehouseCategory == LogisticsWarehouseCategory.CandFWH;
+
+    private bool IsBothWarehouseCategory =>
+        IsWarehouseTab && CurrentWarehouseCategory == LogisticsWarehouseCategory.Both;
+
+    private bool ShowsPvtWarehouseContent =>
+        IsWarehouseTab && (IsPvtWarehouseCategory || IsBothWarehouseCategory);
+
+    private bool ShowsCandFWarehouseContent =>
+        IsWarehouseTab && (IsCandFWarehouseCategory || IsBothWarehouseCategory);
+
+    // Pure C&F hides WH Type. PVT, Both and Rake Point keep it visible.
+    private bool IsCandFOnlyWarehouse => IsWarehouseTab && IsCandFWarehouseCategory;
+
+    private string CurrentContactLabel => IsWarehouseTab
+        ? CurrentWarehouseCategory switch
+        {
+            LogisticsWarehouseCategory.CandFWH => "C&F Operator Contact No",
+            LogisticsWarehouseCategory.Both => "Contact No / C&F Operator Contact No",
+            _ => "Contact No"
+        }
+        : "Contact No";
+
     private string ActiveTabDisplayName => ActiveTab switch
     {
-        "Warehouse" => "PVT WH",
-        "RakePoint" => "C&F WH",
+        "Warehouse" => CurrentWarehouseCategory switch
+        {
+            LogisticsWarehouseCategory.PvtWH => "PVT WH",
+            LogisticsWarehouseCategory.CandFWH => "C&F WH",
+            LogisticsWarehouseCategory.Both => "PVT + C&F WH",
+            _ => "Warehouse"
+        },
         "Port" => "Rake Point",
         "PortMaster" => "Port",
         _ => ActiveTab
     };
+
     private string CurrentApiBase => ActiveTab switch
     {
         "Warehouse" => "api/Warehouse",
-        "RakePoint" => "api/CandFWarehouse",
         "Port" => "api/RackPoint",
         "PortMaster" => "api/Port",
         _ => ""
     };
-    private string CurrentFileName => ActiveTabDisplayName.Replace(" ", "_").Replace("&", "and");
+
+    private string CurrentFileName => ActiveTabDisplayName.Replace(" ", "_").Replace("&", "and").Replace("+", "and");
+
     private string CurrentNamePlaceholder => ActiveTab switch
     {
-        "Warehouse" => "Enter PVT Warehouse Name",
-        "RakePoint" => "Enter C&F Warehouse Name",
+        "Warehouse" => CurrentWarehouseCategory switch
+        {
+            LogisticsWarehouseCategory.PvtWH => "Enter PVT Warehouse Name",
+            LogisticsWarehouseCategory.CandFWH => "Enter C&F Warehouse Name",
+            LogisticsWarehouseCategory.Both => "Enter Warehouse Name",
+            _ => "Enter Warehouse Name"
+        },
         "PortMaster" => "Enter Port Name",
         _ => "Enter Rake Point Name"
     };
@@ -1110,16 +1233,16 @@
     private List<HeadquarterDto> _filteredHeadquarters = new();
     private List<DistrictDto> _filteredDistricts = new();
 
-    private List<LogisticsItemDto> _pvtWarehouseAll = new();
-    private List<LogisticsItemDto> _candFWarehouseAll = new();
+    private List<LogisticsItemDto> _warehouseAll = new();
     private List<LogisticsItemDto> _rakePointAll = new();
     private List<LogisticsItemDto> _portAll = new();
     private List<LogisticsItemDto> _filteredItems = new();
 
     private List<LogisticsItemDto> CurrentAllItems => ActiveTab switch
     {
-        "Warehouse" => _pvtWarehouseAll,
-        "RakePoint" => _candFWarehouseAll,
+        "Warehouse" => _warehouseAll
+            .Where(x => GetWarehouseCategory(x) == CurrentWarehouseCategory)
+            .ToList(),
         "Port" => _rakePointAll,
         "PortMaster" => _portAll,
         _ => new()
@@ -1149,7 +1272,7 @@
     private string? _pincodeMessage;
     private bool _pincodeSuccess;
 
-    // Document upload state. PVT WH requires GST, Insurance and Fertilizer License.
+    // Document upload state. PVT WH requires GST, Insurance and Fertilizer License; C&F uses optional Other Documents.
     private IBrowserFile? _gstDocumentFile;
     private IBrowserFile? _insuranceDocumentFile;
     private IBrowserFile? _fertilizerLicenseDocumentFile;
@@ -1196,6 +1319,7 @@
 
     private static LogisticsFormModel NewForm() => new()
     {
+        WarehouseCategory = LogisticsWarehouseCategory.PvtWH,
         InSpic = true,
         InGreenStar = true,
         IsActive = true
@@ -1223,6 +1347,9 @@
         }
     }
 
+    private static LogisticsWarehouseCategory GetWarehouseCategory(LogisticsItemDto item) =>
+        item.WarehouseCategory ?? LogisticsWarehouseCategory.PvtWH;
+
     private async Task LoadData()
     {
         try
@@ -1232,14 +1359,14 @@
             switch (ActiveTab)
             {
                 case "Warehouse":
-                    _pvtWarehouseAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/Warehouse/all") ?? new();
+                    // PVT WH, C&F WH and Both are all stored in the same Warehouse table.
+                    _warehouseAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/Warehouse/all") ?? new();
                     break;
-                case "RakePoint":
-                    _candFWarehouseAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/CandFWarehouse/all") ?? new();
-                    break;
+
                 case "Port":
                     _rakePointAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/RackPoint/all") ?? new();
                     break;
+
                 case "PortMaster":
                     _portAll = await Http.GetFromJsonAsync<List<LogisticsItemDto>>("api/Port/all") ?? new();
                     break;
@@ -1257,9 +1384,7 @@
         }
     }
 
-    // Keep the current page's tab handler names intact.
     private async Task SelectWarehouseTab() => await SetActiveTab("Warehouse");
-    private async Task SelectRakePointTab() => await SetActiveTab("RakePoint");
     private async Task SelectPortTab() => await SetActiveTab("Port");
     private async Task SelectActualPortTab() => await SetActiveTab("PortMaster");
 
@@ -1273,6 +1398,30 @@
         ResetForm();
         await LoadData();
     }
+
+    private void SetWarehouseCategory(LogisticsWarehouseCategory category)
+    {
+        if (!IsWarehouseTab || CurrentWarehouseCategory == category)
+            return;
+
+        _form.WarehouseCategory = category;
+
+        // Keep entered values in memory while switching category so the user can
+        // choose Both without losing already entered PVT/C&F information.
+        _errors.Remove("WarehouseType");
+        _errors.Remove("GstDocument");
+        _errors.Remove("InsuranceDocument");
+        _errors.Remove("FertilizerLicenseDocument");
+        ApplyFilter();
+    }
+
+    private string GetWarehouseCategoryDescription() => CurrentWarehouseCategory switch
+    {
+        LogisticsWarehouseCategory.PvtWH => "PVT WH selected: PVT reservation fields, WH Type and mandatory GST / Insurance / Fertilizer License are shown.",
+        LogisticsWarehouseCategory.CandFWH => "C&F WH selected: C&F GFL reservation fields and optional Other Documents are shown. WH Type is hidden.",
+        LogisticsWarehouseCategory.Both => "Both selected: complete PVT WH + C&F WH content is shown and saved in the same Warehouse record.",
+        _ => string.Empty
+    };
 
     private void ToggleSpic() => _form.InSpic = !_form.InSpic;
     private void ToggleGreenStar() => _form.InGreenStar = !_form.InGreenStar;
@@ -1318,10 +1467,10 @@
         if (!_form.OperatedBy.HasValue)
             _errors["OperatedBy"] = "Operated By is required.";
 
-        if (!IsCandFWarehouseTab && !_form.WarehouseType.HasValue)
+        if (!IsCandFOnlyWarehouse && !_form.WarehouseType.HasValue)
             _errors["WarehouseType"] = "WH Type is required.";
 
-        if (IsPvtWarehouseTab)
+        if (ShowsPvtWarehouseContent)
         {
             if (string.IsNullOrWhiteSpace(_form.GstDocumentPath) && _gstDocumentFile == null)
                 _errors["GstDocument"] = "GST document is required for PVT WH.";
@@ -1349,7 +1498,6 @@
             HttpResponseMessage response = ActiveTab switch
             {
                 "Warehouse" => await SaveWarehouse(),
-                "RakePoint" => await SaveCandFWarehouse(),
                 "Port" => await SaveRakePoint(),
                 "PortMaster" => await SavePort(),
                 _ => throw new InvalidOperationException("Invalid Logistics Master tab.")
@@ -1387,7 +1535,6 @@
                 HttpResponseMessage documentPathUpdate = ActiveTab switch
                 {
                     "Warehouse" => await SaveWarehouse(forceUpdate: true, forcedId: recordId),
-                    "RakePoint" => await SaveCandFWarehouse(forceUpdate: true, forcedId: recordId),
                     "Port" => await SaveRakePoint(forceUpdate: true, forcedId: recordId),
                     "PortMaster" => await SavePort(forceUpdate: true, forcedId: recordId),
                     _ => throw new InvalidOperationException("Invalid Logistics Master tab.")
@@ -1423,18 +1570,27 @@
     private async Task<HttpResponseMessage> SaveWarehouse(bool forceUpdate = false, int? forcedId = null)
     {
         var now = DateTime.Now;
+        var category = CurrentWarehouseCategory;
+        var includesPvt = category is LogisticsWarehouseCategory.PvtWH or LogisticsWarehouseCategory.Both;
+        var includesCandF = category is LogisticsWarehouseCategory.CandFWH or LogisticsWarehouseCategory.Both;
+
         var payload = new WarehouseSaveModel
         {
             Id = forcedId ?? _editingId ?? 0,
             Name = _form.Name.Trim(),
             WarehouseCode = _form.SapCode.Trim(),
+            WarehouseCategory = category,
+
             InSpic = _form.InSpic,
             InGreenStar = _form.InGreenStar,
             BasicStateId = ToNullableId(_form.BasicStateId),
             RegionId = ToNullableId(_form.RegionId),
             HeadquarterId = ToNullableId(_form.HeadquarterId),
             OperatedBy = _form.OperatedBy,
-            WarehouseType = _form.WarehouseType,
+
+            // Pure C&F hides WH Type. PVT and Both retain it.
+            WarehouseType = includesPvt ? _form.WarehouseType : null,
+
             GoogleURL = NullIfWhiteSpace(_form.GoogleURL),
             Latitude = _form.Latitude,
             Longitude = _form.Longitude,
@@ -1449,16 +1605,22 @@
             DistrictId = _form.DistrictId,
             ContactNumber = NullIfWhiteSpace(_form.ContactNumber),
 
-            // PVT WH: separate reservation quantities for SPIC and GFL.
-            SpicApprovedReservationQuantityMT = _form.SpicApprovedReservationQuantityMT,
-            SpicAdditionalReservationQuantityMT = _form.SpicAdditionalReservationQuantityMT,
-            GflApprovedReservationQuantityMT = _form.GflApprovedReservationQuantityMT,
-            GflAdditionalReservationQuantityMT = _form.GflAdditionalReservationQuantityMT,
+            // PVT fields are saved for PVT and Both; otherwise null.
+            SpicApprovedReservationQuantityMT = includesPvt ? _form.SpicApprovedReservationQuantityMT : null,
+            SpicAdditionalReservationQuantityMT = includesPvt ? _form.SpicAdditionalReservationQuantityMT : null,
+            GflApprovedReservationQuantityMT = includesPvt ? _form.GflApprovedReservationQuantityMT : null,
+            GflAdditionalReservationQuantityMT = includesPvt ? _form.GflAdditionalReservationQuantityMT : null,
 
-            // PVT WH required highlighted documents + optional other documents.
-            GstDocumentPath = NullIfWhiteSpace(_form.GstDocumentPath),
-            InsuranceDocumentPath = NullIfWhiteSpace(_form.InsuranceDocumentPath),
-            FertilizerLicenseDocumentPath = NullIfWhiteSpace(_form.FertilizerLicenseDocumentPath),
+            // C&F fields are saved for C&F and Both; otherwise null.
+            GflReservationQuantityMT = includesCandF ? _form.GflReservationQuantityMT : null,
+            GflAdditionalReservationQuantityLitres = includesCandF ? _form.GflAdditionalReservationQuantityLitres : null,
+
+            // PVT mandatory documents also apply when category = Both.
+            GstDocumentPath = includesPvt ? NullIfWhiteSpace(_form.GstDocumentPath) : null,
+            InsuranceDocumentPath = includesPvt ? NullIfWhiteSpace(_form.InsuranceDocumentPath) : null,
+            FertilizerLicenseDocumentPath = includesPvt ? NullIfWhiteSpace(_form.FertilizerLicenseDocumentPath) : null,
+
+            // Optional Other Documents are shared by every Warehouse category.
             OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths),
 
             IsActive = _form.IsActive,
@@ -1471,53 +1633,6 @@
         return (forceUpdate || (_isEditing && updateId.HasValue)) && updateId.HasValue
             ? await Http.PutAsJsonAsync($"api/Warehouse/{updateId.Value}", payload)
             : await Http.PostAsJsonAsync("api/Warehouse", payload);
-    }
-
-    private async Task<HttpResponseMessage> SaveCandFWarehouse(bool forceUpdate = false, int? forcedId = null)
-    {
-        var now = DateTime.Now;
-        var payload = new CandFWarehouseSaveModel
-        {
-            Id = forcedId ?? _editingId ?? 0,
-            Name = _form.Name.Trim(),
-            WarehouseCode = _form.SapCode.Trim(),
-            InSpic = _form.InSpic,
-            InGreenStar = _form.InGreenStar,
-            BasicStateId = ToNullableId(_form.BasicStateId),
-            RegionId = ToNullableId(_form.RegionId),
-            HeadquarterId = ToNullableId(_form.HeadquarterId),
-            OperatedBy = _form.OperatedBy,
-            GoogleURL = NullIfWhiteSpace(_form.GoogleURL),
-            Latitude = _form.Latitude,
-            Longitude = _form.Longitude,
-            DoorNo = NullIfWhiteSpace(_form.DoorNo),
-            Street = NullIfWhiteSpace(_form.Street),
-            SubVillage = NullIfWhiteSpace(_form.SubVillage),
-            PinCode = NullIfWhiteSpace(_form.PinCode),
-            Village = NullIfWhiteSpace(_form.Village),
-            Block = NullIfWhiteSpace(_form.Block),
-            Taluk = NullIfWhiteSpace(_form.Taluk),
-            StateId = _form.StateId,
-            DistrictId = _form.DistrictId,
-            ContactNumber = NullIfWhiteSpace(_form.ContactNumber),
-
-            // C&F WH: GFL-only reservation quantities.
-            GflReservationQuantityMT = _form.GflReservationQuantityMT,
-            GflAdditionalReservationQuantityLitres = _form.GflAdditionalReservationQuantityLitres,
-
-            // C&F WH: other documents are optional.
-            OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths),
-
-            IsActive = _form.IsActive,
-            CreatedAt = _editingCreatedAt ?? now,
-            UpdatedAt = now,
-            UpdatedBy = _currentUserId ?? "current-user"
-        };
-
-        var updateId = forcedId ?? _editingId;
-        return (forceUpdate || (_isEditing && updateId.HasValue)) && updateId.HasValue
-            ? await Http.PutAsJsonAsync($"api/CandFWarehouse/{updateId.Value}", payload)
-            : await Http.PostAsJsonAsync("api/CandFWarehouse", payload);
     }
 
     private async Task<HttpResponseMessage> SaveRakePoint(bool forceUpdate = false, int? forcedId = null)
@@ -1612,13 +1727,16 @@
                 ? (!string.IsNullOrWhiteSpace(item.SAPCode) ? item.SAPCode! : item.RailwayCode ?? "")
                 : item.WarehouseCode ?? "",
             Name = item.Name,
+            WarehouseCategory = IsWarehouseTab
+                ? GetWarehouseCategory(item)
+                : LogisticsWarehouseCategory.PvtWH,
             InSpic = item.InSpic ?? true,
             InGreenStar = item.InGreenStar ?? true,
             BasicStateId = item.BasicStateId ?? 0,
             RegionId = item.RegionId ?? 0,
             HeadquarterId = item.HeadquarterId ?? 0,
             OperatedBy = item.OperatedBy,
-            WarehouseType = IsCandFWarehouseTab ? null : item.WarehouseType,
+            WarehouseType = IsWarehouseTab && GetWarehouseCategory(item) == LogisticsWarehouseCategory.CandFWH ? null : item.WarehouseType,
             GoogleURL = item.GoogleURL,
             Latitude = item.Latitude,
             Longitude = item.Longitude,
@@ -1757,18 +1875,32 @@
         {
             new() { Header = "S:No", ValueSelector = item => (_filteredItems.IndexOf(item) + 1).ToString() },
             new() { Header = "Name", ValueSelector = item => item.Name },
-            new() { Header = "SAP Code", ValueSelector = GetDisplayCode },
-            new() { Header = "Operated By", ValueSelector = item => GetOperatedByDisplay(item.OperatedBy) }
+            new() { Header = "SAP Code", ValueSelector = GetDisplayCode }
         };
 
-        if (!IsCandFWarehouseTab)
+        if (IsWarehouseTab)
+        {
+            columns.Add(new ExportColumn<LogisticsItemDto>
+            {
+                Header = "Category",
+                ValueSelector = item => GetWarehouseCategoryDisplay(GetWarehouseCategory(item))
+            });
+        }
+
+        columns.Add(new ExportColumn<LogisticsItemDto>
+        {
+            Header = "Operated By",
+            ValueSelector = item => GetOperatedByDisplay(item.OperatedBy)
+        });
+
+        if (!IsCandFOnlyWarehouse)
             columns.Add(new ExportColumn<LogisticsItemDto> { Header = "WH Type", ValueSelector = item => GetWarehouseTypeDisplay(item.WarehouseType) });
 
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "State", ValueSelector = item => GetStateName(item.StateId) });
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "District", ValueSelector = item => GetDistrictName(item.DistrictId) });
         columns.Add(new ExportColumn<LogisticsItemDto>
         {
-            Header = IsCandFWarehouseTab ? "C&F Operator Contact No" : "Contact No",
+            Header = CurrentContactLabel,
             ValueSelector = item => item.ContactNumber ?? ""
         });
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Status", ValueSelector = item => item.IsActive ? "Active" : "Inactive" });
@@ -1794,10 +1926,18 @@
         _ => ""
     };
 
+    private static string GetWarehouseCategoryDisplay(LogisticsWarehouseCategory? value) => value switch
+    {
+        LogisticsWarehouseCategory.PvtWH => "PVT WH",
+        LogisticsWarehouseCategory.CandFWH => "C&F WH",
+        LogisticsWarehouseCategory.Both => "Both",
+        _ => "PVT WH"
+    };
+
     private static string GetWarehouseTypeDisplay(LogisticsWarehouseType? value) => value switch
     {
         LogisticsWarehouseType.FieldWH => "Field WH",
-        LogisticsWarehouseType.EPTWH => "EPT WH",
+        LogisticsWarehouseType.RakepointWH => "Rake Point WH",
         _ => ""
     };
 
@@ -1805,7 +1945,12 @@
 
     private void ResetForm(bool clearMessage)
     {
+        var selectedWarehouseCategory = IsWarehouseTab
+            ? CurrentWarehouseCategory
+            : LogisticsWarehouseCategory.PvtWH;
+
         _form = NewForm();
+        _form.WarehouseCategory = selectedWarehouseCategory;
         _errors.Clear();
         _filteredRegions = new();
         _filteredHeadquarters = new();
@@ -1827,9 +1972,8 @@
     }
 
     private bool HasFilesWaitingForUpload =>
-        _gstDocumentFile != null ||
-        _insuranceDocumentFile != null ||
-        _fertilizerLicenseDocumentFile != null ||
+        (ShowsPvtWarehouseContent &&
+            (_gstDocumentFile != null || _insuranceDocumentFile != null || _fertilizerLicenseDocumentFile != null)) ||
         _otherDocumentFiles.Count > 0;
 
     private void OnGstDocumentSelected(InputFileChangeEventArgs e)
@@ -1870,19 +2014,18 @@
             var entityType = ActiveTab switch
             {
                 "Warehouse" => "Warehouse",
-                "RakePoint" => "CandFWarehouse",
                 "Port" => "RackPoint",
                 "PortMaster" => "Port",
                 _ => throw new InvalidOperationException("Invalid Logistics Master tab.")
             };
 
-            if (IsPvtWarehouseTab && _gstDocumentFile != null)
+            if (ShowsPvtWarehouseContent && _gstDocumentFile != null)
                 _form.GstDocumentPath = await UploadLogisticsFileAsync(entityType, recordId, "GST", _gstDocumentFile);
 
-            if (IsPvtWarehouseTab && _insuranceDocumentFile != null)
+            if (ShowsPvtWarehouseContent && _insuranceDocumentFile != null)
                 _form.InsuranceDocumentPath = await UploadLogisticsFileAsync(entityType, recordId, "Insurance", _insuranceDocumentFile);
 
-            if (IsPvtWarehouseTab && _fertilizerLicenseDocumentFile != null)
+            if (ShowsPvtWarehouseContent && _fertilizerLicenseDocumentFile != null)
                 _form.FertilizerLicenseDocumentPath = await UploadLogisticsFileAsync(entityType, recordId, "FertilizerLicense", _fertilizerLicenseDocumentFile);
 
             foreach (var file in _otherDocumentFiles)
@@ -2261,6 +2404,7 @@
 
     public class LogisticsFormModel
     {
+        public LogisticsWarehouseCategory? WarehouseCategory { get; set; } = LogisticsWarehouseCategory.PvtWH;
         public string SapCode { get; set; } = "";
         public string Name { get; set; } = "";
         public bool InSpic { get; set; } = true;
@@ -2307,6 +2451,7 @@
         public int Id { get; set; }
         public string Name { get; set; } = "";
         public string? WarehouseCode { get; set; }
+        public LogisticsWarehouseCategory? WarehouseCategory { get; set; }
         public string? RailwayCode { get; set; }
         public string? SAPCode { get; set; }
         public bool? InSpic { get; set; }
@@ -2350,6 +2495,7 @@
         public int Id { get; set; }
         public string Name { get; set; } = "";
         public string WarehouseCode { get; set; } = "";
+        public LogisticsWarehouseCategory WarehouseCategory { get; set; } = LogisticsWarehouseCategory.PvtWH;
         public bool? InSpic { get; set; }
         public bool? InGreenStar { get; set; }
         public int? BasicStateId { get; set; }
@@ -2370,47 +2516,23 @@
         public int StateId { get; set; }
         public int DistrictId { get; set; }
         public string? ContactNumber { get; set; }
+
+        // PVT WH quantities.
         public decimal? SpicApprovedReservationQuantityMT { get; set; }
         public decimal? SpicAdditionalReservationQuantityMT { get; set; }
         public decimal? GflApprovedReservationQuantityMT { get; set; }
         public decimal? GflAdditionalReservationQuantityMT { get; set; }
+
+        // C&F WH quantities.
+        public decimal? GflReservationQuantityMT { get; set; }
+        public decimal? GflAdditionalReservationQuantityLitres { get; set; }
+
+        // PVT-required documents + optional documents shared by both warehouse categories.
         public string? GstDocumentPath { get; set; }
         public string? InsuranceDocumentPath { get; set; }
         public string? FertilizerLicenseDocumentPath { get; set; }
         public string? OtherDocumentPathsJson { get; set; }
-        public bool IsActive { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
-        public string UpdatedBy { get; set; } = "";
-    }
 
-    public class CandFWarehouseSaveModel
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = "";
-        public string WarehouseCode { get; set; } = "";
-        public bool? InSpic { get; set; }
-        public bool? InGreenStar { get; set; }
-        public int? BasicStateId { get; set; }
-        public int? RegionId { get; set; }
-        public int? HeadquarterId { get; set; }
-        public LogisticsOperatedBy? OperatedBy { get; set; }
-        public string? GoogleURL { get; set; }
-        public double? Latitude { get; set; }
-        public double? Longitude { get; set; }
-        public string? DoorNo { get; set; }
-        public string? Street { get; set; }
-        public string? SubVillage { get; set; }
-        public string? PinCode { get; set; }
-        public string? Village { get; set; }
-        public string? Block { get; set; }
-        public string? Taluk { get; set; }
-        public int StateId { get; set; }
-        public int DistrictId { get; set; }
-        public string? ContactNumber { get; set; }
-        public decimal? GflReservationQuantityMT { get; set; }
-        public decimal? GflAdditionalReservationQuantityLitres { get; set; }
-        public string? OtherDocumentPathsJson { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

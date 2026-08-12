@@ -31,12 +31,12 @@ namespace SpicAPI.Controllers
 	public class WarehouseController(IGenericRepository<Warehouse> repo) : GenericCrudController<Warehouse>(repo);
 
 	// NEW: PVT WH is now stored in its own table/entity.
-	[Route("api/[controller]")]
-	public class PvtWarehouseController(IGenericRepository<Warehouse> repo) : GenericCrudController<Warehouse>(repo);
+	//[Route("api/[controller]")]
+	//public class PvtWarehouseController(IGenericRepository<Warehouse> repo) : GenericCrudController<Warehouse>(repo);
 
 	// NEW: C&F WH is now stored in its own table/entity.
-	[Route("api/[controller]")]
-	public class CandFWarehouseController(IGenericRepository<CandFWarehouse> repo) : GenericCrudController<CandFWarehouse>(repo);
+	//[Route("api/[controller]")]
+	//public class CandFWarehouseController(IGenericRepository<CandFWarehouse> repo) : GenericCrudController<CandFWarehouse>(repo);
 
 	// Rake Point keeps the existing RackPoint table/entity.
 	[Route("api/[controller]")]

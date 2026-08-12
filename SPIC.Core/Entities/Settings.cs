@@ -88,20 +88,41 @@ namespace SPIC.Core.Entities
 	public enum LogisticsWarehouseType
 	{
 		FieldWH = 1,
-		EPTWH = 2
+		RakepointWH = 2
 	}
 
 	/// <summary>
-	/// PVT Warehouse master. This is a dedicated table/entity and is no longer
-	/// mixed with C&F Warehouse rows.
+	/// Category stored on the single Warehouse table.
+	/// PVT WH, C&F WH and Both all use the same Warehouse entity/API.
 	/// </summary>
-	public class Warehouse//PVT Warehouse master
+	[JsonConverter(typeof(JsonStringEnumConverter))]
+	public enum LogisticsWarehouseCategory
+	{
+		[JsonStringEnumMemberName("PVT")]
+		PvtWH = 1,
+
+		[JsonStringEnumMemberName("C&F")]
+		CandFWH = 2,
+
+		[JsonStringEnumMemberName("Both")]
+		Both = 3
+	}
+
+	/// <summary>
+	/// Single Warehouse master used by PVT WH, C&F WH and Both.
+	/// Category-specific columns stay nullable so one table can safely store
+	/// all three warehouse categories without affecting existing flows.
+	/// </summary>
+	public class Warehouse
 	{
 		public int Id { get; set; }
 		public required string Name { get; set; }
 
-		// Current Logistics Master UI label: SAP Code.
+		// Current Logistics UI label: SAP Code.
 		public string WarehouseCode { get; set; } = string.Empty;
+
+		// Single-table category discriminator.
+		public LogisticsWarehouseCategory WarehouseCategory { get; set; } = LogisticsWarehouseCategory.PvtWH;
 
 		// Company selection.
 		public bool? InSpic { get; set; }
@@ -112,8 +133,10 @@ namespace SPIC.Core.Entities
 		public int? RegionId { get; set; }
 		public int? HeadquarterId { get; set; }
 
-		// Dropdowns.
+		// Shared dropdown.
 		public LogisticsOperatedBy? OperatedBy { get; set; }
+
+		// Used by PVT WH and Both. Pure C&F WH saves null.
 		public LogisticsWarehouseType? WarehouseType { get; set; }
 
 		// Primary Location.
@@ -131,18 +154,22 @@ namespace SPIC.Core.Entities
 		public int DistrictId { get; set; } = 0;
 		public string? ContactNumber { get; set; }
 
-		// PVT WH reservation quantities - separate for SPIC and GFL.
+		// PVT WH content. Also used when category = Both.
 		public decimal? SpicApprovedReservationQuantityMT { get; set; }
 		public decimal? SpicAdditionalReservationQuantityMT { get; set; }
 		public decimal? GflApprovedReservationQuantityMT { get; set; }
 		public decimal? GflAdditionalReservationQuantityMT { get; set; }
 
-		// PVT WH required highlighted documents.
+		// C&F WH content. Also used when category = Both.
+		public decimal? GflReservationQuantityMT { get; set; }
+		public decimal? GflAdditionalReservationQuantityLitres { get; set; }
+
+		// Required for PVT WH and Both.
 		public string? GstDocumentPath { get; set; }
 		public string? InsuranceDocumentPath { get; set; }
 		public string? FertilizerLicenseDocumentPath { get; set; }
 
-		// Optional multiple documents stored as JSON array of relative paths.
+		// Optional for all Warehouse categories.
 		public string? OtherDocumentPathsJson { get; set; }
 
 		public bool IsActive { get; set; }
@@ -152,62 +179,7 @@ namespace SPIC.Core.Entities
 	}
 
 	/// <summary>
-	/// C&F Warehouse master. Dedicated table/entity.
-	/// WH Type is intentionally not present because the C&F UI hides it.
-	/// </summary>
-	public class CandFWarehouse
-	{
-		public int Id { get; set; }
-		public required string Name { get; set; }
-
-		// Current Logistics Master UI label: SAP Code.
-		public string WarehouseCode { get; set; } = string.Empty;
-
-		// Company selection.
-		public bool? InSpic { get; set; }
-		public bool? InGreenStar { get; set; }
-
-		// Basic Information cascading location.
-		public int? BasicStateId { get; set; }
-		public int? RegionId { get; set; }
-		public int? HeadquarterId { get; set; }
-
-		// C&F still uses Operated By. WH Type is not applicable.
-		public LogisticsOperatedBy? OperatedBy { get; set; }
-
-		// Primary Location.
-		public string? GoogleURL { get; set; }
-		public double? Latitude { get; set; }
-		public double? Longitude { get; set; }
-		public string? DoorNo { get; set; }
-		public string? Street { get; set; }
-		public string? SubVillage { get; set; }
-		public string? PinCode { get; set; }
-		public string? Village { get; set; }
-		public string? Block { get; set; }
-		public string? Taluk { get; set; }
-		public int StateId { get; set; } = 0;
-		public int DistrictId { get; set; } = 0;
-
-		// UI label: C&F Operator Contact No.
-		public string? ContactNumber { get; set; }
-
-		// GFL-only C&F reservation quantities.
-		public decimal? GflReservationQuantityMT { get; set; }
-		public decimal? GflAdditionalReservationQuantityLitres { get; set; }
-
-		// C&F supports optional other documents only.
-		public string? OtherDocumentPathsJson { get; set; }
-
-		public bool IsActive { get; set; }
-		public DateTime CreatedAt { get; set; }
-		public DateTime UpdatedAt { get; set; }
-		public required string UpdatedBy { get; set; }
-	}
-
-	/// <summary>
-	/// Existing Rake Point table/entity retained. DoorNo and Street are intentionally
-	/// absent because the current Logistics Master hides those fields for Rake Point.
+	/// Existing Rake Point entity retained unchanged in behavior.
 	/// </summary>
 	public class RackPoint
 	{
@@ -215,11 +187,7 @@ namespace SPIC.Core.Entities
 		public required string Name { get; set; }
 
 		public string? GoogleURL { get; set; }
-
-		// Existing field preserved for backward compatibility.
 		public string? RailwayCode { get; set; }
-
-		// Current UI SAP Code field. The page writes the same value to RailwayCode.
 		public string? SAPCode { get; set; }
 
 		public bool? InSpic { get; set; }
@@ -241,7 +209,6 @@ namespace SPIC.Core.Entities
 		public string? Taluk { get; set; }
 		public string? ContactNumber { get; set; }
 
-		// Optional multiple documents only.
 		public string? OtherDocumentPathsJson { get; set; }
 
 		public int StateId { get; set; } = 0;
@@ -396,5 +363,31 @@ namespace SPIC.Core.Entities
 		public DateTime CreatedAt { get; set; }
 		public DateTime UpdatedAt { get; set; }
 		public string? UpdatedBy { get; set; }
+	}
+	public class PVTMaster
+	{
+		[Key]
+		public int Id { get; set; }
+
+		[Required]
+		public string Code { get; set; }
+
+		[Required]
+		public string Name { get; set; }
+
+		[Required]
+		public bool IsActive { get; set; } = true;
+
+		[Required]
+		public DateTime CreatedAt { get; set; }
+
+		[Required]
+		public DateTime UpdatedAt { get; set; }
+
+		[StringLength(100)]
+		public string CreatedBy { get; set; }
+
+		[StringLength(100)]
+		public string UpdatedBy { get; set; }
 	}
 }
