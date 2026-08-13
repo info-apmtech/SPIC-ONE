@@ -546,8 +546,8 @@
                         }
                     </div>
 
-                    <!-- WH Type is applicable only to exact PVT WH. -->
-                    @if (IsPvtWarehouseCategory)
+                    <!-- WH Type is applicable to exact PVT WH and Both. Hidden for C&F WH. -->
+                    @if (ShowsPvtWarehouseContent)
                     {
                         <div class="col-12 col-md-3">
                             <label class="form-label-custom">
@@ -1218,7 +1218,7 @@
                     <th>Category</th>
                 }
                 <th>Operated By</th>
-                @if (IsPvtWarehouseCategory)
+                @if (ShowsPvtWarehouseContent)
                 {
                     <th>WH Type</th>
                 }
@@ -1275,9 +1275,9 @@
                     <td>@GetWarehouseCategoryDisplay(GetWarehouseCategory(item))</td>
                 }
                 <td>@GetOperatedByDisplay(item.OperatedBy)</td>
-                @if (IsPvtWarehouseCategory)
+                @if (ShowsPvtWarehouseContent)
                 {
-                    <td>@(GetWarehouseCategory(item) == LogisticsWarehouseCategory.PvtWH ? GetWarehouseTypeDisplay(item.WarehouseType) : "")</td>
+                    <td>@(GetWarehouseCategory(item) is LogisticsWarehouseCategory.PvtWH or LogisticsWarehouseCategory.Both ? GetWarehouseTypeDisplay(item.WarehouseType) : "")</td>
                 }
                 <td>@GetStateName(item.StateId)</td>
                 <td>@GetDistrictName(item.DistrictId)</td>
@@ -1685,7 +1685,7 @@
             ? "PVT WH selected: WH Type is shown and GST / Insurance / Fertilizer License are required while Status is Active."
             : "PVT WH selected: WH Type is shown and GST / Insurance / Fertilizer License are optional while Status is Inactive.",
         LogisticsWarehouseCategory.CandFWH => "C&F WH selected: C&F GFL reservation fields and optional Other Documents are shown. WH Type is hidden.",
-        LogisticsWarehouseCategory.Both => "Both selected: PVT + C&F reservation content is saved in the same Warehouse record. WH Type is not applicable and the three main documents remain required.",
+        LogisticsWarehouseCategory.Both => "Both selected: all PVT WH and C&F WH fields are shown and saved in the same Warehouse record. WH Type and the three main documents are required.",
         _ => string.Empty
     };
 
@@ -1781,8 +1781,10 @@
         if (!_form.OperatedBy.HasValue)
             _errors["OperatedBy"] = "Operated By is required.";
 
-        if (IsPvtWarehouseCategory && !_form.WarehouseType.HasValue)
-            _errors["WarehouseType"] = "WH Type is required for PVT WH.";
+        if (ShowsPvtWarehouseContent && !_form.WarehouseType.HasValue)
+            _errors["WarehouseType"] = IsPvtWarehouseCategory
+                ? "WH Type is required for PVT WH."
+                : "WH Type is required.";
 
         // Exact PVT WH: documents are required only when Status = Active.
         if (IsPvtWarehouseCategory && _form.IsActive)
@@ -1916,10 +1918,8 @@
             HeadquarterId = ToNullableId(_form.HeadquarterId),
             OperatedBy = _form.OperatedBy,
 
-            // WH Type applies only to exact PVT WH.
-            WarehouseType = category == LogisticsWarehouseCategory.PvtWH
-                ? _form.WarehouseType
-                : null,
+            // WH Type applies to exact PVT WH and Both. Hidden/not saved for C&F WH.
+            WarehouseType = includesPvt ? _form.WarehouseType : null,
 
             GoogleURL = NullIfWhiteSpace(_form.GoogleURL),
             Latitude = _form.Latitude,
@@ -2066,9 +2066,10 @@
             RegionId = item.RegionId ?? 0,
             HeadquarterId = item.HeadquarterId ?? 0,
             OperatedBy = item.OperatedBy,
-            WarehouseType = IsWarehouseTab && GetWarehouseCategory(item) == LogisticsWarehouseCategory.PvtWH
-                ? item.WarehouseType
-                : null,
+            WarehouseType = IsWarehouseTab &&
+                GetWarehouseCategory(item) is LogisticsWarehouseCategory.PvtWH or LogisticsWarehouseCategory.Both
+                    ? item.WarehouseType
+                    : null,
             GoogleURL = item.GoogleURL,
             Latitude = item.Latitude,
             Longitude = item.Longitude,
@@ -2374,11 +2375,11 @@
             ValueSelector = item => GetOperatedByDisplay(item.OperatedBy)
         });
 
-        if (IsPvtWarehouseCategory)
+        if (ShowsPvtWarehouseContent)
             columns.Add(new ExportColumn<LogisticsItemDto>
             {
                 Header = "WH Type",
-                ValueSelector = item => GetWarehouseCategory(item) == LogisticsWarehouseCategory.PvtWH
+                ValueSelector = item => GetWarehouseCategory(item) is LogisticsWarehouseCategory.PvtWH or LogisticsWarehouseCategory.Both
                     ? GetWarehouseTypeDisplay(item.WarehouseType)
                     : ""
             });
