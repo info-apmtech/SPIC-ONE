@@ -137,7 +137,7 @@ namespace SPIC.Core.Entities
 		// Shared dropdown.
 		public LogisticsOperatedBy? OperatedBy { get; set; }
 
-		// WH Type is used only by exact PVT WH. C&F/Both save null.
+		// WH Type is used by exact PVT WH and Both. C&F saves null.
 		public LogisticsWarehouseType? WarehouseType { get; set; }
 
 		// Primary Location.
