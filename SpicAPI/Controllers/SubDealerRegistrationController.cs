@@ -182,29 +182,56 @@ public class SubDealerRegistrationController : ControllerBase
 		var unrestricted = IsUnrestrictedRole(role);
 
 		// --------------------------------------------------------------
+		// LIST VISIBILITY - NO NEW DB PROPERTY
+		// --------------------------------------------------------------
+		// Bulk import creates Active rows with Code/Name/State/Region/HQ
+		// while the Sub Dealer form details remain empty.
+		//
+		// A record becomes list-visible after it is maintained from the
+		// Sub Dealer form:
+		// - Active records: save requires location/contact/GST/PAN/mFMS data.
+		// - Inactive records: those details are optional, so Inactive itself
+		//   is enough to represent a submitted/updated record.
+		query = query.Where(x =>
+			x.Status == SubDealerStatus.InActive ||
+
+			x.Latitude.HasValue ||
+			x.Longitude.HasValue ||
+			x.DistrictId.HasValue ||
+			x.DealerStateId.HasValue ||
+
+			!string.IsNullOrEmpty(x.ShopNoORRoomNoOrBlockNo) ||
+			!string.IsNullOrEmpty(x.Village) ||
+			!string.IsNullOrEmpty(x.PinCode) ||
+
+			!string.IsNullOrEmpty(x.OfficialContactNumber) ||
+			!string.IsNullOrEmpty(x.WhatsAppNumber) ||
+			!string.IsNullOrEmpty(x.AlternativeNumber) ||
+
+			!string.IsNullOrEmpty(x.GSTNumber) ||
+			!string.IsNullOrEmpty(x.GSTFilePath) ||
+			!string.IsNullOrEmpty(x.PANNo) ||
+
+			!string.IsNullOrEmpty(x.WholesaleMFMSId) ||
+			!string.IsNullOrEmpty(x.RetailMFMSId));
+
+		// --------------------------------------------------------------
 		// SECURITY / DATA SCOPE
 		// Apply role scope BEFORE search, count and paging.
-		// MO/MDO/JMDO additionally see only rows whose UpdatedBy is their user id.
 		// --------------------------------------------------------------
 		if (!unrestricted && IsMoRole(role))
 		{
 			var effectiveHqId = CurrentHqId() ?? hqId;
 
-			// MO list is not the complete HQ master.
-			// Show only records this logged-in MO has created/edited and saved.
-			if (!effectiveHqId.HasValue ||
-				effectiveHqId.Value <= 0 ||
-				string.IsNullOrWhiteSpace(userId))
-			{
+			if (!effectiveHqId.HasValue || effectiveHqId.Value <= 0)
 				return Ok(EmptyPagedResult(page, pageSize));
-			}
 
-			query = query.Where(x =>
-				x.HQ == effectiveHqId.Value &&
-				x.UpdatedBy == userId);
+			// MO/MDO/JMDO: all saved/updated Sub Dealers in logged-in HQ.
+			query = query.Where(x => x.HQ == effectiveHqId.Value);
 		}
 		else if (!unrestricted && IsRegionRole(role))
 		{
+			// RM/RMD: all saved/updated Sub Dealers in logged-in Region.
 			var effectiveRegionId = CurrentRegionId() ?? regionId;
 
 			if (!effectiveRegionId.HasValue || effectiveRegionId.Value <= 0)
@@ -214,6 +241,7 @@ public class SubDealerRegistrationController : ControllerBase
 		}
 		else if (!unrestricted && IsStateRole(role))
 		{
+			// SMM/SMD: all saved/updated Sub Dealers in logged-in State.
 			var effectiveStateId = CurrentStateId() ?? stateId;
 
 			if (!effectiveStateId.HasValue || effectiveStateId.Value <= 0)
@@ -431,11 +459,11 @@ public class SubDealerRegistrationController : ControllerBase
 	}
 
 	/// <summary>
-	/// Admin-only: reads the Excel master and returns the five required text columns.
+	/// Admin / MO roles: reads the Excel master and returns the five required text columns.
 	/// State/Region/HQ names are mapped to IDs by the UI using the same LookupCache
 	/// already used by the Register page.
 	/// </summary>
-	[Authorize(Roles = "Admin")]
+	[Authorize(Roles = "Admin,MO,MDO,JMDO")]
 	[HttpPost("parse-import-excel")]
 	[RequestSizeLimit(MaxExcelImportSize)]
 	public async Task<ActionResult<SubDealerExcelParseResponse>> ParseImportExcel(
@@ -571,16 +599,26 @@ public class SubDealerRegistrationController : ControllerBase
 	}
 
 	/// <summary>
-	/// Admin-only atomic upsert. Existing code => update name + State/Region/HQ only.
+	/// Admin / MO atomic upsert. Existing code => update name + State/Region/HQ only.
 	/// New code => insert a new Active Sub Dealer with empty detail fields.
 	/// </summary>
-	[Authorize(Roles = "Admin")]
+	[Authorize(Roles = "Admin,MO,MDO,JMDO")]
 	[HttpPost("bulk-import")]
 	public async Task<ActionResult<SubDealerBulkImportResponse>> BulkImport(
 		[FromBody] SubDealerBulkImportRequest request,
 		CancellationToken cancellationToken)
 	{
 		var result = new SubDealerBulkImportResponse();
+
+		var role = CurrentRole();
+		var isMoImport = IsMoRole(role);
+		var currentHqId = CurrentHqId();
+
+		if (isMoImport && (!currentHqId.HasValue || currentHqId.Value <= 0))
+		{
+			result.Errors.Add("Your login does not have a valid HQ mapping. Excel import is not allowed.");
+			return BadRequest(result);
+		}
 
 		if (request.Rows == null || request.Rows.Count == 0)
 			return BadRequest("No Sub Dealer rows were supplied for import.");
@@ -607,6 +645,12 @@ public class SubDealerRegistrationController : ControllerBase
 			if (row.HQId <= 0)
 				result.Errors.Add($"Excel row {row.ExcelRowNumber}: HQ mapping is invalid.");
 
+			if (isMoImport && currentHqId.HasValue && row.HQId != currentHqId.Value)
+			{
+				result.Errors.Add(
+					$"Excel row {row.ExcelRowNumber}: HQ is outside your assigned MO HQ. Import is allowed only for HQ Id {currentHqId.Value}.");
+			}
+
 			if (!string.IsNullOrWhiteSpace(code) && !seenCodes.Add(code))
 				result.Errors.Add($"Excel row {row.ExcelRowNumber}: duplicate Sub Dealer Code '{code}'.");
 		}
@@ -629,6 +673,23 @@ public class SubDealerRegistrationController : ControllerBase
 				x => x.SubDealerCode!.Trim(),
 				StringComparer.OrdinalIgnoreCase);
 
+		if (isMoImport && currentHqId.HasValue)
+		{
+			foreach (var row in request.Rows)
+			{
+				var code = row.SubDealerCode.Trim();
+				if (existingByCode.TryGetValue(code, out var existing) &&
+					existing.HQ != currentHqId.Value)
+				{
+					result.Errors.Add(
+						$"Excel row {row.ExcelRowNumber}: Sub Dealer Code '{code}' belongs to another HQ and cannot be updated by this MO.");
+				}
+			}
+
+			if (result.Errors.Count > 0)
+				return BadRequest(result);
+		}
+
 		await using var transaction =
 			await _db.Database.BeginTransactionAsync(cancellationToken);
 
@@ -636,7 +697,9 @@ public class SubDealerRegistrationController : ControllerBase
 		{
 			var now = DateTime.Now;
 			var importedBy = string.IsNullOrWhiteSpace(request.ImportedBy)
-				? "Admin Excel Import"
+				? (isMoImport
+					? CurrentUserId() ?? "MO Excel Import"
+					: "Admin Excel Import")
 				: request.ImportedBy.Trim();
 
 			foreach (var row in request.Rows)
@@ -756,9 +819,8 @@ public class SubDealerRegistrationController : ControllerBase
 
 		if (model.Status == SubDealerStatus.Active)
 		{
-			if (string.IsNullOrWhiteSpace(model.WholesaleMFMSId))
-				return "Wholesale mFMS ID is required for Active Sub Dealer.";
-
+			// Wholesale mFMS ID is optional for Active Sub Dealers.
+			// Retail mFMS ID keeps the existing mandatory rule.
 			if (string.IsNullOrWhiteSpace(model.RetailMFMSId))
 				return "Retail mFMS ID is required for Active Sub Dealer.";
 

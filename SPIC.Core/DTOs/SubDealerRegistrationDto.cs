@@ -55,6 +55,10 @@ public class SubDealerFormModel
 	public DateTime CreatedAt { get; set; }
 	public string? UpdatedBy { get; set; }
 	public DateTime UpdatedAt { get; set; }
+
+	// UI-to-API fallback when role claims are unavailable in local/dev.
+	// The server prefers the authenticated role claim when present.
+	public string? SubmittedByRole { get; set; }
 }
 
 public class SubDealerLookupDto

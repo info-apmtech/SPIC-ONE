@@ -1,7 +1,11 @@
 ﻿@inherits LayoutComponentBase
 @implements IDisposable
+
 @using System.Net.Http.Headers
+@using System.Text
+@using System.Text.Json
 @using SPIC.Core.Entities
+
 @inject HttpClient Http
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.AppSearchState SearchState
@@ -11,358 +15,1394 @@
 <PageGuard />
 
 <div class="app-shell">
-	<LoadingOverlay />
-	<aside class="sidebar">
-		<NavMenu />
-	</aside>
 
-	<main class="content-wrap">
-		<div class="mobile-topbar">
-			<div class="brand p-0 m-0" style="font-size: 1.7rem;">SPIC</div>
-			<button class="btn btn-outline-secondary"
-					type="button"
-					data-bs-toggle="offcanvas"
-					data-bs-target="#mobileSidebar"
-					aria-controls="mobileSidebar">
-				<i class="bi bi-list"></i>
-			</button>
-		</div>
+    <LoadingOverlay />
 
-		<div class="topbar">
-			<div class="search-box">
-				<i class="bi bi-search"></i>
-				<input type="text" class="form-control"
-					   placeholder="Search something here"
-					   value="@SearchState.Query"
-					   @oninput="OnGlobalSearchInput"
-					   @onkeydown="HandleSearchKeyDown" />
-				@if (SearchState.HasQuery)
-				{
-					<i class="bi bi-x-circle-fill global-search-clear"
-					   title="Clear search"
-					   @onclick="() => SearchState.Clear()"></i>
-				}
-			</div>
+    <aside class="sidebar">
+        <NavMenu />
+    </aside>
 
-			<div class="top-actions">
-				<button class="icon-btn"><img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationBell.svg" alt="Notification" class="iconimg" /></button>
-				<div class="profile">
-					<button class="btn btn-link nav-link p-0" @onclick="Logout">
-						<i class="bi bi-box-arrow-right"></i>
-					</button>
-				</div>
-				<i class="bi bi-chevron-down text-secondary"></i>
-			</div>
-		</div>
+    <main class="content-wrap">
 
-		<div class="main-content">
-			@if (_isReady)
-			{
-				@Body
-			}
-			else
-			{
-				<div class="d-flex justify-content-center align-items-center" style="height: 60vh;">
-					<div class="spinner-border text-success" role="status">
-						<span class="visually-hidden">Loading...</span>
-					</div>
-				</div>
-			}
-		</div>
-	</main>
+        @* ================= MOBILE TOP BAR ================= *@
+        <div class="mobile-topbar">
+
+            <div class="brand p-0 m-0"
+                 style="font-size: 1.7rem;">
+                SPIC
+            </div>
+
+            <button class="btn btn-outline-secondary"
+                    type="button"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#mobileSidebar"
+                    aria-controls="mobileSidebar">
+
+                <i class="bi bi-list"></i>
+
+            </button>
+
+        </div>
+
+
+        @* ================= DESKTOP TOP BAR ================= *@
+        <div class="topbar">
+
+            @* Search *@
+            <div class="search-box">
+
+                <i class="bi bi-search"></i>
+
+                <input type="text"
+                       class="form-control"
+                       placeholder="Search something here"
+                       value="@SearchState.Query"
+                       @oninput="OnGlobalSearchInput"
+                       @onkeydown="HandleSearchKeyDown" />
+
+                @if (SearchState.HasQuery)
+                {
+                    <i class="bi bi-x-circle-fill global-search-clear"
+                           title="Clear search"
+                           @onclick="() => SearchState.Clear()">
+                    </i>
+                }
+
+            </div>
+
+
+            @* ================= TOP RIGHT ACTIONS ================= *@
+            <div class="top-actions">
+
+                @* Notification - existing topbar flow unchanged *@
+                <button class="icon-btn"
+                        type="button"
+                        title="Notifications">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationBell.svg"
+                         alt="Notification"
+                         class="iconimg" />
+
+                </button>
+
+
+                @* User profile - custom overlay so it never changes topbar size/background *@
+                <div class="user-profile-wrapper">
+
+                    <button class="user-profile-trigger @(_showUserMenu ? "open" : "")"
+                            type="button"
+                            title="@_userName"
+                            aria-expanded="@_showUserMenu"
+                            @onclick="ToggleUserMenu">
+
+                        <div class="user-avatar">
+                            @GetUserInitial()
+                        </div>
+
+                        <div class="user-profile-text">
+
+                            <span class="user-name">
+                                @_userName
+                            </span>
+
+                            @if (!string.IsNullOrWhiteSpace(_userRole))
+                            {
+                                <span class="user-role">
+                                    @_userRole
+                                </span>
+                            }
+
+                        </div>
+
+                        <i class="bi bi-chevron-down user-chevron"></i>
+
+                    </button>
+
+
+                    @if (_showUserMenu)
+                    {
+                        <div class="user-profile-menu">
+
+                            <div class="user-dropdown-header">
+
+                                <div class="dropdown-user-avatar">
+                                    @GetUserInitial()
+                                </div>
+
+                                <div class="dropdown-user-info">
+
+                                    <div class="dropdown-user-name">
+                                        @_userName
+                                    </div>
+
+                                    @if (!string.IsNullOrWhiteSpace(_userRole))
+                                    {
+                                        <div class="dropdown-user-role">
+                                            @_userRole
+                                        </div>
+                                    }
+
+                                </div>
+
+                            </div>
+
+                            <div class="user-dropdown-divider"></div>
+
+                            <button class="user-logout-item"
+                                    type="button"
+                                    @onclick="Logout">
+
+                                <i class="bi bi-box-arrow-right"></i>
+                                <span>Logout</span>
+
+                            </button>
+
+                        </div>
+                    }
+
+                </div>
+
+            </div>
+        </div>
+
+
+        @* ================= MAIN CONTENT ================= *@
+        <div class="main-content">
+
+            @if (_isReady)
+            {
+                @Body
+            }
+            else
+            {
+                <div class="d-flex justify-content-center align-items-center"
+                     style="height: 60vh;">
+
+                    <div class="spinner-border text-success"
+                         role="status">
+
+                        <span class="visually-hidden">
+                            Loading...
+                        </span>
+
+                    </div>
+
+                </div>
+            }
+
+        </div>
+
+    </main>
+
 </div>
 
-<div class="offcanvas offcanvas-start" tabindex="-1" id="mobileSidebar" aria-labelledby="mobileSidebarLabel">
-	<div class="offcanvas-header">
-		<h5 class="offcanvas-title brand p-0 m-0" id="mobileSidebarLabel" style="font-size:1.6rem;">SPIC</h5>
-		<button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-	</div>
-	<div class="offcanvas-body">
-		<nav class="nav nav-pills flex-column nav-section">
-			@if (LoginState.CanAccess(PagePermission.Dashboard))
-			{
-				<NavLink class="nav-link" href="/Dashboard" Match="NavLinkMatch.All">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
-					Register
-				</NavLink>
-			}
-			@if (LoginState.CanAccess(PagePermission.Purchases))
-			{
-				<NavLink class="nav-link" href="/Purchases">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
-					Purchases
-				</NavLink>
-			}
-			@if (LoginState.CanAccess(PagePermission.Rewards))
-			{
-				<NavLink class="nav-link" href="/Rewards">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg" class="SideBariconimg" />
-					Rewards
-				</NavLink>
-			}
-			@if (LoginState.CanAccess(PagePermission.CropAdvice))
-			{
-				<NavLink class="nav-link" href="/CropAdvice">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg" class="SideBariconimg" />
-					Crop Advice
-				</NavLink>
-			}
-			@if (LoginState.CanAccess(PagePermission.YieldPrediction))
-			{
-				<NavLink class="nav-link" href="/YieldPrediction">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg" class="SideBariconimg" />
-					Yield Prediction
-				</NavLink>
-			}
-			@if (LoginState.CanAccess(PagePermission.DiseaseDetection))
-			{
-				<NavLink class="nav-link" href="/DiseaseDetection">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg" class="SideBariconimg" />
-					Disease Detection
-				</NavLink>
-			}
-			@if (LoginState.CanAccess(PagePermission.Community))
-			{
-				<NavLink class="nav-link" href="/Community">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg" class="SideBariconimg" />
-					Community
-				</NavLink>
-			}
-			@if (LoginState.CanAccess(PagePermission.Notifications))
-			{
-				<NavLink class="nav-link" href="/Notifications">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg" class="SideBariconimg" />
-					Notifications
-				</NavLink>
-			}
-			@if (LoginState.CanAccess(PagePermission.Profile))
-			{
-				<NavLink class="nav-link" href="/Profile">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
-					Profile
-				</NavLink>
-			}
-			@if (LoginState.CanAccess(PagePermission.EmployeeManagement))
-			{
-				<NavLink class="nav-link" href="/EmployeeManagement">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
-					Employee
-				</NavLink>
-			}
-			@if (LoginState.CanAccess(PagePermission.dealerreviewlist))
-			{
-				<NavLink class="nav-link" href="/DealerApplicationReview">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
-					Dealer Application Review
-				</NavLink>
-			}
 
-			@if (LoginState.CanAccess(PagePermission.LocationMaster)
-				 || LoginState.CanAccess(PagePermission.Agriculture)
-				 || LoginState.CanAccess(PagePermission.Logistics)
-				 || LoginState.CanAccess(PagePermission.Financial)
-				 || LoginState.CanAccess(PagePermission.Relationship))
-			{
-				<div class="settings-menu-wrapper">
-					<a href="javascript:void(0);"
-						   class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
-						   @onclick="ToggleSettingsMenu">
-						<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
-						Settings
-						<i class="bi @(isSettingsOpen ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
-					</a>
+@* =========================================================
+   MOBILE SIDEBAR
+   ========================================================= *@
 
-					@if (isSettingsOpen)
-					{
-						<ul class="submenu-list">
-							@if (LoginState.CanAccess(PagePermission.LocationMaster))
-							{
-								<li class="submenu-item">
-									<NavLink href="/LocationMaster" class="submenu-link" Match="NavLinkMatch.All">Location Master</NavLink>
-								</li>
-							}
-							@if (LoginState.CanAccess(PagePermission.Agriculture))
-							{
-								<li class="submenu-item">
-									<NavLink href="/Agriculture" class="submenu-link" Match="NavLinkMatch.All">Agriculture & Prod...</NavLink>
-								</li>
-							}
-							@if (LoginState.CanAccess(PagePermission.Logistics))
-							{
-								<li class="submenu-item">
-									<NavLink href="/Logistics" class="submenu-link" Match="NavLinkMatch.All">Logistics Master</NavLink>
-								</li>
-							}
-							@if (LoginState.CanAccess(PagePermission.Financial))
-							{
-								<li class="submenu-item">
-									<NavLink href="/Financial" class="submenu-link" Match="NavLinkMatch.All">Financial Master</NavLink>
-								</li>
-							}
-							@if (LoginState.CanAccess(PagePermission.Relationship))
-							{
-								<li class="submenu-item">
-									<NavLink href="/Relationship" class="submenu-link" Match="NavLinkMatch.All">Relationship Master</NavLink>
-								</li>
-							}
-						</ul>
-					}
-				</div>
-			}
-		</nav>
-	</div>
+<div class="offcanvas offcanvas-start"
+     tabindex="-1"
+     id="mobileSidebar"
+     aria-labelledby="mobileSidebarLabel">
+
+    <div class="offcanvas-header">
+
+        <h5 class="offcanvas-title brand p-0 m-0"
+            id="mobileSidebarLabel"
+            style="font-size:1.6rem;">
+
+            SPIC
+
+        </h5>
+
+        <button type="button"
+                class="btn-close"
+                data-bs-dismiss="offcanvas"
+                aria-label="Close">
+        </button>
+
+    </div>
+
+
+    <div class="offcanvas-body">
+
+        <nav class="nav nav-pills flex-column nav-section">
+
+
+            @* ================= DASHBOARD ================= *@
+            @if (LoginState.CanAccess(PagePermission.Dashboard))
+            {
+                <NavLink class="nav-link"
+                         href="/Dashboard"
+                         Match="NavLinkMatch.All">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg"
+                         class="SideBariconimg" />
+
+                    Register
+
+                </NavLink>
+            }
+
+
+            @* ================= PURCHASES ================= *@
+            @if (LoginState.CanAccess(PagePermission.Purchases))
+            {
+                <NavLink class="nav-link"
+                         href="/Purchases">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg"
+                         class="SideBariconimg" />
+
+                    Purchases
+
+                </NavLink>
+            }
+
+
+            @* ================= REWARDS ================= *@
+            @if (LoginState.CanAccess(PagePermission.Rewards))
+            {
+                <NavLink class="nav-link"
+                         href="/Rewards">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg"
+                         class="SideBariconimg" />
+
+                    Rewards
+
+                </NavLink>
+            }
+
+
+            @* ================= CROP ADVICE ================= *@
+            @if (LoginState.CanAccess(PagePermission.CropAdvice))
+            {
+                <NavLink class="nav-link"
+                         href="/CropAdvice">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg"
+                         class="SideBariconimg" />
+
+                    Crop Advice
+
+                </NavLink>
+            }
+
+
+            @* ================= YIELD PREDICTION ================= *@
+            @if (LoginState.CanAccess(PagePermission.YieldPrediction))
+            {
+                <NavLink class="nav-link"
+                         href="/YieldPrediction">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg"
+                         class="SideBariconimg" />
+
+                    Yield Prediction
+
+                </NavLink>
+            }
+
+
+            @* ================= DISEASE DETECTION ================= *@
+            @if (LoginState.CanAccess(PagePermission.DiseaseDetection))
+            {
+                <NavLink class="nav-link"
+                         href="/DiseaseDetection">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg"
+                         class="SideBariconimg" />
+
+                    Disease Detection
+
+                </NavLink>
+            }
+
+
+            @* ================= COMMUNITY ================= *@
+            @if (LoginState.CanAccess(PagePermission.Community))
+            {
+                <NavLink class="nav-link"
+                         href="/Community">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg"
+                         class="SideBariconimg" />
+
+                    Community
+
+                </NavLink>
+            }
+
+
+            @* ================= NOTIFICATIONS ================= *@
+            @if (LoginState.CanAccess(PagePermission.Notifications))
+            {
+                <NavLink class="nav-link"
+                         href="/Notifications">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg"
+                         class="SideBariconimg" />
+
+                    Notifications
+
+                </NavLink>
+            }
+
+
+            @* ================= PROFILE ================= *@
+            @if (LoginState.CanAccess(PagePermission.Profile))
+            {
+                <NavLink class="nav-link"
+                         href="/Profile">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
+                         class="SideBariconimg" />
+
+                    Profile
+
+                </NavLink>
+            }
+
+
+            @* ================= EMPLOYEE ================= *@
+            @if (LoginState.CanAccess(PagePermission.EmployeeManagement))
+            {
+                <NavLink class="nav-link"
+                         href="/EmployeeManagement">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
+                         class="SideBariconimg" />
+
+                    Employee
+
+                </NavLink>
+            }
+
+
+            @* ================= DEALER APPLICATION REVIEW ================= *@
+            @if (LoginState.CanAccess(PagePermission.dealerreviewlist))
+            {
+                <NavLink class="nav-link"
+                         href="/DealerApplicationReview">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
+                         class="SideBariconimg" />
+
+                    Dealer Application Review
+
+                </NavLink>
+            }
+
+
+            @* ================= SETTINGS ================= *@
+            @if (
+                                        LoginState.CanAccess(PagePermission.LocationMaster)
+                                        || LoginState.CanAccess(PagePermission.Agriculture)
+                                        || LoginState.CanAccess(PagePermission.Logistics)
+                                        || LoginState.CanAccess(PagePermission.Financial)
+                                        || LoginState.CanAccess(PagePermission.Relationship)
+                                    )
+            {
+
+                <div class="settings-menu-wrapper">
+
+                    <a href="javascript:void(0);"
+                           class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
+                           @onclick="ToggleSettingsMenu">
+
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg"
+                             class="SideBariconimg" />
+
+                        Settings
+
+                        <i class="bi @(isSettingsOpen
+                                                                                                                                          ? "bi-chevron-up"
+                                                                                                                                          : "bi-chevron-down") chevron-icon">
+                        </i>
+
+                    </a>
+
+
+                    @if (isSettingsOpen)
+                    {
+
+                        <ul class="submenu-list">
+
+
+                            @if (LoginState.CanAccess(PagePermission.LocationMaster))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/LocationMaster"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Location Master
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+
+                            @if (LoginState.CanAccess(PagePermission.Agriculture))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/Agriculture"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Agriculture & Prod...
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+
+                            @if (LoginState.CanAccess(PagePermission.Logistics))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/Logistics"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Logistics Master
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+
+                            @if (LoginState.CanAccess(PagePermission.Financial))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/Financial"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Financial Master
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+
+                            @if (LoginState.CanAccess(PagePermission.Relationship))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/Relationship"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Relationship Master
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+
+                        </ul>
+
+                    }
+
+                </div>
+
+            }
+
+        </nav>
+
+    </div>
+
 </div>
+
+
 <style>
-	.search-box {
-		position: relative;
-	}
 
-	.global-search-clear {
-		position: absolute;
-		right: 12px;
-		top: 50%;
-		transform: translateY(-50%);
-		color: #9CA3AF;
-		cursor: pointer;
-		font-size: 0.95rem;
-		transition: color 0.15s;
-	}
+    /* ================= SEARCH ================= */
 
-		.global-search-clear:hover {
-			color: #EF4444;
-		}
+    .search-box {
+        position: relative;
+    }
+
+    .global-search-clear {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9CA3AF;
+        cursor: pointer;
+        font-size: 0.95rem;
+        transition: color 0.15s;
+    }
+
+        .global-search-clear:hover {
+            color: #EF4444;
+        }
+
+
+    /* ================= USER PROFILE - TOPBAR SAFE ================= */
+
+    /*
+           Important:
+           This wrapper does not set topbar height, width or background.
+           The popup is absolute, so opening it cannot push/stretch the topbar.
+        */
+    .user-profile-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+        flex: 0 0 auto;
+        background: transparent;
+    }
+
+    .user-profile-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        outline: 0;
+        background: transparent !important;
+        box-shadow: none !important;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+    }
+
+        .user-profile-trigger:hover,
+        .user-profile-trigger:focus,
+        .user-profile-trigger:active,
+        .user-profile-trigger.open {
+            border: 0;
+            outline: 0;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+
+
+    /* Avatar */
+    .user-avatar {
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #198754;
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 600;
+        text-transform: uppercase;
+        user-select: none;
+    }
+
+
+    /* Name + Role */
+    .user-profile-text {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        min-width: 78px;
+        max-width: 170px;
+        line-height: 1.2;
+        text-align: left;
+    }
+
+    .user-name {
+        max-width: 170px;
+        color: #172033;
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .user-role {
+        max-width: 170px;
+        margin-top: 3px;
+        color: #198754;
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .user-chevron {
+        margin-left: 2px;
+        color: #8a94a3;
+        font-size: 11px;
+        transition: transform 0.18s ease;
+    }
+
+    .user-profile-trigger.open .user-chevron {
+        transform: rotate(180deg);
+    }
+
+
+    /* Popup menu - absolute overlay, DOES NOT participate in topbar layout */
+    .user-profile-menu {
+        position: absolute;
+        top: calc(100% + 12px);
+        right: 0;
+        z-index: 1100;
+        width: 235px;
+        padding: 8px;
+        border: 1px solid #e9edf0;
+        border-radius: 14px;
+        background: #ffffff;
+        box-shadow: 0 14px 38px rgba(20, 34, 28, 0.13);
+    }
+
+    .user-dropdown-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 9px;
+    }
+
+    .dropdown-user-avatar {
+        width: 42px;
+        height: 42px;
+        min-width: 42px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #eaf7ef;
+        color: #198754;
+        font-size: 15px;
+        font-weight: 700;
+        text-transform: uppercase;
+        user-select: none;
+    }
+
+    .dropdown-user-info {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .dropdown-user-name {
+        max-width: 155px;
+        color: #172033;
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .dropdown-user-role {
+        max-width: 155px;
+        margin-top: 3px;
+        color: #7b8492;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .user-dropdown-divider {
+        height: 1px;
+        margin: 4px 2px 6px;
+        background: #edf0f2;
+    }
+
+    .user-logout-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 10px;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        color: #4f5968;
+        font-size: 13px;
+        font-weight: 500;
+        text-align: left;
+        cursor: pointer;
+    }
+
+        .user-logout-item:hover,
+        .user-logout-item:focus {
+            outline: none;
+            background: #fff2f2;
+            color: #dc3545;
+        }
+
+
+    /* ================= RESPONSIVE ================= */
+    @@media (max-width: 768px) {
+
+        .user-profile-text,
+        .user-chevron {
+            display: none;
+        }
+
+        .user-avatar {
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            font-size: 13px;
+        }
+
+        .user-profile-menu {
+            width: 220px;
+            top: calc(100% + 10px);
+        }
+    }
+
 </style>
+
+
 @code {
-	private bool _isReady;
-	private bool isSettingsOpen = false;
-	private Timer? _tokenExpiryTimer;
 
-	protected override void OnInitialized()
-	{
-		isSettingsOpen = IsSettingsSectionActive();
-		StartExpiryCheck();
+    /* =========================================================
+       VARIABLES
+       ========================================================= */
 
-		if (Http.DefaultRequestHeaders.Authorization != null)
-		{
-			_isReady = true;
-		}
-		else if (!string.IsNullOrWhiteSpace(LoginState.Token))
-		{
-			Http.DefaultRequestHeaders.Authorization =
-				new AuthenticationHeaderValue("Bearer", LoginState.Token);
-			_isReady = true;
-		}
-	}
-	private void OnGlobalSearchInput(ChangeEventArgs e)
-	{
-		SearchState.Query = e.Value?.ToString() ?? "";
-	}
-	private void ToggleSettingsMenu()
-	{
-		isSettingsOpen = !isSettingsOpen;
-	}
+    private bool _isReady;
 
-	private async Task Logout()
-	{
-		try
-		{
-			await Http.PostAsync("api/authentication/logout", null);
-		}
-		catch { }
+    private bool isSettingsOpen = false;
 
-		LoginState.Token = null;
-		LoginState.ClearAllowedPages();
-		Http.DefaultRequestHeaders.Authorization = null;
-		await JS.InvokeVoidAsync("sessionStorage.removeItem", "jwt_token");
-		await JS.InvokeVoidAsync("sessionStorage.removeItem", "spic_role_access");
-		Navigation.NavigateTo("/login", forceLoad: true);
-	}
+    private bool _showUserMenu = false;
 
-	private bool IsSettingsSectionActive()
-	{
-		var uri = Navigation.ToBaseRelativePath(Navigation.Uri).ToLower();
+    private Timer? _tokenExpiryTimer;
 
-		return uri == "locationmaster"
-			|| uri == "agriculture"
-			|| uri == "logistics"
-			|| uri == "financial"
-			|| uri == "relationship";
-	}
 
-	protected override async Task OnAfterRenderAsync(bool firstRender)
-	{
-		if (firstRender && !_isReady)
-		{
-			// Page refresh: restore token + page permissions from sessionStorage
-			var token = await JS.InvokeAsync<string?>("sessionStorage.getItem", "jwt_token");
+    // Logged user details
 
-			if (!string.IsNullOrWhiteSpace(token))
-			{
-				Http.DefaultRequestHeaders.Authorization =
-					new AuthenticationHeaderValue("Bearer", token);
-				LoginState.Token = token;
+    private string _userName = "User";
 
-				var roleAccess = await JS.InvokeAsync<string?>("sessionStorage.getItem", "spic_role_access");
-				LoginState.SetAllowedPages(roleAccess);
+    private string _userRole = "";
 
-				var expStr = await JS.InvokeAsync<string?>("sessionStorage.getItem", "jwt_expiration");
-				if (!string.IsNullOrWhiteSpace(expStr) && DateTime.TryParse(expStr, out var exp))
-					LoginState.Expiration = exp;
 
-				_isReady = true;
-				StateHasChanged();
-			}
-			else
-			{
-				Navigation.NavigateTo("/login");
-			}
-		}
-	}
+    /* =========================================================
+       INITIALIZE
+       ========================================================= */
 
-	private void StartExpiryCheck()
-	{
-		_tokenExpiryTimer?.Dispose();
-		_tokenExpiryTimer = new Timer(async _ =>
-		{
-			if (LoginState.IsTokenExpired)
-			{
-				await InvokeAsync(async () => await AutoLogout());
-			}
-		}, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
-	}
+    protected override void OnInitialized()
+    {
+        isSettingsOpen = IsSettingsSectionActive();
 
-	private async Task AutoLogout()
-	{
-		_tokenExpiryTimer?.Dispose();
-		_tokenExpiryTimer = null;
-		LoginState.Token = null;
-		LoginState.Expiration = default;
-		LoginState.ClearAllowedPages();
-		Http.DefaultRequestHeaders.Authorization = null;
-		try
-		{
-			await JS.InvokeVoidAsync("sessionStorage.removeItem", "jwt_token");
-			await JS.InvokeVoidAsync("sessionStorage.removeItem", "jwt_expiration");
-			await JS.InvokeVoidAsync("sessionStorage.removeItem", "spic_role_access");
-		}
-		catch { }
-		Navigation.NavigateTo("/login", forceLoad: true);
-	}
+        StartExpiryCheck();
 
-	public void Dispose()
-	{
-		_tokenExpiryTimer?.Dispose();
-	}
 
-	private async Task HandleSearchKeyDown(KeyboardEventArgs e)
-	{
-		if (e.Key == "Enter")
-		{
-			try
-			{
-				await JS.InvokeVoidAsync("navSearch.clickMatch");
-			}
-			catch { }
-		}
-	}
+        /*
+         * Token already available
+         */
+
+        if (Http.DefaultRequestHeaders.Authorization != null)
+        {
+            var token =
+                LoginState.Token
+                ?? Http.DefaultRequestHeaders.Authorization.Parameter;
+
+            LoadLoggedInUser(token);
+
+            _isReady = true;
+        }
+
+        /*
+         * LoginState token available
+         */
+
+        else if (!string.IsNullOrWhiteSpace(LoginState.Token))
+        {
+            Http.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue(
+                    "Bearer",
+                    LoginState.Token
+                );
+
+            LoadLoggedInUser(LoginState.Token);
+
+            _isReady = true;
+        }
+    }
+
+
+    /* =========================================================
+       GLOBAL SEARCH
+       ========================================================= */
+
+    private void OnGlobalSearchInput(ChangeEventArgs e)
+    {
+        SearchState.Query =
+            e.Value?.ToString() ?? "";
+    }
+
+
+    private async Task HandleSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            try
+            {
+                await JS.InvokeVoidAsync(
+                    "navSearch.clickMatch"
+                );
+            }
+            catch
+            {
+                // Ignore JS errors
+            }
+        }
+    }
+
+
+    /* =========================================================
+       SETTINGS MENU
+       ========================================================= */
+
+    private void ToggleSettingsMenu()
+    {
+        isSettingsOpen = !isSettingsOpen;
+    }
+
+
+    private void ToggleUserMenu()
+    {
+        _showUserMenu = !_showUserMenu;
+    }
+
+
+    private bool IsSettingsSectionActive()
+    {
+        var uri =
+            Navigation
+                .ToBaseRelativePath(Navigation.Uri)
+                .ToLower();
+
+        return uri == "locationmaster"
+            || uri == "agriculture"
+            || uri == "logistics"
+            || uri == "financial"
+            || uri == "relationship";
+    }
+
+
+    /* =========================================================
+       LOAD USER NAME + ROLE FROM JWT
+       ========================================================= */
+
+    private void LoadLoggedInUser(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return;
+        }
+
+        try
+        {
+            /*
+             * JWT Structure:
+             *
+             * Header.Payload.Signature
+             */
+
+            var tokenParts = token.Split('.');
+
+            if (tokenParts.Length < 2)
+            {
+                return;
+            }
+
+
+            var payload = tokenParts[1];
+
+
+            /*
+             * Convert Base64 URL to normal Base64
+             */
+
+            payload = payload
+                .Replace('-', '+')
+                .Replace('_', '/');
+
+
+            /*
+             * Add Base64 padding
+             */
+
+            switch (payload.Length % 4)
+            {
+                case 2:
+                    payload += "==";
+                    break;
+
+                case 3:
+                    payload += "=";
+                    break;
+            }
+
+
+            var jsonBytes =
+                Convert.FromBase64String(payload);
+
+            var json =
+                Encoding.UTF8.GetString(jsonBytes);
+
+
+            using var document =
+                JsonDocument.Parse(json);
+
+            var root =
+                document.RootElement;
+
+
+            /*
+             * USER NAME
+             *
+             * Supports common JWT claim names.
+             */
+
+            _userName =
+                GetJwtClaim(
+                    root,
+
+                    "name",
+                    "Name",
+
+                    "unique_name",
+
+                    "username",
+                    "Username",
+                    "UserName",
+
+                    "preferred_username",
+
+                    "given_name",
+
+                    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
+                )
+                ?? "User";
+
+
+            /*
+             * ROLE
+             *
+             * Supports normal role claim
+             * and ASP.NET Identity role claim.
+             */
+
+            _userRole =
+                GetJwtClaim(
+                    root,
+
+                    "role",
+                    "Role",
+                    "roles",
+                    "Roles",
+
+                    "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
+                )
+                ?? "";
+        }
+        catch
+        {
+            /*
+             * If JWT parsing fails,
+             * don't break MainLayout.
+             */
+
+            _userName = "User";
+
+            _userRole = "";
+        }
+    }
+
+
+    /* =========================================================
+       GET JWT CLAIM
+       ========================================================= */
+
+    private static string? GetJwtClaim(
+        JsonElement root,
+        params string[] claimNames)
+    {
+        foreach (var claimName in claimNames)
+        {
+            if (!root.TryGetProperty(
+                    claimName,
+                    out var claim))
+            {
+                continue;
+            }
+
+
+            /*
+             * Normal string claim
+             */
+
+            if (claim.ValueKind ==
+                JsonValueKind.String)
+            {
+                var value =
+                    claim.GetString();
+
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+
+            /*
+             * Role can sometimes be array
+             *
+             * Example:
+             *
+             * "roles": [
+             *     "Admin",
+             *     "Manager"
+             * ]
+             */
+
+            if (claim.ValueKind ==
+                JsonValueKind.Array)
+            {
+                var values =
+                    new List<string>();
+
+                foreach (var item
+                         in claim.EnumerateArray())
+                {
+                    if (item.ValueKind ==
+                        JsonValueKind.String)
+                    {
+                        var value =
+                            item.GetString();
+
+                        if (!string.IsNullOrWhiteSpace(value))
+                        {
+                            values.Add(value);
+                        }
+                    }
+                }
+
+
+                if (values.Count > 0)
+                {
+                    return string.Join(", ", values);
+                }
+            }
+        }
+
+
+        return null;
+    }
+
+
+    /* =========================================================
+       USER INITIAL
+       ========================================================= */
+
+    private string GetUserInitial()
+    {
+        if (string.IsNullOrWhiteSpace(_userName))
+        {
+            return "U";
+        }
+
+        return _userName
+            .Trim()
+            .Substring(0, 1)
+            .ToUpper();
+    }
+
+
+    /* =========================================================
+       PAGE REFRESH
+       ========================================================= */
+
+    protected override async Task OnAfterRenderAsync(
+        bool firstRender)
+    {
+        if (firstRender && !_isReady)
+        {
+
+            /*
+             * Page refresh:
+             *
+             * Restore:
+             * 1. JWT Token
+             * 2. Logged User
+             * 3. Page Permissions
+             * 4. Token Expiration
+             */
+
+            var token =
+                await JS.InvokeAsync<string?>(
+                    "sessionStorage.getItem",
+                    "jwt_token"
+                );
+
+
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+
+                /*
+                 * Restore Authorization Header
+                 */
+
+                Http.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue(
+                        "Bearer",
+                        token
+                    );
+
+
+                /*
+                 * Restore LoginState Token
+                 */
+
+                LoginState.Token = token;
+
+
+                /*
+                 * Load logged user's Name + Role
+                 */
+
+                LoadLoggedInUser(token);
+
+
+                /*
+                 * Restore Page Permissions
+                 */
+
+                var roleAccess =
+                    await JS.InvokeAsync<string?>(
+                        "sessionStorage.getItem",
+                        "spic_role_access"
+                    );
+
+                LoginState.SetAllowedPages(
+                    roleAccess
+                );
+
+
+                /*
+                 * Restore Expiration
+                 */
+
+                var expStr =
+                    await JS.InvokeAsync<string?>(
+                        "sessionStorage.getItem",
+                        "jwt_expiration"
+                    );
+
+
+                if (
+                    !string.IsNullOrWhiteSpace(expStr)
+                    && DateTime.TryParse(
+                        expStr,
+                        out var exp)
+                )
+                {
+                    LoginState.Expiration = exp;
+                }
+
+
+                _isReady = true;
+
+                StateHasChanged();
+            }
+            else
+            {
+                Navigation.NavigateTo(
+                    "/login"
+                );
+            }
+        }
+    }
+
+
+    /* =========================================================
+       MANUAL LOGOUT
+       ========================================================= */
+
+    private async Task Logout()
+    {
+        _showUserMenu = false;
+
+        try
+        {
+            await Http.PostAsync(
+                "api/authentication/logout",
+                null
+            );
+        }
+        catch
+        {
+            // Even if API logout fails,
+            // clear client-side login information.
+        }
+
+
+        _tokenExpiryTimer?.Dispose();
+
+        _tokenExpiryTimer = null;
+
+
+        LoginState.Token = null;
+
+        LoginState.Expiration = default;
+
+        LoginState.ClearAllowedPages();
+
+
+        Http.DefaultRequestHeaders.Authorization =
+            null;
+
+
+        /*
+         * Clear current user values
+         */
+
+        _userName = "User";
+
+        _userRole = "";
+
+
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "sessionStorage.removeItem",
+                "jwt_token"
+            );
+
+            await JS.InvokeVoidAsync(
+                "sessionStorage.removeItem",
+                "jwt_expiration"
+            );
+
+            await JS.InvokeVoidAsync(
+                "sessionStorage.removeItem",
+                "spic_role_access"
+            );
+        }
+        catch
+        {
+            // Ignore sessionStorage cleanup errors
+        }
+
+
+        Navigation.NavigateTo(
+            "/login",
+            forceLoad: true
+        );
+    }
+
+
+    /* =========================================================
+       TOKEN EXPIRY CHECK
+       ========================================================= */
+
+    private void StartExpiryCheck()
+    {
+        _tokenExpiryTimer?.Dispose();
+
+
+        _tokenExpiryTimer =
+            new Timer(
+                async _ =>
+                {
+                    if (LoginState.IsTokenExpired)
+                    {
+                        await InvokeAsync(
+                            async () =>
+                                await AutoLogout()
+                        );
+                    }
+                },
+                null,
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromSeconds(5)
+            );
+    }
+
+
+    /* =========================================================
+       AUTO LOGOUT
+       ========================================================= */
+
+    private async Task AutoLogout()
+    {
+        _tokenExpiryTimer?.Dispose();
+
+        _tokenExpiryTimer = null;
+
+
+        LoginState.Token = null;
+
+        LoginState.Expiration = default;
+
+        LoginState.ClearAllowedPages();
+
+
+        Http.DefaultRequestHeaders.Authorization =
+            null;
+
+
+        _userName = "User";
+
+        _userRole = "";
+
+
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "sessionStorage.removeItem",
+                "jwt_token"
+            );
+
+            await JS.InvokeVoidAsync(
+                "sessionStorage.removeItem",
+                "jwt_expiration"
+            );
+
+            await JS.InvokeVoidAsync(
+                "sessionStorage.removeItem",
+                "spic_role_access"
+            );
+        }
+        catch
+        {
+            // Ignore cleanup errors
+        }
+
+
+        Navigation.NavigateTo(
+            "/login",
+            forceLoad: true
+        );
+    }
+
+
+    /* =========================================================
+       DISPOSE
+       ========================================================= */
+
+    public void Dispose()
+    {
+        _tokenExpiryTimer?.Dispose();
+    }
+
 }

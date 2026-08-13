@@ -88,7 +88,7 @@
 									<div class="dropdown-item-custom text-muted" @onmousedown='() => SelectWarehouse(0, "")'>
 										-- Select Facility Name --
 									</div>
-									@foreach (var w in _warehouses.Where(x => string.IsNullOrWhiteSpace(_warehouseSearchText) ||
+									@foreach (var w in ApprovedWarehouses.Where(x => string.IsNullOrWhiteSpace(_warehouseSearchText) ||
 																			  $"{x.WarehouseCode} - {x.Name}".Contains(_warehouseSearchText, StringComparison.OrdinalIgnoreCase)))
 									{
 										<div class="dropdown-item-custom" @onmousedown='() => SelectWarehouse(w.Id, $"{w.WarehouseCode} - {w.Name}")'>
@@ -156,7 +156,7 @@
 									<div class="dropdown-item-custom text-muted" @onmousedown='() => SelectRail(0, "")'>
 										-- Select Facility Name --
 									</div>
-									@foreach (var r in _rackPoints.Where(x => string.IsNullOrWhiteSpace(_railSearchText) ||
+									@foreach (var r in ApprovedRackPoints.Where(x => string.IsNullOrWhiteSpace(_railSearchText) ||
 																			  x.Name.Contains(_railSearchText, StringComparison.OrdinalIgnoreCase)))
 									{
 										<div class="dropdown-item-custom" @onmousedown='() => SelectRail(r.Id, r.Name)'>
@@ -488,9 +488,20 @@
 	private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
 
 	// Lookup lists
+	// Keep the full lookup lists unchanged because they are also used by the
+	// existing saved-card, edit and delete flows.
 	private List<WarehouseEntity> _warehouses = new();
 	private List<RackPoint> _rackPoints = new();
 	private List<Port> _ports = new();
+
+	// Dropdown-only lists:
+	// Only AVP-final-approved Warehouse and Rack Point records are selectable.
+	// Port intentionally remains unchanged because it is not part of this approval filter.
+	private IEnumerable<WarehouseEntity> ApprovedWarehouses =>
+		_warehouses.Where(x => x.AVPApproved == true);
+
+	private IEnumerable<RackPoint> ApprovedRackPoints =>
+		_rackPoints.Where(x => x.AVPApproved == true);
 
 	// Dealer location
 	private double? _dealerLat;
