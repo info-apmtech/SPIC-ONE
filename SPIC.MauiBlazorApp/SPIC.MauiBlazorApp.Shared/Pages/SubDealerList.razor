@@ -1,0 +1,1179 @@
+﻿@page "/SubDealerList"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LoginState LoginState
+@inject LookupCacheService LookupCache
+
+<style>
+    .sd-list-page {
+        padding: 24px 0 36px;
+    }
+
+    .sd-page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .sd-page-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .sd-page-icon {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 12px;
+        background: #eaf8f0;
+        color: #07864f;
+        font-size: 20px;
+    }
+
+    .sd-page-title {
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #172033;
+    }
+
+    .sd-page-subtitle {
+        margin-top: 2px;
+        font-size: .82rem;
+        color: #6b7280;
+    }
+
+    .sd-header-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .sd-btn {
+        height: 38px;
+        padding: 0 15px;
+        border-radius: 9px;
+        border: 1px solid #d9e1e7;
+        background: #fff;
+        color: #374151;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        font-size: .86rem;
+        font-weight: 600;
+        transition: .16s ease;
+    }
+
+        .sd-btn:hover {
+            background: #f7faf8;
+        }
+
+        .sd-btn.primary {
+            background: #07864f;
+            border-color: #07864f;
+            color: #fff;
+        }
+
+            .sd-btn.primary:hover {
+                background: #057744;
+            }
+
+    .sd-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 16px;
+    }
+
+    .sd-summary-card {
+        background: #fff;
+        border: 1px solid #e2e8e5;
+        border-radius: 12px;
+        padding: 16px 18px;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+    }
+
+    .sd-summary-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 11px;
+        display: grid;
+        place-items: center;
+        font-size: 18px;
+        background: #f1f6f3;
+        color: #07864f;
+    }
+
+    .sd-summary-card.active .sd-summary-icon {
+        background: #e9f8ef;
+        color: #07864f;
+    }
+
+    .sd-summary-card.inactive .sd-summary-icon {
+        background: #fff5e8;
+        color: #d97706;
+    }
+
+    .sd-summary-label {
+        font-size: .78rem;
+        color: #6b7280;
+    }
+
+    .sd-summary-value {
+        margin-top: 2px;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #172033;
+    }
+
+    .sd-filter-card {
+        background: #fff;
+        border: 1px solid #e2e8e5;
+        border-radius: 13px;
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+
+    .sd-filter-grid {
+        display: grid;
+        grid-template-columns: minmax(240px, 1.6fr) repeat(4, minmax(145px, 1fr));
+        gap: 12px;
+        align-items: end;
+    }
+
+    .sd-label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: .76rem;
+        font-weight: 600;
+        color: #475569;
+    }
+
+    .sd-input,
+    .sd-select {
+        width: 100%;
+        height: 39px;
+        border: 1px solid #dce4e0;
+        border-radius: 8px;
+        background: #f8faf9;
+        color: #334155;
+        padding: 0 12px;
+        outline: none;
+        font-size: .84rem;
+    }
+
+        .sd-input:focus,
+        .sd-select:focus {
+            border-color: #55b98a;
+            box-shadow: 0 0 0 2px rgba(7, 134, 79, .08);
+            background: #fff;
+        }
+
+    .sd-search-wrap {
+        position: relative;
+    }
+
+        .sd-search-wrap i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            font-size: .86rem;
+        }
+
+        .sd-search-wrap .sd-input {
+            padding-left: 34px;
+        }
+
+    .sd-table-card {
+        background: #fff;
+        border: 1px solid #e2e8e5;
+        border-radius: 13px;
+        overflow: hidden;
+    }
+
+    .sd-table-head {
+        padding: 14px 16px;
+        border-bottom: 1px solid #edf1ef;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .sd-result-text {
+        font-size: .82rem;
+        color: #64748b;
+    }
+
+        .sd-result-text strong {
+            color: #172033;
+        }
+
+    .sd-table-scroll {
+        overflow-x: auto;
+    }
+
+    .sd-table {
+        width: 100%;
+        min-width: 1080px;
+        border-collapse: collapse;
+    }
+
+        .sd-table th {
+            padding: 11px 13px;
+            background: #f8faf9;
+            border-bottom: 1px solid #e8eeeb;
+            font-size: .74rem;
+            font-weight: 700;
+            color: #536273;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .sd-table td {
+            padding: 12px 13px;
+            border-bottom: 1px solid #edf1ef;
+            font-size: .81rem;
+            color: #334155;
+            vertical-align: middle;
+        }
+
+        .sd-table tbody tr:hover {
+            background: #fbfdfc;
+        }
+
+    .sd-code {
+        font-weight: 700;
+        color: #08784a;
+        white-space: nowrap;
+    }
+
+    .sd-name {
+        min-width: 200px;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .sd-small-value {
+        color: #64748b;
+        font-size: .77rem;
+    }
+
+    .sd-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 5px 9px;
+        font-size: .72rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+        .sd-status.active {
+            color: #08784a;
+            background: #eaf8f0;
+        }
+
+        .sd-status.inactive {
+            color: #b76500;
+            background: #fff3df;
+        }
+
+    .sd-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .sd-action-wrap {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
+    }
+
+    .sd-action-btn {
+        width: 31px;
+        height: 31px;
+        border-radius: 8px;
+        border: 1px solid #dfe6e2;
+        background: #fff;
+        color: #596878;
+        display: grid;
+        place-items: center;
+        transition: .15s ease;
+    }
+
+        .sd-action-btn:hover {
+            background: #edf8f2;
+            color: #07864f;
+            border-color: #b7ddc8;
+        }
+
+    .sd-loading,
+    .sd-empty {
+        min-height: 260px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        color: #64748b;
+    }
+
+        .sd-empty i {
+            font-size: 30px;
+            color: #a1ada7;
+        }
+
+    .sd-pagination {
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        border-top: 1px solid #edf1ef;
+    }
+
+    .sd-page-size {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: .78rem;
+        color: #64748b;
+    }
+
+        .sd-page-size select {
+            height: 32px;
+            min-width: 68px;
+            border: 1px solid #dce4e0;
+            border-radius: 7px;
+            padding: 0 8px;
+            background: #fff;
+            color: #334155;
+        }
+
+    .sd-page-buttons {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+    }
+
+    .sd-page-button {
+        min-width: 32px;
+        height: 32px;
+        border-radius: 7px;
+        border: 1px solid #dfe6e2;
+        background: #fff;
+        color: #64748b;
+        font-size: .78rem;
+    }
+
+        .sd-page-button.active {
+            background: #07864f;
+            border-color: #07864f;
+            color: #fff;
+        }
+
+        .sd-page-button:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+        }
+
+    .sd-scope-note {
+        margin-bottom: 12px;
+        padding: 9px 12px;
+        border-radius: 9px;
+        background: #eff8f3;
+        border: 1px solid #d7ede1;
+        color: #32644d;
+        font-size: .78rem;
+    }
+
+    @@media (max-width: 1200px) {
+        .sd-filter-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .sd-page-header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .sd-summary-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .sd-filter-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .sd-pagination {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
+</style>
+
+<div class="container-fluid sd-list-page">
+
+    <div class="sd-page-header">
+        <div class="sd-page-title-wrap">
+            <div class="sd-page-icon">
+                <i class="bi bi-people"></i>
+            </div>
+
+            <div>
+                <h4 class="sd-page-title">Sub Dealer Master</h4>
+                <div class="sd-page-subtitle">
+                    View Sub Dealers you have created or updated in your assigned geography.
+                </div>
+            </div>
+        </div>
+
+        <div class="sd-header-actions">
+            <button type="button"
+                    class="sd-btn"
+                    @onclick="RefreshAsync"
+                    disabled="@_isLoading">
+                <i class="bi bi-arrow-clockwise"></i>
+                Refresh
+            </button>
+
+            @if (CanCreateSubDealer)
+            {
+                <button type="button"
+                        class="sd-btn primary"
+                        @onclick="CreateSubDealer">
+                    <i class="bi bi-plus-lg"></i>
+                    Create Sub Dealer
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(RoleScopeMessage))
+    {
+        <div class="sd-scope-note">
+            <i class="bi bi-geo-alt me-1"></i>
+            @RoleScopeMessage
+        </div>
+    }
+
+    <div class="sd-summary-grid">
+        <div class="sd-summary-card">
+            <div class="sd-summary-icon">
+                <i class="bi bi-people"></i>
+            </div>
+            <div>
+                <div class="sd-summary-label">Total Sub Dealers</div>
+                <div class="sd-summary-value">@(_response.ActiveCount + _response.InactiveCount)</div>
+            </div>
+        </div>
+
+        <div class="sd-summary-card active">
+            <div class="sd-summary-icon">
+                <i class="bi bi-check-circle"></i>
+            </div>
+            <div>
+                <div class="sd-summary-label">Active</div>
+                <div class="sd-summary-value">@_response.ActiveCount</div>
+            </div>
+        </div>
+
+        <div class="sd-summary-card inactive">
+            <div class="sd-summary-icon">
+                <i class="bi bi-pause-circle"></i>
+            </div>
+            <div>
+                <div class="sd-summary-label">Inactive</div>
+                <div class="sd-summary-value">@_response.InactiveCount</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sd-filter-card">
+        <div class="sd-filter-grid">
+
+            <div>
+                <label class="sd-label">Search</label>
+                <div class="sd-search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input class="sd-input"
+                           value="@_searchText"
+                           @oninput="OnSearchInput"
+                           placeholder="Code, name, mobile, GST, PAN or mFMS ID" />
+                </div>
+            </div>
+
+            <div>
+                <label class="sd-label">State</label>
+                <select class="sd-select"
+                        value="@_stateId"
+                        @onchange="OnStateChanged"
+                        disabled="@IsStateLocked">
+                    <option value="0">All States</option>
+                    @foreach (var state in AllowedStates)
+                    {
+                        <option value="@state.Id">@state.StateName</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="sd-label">Region</label>
+                <select class="sd-select"
+                        value="@_regionId"
+                        @onchange="OnRegionChanged"
+                        disabled="@IsRegionLocked">
+                    <option value="0">All Regions</option>
+                    @foreach (var region in FilteredRegions)
+                    {
+                        <option value="@region.Id">@region.RegionName</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="sd-label">HQ</label>
+                <select class="sd-select"
+                        value="@_hqId"
+                        @onchange="OnHqChanged"
+                        disabled="@IsHqLocked">
+                    <option value="0">All HQs</option>
+                    @foreach (var hq in FilteredHqs)
+                    {
+                        <option value="@hq.Id">@hq.HeadquarterName</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="sd-label">Status</label>
+                <select class="sd-select"
+                        value="@_statusFilter"
+                        @onchange="OnStatusChanged">
+                    <option value="">All Status</option>
+                    <option value="0">Active</option>
+                    <option value="1">Inactive</option>
+                </select>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="sd-table-card">
+        <div class="sd-table-head">
+            <div class="sd-result-text">
+                @if (_response.TotalCount == 0)
+                {
+                    <span>No records</span>
+                }
+                else
+                {
+                    <span>
+                        Showing <strong>@FirstVisibleRecord</strong>–<strong>@LastVisibleRecord</strong>
+                        of <strong>@_response.TotalCount</strong>
+                    </span>
+                }
+            </div>
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="sd-loading">
+                <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+                <div>Loading Sub Dealers...</div>
+            </div>
+        }
+        else if (_response.Items.Count == 0)
+        {
+            <div class="sd-empty">
+                <i class="bi bi-inbox"></i>
+                <div class="fw-semibold">No Sub Dealers found</div>
+                @if (IsMoRole)
+                {
+                    <div class="small">
+                        Sub Dealers will appear here after you create or edit and submit them.
+                    </div>
+                }
+                else
+                {
+                    <div class="small">Try changing the search or filter values.</div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="sd-table-scroll">
+                <table class="sd-table">
+                    <thead>
+                        <tr>
+                            <th style="width:55px;">#</th>
+                            <th>Sub Dealer Code</th>
+                            <th>Sub Dealer Name</th>
+                            <th>State</th>
+                            <th>Region</th>
+                            <th>HQ</th>
+                            <th>GST / PAN</th>
+                            <th>Contact</th>
+                            <th>Status</th>
+                            <th style="text-align:right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in _response.Items.Select((item, index) => new { item, index }))
+                        {
+                            <tr>
+                                <td>
+                                    @((_response.Page - 1) * _response.PageSize + entry.index + 1)
+                                </td>
+
+                                <td>
+                                    <span class="sd-code">
+                                        @(string.IsNullOrWhiteSpace(entry.item.SubDealerCode)
+                                            ? "-"
+                                            : entry.item.SubDealerCode)
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <div class="sd-name">
+                                        @(string.IsNullOrWhiteSpace(entry.item.FirmName)
+                                            ? "-"
+                                            : entry.item.FirmName)
+                                    </div>
+                                </td>
+
+                                <td>@StateName(entry.item.StateId)</td>
+                                <td>@RegionName(entry.item.RegionId)</td>
+                                <td>@HqName(entry.item.HQId)</td>
+
+                                <td>
+                                    <div>
+                                        @(string.IsNullOrWhiteSpace(entry.item.GSTNumber)
+                                            ? "-"
+                                            : entry.item.GSTNumber)
+                                    </div>
+                                    <div class="sd-small-value mt-1">
+                                        PAN:
+                                        @(string.IsNullOrWhiteSpace(entry.item.PANNo)
+                                            ? "-"
+                                            : entry.item.PANNo)
+                                    </div>
+                                </td>
+
+                                <td>
+                                    <div>
+                                        @(string.IsNullOrWhiteSpace(entry.item.OfficialContactNumber)
+                                            ? "-"
+                                            : entry.item.OfficialContactNumber)
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(entry.item.WhatsAppNumber))
+                                    {
+                                        <div class="sd-small-value mt-1">
+                                            WA: @entry.item.WhatsAppNumber
+                                        </div>
+                                    }
+                                </td>
+
+                                <td>
+                                    @if (entry.item.Status == SubDealerStatus.Active)
+                                    {
+                                        <span class="sd-status active">
+                                            <span class="sd-dot"></span>
+                                            Active
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="sd-status inactive">
+                                            <span class="sd-dot"></span>
+                                            Inactive
+                                        </span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <div class="sd-action-wrap">
+                                        <button type="button"
+                                                class="sd-action-btn"
+                                                title="View"
+                                                @onclick="() => ViewSubDealer(entry.item.Id)">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+
+                                        @if (CanEditSubDealer)
+                                        {
+                                            <button type="button"
+                                                    class="sd-action-btn"
+                                                    title="Edit"
+                                                    @onclick="() => EditSubDealer(entry.item.Id)">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <div class="sd-pagination">
+            <div class="sd-page-size">
+                <span>Items per page</span>
+                <select value="@_pageSize" @onchange="OnPageSizeChanged">
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+
+            <div class="sd-page-buttons">
+                <button type="button"
+                        class="sd-page-button"
+                        disabled="@(_response.Page <= 1 || _isLoading)"
+                        @onclick="PreviousPage">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+
+                @foreach (var pageNo in VisiblePageNumbers)
+                {
+                    <button type="button"
+                            class="sd-page-button @(pageNo == _response.Page ? "active" : "")"
+                            disabled="@_isLoading"
+                            @onclick="() => GoToPage(pageNo)">
+                        @pageNo
+                    </button>
+                }
+
+                <button type="button"
+                        class="sd-page-button"
+                        disabled="@(_response.TotalPages == 0 || _response.Page >= _response.TotalPages || _isLoading)"
+                        @onclick="NextPage">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private SubDealerPagedListResponse _response = new()
+    {
+        Page = 1,
+        PageSize = 20
+    };
+
+    private List<LocationItemDto> _states = new();
+    private List<LocationItemDto> _regions = new();
+    private List<LocationItemDto> _hqs = new();
+
+    private string _searchText = string.Empty;
+    private string _statusFilter = string.Empty;
+
+    private int _stateId;
+    private int _regionId;
+    private int _hqId;
+
+    private int _page = 1;
+    private int _pageSize = 20;
+
+    private bool _isLoading;
+    private CancellationTokenSource? _searchCts;
+
+    private string CurrentRole =>
+        LoginState?.UserRole?.ToString() ?? string.Empty;
+
+    private bool IsMoRole =>
+        string.Equals(CurrentRole, "MO", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentRole, "MDO", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentRole, "JMDO", StringComparison.OrdinalIgnoreCase) ||
+        (LoginState?.IsHQRole ?? false);
+
+    private bool IsRmRole =>
+        string.Equals(CurrentRole, "RM", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentRole, "RMD", StringComparison.OrdinalIgnoreCase) ||
+        (LoginState?.IsRegionRole ?? false);
+
+    private bool IsSmmRole =>
+        string.Equals(CurrentRole, "SMM", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentRole, "SMD", StringComparison.OrdinalIgnoreCase) ||
+        (LoginState?.IsStateRole ?? false);
+
+    private bool IsUnrestricted =>
+        LoginState == null ||
+        LoginState.IsAdmin ||
+        LoginState.IsDirectorOrAVP;
+
+    private bool CanCreateSubDealer =>
+        IsMoRole || IsUnrestricted;
+
+    private bool CanEditSubDealer =>
+        IsMoRole || IsUnrestricted;
+
+    private bool IsStateLocked =>
+        !IsUnrestricted && (IsMoRole || IsRmRole || IsSmmRole);
+
+    private bool IsRegionLocked =>
+        !IsUnrestricted && (IsMoRole || IsRmRole);
+
+    private bool IsHqLocked =>
+        !IsUnrestricted && IsMoRole;
+
+    private IEnumerable<LocationItemDto> AllowedStates
+    {
+        get
+        {
+            if (IsUnrestricted)
+                return _states;
+
+            if (_stateId > 0)
+                return _states.Where(x => x.Id == _stateId);
+
+            return Enumerable.Empty<LocationItemDto>();
+        }
+    }
+
+    private IEnumerable<LocationItemDto> FilteredRegions =>
+        _stateId > 0
+            ? _regions.Where(x => x.StateId == _stateId)
+            : _regions;
+
+    private IEnumerable<LocationItemDto> FilteredHqs =>
+        _regionId > 0
+            ? _hqs.Where(x => x.RegionId == _regionId)
+            : _hqs;
+
+    private int FirstVisibleRecord =>
+        _response.TotalCount == 0
+            ? 0
+            : ((_response.Page - 1) * _response.PageSize) + 1;
+
+    private int LastVisibleRecord =>
+        _response.TotalCount == 0
+            ? 0
+            : Math.Min(
+                _response.Page * _response.PageSize,
+                _response.TotalCount);
+
+    private IEnumerable<int> VisiblePageNumbers
+    {
+        get
+        {
+            if (_response.TotalPages <= 0)
+                return Enumerable.Empty<int>();
+
+            var start = Math.Max(1, _response.Page - 2);
+            var end = Math.Min(_response.TotalPages, start + 4);
+
+            if (end - start < 4)
+                start = Math.Max(1, end - 4);
+
+            return Enumerable.Range(start, end - start + 1);
+        }
+    }
+
+    private string RoleScopeMessage
+    {
+        get
+        {
+            if (IsMoRole && _hqId > 0)
+                return $"Showing only Sub Dealers created/updated by you in HQ: {HqName(_hqId)}.";
+
+            if (IsRmRole && _regionId > 0)
+                return $"Showing Sub Dealers for your Region: {RegionName(_regionId)}.";
+
+            if (IsSmmRole && _stateId > 0)
+                return $"Showing Sub Dealers for your State: {StateName(_stateId)}.";
+
+            return string.Empty;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LookupCache.EnsureLoadedAsync();
+
+        _states = LookupCache.States;
+        _regions = LookupCache.Regions;
+        _hqs = LookupCache.Headquarters;
+
+        ApplyLoggedInRoleScope();
+
+        await LoadListAsync();
+    }
+
+    private void ApplyLoggedInRoleScope()
+    {
+        if (IsUnrestricted)
+            return;
+
+        if (IsMoRole && LoginState.HQId > 0)
+        {
+            _hqId = LoginState.HQId;
+
+            var hq = _hqs.FirstOrDefault(x => x.Id == _hqId);
+            _regionId = hq?.RegionId ?? LoginState.RegionId;
+
+            var region = _regions.FirstOrDefault(x => x.Id == _regionId);
+            _stateId = region?.StateId ?? LoginState.StateId;
+
+            return;
+        }
+
+        if (IsRmRole && LoginState.RegionId > 0)
+        {
+            _regionId = LoginState.RegionId;
+
+            var region = _regions.FirstOrDefault(x => x.Id == _regionId);
+            _stateId = region?.StateId ?? LoginState.StateId;
+
+            _hqId = 0;
+            return;
+        }
+
+        if (IsSmmRole && LoginState.StateId > 0)
+        {
+            _stateId = LoginState.StateId;
+            _regionId = 0;
+            _hqId = 0;
+            return;
+        }
+
+        // Backward-compatible fallback for a restricted custom role.
+        _stateId = LoginState.StateId;
+        _regionId = LoginState.RegionId;
+        _hqId = LoginState.HQId;
+    }
+
+    private async Task LoadListAsync()
+    {
+        if (_isLoading)
+            return;
+
+        _isLoading = true;
+
+        try
+        {
+            var query = new List<string>
+            {
+                $"page={_page}",
+                $"pageSize={_pageSize}"
+            };
+
+            if (!string.IsNullOrWhiteSpace(_searchText))
+                query.Add($"search={Uri.EscapeDataString(_searchText.Trim())}");
+
+            if (!string.IsNullOrWhiteSpace(_statusFilter))
+                query.Add($"status={Uri.EscapeDataString(_statusFilter)}");
+
+            if (_stateId > 0)
+                query.Add($"stateId={_stateId}");
+
+            if (_regionId > 0)
+                query.Add($"regionId={_regionId}");
+
+            if (_hqId > 0)
+                query.Add($"hqId={_hqId}");
+
+            var url =
+                "api/SubDealerRegistration/list?" +
+                string.Join("&", query);
+
+            var result =
+                await Http.GetFromJsonAsync<SubDealerPagedListResponse>(url);
+
+            _response = result ?? new SubDealerPagedListResponse
+            {
+                Page = _page,
+                PageSize = _pageSize
+            };
+
+            _page = _response.Page <= 0
+                ? 1
+                : _response.Page;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Sub Dealer list load failed: {ex.Message}");
+
+            _response = new SubDealerPagedListResponse
+            {
+                Page = _page,
+                PageSize = _pageSize
+            };
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _page = 1;
+        await LoadListAsync();
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _searchText = e.Value?.ToString() ?? string.Empty;
+
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = new CancellationTokenSource();
+
+        var token = _searchCts.Token;
+
+        try
+        {
+            await Task.Delay(350, token);
+
+            if (token.IsCancellationRequested)
+                return;
+
+            _page = 1;
+            await LoadListAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task OnStateChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var value))
+            value = 0;
+
+        _stateId = value;
+        _regionId = 0;
+        _hqId = 0;
+        _page = 1;
+
+        await LoadListAsync();
+    }
+
+    private async Task OnRegionChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var value))
+            value = 0;
+
+        _regionId = value;
+        _hqId = 0;
+        _page = 1;
+
+        await LoadListAsync();
+    }
+
+    private async Task OnHqChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var value))
+            value = 0;
+
+        _hqId = value;
+        _page = 1;
+
+        await LoadListAsync();
+    }
+
+    private async Task OnStatusChanged(ChangeEventArgs e)
+    {
+        _statusFilter = e.Value?.ToString() ?? string.Empty;
+        _page = 1;
+
+        await LoadListAsync();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var value))
+            value = 20;
+
+        _pageSize = value;
+        _page = 1;
+
+        await LoadListAsync();
+    }
+
+    private async Task PreviousPage()
+    {
+        if (_page <= 1)
+            return;
+
+        _page--;
+        await LoadListAsync();
+    }
+
+    private async Task NextPage()
+    {
+        if (_response.TotalPages <= 0 ||
+            _page >= _response.TotalPages)
+        {
+            return;
+        }
+
+        _page++;
+        await LoadListAsync();
+    }
+
+    private async Task GoToPage(int pageNo)
+    {
+        if (pageNo < 1 ||
+            pageNo > _response.TotalPages ||
+            pageNo == _page)
+        {
+            return;
+        }
+
+        _page = pageNo;
+        await LoadListAsync();
+    }
+
+    private void CreateSubDealer()
+    {
+        Nav.NavigateTo("/SubDealerRegistration");
+    }
+
+    private void ViewSubDealer(int id)
+    {
+        Nav.NavigateTo(
+            $"/SubDealerRegistration?subDealerId={id}&mode=view");
+    }
+
+    private void EditSubDealer(int id)
+    {
+        Nav.NavigateTo(
+            $"/SubDealerRegistration?subDealerId={id}");
+    }
+
+    private string StateName(int id) =>
+        _states.FirstOrDefault(x => x.Id == id)?.StateName ?? "-";
+
+    private string RegionName(int id) =>
+        _regions.FirstOrDefault(x => x.Id == id)?.RegionName ?? "-";
+
+    private string HqName(int id) =>
+        _hqs.FirstOrDefault(x => x.Id == id)?.HeadquarterName ?? "-";
+}

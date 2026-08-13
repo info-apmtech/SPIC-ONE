@@ -152,6 +152,38 @@
         margin-top: .75rem;
         font-size: .82rem;
     }
+
+    .subdealer-pan-card {
+        background: #eef5ff;
+        border: 1px solid #d7e3f4;
+        border-radius: 12px;
+        padding: 20px;
+        height: 100%;
+        min-height: 220px;
+    }
+
+        .subdealer-pan-card .pan-card-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            margin-bottom: 18px;
+            color: #172033;
+        }
+
+            .subdealer-pan-card .pan-card-title i {
+                color: #2563eb;
+            }
+
+        .subdealer-pan-card .form-control-custom {
+            background: #ffffff;
+        }
+
+    fieldset:disabled .subdealer-pan-card .form-control-custom {
+        background: #eef1f5;
+        opacity: 1;
+    }
 </style>
 
 <div class="container-fluid py-4 px-0">
@@ -241,7 +273,7 @@
                         <label class="form-label-custom">HQ</label>
                         <select class="form-select-custom w-100 @(_errors.ContainsKey("HQ") ? "is-invalid" : "")"
                                 @bind="_basicInfoHqId"
-                                @bind:after='() => ValidateFieldOnChange("HQ", _basicInfoHqId > 0)'
+                                @bind:after="OnBasicInfoHqChanged"
                                 disabled="@(_isHqLocked || _isEditMode)">
                             <option value="0">-- Select HQ --</option>
                             @foreach (var hq in _filteredHeadquarters)
@@ -659,10 +691,11 @@
                 </div>
             </div>
 
-            @* TAX & COMPLIANCE - GST ONLY. No PAN. No Aadhaar.
-               GST Number + GST Certificate are mandatory only for Active Sub Dealers. *@
+            @* TAX & COMPLIANCE
+               GST and PAN are shown as separate visual cards inside Tax & Compliance.
+               The outer fieldset already makes inputs read-only in View mode. *@
             <div class="basic-info-card">
-                <div class="card-header-title mb-2">
+                <div class="card-header-title mb-3">
                     <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/TaxComplience.svg"
                          class="formicon"
                          alt="icon" />
@@ -670,9 +703,10 @@
                 </div>
 
                 <div class="row g-3">
-                    <div class="col-12 col-lg-6">
-                        <div class="compliance-card gst">
-                            <div class="fw-bold small mb-2">
+                    @* GST INFORMATION *@
+                    <div class="col-12 col-lg-8">
+                        <div class="compliance-card gst h-100">
+                            <div class="fw-bold small mb-3">
                                 <i class="bi bi-file-earmark-text text-success me-2"></i>
                                 GST Information
                                 @if (IsActiveSubDealer)
@@ -685,81 +719,196 @@
                                 }
                             </div>
 
-                            <label class="form-label-custom">GST Number</label>
-                            <div class="input-with-loader">
-                                <input type="text"
-                                       class="form-control form-control-sm @(_errors.ContainsKey("GSTNumber") ? "is-invalid" : "")"
-                                       @bind="_model.GSTNumber"
-                                       @bind:after="OnGSTNumberChanged"
-                                       placeholder="15-character GST Number"
-                                       maxlength="15"
-                                       style="text-transform: uppercase" />
+                            <div class="row g-3">
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label-custom">GST Number</label>
+                                    <div class="input-with-loader">
+                                        <input type="text"
+                                               class="form-control form-control-sm @(_errors.ContainsKey("GSTNumber") ? "is-invalid" : "")"
+                                               @bind="_model.GSTNumber"
+                                               @bind:after="OnGSTNumberChanged"
+                                               placeholder="15-character GST Number"
+                                               maxlength="15"
+                                               style="text-transform: uppercase" />
 
-                                @if (_isExtractingGst)
+                                        @if (_isExtractingGst)
+                                        {
+                                            <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                        }
+                                    </div>
+
+                                    @if (_errors.TryGetValue("GSTNumber", out var gstError))
+                                    {
+                                        <div class="field-error">@gstError</div>
+                                    }
+
+                                    @if (!string.IsNullOrEmpty(_ocrWarningGst))
+                                    {
+                                        <div class="ocr-warning">@_ocrWarningGst</div>
+                                    }
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label-custom">Legal Name</label>
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           @bind="_model.GSTLegalName"
+                                           placeholder="GST Legal Name" />
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label-custom">Trade Name</label>
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           @bind="_model.GSTTradeName"
+                                           placeholder="GST Trade Name" />
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label-custom">Constitution of Business</label>
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           @bind="_model.GSTConstitutionofBusiness"
+                                           placeholder="Constitution of Business" />
+                                </div>
+
+                                <div class="col-12">
+                                    <label class="upload-area">
+                                        <i class="bi bi-cloud-arrow-up text-success"></i>
+                                        <span class="small text-success fw-600">
+                                            Upload GST Certificate (PDF)
+                                            @if (IsActiveSubDealer)
+                                            {
+                                                <span class="text-danger">*</span>
+                                            }
+                                        </span>
+
+                                        <InputFile OnChange="HandleGstUpload"
+                                                   accept=".pdf"
+                                                   hidden />
+
+                                        @if (_errors.TryGetValue("GSTFile", out var gstFileError))
+                                        {
+                                            <div class="field-error">@gstFileError</div>
+                                        }
+
+                                        @if (!string.IsNullOrEmpty(_model.GSTFilePath))
+                                        {
+                                            <div class="mt-1 small text-success file-name-display">
+                                                <i class="bi bi-check-circle"></i>
+                                                @_model.GSTFilePath
+
+                                                @if (!IsViewOnly)
+                                                {
+                                                    <i class="bi bi-x-circle text-danger ms-2 file-remove-x"
+                                                       @onclick="RemoveGstFile"
+                                                       @onclick:preventDefault="true"
+                                                       @onclick:stopPropagation="true"></i>
+                                                }
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* PAN INFORMATION - Register-page style, Aadhaar intentionally excluded. *@
+                    <div class="col-12 col-lg-4">
+                        <div class="subdealer-pan-card">
+                            <div class="pan-card-title">
+                                <i class="bi bi-file-earmark-person"></i>
+                                <span>PAN Information</span>
+
+                                @if (IsActiveSubDealer)
                                 {
-                                    <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                    <span class="text-danger">*</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted fw-normal ms-1">(Optional for Inactive)</span>
                                 }
                             </div>
 
-                            @if (_errors.TryGetValue("GSTNumber", out var gstError))
+                            <label class="form-label-custom">PAN Number</label>
+
+                            <input type="text"
+                                   class="form-control-custom w-100 @(_errors.ContainsKey("PANNo") ? "is-invalid" : "")"
+                                   @bind="_model.PANNo"
+                                   @bind:after="OnPANNumberChanged"
+                                   placeholder="10-CHARACTER PAN NUMBER"
+                                   maxlength="10"
+                                   style="text-transform: uppercase" />
+
+                            @if (_errors.TryGetValue("PANNo", out var panError))
                             {
-                                <div class="field-error">@gstError</div>
+                                <div class="field-error">@panError</div>
                             }
-
-                            @if (!string.IsNullOrEmpty(_ocrWarningGst))
-                            {
-                                <div class="ocr-warning">@_ocrWarningGst</div>
-                            }
-
-                            <label class="form-label-custom mt-2">Legal Name</label>
-                            <input type="text"
-                                   class="form-control form-control-sm"
-                                   @bind="_model.GSTLegalName" />
-
-                            <label class="form-label-custom mt-2">Trade Name</label>
-                            <input type="text"
-                                   class="form-control form-control-sm"
-                                   @bind="_model.GSTTradeName" />
-
-                            <label class="form-label-custom mt-2">Constitution of Business</label>
-                            <input type="text"
-                                   class="form-control form-control-sm"
-                                   @bind="_model.GSTConstitutionofBusiness" />
-
-                            <div class="mt-2">
-                                <label class="upload-area">
-                                    <i class="bi bi-cloud-arrow-up text-success"></i>
-                                    <span class="small text-success fw-600">
-                                        Upload GST Certificate (PDF)
-                                        @if (IsActiveSubDealer)
-                                        {
-                                            <span class="text-danger">*</span>
-                                        }
-                                    </span>
-                                    <InputFile OnChange="HandleGstUpload" accept=".pdf" hidden />
-
-                                    @if (_errors.TryGetValue("GSTFile", out var gstFileError))
-                                    {
-                                        <div class="field-error">@gstFileError</div>
-                                    }
-
-                                    @if (!string.IsNullOrEmpty(_model.GSTFilePath))
-                                    {
-                                        <div class="mt-1 small text-success file-name-display">
-                                            <i class="bi bi-check-circle"></i> @_model.GSTFilePath
-
-                                            @if (!IsViewOnly)
-                                            {
-                                                <i class="bi bi-x-circle text-danger ms-2 file-remove-x"
-                                                   @onclick="RemoveGstFile"
-                                                   @onclick:preventDefault="true"
-                                                   @onclick:stopPropagation="true"></i>
-                                            }
-                                        </div>
-                                    }
-                                </label>
-                            </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            @* mFMS DETAILS - separate card after Tax & Compliance. *@
+            <div class="basic-info-card">
+                <div class="card-header-title mb-3">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                         class="formicon"
+                         alt="icon" />
+                    mFMS Information
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label-custom">
+                            Wholesale mFMS ID
+                            @if (IsActiveSubDealer)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                            else
+                            {
+                                <small class="text-muted fw-normal">(Optional for Inactive)</small>
+                            }
+                        </label>
+
+                        <input type="text"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("WholesaleMFMSId") ? "is-invalid" : "")"
+                               @bind="_model.WholesaleMFMSId"
+                               @bind:after='() => ValidateFieldOnChange("WholesaleMFMSId", !string.IsNullOrWhiteSpace(_model.WholesaleMFMSId))'
+                               placeholder="Enter Wholesale mFMS ID"
+                               maxlength="50" />
+
+                        @if (_errors.TryGetValue("WholesaleMFMSId", out var wholesaleMfmsError))
+                        {
+                            <div class="field-error">@wholesaleMfmsError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label-custom">
+                            Retail mFMS ID
+                            @if (IsActiveSubDealer)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                            else
+                            {
+                                <small class="text-muted fw-normal">(Optional for Inactive)</small>
+                            }
+                        </label>
+
+                        <input type="text"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("RetailMFMSId") ? "is-invalid" : "")"
+                               @bind="_model.RetailMFMSId"
+                               @bind:after='() => ValidateFieldOnChange("RetailMFMSId", !string.IsNullOrWhiteSpace(_model.RetailMFMSId))'
+                               placeholder="Enter Retail mFMS ID"
+                               maxlength="50" />
+
+                        @if (_errors.TryGetValue("RetailMFMSId", out var retailMfmsError))
+                        {
+                            <div class="field-error">@retailMfmsError</div>
+                        }
                     </div>
                 </div>
             </div>
@@ -1039,9 +1188,14 @@
 
     private async Task LoadData()
     {
+        // Lookup masters and Sub Dealers can still load in parallel.
+        // The Sub Dealer API is now role-scoped, so the browser no longer
+        // downloads the complete SubDealerRegistrations table.
         var cacheTask = LookupCache.EnsureLoadedAsync();
+
+        var subDealerLookupUrl = BuildRoleScopedSubDealerLookupUrl();
         var subDealerTask = Http.GetFromJsonAsync<List<SubDealerLookupDto>>(
-            "api/SubDealerRegistration/lookup");
+            subDealerLookupUrl);
 
         await Task.WhenAll(cacheTask, subDealerTask);
 
@@ -1052,9 +1206,69 @@
 
         _subDealersAll = subDealerTask.Result ?? new();
 
-        _filteredSubDealers = _basicInfoStateId > 0
-            ? _subDealersAll.Where(x => x.StateId == _basicInfoStateId).ToList()
-            : _subDealersAll.ToList();
+        // ApplyLockedEmployeeLocation() runs immediately after LoadData().
+        // It will set the correct State / Region / HQ and call this again.
+        ApplySubDealerClientFilter();
+    }
+
+    private string CurrentLoginRole =>
+        LoginState?.UserRole?.ToString() ?? string.Empty;
+
+    private bool IsLoginMoRole =>
+        string.Equals(CurrentLoginRole, "MO", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentLoginRole, "MDO", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentLoginRole, "JMDO", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsLoginRmRole =>
+        string.Equals(CurrentLoginRole, "RM", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentLoginRole, "RMD", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsLoginSmmRole =>
+        string.Equals(CurrentLoginRole, "SMM", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentLoginRole, "SMD", StringComparison.OrdinalIgnoreCase);
+
+    private string BuildRoleScopedSubDealerLookupUrl()
+    {
+        const string baseUrl = "api/SubDealerRegistration/lookup";
+
+        if (LoginState is null ||
+            LoginState.IsAdmin ||
+            LoginState.IsDirectorOrAVP)
+        {
+            return baseUrl;
+        }
+
+        // MO / MDO / JMDO: ALWAYS HQ scope.
+        // Explicit UserRole check is included so an MO never falls through
+        // and downloads the full Sub Dealer master.
+        if ((IsLoginMoRole || LoginState.IsHQRole) && LoginState.HQId > 0)
+            return $"{baseUrl}?hqId={LoginState.HQId}";
+
+        // RM / RMD: Region scope. Do not narrow RM by a stored HQId.
+        if ((IsLoginRmRole || LoginState.IsRegionRole) && LoginState.RegionId > 0)
+            return $"{baseUrl}?regionId={LoginState.RegionId}";
+
+        // SMM / SMD: State scope.
+        if ((IsLoginSmmRole || LoginState.IsStateRole) && LoginState.StateId > 0)
+            return $"{baseUrl}?stateId={LoginState.StateId}";
+
+        return baseUrl;
+    }
+
+    private void ApplySubDealerClientFilter()
+    {
+        IEnumerable<SubDealerLookupDto> query = _subDealersAll;
+
+        if (_basicInfoStateId > 0)
+            query = query.Where(x => x.StateId == _basicInfoStateId);
+
+        if (_basicInfoRegionId > 0)
+            query = query.Where(x => x.RegionId == _basicInfoRegionId);
+
+        if (_basicInfoHqId > 0)
+            query = query.Where(x => x.HQId == _basicInfoHqId);
+
+        _filteredSubDealers = query.ToList();
     }
 
     private async Task LoadSubDealer(int id)
@@ -1090,9 +1304,7 @@
             .Where(x => x.RegionId == _basicInfoRegionId)
             .ToList();
 
-        _filteredSubDealers = _subDealersAll
-            .Where(x => x.StateId == _basicInfoStateId)
-            .ToList();
+        ApplySubDealerClientFilter();
 
         // Same behavior as Dealer selection: selected code loads the firm name.
         _subDealerSearchText =
@@ -1113,19 +1325,120 @@
 
     private void ApplyLockedEmployeeLocation()
     {
-        if (LoginState.IsAdmin)
-            return;
+        _isStateLocked = false;
+        _isRegionLocked = false;
+        _isHqLocked = false;
 
+        // Admin / Director / AVP keep the existing unrestricted behavior.
+        if (LoginState is null ||
+            LoginState.IsAdmin ||
+            LoginState.IsDirectorOrAVP)
+        {
+            ApplySubDealerClientFilter();
+            return;
+        }
+
+        // MO / MDO / JMDO:
+        // Lock State + Region + HQ to the logged-in user's assigned HQ.
+        if ((IsLoginMoRole || LoginState.IsHQRole) && LoginState.HQId > 0)
+        {
+            var hqId = LoginState.HQId;
+            var hq = _headquartersAll.FirstOrDefault(x => x.Id == hqId);
+
+            var regionId = hq?.RegionId ??
+                (LoginState.RegionId > 0
+                    ? LoginState.RegionId
+                    : 0);
+
+            var stateId = regionId > 0
+                ? _regionsAll.FirstOrDefault(x => x.Id == regionId)?.StateId ?? 0
+                : 0;
+
+            if (stateId <= 0 && LoginState.StateId > 0)
+                stateId = LoginState.StateId;
+
+            _basicInfoStateId = stateId;
+            _basicInfoRegionId = regionId;
+            _basicInfoHqId = hqId;
+
+            _filteredRegions = _regionsAll
+                .Where(x => x.StateId == _basicInfoStateId)
+                .ToList();
+
+            _filteredHeadquarters = _headquartersAll
+                .Where(x => x.RegionId == _basicInfoRegionId)
+                .ToList();
+
+            _isStateLocked = _basicInfoStateId > 0;
+            _isRegionLocked = _basicInfoRegionId > 0;
+            _isHqLocked = true;
+
+            ApplySubDealerClientFilter();
+            return;
+        }
+
+        // RM / RMD:
+        // Lock State + Region. HQ remains selectable within that Region.
+        if ((IsLoginRmRole || LoginState.IsRegionRole) && LoginState.RegionId > 0)
+        {
+            var regionId = LoginState.RegionId;
+            var stateId = _regionsAll
+                .FirstOrDefault(x => x.Id == regionId)?.StateId ?? 0;
+
+            if (stateId <= 0 && LoginState.StateId > 0)
+                stateId = LoginState.StateId;
+
+            _basicInfoStateId = stateId;
+            _basicInfoRegionId = regionId;
+            _basicInfoHqId = 0;
+
+            _filteredRegions = _regionsAll
+                .Where(x => x.StateId == _basicInfoStateId)
+                .ToList();
+
+            _filteredHeadquarters = _headquartersAll
+                .Where(x => x.RegionId == _basicInfoRegionId)
+                .ToList();
+
+            _isStateLocked = _basicInfoStateId > 0;
+            _isRegionLocked = true;
+            _isHqLocked = false;
+
+            ApplySubDealerClientFilter();
+            return;
+        }
+
+        // SMM / SMD:
+        // Lock only State. Region and HQ remain selectable inside the State.
+        if ((IsLoginSmmRole || LoginState.IsStateRole) && LoginState.StateId > 0)
+        {
+            _basicInfoStateId = LoginState.StateId;
+            _basicInfoRegionId = 0;
+            _basicInfoHqId = 0;
+
+            _filteredRegions = _regionsAll
+                .Where(x => x.StateId == _basicInfoStateId)
+                .ToList();
+
+            _filteredHeadquarters = new();
+
+            _isStateLocked = true;
+            _isRegionLocked = false;
+            _isHqLocked = false;
+
+            ApplySubDealerClientFilter();
+            return;
+        }
+
+        // Fallback: preserve the old behavior for any custom role that does not
+        // expose IsHQRole / IsRegionRole / IsStateRole.
         if (LoginState.StateId > 0)
         {
             _basicInfoStateId = LoginState.StateId;
             _filteredRegions = _regionsAll
                 .Where(x => x.StateId == _basicInfoStateId)
                 .ToList();
-
-            _filteredSubDealers = _subDealersAll
-                .Where(x => x.StateId == _basicInfoStateId)
-                .ToList();
+            _isStateLocked = true;
         }
 
         if (LoginState.RegionId > 0)
@@ -1134,14 +1447,16 @@
             _filteredHeadquarters = _headquartersAll
                 .Where(x => x.RegionId == _basicInfoRegionId)
                 .ToList();
+            _isRegionLocked = true;
         }
 
         if (LoginState.HQId > 0)
+        {
             _basicInfoHqId = LoginState.HQId;
+            _isHqLocked = true;
+        }
 
-        _isStateLocked = LoginState.StateId > 0;
-        _isRegionLocked = LoginState.RegionId > 0;
-        _isHqLocked = LoginState.HQId > 0;
+        ApplySubDealerClientFilter();
     }
 
     private void OnBasicInfoStateChanged()
@@ -1157,9 +1472,7 @@
 
         _filteredHeadquarters = new();
 
-        _filteredSubDealers = _subDealersAll
-            .Where(x => x.StateId == _basicInfoStateId)
-            .ToList();
+        ApplySubDealerClientFilter();
 
         if (_subDealerId == 0)
             _subDealerSearchText = "";
@@ -1170,9 +1483,25 @@
         ValidateFieldOnChange("Region", _basicInfoRegionId > 0);
 
         _basicInfoHqId = 0;
+
         _filteredHeadquarters = _headquartersAll
             .Where(x => x.RegionId == _basicInfoRegionId)
             .ToList();
+
+        ApplySubDealerClientFilter();
+
+        if (_subDealerId == 0)
+            _subDealerSearchText = "";
+    }
+
+    private void OnBasicInfoHqChanged()
+    {
+        ValidateFieldOnChange("HQ", _basicInfoHqId > 0);
+
+        ApplySubDealerClientFilter();
+
+        if (_subDealerId == 0)
+            _subDealerSearchText = "";
     }
 
     private void SelectStatus(string value)
@@ -1201,6 +1530,9 @@
             "DealerStateId",
             "OfficialContactNumber",
             "WhatsAppNumber",
+            "WholesaleMFMSId",
+            "RetailMFMSId",
+            "PANNo",
             "GSTNumber",
             "GSTFile"
         };
@@ -1367,6 +1699,28 @@
             new string((_model.AlternativeNumber ?? "")
                 .Where(char.IsDigit)
                 .ToArray());
+    }
+
+    private void OnPANNumberChanged()
+    {
+        _errors.Remove("PANNo");
+
+        if (string.IsNullOrWhiteSpace(_model.PANNo))
+        {
+            _model.PANNo = null;
+            return;
+        }
+
+        _model.PANNo = _model.PANNo
+            .Trim()
+            .ToUpperInvariant();
+
+        if (Regex.IsMatch(
+            _model.PANNo,
+            @"^[A-Z]{5}[0-9]{4}[A-Z]$"))
+        {
+            _errors.Remove("PANNo");
+        }
     }
 
     private void OnGSTNumberChanged()
@@ -1940,7 +2294,7 @@
         if (IsActiveSubDealer)
         {
             // ACTIVE SUB DEALER:
-            // Primary Location + Contact + GST are mandatory.
+            // Primary Location + Contact + mFMS + PAN + GST are mandatory.
 
             if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo))
                 _errors["ShopNo"] =
@@ -1996,6 +2350,31 @@
                     "WhatsApp Number must be 10 digits";
             }
 
+            if (string.IsNullOrWhiteSpace(_model.WholesaleMFMSId))
+            {
+                _errors["WholesaleMFMSId"] =
+                    "Wholesale mFMS ID is required for Active Sub Dealer";
+            }
+
+            if (string.IsNullOrWhiteSpace(_model.RetailMFMSId))
+            {
+                _errors["RetailMFMSId"] =
+                    "Retail mFMS ID is required for Active Sub Dealer";
+            }
+
+            if (string.IsNullOrWhiteSpace(_model.PANNo))
+            {
+                _errors["PANNo"] =
+                    "PAN No is required for Active Sub Dealer";
+            }
+            else if (!Regex.IsMatch(
+                         _model.PANNo.Trim().ToUpperInvariant(),
+                         @"^[A-Z]{5}[0-9]{4}[A-Z]$"))
+            {
+                _errors["PANNo"] =
+                    "Invalid PAN format (e.g., ABCDE1234F)";
+            }
+
             if (string.IsNullOrWhiteSpace(_model.GSTNumber))
             {
                 _errors["GSTNumber"] = "GST Number is required";
@@ -2046,6 +2425,17 @@
                 _errors["GSTNumber"] =
                     "Invalid GST format (e.g., 22AAAAA0000A1Z5)";
             }
+
+            if (!string.IsNullOrWhiteSpace(_model.PANNo) &&
+                !Regex.IsMatch(
+                    _model.PANNo.Trim().ToUpperInvariant(),
+                    @"^[A-Z]{5}[0-9]{4}[A-Z]$"))
+            {
+                _errors["PANNo"] =
+                    "Invalid PAN format (e.g., ABCDE1234F)";
+            }
+
+            // Wholesale/Retail mFMS IDs are intentionally optional for Inactive.
 
             // Coordinates are optional for Inactive.
             // If one coordinate exists, require the matching pair.
@@ -2201,13 +2591,9 @@
     {
         _subDealersAll =
             await Http.GetFromJsonAsync<List<SubDealerLookupDto>>(
-                "api/SubDealerRegistration/lookup") ?? new();
+                BuildRoleScopedSubDealerLookupUrl()) ?? new();
 
-        _filteredSubDealers = _basicInfoStateId > 0
-            ? _subDealersAll
-                .Where(x => x.StateId == _basicInfoStateId)
-                .ToList()
-            : _subDealersAll.ToList();
+        ApplySubDealerClientFilter();
     }
 
     private async Task OnPincodeChanged()
