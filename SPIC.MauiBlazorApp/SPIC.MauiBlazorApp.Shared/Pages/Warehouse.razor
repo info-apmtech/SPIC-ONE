@@ -498,7 +498,7 @@
 	// Only AVP-final-approved Warehouse and Rack Point records are selectable.
 	// Port intentionally remains unchanged because it is not part of this approval filter.
 	private IEnumerable<WarehouseEntity> ApprovedWarehouses =>
-		_warehouses.Where(x => x.AVPApproved == true);
+		_warehouses.Where(x => x.IsActive && x.AVPApproved == true);
 
 	private IEnumerable<RackPoint> ApprovedRackPoints =>
 		_rackPoints.Where(x => x.AVPApproved == true);
@@ -582,7 +582,11 @@
 {
     try
     {
-        var whTask   = Http.GetFromJsonAsync<List<WarehouseEntity>>("api/Warehouse");
+        // Logistics approval-aware Warehouse list. /all returns the current
+        // role-visible Warehouse rows including final AVP approval state.
+        // ApprovedWarehouses below still keeps only Active + final-approved rows,
+        // preserving the previous selectable-facility behavior.
+        var whTask   = Http.GetFromJsonAsync<List<WarehouseEntity>>("api/Warehouse/all");
         var rackTask = Http.GetFromJsonAsync<List<RackPoint>>("api/RackPoint");
         var portTask = Http.GetFromJsonAsync<List<Port>>("api/Port");
 
