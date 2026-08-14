@@ -1,4 +1,6 @@
-﻿using ClosedXML.Excel;
+﻿using System.Text.RegularExpressions;
+using System.Security.Claims;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +16,7 @@ public class SubDealerRegistrationController : ControllerBase
 {
 	private const long MaxExcelImportSize = 10 * 1024 * 1024;
 
-	private readonly AppDbContext	 _db;
+	private readonly AppDbContext _db;
 
 	public SubDealerRegistrationController(AppDbContext db)
 	{
@@ -23,22 +25,369 @@ public class SubDealerRegistrationController : ControllerBase
 
 	[HttpGet("lookup")]
 	public async Task<ActionResult<List<SubDealerLookupDto>>> Lookup(
+		[FromQuery] int? stateId,
+		[FromQuery] int? regionId,
+		[FromQuery] int? hqId,
 		CancellationToken cancellationToken)
 	{
-		var items = await _db.SubDealerRegistrations
+		// Keep this query server-side. Role/location conditions are applied
+		// before ToListAsync so MO users do not download the entire master.
+		var query = _db.SubDealerRegistrations
 			.AsNoTracking()
+			.AsQueryable();
+
+		var role = CurrentRole();
+		var userId = CurrentUserId();
+
+		var isUnrestrictedRole =
+			IsUnrestrictedRole(role);
+
+		if (!isUnrestrictedRole && IsMoRole(role))
+		{
+			// MO/MDO/JMDO must be HQ-scoped.
+			// Prefer authenticated claim; use the page query parameter as a
+			// local/dev fallback. Never return all rows for an MO.
+			var effectiveHqId = CurrentHqId() ?? hqId;
+
+			if (!effectiveHqId.HasValue || effectiveHqId.Value <= 0)
+				return Ok(new List<SubDealerLookupDto>());
+
+			query = query.Where(x => x.HQ == effectiveHqId.Value);
+		}
+		else if (!isUnrestrictedRole && IsRegionRole(role))
+		{
+			var effectiveRegionId = CurrentRegionId() ?? regionId;
+
+			if (!effectiveRegionId.HasValue || effectiveRegionId.Value <= 0)
+				return Ok(new List<SubDealerLookupDto>());
+
+			query = query.Where(x => x.Region == effectiveRegionId.Value);
+		}
+		else if (!isUnrestrictedRole && IsStateRole(role))
+		{
+			var effectiveStateId = CurrentStateId() ?? stateId;
+
+			if (!effectiveStateId.HasValue || effectiveStateId.Value <= 0)
+				return Ok(new List<SubDealerLookupDto>());
+
+			query = query.Where(x => x.StateId == effectiveStateId.Value);
+		}
+		else if (!isUnrestrictedRole && !string.IsNullOrWhiteSpace(role))
+		{
+			// Preserve existing fallback for other restricted/custom roles.
+			if (string.IsNullOrWhiteSpace(userId))
+				return Ok(new List<SubDealerLookupDto>());
+
+			query = query.Where(x => x.CreatedBy == userId);
+		}
+		else
+		{
+			// Local/dev fallback when the request has no role claim.
+			// The Blazor page sends only the logged-in user's correct scope.
+			if (hqId.HasValue && hqId.Value > 0)
+				query = query.Where(x => x.HQ == hqId.Value);
+			else if (regionId.HasValue && regionId.Value > 0)
+				query = query.Where(x => x.Region == regionId.Value);
+			else if (stateId.HasValue && stateId.Value > 0)
+				query = query.Where(x => x.StateId == stateId.Value);
+		}
+
+		var items = await query
 			.OrderBy(x => x.SubDealerCode)
 			.Select(x => new SubDealerLookupDto
 			{
 				Id = x.Id,
 				SubDealerCode = x.SubDealerCode ?? string.Empty,
 				FirmName = x.FirmName,
-				StateId = x.StateId
+				StateId = x.StateId,
+				RegionId = x.Region,
+				HQId = x.HQ
 			})
 			.ToListAsync(cancellationToken);
 
 		return Ok(items);
 	}
+
+	private string CurrentRole() =>
+		User.FindFirst(ClaimTypes.Role)?.Value ??
+		User.FindFirst("Role")?.Value ??
+		string.Empty;
+
+	private string? CurrentUserId() =>
+		User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
+		User.FindFirst("sub")?.Value ??
+		User.FindFirst("spic:user_id")?.Value;
+
+	private int? CurrentStateId() =>
+		ReadIntClaim("spic:state_id", "StateId");
+
+	private int? CurrentRegionId() =>
+		ReadIntClaim("spic:region_id", "RegionId");
+
+	private int? CurrentHqId() =>
+		ReadIntClaim("spic:hq_id", "HQId", "HqId");
+
+	private int? ReadIntClaim(params string[] names)
+	{
+		foreach (var name in names)
+		{
+			var value = User.FindFirst(name)?.Value;
+			if (int.TryParse(value, out var id) && id > 0)
+				return id;
+		}
+
+		return null;
+	}
+
+	private static bool IsMoRole(string role) =>
+		role.Equals("MO", StringComparison.OrdinalIgnoreCase) ||
+		role.Equals("MDO", StringComparison.OrdinalIgnoreCase) ||
+		role.Equals("JMDO", StringComparison.OrdinalIgnoreCase);
+
+	private static bool IsRegionRole(string role) =>
+		role.Equals("RM", StringComparison.OrdinalIgnoreCase) ||
+		role.Equals("RMD", StringComparison.OrdinalIgnoreCase);
+
+	private static bool IsStateRole(string role) =>
+		role.Equals("SMM", StringComparison.OrdinalIgnoreCase) ||
+		role.Equals("SMD", StringComparison.OrdinalIgnoreCase);
+
+	private static bool IsUnrestrictedRole(string role) =>
+		role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
+		role.Equals("CorporateAdmin", StringComparison.OrdinalIgnoreCase) ||
+		role.Equals("Director", StringComparison.OrdinalIgnoreCase) ||
+		role.Equals("AVP", StringComparison.OrdinalIgnoreCase);
+
+
+	[HttpGet("list")]
+	public async Task<ActionResult<SubDealerPagedListResponse>> GetList(
+		[FromQuery] string? search,
+		[FromQuery] int? status,
+		[FromQuery] int? stateId,
+		[FromQuery] int? regionId,
+		[FromQuery] int? hqId,
+		[FromQuery] int page = 1,
+		[FromQuery] int pageSize = 20,
+		CancellationToken cancellationToken = default)
+	{
+		page = page < 1 ? 1 : page;
+		pageSize = pageSize < 10 ? 10 : pageSize > 100 ? 100 : pageSize;
+
+		var query = _db.SubDealerRegistrations
+			.AsNoTracking()
+			.AsQueryable();
+
+		var role = CurrentRole();
+		var userId = CurrentUserId();
+		var unrestricted = IsUnrestrictedRole(role);
+
+		// --------------------------------------------------------------
+		// LIST VISIBILITY - NO NEW DB PROPERTY
+		// --------------------------------------------------------------
+		// Bulk import creates Active rows with Code/Name/State/Region/HQ
+		// while the Sub Dealer form details remain empty.
+		//
+		// A record becomes list-visible after it is maintained from the
+		// Sub Dealer form:
+		// - Active records: save requires location/contact/GST/PAN/mFMS data.
+		// - Inactive records: those details are optional, so Inactive itself
+		//   is enough to represent a submitted/updated record.
+		query = query.Where(x =>
+			x.Status == SubDealerStatus.InActive ||
+
+			x.Latitude.HasValue ||
+			x.Longitude.HasValue ||
+			x.DistrictId.HasValue ||
+			x.DealerStateId.HasValue ||
+
+			!string.IsNullOrEmpty(x.ShopNoORRoomNoOrBlockNo) ||
+			!string.IsNullOrEmpty(x.Village) ||
+			!string.IsNullOrEmpty(x.PinCode) ||
+
+			!string.IsNullOrEmpty(x.OfficialContactNumber) ||
+			!string.IsNullOrEmpty(x.WhatsAppNumber) ||
+			!string.IsNullOrEmpty(x.AlternativeNumber) ||
+
+			!string.IsNullOrEmpty(x.GSTNumber) ||
+			!string.IsNullOrEmpty(x.GSTFilePath) ||
+			!string.IsNullOrEmpty(x.PANNo) ||
+
+			!string.IsNullOrEmpty(x.WholesaleMFMSId) ||
+			!string.IsNullOrEmpty(x.RetailMFMSId));
+
+		// --------------------------------------------------------------
+		// SECURITY / DATA SCOPE
+		// Apply role scope BEFORE search, count and paging.
+		// --------------------------------------------------------------
+		if (!unrestricted && IsMoRole(role))
+		{
+			var effectiveHqId = CurrentHqId() ?? hqId;
+
+			if (!effectiveHqId.HasValue || effectiveHqId.Value <= 0)
+				return Ok(EmptyPagedResult(page, pageSize));
+
+			// MO/MDO/JMDO: all saved/updated Sub Dealers in logged-in HQ.
+			query = query.Where(x => x.HQ == effectiveHqId.Value);
+		}
+		else if (!unrestricted && IsRegionRole(role))
+		{
+			// RM/RMD: all saved/updated Sub Dealers in logged-in Region.
+			var effectiveRegionId = CurrentRegionId() ?? regionId;
+
+			if (!effectiveRegionId.HasValue || effectiveRegionId.Value <= 0)
+				return Ok(EmptyPagedResult(page, pageSize));
+
+			query = query.Where(x => x.Region == effectiveRegionId.Value);
+		}
+		else if (!unrestricted && IsStateRole(role))
+		{
+			// SMM/SMD: all saved/updated Sub Dealers in logged-in State.
+			var effectiveStateId = CurrentStateId() ?? stateId;
+
+			if (!effectiveStateId.HasValue || effectiveStateId.Value <= 0)
+				return Ok(EmptyPagedResult(page, pageSize));
+
+			query = query.Where(x => x.StateId == effectiveStateId.Value);
+		}
+		else if (!unrestricted && !string.IsNullOrWhiteSpace(role))
+		{
+			// Preserve existing fallback behavior for custom restricted roles.
+			if (string.IsNullOrWhiteSpace(userId))
+				return Ok(EmptyPagedResult(page, pageSize));
+
+			query = query.Where(x => x.CreatedBy == userId);
+		}
+		else
+		{
+			// Local/dev fallback when auth claims are unavailable.
+			if (hqId.HasValue && hqId.Value > 0)
+				query = query.Where(x => x.HQ == hqId.Value);
+			else if (regionId.HasValue && regionId.Value > 0)
+				query = query.Where(x => x.Region == regionId.Value);
+			else if (stateId.HasValue && stateId.Value > 0)
+				query = query.Where(x => x.StateId == stateId.Value);
+		}
+
+		// --------------------------------------------------------------
+		// UI filters can only NARROW the already role-scoped query.
+		// --------------------------------------------------------------
+		if (stateId.HasValue && stateId.Value > 0)
+			query = query.Where(x => x.StateId == stateId.Value);
+
+		if (regionId.HasValue && regionId.Value > 0)
+			query = query.Where(x => x.Region == regionId.Value);
+
+		if (hqId.HasValue && hqId.Value > 0)
+			query = query.Where(x => x.HQ == hqId.Value);
+
+		if (!string.IsNullOrWhiteSpace(search))
+		{
+			var term = search.Trim().ToLower();
+
+			query = query.Where(x =>
+				(x.SubDealerCode != null && x.SubDealerCode.ToLower().Contains(term)) ||
+				x.FirmName.ToLower().Contains(term) ||
+				(x.OfficialContactNumber != null && x.OfficialContactNumber.ToLower().Contains(term)) ||
+				(x.WhatsAppNumber != null && x.WhatsAppNumber.ToLower().Contains(term)) ||
+				(x.GSTNumber != null && x.GSTNumber.ToLower().Contains(term)) ||
+				(x.PANNo != null && x.PANNo.ToLower().Contains(term)) ||
+				(x.WholesaleMFMSId != null && x.WholesaleMFMSId.ToLower().Contains(term)) ||
+				(x.RetailMFMSId != null && x.RetailMFMSId.ToLower().Contains(term)));
+		}
+
+		// Counts follow role + location + search filters, but not the selected
+		// status filter. This lets the page show useful Active/Inactive totals.
+		var statusCounts = await query
+			.GroupBy(x => x.Status)
+			.Select(g => new
+			{
+				Status = g.Key,
+				Count = g.Count()
+			})
+			.ToListAsync(cancellationToken);
+
+		var activeCount = statusCounts
+			.FirstOrDefault(x => x.Status == SubDealerStatus.Active)?.Count ?? 0;
+
+		var inactiveCount = statusCounts
+			.FirstOrDefault(x => x.Status == SubDealerStatus.InActive)?.Count ?? 0;
+
+		if (status.HasValue &&
+			(status.Value == (int)SubDealerStatus.Active ||
+			 status.Value == (int)SubDealerStatus.InActive))
+		{
+			var requestedStatus = (SubDealerStatus)status.Value;
+			query = query.Where(x => x.Status == requestedStatus);
+		}
+
+		var totalCount = await query.CountAsync(cancellationToken);
+		var totalPages = totalCount == 0
+			? 0
+			: (int)Math.Ceiling(totalCount / (double)pageSize);
+
+		if (totalPages > 0 && page > totalPages)
+			page = totalPages;
+
+		var skip = (page - 1) * pageSize;
+
+		var items = await query
+			.OrderBy(x => x.FirmName)
+			.ThenBy(x => x.SubDealerCode)
+			.Skip(skip)
+			.Take(pageSize)
+			.Select(x => new SubDealerListItemDto
+			{
+				Id = x.Id,
+				SubDealerCode = x.SubDealerCode ?? string.Empty,
+				FirmName = x.FirmName,
+
+				StateId = x.StateId,
+				RegionId = x.Region,
+				HQId = x.HQ,
+
+				Status = x.Status,
+
+				OfficialContactNumber = x.OfficialContactNumber,
+				WhatsAppNumber = x.WhatsAppNumber,
+
+				GSTNumber = x.GSTNumber,
+				PANNo = x.PANNo,
+
+				WholesaleMFMSId = x.WholesaleMFMSId,
+				RetailMFMSId = x.RetailMFMSId,
+
+				UpdatedAt = x.UpdatedAt
+			})
+			.ToListAsync(cancellationToken);
+
+		return Ok(new SubDealerPagedListResponse
+		{
+			Items = items,
+			Page = page,
+			PageSize = pageSize,
+			TotalCount = totalCount,
+			TotalPages = totalPages,
+			ActiveCount = activeCount,
+			InactiveCount = inactiveCount
+		});
+	}
+
+	private static SubDealerPagedListResponse EmptyPagedResult(
+		int page,
+		int pageSize)
+	{
+		return new SubDealerPagedListResponse
+		{
+			Items = new List<SubDealerListItemDto>(),
+			Page = page,
+			PageSize = pageSize,
+			TotalCount = 0,
+			TotalPages = 0,
+			ActiveCount = 0,
+			InactiveCount = 0
+		};
+	}
+
 
 	[HttpGet("{id:int}")]
 	public async Task<ActionResult<SubDealerFormModel>> GetById(
@@ -110,11 +459,11 @@ public class SubDealerRegistrationController : ControllerBase
 	}
 
 	/// <summary>
-	/// Admin-only: reads the Excel master and returns the five required text columns.
+	/// Admin / MO roles: reads the Excel master and returns the five required text columns.
 	/// State/Region/HQ names are mapped to IDs by the UI using the same LookupCache
 	/// already used by the Register page.
 	/// </summary>
-	[Authorize(Roles = "Admin")]
+	[Authorize(Roles = "Admin,MO,MDO,JMDO")]
 	[HttpPost("parse-import-excel")]
 	[RequestSizeLimit(MaxExcelImportSize)]
 	public async Task<ActionResult<SubDealerExcelParseResponse>> ParseImportExcel(
@@ -250,16 +599,26 @@ public class SubDealerRegistrationController : ControllerBase
 	}
 
 	/// <summary>
-	/// Admin-only atomic upsert. Existing code => update name + State/Region/HQ only.
+	/// Admin / MO atomic upsert. Existing code => update name + State/Region/HQ only.
 	/// New code => insert a new Active Sub Dealer with empty detail fields.
 	/// </summary>
-	[Authorize(Roles = "Admin")]
+	[Authorize(Roles = "Admin,MO,MDO,JMDO")]
 	[HttpPost("bulk-import")]
 	public async Task<ActionResult<SubDealerBulkImportResponse>> BulkImport(
 		[FromBody] SubDealerBulkImportRequest request,
 		CancellationToken cancellationToken)
 	{
 		var result = new SubDealerBulkImportResponse();
+
+		var role = CurrentRole();
+		var isMoImport = IsMoRole(role);
+		var currentHqId = CurrentHqId();
+
+		if (isMoImport && (!currentHqId.HasValue || currentHqId.Value <= 0))
+		{
+			result.Errors.Add("Your login does not have a valid HQ mapping. Excel import is not allowed.");
+			return BadRequest(result);
+		}
 
 		if (request.Rows == null || request.Rows.Count == 0)
 			return BadRequest("No Sub Dealer rows were supplied for import.");
@@ -286,6 +645,12 @@ public class SubDealerRegistrationController : ControllerBase
 			if (row.HQId <= 0)
 				result.Errors.Add($"Excel row {row.ExcelRowNumber}: HQ mapping is invalid.");
 
+			if (isMoImport && currentHqId.HasValue && row.HQId != currentHqId.Value)
+			{
+				result.Errors.Add(
+					$"Excel row {row.ExcelRowNumber}: HQ is outside your assigned MO HQ. Import is allowed only for HQ Id {currentHqId.Value}.");
+			}
+
 			if (!string.IsNullOrWhiteSpace(code) && !seenCodes.Add(code))
 				result.Errors.Add($"Excel row {row.ExcelRowNumber}: duplicate Sub Dealer Code '{code}'.");
 		}
@@ -308,6 +673,23 @@ public class SubDealerRegistrationController : ControllerBase
 				x => x.SubDealerCode!.Trim(),
 				StringComparer.OrdinalIgnoreCase);
 
+		if (isMoImport && currentHqId.HasValue)
+		{
+			foreach (var row in request.Rows)
+			{
+				var code = row.SubDealerCode.Trim();
+				if (existingByCode.TryGetValue(code, out var existing) &&
+					existing.HQ != currentHqId.Value)
+				{
+					result.Errors.Add(
+						$"Excel row {row.ExcelRowNumber}: Sub Dealer Code '{code}' belongs to another HQ and cannot be updated by this MO.");
+				}
+			}
+
+			if (result.Errors.Count > 0)
+				return BadRequest(result);
+		}
+
 		await using var transaction =
 			await _db.Database.BeginTransactionAsync(cancellationToken);
 
@@ -315,7 +697,9 @@ public class SubDealerRegistrationController : ControllerBase
 		{
 			var now = DateTime.Now;
 			var importedBy = string.IsNullOrWhiteSpace(request.ImportedBy)
-				? "Admin Excel Import"
+				? (isMoImport
+					? CurrentUserId() ?? "MO Excel Import"
+					: "Admin Excel Import")
 				: request.ImportedBy.Trim();
 
 			foreach (var row in request.Rows)
@@ -433,6 +817,26 @@ public class SubDealerRegistrationController : ControllerBase
 		if (model.Status is not SubDealerStatus.Active and not SubDealerStatus.InActive)
 			return "Only Active or Inactive status is allowed.";
 
+		if (model.Status == SubDealerStatus.Active)
+		{
+			// Wholesale mFMS ID is optional for Active Sub Dealers.
+			// Retail mFMS ID keeps the existing mandatory rule.
+			if (string.IsNullOrWhiteSpace(model.RetailMFMSId))
+				return "Retail mFMS ID is required for Active Sub Dealer.";
+
+			if (string.IsNullOrWhiteSpace(model.PANNo))
+				return "PAN No is required for Active Sub Dealer.";
+		}
+
+		// PAN is optional for Inactive, but if entered the format is still validated.
+		if (!string.IsNullOrWhiteSpace(model.PANNo) &&
+			!Regex.IsMatch(
+				model.PANNo.Trim().ToUpperInvariant(),
+				@"^[A-Z]{5}[0-9]{4}[A-Z]$"))
+		{
+			return "Invalid PAN format (e.g., ABCDE1234F).";
+		}
+
 		return null;
 	}
 
@@ -463,7 +867,17 @@ public class SubDealerRegistrationController : ControllerBase
 		entity.WhatsAppNumber = model.WhatsAppNumber ?? string.Empty;
 		entity.AlternativeNumber = model.AlternativeNumber;
 
-		
+		entity.WholesaleMFMSId = string.IsNullOrWhiteSpace(model.WholesaleMFMSId)
+			? null
+			: model.WholesaleMFMSId.Trim();
+
+		entity.RetailMFMSId = string.IsNullOrWhiteSpace(model.RetailMFMSId)
+			? null
+			: model.RetailMFMSId.Trim();
+
+		entity.PANNo = string.IsNullOrWhiteSpace(model.PANNo)
+			? null
+			: model.PANNo.Trim().ToUpperInvariant();
 
 		entity.GSTNumber = model.GSTNumber?.Trim().ToUpperInvariant();
 		entity.GSTLegalName = model.GSTLegalName;
@@ -505,7 +919,9 @@ public class SubDealerRegistrationController : ControllerBase
 			WhatsAppNumber = entity.WhatsAppNumber,
 			AlternativeNumber = entity.AlternativeNumber,
 
-			
+			WholesaleMFMSId = entity.WholesaleMFMSId,
+			RetailMFMSId = entity.RetailMFMSId,
+			PANNo = entity.PANNo,
 
 			GSTNumber = entity.GSTNumber,
 			GSTLegalName = entity.GSTLegalName,

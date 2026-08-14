@@ -82,6 +82,20 @@ namespace SpicAPI.Controllers
 
 			return Ok(await query.OrderByDescending(x => x.CreatedAt).ToListAsync());
 		}
+		[HttpGet("approved")]
+		public async Task<IActionResult> GetApprovedWarehouses()
+		{
+			var items = await _repo
+				.GetAllWithInactive()
+				.Where(x =>
+					x.IsActive &&
+					x.AVPApproved == true)
+				.AsNoTracking()
+				.OrderBy(x => x.Name)
+				.ToListAsync();
+
+			return Ok(items);
+		}
 
 		[HttpPost]
 		public override async Task<IActionResult> Create([FromBody] Warehouse entity)
@@ -229,6 +243,88 @@ namespace SpicAPI.Controllers
 					: IsStateRole(role)
 						? "Warehouse approved by SMM and moved to AVP."
 						: "Warehouse finally approved."
+			});
+		}
+
+		[HttpPost("{id}/reject")]
+		public async Task<IActionResult> Reject(int id, [FromBody] LogisticsApprovalRequest? request)
+		{
+			var entity = await _repo.GetByIdAsync(id);
+			if (entity == null) return NotFound(new { message = "Warehouse not found." });
+
+			if (!entity.IsSubmittedForReview)
+				return BadRequest(new { message = "This Warehouse is not submitted for approval." });
+
+			var remarks = request?.Remarks?.Trim();
+			if (string.IsNullOrWhiteSpace(remarks))
+				return BadRequest(new { message = "Rejection remarks are required." });
+
+			var role = CurrentRole();
+			var userId = CurrentUserId();
+			if (string.IsNullOrWhiteSpace(userId))
+				return Unauthorized(new { message = "User not logged in." });
+
+			var now = DateTime.Now;
+
+			if (IsRegionRole(role))
+			{
+				var regionId = CurrentRegionId();
+				if (!regionId.HasValue || entity.RegionId != regionId.Value)
+					return Forbid();
+
+				if (entity.RMApproved != null)
+					return BadRequest(new { message = "RM action is already completed." });
+
+				entity.RMApproved = false;
+				entity.RMApprovedBy = userId;
+				entity.RMApprovedAt = now;
+			}
+			else if (IsStateRole(role))
+			{
+				var stateId = CurrentStateId();
+				if (!stateId.HasValue || entity.BasicStateId != stateId.Value)
+					return Forbid();
+
+				if (entity.RMApproved != true)
+					return BadRequest(new { message = "RM approval is required first." });
+
+				if (entity.SMApproved != null)
+					return BadRequest(new { message = "SMM action is already completed." });
+
+				entity.SMApproved = false;
+				entity.SMApprovedBy = userId;
+				entity.SMApprovedAt = now;
+			}
+			else if (IsUnrestrictedRole(role))
+			{
+				if (entity.RMApproved != true || entity.SMApproved != true)
+					return BadRequest(new { message = "RM and SMM approval are required first." });
+
+				if (entity.AVPApproved != null)
+					return BadRequest(new { message = "Final action is already completed." });
+
+				entity.AVPApproved = false;
+				entity.AVPApprovedBy = userId;
+				entity.AVPApprovedAt = now;
+			}
+			else
+			{
+				return Forbid();
+			}
+
+			entity.ApprovalRemarks = remarks;
+			entity.UpdatedAt = now;
+			entity.UpdatedBy = userId;
+
+			await _repo.PatchAsync(id, entity);
+
+			return Ok(new
+			{
+				message = IsRegionRole(role)
+					? "Warehouse rejected by RM."
+					: IsStateRole(role)
+						? "Warehouse rejected by SMM."
+						: "Warehouse rejected by AVP."
 			});
 		}
 
@@ -496,6 +592,88 @@ namespace SpicAPI.Controllers
 					: IsStateRole(role)
 						? "Rake Point approved by SMM and moved to AVP."
 						: "Rake Point finally approved."
+			});
+		}
+
+		[HttpPost("{id}/reject")]
+		public async Task<IActionResult> Reject(int id, [FromBody] LogisticsApprovalRequest? request)
+		{
+			var entity = await _repo.GetByIdAsync(id);
+			if (entity == null) return NotFound(new { message = "Rake Point not found." });
+
+			if (!entity.IsSubmittedForReview)
+				return BadRequest(new { message = "This Rake Point is not submitted for approval." });
+
+			var remarks = request?.Remarks?.Trim();
+			if (string.IsNullOrWhiteSpace(remarks))
+				return BadRequest(new { message = "Rejection remarks are required." });
+
+			var role = CurrentRole();
+			var userId = CurrentUserId();
+			if (string.IsNullOrWhiteSpace(userId))
+				return Unauthorized(new { message = "User not logged in." });
+
+			var now = DateTime.Now;
+
+			if (IsRegionRole(role))
+			{
+				var regionId = CurrentRegionId();
+				if (!regionId.HasValue || entity.RegionId != regionId.Value)
+					return Forbid();
+
+				if (entity.RMApproved != null)
+					return BadRequest(new { message = "RM action is already completed." });
+
+				entity.RMApproved = false;
+				entity.RMApprovedBy = userId;
+				entity.RMApprovedAt = now;
+			}
+			else if (IsStateRole(role))
+			{
+				var stateId = CurrentStateId();
+				if (!stateId.HasValue || entity.BasicStateId != stateId.Value)
+					return Forbid();
+
+				if (entity.RMApproved != true)
+					return BadRequest(new { message = "RM approval is required first." });
+
+				if (entity.SMApproved != null)
+					return BadRequest(new { message = "SMM action is already completed." });
+
+				entity.SMApproved = false;
+				entity.SMApprovedBy = userId;
+				entity.SMApprovedAt = now;
+			}
+			else if (IsUnrestrictedRole(role))
+			{
+				if (entity.RMApproved != true || entity.SMApproved != true)
+					return BadRequest(new { message = "RM and SMM approval are required first." });
+
+				if (entity.AVPApproved != null)
+					return BadRequest(new { message = "Final action is already completed." });
+
+				entity.AVPApproved = false;
+				entity.AVPApprovedBy = userId;
+				entity.AVPApprovedAt = now;
+			}
+			else
+			{
+				return Forbid();
+			}
+
+			entity.ApprovalRemarks = remarks;
+			entity.UpdatedAt = now;
+			entity.UpdatedBy = userId;
+
+			await _repo.PatchAsync(id, entity);
+
+			return Ok(new
+			{
+				message = IsRegionRole(role)
+					? "Rake Point rejected by RM."
+					: IsStateRole(role)
+						? "Rake Point rejected by SMM."
+						: "Rake Point rejected by AVP."
 			});
 		}
 

@@ -35,8 +35,13 @@ public class SubDealerFileController : ControllerBase
 		if (file.Length > MaxFileSize)
 			return BadRequest("File size must be less than 5 MB.");
 
-		if (!string.Equals(Path.GetExtension(file.FileName), ".pdf", StringComparison.OrdinalIgnoreCase))
+		if (!string.Equals(
+				Path.GetExtension(file.FileName),
+				".pdf",
+				StringComparison.OrdinalIgnoreCase))
+		{
 			return BadRequest("Only PDF files are allowed for GST Certificate.");
+		}
 
 		var exists = await _db.SubDealerRegistrations
 			.AsNoTracking()
@@ -49,7 +54,12 @@ public class SubDealerFileController : ControllerBase
 		if (string.IsNullOrWhiteSpace(webRoot))
 			webRoot = Path.Combine(_environment.ContentRootPath, "wwwroot");
 
-		var relativeDirectory = Path.Combine("uploads", "subdealers", subDealerId.ToString(), "gst");
+		var relativeDirectory = Path.Combine(
+			"uploads",
+			"subdealers",
+			subDealerId.ToString(),
+			"gst");
+
 		var physicalDirectory = Path.Combine(webRoot, relativeDirectory);
 		Directory.CreateDirectory(physicalDirectory);
 
@@ -77,20 +87,34 @@ public class SubDealerFileController : ControllerBase
 		if (string.IsNullOrWhiteSpace(filePath))
 			return BadRequest("filePath is required.");
 
-		var normalizedRelative = filePath.Trim().Replace("\\", "/").TrimStart('/');
+		var normalizedRelative = filePath
+			.Trim()
+			.Replace("\\", "/")
+			.TrimStart('/');
 
-		if (!normalizedRelative.StartsWith("uploads/subdealers/", StringComparison.OrdinalIgnoreCase))
+		if (!normalizedRelative.StartsWith(
+				"uploads/subdealers/",
+				StringComparison.OrdinalIgnoreCase))
+		{
 			return BadRequest("Invalid Sub Dealer file path.");
+		}
 
 		var webRoot = _environment.WebRootPath;
 		if (string.IsNullOrWhiteSpace(webRoot))
 			webRoot = Path.Combine(_environment.ContentRootPath, "wwwroot");
 
-		var allowedRoot = Path.GetFullPath(Path.Combine(webRoot, "uploads", "subdealers"));
-		var requestedFile = Path.GetFullPath(Path.Combine(webRoot, normalizedRelative));
+		var allowedRoot = Path.GetFullPath(
+			Path.Combine(webRoot, "uploads", "subdealers"));
 
-		if (!requestedFile.StartsWith(allowedRoot, StringComparison.OrdinalIgnoreCase))
+		var requestedFile = Path.GetFullPath(
+			Path.Combine(webRoot, normalizedRelative));
+
+		if (!requestedFile.StartsWith(
+				allowedRoot,
+				StringComparison.OrdinalIgnoreCase))
+		{
 			return BadRequest("Invalid file path.");
+		}
 
 		if (System.IO.File.Exists(requestedFile))
 			System.IO.File.Delete(requestedFile);

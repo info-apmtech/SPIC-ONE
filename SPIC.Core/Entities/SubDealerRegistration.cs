@@ -39,7 +39,10 @@ public class SubDealerRegistration
 	public string WhatsAppNumber { get; set; } = string.Empty;
 	public string? AlternativeNumber { get; set; }
 
-
+	// mFMS / PAN
+	public string? WholesaleMFMSId { get; set; }
+	public string? RetailMFMSId { get; set; }
+	public string? PANNo { get; set; }
 
 	// GST only - no PAN / Aadhaar
 	public string? GSTNumber { get; set; }

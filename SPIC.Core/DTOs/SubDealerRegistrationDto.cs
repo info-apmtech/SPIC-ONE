@@ -30,6 +30,13 @@ public class SubDealerFormModel
 	public string WhatsAppNumber { get; set; } = string.Empty;
 	public string? AlternativeNumber { get; set; }
 
+	// mFMS / PAN
+	public string? WholesaleMFMSId { get; set; }
+	public string? RetailMFMSId { get; set; }
+	public string? PANNo { get; set; }
+
+	// Kept because your current DTO already contains these properties.
+	// They do not change the current Sub Dealer UI.
 	public decimal? SpicTradeDepositAmount { get; set; }
 	public string? SpicTradeDepositReceiptNo { get; set; }
 	public DateTime? SpicTradeDepositDate { get; set; }
@@ -48,6 +55,10 @@ public class SubDealerFormModel
 	public DateTime CreatedAt { get; set; }
 	public string? UpdatedBy { get; set; }
 	public DateTime UpdatedAt { get; set; }
+
+	// UI-to-API fallback when role claims are unavailable in local/dev.
+	// The server prefers the authenticated role claim when present.
+	public string? SubmittedByRole { get; set; }
 }
 
 public class SubDealerLookupDto
@@ -56,6 +67,8 @@ public class SubDealerLookupDto
 	public string SubDealerCode { get; set; } = string.Empty;
 	public string FirmName { get; set; } = string.Empty;
 	public int StateId { get; set; }
+	public int RegionId { get; set; }
+	public int HQId { get; set; }
 }
 
 public class SubDealerFileUploadResponse
@@ -109,4 +122,43 @@ public class SubDealerBulkImportResponse
 	public int Inserted { get; set; }
 	public int Updated { get; set; }
 	public List<string> Errors { get; set; } = new();
+}
+
+
+public class SubDealerListItemDto
+{
+	public int Id { get; set; }
+	public string SubDealerCode { get; set; } = string.Empty;
+	public string FirmName { get; set; } = string.Empty;
+
+	public int StateId { get; set; }
+	public int RegionId { get; set; }
+	public int HQId { get; set; }
+
+	public SubDealerStatus Status { get; set; }
+
+	public string? OfficialContactNumber { get; set; }
+	public string? WhatsAppNumber { get; set; }
+
+	public string? GSTNumber { get; set; }
+	public string? PANNo { get; set; }
+
+	public string? WholesaleMFMSId { get; set; }
+	public string? RetailMFMSId { get; set; }
+
+	public DateTime UpdatedAt { get; set; }
+}
+
+public class SubDealerPagedListResponse
+{
+	public List<SubDealerListItemDto> Items { get; set; } = new();
+
+	public int Page { get; set; }
+	public int PageSize { get; set; }
+
+	public int TotalCount { get; set; }
+	public int TotalPages { get; set; }
+
+	public int ActiveCount { get; set; }
+	public int InactiveCount { get; set; }
 }
