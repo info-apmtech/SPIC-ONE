@@ -582,23 +582,32 @@
 {
     try
     {
-        // Logistics approval-aware Warehouse list. /all returns the current
-        // role-visible Warehouse rows including final AVP approval state.
-        // ApprovedWarehouses below still keeps only Active + final-approved rows,
-        // preserving the previous selectable-facility behavior.
-        var whTask   = Http.GetFromJsonAsync<List<WarehouseEntity>>("api/Warehouse/all");
-        var rackTask = Http.GetFromJsonAsync<List<RackPoint>>("api/RackPoint");
-        var portTask = Http.GetFromJsonAsync<List<Port>>("api/Port");
+        var whTask =
+            Http.GetFromJsonAsync<List<WarehouseEntity>>(
+                "api/Warehouse/approved");
 
-        await Task.WhenAll(whTask, rackTask, portTask);
+        var rackTask =
+            Http.GetFromJsonAsync<List<RackPoint>>(
+                "api/RackPoint");
 
-        _warehouses = whTask.Result   ?? new();
+        var portTask =
+            Http.GetFromJsonAsync<List<Port>>(
+                "api/Port");
+
+        await Task.WhenAll(
+            whTask,
+            rackTask,
+            portTask);
+
+        _warehouses = whTask.Result ?? new();
         _rackPoints = rackTask.Result ?? new();
-        _ports      = portTask.Result ?? new();
+        _ports = portTask.Result ?? new();
     }
     catch (Exception ex)
     {
-        ShowMessage($"Failed to load facilities: {ex.Message}", true);
+        ShowMessage(
+            $"Failed to load facilities: {ex.Message}",
+            true);
     }
 }
 

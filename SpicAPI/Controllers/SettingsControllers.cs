@@ -82,6 +82,20 @@ namespace SpicAPI.Controllers
 
 			return Ok(await query.OrderByDescending(x => x.CreatedAt).ToListAsync());
 		}
+		[HttpGet("approved")]
+		public async Task<IActionResult> GetApprovedWarehouses()
+		{
+			var items = await _repo
+				.GetAllWithInactive()
+				.Where(x =>
+					x.IsActive &&
+					x.AVPApproved == true)
+				.AsNoTracking()
+				.OrderBy(x => x.Name)
+				.ToListAsync();
+
+			return Ok(items);
+		}
 
 		[HttpPost]
 		public override async Task<IActionResult> Create([FromBody] Warehouse entity)
