@@ -88,7 +88,6 @@ namespace SpicAPI.Controllers
 			var items = await _repo
 				.GetAllWithInactive()
 				.Where(x =>
-					x.IsActive &&
 					x.AVPApproved == true)
 				.AsNoTracking()
 				.OrderBy(x => x.Name)
