@@ -93,6 +93,69 @@ namespace SpicAPI.Controllers
 			});
 		}
 
+		[HttpGet("view/{*filePath}")]
+		public IActionResult ViewFile(string filePath)
+		{
+			var (fullPath, fileName) = ResolveFilePath(filePath);
+			if (fullPath == null)
+				return NotFound("File not found.");
+
+			var contentType = GetContentType(fileName!);
+			return PhysicalFile(fullPath, contentType);
+		}
+
+		[HttpGet("download/{*filePath}")]
+		public IActionResult DownloadFile(string filePath)
+		{
+			var (fullPath, fileName) = ResolveFilePath(filePath);
+			if (fullPath == null)
+				return NotFound("File not found.");
+
+			var contentType = GetContentType(fileName!);
+			return PhysicalFile(fullPath, contentType, fileName);
+		}
+
+		private (string? fullPath, string? fileName) ResolveFilePath(string filePath)
+		{
+			if (string.IsNullOrWhiteSpace(filePath) ||
+				filePath.Contains("..", StringComparison.Ordinal) ||
+				Path.IsPathRooted(filePath))
+				return (null, null);
+
+			var webRoot = _environment.WebRootPath;
+			if (string.IsNullOrWhiteSpace(webRoot))
+				webRoot = Path.Combine(_environment.ContentRootPath, "wwwroot");
+
+			var uploadsRoot = Path.Combine(webRoot, "uploads");
+			var relativePath = filePath.Replace('/', Path.DirectorySeparatorChar);
+			var fullPath = Path.GetFullPath(Path.Combine(uploadsRoot, relativePath));
+
+			if (!fullPath.StartsWith(uploadsRoot, StringComparison.OrdinalIgnoreCase))
+				return (null, null);
+
+			if (!System.IO.File.Exists(fullPath))
+				return (null, null);
+
+			return (fullPath, Path.GetFileName(fullPath));
+		}
+
+		private static string GetContentType(string fileName)
+		{
+			var extension = Path.GetExtension(fileName).ToLowerInvariant();
+			return extension switch
+			{
+				".pdf" => "application/pdf",
+				".jpg" or ".jpeg" => "image/jpeg",
+				".png" => "image/png",
+				".webp" => "image/webp",
+				".doc" => "application/msword",
+				".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+				".xls" => "application/vnd.ms-excel",
+				".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				_ => "application/octet-stream"
+			};
+		}
+
 		private static bool IsSupportedEntity(string value) =>
 			string.Equals(value, "Warehouse", StringComparison.OrdinalIgnoreCase) ||
 			string.Equals(value, "RackPoint", StringComparison.OrdinalIgnoreCase) ||
