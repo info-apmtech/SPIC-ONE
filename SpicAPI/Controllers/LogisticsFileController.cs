@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -44,6 +45,9 @@ namespace SpicAPI.Controllers
 			if (!IsSupportedEntity(entityType))
 				return BadRequest("entityType must be Warehouse, RackPoint or Port.");
 
+			if (string.IsNullOrWhiteSpace(documentType))
+				return BadRequest("A valid document type is required.");
+
 			if (file == null || file.Length == 0)
 				return BadRequest("Please select a file.");
 
@@ -57,10 +61,13 @@ namespace SpicAPI.Controllers
 			var safeEntityType = SanitizeSegment(entityType);
 			var safeDocumentType = SanitizeSegment(documentType);
 
-			var webRoot = _environment.WebRootPath;
-			if (string.IsNullOrWhiteSpace(webRoot))
-				webRoot = Path.Combine(_environment.ContentRootPath, "wwwroot");
+			if (string.IsNullOrWhiteSpace(safeEntityType) || string.IsNullOrWhiteSpace(safeDocumentType))
+				return BadRequest("Invalid upload path information.");
 
+			var webRoot = GetWebRoot();
+
+			// This remains compatible with the existing frontend document type keys,
+			// including Insurance, Insurance_SPIC and Insurance_GFL.
 			var folder = Path.Combine(
 				webRoot,
 				"uploads",
@@ -76,15 +83,22 @@ namespace SpicAPI.Controllers
 			if (string.IsNullOrWhiteSpace(safeBaseName))
 				safeBaseName = "document";
 
-			var storedFileName = $"{safeBaseName}_{DateTime.UtcNow:yyyyMMddHHmmssfff}_{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
+			var storedFileName =
+				$"{safeBaseName}_{DateTime.UtcNow:yyyyMMddHHmmssfff}_{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
+
 			var physicalPath = Path.Combine(folder, storedFileName);
 
-			await using (var stream = new FileStream(physicalPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+			await using (var stream = new FileStream(
+				physicalPath,
+				FileMode.CreateNew,
+				FileAccess.Write,
+				FileShare.None))
 			{
 				await file.CopyToAsync(stream);
 			}
 
-			var relativePath = $"/uploads/logistics/{safeEntityType.ToLowerInvariant()}/{entityId}/{safeDocumentType.ToLowerInvariant()}/{storedFileName}";
+			var relativePath =
+				$"/uploads/logistics/{safeEntityType.ToLowerInvariant()}/{entityId}/{safeDocumentType.ToLowerInvariant()}/{storedFileName}";
 
 			return Ok(new
 			{
@@ -97,10 +111,10 @@ namespace SpicAPI.Controllers
 		public IActionResult ViewFile(string filePath)
 		{
 			var (fullPath, fileName) = ResolveFilePath(filePath);
-			if (fullPath == null)
+			if (fullPath == null || fileName == null)
 				return NotFound("File not found.");
 
-			var contentType = GetContentType(fileName!);
+			var contentType = GetContentType(fileName);
 			return PhysicalFile(fullPath, contentType);
 		}
 
@@ -108,35 +122,62 @@ namespace SpicAPI.Controllers
 		public IActionResult DownloadFile(string filePath)
 		{
 			var (fullPath, fileName) = ResolveFilePath(filePath);
-			if (fullPath == null)
+			if (fullPath == null || fileName == null)
 				return NotFound("File not found.");
 
-			var contentType = GetContentType(fileName!);
+			var contentType = GetContentType(fileName);
 			return PhysicalFile(fullPath, contentType, fileName);
 		}
 
 		private (string? fullPath, string? fileName) ResolveFilePath(string filePath)
 		{
 			if (string.IsNullOrWhiteSpace(filePath) ||
-				filePath.Contains("..", StringComparison.Ordinal) ||
-				Path.IsPathRooted(filePath))
+				filePath.Contains("..", StringComparison.Ordinal))
+			{
+				return (null, null);
+			}
+
+			// Accept both values used by existing code:
+			//   logistics/warehouse/...
+			//   /uploads/logistics/warehouse/...
+			var normalized = filePath
+				.Replace('\\', '/')
+				.Trim();
+
+			normalized = normalized.TrimStart('/');
+
+			if (normalized.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase))
+				normalized = normalized["uploads/".Length..];
+
+			if (string.IsNullOrWhiteSpace(normalized) || Path.IsPathRooted(normalized))
 				return (null, null);
 
-			var webRoot = _environment.WebRootPath;
-			if (string.IsNullOrWhiteSpace(webRoot))
-				webRoot = Path.Combine(_environment.ContentRootPath, "wwwroot");
+			var webRoot = GetWebRoot();
+			var uploadsRoot = Path.GetFullPath(Path.Combine(webRoot, "uploads"));
 
-			var uploadsRoot = Path.Combine(webRoot, "uploads");
-			var relativePath = filePath.Replace('/', Path.DirectorySeparatorChar);
+			var relativePath = normalized.Replace('/', Path.DirectorySeparatorChar);
 			var fullPath = Path.GetFullPath(Path.Combine(uploadsRoot, relativePath));
 
-			if (!fullPath.StartsWith(uploadsRoot, StringComparison.OrdinalIgnoreCase))
+			var uploadsRootWithSeparator = uploadsRoot.TrimEnd(
+				Path.DirectorySeparatorChar,
+				Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+			if (!fullPath.StartsWith(uploadsRootWithSeparator, StringComparison.OrdinalIgnoreCase))
 				return (null, null);
 
 			if (!System.IO.File.Exists(fullPath))
 				return (null, null);
 
 			return (fullPath, Path.GetFileName(fullPath));
+		}
+
+		private string GetWebRoot()
+		{
+			var webRoot = _environment.WebRootPath;
+			if (string.IsNullOrWhiteSpace(webRoot))
+				webRoot = Path.Combine(_environment.ContentRootPath, "wwwroot");
+
+			return webRoot;
 		}
 
 		private static string GetContentType(string fileName)
