@@ -89,73 +89,161 @@
                 @* User profile - custom overlay so it never changes topbar size/background *@
                 <div class="user-profile-wrapper">
 
-                    <button class="user-profile-trigger @(_showUserMenu ? "open" : "")"
+                    <button class="user-menu-toggle @(_showUserMenu ? "open" : "")"
                             type="button"
                             title="@_userName"
+                            aria-label="Account menu"
                             aria-expanded="@_showUserMenu"
                             @onclick="ToggleUserMenu">
 
-                        <div class="user-avatar">
+                        <div class="topbar-avatar-only">
                             @GetUserInitial()
                         </div>
 
-                        <div class="user-profile-text">
-
-                            <span class="user-name">
-                                @_userName
-                            </span>
-
-                            @if (!string.IsNullOrWhiteSpace(_userRole))
-                            {
-                                <span class="user-role">
-                                    @_userRole
-                                </span>
-                            }
-
-                        </div>
-
-                        <i class="bi bi-chevron-down user-chevron"></i>
+                        <i class="bi bi-chevron-down topbar-user-chevron"></i>
 
                     </button>
 
 
                     @if (_showUserMenu)
                     {
+                        <div class="user-menu-backdrop"
+                             @onclick="CloseUserMenu">
+                        </div>
+
                         <div class="user-profile-menu">
 
-                            <div class="user-dropdown-header">
+                            @* ===== Reference-style green profile header ===== *@
+                            <div class="reference-profile-header">
 
-                                <div class="dropdown-user-avatar">
-                                    @GetUserInitial()
-                                </div>
+                                <div class="reference-header-wave"></div>
 
-                                <div class="dropdown-user-info">
+                                @* Tree Pattern *@
+                                <svg class="reference-leaf-pattern"
+                                     viewBox="0 0 190 130"
+                                     aria-hidden="true">
+                                    <g fill="none"
+                                       stroke="currentColor"
+                                       stroke-width="5"
+                                       stroke-linecap="round"
+                                       stroke-linejoin="round">
 
-                                    <div class="dropdown-user-name">
-                                        @_userName
+                                        <!-- Trunk and Branches -->
+                                        <path d="M 105,140 Q 105,80 150,45" />
+                                        <path d="M 108,95 Q 85,80 80,45" />
+                                        <path d="M 120,70 Q 135,55 140,40" />
+
+                                        <!-- Leaves -->
+                                        <path d="M 55,30 Q 75,20 75,45 Q 55,45 55,30 Z" />
+                                        <path d="M 25,65 Q 50,50 45,75 Q 20,75 25,65 Z" />
+                                        <path d="M 50,95 Q 70,85 65,110 Q 45,105 50,95 Z" />
+                                        <path d="M 85,15 Q 105,5 105,30 Q 85,30 85,15 Z" />
+                                        <path d="M 105,45 Q 120,35 115,55 Q 100,55 105,45 Z" />
+                                        <path d="M 135,10 Q 160,0 155,25 Q 130,25 135,10 Z" />
+                                        <path d="M 150,45 Q 175,35 165,60 Q 145,60 150,45 Z" />
+                                        <path d="M 130,85 Q 155,75 150,100 Q 125,100 130,85 Z" />
+                                    </g>
+                                </svg>
+
+
+                                <div class="reference-profile-user">
+
+                                    <div class="reference-avatar-wrap">
+
+                                        <div class="reference-avatar">
+                                            @if (!string.IsNullOrWhiteSpace(_profileImageUrl))
+                                            {
+                                                <img src="@_profileImageUrl"
+                                                     alt="@_userName"
+                                                     class="reference-avatar-image" />
+                                            }
+                                            else
+                                            {
+                                                <span>@GetUserInitial()</span>
+                                            }
+                                        </div>
+
+                                        @if (LoginState.CanAccess(PagePermission.Profile))
+                                        {
+                                            <button type="button"
+                                                    class="reference-edit-button"
+                                                    title="Profile"
+                                                    @onclick="GoToProfile">
+                                                
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                </svg>
+
+                                            </button>
+                                        }
+
                                     </div>
 
-                                    @if (!string.IsNullOrWhiteSpace(_userRole))
-                                    {
-                                        <div class="dropdown-user-role">
-                                            @_userRole
+
+                                    <div class="reference-user-info">
+
+                                        <div class="reference-user-name">
+                                            @_userName
                                         </div>
-                                    }
+
+                                        @if (!string.IsNullOrWhiteSpace(_userRole))
+                                        {
+                                            <div class="reference-user-role">
+                                                @_userRole
+                                            </div>
+                                        }
+
+                                    </div>
 
                                 </div>
 
                             </div>
 
-                            <div class="user-dropdown-divider"></div>
 
-                            <button class="user-logout-item"
-                                    type="button"
-                                    @onclick="Logout">
+                            @* ===== Reference-style action area ===== *@
+                            <div class="reference-profile-body">
 
-                                <i class="bi bi-box-arrow-right"></i>
-                                <span>Logout</span>
+                                @if (LoginState.CanAccess(PagePermission.Notifications))
+                                {
+                                    <button type="button"
+                                            class="reference-menu-action reference-notification"
+                                            @onclick="GoToNotifications">
 
-                            </button>
+                                        <span class="reference-action-icon">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                                            </svg>
+                                        </span>
+
+                                        <span class="reference-action-label">
+                                            Notification
+                                        </span>
+
+                                    </button>
+                                }
+
+
+                                <button type="button"
+                                        class="reference-menu-action reference-logout"
+                                        @onclick="Logout">
+
+                                    <span class="reference-action-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                            <polyline points="16 17 21 12 16 7"></polyline>
+                                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                                        </svg>
+                                    </span>
+
+                                    <span class="reference-action-label">
+                                        Log Out
+                                    </span>
+
+                                </button>
+
+                            </div>
 
                         </div>
                     }
@@ -398,19 +486,19 @@
 
             @* ================= SETTINGS ================= *@
             @if (
-                                        LoginState.CanAccess(PagePermission.LocationMaster)
-                                        || LoginState.CanAccess(PagePermission.Agriculture)
-                                        || LoginState.CanAccess(PagePermission.Logistics)
-                                        || LoginState.CanAccess(PagePermission.Financial)
-                                        || LoginState.CanAccess(PagePermission.Relationship)
-                                    )
+                                                    LoginState.CanAccess(PagePermission.LocationMaster)
+                                                    || LoginState.CanAccess(PagePermission.Agriculture)
+                                                    || LoginState.CanAccess(PagePermission.Logistics)
+                                                    || LoginState.CanAccess(PagePermission.Financial)
+                                                    || LoginState.CanAccess(PagePermission.Relationship)
+                                                )
             {
 
                 <div class="settings-menu-wrapper">
 
                     <a href="javascript:void(0);"
-                           class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
-                           @onclick="ToggleSettingsMenu">
+                       class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
+                       @onclick="ToggleSettingsMenu">
 
                         <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg"
                              class="SideBariconimg" />
@@ -418,8 +506,8 @@
                         Settings
 
                         <i class="bi @(isSettingsOpen
-                                                                                                                                          ? "bi-chevron-up"
-                                                                                                                                          : "bi-chevron-down") chevron-icon">
+                                                                                                                                                                             ? "bi-chevron-up"
+                                                                                                                                                                             : "bi-chevron-down") chevron-icon">
                         </i>
 
                     </a>
@@ -550,13 +638,8 @@
         }
 
 
-    /* ================= USER PROFILE - TOPBAR SAFE ================= */
+    /* ================= ACCOUNT MENU TRIGGER ================= */
 
-    /*
-           Important:
-           This wrapper does not set topbar height, width or background.
-           The popup is absolute, so opening it cannot push/stretch the topbar.
-        */
     .user-profile-wrapper {
         position: relative;
         display: flex;
@@ -565,209 +648,435 @@
         background: transparent;
     }
 
-    .user-profile-trigger {
+    .user-menu-toggle {
+        position: relative;
+        z-index: 1103;
         display: inline-flex;
         align-items: center;
-        gap: 10px;
+        justify-content: center;
+        gap: 7px;
         margin: 0;
         padding: 0;
         border: 0;
         outline: 0;
-        background: transparent !important;
-        box-shadow: none !important;
+        background: transparent;
+        box-shadow: none;
         cursor: pointer;
-        font: inherit;
-        color: inherit;
     }
 
-        .user-profile-trigger:hover,
-        .user-profile-trigger:focus,
-        .user-profile-trigger:active,
-        .user-profile-trigger.open {
-            border: 0;
-            outline: 0;
-            background: transparent !important;
-            box-shadow: none !important;
-        }
-
-
-    /* Avatar */
-    .user-avatar {
+    .topbar-avatar-only {
         width: 38px;
         height: 38px;
         min-width: 38px;
-        border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #198754;
+        border-radius: 50%;
+        background: #168a57;
         color: #ffffff;
-        font-size: 15px;
-        font-weight: 600;
-        text-transform: uppercase;
-        user-select: none;
-    }
-
-
-    /* Name + Role */
-    .user-profile-text {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        justify-content: center;
-        min-width: 78px;
-        max-width: 170px;
-        line-height: 1.2;
-        text-align: left;
-    }
-
-    .user-name {
-        max-width: 170px;
-        color: #172033;
-        font-size: 14px;
-        font-weight: 600;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .user-role {
-        max-width: 170px;
-        margin-top: 3px;
-        color: #198754;
-        font-size: 11px;
-        font-weight: 500;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .user-chevron {
-        margin-left: 2px;
-        color: #8a94a3;
-        font-size: 11px;
-        transition: transform 0.18s ease;
-    }
-
-    .user-profile-trigger.open .user-chevron {
-        transform: rotate(180deg);
-    }
-
-
-    /* Popup menu - absolute overlay, DOES NOT participate in topbar layout */
-    .user-profile-menu {
-        position: absolute;
-        top: calc(100% + 12px);
-        right: 0;
-        z-index: 1100;
-        width: 235px;
-        padding: 8px;
-        border: 1px solid #e9edf0;
-        border-radius: 14px;
-        background: #ffffff;
-        box-shadow: 0 14px 38px rgba(20, 34, 28, 0.13);
-    }
-
-    .user-dropdown-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 9px;
-    }
-
-    .dropdown-user-avatar {
-        width: 42px;
-        height: 42px;
-        min-width: 42px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #eaf7ef;
-        color: #198754;
         font-size: 15px;
         font-weight: 700;
         text-transform: uppercase;
         user-select: none;
+        transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
     }
 
-    .dropdown-user-info {
+    .topbar-user-chevron {
+        color: #8a94a3;
+        font-size: 11px;
+        line-height: 1;
+        transition: transform 0.18s ease, color 0.18s ease;
+    }
+
+    .user-menu-toggle:hover .topbar-user-chevron,
+    .user-menu-toggle:focus .topbar-user-chevron {
+        color: #08794a;
+    }
+
+    .user-menu-toggle.open .topbar-user-chevron {
+        color: #08794a;
+        transform: rotate(180deg);
+    }
+
+    .user-menu-toggle:hover,
+    .user-menu-toggle:focus {
+        outline: none;
+        background: transparent;
+        box-shadow: none;
+    }
+
+        .user-menu-toggle:hover .topbar-avatar-only,
+        .user-menu-toggle:focus .topbar-avatar-only {
+            background: #0f7c4c;
+            box-shadow: 0 4px 12px rgba(15, 124, 76, 0.20);
+            transform: translateY(-1px);
+        }
+
+    .user-menu-toggle.open .topbar-avatar-only {
+        background: #0d7145;
+        box-shadow: 0 0 0 3px rgba(13, 113, 69, 0.12);
+    }
+
+    .user-menu-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 1099;
+        background: transparent;
+        cursor: default;
+    }
+
+
+    /* ================= PROFESSIONAL PROFILE CARD ================= */
+
+    .user-profile-menu {
+        position: absolute;
+        top: calc(100% + 12px);
+        right: 0;
+        z-index: 1102;
+        width: 350px; /* Widened slightly to match figma proportions */
+        padding: 0;
+        border: none;
+        border-radius: 20px; /* Softer rounded corners */
+        background: #ffffff;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+        animation: userMenuIn 0.16s ease-out;
+    }
+
+    @@keyframes userMenuIn {
+        from {
+            opacity: 0;
+            transform: translateY(-5px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+
+    /* Green header */
+    .reference-profile-header {
+        position: relative;
+        min-height: 145px;
+        overflow: hidden;
+        background: #0B7542; /* Updated to exact Figma tone */
+        border-top-left-radius: 20px;
+        border-top-right-radius: 20px;
+    }
+
+    /* Large overlay circle on the left */
+    .reference-header-wave {
+        position: absolute;
+        left: -50px;
+        top: -60px;
+        width: 220px;
+        height: 220px;
+        border-radius: 50%;
+        background: #148351;
+        pointer-events: none;
+    }
+
+    /* Tree pattern styling */
+    .reference-leaf-pattern {
+        position: absolute;
+        right: -10px;
+        top: 0px;
+        width: 170px;
+        height: 145px;
+        color: rgba(255, 255, 255, 0.12);
+        pointer-events: none;
+    }
+
+
+    /* Header user info positioning */
+    .reference-profile-user {
+        position: relative;
+        z-index: 2;
+        min-height: 145px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 28px 24px;
+    }
+
+    .reference-avatar-wrap {
+        position: relative;
+        flex: 0 0 auto;
+    }
+
+    /* Circular avatar */
+    .reference-avatar {
+        width: 76px;
+        height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border: 4px solid #ffffff; 
+        border-radius: 50%;
+        background: #ffffff;
+        color: #0d7042;
+        font-size: 26px;
+        font-weight: 700;
+        text-transform: uppercase;
+        user-select: none;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    .reference-avatar-image {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+    }
+
+    /* Small overlapping edit button */
+    .reference-edit-button {
+        position: absolute;
+        right: -2px;
+        bottom: -2px;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: none;
+        border-radius: 8px; 
+        background: #ffffff;
+        color: #0b7542;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        cursor: pointer;
+    }
+
+        .reference-edit-button:hover,
+        .reference-edit-button:focus {
+            outline: none;
+            background: #f0fdf4;
+        }
+
+        .reference-edit-button svg {
+            width: 15px;
+            height: 15px;
+            stroke-width: 2.2;
+        }
+
+    .reference-user-info {
         min-width: 0;
         flex: 1;
     }
 
-    .dropdown-user-name {
-        max-width: 155px;
-        color: #172033;
-        font-size: 14px;
+    /* Text styling */
+    .reference-user-name {
+        max-width: 200px;
+        color: #ffffff;
+        font-size: 22px;
         font-weight: 600;
-        white-space: nowrap;
+        line-height: 1.2;
+        margin-bottom: 4px;
         overflow: hidden;
-        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow-wrap: anywhere;
+        letter-spacing: 0.3px;
     }
 
-    .dropdown-user-role {
-        max-width: 155px;
-        margin-top: 3px;
-        color: #7b8492;
-        font-size: 12px;
-        font-weight: 500;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+    .reference-user-role {
+        max-width: 200px;
+        color: #E2F2EA;
+        font-size: 15px;
+        font-weight: 400;
+        line-height: 1.2;
+        white-space: normal;
+        overflow-wrap: anywhere;
     }
 
-    .user-dropdown-divider {
-        height: 1px;
-        margin: 4px 2px 6px;
-        background: #edf0f2;
+
+    /* White action body with buttons */
+    .reference-profile-body {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 24px;
+        background: #ffffff;
+        border-bottom-left-radius: 20px;
+        border-bottom-right-radius: 20px;
     }
 
-    .user-logout-item {
+    /* Base button styling */
+    .reference-menu-action {
         width: 100%;
+        height: 56px;
         display: flex;
         align-items: center;
-        gap: 9px;
-        padding: 9px 10px;
-        border: 0;
-        border-radius: 9px;
-        background: transparent;
-        color: #4f5968;
-        font-size: 13px;
-        font-weight: 500;
-        text-align: left;
+        gap: 16px;
+        padding: 0 20px;
+        border: none;
+        border-radius: 12px;
         cursor: pointer;
+        text-align: left;
+        transition: transform 0.1s ease, filter 0.1s ease;
     }
 
-        .user-logout-item:hover,
-        .user-logout-item:focus {
+        .reference-menu-action:hover,
+        .reference-menu-action:focus {
             outline: none;
-            background: #fff2f2;
-            color: #dc3545;
+            transform: scale(0.99);
+            filter: brightness(0.97);
         }
+
+    .reference-action-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .reference-action-icon svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .reference-action-label {
+        font-size: 17px;
+        font-weight: 500;
+        line-height: 1;
+    }
+
+    /* Notification Button Colors */
+    .reference-notification {
+        background: #ECFCF3;
+        color: #107445;
+    }
+
+    /* Log Out Button Card Design - Full Override */
+    .reference-logout {
+        height: auto !important;
+        padding: 20px !important;
+        gap: 16px !important;
+        background: #FEEFEA !important;
+        color: #D84C4B !important;
+        border-radius: 16px !important;
+        border: none !important;
+        display: flex !important;
+        align-items: center !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+    }
+
+    .reference-logout:hover,
+    .reference-logout:focus {
+        outline: none;
+        background: #FCDCDA !important;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(216, 76, 75, 0.15);
+    }
+
+    .reference-logout:active {
+        transform: translateY(0);
+    }
+
+    .reference-logout .reference-action-label {
+        font-size: 18px;
+        font-weight: 500;
+    }
+
+    .reference-logout .reference-action-icon {
+        flex: 0 0 auto;
+        display: inline-flex;
+    }
+
+    .reference-logout .reference-action-icon svg {
+        width: 24px;
+        height: 24px;
+    }
 
 
     /* ================= RESPONSIVE ================= */
     @@media (max-width: 768px) {
 
-        .user-profile-text,
-        .user-chevron {
-            display: none;
+        .user-menu-toggle {
+            min-height: 34px;
+            padding: 2px 4px;
         }
 
-        .user-avatar {
-            width: 34px;
-            height: 34px;
-            min-width: 34px;
-            font-size: 13px;
+        .topbar-user-text {
+            max-width: 120px;
         }
 
+        .topbar-user-name,
         .user-profile-menu {
-            width: 220px;
-            top: calc(100% + 10px);
+            width: min(330px, calc(100vw - 24px));
+            right: -2px;
+            top: calc(100% + 8px);
+        }
+
+        .reference-profile-header,
+        .reference-profile-user {
+            min-height: 126px;
+        }
+
+        .reference-profile-user {
+            gap: 16px;
+            padding: 22px;
+        }
+
+        .reference-avatar {
+            width: 66px;
+            height: 66px;
+            font-size: 22px;
+        }
+
+        .reference-edit-button {
+            width: 26px;
+            height: 26px;
+        }
+
+        .reference-user-name {
+            max-width: 180px;
+            font-size: 19px;
+        }
+
+        .reference-user-role {
+            max-width: 180px;
+            font-size: 14px;
+        }
+
+        .reference-profile-body {
+            gap: 14px;
+            padding: 22px;
+        }
+
+        .reference-menu-action {
+            height: 52px;
+            gap: 14px;
+            padding: 0 18px;
+        }
+
+        .reference-logout {
+            height: auto !important;
+            padding: 18px !important;
+            gap: 14px !important;
+        }
+
+        .reference-logout .reference-action-label {
+            font-size: 15.5px;
+        }
+
+        .reference-logout .reference-action-icon svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        .reference-action-icon svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        .reference-action-label {
+            font-size: 15.5px;
         }
     }
-
 </style>
 
 
@@ -791,6 +1100,9 @@
     private string _userName = "User";
 
     private string _userRole = "";
+
+    // Optional profile photo from JWT. If unavailable, the user's initial is shown.
+    private string? _profileImageUrl;
 
 
     /* =========================================================
@@ -880,6 +1192,26 @@
     private void ToggleUserMenu()
     {
         _showUserMenu = !_showUserMenu;
+    }
+
+
+    private void CloseUserMenu()
+    {
+        _showUserMenu = false;
+    }
+
+
+    private void GoToNotifications()
+    {
+        _showUserMenu = false;
+        Navigation.NavigateTo("/Notifications");
+    }
+
+
+    private void GoToProfile()
+    {
+        _showUserMenu = false;
+        Navigation.NavigateTo("/Profile");
     }
 
 
@@ -1014,6 +1346,18 @@
                     "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
                 )
                 ?? "";
+
+
+            _profileImageUrl =
+                GetJwtClaim(
+                    root,
+                    "picture",
+                    "profile_image",
+                    "profileImage",
+                    "ProfileImage",
+                    "ProfileImageUrl",
+                    "profile_image_url"
+                );
         }
         catch
         {
@@ -1025,6 +1369,8 @@
             _userName = "User";
 
             _userRole = "";
+
+            _profileImageUrl = null;
         }
     }
 
@@ -1280,6 +1626,8 @@
 
         _userRole = "";
 
+        _profileImageUrl = null;
+
 
         try
         {
@@ -1364,6 +1712,8 @@
         _userName = "User";
 
         _userRole = "";
+
+        _profileImageUrl = null;
 
 
         try
