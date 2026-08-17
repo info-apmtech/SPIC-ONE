@@ -106,6 +106,16 @@ namespace SpicAPI.Controllers
 			var now = DateTime.Now;
 			var role = CurrentRole();
 
+			// Server-side duplicate SAP Code check.
+			if (!string.IsNullOrWhiteSpace(entity.WarehouseCode))
+			{
+				var sapCode = entity.WarehouseCode.Trim();
+				if (await _repo.ExistsAsync(x => x.WarehouseCode != null && x.WarehouseCode.Trim() == sapCode))
+				{
+					return Conflict(new { message = $"Warehouse with SAP Code '{sapCode}' already exists." });
+				}
+			}
+
 			// Existing incoming business fields are untouched.
 			// Creator / workflow fields are server-owned.
 			entity.CreatedBy = userId;
@@ -149,6 +159,16 @@ namespace SpicAPI.Controllers
 			// Preserve every workflow-owned value so that normal edit/document saves cannot
 			// accidentally clear creator or approval state through GenericRepository.PatchAsync.
 			PreserveApprovalState(existing, entity);
+
+			// Server-side duplicate SAP Code check (exclude current record).
+			if (!string.IsNullOrWhiteSpace(entity.WarehouseCode))
+			{
+				var sapCode = entity.WarehouseCode.Trim();
+				if (await _repo.ExistsAsync(x => x.Id != id && x.WarehouseCode != null && x.WarehouseCode.Trim() == sapCode))
+				{
+					return Conflict(new { message = $"Warehouse with SAP Code '{sapCode}' already exists." });
+				}
+			}
 
 			var userId = CurrentUserId();
 			entity.UpdatedAt = DateTime.Now;

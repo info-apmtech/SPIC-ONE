@@ -2673,6 +2673,18 @@
                 _errors["SapCode"] = $"Rake Point with SAP Code '{sapCode}' already exists.";
         }
 
+        // Client-side duplicate SAP Code check for Warehouse.
+        if (IsWarehouseTab && !string.IsNullOrWhiteSpace(_form.SapCode) && !_errors.ContainsKey("SapCode"))
+        {
+            var sapCode = _form.SapCode.Trim();
+            bool duplicateExists = _warehouseAll.Any(x =>
+                string.Equals(x.WarehouseCode, sapCode, StringComparison.OrdinalIgnoreCase) &&
+                (!_editingId.HasValue || x.Id != _editingId.Value));
+
+            if (duplicateExists)
+                _errors["SapCode"] = $"Warehouse with SAP Code '{sapCode}' already exists.";
+        }
+
         if (string.IsNullOrWhiteSpace(_form.Name))
             _errors["Name"] = $"{ActiveTabDisplayName} name is required.";
 
