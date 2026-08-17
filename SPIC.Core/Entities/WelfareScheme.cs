@@ -1,54 +1,12 @@
 namespace SPIC.Core.Entities;
 
 
-public class WelfareScheme
-{
-	public int Id { get; set; }                                          // Primary key
-	public string SchemeName { get; set; } = string.Empty;               // Name of the scheme (e.g. "Grahapravesam")
-	public string? Description { get; set; }                             // Short summary shown on the scheme card
-	public string? Category { get; set; }                                // Grouping used by the filter tabs (e.g. "Family Welfare", "Medical", "Education", "Emergency Support")
-	public int? DocumentsRequired { get; set; }                          // Number of documents displayed on the card (e.g. "2 required")
-	public string? EligibilityDescription { get; set; }                  // Eligibility conditions text shown at the top of the apply form
-	public bool IsActive { get; set; } = true;                           // Whether the scheme is visible/enabled for applications
-
-	// Audit
-	public string? CreatedBy { get; set; }                               // User who created the scheme record
-	public DateTime CreatedAt { get; set; } = DateTime.Now;              // When the scheme record was created
-	public string? UpdatedBy { get; set; }                               // User who last updated the scheme record
-	public DateTime UpdatedAt { get; set; } = DateTime.Now;              // When the scheme record was last updated
-
-	// Relationships
-	public ICollection<WelfareApplication> Applications { get; set; } = new List<WelfareApplication>();                        // All welfare applications raised against this scheme
-	public ICollection<WelfareSchemeDocumentRequirement> DocumentRequirements { get; set; } = new List<WelfareSchemeDocumentRequirement>(); // List of documents a dealer must upload for this scheme
-}
-
-public class WelfareSchemeDocumentRequirement
-{
-	public int Id { get; set; }                                          // Primary key
-	public int WelfareSchemeId { get; set; }                             // FK to the WelfareScheme this requirement belongs to
-	public WelfareScheme? WelfareScheme { get; set; }                    // Navigation to the parent scheme
-
-	public string? DocumentType { get; set; }                            // Category of the document (e.g. "Invitation", "Proof", "ID Card")
-	public string? DocumentName { get; set; }                            // Display name shown on the upload UI (e.g. "House Ownership Proof")
-	public bool IsMandatory { get; set; } = true;                        // Whether the dealer must upload this document to submit
-	public string? AllowedFileTypes { get; set; }                        // Accepted formats, comma separated (e.g. "PDF,JPG,PNG")
-	public long? MaxFileSize { get; set; }                               // Maximum file size in bytes (e.g. 5MB = 5242880)
-	public bool IsActive { get; set; } = true;                           // Whether this requirement is currently enforced
-
-	// Audit
-	public string? CreatedBy { get; set; }                               // User who created the requirement
-	public DateTime CreatedAt { get; set; } = DateTime.Now;              // When the requirement was created
-	public string? UpdatedBy { get; set; }                               // User who last updated the requirement
-	public DateTime UpdatedAt { get; set; } = DateTime.Now;              // When the requirement was last updated
-}
-
 public class WelfareApplication
 {
 	public int Id { get; set; }                                          // Primary key
 	public int DealerId { get; set; }                                    // FK to the DealerRegistration applying for the scheme
 	public DealerRegistration? Dealer { get; set; }                      // Navigation to the applying dealer
-	public int WelfareSchemeId { get; set; }                             // FK to the WelfareScheme being applied for
-	public WelfareScheme? WelfareScheme { get; set; }                    // Navigation to the applied scheme
+	public WelfareSchemeType SchemeName { get; set; }                      // Which scheme this application is for
 
 	// Application Information
 	public string? ApplicationNumber { get; set; }                       // Generated reference shown to user/office (e.g. "SDWA-GH-2025-00847")
@@ -62,11 +20,7 @@ public class WelfareApplication
 	public string? MobileNumber { get; set; }                            // Dealer mobile number copied at submission
 	public string? Region { get; set; }                                  // Region name copied at submission
 	public string? District { get; set; }                                // District name copied at submission
-
-	// Quantity / Eligibility
-	public int? FinancialYearId { get; set; }                            // FK to the FinancialYear selected on the form
-	public FinancialYear? FinancialYear { get; set; }                    // Navigation to the selected financial year
-	public decimal? QuantityLifted { get; set; }                         // Cases/quantity lifted in the selected financial year
+	public int? QuantityLifted { get; set; }                         // Cases/quantity lifted in the selected financial year
 
 	// Beneficiary Information
 	public string? BeneficiaryName { get; set; }                         // Name of the person receiving the benefit
@@ -76,6 +30,45 @@ public class WelfareApplication
 	public string? NomineeRelationship { get; set; }                     // Nominee's relationship to the dealer
 	public string? BeneficiaryNameAsInCheque { get; set; }               // Name exactly as printed on the cheque leaf / bank passbook
 	public string? LeafOrBankPassbook { get; set; }                      // Which document the name was taken from (e.g. "Cheque Leaf" / "Bank Passbook")
+
+	// Scheme-specific: Wedding Gift
+	public DateTime? MarriageDate { get; set; }                           // Date of marriage for Wedding Gift scheme
+
+	// Scheme-specific: Grahapravesam
+	public DateTime? EventDate { get; set; }                              // Date of function/event (Grahapravesam, Sathabhishekam)
+	public string? OwnershipType { get; set; }                            // Owned / Rented for Grahapravesam
+	public string? EventVenue { get; set; }                               // Venue if different from house address
+
+	// Scheme-specific: Educational Assistance
+	public string? Course { get; set; }                                   // Course name
+	public int? EduYear { get; set; }                                  // Year of study (1st, 2nd, 3rd, 4th)
+	public string? CollegeName { get; set; }                              // Name of the college
+	public int? TotalNumberOfCourses { get; set; }                        // Total number of years/duration of the course
+	public bool? IsFirstApplication { get; set; }                         // First-time or renewal (null = unknown, true = first, false = renewal)
+
+	// Scheme-specific: Medical Assistance
+	public string? MedicalTreatmentType { get; set; }                    // Type of treatment / medical condition (e.g. Surgery, Hospitalization, Cancer treatment)
+
+	// Scheme-specific: Merit Award
+	public string? MeritCandidateName { get; set; }                       // Name of the candidate
+	public string? MeritFatherName { get; set; }                          // Father's name of the candidate
+	public string? ExaminationAppeared { get; set; }                      // 10th or 12th
+	public string? BoardName { get; set; }                                // Name of the examination board
+	public int? MaximumMarks { get; set; }                                // Maximum marks for the examination
+	public int? MarksObtained { get; set; }                               // Marks obtained by the candidate
+	public double? MeritPercentage { get; set; }                          // Calculated percentage (Marks Obtained / Maximum Marks * 100)
+
+	// Scheme-specific: Distinction Award
+	public string? DistinctionCandidateName { get; set; }                // Name of the candidate
+	public string? DistinctionFatherName { get; set; }                   // Father's name of the candidate
+	public string? ProfessionalCourseName { get; set; }                  // Name of the professional course completed
+	public string? CourseCompletionYear { get; set; }                    // Year of course completion
+	public string? UniversityName { get; set; }                          // University / institution name
+	public int? DistinctionMaximumMarks { get; set; }                    // Total / maximum marks for the course
+	public int? DistinctionMarksObtained { get; set; }                   // Marks obtained in the course
+	public double? DistinctionAggregatePercentage { get; set; }          // Calculated aggregate percentage
+	public bool? HasArrears { get; set; }                                // Whether the candidate has any arrears (true = has arrears, false = no arrears)
+	public bool? IsWholesaleDealerEmployee { get; set; }                 // Whether the candidate is an approved employee of a wholesale dealer (TN only)
 
 	// Declaration
 	public bool IsDeclarationConfirmed { get; set; }                     // Whether the dealer ticked the declaration checkbox before submitting
@@ -146,5 +139,17 @@ public enum WelfareApprovalStatus
     Pending = 0,   // Approval step not yet acted upon
     Approved = 1,  // Level approved/recommended and forwarded
     Rejected = 2   // Level rejected the application
+}
+
+public enum WelfareSchemeType
+{
+    MedicalAssistance = 0,
+    Wedding = 1,
+    Grahapravesam = 2,
+    EducationalAssistance = 3,
+    Sathabhishekam = 4,
+    DeathRelief = 5,
+    MeritAward = 6,
+    DistinctionAward = 7
 }
 

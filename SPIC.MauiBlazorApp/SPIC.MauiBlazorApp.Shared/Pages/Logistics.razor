@@ -364,6 +364,55 @@
         font-size: .78rem;
     }
 
+    .lm-doc-entry {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 0;
+        font-size: .76rem;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+        .lm-doc-entry:last-child {
+            border-bottom: none;
+        }
+
+    .lm-doc-entry-company {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: .66rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .lm-doc-entry-company.spic {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .lm-doc-entry-company.gfl {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .lm-doc-entry-name {
+        color: #374151;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
+    }
+
+    .lm-doc-entry-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: auto;
+        white-space: nowrap;
+    }
+
     @@media (max-width: 991.98px) {
         .lm-doc-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1895,6 +1944,7 @@
                 <th>SAP Code</th>
                 @if (IsWarehouseTab)
                 {
+                    <th>Company</th>
                     <th>Category</th>
                 }
                 <th>Operated By</th>
@@ -1956,6 +2006,25 @@
                 <td><span class="lm-table-code">@GetDisplayCode(item)</span></td>
                 @if (IsWarehouseTab)
                 {
+                    <td>
+                        @if (item.InSpic == true && item.InGreenStar == true)
+                        {
+                            <span class="lm-doc-entry-company spic">SPIC</span>
+                            <span class="lm-doc-entry-company gfl">Green Star</span>
+                        }
+                        else if (item.InSpic == true)
+                        {
+                            <span class="lm-doc-entry-company spic">SPIC</span>
+                        }
+                        else if (item.InGreenStar == true)
+                        {
+                            <span class="lm-doc-entry-company gfl">Green Star</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                    </td>
                     <td>@GetWarehouseCategoryDisplay(GetWarehouseCategory(item))</td>
                 }
                 <td>@GetOperatedByDisplay(item.OperatedBy)</td>
@@ -1983,12 +2052,29 @@
                 @if (IsWarehouseTab)
                 {
                     <td>
-                        <div class="action-icons">
-                            <i class="bi @(_isDownloadingDocuments ? "bi-hourglass-split" : "bi-download") lm-download-icon"
-                               title="Download Documents"
-                               style="cursor:pointer"
-                               @onclick="() => DownloadWarehouseDocuments(item)"></i>
-                        </div>
+                        @{ var docEntries = GetItemDocumentEntries(item); }
+                        @if (docEntries.Count == 0)
+                        {
+                            <span class="text-muted small">No documents</span>
+                        }
+                        else
+                        {
+                            @foreach (var entry in docEntries)
+                            {
+                                <div class="lm-doc-entry">
+                                    <span class="lm-doc-entry-name" title="@GetFileName(entry.Path)">@entry.TypeName</span>
+                                    <span class="lm-doc-entry-actions">
+                                        <i class="bi @(_isDownloadingDocuments ? "bi-hourglass-split" : "bi-download") lm-download-icon"
+                                           title="Download @entry.TypeName"
+                                           style="cursor:pointer"
+                                           @onclick="() => DownloadSingleDocument(entry.Path)"></i>
+                                        <i class="bi bi-eye lm-doc-viewable"
+                                           title="View @entry.TypeName"
+                                           @onclick="() => ViewLogisticsDocument(entry.Path)"></i>
+                                    </span>
+                                </div>
+                            }
+                        }
                     </td>
                 }
                 @if (CanShowLogisticsActionColumn)
@@ -3441,6 +3527,19 @@
         {
             columns.Add(new ExportColumn<LogisticsItemDto>
             {
+                Header = "Company",
+                ValueSelector = item =>
+                {
+                    var spic = item.InSpic == true;
+                    var gfl = item.InGreenStar == true;
+                    if (spic && gfl) return "SPIC, Green Star";
+                    if (spic) return "SPIC";
+                    if (gfl) return "Green Star";
+                    return "";
+                }
+            });
+            columns.Add(new ExportColumn<LogisticsItemDto>
+            {
                 Header = "Category",
                 ValueSelector = item => GetWarehouseCategoryDisplay(GetWarehouseCategory(item))
             });
@@ -3864,6 +3963,75 @@
         if (string.IsNullOrWhiteSpace(path)) return string.Empty;
         var normalized = path.Replace('\\', '/');
         return normalized[(normalized.LastIndexOf('/') + 1)..];
+    }
+
+    private static string GetDocumentTypeName(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return "Document";
+        var normalized = path.Replace('\\', '/').ToLowerInvariant();
+        if (normalized.Contains("/gst_spic/")) return "SPIC GST";
+        if (normalized.Contains("/gst_gfl/")) return "GREEN STAR GST";
+        if (normalized.Contains("/gst_trading/")) return "Trading Document";
+        if (normalized.Contains("/insurance_spic/")) return "SPIC Insurance";
+        if (normalized.Contains("/insurance_gfl/")) return "GREEN STAR Insurance";
+        if (normalized.Contains("/insurance/")) return "Insurance Document";
+        if (normalized.Contains("/fertilizerlicense_spic/")) return "SPIC Fertilizer License";
+        if (normalized.Contains("/fertilizerlicense_gfl/")) return "GREEN STAR Fertilizer License";
+        if (normalized.Contains("/other/")) return "Other Document";
+        var name = GetFileName(path);
+        return string.IsNullOrWhiteSpace(name) ? "Document" : name;
+    }
+
+    private static string? GetDocumentCompany(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        var normalized = path.Replace('\\', '/').ToLowerInvariant();
+        if (normalized.Contains("/gst_spic/") || normalized.Contains("/insurance_spic/") || normalized.Contains("/fertilizerlicense_spic/"))
+            return "SPIC";
+        if (normalized.Contains("/gst_gfl/") || normalized.Contains("/insurance_gfl/") || normalized.Contains("/fertilizerlicense_gfl/"))
+            return "Green Star";
+        return null;
+    }
+
+    private List<(string Path, string TypeName, string? Company)> GetItemDocumentEntries(LogisticsItemDto item)
+    {
+        var entries = new List<(string Path, string TypeName, string? Company)>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddEntry(string? p)
+        {
+            if (string.IsNullOrWhiteSpace(p) || !seen.Add(p)) return;
+            entries.Add((p, GetDocumentTypeName(p), GetDocumentCompany(p)));
+        }
+
+        AddEntry(item.GstDocumentPath);
+        AddEntry(item.InsuranceDocumentPath);
+        AddEntry(item.FertilizerLicenseDocumentPath);
+        foreach (var p in DeserializeDocumentPaths(item.OtherDocumentPathsJson))
+            AddEntry(p);
+
+        return entries;
+    }
+
+    private async Task DownloadSingleDocument(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        _isDownloadingDocuments = true;
+        StateHasChanged();
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync(BuildLogisticsFileUrl("download", path, includeToken: false));
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", GetFileName(path), GetLogisticsContentType(path), base64);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to download document: {ex.Message}", true);
+        }
+        finally
+        {
+            _isDownloadingDocuments = false;
+        }
     }
 
     private async Task ViewLogisticsDocument(string? path)

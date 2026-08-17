@@ -121,8 +121,6 @@ namespace Spic.Infrastructure.Data
         public DbSet<SubDealerRegistration> SubDealerRegistrations { get; set; }
 
         //// Welfare Scheme
-        //public DbSet<WelfareScheme> WelfareSchemes { get; set; }
-        //public DbSet<WelfareSchemeDocumentRequirement> WelfareSchemeDocumentRequirements { get; set; }
         //public DbSet<WelfareApplication> WelfareApplications { get; set; }
         //public DbSet<WelfareApplicationDocument> WelfareApplicationDocuments { get; set; }
         //public DbSet<WelfareApplicationApproval> WelfareApplicationApprovals { get; set; }
