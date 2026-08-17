@@ -1,171 +1,631 @@
 ﻿@page "/StockDetails"
+@implements IDisposable
+@inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
+@using System.Text.Json
+@using System.Net.Http.Json
+@using System.Globalization
+@using SPIC.Core.DTOs
 
-<div class="container-fluid py-4 px-0">
-    <div class="sd-wrapper">
+<div class="sd-wrapper">
 
-        <!-- Page Header -->
-        <div class="sd-page-header">
-            <div class="sd-title-block">
-                <div class="sd-title-row">
-                    <h1>Stock Details</h1>
-                    <div class="sd-badges">
-                        <span class="sd-badge"><i class="bi bi-calendar3"></i> Date as on: 07 Apr 2025</span>
-                        <span class="sd-badge"><i class="bi bi-calendar-event"></i> Month: April 2025</span>
-                    </div>
+    <!-- Page Header -->
+    <div class="sd-header-section">
+        <div class="sd-header-left">
+            <div class="sd-title-area">
+                <h1>Stock Details</h1>
+                <div class="sd-badges">
+                    <span class="sd-badge"><i class="bi bi-calendar3"></i> Date as on: @(_dashboard is null ? "—" : _dashboard.Labels.ClosingAsOn)</span>
+                    <span class="sd-badge"><i class="bi bi-calendar-event"></i> Period: @(_dateFrom?.ToString("dd MMM yyyy") ?? "—") – @(_dateTo?.ToString("dd MMM yyyy") ?? "—")</span>
                 </div>
-                <p>Consolidated stock and sales updated daily</p>
             </div>
-            <div class="sd-actions">
-                <button class="sd-btn sd-btn-outline"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
-                <button class="sd-btn sd-btn-outline"><i class="bi bi-file-earmark-spreadsheet" style="color:#16A34A"></i> Excel</button>
-                <button class="sd-btn sd-btn-outline"><i class="bi bi-file-earmark-pdf" style="color:#DC2626"></i> PDF</button>
-                <button class="sd-btn sd-btn-primary"><i class="bi bi-envelope"></i> Send Mail</button>
-            </div>
+            <p class="sd-subtitle">Consolidated stock and sales updated daily</p>
         </div>
-
-        <!-- KPI Cards -->
-        <div class="sd-kpi-grid">
-
-            <div class="sd-kpi-card sd-kpi-purple">
-                <div class="sd-kpi-info">
-                    <div class="sd-kpi-label">Total Stock</div>
-                    <div class="sd-kpi-value">43,092</div>
-                </div>
-                <div class="sd-kpi-icon">
-                    <i class="bi bi-bag-fill"></i>
-                </div>
-            </div>
-
-            <div class="sd-kpi-card sd-kpi-green">
-                <div class="sd-kpi-info">
-                    <div class="sd-kpi-label">Total Sales</div>
-                    <div class="sd-kpi-value">6,087</div>
-                </div>
-                <div class="sd-kpi-icon">
-                    <i class="bi bi-cart-check-fill"></i>
-                </div>
-            </div>
-
-            <div class="sd-kpi-card sd-kpi-yellow">
-                <div class="sd-kpi-info">
-                    <div class="sd-kpi-label">Closing Stock</div>
-                    <div class="sd-kpi-value">37,005</div>
-                </div>
-                <div class="sd-kpi-icon">
-                    <i class="bi bi-shield-lock-fill"></i>
-                </div>
-            </div>
-
-            <div class="sd-kpi-card sd-kpi-teal">
-                <div class="sd-kpi-info">
-                    <div class="sd-kpi-label">Sales %</div>
-                    <div class="sd-kpi-value">14%</div>
-                </div>
-                <div class="sd-kpi-icon">
-                    <i class="bi bi-bag-check-fill"></i>
-                </div>
-            </div>
-
+        <div class="sd-header-actions">
+            <button class="btn-custom" disabled="@_isLoading" @onclick="RefreshData"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+            <button class="btn-custom" disabled="@(_dashboard is null || _isLoading)" @onclick="ExportExcel"><i class="bi bi-file-earmark-spreadsheet" style="color:#16A34A"></i> Excel</button>
+            <button class="btn-custom" disabled="@(_dashboard is null || _isLoading)" @onclick="ExportPdf"><i class="bi bi-file-earmark-pdf" style="color:#DC2626"></i> PDF</button>
+            <button class="btn-custom btn-primary-custom" disabled="@(_dashboard is null || _isLoading)" @onclick="SendMail"><i class="bi bi-envelope"></i> Mail</button>
         </div>
+    </div>
 
-        <!-- Filter Card -->
-        <div class="sd-card">
-            <div class="sd-filters-header">
-                <span><i class="bi bi-filter-left"></i> Filters</span>
-                <i class="bi bi-chevron-down sd-toggle-icon"></i>
-            </div>
+    <!-- Filter Card -->
+    <div class="sd-card">
+        <div class="sd-filters-header">
+            <span><i class="bi bi-filter-left"></i> Filters</span>
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="sd-filters-body">
             <div class="sd-filters-grid">
                 <div class="sd-form-group">
+                    <label>From Date</label>
+                    <input type="date" class="sd-form-control" disabled="@(!_masterDataLoaded)" @bind="_dateFrom" />
+                </div>
+                <div class="sd-form-group">
+                    <label>To Date</label>
+                    <input type="date" class="sd-form-control" disabled="@(!_masterDataLoaded)" @bind="_dateTo" />
+                </div>
+                <div class="sd-form-group">
+                    <label>Financial Year</label>
+                    <select id="sd-fy-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)">
+                        @foreach (var fy in _financialYears)
+                        {
+                            <option value="@fy.Id" selected="@(_selFinancialYears.Contains(fy.Id))">@fy.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="sd-form-group">
                     <label>State</label>
-                    <select class="sd-control sd-select">
-                        <option value="" disabled selected hidden>All State</option>
+                    <select id="sd-state-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)">
+                        @foreach (var s in _states)
+                        {
+                            <option value="@s.Id" selected="@(_selStates.Contains(s.Id))">@s.Name</option>
+                        }
                     </select>
                 </div>
             </div>
             <div class="sd-filter-actions">
-                <button class="sd-btn sd-btn-ghost"><i class="bi bi-x-lg"></i> Clear All</button>
-                <button class="sd-btn sd-btn-primary"><i class="bi bi-funnel"></i> Apply Filters</button>
+                <button class="btn-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ClearAll"><i class="bi bi-x"></i> Clear All</button>
+                <button class="btn-custom btn-primary-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ApplyFilters"><i class="bi bi-funnel"></i> Search</button>
             </div>
         </div>
-
-        <!-- Table Card -->
-        <div class="sd-card">
-            <div class="sd-table-head">
-                <h2 class="sd-table-title">Stock List</h2>
-                <div class="sd-search">
-                    <i class="bi bi-search"></i>
-                    <input type="text" placeholder="Search zones..." />
-                </div>
-            </div>
-
-            <div class="sd-table-wrap">
-                <table class="sd-table">
-                    <thead>
-                        <tr>
-                            <th class="sd-th-check"><input type="checkbox" /></th>
-                            <th>State</th>
-                            <th>Opening Stock <span class="sd-th-sub">(as on 1 Apr)</span></th>
-                            <th>Supplies <span class="sd-th-sub">(April)</span></th>
-                            <th>Total Stock</th>
-                            <th>Sales <span class="sd-th-sub">(1-6 Apr)</span></th>
-                            <th>Sales <span class="sd-th-sub">(7 Apr)</span></th>
-                            <th>Total Sales</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @for (int i = 0; i < 5; i++)
-                        {
-                            <tr>
-                                <td><input type="checkbox" /></td>
-                                <td class="sd-cell-left">Tamil Nadu</td>
-                                <td>16,338</td>
-                                <td>571</td>
-                                <td>22,055</td>
-                                <td>571</td>
-                                <td>639</td>
-                                <td>1,210</td>
-                            </tr>
-                        }
-                        <tr class="sd-grand-total">
-                            <td></td>
-                            <td class="sd-cell-left">Grand Total</td>
-                            <td>35,113</td>
-                            <td>7,978</td>
-                            <td>43,092</td>
-                            <td>43,092</td>
-                            <td>43,092</td>
-                            <td>43,092</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Pagination -->
-            <div class="sd-pagination">
-                <div class="sd-page-size">
-                    <span>Items Per Page</span>
-                    <select class="sd-control sd-select sd-page-select">
-                        <option>16</option>
-                        <option>25</option>
-                    </select>
-                </div>
-                <div class="sd-page-controls">
-                    <button class="sd-page-btn"><i class="bi bi-chevron-left"></i></button>
-                    <button class="sd-page-btn sd-page-active">1</button>
-                    <button class="sd-page-btn">2</button>
-                    <button class="sd-page-btn">3</button>
-                    <span class="sd-page-ellipsis">..</span>
-                    <button class="sd-page-btn">8</button>
-                    <button class="sd-page-btn">9</button>
-                    <button class="sd-page-btn">10</button>
-                    <button class="sd-page-btn"><i class="bi bi-chevron-right"></i></button>
-                </div>
-            </div>
-        </div>
-
     </div>
+
+    @if (_dashboard is null)
+    {
+        @if (_isLoading)
+        {
+            <div class="sd-loading-layout" aria-busy="true" aria-label="Loading stock details">
+                <div class="sd-kpi-grid">
+                    @for (var i = 0; i < 4; i++)
+                    {
+                        <div class="sd-kpi-card sd-skeleton-card">
+                            <div class="sd-kpi-info">
+                                <div class="sd-skeleton sd-skeleton-label"></div>
+                                <div class="sd-skeleton sd-skeleton-value"></div>
+                            </div>
+                            <div class="sd-skeleton sd-skeleton-icon"></div>
+                        </div>
+                    }
+                </div>
+
+                <div class="sd-card sd-skeleton-table-card">
+                    <div class="sd-table-header">
+                        <div class="sd-skeleton sd-skeleton-title"></div>
+                        <div class="sd-skeleton sd-skeleton-search"></div>
+                    </div>
+                    <div class="sd-skeleton-table">
+                        <div class="sd-skeleton sd-skeleton-table-head"></div>
+                        @for (var i = 0; i < 7; i++)
+                        {
+                            <div class="sd-skeleton-row">
+                                <div class="sd-skeleton sd-skeleton-cell sd-skeleton-cell-wide"></div>
+                                <div class="sd-skeleton sd-skeleton-cell"></div>
+                                <div class="sd-skeleton sd-skeleton-cell"></div>
+                                <div class="sd-skeleton sd-skeleton-cell"></div>
+                                <div class="sd-skeleton sd-skeleton-cell"></div>
+                                <div class="sd-skeleton sd-skeleton-cell"></div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="sd-empty-state">
+                <i class="bi bi-exclamation-circle"></i>
+                <div>@(_loadError is null ? "No Data Available" : $"Could not load report: {_loadError}")</div>
+                <button type="button" class="btn-custom" @onclick="RefreshData">Try Again</button>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="@(_isLoading ? "sd-dashboard-shell is-updating" : "sd-dashboard-shell")">
+            @if (_isLoading)
+            {
+                <div class="sd-update-indicator" role="status">
+                    <span class="sd-update-spinner"></span>
+                    Updating…
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_loadError))
+            {
+                <div class="sd-inline-error">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    @_loadError
+                </div>
+            }
+
+            <!-- KPI Cards -->
+            <div class="sd-kpi-grid">
+                <div class="sd-kpi-card sd-kpi-purple">
+                    <div class="sd-kpi-info">
+                        <div class="sd-kpi-label">Total Stock</div>
+                        <div class="sd-kpi-value">@Fmt(_dashboard.Summary.TotalStock)</div>
+                    </div>
+                    <div class="sd-kpi-icon-box"><i class="bi bi-box-seam"></i></div>
+                </div>
+
+                <div class="sd-kpi-card sd-kpi-green">
+                    <div class="sd-kpi-info">
+                        <div class="sd-kpi-label">Total Sales</div>
+                        <div class="sd-kpi-value">@Fmt(_dashboard.Summary.TotalSales)</div>
+                    </div>
+                    <div class="sd-kpi-icon-box"><i class="bi bi-box-arrow-down"></i></div>
+                </div>
+
+                <div class="sd-kpi-card sd-kpi-yellow">
+                    <div class="sd-kpi-info">
+                        <div class="sd-kpi-label">Closing Stock</div>
+                        <div class="sd-kpi-value">@Fmt(_dashboard.Summary.ClosingStock)</div>
+                    </div>
+                    <div class="sd-kpi-icon-box"><i class="bi bi-safe"></i></div>
+                </div>
+
+                <div class="sd-kpi-card sd-kpi-teal">
+                    <div class="sd-kpi-info">
+                        <div class="sd-kpi-label">Sales %</div>
+                        <div class="sd-kpi-value">@Math.Round(_dashboard.Summary.SalesPct)%</div>
+                    </div>
+                    <div class="sd-kpi-icon-box"><i class="bi bi-tags"></i></div>
+                </div>
+            </div>
+
+            <!-- Table Card -->
+            <div class="sd-card">
+                <div class="sd-table-header">
+                    <h2 class="sd-table-title">Stock List</h2>
+                    <div class="sd-search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Search state..." disabled="@_isLoading" @bind="_filter.Search" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+                    </div>
+                </div>
+
+                <div class="sd-table-responsive">
+                    <table class="sd-table">
+                        <thead>
+                            <tr>
+                                <th class="text-start sd-sortable" @onclick='() => Sort("state")'>State</th>
+                                <th>Opening Stock <span>(as on @_dashboard.Labels.OpeningAsOn)</span></th>
+                                <th>Supplies <span>(@_dashboard.Labels.SuppliesMonth)</span></th>
+                                <th class="sd-sortable" @onclick='() => Sort("totalstock")'>Total Stock</th>
+                                <th>Sales <span>(@_dashboard.Labels.SalesBeforeRange)</span></th>
+                                <th>Sales <span>(@_dashboard.Labels.SalesOnDay)</span></th>
+                                <th class="sd-sortable" @onclick='() => Sort("totalsales")'>Total Sales</th>
+                                <th class="sd-sortable" @onclick='() => Sort("closing")'>Closing Stock <span>(as on @_dashboard.Labels.ClosingAsOn)</span></th>
+                                <th class="sd-sortable" @onclick='() => Sort("salespct")'>Sales %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_dashboard.Grid.Items.Count == 0)
+                            {
+                                <tr><td class="text-start" colspan="9" style="text-align:center; padding:24px; color:#94a3b8;">No Data Available</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _dashboard.Grid.Items)
+                                {
+                                    <tr>
+                                        <td class="text-start">@row.StateName</td>
+                                        <td>@Fmt(row.OpeningStock)</td>
+                                        <td>@Fmt(row.Supplies)</td>
+                                        <td>@Fmt(row.TotalStock)</td>
+                                        <td>@Fmt(row.SalesBefore)</td>
+                                        <td>@Fmt(row.SalesOnDay)</td>
+                                        <td>@Fmt(row.TotalSales)</td>
+                                        <td>@Fmt(row.ClosingStock)</td>
+                                        <td>@Math.Round(row.SalesPct)%</td>
+                                    </tr>
+                                }
+
+                                <tr class="sd-grand-total">
+                                    <td class="text-start">Grand Total</td>
+                                    <td>@Fmt(_dashboard.GrandTotal.OpeningStock)</td>
+                                    <td>@Fmt(_dashboard.GrandTotal.Supplies)</td>
+                                    <td>@Fmt(_dashboard.GrandTotal.TotalStock)</td>
+                                    <td>@Fmt(_dashboard.GrandTotal.SalesBefore)</td>
+                                    <td>@Fmt(_dashboard.GrandTotal.SalesOnDay)</td>
+                                    <td>@Fmt(_dashboard.GrandTotal.TotalSales)</td>
+                                    <td>@Fmt(_dashboard.GrandTotal.ClosingStock)</td>
+                                    <td>@Math.Round(_dashboard.GrandTotal.SalesPct)%</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div class="sd-pagination-bar">
+                    <div class="sd-page-size">
+                        <span>Items Per Page</span>
+                        <select @onchange="OnPageSizeChanged">
+                            <option value="16" selected="@(_filter.PageSize == 16)">16</option>
+                            <option value="25" selected="@(_filter.PageSize == 25)">25</option>
+                            <option value="50" selected="@(_filter.PageSize == 50)">50</option>
+                        </select>
+                    </div>
+                    <div class="sd-page-controls">
+                        <button class="sd-page-btn" disabled="@(_filter.Page <= 1)" @onclick="() => GoToPage(_filter.Page - 1)"><i class="bi bi-chevron-left"></i></button>
+                        @foreach (var pg in PageNumbers())
+                        {
+                            if (pg == -1)
+                            {
+                                <button class="sd-page-btn ellipsis" disabled>..</button>
+                            }
+                            else
+                            {
+                                <button class="sd-page-btn @(pg == _filter.Page ? "active" : "")" @onclick="() => GoToPage(pg)">@pg</button>
+                            }
+                        }
+                        <button class="sd-page-btn" disabled="@(_filter.Page >= TotalPages)" @onclick="() => GoToPage(_filter.Page + 1)"><i class="bi bi-chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 @code {
+    private static readonly CultureInfo InIN = new("en-IN");
+    private string Fmt(decimal v) => v.ToString("#,##0", InIN);
 
+    private StockDetailsDto? _dashboard;
+    private readonly StockDetailsFilter _filter = new();
+    private bool _isLoading = true;
+    private bool _masterDataLoaded;
+    private bool _select2Initialized;
+    private bool _disposed;
+    private string? _loadError;
+    private CancellationTokenSource? _loadCts;
+    private System.Timers.Timer? _searchDebounce;
+
+    // Filter inputs
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+
+    private int TotalPages => _dashboard is null || _dashboard.Grid.PageSize == 0
+        ? 1 : (int)Math.Ceiling((double)_dashboard.Grid.TotalCount / _dashboard.Grid.PageSize);
+
+    private List<LocationDto> _states = new();
+    private List<int> _selStates = new();
+
+    private List<FinancialYearDto> _financialYears = new();
+    private List<int> _selFinancialYears = new();
+
+    private DotNetObjectReference<StockDetails>? _objRef;
+
+    public class LocationDto { public int Id { get; set; } public string Name { get; set; } = ""; }
+    public class FinancialYearDto { public int Id { get; set; } public string Name { get; set; } = ""; public DateTime? StartDate { get; set; } public DateTime? EndDate { get; set; } }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Start both requests together so the filter masters and dashboard do not
+        // wait for one another during the first page load.
+        var dashboardTask = LoadDashboard();
+        var masterDataTask = LoadMasterData();
+
+        try
+        {
+            await masterDataTask;
+            _masterDataLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Could not load filter data: {ex.Message}";
+            Console.WriteLine($"[StockDetails] master: {ex}");
+        }
+
+        await InvokeAsync(StateHasChanged);
+        await dashboardTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_masterDataLoaded || _select2Initialized || _disposed) return;
+
+        _select2Initialized = true;
+        try
+        {
+            _objRef ??= DotNetObjectReference.Create(this);
+            await InitSelect2();
+        }
+        catch (Exception ex)
+        {
+            _select2Initialized = false;
+            Console.WriteLine($"[StockDetails] select2: {ex}");
+        }
+    }
+
+    private async Task LoadMasterData()
+    {
+        var statesTask = FetchData("api/State/all");
+        var fyTask = FetchFinancialYears("api/FinancialYear/all");
+        await Task.WhenAll(statesTask, fyTask);
+        var allStates = statesTask.Result;
+        _financialYears = fyTask.Result;
+
+        // Role-based visibility
+        if (LoginState != null && !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP))
+        {
+            if (LoginState.IsHQRole && LoginState.HQId > 0)
+            {
+                // restrict to HQ's state
+                var stateId = allStates.FirstOrDefault(s => s.Id == LoginState.StateId)?.Id ?? LoginState.StateId;
+                _states = allStates.Where(s => s.Id == stateId).ToList();
+            }
+            else if (LoginState.IsRegionRole && LoginState.RegionId > 0)
+            {
+                var stateId = LoginState.StateId;
+                _states = allStates.Where(s => s.Id == stateId).ToList();
+            }
+            else if (LoginState.IsStateRole && LoginState.StateId > 0)
+            {
+                _states = allStates.Where(s => s.Id == LoginState.StateId).ToList();
+            }
+            else
+            {
+                _states = allStates;
+            }
+        }
+        else
+        {
+            _states = allStates;
+        }
+    }
+
+    private async Task LoadDashboard()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        _loadCts = cts;
+        var token = cts.Token;
+
+        _isLoading = true;
+        _loadError = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            using var resp = await Http.PostAsJsonAsync("api/StockDetails/dashboard", _filter, token);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<StockDetailsDto>(cancellationToken: token);
+                if (result is null)
+                    _loadError = "The server returned an empty dashboard response.";
+                else
+                    _dashboard = result;
+            }
+            else
+            {
+                // Keep already displayed data visible when a refresh/filter request fails.
+                _loadError = $"Server returned {(int)resp.StatusCode} {resp.ReasonPhrase}.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (!ReferenceEquals(_loadCts, cts)) return;
+            _loadError = "Request timed out — the server took too long to respond.";
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+        finally
+        {
+            if (ReferenceEquals(_loadCts, cts))
+            {
+                _isLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private void SyncSelectionsToFilter()
+    {
+        _filter.DateFrom = _dateFrom;
+        _filter.DateTo = _dateTo;
+        _filter.FinancialYearIds = _selFinancialYears.ToList();
+        _filter.StateIds = _selStates.ToList();
+    }
+
+    private async Task ApplyFilters() { SyncSelectionsToFilter(); _filter.Page = 1; await LoadDashboard(); }
+    private async Task RefreshData() => await LoadDashboard();
+
+    private async Task ClearAll()
+    {
+        _selStates.Clear();
+        _selFinancialYears.Clear();
+        _dateFrom = _dateTo = null;
+        SyncSelectionsToFilter(); _filter.Search = null; _filter.Page = 1;
+        await InvokeAsync(StateHasChanged);
+        if (_select2Initialized)
+            await RefreshSelect2();
+        await LoadDashboard();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || page > TotalPages || page == _filter.Page) return;
+        _filter.Page = page; await LoadDashboard();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var size)) { _filter.PageSize = size; _filter.Page = 1; await LoadDashboard(); }
+    }
+
+    private async Task Sort(string column)
+    {
+        if (_filter.SortColumn == column) _filter.SortDir = _filter.SortDir == "asc" ? "desc" : "asc";
+        else { _filter.SortColumn = column; _filter.SortDir = "asc"; }
+        await LoadDashboard();
+    }
+
+    private void OnSearchKeyUp()
+    {
+        _searchDebounce?.Stop();
+        _searchDebounce?.Dispose();
+
+        _searchDebounce = new System.Timers.Timer(400) { AutoReset = false };
+        _searchDebounce.Elapsed += async (_, _) =>
+        {
+            if (_disposed) return;
+
+            try
+            {
+                await InvokeAsync(async () =>
+                {
+                    _filter.Page = 1;
+                    await LoadDashboard();
+                });
+            }
+            catch (ObjectDisposedException)
+            {
+                // Component was closed while the debounce timer was waiting.
+            }
+        };
+        _searchDebounce.Start();
+    }
+
+    private IEnumerable<int> PageNumbers()
+    {
+        int total = TotalPages, current = _filter.Page;
+        if (total <= 7) { for (int i = 1; i <= total; i++) yield return i; yield break; }
+        yield return 1;
+        if (current > 4) yield return -1;
+        for (int i = Math.Max(2, current - 1); i <= Math.Min(total - 1, current + 1); i++) yield return i;
+        if (current < total - 3) yield return -1;
+        yield return total;
+    }
+
+    private async Task ExportExcel() { SyncSelectionsToFilter(); await JS.InvokeVoidAsync("spicDownload.post", "api/StockDetails/export/excel", _filter, "StockDetails.xlsx"); }
+    private async Task ExportPdf() { SyncSelectionsToFilter(); await JS.InvokeVoidAsync("spicDownload.post", "api/StockDetails/export/pdf", _filter, "StockDetails.pdf"); }
+    private async Task SendMail() { SyncSelectionsToFilter(); await Http.PostAsJsonAsync("api/StockDetails/send-mail", _filter); }
+
+    // ---- Select2 (Financial Year + State) ----
+    private async Task InitSelect2()
+    {
+        if (_objRef is null) return;
+
+        var configs = new[]
+        {
+            new { id = "sd-fy-select",    method = nameof(OnFinancialYearChanged) },
+            new { id = "sd-state-select", method = nameof(OnStateChanged) }
+        };
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    [JSInvokable]
+    public async Task OnFinancialYearChanged(List<string>? v)
+    {
+        _selFinancialYears = (v ?? new List<string>())
+            .Select(value => int.TryParse(value, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+        if (_selFinancialYears.Count == 0)
+        {
+            _dateFrom = _dateTo = null;
+        }
+        else
+        {
+            var fyItems = _financialYears.Where(x => _selFinancialYears.Contains(x.Id)).ToList();
+            if (fyItems.Count > 0)
+            {
+                _dateFrom = fyItems.Min(x => x.StartDate);
+                _dateTo = fyItems.Max(x => x.EndDate);
+            }
+            else
+            {
+                _dateFrom = _dateTo = null;
+            }
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnStateChanged(List<string>? v)
+    {
+        _selStates = (v ?? new List<string>())
+            .Select(value => int.TryParse(value, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+        StateHasChanged();
+    }
+
+    private async Task RefreshSelect2()
+    {
+        await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", new[] { "sd-fy-select", "sd-state-select" });
+        await Task.Delay(50);
+        await InitSelect2();
+    }
+
+    private async Task<List<LocationDto>> FetchData(string url)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var raw = await Http.GetFromJsonAsync<List<JsonElement>>(url, cts.Token);
+            var list = new List<LocationDto>();
+            if (raw == null) return list;
+            foreach (var item in raw)
+            {
+                var id = item.GetProperty("id").GetInt32();
+                string name = "";
+                if (item.TryGetProperty("name", out var n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("stateName", out n)) name = n.GetString() ?? "";
+                list.Add(new LocationDto { Id = id, Name = name });
+            }
+            return list;
+        }
+        catch { return new List<LocationDto>(); }
+    }
+
+    private async Task<List<FinancialYearDto>> FetchFinancialYears(string url)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var raw = await Http.GetFromJsonAsync<List<JsonElement>>(url, cts.Token);
+            var list = new List<FinancialYearDto>();
+            if (raw == null) return list;
+            foreach (var item in raw)
+            {
+                var dto = new FinancialYearDto { Id = item.GetProperty("id").GetInt32() };
+
+                if (item.TryGetProperty("name", out var n)) dto.Name = n.GetString() ?? "";
+                else if (item.TryGetProperty("financialYearName", out n)) dto.Name = n.GetString() ?? "";
+                else if (item.TryGetProperty("financialYear", out n)) dto.Name = n.GetString() ?? "";
+                else if (item.TryGetProperty("label", out n)) dto.Name = n.GetString() ?? "";
+                else if (item.TryGetProperty("year", out n)) dto.Name = n.ToString();
+
+                if (item.TryGetProperty("startDate", out var sd) && DateTime.TryParse(sd.GetString(), out var s)) dto.StartDate = s;
+                else if (item.TryGetProperty("fromDate", out sd) && DateTime.TryParse(sd.GetString(), out s)) dto.StartDate = s;
+
+                if (item.TryGetProperty("endDate", out var ed) && DateTime.TryParse(ed.GetString(), out var e)) dto.EndDate = e;
+                else if (item.TryGetProperty("toDate", out ed) && DateTime.TryParse(ed.GetString(), out e)) dto.EndDate = e;
+
+                list.Add(dto);
+            }
+            return list;
+        }
+        catch { return new List<FinancialYearDto>(); }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _searchDebounce?.Stop();
+        _searchDebounce?.Dispose();
+        _objRef?.Dispose();
+    }
 }

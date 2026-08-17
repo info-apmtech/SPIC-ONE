@@ -76,7 +76,7 @@
 /* --- Statistics Grid --- */
 .cs-stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 20px;
     margin-bottom: 24px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -897,6 +897,142 @@
         cursor: default;
     }
 
+/* Global Box Sizing */
+.spic-sr-container,
+.spic-sr-container *,
+.spic-sr-container *::before,
+.spic-sr-container *::after {
+    box-sizing: border-box;
+}
+
+/* Tooltip Hover Logic for Company Sales Chart */
+.cs-bar-group {
+    width: 50px;
+    height: calc(100% - 24px);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    border-left: 1px dashed #e2e8f0;
+    border-right: 1px dashed #e2e8f0;
+    cursor: pointer;
+    flex-shrink: 0; /* CRITICAL: Prevents bars from squishing on mobile */
+}
+
+.cs-chart-tooltip {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: all 0.2s ease-in-out;
+    transform: translateY(5px);
+    z-index: 20 !important;
+}
+
+.cs-bar-group:hover .cs-chart-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* Makes the dashed background column highlight on hover */
+.cs-bar-bg {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: #fef2f2;
+}
+
+.cs-bar-group:hover .cs-bar-bg {
+    opacity: 0.6 !important;
+}
+
+/* Chart Scroll Wrappers */
+.cs-chart-scroll-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 15px; /* Prevents scrollbar from covering labels */
+}
+
+.cs-chart-inner-area {
+    min-width: 800px; /* CRITICAL: Forces minimum width so it scrolls instead of squishing */
+    display: flex;
+    height: 320px;
+    font-family: sans-serif;
+    color: #94a3b8;
+    font-size: 11px;
+}
+
+/* Table Scroll Wrapper */
+.cs-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.cs-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1000px; /* Forces table to scroll on mobile */
+}
+
+/* Tabs Styling */
+.cs-table-header {
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.cs-tabs-wrapper {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.cs-tab {
+    padding: 8px 16px;
+    border: 1px solid transparent;
+    background: transparent;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+    .cs-tab.active {
+        background: #f1f5f9;
+        color: #0f172a;
+        font-weight: 600;
+    }
+
+    .cs-tab:hover:not(.active) {
+        background: #f8fafc;
+    }
+
+/* Mobile specifically */
+@media (max-width: 768px) {
+    .cs-table-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .cs-search-input {
+        width: 100%;
+        max-width: 100%;
+    }
+}
+
+
 /* --- Responsive Queries --- */
 @media (max-width: 1280px) {
     .cs-stats-grid {
@@ -964,3 +1100,589 @@
     }
 }
 
+/* ============================================================
+   PENDING ACKNOWLEDGEMENT: INITIAL RENDER + SELECT2 + LOADING UI
+   ============================================================ */
+
+.cs-page-container,
+.cs-page-container *,
+.cs-page-container *::before,
+.cs-page-container *::after {
+    box-sizing: border-box;
+}
+
+.cs-btn:disabled,
+.cs-tab:disabled,
+.cs-page-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+    .cs-btn:disabled:hover {
+        transform: none;
+    }
+
+/* Hide the browser's expanded native multiple-select while Select2 attaches. */
+.cs-page-container .cs-form-group {
+    position: relative;
+    min-width: 0;
+}
+
+.cs-page-container select.cs-form-select[multiple]:not(.select2-hidden-accessible) {
+    display: block !important;
+    width: 100% !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+}
+
+/* Temporary closed-field visual. It disappears as soon as Select2 adds its class. */
+.cs-page-container .cs-form-group:has(> select.cs-form-select[multiple]:not(.select2-hidden-accessible))::after {
+    content: "Select an option";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    padding: 0 40px 0 12px;
+    overflow: hidden;
+    color: #94a3b8;
+    font-size: 13px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    background-color: #fafafa;
+    border: 1px solid #f1f5f9;
+    border-radius: 8px;
+    pointer-events: none;
+}
+
+.cs-page-container .cs-form-group:has(> select.cs-form-select[multiple]:not(.select2-hidden-accessible))::before {
+    content: "";
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 3;
+    width: 7px;
+    height: 7px;
+    border-right: 1.5px solid #94a3b8;
+    border-bottom: 1.5px solid #94a3b8;
+    transform: rotate(45deg);
+    pointer-events: none;
+}
+
+/* Select2 sizing and appearance, scoped to this page. */
+.cs-page-container .select2-container {
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+.cs-page-container .select2-container--default .select2-selection--multiple {
+    width: 100% !important;
+    min-height: 38px !important;
+    height: auto !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    padding: 3px 42px 3px 6px !important;
+    color: #334155 !important;
+    background-color: #fafafa !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 12px center !important;
+    border: 1px solid #f1f5f9 !important;
+    border-radius: 8px !important;
+    outline: none !important;
+}
+
+.cs-page-container .select2-container--default.select2-container--focus .select2-selection--multiple,
+.cs-page-container .select2-container--default.select2-container--open .select2-selection--multiple {
+    border-color: #3b82f6 !important;
+}
+
+.cs-page-container .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 4px;
+    margin: 0 !important;
+    padding: 0 !important;
+    list-style: none !important;
+}
+
+.cs-page-container .select2-search--inline {
+    display: block !important;
+    flex: 1 1 120px !important;
+    min-width: 80px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+    .cs-page-container .select2-search--inline .select2-search__field {
+        width: 100% !important;
+        min-width: 80px !important;
+        height: 28px !important;
+        margin: 0 !important;
+        padding: 0 4px !important;
+        color: #334155 !important;
+        font-family: inherit !important;
+        font-size: 13px !important;
+        line-height: 28px !important;
+        background: transparent !important;
+        border: 0 !important;
+        outline: none !important;
+    }
+
+/* Selected chip and right-aligned individual remove button. */
+.cs-page-container .select2-container--default .select2-selection--multiple .select2-selection__choice {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    max-width: calc(100% - 4px);
+    min-height: 26px;
+    margin: 1px 0 !important;
+    padding: 3px 27px 3px 8px !important;
+    overflow: hidden;
+    color: #334155 !important;
+    font-size: 12px !important;
+    line-height: 18px !important;
+    background-color: #e8eef7 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 5px !important;
+}
+
+.cs-page-container .select2-container--default .select2-selection--multiple .select2-selection__choice__display {
+    display: block;
+    max-width: 100%;
+    padding: 0 !important;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.cs-page-container .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+    position: absolute !important;
+    top: 50% !important;
+    right: 3px !important;
+    left: auto !important;
+    width: 20px !important;
+    height: 20px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #64748b !important;
+    font-size: 0 !important;
+    line-height: 1 !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    transform: translateY(-50%);
+    cursor: pointer !important;
+    z-index: 2;
+}
+
+    .cs-page-container .select2-container--default .select2-selection--multiple .select2-selection__choice__remove::before {
+        content: "\00D7";
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1;
+    }
+
+    .cs-page-container .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+        color: #0f172a !important;
+        background-color: #cbd5e1 !important;
+    }
+
+.cs-page-container .select2-container--default .select2-selection--multiple .select2-selection__clear {
+    position: absolute !important;
+    top: 50% !important;
+    right: 32px !important;
+    height: 20px !important;
+    margin: 0 !important;
+    color: #64748b !important;
+    font-size: 16px !important;
+    line-height: 20px !important;
+    transform: translateY(-50%);
+}
+
+/* Initial loading and background-refresh behaviour. */
+.cs-dashboard-skeleton,
+.cs-dashboard-content {
+    position: relative;
+    min-height: 480px;
+}
+
+.cs-loading-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 14px 2px;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.cs-inline-spinner {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    border: 2px solid #dbeafe;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: cs-spin 0.75s linear infinite;
+}
+
+.cs-refresh-indicator {
+    position: sticky;
+    top: 12px;
+    z-index: 40;
+    width: max-content;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px auto;
+    padding: 7px 12px;
+    color: #1d4ed8;
+    font-size: 12px;
+    font-weight: 700;
+    background: rgba(239, 246, 255, 0.96);
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.12);
+}
+
+.cs-dashboard-warning,
+.cs-empty-state {
+    padding: 14px 16px;
+    color: #b45309;
+    font-size: 13px;
+    text-align: center;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+}
+
+.cs-empty-state {
+    margin-top: 8px;
+    padding: 48px 20px;
+    color: #64748b;
+    background: #ffffff;
+    border-color: #e2e8f0;
+}
+
+.cs-dashboard-warning {
+    margin-bottom: 16px;
+}
+
+.cs-dashboard-content.is-refreshing > :not(.cs-refresh-indicator):not(.cs-dashboard-warning) {
+    opacity: 0.62;
+    filter: grayscale(12%);
+    pointer-events: none;
+    transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+/* Skeleton shimmer blocks. */
+.cs-skeleton-block {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    background: #e8edf3;
+    border-radius: 6px;
+}
+
+    .cs-skeleton-block::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.7) 48%, transparent 100%);
+        transform: translateX(-100%);
+        animation: cs-skeleton-shimmer 1.35s ease-in-out infinite;
+    }
+
+.cs-skeleton-stat-card {
+    min-height: 138px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+}
+
+.cs-skeleton-stat-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.cs-skeleton-stat-copy {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cs-skeleton-title {
+    width: 48%;
+    height: 12px;
+}
+
+.cs-skeleton-value {
+    width: 30%;
+    height: 23px;
+}
+
+.cs-skeleton-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+}
+
+.cs-skeleton-stat-bottom {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    padding-top: 14px;
+}
+
+    .cs-skeleton-stat-bottom .cs-skeleton-block {
+        height: 28px;
+    }
+
+.cs-skeleton-chart-card {
+    min-height: 395px;
+}
+
+.cs-skeleton-heading {
+    width: 280px;
+    max-width: 65%;
+    height: 18px;
+    margin-bottom: 28px;
+}
+
+.cs-skeleton-chart {
+    height: 270px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    gap: 20px;
+    padding: 20px 24px 0;
+    border-left: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
+    background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 53px, #f1f5f9 54px);
+}
+
+    .cs-skeleton-chart .cs-skeleton-block {
+        width: 26px;
+        min-width: 18px;
+        border-radius: 5px 5px 0 0;
+    }
+
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(1),
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(7) {
+            height: 42%;
+        }
+
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(2),
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(10) {
+            height: 68%;
+        }
+
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(3),
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(8) {
+            height: 54%;
+        }
+
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(4),
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(11) {
+            height: 82%;
+        }
+
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(5) {
+            height: 61%;
+        }
+
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(6),
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(12) {
+            height: 48%;
+        }
+
+        .cs-skeleton-chart .cs-skeleton-block:nth-child(9) {
+            height: 74%;
+        }
+
+.cs-skeleton-legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-top: 22px;
+}
+
+    .cs-skeleton-legend .cs-skeleton-block {
+        width: 92px;
+        height: 12px;
+    }
+
+.cs-skeleton-table-card {
+    overflow: hidden;
+}
+
+.cs-skeleton-tabs {
+    width: 340px;
+    max-width: 52%;
+    height: 34px;
+}
+
+.cs-skeleton-search {
+    width: 260px;
+    max-width: 38%;
+    height: 34px;
+}
+
+.cs-skeleton-table-head,
+.cs-skeleton-table-row {
+    min-width: 1200px;
+    display: grid;
+    grid-template-columns: 55px repeat(12, minmax(80px, 1fr));
+    gap: 16px;
+    padding: 14px 16px;
+}
+
+.cs-skeleton-table-head {
+    background: #f1f5f9;
+}
+
+    .cs-skeleton-table-head .cs-skeleton-block {
+        height: 12px;
+    }
+
+.cs-skeleton-table-body {
+    width: 100%;
+    overflow-x: hidden;
+}
+
+.cs-skeleton-table-row {
+    border-bottom: 1px solid #f1f5f9;
+}
+
+    .cs-skeleton-table-row .cs-skeleton-block {
+        height: 13px;
+    }
+
+.cs-skeleton-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 4px;
+}
+
+    .cs-skeleton-pagination .cs-skeleton-block:first-child {
+        width: 150px;
+        height: 32px;
+    }
+
+    .cs-skeleton-pagination .cs-skeleton-block:last-child {
+        width: 205px;
+        height: 32px;
+    }
+
+@keyframes cs-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes cs-skeleton-shimmer {
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+@media (max-width: 768px) {
+    .cs-refresh-indicator {
+        position: static;
+        margin-left: auto;
+    }
+
+    .cs-skeleton-stat-bottom {
+        gap: 8px;
+    }
+
+    .cs-skeleton-chart {
+        min-width: 760px;
+    }
+
+    .cs-skeleton-chart-card {
+        overflow-x: auto;
+    }
+
+    .cs-skeleton-tabs,
+    .cs-skeleton-search {
+        width: 100%;
+        max-width: 100%;
+    }
+}
+/* Add these rules to the existing CompanySales.razor.css file. */
+.cs-badge-blue {
+    color: #1d4ed8;
+    background: #dbeafe;
+    border-color: #bfdbfe;
+}
+
+.cs-badge-purple {
+    color: #7e22ce;
+    background: #f3e8ff;
+    border-color: #e9d5ff;
+}
+
+    .cs-badge-purple .dot {
+        background: #9333ea;
+    }
+
+.cs-badge-gray {
+    color: #475569;
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+}
+
+    .cs-badge-gray .dot {
+        background: #64748b;
+    }
+
+.cs-age-text-blue {
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.cs-age-text-purple {
+    color: #9333ea;
+    font-weight: 600;
+}
+
+.cs-age-text-green {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+@media (max-width: 900px) {
+    .cs-stat-card > div[style*="grid-template-columns:repeat(5"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 520px) {
+    .cs-stat-card > div[style*="grid-template-columns:repeat(5"] {
+        grid-template-columns: 1fr !important;
+    }
+}

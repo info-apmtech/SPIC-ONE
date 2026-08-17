@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
@@ -9,11 +9,11 @@ namespace SPIC.Core.Entities
     public class DealerRegistration
     {
         public int Id { get; set; }
-        public string UserTableId { get; set; }
+        public string? UserTableId { get; set; }
         [Display(Name = "Dealar / Department")]
         public bool IsDealer { get; set; }
         // NEW: Keep old IsDealer for backward compatibility. Add DealerType enum to support Institution.
-        public DealerType? DealerType { get; set; }
+        public RegistrationDealerType? DealerType { get; set; }
         public bool InSpic { get; set; }
         public bool InGreenStar { get; set; }
 
@@ -21,9 +21,9 @@ namespace SPIC.Core.Entities
         public string? SPICCode { get; set; }
         public string? GreenStarCode { get; set; }
         public string? TnCode { get; set; }
-		public string? NCode { get; set; }
+        public string? NCode { get; set; }
 
-		[Display(Name = "State")]
+        [Display(Name = "State")]
         public int StateId { get; set; }
         public int Region { get; set; }
         public int HQ { get; set; }
@@ -32,8 +32,10 @@ namespace SPIC.Core.Entities
         public int ParentDealer { get; set; }
         [Display(Name = "Firm Name")]
         public string FirmName { get; set; }
-        [Display(Name = "Date Of Appointment")]
+        [Display(Name = "Spic Date Of Appointment")]
         public DateTime DateOfAppointment { get; set; }
+        [Display(Name = "Greenstar Date Of Appointment")]
+        public DateTime? GreenstarDateOfAppointment { get; set; }
         [Display(Name = "Business Type")]
         public string? BusinessEntityType { get; set; }
         //In Active Status
@@ -93,7 +95,12 @@ namespace SPIC.Core.Entities
         //Trade Deposit Details
         public decimal TradeDepositAmount { get; set; }
         public string? TradeDepositReceiptNo { get; set; }
-        public DateTime TradeDepositDate { get; set; }
+        public DateTime? TradeDepositDate { get; set; }
+
+        //Trade Deposit Details - Greenstar
+        public decimal? GreenstarTradeDepositAmountReg { get; set; }
+        public string? GreenstarTradeDepositReceiptNoReg { get; set; }
+        public DateTime? GreenstarTradeDepositDateReg { get; set; }
 
         //Wholesale Fertilizer
         [Display(Name = "WholeSale Fertilizer License")]
@@ -164,15 +171,41 @@ namespace SPIC.Core.Entities
         //infra
         public decimal OwnGodownCapacity { get; set; }
         public decimal RentGodownCapacity { get; set; }
-		[Display(Name = "Legal Name")]
-		public string? GSTLegalName { get; set; }
-		[Display(Name = "Trade Name")]
-		public string? GSTTradeName { get; set; }
-		[Display(Name = "Constitution of Business")]
-		public string? GSTConstitutionofBusiness { get; set; }
-		[Display(Name = "Inactive Proposal")]
-		public FutureBusinessProposal? InactiveProposal { get; set; }
+        [Display(Name = "Legal Name")]
+        public string? GSTLegalName { get; set; }
+        [Display(Name = "Trade Name")]
+        public string? GSTTradeName { get; set; }
+        [Display(Name = "Constitution of Business")]
+        public string? GSTConstitutionofBusiness { get; set; }
+        [Display(Name = "Inactive Proposal")]
+        public FutureBusinessProposal? InactiveProposal { get; set; }
         public bool? IsSubmittedForReview { get; set; } = false;
+
+        // True when this registration was created through the "Create New Dealer" flow.
+        // New dealers have no DealerCode until the final approval generates one.
+        public bool IsNewDealerRegistration { get; set; }
+
+        // Dealership Application Fee (New Dealer flow — SPIC)
+        public int? DealershipApplicationFeeBankId { get; set; }
+        public string? DealershipApplicationFeeDDNumber { get; set; }
+        public DateTime? DealershipApplicationFeeDDDate { get; set; }
+        public decimal? DealershipApplicationFeeAmount { get; set; }
+        public string? DealershipApplicationFeePayableAt { get; set; }
+
+        // Trade Deposit Details — SPIC (New Dealer flow)
+        public string? SpicTradeDepositDDNumber { get; set; }
+        public int? SpicTradeDepositDDBankId { get; set; }
+        public DateTime? SpicTradeDepositDDDate { get; set; }
+        public decimal? SpicTradeDepositDDAmount { get; set; }
+		public string? DealershipApplicationFeeFilePath { get; set; }
+		public string? SpicTradeDepositFilePath { get; set; }
+
+		// Trade Deposit Details — GFL / Greenstar (New Dealer flow)
+		public string? GflTradeDepositDDNumber { get; set; }
+        public int? GflTradeDepositDDBankId { get; set; }
+        public DateTime? GflTradeDepositDDDate { get; set; }
+        public decimal? GflTradeDepositDDAmount { get; set; }
+		public string? GflTradeDepositFilePath { get; set; }
 
 	}
     public class DealerApprovalHistory
@@ -204,14 +237,15 @@ namespace SPIC.Core.Entities
         CANAL, TANK, WELL
     }
 
-    public enum DealerType
+    public enum RegistrationDealerType
     {
         Dealer, Department, Institution
     }
     public enum FutureBusinessProposal
     {
         FutureBusiness = 1,
-        Terminated = 2
+        Terminated = 2,
+        NotTraceable = 3
     }
     public class DealerExperience
     {
@@ -287,7 +321,8 @@ namespace SPIC.Core.Entities
         public bool IsCanal { get; set; }
         public bool IsTank { get; set; }
         public bool IsWell { get; set; }
-    }
+		public bool IsRainfed { get; set; }
+	}
     public class DealerCompaniesOperatingInArea
     {
         public int Id { get; set; }
@@ -530,6 +565,32 @@ namespace SPIC.Core.Entities
         public double? SpicMonthlyAvgNetOverdues { get; set; }
         public double? GreenstarMonthlyAvgNetOverdues { get; set; }
     }
+    public enum CreditType
+    {
+        SPIC,
+        Greenstar
+    }
+    public class CreditLimitHistory
+    {
+        public int Id { get; set; }
+        public int DealerId { get; set; }
+        public CreditType? CreditType { get; set; }
+        [Display(Name = "Existing Credit Limit Amount (₹) In Lakhs")]
+        public decimal? ExistingCreditLimit { get; set; }
+        [Display(Name = "Existing Valid From")]
+        public DateTime ExistingValidFrom { get; set; }
+        [Display(Name = "Existing Valid To")]
+        public DateTime ExistingValidTo { get; set; }
+        [Display(Name = "Additional Credit Limit (₹) In Lakhs")]
+        public decimal? AdditionalCreditLimit { get; set; }
+        [Display(Name = "MO Recommended Credit Limit (₹) In Lakhs")]
+        public decimal? MORecommendedCreditLimit { get; set; }
+        public decimal? RMApprovedCreditLimit { get; set; }
+        public decimal? SMApprovedCreditLimit { get; set; }
+        public decimal? AVPApprovedCreditLimit { get; set; }
+        public string? CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
     public class DealerCreditLimitSalesPerformance
     {
         public int Id { get; set; }
@@ -561,8 +622,13 @@ namespace SPIC.Core.Entities
         public string? GreenstarSpecimanFilePath { get; set; }
         public string? AuthorizationLetterFilePath { get; set; }
         public string? DeedOfGuaranteeFilePath { get; set; }
+        public string? LlpAgreementFilePath { get; set; }
+		public string? ArticlesOfAssociationFilePath { get; set; }   // AOA
+		public string? MemorandumOfAssociationFilePath { get; set; } // MOA
+		public string? ByLaw { get; set; }
+		public string? RequestLetterFilePath { get; set; }
 
-    }
+	}
     public class DealerCreditLimitSales
     {
         public int Id { get; set; }

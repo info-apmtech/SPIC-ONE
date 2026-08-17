@@ -7,7 +7,8 @@ namespace SpicAPI.Controllers
 {
 	/// <summary>
 	/// Base controller providing full CRUD operations for any entity.
-	/// Derived controllers only need to set the route — zero boilerplate.
+	/// No Logistics-specific change is required here: the new entity properties
+	/// are automatically handled by the existing generic repository/controller.
 	/// </summary>
 	[Authorize]
 	[ApiController]
@@ -20,7 +21,6 @@ namespace SpicAPI.Controllers
 			_repo = repo;
 		}
 
-		// Returns only active items (if entity has IsActive property)
 		[HttpGet]
 		public virtual async Task<IActionResult> GetAll()
 		{
@@ -28,7 +28,6 @@ namespace SpicAPI.Controllers
 			return Ok(items);
 		}
 
-		// Returns all items including inactive
 		[HttpGet("all")]
 		public virtual async Task<IActionResult> GetAllWithInactive()
 		{
@@ -40,7 +39,8 @@ namespace SpicAPI.Controllers
 		public virtual async Task<IActionResult> GetByDealerId(int dealerId)
 		{
 			var prop = typeof(T).GetProperty("DealerId");
-			if (prop == null) return BadRequest($"{typeof(T).Name} does not have a DealerId property.");
+			if (prop == null)
+				return BadRequest($"{typeof(T).Name} does not have a DealerId property.");
 
 			var param = System.Linq.Expressions.Expression.Parameter(typeof(T), "x");
 			var body = System.Linq.Expressions.Expression.Equal(
@@ -64,7 +64,11 @@ namespace SpicAPI.Controllers
 		public virtual async Task<IActionResult> Create([FromBody] T entity)
 		{
 			var created = await _repo.CreateAsync(entity);
-			return Ok(new { message = $"{typeof(T).Name} created successfully", data = created });
+			return Ok(new
+			{
+				message = $"{typeof(T).Name} created successfully",
+				data = created
+			});
 		}
 
 		[HttpPut("{id}")]
@@ -72,10 +76,13 @@ namespace SpicAPI.Controllers
 		{
 			var updated = await _repo.PatchAsync(id, entity);
 			if (updated == null) return NotFound();
-			return Ok(new { message = $"{typeof(T).Name} updated successfully", data = updated });
+			return Ok(new
+			{
+				message = $"{typeof(T).Name} updated successfully",
+				data = updated
+			});
 		}
 
-		// Toggle IsActive status
 		[HttpPatch("{id}/status")]
 		public virtual async Task<IActionResult> ChangeStatus(int id, [FromQuery] bool isActive)
 		{

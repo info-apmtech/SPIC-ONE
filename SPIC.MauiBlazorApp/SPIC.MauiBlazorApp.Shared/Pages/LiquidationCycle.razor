@@ -1,125 +1,32 @@
 ﻿@page "/LiquidationCycle"
+@implements IDisposable
+@inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
+@using System.Globalization
+@using SPIC.Core.DTOs
+@using System.Text.Json
+@using System.Net.Http.Json
+
+
 
 <div class="container-fluid py-4 px-0">
-        
+    
     <!-- Header Section -->
     <div class="lc-header-container">
         <div class="lc-header-text">
             <h1>Liquidation Cycle</h1>
-            <p>View and monitor company sales transactions from iFMS</p>
+            <p>View and monitor sales transactions and ageing stock</p>
         </div>
         
         <div class="lc-action-buttons">
-            <button class="lc-btn lc-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg>
-                Refresh Data
-            </button>
-            <button class="lc-btn lc-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg>
-                Excel
-            </button>
-            <button class="lc-btn lc-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg>
-                PDF
-            </button>
-            <button class="lc-btn lc-btn-solid">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
-                Send Mail
-            </button>
+            <button class="lc-btn lc-btn-outline" disabled="@(_isLoading)" @onclick="RefreshData"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg> Refresh Data</button>
+            <button class="lc-btn lc-btn-outline" disabled="@(_dashboard is null || _isLoading)" @onclick="ExportExcel"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg> Excel</button>
+            <button class="lc-btn lc-btn-solid" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
         </div>
     </div>
 
-    <!-- 5-Column Statistics Grid -->
-    <div class="lc-stats-grid">
-        
-        <!-- Total Stock -->
-        <div class="lc-stat-card lc-theme-green">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Total Stock</span>
-                    <span class="lc-stat-value">4,820</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                </div>
-            </div>
-            <div class="lc-stat-trend lc-text-green">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>12% vs last period</span>
-            </div>
-        </div>
-
-        <!-- Under Review -->
-        <div class="lc-stat-card lc-theme-blue">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Under Review (MT)</span>
-                    <span class="lc-stat-value">4,820</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><circle cx="10" cy="13" r="2"></circle><line x1="11.4" y1="14.4" x2="13.4" y2="16.4"></line></svg>
-                </div>
-            </div>
-            <div class="lc-stat-trend lc-text-green">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>3.5% vs last period</span>
-            </div>
-        </div>
-
-        <!-- In Progress -->
-        <div class="lc-stat-card lc-theme-orange">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">In Progress (MT)</span>
-                    <span class="lc-stat-value">2,820</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
-                </div>
-            </div>
-            <div class="lc-stat-trend lc-text-green">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>1.2% vs last period</span>
-            </div>
-        </div>
-
-        <!-- Liquidated -->
-        <div class="lc-stat-card lc-theme-teal">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Liquidated (MT)</span>
-                    <span class="lc-stat-value">3,120</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 14l2 2 4-4"></path></svg>
-                </div>
-            </div>
-            <div class="lc-stat-trend lc-text-green">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>7.2% vs last period</span>
-            </div>
-        </div>
-
-        <!-- Pending Ack -->
-        <div class="lc-stat-card lc-theme-red">
-            <div class="lc-card-top">
-                <div class="lc-stat-info">
-                    <span class="lc-stat-title">Pending Ack</span>
-                    <span class="lc-stat-value">1,020</span>
-                </div>
-                <div class="lc-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22V12"></path><circle cx="12" cy="12" r="3" fill="#dc2626"></circle></svg>
-                </div>
-            </div>
-            <div class="lc-stat-trend lc-text-red">
-                <svg class="lc-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"></polyline><polyline points="16 17 22 17 22 11"></polyline></svg>
-                <span>6.10% vs last period</span>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Filters Section (5 Columns matching design) -->
+    <!-- Filters Section -->
     <div class="lc-filter-card">
         <div class="lc-filter-header">
             <div class="lc-filter-title">
@@ -130,113 +37,1016 @@
         </div>
         
         <div class="lc-filter-body">
-            <div class="lc-filter-grid">
-                <div class="lc-form-group"><label class="lc-form-label">State</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Region</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">HQ</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">District</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Sub District</label><select class="lc-form-select"><option>All</option></select></div>
-                
-                <div class="lc-form-group"><label class="lc-form-label">Dealer Name</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Product</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Liquidation Status</label><select class="lc-form-select"><option>All</option></select></div>
-                <div class="lc-form-group"><label class="lc-form-label">Status</label><select class="lc-form-select"><option>All</option></select></div>
+            <div class="lc-filter-grid-top">
+                <!-- Changed ac-form-group to lc-form-group for design consistency -->
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Date From</label>
+                    <input type="date" class="lc-form-input" @bind="_dateFrom" />
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Date To</label>
+                    <input type="date" class="lc-form-input" @bind="_dateTo" />
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">State</label>
+                    <select id="lc-state-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var s in _states)
+                        {
+                            <option value="@s.Id" selected="@(_selStates.Contains(s.Id))">@s.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Region</label>
+                    <select id="lc-region-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var r in _regions)
+                        {
+                            <option value="@r.Id" selected="@(_selRegions.Contains(r.Id))">@r.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">HQ</label>
+                    <select id="lc-hq-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var h in _hq)
+                        {
+                            <option value="@h.Id" selected="@(_selHqs.Contains(h.Id))">@h.Name</option>
+                        }
+                    </select>
+                </div>
+              
             </div>
             
-            <div class="lc-filter-actions">
-                <button class="lc-btn lc-btn-outline"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Clear All</button>
-                <button class="lc-btn lc-btn-solid"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg> Apply Filters</button>
+            <div class="lc-filter-grid-bottom">
+                <div class="lc-form-group">
+                    <label class="lc-form-label">District</label>
+                    <select id="lc-district-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var d in _districts)
+                        {
+                            <option value="@d.Id" selected="@(_selDistricts.Contains(d.Id))">@d.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Sub District</label>
+                    <select id="lc-subdistrict-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var sd in _subDistricts)
+                        {
+                            <option value="@sd.Id" selected="@(_selSubDistricts.Contains(sd.Id))">@sd.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Dealer Name</label>
+                    <select id="lc-dealer-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var d in _dealers)
+                        {
+                            <option value="@d.Id" selected="@(_selDealerKeys.Contains(d.Id))">@d.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Product</label>
+                    <select id="lc-product-select" class="lc-form-select" multiple="multiple">
+                        @foreach (var p in _products)
+                        {
+                            <option value="@p.Id" selected="@(_selProducts.Contains(p.Id))">@p.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="lc-form-group">
+                    <label class="lc-form-label">Financial Year</label>
+                    <select id="lc-financialyear-select" class="lc-form-select" multiple="multiple">
+                        @if (_financialYears.Count == 0)
+                        {
+                            <option disabled>Loading…</option>
+                        }
+                        @foreach (var fy in _financialYears)
+                        {
+                            <option value="@fy.Id" selected="@(_selFinancialYears.Contains(fy.Id))">@fy.Name</option>
+                        }
+                    </select>
+                </div>
+                
+                <div class="lc-filter-actions">
+                    <button class="lc-btn lc-btn-outline" disabled="@(!_masterDataReady || _isLoading)" @onclick="ClearAll"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Clear All</button>
+                    <button class="lc-btn lc-btn-solid" disabled="@(!_masterDataReady || _isLoading)" @onclick="ApplyFilters"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg> Apply Filters</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Table Section -->
-    <div class="lc-table-card">
-        <div class="lc-table-top">
-            <h3>Liquidation Cycle List</h3>
-            <input type="text" class="lc-search-input" placeholder="Search zones...">
-        </div>
-
-        <div class="lc-table-wrapper">
-            <table class="lc-main-table">
-                <thead>
-                    <tr>
-                        <th><input type="checkbox" class="lc-checkbox"></th>
-                        <th style="text-align: left;">Dealer Name</th>
-                        <th>Product</th>
-                        <th>Stock</th>
-                        <th>Ageing in Days</th>
-                        <th>Sales</th>
-                        <th>Liquidation Status</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><input type="checkbox" class="lc-checkbox"></td>
-                        <td style="text-align: left; color: #475569;">Sri Murugan Traders</td>
-                        <td>DAP 50 KG</td>
-                        <td>120.500</td>
-                        <td class="lc-txt-red">28</td>
-                        <td>70.600</td>
-                        <td><span class="lc-outline-badge lc-outline-blue">Under Review</span></td>
-                        <td><div class="lc-status lc-st-red"><div class="dot"></div>Critical</div></td>
-                        <td><button class="lc-action-btn" @onclick="OpenLiquidationDetails"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                    </tr>
-                    <tr>
-                        <td><input type="checkbox" class="lc-checkbox"></td>
-                        <td style="text-align: left; color: #475569;">Sri Murugan Traders</td>
-                        <td>MOP 50 Kg</td>
-                        <td>80.250</td>
-                        <td class="lc-txt-orange">42</td>
-                        <td>62.100</td>
-                        <td><span class="lc-outline-badge lc-outline-pink">In Progress</span></td>
-                        <td><div class="lc-status lc-st-orange"><div class="dot"></div>Monitoring</div></td>
-                        <td><button class="lc-action-btn" @onclick="OpenLiquidationDetails"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                    </tr>
-                    <tr>
-                        <td><input type="checkbox" class="lc-checkbox"></td>
-                        <td style="text-align: left; color: #475569;">Sri Murugan Traders</td>
-                        <td>Mop 50 Kg</td>
-                        <td>70.600</td>
-                        <td class="lc-txt-green">78</td>
-                        <td>18.600</td>
-                        <td><span class="lc-outline-badge lc-outline-green">Liquidated</span></td>
-                        <td><div class="lc-status lc-st-green"><div class="dot"></div>Active</div></td>
-                        <td><button class="lc-action-btn" @onclick="OpenLiquidationDetails"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="lc-pagination">
-            <div class="lc-page-size">
-                <span>Items Per Page</span>
-                <select class="lc-form-select" style="padding: 6px 32px 6px 12px; width: 65px; margin:0; background-position: right 8px center;">
-                    <option>16</option>
-                </select>
-            </div>
-            <div class="lc-page-controls">
-                <button class="lc-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <button class="lc-page-btn active">1</button>
-                <button class="lc-page-btn">2</button>
-                <button class="lc-page-btn">3</button>
-                <button class="lc-page-btn dots">..</button>
-                <button class="lc-page-btn">8</button>
-                <button class="lc-page-btn">9</button>
-                <button class="lc-page-btn">10</button>
-                <button class="lc-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-            </div>
-        </div>
-    </div>
-</div>
-<LiquidationDetailsDrawer @bind-IsOpen="isLiquidationDetailsOpen" />
-@code {
-    private bool isLiquidationDetailsOpen = false;
-
-    private void OpenLiquidationDetails()
+    @if (_dashboard is null)
     {
-        isLiquidationDetailsOpen = true;
+        @if (_isLoading)
+        {
+            <!-- Keep the complete dashboard footprint visible while the first API request runs. -->
+            <div class="lc-skeleton-dashboard" aria-label="Loading liquidation dashboard">
+                <div class="lc-stats-grid">
+                    @for (var i = 0; i < 3; i++)
+                    {
+                        <div class="lc-stat-card lc-skeleton-card">
+                            <div class="lc-skeleton-line lc-skeleton-label"></div>
+                            <div class="lc-skeleton-line lc-skeleton-value"></div>
+                        </div>
+                    }
+                </div>
+
+                <div class="lc-skeleton-section-header">
+                    <div class="lc-skeleton-line lc-skeleton-heading"></div>
+                    <div class="lc-skeleton-line lc-skeleton-toolbar"></div>
+                </div>
+
+                <div class="lc-charts-grid">
+                    @for (var chart = 0; chart < 2; chart++)
+                    {
+                        <div class="lc-chart-card lc-skeleton-chart-card">
+                            <div class="lc-skeleton-line lc-skeleton-heading"></div>
+                            <div class="lc-skeleton-line lc-skeleton-subtitle"></div>
+                            @for (var row = 0; row < 5; row++)
+                            {
+                                <div class="lc-skeleton-chart-row">
+                                    <div class="lc-skeleton-circle"></div>
+                                    <div class="lc-skeleton-line lc-skeleton-name"></div>
+                                    <div class="lc-skeleton-line lc-skeleton-bar"></div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="lc-table-card lc-skeleton-table-card">
+                    <div class="lc-table-top">
+                        <div class="lc-skeleton-line lc-skeleton-heading"></div>
+                        <div class="lc-skeleton-line lc-skeleton-search"></div>
+                    </div>
+                    @for (var row = 0; row < 6; row++)
+                    {
+                        <div class="lc-skeleton-table-row">
+                            @for (var col = 0; col < 8; col++)
+                            {
+                                <div class="lc-skeleton-line"></div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="lc-empty-state">
+                @(_loadError is null ? "No Data Available" : $"Could not load report: {_loadError}")
+            </div>
+        }
+    }
+    else
+    {
+        <div class="lc-dashboard-content @(_isLoading ? "is-updating" : "")">
+            @if (_isLoading)
+            {
+                <div class="lc-updating-indicator" role="status">
+                    <span class="lc-mini-spinner"></span>
+                    Updating…
+                </div>
+            }
+            
+            <!-- 3-Column Statistics Grid -->
+            <div class="lc-stats-grid">
+                <div class="lc-stat-card lc-card-green">
+                    <div class="lc-card-top">
+                        <div class="lc-stat-info">
+                            <span class="lc-stat-title">Total Stock (MT)</span>
+                            <span class="lc-stat-value">@Num(_dashboard.Summary.TotalStock)</span>
+                        </div>
+                        <div class="lc-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg></div>
+                    </div>
+                </div>
+
+                <div class="lc-stat-card lc-card-cyan">
+                    <div class="lc-card-top">
+                        <div class="lc-stat-info">
+                            <span class="lc-stat-title">Liquidated (MT)</span>
+                            <span class="lc-stat-value">@Num(_dashboard.Summary.Liquidated)</span>
+                        </div>
+                        <div class="lc-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="14 2 14 8 20 8"></polyline><circle cx="10" cy="13" r="2"></circle></svg></div>
+                    </div>
+                </div>
+
+                <div class="lc-stat-card lc-card-red">
+                    <div class="lc-card-top">
+                        <div class="lc-stat-info">
+                            <span class="lc-stat-title">Balance Stock (MT)</span>
+                            <span class="lc-stat-value">@Num(_dashboard.Summary.BalanceStock)</span>
+                        </div>
+                        <div class="lc-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3" fill="currentColor"></circle></svg></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WHOLESALER LIQUIDATION SECTION WITH UNIFIED TOGGLES -->
+            <div class="lc-section-header">
+                <h3>Dealer Liquidation Performance</h3>
+                
+                <div class="lc-btn-group">
+                    <!-- Single-select toolbar: only one button active at a time -->
+                    <button class="lc-toggle-btn @(_activeFilter == "Top5" ? "active" : "")"
+                            disabled="@(_isLoading)"
+                            @onclick='() => SelectFilter("Top5")'>
+                        Top 5 Performance
+                    </button>
+                    <button class="lc-toggle-btn @(_activeFilter == "StateWise" ? "active" : "")"
+                            disabled="@(_isLoading)"
+                            @onclick='() => SelectFilter("StateWise")'>
+                        State-wise
+                    </button>
+                    <button class="lc-toggle-btn @(_activeFilter == "All" ? "active" : "")"
+                            disabled="@(_isLoading)"
+                            @onclick='() => SelectFilter("All")'>
+                        All
+                    </button>
+                    <button class="lc-toggle-btn @(_activeFilter == "Company Sales" ? "active" : "")"
+                            disabled="@(_isLoading)"
+                            @onclick='() => SelectFilter("Company Sales")'>
+                        Company Sales
+                    </button>
+                    <button class="lc-toggle-btn @(_activeFilter == "Wholesaler Sales" ? "active" : "")"
+                            disabled="@(_isLoading)"
+                            @onclick='() => SelectFilter("Wholesaler Sales")'>
+                        Wholesalers
+                    </button>
+                    <button class="lc-toggle-btn @(_activeFilter == "Retailer Sales" ? "active" : "")"
+                            disabled="@(_isLoading)"
+                            @onclick='() => SelectFilter("Retailer Sales")'>
+                        Retailers
+                    </button>
+                </div>
+            </div>
+
+            <!-- Single Row Chart Output — ONE chart format (horizontal bars) for every view -->
+            <div class="lc-charts-grid">
+
+                <!-- FAST -->
+                <div class="lc-chart-card">
+                    <div class="lc-chart-card-header">
+                        <h4>@(chartView == "Top5" ? "Top 5 Fast Dealers" : "State-wise Fast Liquidation")</h4>
+                        <p>@(chartView == "Top5" ? "High fast liquidation volume" : "States with the highest fast liquidation rate")</p>
+                    </div>
+                    <div class="lc-chart-scroll-wrapper">
+                        <div class="lc-horiz-chart-inner">
+                            @{
+                                var fastData = GetFastChartData();
+                            }
+                            @if (fastData.Count == 0)
+                            {
+                                <div style="text-align:center; padding:24px; color:#94a3b8;">No data available.</div>
+                            }
+                            else
+                            {
+                                @foreach (var (item, i) in fastData.Select((d, i) => (d, i)))
+                                {
+                                    <div class="lc-horiz-row">
+                                        <div class="lc-horiz-rank">@(i + 1)</div>
+                                        <div class="lc-horiz-label" style="width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@item.Label</div>
+                                        <div class="lc-horiz-track" style="flex:1;">
+                                            <div class="lc-horiz-fill bg-green-400" style="width: @(item.Rate.ToString("0", Inv))%;"></div>
+                                        </div>
+                                        <div class="lc-horiz-val">@item.Rate.ToString("0.##")%</div>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SLOW -->
+                <div class="lc-chart-card">
+                    <div class="lc-chart-card-header">
+                        <h4>@(chartView == "Top5" ? "Top 5 Slow Dealers" : "State-wise Slow Liquidation")</h4>
+                        <p>@(chartView == "Top5" ? "High critical / slow volume" : "States with the highest delayed / slow liquidation rate")</p>
+                    </div>
+                    <div class="lc-chart-scroll-wrapper">
+                        <div class="lc-horiz-chart-inner">
+                            @{
+                                var slowData = GetSlowChartData();
+                            }
+                            @if (slowData.Count == 0)
+                            {
+                                <div style="text-align:center; padding:24px; color:#94a3b8;">No data available.</div>
+                            }
+                            else
+                            {
+                                @foreach (var (item, i) in slowData.Select((d, i) => (d, i)))
+                                {
+                                    <div class="lc-horiz-row">
+                                        <div class="lc-horiz-rank">@(i + 1)</div>
+                                        <div class="lc-horiz-label" style="width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@item.Label</div>
+                                        <div class="lc-horiz-track" style="flex:1;">
+                                            <div class="lc-horiz-fill bg-red-400" style="width: @(item.Rate.ToString("0", Inv))%;"></div>
+                                        </div>
+                                        <div class="lc-horiz-val">@item.Rate.ToString("0.##")%</div>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table Section -->
+            <div class="lc-table-card">
+                <div class="lc-table-top">
+                    <h3>Liquidation Cycle List</h3>
+                    <input type="text" class="lc-search-input" placeholder="Search dealer, product..." disabled="@(_isLoading)" @bind="_filter.Search" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+                </div>
+
+                <div class="lc-table-wrapper">
+                    <table class="lc-main-table">
+                        <thead>
+                            <tr>
+                                <th style="text-align: left;">Dealer Name</th>
+                                <th>Dealer Type</th>
+                                <th>Product</th>
+                                <th>Stock (MT)</th>
+                                <th>Ageing (Days)</th>
+                                <th>Sales (MT)</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_dashboard.Grid.Items.Count == 0)
+                            {
+                                <tr><td colspan="8" style="text-align:center; padding:24px;">No records found.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _dashboard.Grid.Items)
+                                {
+                                    <tr>
+                                        <td style="text-align: left; color: #475569;">@row.DealerName</td>
+                                        <td>@row.DealerType</td>
+                                        <td>@row.ProductName</td>
+                                        <td>@Num(row.Stock)</td>
+                                        <td class="@AgeingClass(row.AgeingDays)">@row.AgeingDays</td>
+                                        <td>@Num(row.Sales)</td>
+                                        <td><div class="lc-status @StatusClass(row.Status)"><div class="dot"></div>@row.Status</div></td>
+                                        <td><button class="lc-action-btn" @onclick="() => OpenDetails(row)"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="lc-pagination">
+                    <div class="lc-page-size">
+                        <span>Items Per Page</span>
+                        <select class="lc-form-select" style="padding: 6px 32px 6px 12px; width: 65px;" @onchange="OnPageSizeChanged">
+                            <option value="16" selected="@(_filter.PageSize == 16)">16</option>
+                            <option value="50" selected="@(_filter.PageSize == 50)">50</option>
+                        </select>
+                    </div>
+                    <div class="lc-page-controls">
+                        <button class="lc-page-btn" disabled="@(_filter.Page <= 1)" @onclick="() => GoToPage(_filter.Page - 1)">‹</button>
+                        <button class="lc-page-btn active">@_filter.Page</button>
+                        <button class="lc-page-btn" disabled="@(_filter.Page >= TotalPages)" @onclick="() => GoToPage(_filter.Page + 1)">›</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<LiquidationDetailsDrawer @bind-IsOpen="isDrawerOpen" Row="_selectedRow" />
+
+@code {
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+    private LiqCycleDashboardDto? _dashboard;
+    private readonly LiqCycleFilter _filter = new();
+
+    private bool _isLoading = true;
+    private bool _masterDataReady;
+    private bool _select2Initialized;
+    private bool _disposed;
+    private string? _loadError;
+
+    private CancellationTokenSource? _loadCts;
+    private System.Timers.Timer? _searchDebounce;
+
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+
+    private bool isDrawerOpen;
+    private LiqCycleRowDto? _selectedRow;
+
+    // View toggles (content switch only — the same chart format is used for both).
+    private string chartView = "Top5";
+
+    // Values: Top5, StateWise, All, Company Sales, Wholesaler Sales, Retailer Sales.
+    private string _activeFilter = "Top5";
+
+    // ---- Master Data ----
+    private List<LocationDto> _states = new();
+    private List<LocationDto> _regions = new();
+    private List<LocationDto> _hq = new();
+    private List<LocationDto> _districts = new();
+    private List<LocationDto> _subDistricts = new();
+    private List<LocationDto> _products = new();
+    private List<AckLookupItemDto> _dealers = new();
+    private List<FinancialYearDto> _financialYears = new();
+
+    private List<int> _selStates = new();
+    private List<int> _selRegions = new();
+    private List<int> _selHqs = new();
+    private List<int> _selDistricts = new();
+    private List<int> _selSubDistricts = new();
+    private List<int> _selProducts = new();
+    private List<string> _selDealerKeys = new();
+    private List<int> _selFinancialYears = new();
+
+    private DotNetObjectReference<LiquidationCycle>? _objRef;
+
+    public class LocationDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    private class FinancialYearDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+    }
+
+    private record ChartBar(string Label, double Rate);
+
+    // Replace these placeholders when the API exposes state-wise fast/slow collections.
+    private static readonly List<ChartBar> _stateFastPlaceholder = new()
+    {
+        new("Gujarat", 89),
+        new("Maharashtra", 78),
+        new("Karnataka", 70),
+        new("Punjab", 65)
+    };
+
+    private static readonly List<ChartBar> _stateSlowPlaceholder = new()
+    {
+        new("Gujarat", 89),
+        new("Maharashtra", 78),
+        new("Karnataka", 70),
+        new("Punjab", 65)
+    };
+
+    private List<ChartBar> GetFastChartData()
+    {
+        if (_dashboard is null)
+            return new();
+
+        return chartView == "Top5"
+            ? _dashboard.TopFastDealers
+                .Select(d => new ChartBar(d.DealerName, d.Rate))
+                .ToList()
+            : _stateFastPlaceholder;
+    }
+
+    private List<ChartBar> GetSlowChartData()
+    {
+        if (_dashboard is null)
+            return new();
+
+        return chartView == "Top5"
+            ? _dashboard.TopSlowDealers
+                .Select(d => new ChartBar(d.DealerName, d.Rate))
+                .ToList()
+            : _stateSlowPlaceholder;
+    }
+
+    private int TotalPages =>
+        _dashboard is null || _dashboard.Grid.PageSize == 0
+            ? 1
+            : (int)Math.Ceiling(
+                (double)_dashboard.Grid.TotalCount / _dashboard.Grid.PageSize);
+
+    // ---- Lifecycle ----
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _objRef = DotNetObjectReference.Create(this);
+
+            // Do not await here. The first render returns immediately so the skeleton
+            // dashboard is visible while master data and dashboard data load in parallel.
+            _ = InitializePageAsync();
+            return;
+        }
+
+        if (_masterDataReady && !_select2Initialized && !_disposed)
+        {
+            _select2Initialized = true;
+
+            try
+            {
+                await InitSelect2();
+            }
+            catch (Exception ex)
+            {
+                _select2Initialized = false;
+                Console.WriteLine($"[Liquidation] Select2 initialization error: {ex}");
+            }
+        }
+    }
+
+    private async Task InitializePageAsync()
+    {
+        // Start dashboard immediately instead of waiting for every lookup request.
+        var dashboardTask = LoadDashboard(renderLoadingState: false);
+
+        try
+        {
+            await LoadMasterData();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Liquidation] Master-data error: {ex}");
+        }
+        finally
+        {
+            _masterDataReady = true;
+
+            if (!_disposed)
+                await InvokeAsync(StateHasChanged);
+        }
+
+        try
+        {
+            await dashboardTask;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Liquidation] Dashboard initialization error: {ex}");
+        }
+    }
+
+    private async Task LoadMasterData()
+    {
+        var statesTask = FetchLocations("api/State/all");
+        var regionsTask = FetchLocations("api/Region/all");
+        var hqTask = FetchLocations("api/Headquarter/all");
+        var districtsTask = FetchLocations("api/District/all");
+        var subDistrictsTask = FetchLocations("api/SubDistrict/all");
+        var productsTask = FetchLocations("api/Product/all");
+        var dealersTask = FetchDealers();
+        var fyTask = FetchFinancialYears();
+
+        await Task.WhenAll(
+            statesTask,
+            regionsTask,
+            hqTask,
+            districtsTask,
+            subDistrictsTask,
+            productsTask,
+            dealersTask,
+            fyTask);
+
+        _states = await statesTask;
+        _regions = await regionsTask;
+        _hq = await hqTask;
+        _districts = await districtsTask;
+        _subDistricts = await subDistrictsTask;
+        _products = await productsTask;
+        _dealers = await dealersTask;
+        _financialYears = await fyTask;
+    }
+
+    private async Task<List<LocationDto>> FetchLocations(string url)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var raw = await Http.GetFromJsonAsync<List<JsonElement>>(url, cts.Token);
+            var list = new List<LocationDto>();
+
+            if (raw is null)
+                return list;
+
+            foreach (var item in raw)
+            {
+                if (!item.TryGetProperty("id", out var idProperty) ||
+                    idProperty.ValueKind != JsonValueKind.Number)
+                {
+                    continue;
+                }
+
+                var id = idProperty.GetInt32();
+                var name = ReadLookupName(item);
+
+                list.Add(new LocationDto
+                {
+                    Id = id,
+                    Name = name
+                });
+            }
+
+            return list;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Liquidation] Could not load {url}: {ex.Message}");
+            return new();
+        }
+    }
+
+    private async Task<List<AckLookupItemDto>> FetchDealers()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            return await Http.GetFromJsonAsync<List<AckLookupItemDto>>(
+                       "api/AckCycle/dealers",
+                       cts.Token)
+                   ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Liquidation] Dealer lookup error: {ex.Message}");
+            return new();
+        }
+    }
+
+    private async Task<List<FinancialYearDto>> FetchFinancialYears()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            return await Http.GetFromJsonAsync<List<FinancialYearDto>>(
+                       "api/FinancialYear/all",
+                       cts.Token)
+                   ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Liquidation] Financial-year lookup error: {ex.Message}");
+            return new();
+        }
+    }
+
+    private static string ReadLookupName(JsonElement item)
+    {
+        string[] properties =
+        {
+            "name",
+            "stateName",
+            "regionName",
+            "headquarterName",
+            "districtName",
+            "subDistrictName",
+            "productName"
+        };
+
+        foreach (var property in properties)
+        {
+            if (item.TryGetProperty(property, out var value) &&
+                value.ValueKind == JsonValueKind.String)
+            {
+                return value.GetString() ?? "";
+            }
+        }
+
+        return "";
+    }
+
+    // ---- Dashboard ----
+    private void SyncSelections()
+    {
+        _filter.StateIds = _selStates.ToList();
+        _filter.DistrictIds = _selDistricts.ToList();
+        _filter.ProductIds = _selProducts.ToList();
+        _filter.DealerKeys = _selDealerKeys.ToList();
+        _filter.DateFrom = _dateFrom;
+        _filter.DateTo = _dateTo;
+    }
+
+    private async Task LoadDashboard(bool renderLoadingState = true)
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        _loadCts = cts;
+        var token = cts.Token;
+
+        _isLoading = true;
+        _loadError = null;
+        SyncSelections();
+
+        if (renderLoadingState && !_disposed)
+            await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                "api/LiquidationCycle/dashboard",
+                _filter,
+                token);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var nextDashboard = await response.Content
+                    .ReadFromJsonAsync<LiqCycleDashboardDto>(cancellationToken: token);
+
+                if (nextDashboard is not null)
+                    _dashboard = nextDashboard;
+                else
+                    _loadError = "The server returned an empty dashboard response.";
+            }
+            else
+            {
+                _loadError =
+                    $"Server returned {(int)response.StatusCode} {response.ReasonPhrase}.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer request owns the screen when this request was superseded.
+            if (!ReferenceEquals(_loadCts, cts))
+                return;
+
+            _loadError = "Request timed out — the server took too long to respond.";
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+        finally
+        {
+            if (ReferenceEquals(_loadCts, cts))
+            {
+                _isLoading = false;
+
+                if (!_disposed)
+                    await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        _filter.Page = 1;
+        await LoadDashboard();
+    }
+
+    private Task RefreshData() => LoadDashboard();
+
+    private async Task ClearAll()
+    {
+        _selStates.Clear();
+        _selRegions.Clear();
+        _selHqs.Clear();
+        _selDistricts.Clear();
+        _selSubDistricts.Clear();
+        _selProducts.Clear();
+        _selDealerKeys.Clear();
+        _selFinancialYears.Clear();
+
+        _dateFrom = null;
+        _dateTo = null;
+        _filter.Search = null;
+        _filter.Source = null;
+        _filter.Page = 1;
+        _activeFilter = "Top5";
+        chartView = "Top5";
+
+        SyncSelections();
+        await InvokeAsync(StateHasChanged);
+        await RefreshAllSelect2();
+        await LoadDashboard();
+    }
+
+    // ---- Select2 ----
+    private async Task InitSelect2()
+    {
+        if (_objRef is null)
+            return;
+
+        var configs = new[]
+        {
+            new { id = "lc-state-select",         method = nameof(OnStateChanged) },
+            new { id = "lc-region-select",        method = nameof(OnRegionChanged) },
+            new { id = "lc-hq-select",            method = nameof(OnHqChanged) },
+            new { id = "lc-district-select",      method = nameof(OnDistrictChanged) },
+            new { id = "lc-subdistrict-select",   method = nameof(OnSubDistrictChanged) },
+            new { id = "lc-product-select",       method = nameof(OnProductChanged) },
+            new { id = "lc-dealer-select",        method = nameof(OnDealerChanged) },
+            new { id = "lc-financialyear-select", method = nameof(OnFinancialYearChanged) }
+        };
+
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    private async Task RefreshAllSelect2()
+    {
+        if (!_select2Initialized)
+            return;
+
+        var ids = new[]
+        {
+            "lc-state-select",
+            "lc-region-select",
+            "lc-hq-select",
+            "lc-district-select",
+            "lc-subdistrict-select",
+            "lc-product-select",
+            "lc-dealer-select",
+            "lc-financialyear-select"
+        };
+
+        await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", ids);
+        await Task.Delay(50);
+        await InitSelect2();
+    }
+
+    private static List<int> ParseIds(List<string>? values) =>
+        (values ?? new())
+            .Where(value => int.TryParse(value, out _))
+            .Select(int.Parse)
+            .Distinct()
+            .ToList();
+
+    [JSInvokable]
+    public void OnStateChanged(List<string>? values) =>
+        _selStates = ParseIds(values);
+
+    [JSInvokable]
+    public void OnRegionChanged(List<string>? values) =>
+        _selRegions = ParseIds(values);
+
+    [JSInvokable]
+    public void OnHqChanged(List<string>? values) =>
+        _selHqs = ParseIds(values);
+
+    [JSInvokable]
+    public void OnDistrictChanged(List<string>? values) =>
+        _selDistricts = ParseIds(values);
+
+    [JSInvokable]
+    public void OnSubDistrictChanged(List<string>? values) =>
+        _selSubDistricts = ParseIds(values);
+
+    [JSInvokable]
+    public void OnProductChanged(List<string>? values) =>
+        _selProducts = ParseIds(values);
+
+    [JSInvokable]
+    public void OnDealerChanged(List<string>? values) =>
+        _selDealerKeys = (values ?? new())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct()
+            .ToList();
+
+    [JSInvokable]
+    public async Task OnFinancialYearChanged(List<string>? values)
+    {
+        _selFinancialYears = ParseIds(values);
+
+        if (_selFinancialYears.Count == 0)
+        {
+            _dateFrom = null;
+            _dateTo = null;
+        }
+        else
+        {
+            var selectedYears = _financialYears
+                .Where(item => _selFinancialYears.Contains(item.Id))
+                .ToList();
+
+            _dateFrom = selectedYears.Count == 0
+                ? null
+                : selectedYears.Min(item => item.StartDate);
+
+            _dateTo = selectedYears.Count == 0
+                ? null
+                : selectedYears.Max(item => item.EndDate);
+        }
+
+        if (!_disposed)
+            await InvokeAsync(StateHasChanged);
+    }
+
+    // ---- Charts / grid ----
+    private async Task SelectFilter(string key)
+    {
+        _activeFilter = key;
+
+        switch (key)
+        {
+            case "Top5":
+                chartView = "Top5";
+                _filter.Source = null;
+                break;
+
+            case "StateWise":
+                chartView = "StateWise";
+                _filter.Source = null;
+                break;
+
+            case "All":
+                _filter.Source = null;
+                break;
+
+            default:
+                _filter.Source = key;
+                break;
+        }
+
+        _filter.Page = 1;
+        await LoadDashboard();
+    }
+
+    private void OnSearchKeyUp()
+    {
+        _searchDebounce?.Stop();
+        _searchDebounce?.Dispose();
+
+        _searchDebounce = new System.Timers.Timer(400)
+        {
+            AutoReset = false
+        };
+
+        _searchDebounce.Elapsed += async (_, _) =>
+        {
+            await InvokeAsync(async () =>
+            {
+                _filter.Page = 1;
+                await LoadDashboard();
+            });
+        };
+
+        _searchDebounce.Start();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || page > TotalPages || page == _filter.Page)
+            return;
+
+        _filter.Page = page;
+        await LoadDashboard();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var size))
+            return;
+
+        _filter.PageSize = size;
+        _filter.Page = 1;
+        await LoadDashboard();
+    }
+
+    private void OpenDetails(LiqCycleRowDto row)
+    {
+        _selectedRow = row;
+        isDrawerOpen = true;
+    }
+
+    private async Task ExportExcel()
+    {
+        SyncSelections();
+        await JS.InvokeVoidAsync(
+            "spicDownload.post",
+            "api/LiquidationCycle/export/excel",
+            _filter,
+            "LiquidationCycle.xlsx");
+    }
+
+    private string Num(decimal value) => value.ToString("0.###", Inv);
+
+    private string AgeingClass(int days) =>
+        days > 90
+            ? "lc-txt-red"
+            : days > 60
+                ? "lc-txt-orange"
+                : "lc-txt-green";
+
+    private string StatusClass(string status) => status switch
+    {
+        "Critical" => "lc-st-red",
+        "Monitoring" => "lc-st-orange",
+        "Active" => "lc-st-green",
+        _ => "lc-st-green"
+    };
+
+    public void Dispose()
+    {
+        _disposed = true;
+
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _searchDebounce?.Dispose();
+        _objRef?.Dispose();
     }
 }

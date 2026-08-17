@@ -42,7 +42,15 @@ builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
 
 builder.Services.AddScoped<IUserService, UserService>();
 //builder.Services.AddScoped<ILocationService, LocationImplementation>();
+builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+builder.Services.AddScoped<IStockReportService, StockReportService>();
+builder.Services.AddScoped<IPendingAckService, PendingAckService>();
+builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();
+builder.Services.AddScoped<IAckCycleService, AckCycleService>();
+builder.Services.AddScoped<ILiquidationCycleService, LiquidationCycleService>();
+builder.Services.AddScoped<IProductStockAvailabilityService, ProductStockAvailabilityService>();
+builder.Services.AddScoped<IStockDetailsService, StockDetailsService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];
@@ -70,6 +78,23 @@ builder.Services.AddAuthentication(options =>
         RoleClaimType = ClaimTypes.Role,
         NameClaimType = ClaimTypes.Name,
         ClockSkew = TimeSpan.Zero
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) &&
+                (path.StartsWithSegments("/api/DealerFile/view") ||
+                 path.StartsWithSegments("/api/LogisticsFile/view") ||
+                 path.StartsWithSegments("/api/LogisticsFile/download")))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
     };
 });
 

@@ -238,6 +238,12 @@
                             <i class="bi @(_formIsWell ? "bi-check-square-fill" : "bi-square")"></i>
                             WELL
                         </label>
+
+                        <label class="toggle-btn @(_formIsRainfed ? "active" : "")">
+                            <input type="checkbox" @bind="_formIsRainfed" />
+                            <i class="bi @(_formIsRainfed ? "bi-check-square-fill" : "bi-square")"></i>
+                            RAINFED
+                        </label>
                     </div>
                 </div>
             </div>
@@ -408,8 +414,12 @@
     public int? DealerId { get; set; }
     [SupplyParameterFromQuery(Name = "mode")]
     public string? Mode { get; set; }
+    [SupplyParameterFromQuery(Name = "flow")]
+    public string? Flow { get; set; }
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+    private bool IsNewDealerFlow => string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase);
+    private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
     private List<Crop> _crops = new();
     private string[] _monthValues = Enum.GetNames<Months>();
 
@@ -426,6 +436,7 @@
     private bool _formIsCanal;
     private bool _formIsTank;
     private bool _formIsWell;
+    private bool _formIsRainfed;
     private int _editingId;
 
     private bool _isCropDropdownOpen;
@@ -562,7 +573,8 @@
                     SeasonToMonth = toMonth,
                     IsCanal = _formIsCanal,
                     IsTank = _formIsTank,
-                    IsWell = _formIsWell
+                    IsWell = _formIsWell,
+                    IsRainfed = _formIsRainfed
                 };
 
                 var response = await Http.PutAsJsonAsync($"api/DealerMarketDetail/{_editingId}", entry);
@@ -586,6 +598,7 @@
                     existing.IsCanal = entry.IsCanal;
                     existing.IsTank = entry.IsTank;
                     existing.IsWell = entry.IsWell;
+                    existing.IsRainfed = entry.IsRainfed;
                 }
 
                 ShowMessage("Block / Village updated successfully.", false);
@@ -608,7 +621,8 @@
                         SeasonToMonth = toMonth,
                         IsCanal = _formIsCanal,
                         IsTank = _formIsTank,
-                        IsWell = _formIsWell
+                        IsWell = _formIsWell,
+                        IsRainfed = _formIsRainfed
                     };
 
                     var response = await Http.PostAsJsonAsync("api/DealerMarketDetail", entry);
@@ -656,6 +670,7 @@
         _formIsCanal = block.IsCanal;
         _formIsTank = block.IsTank;
         _formIsWell = block.IsWell;
+        _formIsRainfed = block.IsRainfed;
         _editingId = block.Id;
         _isCropDropdownOpen = false;
         _cropSearchQuery = "";
@@ -716,6 +731,7 @@
         _formIsCanal = false;
         _formIsTank = false;
         _formIsWell = false;
+        _formIsRainfed = false;
         _editingId = 0;
         _isCropDropdownOpen = false;
         _cropSearchQuery = "";
@@ -730,6 +746,7 @@
         if (block.IsCanal) types.Add("Canal");
         if (block.IsTank) types.Add("Tank");
         if (block.IsWell) types.Add("Well");
+        if (block.IsRainfed) types.Add("Rainfed");
         return types.Count > 0 ? string.Join(", ", types) : "—";
     }
 
@@ -738,7 +755,7 @@
         if (IsViewOnly)
         {
             Loading.Show();
-            Nav.NavigateTo($"/Companies?dealerId={DealerId}&mode=view");
+            Nav.NavigateTo($"/Companies?dealerId={DealerId}&mode=view{FlowParam}");
             return;
         }
         if (!DealerId.HasValue || DealerId.Value <= 0)
@@ -754,7 +771,7 @@
             var hasError = _savedBlocks.Count == 0;
             FormStepData.MarkStepError(5, hasError);
             Loading.Show();
-            Nav.NavigateTo($"/Companies?dealerId={DealerId}");
+            Nav.NavigateTo($"/Companies?dealerId={DealerId}{FlowParam}");
         }
         catch (Exception ex)
         {

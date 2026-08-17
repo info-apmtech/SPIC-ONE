@@ -31,7 +31,7 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 			OnStateChanged?.Invoke();
 		}
 
-		public static List<FormStepModel> Steps = new()
+		public static readonly List<FormStepModel> Steps = new()
 		{
 			new FormStepModel
 			{
@@ -159,6 +159,22 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 				.ToList();
 		}
 
+		// Step routes remain unchanged. Only the titles change for New Dealer Creation.
+		public static string GetDisplayTitle(FormStepModel step, bool isNewDealer)
+		{
+			if (!isNewDealer)
+				return step.Title;
+
+			return step.StepNo switch
+			{
+				10 => "Provide the SPIC dealership application fee and trade deposit details.",
+				11 => "Provide the GFL trade deposit details.",
+				12 => "Upload and verify all required dealership documents.",
+				13 => "Review the complete application before final submission.",
+				_ => step.Title
+			};
+		}
+
 		public static FormStepModel? GetStepByRoute(string route)
 		{
 			return Steps.FirstOrDefault(x =>
@@ -180,9 +196,7 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 			}
 
 			if (currentRoute.Equals("/CreditLimit", StringComparison.OrdinalIgnoreCase))
-			{
 				return hasGreenStar ? "/CreditLimitForGreenStar" : "/Enclosures";
-			}
 
 			return GetStepByRoute(currentRoute)?.NextRoute ?? "/Dashboard";
 		}
@@ -202,9 +216,7 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 			}
 
 			if (currentRoute.Equals("/Enclosures", StringComparison.OrdinalIgnoreCase))
-			{
 				return hasGreenStar ? "/CreditLimitForGreenStar" : "/CreditLimit";
-			}
 
 			return GetStepByRoute(currentRoute)?.PreviousRoute ?? "/Dashboard";
 		}

@@ -1,4 +1,4 @@
-﻿@page "/Dashboard"
+@page "/Dashboard"
 @using System.Net.Http.Json
 @using System.Text.Json
 @using SPIC.Core.Entities
@@ -19,6 +19,91 @@
     .badge-status-insmm { background:#EDE9FE; color:#7C3AED; }
     .badge-status-inavp { background:#E0E7FF; color:#4338CA; }
 
+    /* Dealer identity badges - visual distinction only */
+    .dealer-kind-new {
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:5px 10px;
+        border-radius:999px;
+        background:#F3E8FF;
+        color:#7E22CE;
+        border:1px solid #E9D5FF;
+        font-size:0.78rem;
+        font-weight:700;
+        letter-spacing:0.02em;
+    }
+
+    .dealer-kind-code {
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:5px 10px;
+        border-radius:999px;
+        background:#DBEAFE;
+        color:#1D4ED8;
+        border:1px solid #BFDBFE;
+        font-size:0.78rem;
+        font-weight:700;
+        letter-spacing:0.01em;
+    }
+
+    .dealer-kind-pending {
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:5px 10px;
+        border-radius:999px;
+        background:#F3F4F6;
+        color:#6B7280;
+        border:1px solid #E5E7EB;
+        font-size:0.78rem;
+        font-weight:700;
+    }
+
+    .btn-credit-limit {
+        border:1px solid #A7F3D0;
+        background:#ECFDF5;
+        color:#047857;
+        border-radius:8px;
+        padding:6px 10px;
+        font-size:0.82rem;
+        font-weight:600;
+        display:inline-flex;
+        align-items:center;
+        gap:5px;
+        transition:all .15s ease-in-out;
+    }
+
+    .btn-credit-limit:hover {
+        background:#D1FAE5;
+        border-color:#6EE7B7;
+        color:#065F46;
+    }
+
+    /* Approved New Dealer -> Existing Dealer maintenance action.
+       Visual addition only; normal Edit/Review routing is unchanged. */
+    .btn-update-existing-dealer {
+        border:1px solid #BFDBFE;
+        background:#EFF6FF;
+        color:#1D4ED8;
+        border-radius:8px;
+        padding:6px 10px;
+        font-size:0.82rem;
+        font-weight:600;
+        display:inline-flex;
+        align-items:center;
+        gap:5px;
+        transition:all .15s ease-in-out;
+        white-space:nowrap;
+    }
+
+    .btn-update-existing-dealer:hover {
+        background:#DBEAFE;
+        border-color:#93C5FD;
+        color:#1E40AF;
+    }
+
     .btn-completed-badge {
         background:#F3F4F6;
         color:#6B7280;
@@ -38,46 +123,105 @@
         line-height: 1 !important;
         white-space: nowrap;
     }
+
+    /* First-time New Dealer final approval marker.
+       Existing Dealer and New Dealer maintenance completion keep the existing
+       100% Completed circle. Visual-only differentiation. */
+    .new-dealer-first-complete {
+        width: 72px;
+        height: 72px;
+        min-width: 72px;
+        border: 5px solid #087A3D;
+        border-radius: 50%;
+        background: #FFFFFF;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+    }
+
+    .new-dealer-first-complete i {
+        color: #16A34A;
+        font-size: 39px;
+        line-height: 1;
+    }
 </style>
 
 <div class="container-fluid py-4 px-0">
-    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3 mb-4 page-header-row">
-        <div class="page-header-text">
-            <h1 class="page-title">Dealer Registrations</h1>
-            <p class="page-subtitle">Manage all draft, in-progress, submitted, and approved dealer applications</p>
-        </div>
-        <div class="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2 page-header-actions">
-           
-            @if (CanShowcreatebutton && CanCreateDealer)
-                {
-                    <NavLink href="/Register" class="btn-create-new text-decoration-none">
-                        <i class="bi bi-plus-lg"></i> Create New Registration
-                    </NavLink>
-                }
-            @if (CanShowHeaderActions)
-            { 
-                <button class="btn-create-new" @onclick="DownloadSampleTemplate"
-                        style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
-                    <i class="bi bi-file-earmark-excel"></i> Sample Format
-                </button>
-                <button class="btn-create-new" @onclick="() => _showImportModal = true"
-                        style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
-                    <i class="bi bi-cloud-arrow-up"></i> Import from Excel
-                </button>
-                <button class="btn-create-new" @onclick="OpenManualModal"
-                        style="background: #fff; color: #16a34a; border: 1.5px solid #16a34a;">
-                    <i class="bi bi-person-plus"></i> Add Dealer
-                </button>
-                <button class="btn-create-new" @onclick="ExportDealers"
-                        style="background: #fff; color: #2563eb; border: 1.5px solid #2563eb;">
-                    <i class="bi bi-download"></i> Export Dealers
-                </button>
-            }
-        </div>
+   <div class="dealer-page-header mb-4">
+
+    <div class="dealer-heading">
+        <h1 class="page-title">Dealer Registrations</h1>
+
+        <p class="page-subtitle">
+            Manage all draft, in-progress, submitted, and approved dealer applications
+        </p>
     </div>
 
+    <div class="dealer-header-actions">
+
+        @if (CanShowcreatebutton && CanCreateDealer)
+        {
+           @*  <NavLink href="/Register?flow=new"
+                     class="header-action-btn action-green text-decoration-none">
+                <i class="bi bi-plus-circle"></i>
+                <span>Create New Dealer</span>
+            </NavLink> *@
+
+            <NavLink href="/Register"
+                     class="header-action-btn action-primary text-decoration-none">
+                <i class="bi bi-plus-lg"></i>
+                <span>Create Existing Dealer</span>
+            </NavLink>
+        }
+
+        @if (CanShowHeaderActions)
+        {
+            <button type="button"
+                    class="header-action-btn action-green"
+                    @onclick="DownloadSampleTemplate">
+                <i class="bi bi-file-earmark-excel"></i>
+                <span>Sample Format</span>
+            </button>
+
+            <button type="button"
+                    class="header-action-btn action-green"
+                    @onclick="() => _showImportModal = true">
+                <i class="bi bi-cloud-arrow-up"></i>
+                <span>Import from Excel</span>
+            </button>
+
+            <button type="button"
+                    class="header-action-btn action-green"
+                    @onclick="OpenManualModal">
+                <i class="bi bi-person-plus"></i>
+                <span>Add Dealer</span>
+            </button>
+
+            <button type="button"
+                    class="header-action-btn action-blue"
+                    @onclick="ExportDealers">
+                <i class="bi bi-download"></i>
+                <span>Export Dealers</span>
+            </button>
+        }
+
+        @* State-wise dealer summary moved to a separate page so Dashboard stays fast.
+           Visibility remains exactly the same as the old inline table: Admin only. *@
+        @if (LoginState.IsAdmin)
+        {
+            <NavLink href="/DealerStateSummary"
+                     class="header-action-btn action-primary text-decoration-none">
+                <i class="bi bi-table"></i>
+                <span>Total Dealer List</span>
+            </NavLink>
+        }
+
+    </div>
+</div>
+
     <div class="row g-3 mb-4">
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-4 col-lg-3">
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-green"><i class="bi bi-file-earmark-check"></i></div>
@@ -86,54 +230,52 @@
                 <div class="kpi-label">Total Registrations</div>
             </div>
         </div>
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-4 col-lg-3">
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-gray"><i class="bi bi-file-earmark-text"></i></div>
-                    <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && GetApprovalStatus(d) == "Draft")</div>
+                    <div class="kpi-number">@CountDraft()</div>
                 </div>
                 <div class="kpi-label">Draft</div>
             </div>
         </div>
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-4 col-lg-3">
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                   <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && d.IsSubmittedForReview == true && ((d.RMApproved == null) || (d.RMApproved == true && d.SMApproved == false)))</div>
+                   <div class="kpi-number">@CountInRM()</div>
                 </div>
                 <div class="kpi-label">In RM</div>
             </div>
         </div>
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-4 col-lg-3">
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                  <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && ((_completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == null) || (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false)))</div>
+                  <div class="kpi-number">@CountInSMM()</div>
                 </div>
                 <div class="kpi-label">In SMM</div>
             </div>
         </div>
-    </div>
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-4 col-lg-3">
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                  <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)</div>
+                  <div class="kpi-number">@CountInAVP()</div>
                 </div>
-                <div class="kpi-label">In Avp</div>
+                <div class="kpi-label">In AVP</div>
             </div>
         </div>
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-4 col-lg-3">
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-green"><i class="bi bi-check-circle"></i></div>
-                   <div class="kpi-number">@_filteredDealers.Count(d => d.Status != 2 && d.AVPApproved == true)</div>
+                   <div class="kpi-number">@CountApproved()</div>
                 </div>
                 <div class="kpi-label">Approved</div>
             </div>
         </div>
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-4 col-lg-3">
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-red"><i class="bi bi-x-circle"></i></div>
@@ -145,7 +287,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-4 col-lg-3">
             <div class="kpi-card justify-content-center">
                 <div class="kpi-label mb-2">Status</div>
                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -160,48 +302,64 @@
         </div>
     </div>
 
-    <div class="filter-bar">
-
-        <div class="search-wrap">
-            <input type="text" class="search-input" placeholder="Search by Dealer Code or Firm Name" @bind="_searchText" @bind:after="ApplyFilters">
+    <div class="p-3 bg-white mb-4" style="border-radius: 12px; border: 1px solid #E5E7EB;">
+        <div class="row g-3">
+            <div class="col-12 col-md-6 col-lg-4 col-xxl-4">
+                <div class="search-wrap h-100 position-relative">
+                    <input type="text" class="search-input w-100 h-100" placeholder="Search by Dealer Code or Firm Name" @bind="_searchText" @bind:after="ApplyFilters" style="padding: 8px 12px 8px 32px; min-height: 38px;">
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 col-xxl">
+                <select class="filter-select w-100 h-100" @bind="_filterCompany" @bind:after="ApplyFilters" style="min-height: 38px;">
+                    <option value="">All Companies</option>
+                    <option value="SPIC">SPIC</option>
+                    <option value="GreenStar">GreenStar</option>
+                    <option value="Both">Both (SPIC & GreenStar)</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 col-xxl">
+                <select class="filter-select w-100 h-100" @bind="_filterDealerRegistrationType" @bind:after="ApplyFilters" style="min-height: 38px;">
+                    <option value="">All Dealer Types</option>
+                    <option value="new">New Dealers</option>
+                    <option value="existing">Existing Dealers</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 col-xxl">
+                <select class="filter-select w-100 h-100" @bind="_filterStatus" @bind:after="ApplyFilters" style="min-height: 38px;">
+                    <option value="-1">All Statuses</option>
+                    <option value="0">Active</option>
+                    <option value="1">Inactive</option>
+                    <option value="2">Terminated</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 col-xxl">
+                <select class="filter-select w-100 h-100" @bind="_filterRegionId" @bind:after="ApplyFilters" style="min-height: 38px;">
+                    <option value="0">All Regions</option>
+                    @foreach (var r in _regionsAll)
+                    {
+                        <option value="@r.Id">@r.RegionName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 col-xxl">
+                <select class="filter-select w-100 h-100" @bind="_filterEntityType" @bind:after="ApplyFilters" style="min-height: 38px;">
+                    <option value="">All Entities</option>
+                    <option value="soleProprietor">Sole Proprietor</option>
+                    <option value="Partnership">Partnership</option>
+                    <option value="LLP">LLP</option>
+                    <option value="PvtLtd">Pvt Ltd</option>
+                    <option value="PubLtd">Pub Ltd</option>
+                    <option value="Society">Society</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 col-xxl">
+                <select class="filter-select w-100 h-100" @bind="_sortOrder" @bind:after="ApplyFilters" style="min-height: 38px;">
+                    <option value="recent">Recently Updated</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="name">Firm Name A-Z</option>
+                </select>
+            </div>
         </div>
-
-        <div class="filter-group">
-            <select class="filter-select" @bind="_filterCompany" @bind:after="ApplyFilters">
-                <option value="">All Companies</option>
-                <option value="SPIC">SPIC</option>
-                <option value="GreenStar">GreenStar</option>
-                <option value="Both">Both (SPIC & GreenStar)</option>
-            </select>
-            <select class="filter-select" @bind="_filterStatus" @bind:after="ApplyFilters">
-                <option value="-1">All Statuses</option>
-                <option value="0">Active</option>
-                <option value="1">Inactive</option>
-                <option value="2">Terminated</option>
-            </select>
-            <select class="filter-select" @bind="_filterRegionId" @bind:after="ApplyFilters">
-                <option value="0">All Regions</option>
-                @foreach (var r in _regionsAll)
-                {
-                    <option value="@r.Id">@r.RegionName</option>
-                }
-            </select>
-            <select class="filter-select" @bind="_filterEntityType" @bind:after="ApplyFilters">
-                <option value="">All Entity Type</option>
-                <option value="soleProprietor">Sole Proprietor</option>
-                <option value="Partnership">Partnership</option>
-                <option value="LLP">LLP</option>
-                <option value="PvtLtd">Pvt Ltd</option>
-                <option value="PubLtd">Pub Ltd</option>
-                <option value="Society">Society</option>
-            </select>
-            <select class="filter-select" @bind="_sortOrder" @bind:after="ApplyFilters">
-                <option value="recent">Recently Updated</option>
-                <option value="oldest">Oldest First</option>
-                <option value="name">Firm Name A-Z</option>
-            </select>
-        </div>
-
     </div>
 
     @if (_isLoading)
@@ -229,38 +387,29 @@
                 var hqName = _headquartersAll.FirstOrDefault(h => h.Id == dealer.HQ)?.HeadquarterName ?? "-";
                 var isPendingForMe = IsPendingForMe(dealer);
 
-                // Terminated-specific display flags — do NOT affect GetApprovalStatus, filters,
-                // KPI counts, or IsDealerComplete/CanShowReviewButton logic used elsewhere.
-                var isTerminatedDealer = dealer.Status == 2 || (dealer.Status == 1 && dealer.InactiveProposal == FutureBusinessProposal.Terminated);
-                var isTerminatedSubmitted = (dealer.Status == 2 || (dealer.Status == 1 && dealer.InactiveProposal == FutureBusinessProposal.Terminated)) && dealer.IsSubmittedForReview == true;
-
                 <div class="col-12 col-sm-12 col-md-6 col-xl-4">
                     <div class="reg-card @(isPendingForMe ? "border-primary shadow-sm" : "")">
                         <div class="card-top-row">
 
-                            @if (isTerminatedSubmitted)
+                            @if (approvalStatus == "Approved")
                             {
-                                <div class="progress-circle p-30">
-                                    <div class="progress-inner">
-                                        <div class="progress-val progress-val-small">Term</div>
-                                        <div class="progress-steps">Completed</div>
+                                @if (ShowFirstNewDealerCompletionDesign(dealer))
+                                {
+                                    <div class="new-dealer-first-complete"
+                                         title="New Dealer registration approved"
+                                         aria-label="New Dealer registration approved">
+                                        <i class="bi bi-patch-check-fill" aria-hidden="true"></i>
                                     </div>
-                                </div>
-                            }
-                            else if (isTerminatedDealer)
-                            {
-                                <div class="progress-circle p-30">
-                                    <div class="progress-inner">
-                                        <div class="progress-val">Draft</div>
-                                        <div class="progress-steps">Draft</div>
+                                }
+                                else
+                                {
+                                    <div class="progress-circle p-100">
+                                        <div class="progress-inner">
+                                            <div class="progress-val">100%</div>
+                                            <div class="progress-steps">Completed</div>
+                                        </div>
                                     </div>
-                                </div>
-                            }
-                            else if (approvalStatus == "Approved")
-                            {
-                                <div class="progress-circle p-100">
-                                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CheckedGreen.svg" class="formicon" />
-                                </div>
+                                }
                             }
                             else if (approvalStatus == "In RM" || approvalStatus == "In SMM" || approvalStatus == "In AVP")
                             {
@@ -284,13 +433,31 @@
                             }
 
                             <div class="d-flex flex-column align-items-end gap-2 card-top-right">
-                                <div class="badge-group">
+                                <div class="badge-group align-items-center">
 
-                                    @if (isTerminatedSubmitted)
+                                    @* ── Action button routing ──
+                                       Edit   → only for the MO/creator level:
+                                                  • Draft
+                                                  • Rejected by RM  (routed back down to the MO)
+                                       Review → for the approver who currently owns the record:
+                                                  • In RM  / Rejected by SMM  → RM
+                                                  • In SMM / Rejected by AVP  → SMM
+                                                  • In AVP                    → AVP
+                                    *@
+                                    @if (ShowEditButton(dealer))
                                     {
-                                        <span class="badge-custom badge-status-terminated">Terminated</span>
+                                        <button class="btn-continue-blue" @onclick="() => EditDealer(dealer)">
+                                            <i class="bi bi-pencil-square me-1"></i> Edit
+                                        </button>
                                     }
-                                    else if (isPendingForMe)
+                                    else if (CanShowReviewButton(dealer))
+                                    {
+                                        <button class="btn-continue-blue" @onclick="() => ReviewDealer(dealer.Id)">
+                                            <i class="bi bi-search me-1"></i> Review
+                                        </button>
+                                    }
+
+                                    @if (isPendingForMe)
                                     {
                                         <span class="badge-custom bg-primary text-white border-0">Action Required</span>
                                     }
@@ -327,43 +494,33 @@
                                 </div>
                                 <div class="d-flex flex-wrap justify-content-end gap-2 card-action-row">
 
-                                    @{
-    var isSubmittedForReview = dealer.IsSubmittedForReview == true;
-    var isDraftDealer = dealer.IsSubmittedForReview != true;
-    var isApprovedDealer = dealer.AVPApproved == true;
-    var isRejectedDealer = dealer.RMApproved == false || dealer.SMApproved == false || dealer.AVPApproved == false;
-    var canEditDealer = LoginState.Can("Dashboard", "Update");
-}
+                                    <button class="btn-view" @onclick="() => ViewDealer(dealer)"><i class="bi bi-eye"></i></button>
 
-@if (isTerminatedDealer && !isTerminatedSubmitted && canEditDealer)
-{
-    <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
-        <i class="bi bi-pencil-square me-1"></i> Edit
-    </button>
-}
-else if (!isTerminatedDealer && canEditDealer && isDraftDealer)
-{
-    <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
-        <i class="bi bi-pencil-square me-1"></i> Edit
-    </button>
-}
-else if (!isTerminatedDealer && canEditDealer && isRejectedDealer && !isApprovedDealer)
-{
-    <button class="btn-continue-blue" @onclick="() => EditDealer(dealer.Id)">
-        <i class="bi bi-pencil-square me-1"></i> Edit
-    </button>
-}
-else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(dealer) && approvalStatus != "Approved")
-{
-    <button class="btn-continue-blue" @onclick="() => ReviewDealer(dealer.Id)">
-        <i class="bi bi-search me-1"></i> Review
-    </button>
-}
-
-                                    <button class="btn-view" @onclick="() => ViewDealer(dealer.Id)"><i class="bi bi-eye"></i></button>
-
-                                    @if (dealer.Status != 2)
+                                    @* After a New Dealer has completed final AVP approval, allow the
+                                       same record to be maintained through the Existing Dealer form.
+                                       The permanent IsNewDealerRegistration source flag is preserved. *@
+                                    @if (CanShowApprovedNewDealerMaintenanceButton(dealer))
                                     {
+                                        <button type="button"
+                                                class="btn-update-existing-dealer"
+                                                title="Update this approved New Dealer using the Existing Dealer form"
+                                                @onclick="() => UpdateApprovedNewDealerAsExisting(dealer)">
+                                            <i class="bi bi-arrow-repeat"></i>
+                                            <span>Update Dealer</span>
+                                        </button>
+                                    }
+
+                                    @if (CanShowCreditLimitButton(dealer))
+                                    {
+                                        <button type="button"
+                                                class="btn-credit-limit"
+                                                title="Add / Edit Credit Limit"
+                                                @onclick="() => OpenCreditLimit(dealer)">
+                                            <i class="bi bi-credit-card-2-front"></i>
+                                            <span>Credit Limit</span>
+                                        </button>
+                                    }
+
                                         @if (dealer.InSpic)
                                         {
                                             <a class="btn-view text-decoration-none" href="@($"/DealershipPDF/{dealer.Id}?company=SPIC")">
@@ -377,7 +534,6 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
                                                 <i class="bi bi-file-earmark-pdf me-1"></i> GFL
                                             </a>
                                         }
-                                    }
 
                                     @if (CanDeleteDealer)
                                     {
@@ -387,7 +543,27 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
                             </div>
                         </div>
                         <div class="tags-row mb-2">
-                            <div class="reg-id">REG #@(dealer.DealerCode ?? $"DL-{dealer.Id}")</div>
+                            @if (dealer.IsNewDealerRegistration && string.IsNullOrWhiteSpace(dealer.DealerCode))
+                            {
+                                <div class="dealer-kind-new">
+                                    <i class="bi bi-person-plus-fill"></i>
+                                    <span>NEW DEALER</span>
+                                </div>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(dealer.DealerCode))
+                            {
+                                <div class="dealer-kind-code">
+                                    <i class="bi bi-person-badge-fill"></i>
+                                    <span>Dealer Code: @dealer.DealerCode</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="dealer-kind-pending">
+                                    <i class="bi bi-hourglass-split"></i>
+                                    <span>Dealer Code Pending</span>
+                                </div>
+                            }
                             <h3 class="company-name">@(dealer.FirmName ?? "Unnamed Firm")</h3>
                             <div class="location-info">
                                 <div><i class="bi bi-geo-alt"></i> Region: @regionName</div>
@@ -428,128 +604,8 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
         </div>
    }
 
-    @if (LoginState.IsAdmin && !_isLoading)
-    {
-       <div class="mt-5">
-            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                <h4 class="fw-bold m-0" style="color:#1F2937;">Total Dealers — State Wise</h4>
-                <div class="d-flex gap-3">
-                    <div class="d-flex align-items-center gap-2" style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:6px 14px;">
-                        <span style="color:#1D4ED8; font-weight:600; font-size:0.85rem;">Total Dealers:</span>
-                       <span style="color:#1D4ED8; font-weight:700; font-size:1rem;">@_trueTotalDealerCount</span>
-                    </div>
-                    <div class="d-flex align-items-center gap-2" style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:8px; padding:6px 14px;">
-                        <span style="color:#047857; font-weight:600; font-size:0.85rem;">Completed:</span>
-                        <span style="color:#047857; font-weight:700; font-size:1rem;">@_allDealers.Count(d => d.Status != 2 && d.AVPApproved == true)</span>
-                    </div>
-                </div>
-            </div>
-            <div class="table-responsive" style="border:1px solid #E5E7EB; border-radius:12px; overflow:hidden;">
-                <table class="table mb-0" style="background:#fff;">
-                   <thead style="background:#F9FAFB;">
-                        <tr>
-                            <th rowspan="2" style="padding:12px 16px; font-weight:600; color:#374151; width:60px; vertical-align:middle;">S.No</th>
-                            <th rowspan="2" style="padding:12px 16px; font-weight:600; color:#374151; vertical-align:middle;">State</th>
-                            <th colspan="2" style="padding:8px 16px; font-weight:600; color:#374151; text-align:center; border-bottom:1px solid #E5E7EB;">As Per SAP Data</th>
-                            <th colspan="2" style="padding:8px 16px; font-weight:600; color:#374151; text-align:center; border-bottom:1px solid #E5E7EB;">Saved Dealers</th>
-                            <th colspan="2" style="padding:8px 16px; font-weight:600; color:#374151; text-align:center; border-bottom:1px solid #E5E7EB;">MO</th>
-                            <th colspan="2" style="padding:8px 16px; font-weight:600; color:#374151; text-align:center; border-bottom:1px solid #E5E7EB;">RM</th>
-                            <th colspan="2" style="padding:8px 16px; font-weight:600; color:#374151; text-align:center; border-bottom:1px solid #E5E7EB;">SMM</th>
-                            <th colspan="2" style="padding:8px 16px; font-weight:600; color:#374151; text-align:center; border-bottom:1px solid #E5E7EB;">AVP</th>
-                            <th colspan="2" style="padding:8px 16px; font-weight:600; color:#374151; text-align:center; border-bottom:1px solid #E5E7EB;">Completed</th>
-                        </tr>
-                        <tr>
-                            @foreach (var _grp in Enumerable.Range(0, 7))
-                            {
-                                <th style="padding:8px 12px; font-weight:600; color:#6B7280; text-align:center;">SPIC</th>
-                                <th style="padding:8px 12px; font-weight:600; color:#6B7280; text-align:center;">GFL</th>
-                            }
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var (row, idx) in StateTablePagedRows.Select((v, i) => (v, i)))
-                        {
-                           <tr>
-                                <td style="padding:10px 16px; color:#6B7280;">@((_stateTableCurrentPage - 1) * _stateTablePageSize + idx + 1)</td>
-                                <td style="padding:10px 16px;">@row.StateName</td>
-                              <td style="padding:10px 12px; text-align:center;">@Dash(row.AsPerSapSpic)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.AsPerSapGfl)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.SavedDealersSpic)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.SavedDealersGfl)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.MoSpic)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.MoGfl)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.RmSpic)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.RmGfl)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.SmmSpic)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.SmmGfl)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.AvpSpic)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.AvpGfl)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.CompletedSpic)</td>
-                                <td style="padding:10px 12px; text-align:center;">@Dash(row.CompletedGfl)</td>
-                            </tr>
-                        }
-                   </tbody>
-                    <tfoot>
-                        @{
-                            var allRows = GetCachedStateWiseSummary();
-                        }
-                      <tr style="background:#F9FAFB; border-top:2px solid #E5E7EB;">
-                            <td style="padding:10px 16px;"></td>
-                            <td style="padding:10px 16px; font-weight:700; color:#1F2937;">Total</td>
-                         <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.AsPerSapSpic))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.AsPerSapGfl))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.SavedDealersSpic))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.SavedDealersGfl))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.MoSpic))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.MoGfl))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.RmSpic))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.RmGfl))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.SmmSpic))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.SmmGfl))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.AvpSpic))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.AvpGfl))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.CompletedSpic))</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#1F2937; text-align:center;">@Dash(allRows.Sum(r => r.CompletedGfl))</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mt-3">
-                <div class="d-flex align-items-center gap-2" style="font-size:0.85rem; color:#374151;">
-                    Items Per Page
-                    <select class="filter-select" style="width:auto; padding:4px 10px;" @bind="_stateTablePageSize" @bind:after="StateTableOnPageSizeChanged">
-                        <option value="10">10</option>
-                        <option value="25">25</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                    </select>
-                </div>
-
-                <div class="d-flex align-items-center gap-2">
-                    <button class="btn btn-sm btn-outline-secondary" disabled="@(_stateTableCurrentPage <= 1)" @onclick="StateTablePreviousPage">
-                        <i class="bi bi-chevron-left"></i>
-                    </button>
-                    @foreach (var pageNum in StateTablePageNumbers)
-                    {
-                        @if (pageNum == -1)
-                        {
-                            <span class="px-2">...</span>
-                        }
-                        else
-                        {
-                            <button class="btn btn-sm @(pageNum == _stateTableCurrentPage ? "btn-primary" : "btn-outline-secondary")" @onclick="() => StateTableGoToPage(pageNum)">@pageNum</button>
-                        }
-                    }
-                    <button class="btn btn-sm btn-outline-secondary" disabled="@(_stateTableCurrentPage >= StateTableTotalPages)" @onclick="StateTableNextPage">
-                        <i class="bi bi-chevron-right"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-    }
-
 </div>
+
 
 @if (_showManualModal)
 {
@@ -721,18 +777,12 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     private List<RegionDto> _regionsAll = new();
     private List<HeadquarterDto> _headquartersAll = new();
     private List<StateDto> _statesAll = new();
-    private int _trueTotalDealerCount = 0;
-    private List<DealerDto> _allDealersFull = new();
-    private List<StateWiseSummary> _stateWiseSummaryCache = new();
-
-    // Pagination for the state-wise table
-    private int _stateTableCurrentPage = 1;
-    private int _stateTablePageSize = 10;
     private bool _isLoading = true;
 
     // Filters
     private string _searchText = "";
     private string _filterCompany = "";
+    private string _filterDealerRegistrationType = "";
     private int _filterStatus = -1;
     private int _filterRegionId;
     private string _filterEntityType = "";
@@ -866,6 +916,60 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     private bool CanShowHeaderActions => LoginState.UserRole == AppRole.Admin || LoginState.UserRole == AppRole.AVP;
     private bool CanShowcreatebutton => LoginState.UserRole == AppRole.MO || LoginState.UserRole == AppRole.MDO || LoginState.UserRole == AppRole.JMDO|| LoginState.IsAdmin;
 
+    // Approved New Dealer maintenance: shown only after final AVP approval and only
+    // to users who already have Dashboard Update permission. This does not replace
+    // or widen the existing Draft/Review ownership rules above.
+    private bool CanShowApprovedNewDealerMaintenanceButton(DealerDto dealer)
+    {
+        if (dealer == null) return false;
+        if (!LoginState.Can("Dashboard", "Update")) return false;
+
+        return dealer.IsNewDealerRegistration
+            && dealer.AVPApproved == true
+            && !string.IsNullOrWhiteSpace(dealer.DealerCode);
+    }
+
+    // Completion display rule:
+    // 1) Normal Existing Dealer final approval -> existing 100% Completed design.
+    // 2) First New Dealer final AVP approval -> dedicated green verification design.
+    // 3) New Dealer after Update Existing Dealer + RM/SMM/AVP re-approval ->
+    //    existing 100% Completed design.
+    // The API supplies HasCompletedExistingMaintenance from credit-limit + approval-history
+    // evidence, so DealerCode is never used as the completion-cycle discriminator.
+    private static bool ShowFirstNewDealerCompletionDesign(DealerDto dealer)
+    {
+        if (dealer == null) return false;
+
+        return dealer.IsNewDealerRegistration
+            && dealer.AVPApproved == true
+            && !string.IsNullOrWhiteSpace(dealer.DealerCode)
+            && !dealer.HasCompletedExistingMaintenance;
+    }
+
+    // Standalone Credit Limit action is available only after the application has
+    // been submitted for review AND fully approved by the AVP (both must be true),
+    // and a real Dealer Code exists.
+    // Visibility is restricted to Admin and MO roles only.
+    // Page-level CreditLimit permissions are reused; approval/edit/review routing is untouched.
+    private bool CanShowCreditLimitButton(DealerDto dealer)
+    {
+        if (dealer == null) return false;
+
+        if (LoginState.UserRole != AppRole.Admin && LoginState.UserRole != AppRole.MO) return false;
+
+        if (dealer.IsSubmittedForReview != true || dealer.AVPApproved != true) return false;
+
+        if (string.IsNullOrWhiteSpace(dealer.DealerCode)) return false;
+
+        var canSpic = dealer.InSpic &&
+            (LoginState.Can("CreditLimit", "Entry") || LoginState.Can("CreditLimit", "Update"));
+
+        var canGreenStar = dealer.InGreenStar &&
+            (LoginState.Can("CreditLimitForGreenStar", "Entry") || LoginState.Can("CreditLimitForGreenStar", "Update"));
+
+        return canSpic || canGreenStar;
+    }
+
     private async Task<List<TItem>> SafeGet<TItem>(string url)
     {
         try { return await Http.GetFromJsonAsync<List<TItem>>(url) ?? new(); }
@@ -877,75 +981,26 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
         _isLoading = true;
         try
         {
-            // Kick off every request at once (no awaits yet)
             var dealersTask   = SafeGet<DealerDto>("api/DealerRegistration/submitted");
             var regionsTask   = SafeGet<RegionDto>("api/Region/all");
             var hqTask        = SafeGet<HeadquarterDto>("api/Headquarter/all");
-           var statesTask    = SafeGet<StateDto>("api/State/all");
-            var allDealersCountTask = SafeGet<DealerDto>("api/DealerRegistration/all");
-            var expTask       = SafeGet<DealerExperience>("api/DealerExperience");
-            var annualTask    = SafeGet<AnnualSaleDataLastFYofDealerRegistration>("api/AnnualSaleDataLastFYofDealerRegistration");
-            var whTask        = SafeGet<DealerWarehouseFacilities>("api/DealerWarehouseFacilities");
-            var railTask      = SafeGet<DealerRailFacilities>("api/DealerRailFacilities");
-            var portTask      = SafeGet<DealerPortFacilities>("api/DealerPortFacilities");
-            var marketTask    = SafeGet<DealerMarketDetail>("api/DealerMarketDetail");
-            var compTask      = SafeGet<DealerCompaniesOperatingInArea>("api/DealerCompaniesOperatingInArea");
-            var ownerTask     = SafeGet<DealerOwnershipInfo>("api/DealerOwnershipInfo");
-            var partnerTask   = SafeGet<PartnerFamilyDetails>("api/PartnerFamilyDetails");
-            var occTask       = SafeGet<PartnerOccupation>("api/PartnerOccupation");
-            var salesPlanTask = SafeGet<SalesPlanningInDealerRegistration>("api/SalesPlanning");
-            var bankTask      = SafeGet<DealerAssetBank>("api/DealerAssetBank");
-            var landTask      = SafeGet<DealerAssetLand>("api/DealerAssetLand");
-            var buildingTask  = SafeGet<DealerAssetBuilding>("api/DealerAssetBuilding");
-            var loanTask      = SafeGet<DealerLoanLiabilities>("api/DealerLoanLiabilities");
-            var creditTask    = SafeGet<DealerCreditLimitProposal>("api/DealerCreditLimitProposal");
-            var creditSalesTask = SafeGet<DealerCreditLimitSalesPerformance>("api/DealerCreditLimitSalesPerformance");
-           var docsTask      = SafeGet<DealerRegistrationDocuments>("api/DealerRegistrationDocuments");
-          var categoriesTask = SafeGet<Category>("api/Category");
-            var productsTask   = SafeGet<Product>("api/Product");
-           var approvalHistoryTask = SafeGet<DealerApprovalHistory>("api/DealerApprovalHistory");
+            var statesTask    = SafeGet<StateDto>("api/State/all");
 
-            // Wait for all of them in parallel
-            await Task.WhenAll(
-                dealersTask, regionsTask, hqTask, expTask, annualTask, whTask, railTask,
-                portTask, marketTask, compTask, ownerTask, partnerTask, occTask,
-                salesPlanTask, bankTask, landTask, buildingTask, loanTask,
-            creditTask, creditSalesTask, docsTask, categoriesTask, productsTask, approvalHistoryTask, statesTask, allDealersCountTask);
+            // Existing optimized endpoint for step counts.
+            var countsTask    = Http.GetFromJsonAsync<Dictionary<int, int>>("api/DealerRegistration/dashboard-completion-counts");
 
-            // Assign results
+            await Task.WhenAll(dealersTask, regionsTask, hqTask, statesTask, countsTask);
+
             _allDealers          = await dealersTask;
             _regionsAll          = await regionsTask;
             _headquartersAll     = await hqTask;
-           _statesAll           = await statesTask;
-            _allDealersFull       = await allDealersCountTask;
-            _trueTotalDealerCount = _allDealersFull.Count;
-            _allExperiences      = await expTask;
-            _allAnnualSales      = await annualTask;
-            _allWarehouses       = await whTask;
-            _allRails            = await railTask;
-            _allPorts            = await portTask;
-            _allMarketDetails    = await marketTask;
-            _allCompaniesOperating = await compTask;
-            _allOwnerships       = await ownerTask;
-            _allPartners         = await partnerTask;
-            _allOccupations      = await occTask;
-            _allSalesPlanning    = await salesPlanTask;
-            _allAssetBanks       = await bankTask;
-            _allAssetLands       = await landTask;
-            _allAssetBuildings   = await buildingTask;
-            _allLoans            = await loanTask;
-            _allCreditProposals  = await creditTask;
-            _allCreditSales      = await creditSalesTask;
-           _allDocuments        = await docsTask;
-            _allCategories       = await categoriesTask;
-            _allProducts         = await productsTask;
-          _allApprovalHistory  = await approvalHistoryTask;
+            _statesAll           = await statesTask;
 
-         BuildCompletionSet();
+            _dealerStepCounts = await countsTask ?? new Dictionary<int, int>();
+            _completeDealerIds = _dealerStepCounts.Where(kv => kv.Value >= 11).Select(kv => kv.Key).ToHashSet();
+
             ApplyRoleFilter();
             ApplyFilters();
-            _stateWiseSummaryCache = new();
-            _stateTableCurrentPage = 1;
         }
         catch { }
         finally
@@ -964,46 +1019,47 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
             _allDealers = _allDealers.Where(d => d.HQ == LoginState.HQId).ToList();
     }
 
-    private void BuildCompletionSet()
-    {
-        _dealerStepCounts.Clear();
-        foreach (var d in _allDealers)
-        {
-            int count = 0;
-            if (!string.IsNullOrWhiteSpace(d.PinCode)) count++;
-            if (_allExperiences.Any(x => x.DealerId == d.Id)) count++;
-            if (_allAnnualSales.Any(x => x.DealerId == d.Id)) count++;
-            if (_allWarehouses.Any(x => x.DealerId == d.Id) || _allRails.Any(x => x.DealerId == d.Id) || _allPorts.Any(x => x.DealerId == d.Id)) count++;
-            if (_allMarketDetails.Any(x => x.DealerId == d.Id)) count++;
-            if (_allCompaniesOperating.Any(x => x.DealerId == d.Id)) count++;
-            if (_allOwnerships.Any(x => x.DealerId == d.Id)) count++;
-            bool hasPartner = _allPartners.Any(p => _allOwnerships.Any(o => o.Id == p.OwnershipPartnerId && o.DealerId == d.Id));
-            bool hasOccupation = _allOccupations.Any(o => _allOwnerships.Any(own => own.Id == o.OwnershipPartnerId && own.DealerId == d.Id));
-            if (hasPartner || hasOccupation) count++;
-            if (_allSalesPlanning.Any(x => x.DealerId == d.Id)) count++;
-            if (_allAssetBanks.Any(x => x.DealerId == d.Id) || _allAssetLands.Any(x => x.DealerId == d.Id) || _allAssetBuildings.Any(x => x.DealerId == d.Id)) count++;
-            if (_allLoans.Any(x => x.DealerId == d.Id)) count++;
-            bool hasCreditProposal = _allCreditProposals.Any(cp => cp.DealerId == d.Id);
-            bool hasCreditSales = _allCreditSales.Any(s => _allCreditProposals.Any(cp => cp.Id == s.CreditLimitId && cp.DealerId == d.Id));
-            if (hasCreditProposal || hasCreditSales) count++;
-            if (_allDocuments.Any(x => x.DealerId == d.Id)) count++;
 
-            _dealerStepCounts[d.Id] = count;
-        }
-
-        _completeDealerIds = _dealerStepCounts.Where(kv => kv.Value >= 11).Select(kv => kv.Key).ToHashSet();
-    }
 
     private bool IsDealerComplete(int dealerId) => _dealerStepCounts.TryGetValue(dealerId, out var c) && c >= 11;
 
     private int CountRejectedTotal()
     {
-        return _filteredDealers.Count(d => d.Status != 2 && (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false));
+        return _filteredDealers.Count(d => (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false));
     }
 
-    private int CountRejectedByRM() => _filteredDealers.Count(d => d.Status != 2 && d.RMApproved == false);
-    private int CountRejectedBySMM() => _filteredDealers.Count(d => d.Status != 2 && d.SMApproved == false);
-    private int CountRejectedByAVP() => _filteredDealers.Count(d => d.Status != 2 && d.AVPApproved == false);
+    private int CountRejectedByRM() => _filteredDealers.Count(d => d.RMApproved == false);
+    private int CountRejectedBySMM() => _filteredDealers.Count(d => d.SMApproved == false);
+    private int CountRejectedByAVP() => _filteredDealers.Count(d => d.AVPApproved == false);
+
+    // ── Stage counts for the KPI cards ──
+    // Driven purely by the approval flags (same logic as GetApprovalStatus) so
+    // they never silently read 0 when the completion-counts endpoint is stale
+    // or fails. Rejections are folded into the level they route back down to,
+    // matching the "In RM / In SMM" card semantics.
+    private int CountDraft() =>
+        _filteredDealers.Count(d => d.Status != 2 && GetApprovalStatus(d) == "Draft");
+
+    private int CountInRM() =>
+        _filteredDealers.Count(d =>
+        {
+            var s = GetApprovalStatus(d);
+            return s == "In RM" || s == "Rejected by SMM";
+        });
+
+    private int CountInSMM() =>
+        _filteredDealers.Count(d =>
+        {
+            var s = GetApprovalStatus(d);
+            return s == "In SMM" || s == "Rejected by AVP";
+        });
+
+    private int CountInAVP() =>
+        _filteredDealers.Count(d => GetApprovalStatus(d) == "In AVP");
+
+    // AVP-approved = fully approved dealers.
+    private int CountApproved() =>
+        _filteredDealers.Count(d => d.AVPApproved == true);
 
     private string GetApprovalStatus(DealerDto d)
     {
@@ -1021,45 +1077,94 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
         return "Submitted";
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Ownership / routing — WHO currently owns the record and must act on it.
+    //  This is the single source of truth for which button (Edit vs Review) is
+    //  shown, and does NOT alter the approval/rejection workflow itself.
+    //
+    //  Draft                → MO  (creator edits)
+    //  Rejected by RM       → MO  (routed back down to the creator)
+    //  In RM  / Rej. by SMM → RM  (RM reviews & corrects, or sends back to MO)
+    //  In SMM / Rej. by AVP → SMM (SMM reviews & corrects, or sends back to RM)
+    //  In AVP               → AVP
+    //  Approved             → None
+    // ─────────────────────────────────────────────────────────────────────────
+    private enum OwnerLevel { None, MO, RM, SMM, AVP }
+
+    private OwnerLevel GetCurrentOwnerLevel(DealerDto d)
+    {
+        if (d == null) return OwnerLevel.None;
+
+        // Never submitted → still a draft owned by the MO/creator.
+        if (d.IsSubmittedForReview != true) return OwnerLevel.MO;
+
+        // Fully approved → nobody needs to act.
+        if (d.AVPApproved == true) return OwnerLevel.None;
+
+        // Rejections route BACK DOWN one level (order matters: match GetApprovalStatus).
+        if (d.RMApproved == false) return OwnerLevel.MO;   // Rejected by RM  → MO
+        if (d.SMApproved == false) return OwnerLevel.RM;   // Rejected by SMM → RM
+        if (d.AVPApproved == false) return OwnerLevel.SMM; // Rejected by AVP → SMM
+
+        // Normal forward flow.
+        if (d.RMApproved == null) return OwnerLevel.RM;                                   // In RM
+        if (d.RMApproved == true && d.SMApproved == null) return OwnerLevel.SMM;          // In SMM
+        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return OwnerLevel.AVP; // In AVP
+
+        return OwnerLevel.None;
+    }
+
+    // Edit (full re-registration) is ONLY for the MO/creator level:
+    //   • Draft
+    //   • Rejected by RM  (came back down to the MO)
+    // For SMM/AVP rejections the record is owned by RM/SMM respectively, so
+    // those approvers get the Review button instead — never a raw Edit.
+    private bool ShowEditButton(DealerDto d)
+    {
+        if (d == null) return false;
+        if (!LoginState.Can("Dashboard", "Update")) return false;
+
+        // Edit is only for MO-level records (Draft or Rejected-by-RM) and only
+        // for the maker who owns them — the actual creator or an MO-type role.
+        if (GetCurrentOwnerLevel(d) != OwnerLevel.MO) return false;
+
+        return IsCreatorLevelUser(d);
+    }
+
+    // The maker/creator who owns MO-level records: the user who created the
+    // registration, or an MO / MDO / JMDO role (already scoped to their HQ by
+    // ApplyRoleFilter). Approver roles (RM / SMM / AVP) are NOT creators, so a
+    // draft never shows "Action Required" or Edit to them.
+    private bool IsCreatorLevelUser(DealerDto d)
+    {
+        if (d == null) return false;
+
+        if (!string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy)
+            return true;
+
+        return LoginState.UserRole == AppRole.MO
+            || LoginState.UserRole == AppRole.MDO
+            || LoginState.UserRole == AppRole.JMDO;
+    }
+
+    // "Action Required" lights up only for the exact role that currently owns
+    // the record at its stage:
+    //   Draft   (owner MO)  → MO / creator only
+    //   In RM   (owner RM)  → RM role only
+    //   In SMM  (owner SMM) → SMM role only
+    //   In AVP  (owner AVP) → AVP role only
+    // (Rejections route the ownership back down one level, so the correcting
+    //  role sees "Action Required" there too.)
     private bool IsPendingForMe(DealerDto d)
     {
-        if (d.Status == 2) return false; // Terminated dealers never enter anyone's action queue
-
-        var status = GetApprovalStatus(d);
-
-        var showForRejected = false;
-        if (!string.IsNullOrEmpty(status) && status.StartsWith("Rejected"))
+        return GetCurrentOwnerLevel(d) switch
         {
-            if (LoginState.IsRegionRole && d.RMApproved == true && d.SMApproved == false) showForRejected = true;
-            if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false) showForRejected = true;
-        }
-
-      if (d.IsSubmittedForReview != true && !showForRejected) return false;
-        if (d.AVPApproved == true) return false;
-
-        if (LoginState.IsRegionRole)
-        {
-            if (d.RMApproved == null) return true;
-            if (d.RMApproved == true && d.SMApproved == false) return true;
-            if (showForRejected) return true;
-            return false;
-        }
-
-        if (LoginState.IsStateRole)
-        {
-            if (d.RMApproved == true && d.SMApproved == null) return true;
-            if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false) return true;
-            if (showForRejected) return true;
-            return false;
-        }
-
-        if (LoginState.IsAdmin)
-        {
-            if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return true;
-            return false;
-        }
-
-        return false;
+            OwnerLevel.MO  => IsCreatorLevelUser(d),
+            OwnerLevel.RM  => LoginState.IsRegionRole,
+            OwnerLevel.SMM => LoginState.IsStateRole,
+            OwnerLevel.AVP => LoginState.IsAdmin,
+            _              => false
+        };
     }
 
     private void ApplyFilters()
@@ -1077,6 +1182,13 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
         if (_filterCompany == "SPIC") query = query.Where(d => d.InSpic);
         else if (_filterCompany == "GreenStar") query = query.Where(d => d.InGreenStar);
         else if (_filterCompany == "Both") query = query.Where(d => d.InSpic && d.InGreenStar);
+
+        // Registration-flow filter uses the permanent DB flag, not DealerCode.
+        // A New Dealer remains a New Dealer even after AVP approval generates DealerCode.
+        if (_filterDealerRegistrationType == "new")
+            query = query.Where(d => d.IsNewDealerRegistration);
+        else if (_filterDealerRegistrationType == "existing")
+            query = query.Where(d => !d.IsNewDealerRegistration);
 
         if (_filterStatus >= 0) query = query.Where(d => d.Status == _filterStatus);
         if (_filterRegionId > 0) query = query.Where(d => d.Region == _filterRegionId);
@@ -1199,107 +1311,6 @@ else if (!isTerminatedDealer && isSubmittedForReview && CanShowReviewButton(deal
     private decimal GetSpicAvpRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.AvpCreditLimit);
     private decimal GetGflAvpRecommendedCreditLimit(int dealerId) => GetApprovalLimitDash(dealerId, h => h.AvpCreditLimitGfl);
 
-  private List<StateWiseSummary> GetStateWiseSummary()
-    {
-        // SAP counts (from full dealer table) split by company.
-        var sapSpicByState = _allDealersFull
-            .Where(d => d.InSpic)
-            .GroupBy(d => d.StateId)
-            .ToDictionary(g => g.Key, g => g.Count());
-        var sapGflByState = _allDealersFull
-            .Where(d => d.InGreenStar)
-            .GroupBy(d => d.StateId)
-            .ToDictionary(g => g.Key, g => g.Count());
-
-        var allSapStateIds = _allDealersFull.Select(d => d.StateId).Distinct().ToHashSet();
-
-        var savedByState = _allDealers
-            .GroupBy(d => d.StateId)
-            .Select(g =>
-            {
-                var stateName = _statesAll.FirstOrDefault(s => s.Id == g.Key)?.StateName ?? "Unknown";
-                var dealers = g.ToList();
-
-                bool IsMo(DealerDto d) => d.Status != 2 && GetApprovalStatus(d) == "Draft";
-                bool IsRm(DealerDto d) => d.Status != 2 && d.IsSubmittedForReview == true && ((d.RMApproved == null) || (d.RMApproved == true && d.SMApproved == false));
-                bool IsSmm(DealerDto d) => d.Status != 2 && ((_completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == null) || (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false));
-                bool IsAvp(DealerDto d) => d.Status != 2 && _completeDealerIds.Contains(d.Id) && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null;
-                bool IsCompleted(DealerDto d) => d.Status != 2 && d.AVPApproved == true;
-
-                return new StateWiseSummary
-                {
-                    StateName = stateName,
-                    AsPerSapSpic = sapSpicByState.TryGetValue(g.Key, out var ss) ? ss : 0,
-                    AsPerSapGfl = sapGflByState.TryGetValue(g.Key, out var sg) ? sg : 0,
-                    SavedDealersSpic = dealers.Count(d => d.InSpic),
-                    SavedDealersGfl = dealers.Count(d => d.InGreenStar),
-                    MoSpic = dealers.Count(d => IsMo(d) && d.InSpic),
-                    MoGfl = dealers.Count(d => IsMo(d) && d.InGreenStar),
-                    RmSpic = dealers.Count(d => IsRm(d) && d.InSpic),
-                    RmGfl = dealers.Count(d => IsRm(d) && d.InGreenStar),
-                    SmmSpic = dealers.Count(d => IsSmm(d) && d.InSpic),
-                    SmmGfl = dealers.Count(d => IsSmm(d) && d.InGreenStar),
-                    AvpSpic = dealers.Count(d => IsAvp(d) && d.InSpic),
-                    AvpGfl = dealers.Count(d => IsAvp(d) && d.InGreenStar),
-                    CompletedSpic = dealers.Count(d => IsCompleted(d) && d.InSpic),
-                    CompletedGfl = dealers.Count(d => IsCompleted(d) && d.InGreenStar)
-                };
-            })
-            .ToList();
-
-        // States present in the full dealer table but with zero submitted dealers.
-        var missingStates = allSapStateIds
-            .Where(stateId => !savedByState.Any(s => _statesAll.FirstOrDefault(st => st.StateName == s.StateName)?.Id == stateId))
-            .Select(stateId => new StateWiseSummary
-            {
-                StateName = _statesAll.FirstOrDefault(s => s.Id == stateId)?.StateName ?? "Unknown",
-                AsPerSapSpic = sapSpicByState.TryGetValue(stateId, out var ss) ? ss : 0,
-                AsPerSapGfl = sapGflByState.TryGetValue(stateId, out var sg) ? sg : 0
-            });
-
-        return savedByState
-            .Concat(missingStates)
-            .OrderBy(s => s.StateName)
-            .ToList();
-    }
-private List<StateWiseSummary> GetCachedStateWiseSummary()
-    {
-        if (_stateWiseSummaryCache.Count == 0)
-            _stateWiseSummaryCache = GetStateWiseSummary();
-        return _stateWiseSummaryCache;
-    }
-
-    private int StateTableTotalPages => Math.Max(1, (int)Math.Ceiling(GetCachedStateWiseSummary().Count / (double)_stateTablePageSize));
-
-    private IEnumerable<StateWiseSummary> StateTablePagedRows => GetCachedStateWiseSummary()
-        .Skip((_stateTableCurrentPage - 1) * _stateTablePageSize)
-        .Take(_stateTablePageSize);
-
-    private void StateTableGoToPage(int page) { _stateTableCurrentPage = page; }
-    private void StateTablePreviousPage() { if (_stateTableCurrentPage > 1) _stateTableCurrentPage--; }
-    private void StateTableNextPage() { if (_stateTableCurrentPage < StateTableTotalPages) _stateTableCurrentPage++; }
-    private void StateTableOnPageSizeChanged() { _stateTableCurrentPage = 1; }
-
-    private IEnumerable<int> StateTablePageNumbers
-    {
-        get
-        {
-            var total = StateTableTotalPages;
-            if (total <= 7)
-                return Enumerable.Range(1, total);
-
-            var pages = new List<int> { 1 };
-            var start = Math.Max(2, _stateTableCurrentPage - 1);
-            var end = Math.Min(total - 1, _stateTableCurrentPage + 1);
-
-            if (start > 2) pages.Add(-1);
-            for (var i = start; i <= end; i++) pages.Add(i);
-            if (end < total - 1) pages.Add(-1);
-            pages.Add(total);
-
-            return pages;
-        }
-    }
 private string GetStatusName(int status) => status switch
     {
         0 => "Active",
@@ -1307,9 +1318,6 @@ private string GetStatusName(int status) => status switch
         2 => "Terminated",
         _ => "Unknown"
     };
-
-    // State-wise table: show "-" when the count is zero, otherwise the number.
-    private static string Dash(int n) => n == 0 ? "-" : n.ToString();
 
     private async Task DownloadSampleTemplate()
     {
@@ -1395,9 +1403,46 @@ private string GetStatusName(int status) => status switch
         }
     }
 
-    private void EditDealer(int dealerId) => NavManager.NavigateTo($"/Register?dealerId={dealerId}");
+    private void EditDealer(DealerDto dealer) =>
+        NavManager.NavigateTo($"/Register?dealerId={dealer.Id}{GetDealerFlowParameter(dealer)}");
+
+    private void UpdateApprovedNewDealerAsExisting(DealerDto dealer)
+    {
+        if (!CanShowApprovedNewDealerMaintenanceButton(dealer)) return;
+
+        // Explicit maintenance flow makes Register render the normal Existing Dealer
+        // sections while preserving IsNewDealerRegistration=true in the database.
+        NavManager.NavigateTo($"/Register?dealerId={dealer.Id}&flow=existing-maintenance");
+    }
+
     private void ReviewDealer(int dealerId) => NavManager.NavigateTo($"/SavedDealerReview?dealerId={dealerId}");
-    private void ViewDealer(int dealerId) => NavManager.NavigateTo($"/Register?dealerId={dealerId}&mode=view");
+
+    private void ViewDealer(DealerDto dealer) =>
+        NavManager.NavigateTo($"/Register?dealerId={dealer.Id}&mode=view{GetDealerFlowParameter(dealer)}");
+
+    // Dashboard Credit Limit entry/edit mode.
+    // `source=dashboard` lets approved New Dealers use the normal Credit Limit form
+    // instead of the New Dealer registration trade-deposit form.
+    private void OpenCreditLimit(DealerDto dealer)
+    {
+        if (dealer == null || string.IsNullOrWhiteSpace(dealer.DealerCode)) return;
+
+        if (dealer.InSpic &&
+            (LoginState.Can("CreditLimit", "Entry") || LoginState.Can("CreditLimit", "Update")))
+        {
+            NavManager.NavigateTo($"/CreditLimit?dealerId={dealer.Id}&source=dashboard");
+            return;
+        }
+
+        if (dealer.InGreenStar &&
+            (LoginState.Can("CreditLimitForGreenStar", "Entry") || LoginState.Can("CreditLimitForGreenStar", "Update")))
+        {
+            NavManager.NavigateTo($"/CreditLimitForGreenStar?dealerId={dealer.Id}&source=dashboard");
+        }
+    }
+
+    private static string GetDealerFlowParameter(DealerDto dealer) =>
+        dealer.IsNewDealerRegistration ? "&flow=new" : string.Empty;
 
     private void ConfirmDelete(DealerDto dealer)
     {
@@ -1405,29 +1450,26 @@ private string GetStatusName(int status) => status switch
         _showDeleteConfirm = true;
     }
 
+    // Review (SavedDealerReview page) is shown to the approver who currently owns
+    // the record. This includes the "back down" rejection cases:
+    //   • Rejected by SMM → owned by RM  → RM sees Review (corrects, then forwards
+    //                                       again or sends back down to the MO)
+    //   • Rejected by AVP → owned by SMM → SMM sees Review
+    // The approval/rejection workflow itself is untouched — this only decides
+    // button visibility.
     private bool CanShowReviewButton(DealerDto d)
     {
         if (d == null) return false;
-        if (LoginState.IsHQCreatorRole) return false;
+        if (d.IsSubmittedForReview != true) return false; // drafts are never "reviewed"
+        if (LoginState.IsHQCreatorRole) return false;      // creators edit, they don't review
 
-        var status = GetApprovalStatus(d);
-
-        var showForRejected = false;
-        if (!string.IsNullOrEmpty(status) && status.StartsWith("Rejected"))
+        return GetCurrentOwnerLevel(d) switch
         {
-            if (LoginState.IsRegionRole && d.RMApproved == true && d.SMApproved == false) showForRejected = true;
-            if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == false) showForRejected = true;
-        }
-
-       if (d.IsSubmittedForReview != true && !showForRejected && !(status != null && status.StartsWith("Rejected"))) return false;
-
-        if (!(status == "In RM" || status == "In SMM" || status == "In AVP" || showForRejected || (status != null && status.StartsWith("Rejected")))) return false;
-
-        if (LoginState.IsReviewerRole) return true;
-        if (LoginState.IsHQCreatorRole) return !string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy;
-        if (!string.IsNullOrEmpty(LoginState.UserId) && LoginState.UserId == d.CreatedBy) return true;
-
-        return false;
+            OwnerLevel.RM  => LoginState.IsRegionRole,
+            OwnerLevel.SMM => LoginState.IsStateRole,
+            OwnerLevel.AVP => LoginState.IsAdmin,
+            _              => false   // MO / None → no Review button
+        };
     }
 
     private void CancelDelete()
@@ -1460,8 +1502,19 @@ private string GetStatusName(int status) => status switch
 
     private async Task ExportDealers()
     {
-        var data = _filteredDealers.ToList();
-        if (!data.Any()) return;
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            if (!_allCreditProposals.Any()) _allCreditProposals = await SafeGet<DealerCreditLimitProposal>("api/DealerCreditLimitProposal");
+            if (!_allCreditSales.Any()) _allCreditSales = await SafeGet<DealerCreditLimitSalesPerformance>("api/DealerCreditLimitSalesPerformance");
+            if (!_allCategories.Any()) _allCategories = await SafeGet<Category>("api/Category");
+            if (!_allProducts.Any()) _allProducts = await SafeGet<Product>("api/Product");
+            if (!_allApprovalHistory.Any()) _allApprovalHistory = await SafeGet<DealerApprovalHistory>("api/DealerApprovalHistory");
+
+            var data = _filteredDealers.ToList();
+            if (!data.Any()) return;
 
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Dealers");
@@ -1522,6 +1575,17 @@ private string GetStatusName(int status) => status switch
         var dataUri = $"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{Convert.ToBase64String(stream.ToArray())}";
         var js = $@"var a = document.createElement('a'); a.href = '{dataUri}'; a.download = '{fileName}'; document.body.appendChild(a); a.click(); document.body.removeChild(a);";
         await JSRuntime.InvokeVoidAsync("eval", js);
+        
+        }
+        catch (Exception ex)
+        {
+            // Log or handle error if necessary
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
     }
 
     public class DealerDto
@@ -1530,6 +1594,10 @@ private string GetStatusName(int status) => status switch
         public bool IsDealer { get; set; }
         public bool InSpic { get; set; }
         public bool InGreenStar { get; set; }
+        public bool IsNewDealerRegistration { get; set; }
+        // True only after an originally New Dealer completed the Existing Dealer
+        // maintenance cycle and received the second final-level approval.
+        public bool HasCompletedExistingMaintenance { get; set; }
         public string? DealerCode { get; set; }
         public string? CreatedBy { get; set; }
         public string? SPICCode { get; set; }
@@ -1570,22 +1638,4 @@ private string GetStatusName(int status) => status switch
         public string StateName { get; set; } = "";
     }
 
-    public class StateWiseSummary
-    {
-        public string StateName { get; set; } = "";
-        public int AsPerSapSpic { get; set; }
-        public int AsPerSapGfl { get; set; }
-        public int SavedDealersSpic { get; set; }
-        public int SavedDealersGfl { get; set; }
-        public int MoSpic { get; set; }
-        public int MoGfl { get; set; }
-        public int RmSpic { get; set; }
-        public int RmGfl { get; set; }
-        public int SmmSpic { get; set; }
-        public int SmmGfl { get; set; }
-        public int AvpSpic { get; set; }
-        public int AvpGfl { get; set; }
-        public int CompletedSpic { get; set; }
-        public int CompletedGfl { get; set; }
-    }
 }

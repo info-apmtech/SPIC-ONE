@@ -1,509 +1,1137 @@
 ﻿@page "/CompanySales"
+@implements IDisposable
+@inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
+@using System.Text.Json
+@using System.Net.Http.Json
+@using System.Globalization
+@using SPIC.Core.DTOs
 
-<div class="container-fluid py-4 px-0">
-        
+<div class="container-fluid py-4 px-0 cs-page-container">
+
+    <!-- Header Section -->
     <div class="cs-header-container">
         <div class="cs-header-text">
-            <h1>Company sales</h1>
+            <h1>Pending Acknowledgement</h1>
             <p>Track and manage pending acknowledgement transactions across all channels</p>
         </div>
-        
         <div class="cs-action-buttons">
-            <button class="cs-btn cs-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path>
-                </svg>
+            <button class="cs-btn cs-btn-outline" @onclick="RefreshData" disabled="@(!_masterDataLoaded || _isLoading)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg>
                 Refresh Data
             </button>
-            <button class="cs-btn cs-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path>
-                </svg>
+            <button class="cs-btn cs-btn-outline" @onclick="ExportExcel" disabled="@(_dashboard is null || _isLoading)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg>
                 Excel
             </button>
-            <button class="cs-btn cs-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path>
-                    <path d="M16 11v4"></path><path d="M16 13h2"></path>
-                </svg>
+            <button class="cs-btn cs-btn-outline" @onclick="ExportPdf" disabled="@(_dashboard is null || _isLoading)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg>
                 PDF
             </button>
-            <button class="cs-btn cs-btn-solid">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
-                </svg>
+            <button class="cs-btn cs-btn-solid" @onclick="SendMail" disabled="@(_dashboard is null || _isLoading)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
                 Send Mail
             </button>
         </div>
     </div>
 
-    <div class="cs-stats-grid">
-        
-        <div class="cs-stat-card cs-theme-cyan">
-            <div class="cs-card-top">
-                <div class="cs-stat-info">
-                    <span class="cs-stat-title">Wholesaler sales</span>
-                    <span class="cs-stat-value">5689</span>
-                </div>
-                <div class="cs-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line><path d="M12 10 c-1.5 0 -3 -1 -3 -3 c0 -2 1.5 -3 3 -3 c1.5 0 3 1 3 3"></path></svg>
-                </div>
-            </div>
-            <div class="cs-card-bottom">
-                <div class="cs-bottom-col">
-                    <span class="cs-bottom-label">Wholesaler</span>
-                    <span class="cs-bottom-val cs-text-green">3456</span>
-                </div>
-                <div class="cs-divider"></div>
-                <div class="cs-bottom-col cs-col-right">
-                    <span class="cs-bottom-label">Retailer</span>
-                    <span class="cs-bottom-val cs-text-blue">2345</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="cs-stat-card cs-theme-orange">
-            <div class="cs-card-top">
-                <div class="cs-stat-info">
-                    <span class="cs-stat-title">Critical (5-6 Days)</span>
-                    <span class="cs-stat-value">345</span>
-                </div>
-                <div class="cs-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                </div>
-            </div>
-            <div class="cs-card-bottom">
-                <div class="cs-bottom-col">
-                    <span class="cs-bottom-label">Wholesaler</span>
-                    <span class="cs-bottom-val cs-text-green">123</span>
-                </div>
-                <div class="cs-divider"></div>
-                <div class="cs-bottom-col cs-col-right">
-                    <span class="cs-bottom-label">Retailer</span>
-                    <span class="cs-bottom-val cs-text-blue">234</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="cs-stat-card cs-theme-red">
-            <div class="cs-card-top">
-                <div class="cs-stat-info">
-                    <span class="cs-stat-title">Overdue (7 Days)</span>
-                    <span class="cs-stat-value">678</span>
-                </div>
-                <div class="cs-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line><polyline points="19 5 22 2"></polyline><polyline points="5 5 2 2"></polyline></svg>
-                </div>
-            </div>
-            <div class="cs-card-bottom">
-                <div class="cs-bottom-col">
-                    <span class="cs-bottom-label">Wholesaler</span>
-                    <span class="cs-bottom-val cs-text-green">456</span>
-                </div>
-                <div class="cs-divider"></div>
-                <div class="cs-bottom-col cs-col-right">
-                    <span class="cs-bottom-label">Retailer</span>
-                    <span class="cs-bottom-val cs-text-blue">213</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="cs-stat-card cs-theme-yellow">
-            <div class="cs-card-top">
-                <div class="cs-stat-info">
-                    <span class="cs-stat-title">Total Pending</span>
-                    <span class="cs-stat-value cs-val-yellow">12,480</span>
-                </div>
-                <div class="cs-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"></path><path d="M5 2h14"></path><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path><path d="M21 12a9 9 0 0 0-3-6.5"></path><path d="M3 12a9 9 0 0 1 3-6.5"></path></svg>
-                </div>
-            </div>
-            <div class="cs-card-bottom">
-                <div class="cs-bottom-col">
-                    <span class="cs-bottom-label">Wholesaler</span>
-                    <span class="cs-bottom-val cs-text-green">9456</span>
-                </div>
-                <div class="cs-divider"></div>
-                <div class="cs-bottom-col cs-col-right">
-                    <span class="cs-bottom-label">Retailer</span>
-                    <span class="cs-bottom-val cs-text-blue">3679</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    <!-- Filters Section -->
     <div class="cs-filter-card">
         <div class="cs-filter-header">
             <div class="cs-filter-title">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line>
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg>
                 Filters
             </div>
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
         </div>
-        
+
         <div class="cs-filter-body">
             <div class="cs-filter-grid">
                 <div class="cs-form-group">
                     <label class="cs-form-label">Date Range</label>
-                    <input type="text" class="cs-form-input cs-input-calendar" placeholder="01 Apr 2025 - 28 Apr 2025" />
+                    <div style="display:flex; gap:8px;">
+                        <input type="date" class="cs-form-input" @bind="_filter.DateFrom" />
+                        <input type="date" class="cs-form-input" @bind="_filter.DateTo" />
+                    </div>
                 </div>
-                <div class="cs-form-group"><label class="cs-form-label">State</label><select class="cs-form-select"><option>All State</option></select></div>
-                <div class="cs-form-group"><label class="cs-form-label">District</label><select class="cs-form-select"><option>All District</option></select></div>
-                <div class="cs-form-group"><label class="cs-form-label">Dealer Type</label><select class="cs-form-select"><option>All Types</option></select></div>
-                
-                <div class="cs-form-group"><label class="cs-form-label">Dealer / Agency Name</label><select class="cs-form-select"><option>Select Dealer</option></select></div>
-                <div class="cs-form-group"><label class="cs-form-label">Product</label><select class="cs-form-select"><option>All Products</option></select></div>
-                <div class="cs-form-group"><label class="cs-form-label">Status (By Age)</label><select class="cs-form-select"><option>Any Age</option></select></div>
+                <div class="cs-form-group">
+                    <label class="cs-form-label">State</label>
+                    <select id="state-select" class="cs-form-select" multiple="multiple">
+                        @foreach (var s in _states)
+                        {
+                            <option value="@s.Id" selected="@(_selectedStates.Contains(s.Id))">@s.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="cs-form-group">
+                    <label class="cs-form-label">District</label>
+                    <select id="district-select" class="cs-form-select" multiple="multiple">
+                        @foreach (var d in _districts)
+                        {
+                            <option value="@d.Id" selected="@(_selectedDistricts.Contains(d.Id))">@d.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="cs-form-group">
+                    <label class="cs-form-label">Dealer Type</label>
+                    <select id="dealertype-select" class="cs-form-select" multiple="multiple">
+                        @foreach (var t in _dealerTypes)
+                        {
+                            <option value="@t.Id" selected="@(_selectedDealerTypes.Contains(t.Id))">@t.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="cs-form-group">
+                    <label class="cs-form-label">Dealer / Agency Name</label>
+                    <select id="dealer-select" class="cs-form-select" multiple="multiple">
+                        @foreach (var a in _dealers)
+                        {
+                            <option value="@a.Id" selected="@(_selectedDealers.Contains(a.Id))">@a.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="cs-form-group">
+                    <label class="cs-form-label">Product</label>
+                    <select id="product-select" class="cs-form-select" multiple="multiple">
+                        @foreach (var p in _products)
+                        {
+                            <option value="@p.Id" selected="@(_selectedProducts.Contains(p.Id))">@p.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="cs-form-group">
+                    <label class="cs-form-label">Status (By Age)</label>
+                    <select id="agestatus-select" class="cs-form-select" multiple="multiple">
+                        <option value="@AgeStatus.Completed"
+                                selected="@(_selectedAgeStatuses.Contains(AgeStatus.Completed))">
+                            @AgeStatus.Completed
+                        </option>
+                        <option value="@AgeStatus.Latest"
+                                selected="@(_selectedAgeStatuses.Contains(AgeStatus.Latest))">
+                            @AgeStatus.Latest
+                        </option>
+                        <option value="@AgeStatus.Critical"
+                                selected="@(_selectedAgeStatuses.Contains(AgeStatus.Critical))">
+                            @AgeStatus.Critical
+                        </option>
+                        <option value="@AgeStatus.Overdue"
+                                selected="@(_selectedAgeStatuses.Contains(AgeStatus.Overdue))">
+                            @AgeStatus.Overdue
+                        </option>
+                        <option value="@AgeStatus.ConsentOfBuyer"
+                                selected="@(_selectedAgeStatuses.Contains(AgeStatus.ConsentOfBuyer))">
+                            @AgeStatus.ConsentOfBuyer
+                        </option>
+                    </select>
+                </div>
                 <div></div>
             </div>
-            
+
             <div class="cs-filter-actions">
-                <button class="cs-btn cs-btn-outline">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
+                <button class="cs-btn cs-btn-outline" @onclick="ClearAll" disabled="@(!_select2Initialized || _isLoading)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     Clear All
                 </button>
-                <button class="cs-btn cs-btn-solid">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line>
-                    </svg>
-                    Apply Filters
+                <button class="cs-btn cs-btn-solid" @onclick="ApplyFilters" disabled="@(!_select2Initialized || _isLoading)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg>
+                    Search
                 </button>
             </div>
         </div>
     </div>
 
-    <div class="cs-table-card">
-        
-        <div class="cs-table-header">
-            <div class="cs-tabs-wrapper">
-                <button class="cs-tab @(activeTab == "All" ? "active" : "")" @onclick='() => SetActiveTab("All")'>All</button>
-                <button class="cs-tab @(activeTab == "Company Sales" ? "active" : "")" @onclick='() => SetActiveTab("Company Sales")'>Company Sales</button>
-                <button class="cs-tab @(activeTab == "Wholesaler Sales" ? "active" : "")" @onclick='() => SetActiveTab("Wholesaler Sales")'>Wholesaler Sales</button>
+    @if (_dashboard is null && _isLoading)
+    {
+        <!-- Keep the complete lower layout visible during the first API request. -->
+        <section class="cs-dashboard-skeleton" aria-busy="true" aria-label="Loading pending acknowledgement dashboard">
+            <div class="cs-loading-status" role="status">
+                <span class="cs-inline-spinner" aria-hidden="true"></span>
+                <span>Loading dashboard data…</span>
             </div>
-            <input type="text" class="cs-search-input" placeholder="Search zones...">
-        </div>
 
-        <div class="cs-table-wrapper">
-            <table class="cs-table">
-                <thead>
-                    <tr>
-                        <th><input type="checkbox" class="cs-checkbox"></th>
-                        <th>Invoice No.</th>
-                        <th>Invoice Date</th>
-                        <th>Agency Name</th>
-                        <th>Source</th>
-                        <th>Dealer Type</th>
-                        <th>State / District</th>
-                        <th>Quantity (MT)</th>
-                        <th>Ack Age Status</th>
-                        <th>Pending Ack Age (Days)</th>
-                        <th>Status</th>
-                        <th>Entry Date</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (activeTab == "All" || activeTab == "Company Sales")
+            <div class="cs-stats-grid">
+                @for (var cardIndex = 0; cardIndex < 3; cardIndex++)
+                {
+                    <div class="cs-stat-card cs-skeleton-stat-card">
+                        <div class="cs-skeleton-stat-top">
+                            <div class="cs-skeleton-stat-copy">
+                                <span class="cs-skeleton-block cs-skeleton-title"></span>
+                                <span class="cs-skeleton-block cs-skeleton-value"></span>
+                            </div>
+                            <span class="cs-skeleton-block cs-skeleton-icon"></span>
+                        </div>
+                        <div class="cs-skeleton-stat-bottom">
+                            @for (var itemIndex = 0; itemIndex < 3; itemIndex++)
+                            {
+                                <span class="cs-skeleton-block"></span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="cs-status-section cs-skeleton-chart-card">
+                <span class="cs-skeleton-block cs-skeleton-heading"></span>
+                <div class="cs-skeleton-chart" aria-hidden="true">
+                    @for (var barIndex = 0; barIndex < 12; barIndex++)
                     {
-                        <tr>
-                            <td><input type="checkbox" class="cs-checkbox"></td>
-                            <td>3326100255</td>
-                            <td>05-04-2026</td>
-                            <td>Monsoon Agro Centre</td>
-                            <td><span class="cs-pill-solid">Company Sales</span></td>
-                            <td><span class="cs-pill-outline-purple">Wholesaler</span></td>
-                            <td>
-                                <div class="cs-stacked-text">
-                                    <span class="cs-stacked-primary">Tamilnadu</span>
-                                    <span class="cs-stacked-secondary">Coimbatore</span>
-                                </div>
-                            </td>
-                            <td>15.3</td>
-                            <td>
-                                <div class="cs-status-badge cs-badge-red">
-                                    <div class="dot"></div> Overdue
-                                </div>
-                            </td>
-                            <td class="cs-age-text-red">7 days</td>
-                            <td><span class="cs-pill-simple cs-pill-blue">New</span></td>
-                            <td>05-04-2026</td>
-                            <td>
-                                <div class="cs-action-group">
-                                    <button class="cs-action-btn-blue" @onclick="OpenRecordDetails">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                    </button>
-                                    <button class="cs-action-btn-green">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td><input type="checkbox" class="cs-checkbox"></td>
-                            <td>3326100255</td>
-                            <td>05-04-2026</td>
-                            <td>Monsoon Agro Centre</td>
-                            <td><span class="cs-pill-solid">Company Sales</span></td>
-                            <td><span class="cs-pill-outline-orange">Retailer</span></td>
-                            <td>
-                                <div class="cs-stacked-text">
-                                    <span class="cs-stacked-primary">Tamilnadu</span>
-                                    <span class="cs-stacked-secondary">Coimbatore</span>
-                                </div>
-                            </td>
-                            <td>15.3</td>
-                            <td>
-                                <div class="cs-status-badge cs-badge-yellow">
-                                    <div class="dot"></div> Pending
-                                </div>
-                            </td>
-                            <td class="cs-age-text-yellow">3 days</td>
-                            <td><span class="cs-pill-simple cs-pill-blue">New</span></td>
-                            <td>05-04-2026</td>
-                            <td>
-                                <div class="cs-action-group">
-                                    <button class="cs-action-btn-blue" @onclick="OpenRecordDetails">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                    </button>
-                                    <button class="cs-action-btn-green">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td><input type="checkbox" class="cs-checkbox"></td>
-                            <td>3326100255</td>
-                            <td>05-04-2026</td>
-                            <td>Monsoon Agro Centre</td>
-                            <td><span class="cs-pill-solid">Company Sales</span></td>
-                            <td><span class="cs-pill-outline-purple">Wholesaler</span></td>
-                            <td>
-                                <div class="cs-stacked-text">
-                                    <span class="cs-stacked-primary">Tamilnadu</span>
-                                    <span class="cs-stacked-secondary">Coimbatore</span>
-                                </div>
-                            </td>
-                            <td>15.3</td>
-                            <td>
-                                <div class="cs-status-badge cs-badge-blue">
-                                    <div class="dot"></div> Fresh
-                                </div>
-                            </td>
-                            <td class="cs-age-text-green">1 day</td>
-                            <td><span class="cs-pill-simple cs-pill-purple">Consent Buyer</span></td>
-                            <td>05-04-2026</td>
-                            <td>
-                                <div class="cs-action-group">
-                                    <button class="cs-action-btn-blue" @onclick="OpenRecordDetails">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                    </button>
-                                    <button class="cs-action-btn-green">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td><input type="checkbox" class="cs-checkbox"></td>
-                            <td>3326100255</td>
-                            <td>05-04-2026</td>
-                            <td>Monsoon Agro Centre</td>
-                            <td><span class="cs-pill-solid">Company Sales</span></td>
-                            <td><span class="cs-pill-outline-orange">Retailer</span></td>
-                            <td>
-                                <div class="cs-stacked-text">
-                                    <span class="cs-stacked-primary">Tamilnadu</span>
-                                    <span class="cs-stacked-secondary">Coimbatore</span>
-                                </div>
-                            </td>
-                            <td>15.3</td>
-                            <td>
-                                <div class="cs-status-badge cs-badge-orange">
-                                    <div class="dot"></div> Critical
-                                </div>
-                            </td>
-                            <td class="cs-age-text-orange">5 days</td>
-                            <td><span class="cs-pill-simple cs-pill-blue">New</span></td>
-                            <td>05-04-2026</td>
-                            <td>
-                                <div class="cs-action-group">
-                                    <button class="cs-action-btn-blue" @onclick="OpenRecordDetails">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                    </button>
-                                    <button class="cs-action-btn-green">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
+                        <span class="cs-skeleton-block"></span>
                     }
+                </div>
+                <div class="cs-skeleton-legend">
+                    <span class="cs-skeleton-block"></span>
+                    <span class="cs-skeleton-block"></span>
+                    <span class="cs-skeleton-block"></span>
+                </div>
+            </div>
 
-                    @if (activeTab == "All" || activeTab == "Wholesaler Sales")
+            <div class="cs-table-card cs-skeleton-table-card">
+                <div class="cs-table-header">
+                    <span class="cs-skeleton-block cs-skeleton-tabs"></span>
+                    <span class="cs-skeleton-block cs-skeleton-search"></span>
+                </div>
+                <div class="cs-skeleton-table-head">
+                    @for (var columnIndex = 0; columnIndex < 13; columnIndex++)
                     {
-                        <tr>
-                            <td><input type="checkbox" class="cs-checkbox"></td>
-                            <td>3326100255</td>
-                            <td>05-04-2026</td>
-                            <td>Monsoon Agro Centre</td>
-                            <td><span class="cs-pill-outline-green">Wholesaler Sales</span></td>
-                            <td><span class="cs-pill-outline-purple">Wholesaler</span></td>
-                            <td>
-                                <div class="cs-stacked-text">
-                                    <span class="cs-stacked-primary">Tamilnadu</span>
-                                    <span class="cs-stacked-secondary">Coimbatore</span>
-                                </div>
-                            </td>
-                            <td>15.3</td>
-                            <td>
-                                <div class="cs-status-badge cs-badge-green">
-                                    <div class="dot"></div> Completed
-                                </div>
-                            </td>
-                            <td class="cs-age-text-gray">--</td>
-                            <td><span class="cs-pill-simple cs-pill-green">Acknowledged</span></td>
-                            <td>05-04-2026</td>
-                            <td>
-                                <div class="cs-action-group">
-                                    <button class="cs-action-btn-blue" @onclick="OpenRecordDetails">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                    </button>
-                                    <button class="cs-action-btn-green">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
+                        <span class="cs-skeleton-block"></span>
                     }
-                </tbody>
-            </table>
+                </div>
+                <div class="cs-skeleton-table-body">
+                    @for (var rowIndex = 0; rowIndex < 5; rowIndex++)
+                    {
+                        <div class="cs-skeleton-table-row">
+                            @for (var cellIndex = 0; cellIndex < 13; cellIndex++)
+                            {
+                                <span class="cs-skeleton-block"></span>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="cs-skeleton-pagination">
+                    <span class="cs-skeleton-block"></span>
+                    <span class="cs-skeleton-block"></span>
+                </div>
+            </div>
+        </section>
+    }
+    else if (_dashboard is null)
+    {
+        <div class="cs-empty-state" role="alert">
+            @(_loadError is null ? "No Data Available" : $"Could not load report: {_loadError}")
         </div>
+    }
+    else
+    {
+        <!-- Keep the previous dashboard visible during filters, paging and search updates. -->
+        <div class="cs-dashboard-content @(_isLoading ? "is-refreshing" : string.Empty)">
+            @if (_isLoading)
+            {
+                <div class="cs-refresh-indicator" role="status">
+                    <span class="cs-inline-spinner" aria-hidden="true"></span>
+                    <span>Updating…</span>
+                </div>
+            }
 
-        <div class="cs-pagination">
-            <div class="cs-page-size">
-                <span>Items Per Page</span>
-                <select class="cs-form-select" style="padding: 6px 32px 6px 12px; width: 65px; margin:0;">
-                    <option>16</option>
-                </select>
+            @if (!string.IsNullOrWhiteSpace(_loadError))
+            {
+                <div class="cs-dashboard-warning" role="alert">@_loadError</div>
+            }
+
+            <!-- KPIs Section -->
+            <div class="cs-stats-grid">
+
+                <!-- Card 1: Completed (overall) -->
+                <div class="cs-stat-card cs-theme-cyan">
+                    <div class="cs-card-top">
+                        <div class="cs-stat-info">
+                            <span class="cs-stat-title">Completed</span>
+                            <span class="cs-stat-value">@_dashboard.Summary.Completed.ToString("N0")</span>
+                        </div>
+                        <div class="cs-icon-box">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line><path d="M12 10 c-1.5 0 -3 -1 -3 -3 c0 -2 1.5 -3 3 -3 c1.5 0 3 1 3 3"></path></svg>
+                        </div>
+                    </div>
+                    <div class="cs-card-bottom">
+                        <div class="cs-bottom-col">
+                            <span class="cs-bottom-label">Completed</span>
+                            <span class="cs-bottom-val cs-text-green">@_dashboard.Summary.Completed.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Latest</span>
+                            <span class="cs-bottom-val cs-text-blue">@_dashboard.Summary.Latest.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Critical</span>
+                            <span class="cs-bottom-val cs-text-orange">@_dashboard.Summary.Critical.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Overdue</span>
+                            <span class="cs-bottom-val cs-text-red">@_dashboard.Summary.Overdue.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Consent of Buyer</span>
+                            <span class="cs-bottom-val cs-text-purple">@_dashboard.Summary.ConsentBuyer.ToString("N0")</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Company Sales -->
+                <div class="cs-stat-card cs-theme-orange">
+                    <div class="cs-card-top">
+                        <div class="cs-stat-info">
+                            <span class="cs-stat-title">Company Sales</span>
+                            <span class="cs-stat-value">@_dashboard.Summary.CompanyTotal.ToString("N0")</span>
+                        </div>
+                        <div class="cs-icon-box">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        </div>
+                    </div>
+                    <div class="cs-card-bottom">
+                        <div class="cs-bottom-col">
+                            <span class="cs-bottom-label">Completed</span>
+                            <span class="cs-bottom-val cs-text-green">@_dashboard.Summary.CompanyCompleted.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Latest</span>
+                            <span class="cs-bottom-val cs-text-blue">@_dashboard.Summary.CompanyLatest.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Critical</span>
+                            <span class="cs-bottom-val cs-text-orange">@_dashboard.Summary.CompanyCritical.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Overdue</span>
+                            <span class="cs-bottom-val cs-text-red">@_dashboard.Summary.CompanyOverdue.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Consent of Buyer</span>
+                            <span class="cs-bottom-val cs-text-purple">@_dashboard.Summary.CompanyConsentBuyer.ToString("N0")</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 3: Wholesaler Sales -->
+                <div class="cs-stat-card cs-theme-red">
+                    <div class="cs-card-top">
+                        <div class="cs-stat-info">
+                            <span class="cs-stat-title">Wholesaler Sales</span>
+                            <span class="cs-stat-value">@_dashboard.Summary.WholesalerTotal.ToString("N0")</span>
+                        </div>
+                        <div class="cs-icon-box">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line><polyline points="19 5 22 2"></polyline><polyline points="5 5 2 2"></polyline></svg>
+                        </div>
+                    </div>
+                    <div class="cs-card-bottom">
+                        <div class="cs-bottom-col">
+                            <span class="cs-bottom-label">Completed</span>
+                            <span class="cs-bottom-val cs-text-green">@_dashboard.Summary.WholesalerCompleted.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Latest</span>
+                            <span class="cs-bottom-val cs-text-blue">@_dashboard.Summary.WholesalerLatest.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Critical</span>
+                            <span class="cs-bottom-val cs-text-orange">@_dashboard.Summary.WholesalerCritical.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Overdue</span>
+                            <span class="cs-bottom-val cs-text-red">@_dashboard.Summary.WholesalerOverdue.ToString("N0")</span>
+                        </div>
+                        <div class="cs-divider"></div>
+                        <div class="cs-bottom-col cs-col-right">
+                            <span class="cs-bottom-label">Consent of Buyer</span>
+                            <span class="cs-bottom-val cs-text-purple">@_dashboard.Summary.WholesalerConsentBuyer.ToString("N0")</span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="cs-page-controls">
-                <button class="cs-page-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                </button>
-                <button class="cs-page-btn active">1</button>
-                <button class="cs-page-btn">2</button>
-                <button class="cs-page-btn">3</button>
-                <button class="cs-page-btn dots">..</button>
-                <button class="cs-page-btn">8</button>
-                <button class="cs-page-btn">9</button>
-                <button class="cs-page-btn">10</button>
-                <button class="cs-page-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </button>
+
+            <!-- State-wise Pending Acknowledgement Comparison Chart -->
+            <div class="cs-status-section" style="background:white; border-radius:12px; padding:24px; margin-bottom:24px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                <div class="cs-status-header" style="margin-bottom:24px;">
+                    <h3 style="font-size:18px; font-weight:600; color:#334155; margin:0;">State-wise Pending Acknowledgement Comparison</h3>
+                </div>
+
+                <div class="cs-chart-scroll-wrapper">
+                    <div class="cs-chart-inner-area">
+
+                        <div style="display:flex; flex-direction:column; justify-content:space-between; padding-right:16px; text-align:right; height:calc(100% - 24px); width:40px; margin-top:-6px; flex-shrink:0;">
+                            @foreach (var label in AxisLabels())
+                            {
+                                <span>@label</span>
+                            }
+                        </div>
+
+                        <div style="flex-grow:1; position:relative;">
+                            <div style="position:absolute; top:0; left:0; right:0; height:calc(100% - 24px); display:flex; flex-direction:column; justify-content:space-between; pointer-events:none; z-index:0;">
+                                <div style="border-top:1px dashed #e2e8f0; width:100%;"></div>
+                                <div style="border-top:1px dashed #e2e8f0; width:100%;"></div>
+                                <div style="border-top:1px dashed #e2e8f0; width:100%;"></div>
+                                <div style="border-top:1px dashed #e2e8f0; width:100%;"></div>
+                                <div style="border-top:1px dashed #e2e8f0; width:100%;"></div>
+                                <div style="border-top:1px dashed #e2e8f0; width:100%;"></div>
+                                <div style="border-top:1px solid #cbd5e1; width:100%;"></div>
+                            </div>
+
+                            <div style="position:absolute; top:0; left:0; right:0; bottom:0; display:flex; justify-content:space-around; padding:0 10px; z-index:1;">
+                                @foreach (var b in _dashboard.StateWise)
+                                {
+                                    var barPct = _axisMax == 0 ? 0 : (b.TotalPending * 100.0 / _axisMax);
+                                    var latestPct = b.TotalPending == 0 ? 0 : (b.Latest  * 100.0 / b.TotalPending);
+                                    var criticalPct = b.TotalPending == 0 ? 0 : (b.Critical * 100.0 / b.TotalPending);
+                                    var overduePct = b.TotalPending == 0 ? 0 : (b.Overdue  * 100.0 / b.TotalPending);
+                                    var consentPct = b.TotalPending == 0 ? 0 : (b.ConsentBuyer * 100.0 / b.TotalPending);
+
+                                    <div class="cs-bar-group">
+                                        <div class="cs-bar-bg"></div>
+                                        <div class="cs-chart-tooltip">
+                                            <div style="font-weight:600; color:#334155; margin-bottom:8px; font-size:13px;">@b.StateName</div>
+                                            <div style="display:flex; justify-content:space-between; margin-bottom:4px; color:#2563eb; font-size:12px;"><span style="margin-right:10px;">Latest</span><span style="font-weight:600;">@b.Latest</span></div>
+                                            <div style="display:flex; justify-content:space-between; margin-bottom:4px; color:#ef4444; font-size:12px;"><span style="margin-right:10px;">Critical</span><span style="font-weight:600;">@b.Critical</span></div>
+                                            <div style="display:flex; justify-content:space-between; margin-bottom:4px; color:#f97316; font-size:12px;"><span style="margin-right:10px;">Overdue</span><span style="font-weight:600;">@b.Overdue</span></div>
+                                            <div style="display:flex; justify-content:space-between; color:#9333ea; font-size:12px;"><span style="margin-right:10px;">Consent of Buyer</span><span style="font-weight:600;">@b.ConsentBuyer</span></div>
+                                        </div>
+                                        <!-- Stacked bar (pending only): Latest (blue, top) / Critical (red) / Overdue (orange) / Consent of Buyer (purple, bottom) -->
+                                        <div style="width:100%; height:@barPct.ToString("0.##", Inv)%; display:flex; flex-direction:column; justify-content:flex-end; overflow:hidden; position:relative; z-index:2; border-top-left-radius:2px; border-top-right-radius:2px;">
+                                            <div style="height:@latestPct.ToString("0.##", Inv)%; background:linear-gradient(to bottom, #93c5fd, #60a5fa);"></div>
+                                            <div style="height:@criticalPct.ToString("0.##", Inv)%; background:#fca5a5;"></div>
+                                            <div style="height:@overduePct.ToString("0.##", Inv)%; background:#fdba74;"></div>
+                                            <div style="height:@consentPct.ToString("0.##", Inv)%; background:#d8b4fe;"></div>
+                                        </div>
+                                        <div style="position:absolute; bottom:-24px; text-align:center; width:100%; white-space:nowrap;">@b.StateName</div>
+                                    </div>
+                                }
+                                @if (_dashboard.StateWise.Count == 0)
+                                {
+                                    <div style="align-self:center; color:#94a3b8; font-size:13px;">No data for the selected filters.</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:center; flex-wrap:wrap; gap:20px; margin-top:20px; font-size:13px; font-weight:500;">
+                    <div style="display:flex; align-items:center; gap:8px; color:#2563eb;"><span style="width:12px; height:12px; border-radius:3px; background:#60a5fa;"></span> Latest</div>
+                    <div style="display:flex; align-items:center; gap:8px; color:#ef4444;"><span style="width:12px; height:12px; border-radius:3px; background:#fca5a5;"></span> Critical</div>
+                    <div style="display:flex; align-items:center; gap:8px; color:#f97316;"><span style="width:12px; height:12px; border-radius:3px; background:#fdba74;"></span> Overdue</div>
+                    <div style="display:flex; align-items:center; gap:8px; color:#9333ea;"><span style="width:12px; height:12px; border-radius:3px; background:#d8b4fe;"></span> Consent of Buyer</div>
+                </div>
+            </div>
+
+            <!-- Data Table Section -->
+            <div class="cs-table-card">
+                <div class="cs-table-header">
+                    <div class="cs-tabs-wrapper">
+                        <button class="cs-tab @(_filter.Source == "All" ? "active" : "")" @onclick='() => SetActiveTab("All")'>All</button>
+                        <button class="cs-tab @(_filter.Source == "Company Sales" ? "active" : "")" @onclick='() => SetActiveTab("Company Sales")'>Company Sales</button>
+                        <button class="cs-tab @(_filter.Source == "Wholesaler Sales" ? "active" : "")" @onclick='() => SetActiveTab("Wholesaler Sales")'>Wholesaler Sales</button>
+                    </div>
+                    <input type="text" class="cs-search-input" placeholder="Search zones…"
+                           @bind="_filter.Search" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+                </div>
+
+                <div class="cs-table-wrapper">
+                    <table class="cs-table">
+                        <thead>
+                            <tr>
+                                <th style="width:60px;">S.No</th>
+                                <th>Invoice No.</th>
+                                <th>Invoice Date</th>
+                                <th>Agency Name</th>
+                                <th>Source</th>
+                                <th>Dealer Type</th>
+                                <th>State / District</th>
+                                <th class="cs-sortable" @onclick='() => Sort("quantity")'>Quantity (MT)</th>
+                                <th>Status</th>
+                                <th class="cs-sortable" @onclick='() => Sort("age")'>Pending Ack Age (Days)</th>
+                                <th>Status</th>
+                                <th>Entry Date</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_dashboard.Grid.Items.Count == 0)
+                            {
+                                <tr><td colspan="13" style="text-align:center; padding:24px; color:#64748b;">No records found.</td></tr>
+                            }
+                            else
+                            {
+                                var startIndex = (_filter.Page - 1) * _filter.PageSize;
+                                var rowNo = 0;
+                                @foreach (var r in _dashboard.Grid.Items)
+                                {
+                                    rowNo++;
+                                    var badge = StatusBadge(r.AgeStatus);
+                                    <tr>
+                                        <td>@(startIndex + rowNo)</td>
+                                        <td>@r.InvoiceNo</td>
+                                        <td>@(r.InvoiceDate?.ToString("dd-MM-yyyy") ?? "-")</td>
+                                        <td>@r.AgencyName</td>
+                                        <td><span class="@SourcePillClass(r.Source)">@r.Source</span></td>
+                                        <td><span class="@DealerTypePillClass(r.DealerType)">@r.DealerType</span></td>
+                                        <td>
+                                            <div class="cs-stacked-text">
+                                                <span class="cs-stacked-primary">@r.StateName</span>
+                                                <span class="cs-stacked-secondary">@r.District</span>
+                                            </div>
+                                        </td>
+                                        <td>@r.QuantityMT.ToString("0.#", Inv)</td>
+                                        <td>
+                                            <div class="cs-status-badge @badge.cssClass">
+                                                <div class="dot"></div> @badge.label
+                                            </div>
+                                        </td>
+                                        <td class="@AgeTextClass(r.AgeStatus)">@(r.AgeStatus == "Completed" ? "--" : r.PendingAckAgeDays.ToString())</td>
+                                        <td><span class="cs-pill-simple @WorkflowPillClass(r.WorkflowStatus)">@r.WorkflowStatus</span></td>
+                                        <td>@(r.EntryDate?.ToString("dd-MM-yyyy") ?? "-")</td>
+                                        <td>
+                                            <div class="cs-action-group">
+                                                <button type="button" class="cs-action-btn-blue" @onclick="() => OpenRecordDetails(r)">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="cs-pagination">
+                    <div class="cs-page-size">
+                        <span>Items Per Page</span>
+                        <select class="cs-form-select" style="padding:6px 32px 6px 12px; width:65px; margin:0;" @onchange="OnPageSizeChanged">
+                            <option value="16" selected="@(_filter.PageSize == 16)">16</option>
+                            <option value="25" selected="@(_filter.PageSize == 25)">25</option>
+                            <option value="50" selected="@(_filter.PageSize == 50)">50</option>
+                            <option value="100" selected="@(_filter.PageSize == 100)">100</option>
+                        </select>
+                    </div>
+                    <div class="cs-page-controls">
+                        <button type="button" class="cs-page-btn" disabled="@(_filter.Page <= 1)" @onclick="() => GoToPage(_filter.Page - 1)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        </button>
+                        @foreach (var pg in PageNumbers())
+                        {
+                            if (pg == -1)
+                            {
+                                <button type="button" class="cs-page-btn dots" disabled>..</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="cs-page-btn @(pg == _filter.Page ? "active" : "")" @onclick="() => GoToPage(pg)">@pg</button>
+                            }
+                        }
+                        <button type="button" class="cs-page-btn" disabled="@(_filter.Page >= TotalPages)" @onclick="() => GoToPage(_filter.Page + 1)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
-
-    </div>
-
-        <div class="cs-status-section">
-        <div class="cs-status-header">
-            <h3>Status (By Age)</h3>
-        </div>
-        
-        <div class="cs-status-grid">
-            <div class="cs-age-box cs-age-green">
-                <div class="cs-age-info">
-                    <span class="cs-age-label">Overall</span>
-                    <span class="cs-age-value">--</span>
-                </div>
-                <div class="cs-age-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
-                    </svg>
-                </div>
-            </div>
-            <div class="cs-age-box cs-age-blue">
-                <div class="cs-age-info">
-                    <span class="cs-age-label">Fresh</span>
-                    <span class="cs-age-value">0-2 Days</span>
-                </div>
-                <div class="cs-age-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle><path d="m12 8 4 8H8z"></path>
-                    </svg>
-                </div>
-            </div>
-            <div class="cs-age-box cs-age-yellow">
-                <div class="cs-age-info">
-                    <span class="cs-age-label">Pending</span>
-                    <span class="cs-age-value">3-4 Days</span>
-                </div>
-                <div class="cs-age-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path>
-                    </svg>
-                </div>
-            </div>
-            <div class="cs-age-box cs-age-orange">
-                <div class="cs-age-info">
-                    <span class="cs-age-label">Critical</span>
-                    <span class="cs-age-value">5-6 Days</span>
-                </div>
-                <div class="cs-age-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                </div>
-            </div>
-            <div class="cs-age-box cs-age-red">
-                <div class="cs-age-info">
-                    <span class="cs-age-label">Overdue</span>
-                    <span class="cs-age-value">7 Days</span>
-                </div>
-                <div class="cs-age-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="8"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line><polyline points="19 5 22 2"></polyline><polyline points="5 5 2 2"></polyline>
-                    </svg>
-                </div>
-            </div>
-        </div>
-
-        <div class="cs-status-banner">
-            <svg class="cs-banner-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>
-            </svg>
-            <span class="cs-banner-text">Status is calculated based on Pending Acknowledgement Age (Days)</span>
-        </div>
-    </div>
-
+    }
 </div>
-<RecordDetailsDrawer @bind-IsOpen="isRecordDetailsOpen" />
+
+<RecordDetailsDrawer @bind-IsOpen="isRecordDetailsOpen" Row="_selectedRow" />
 
 @code {
-    private string activeTab = "Company Sales";
-    private bool isRecordDetailsOpen = false;
+    // ---------- Culture / formatting ----------
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    private void SetActiveTab(string tabName)
+    // ---------- Dashboard state ----------
+    private PendingAckDashboardDto? _dashboard;
+    private readonly PendingAckFilter _filter = new();
+    private bool _isLoading = true;
+    private string? _loadError;
+    private CancellationTokenSource? _loadCts;
+    private System.Timers.Timer? _searchDebounce;
+
+    private bool isRecordDetailsOpen = false;
+    private PendingAckRowDto? _selectedRow;
+
+    private int _axisMax = 240;
+
+    private int TotalPages => _dashboard is null || _dashboard.Grid.PageSize == 0
+        ? 1
+        : (int)Math.Ceiling((double)_dashboard.Grid.TotalCount / _dashboard.Grid.PageSize);
+
+    // ---------- Filter master data ----------
+    private List<LocationDto> _allStates = new();
+    private List<LocationDto> _allDistricts = new();
+
+    private List<LocationDto> _states = new();
+    private List<LocationDto> _districts = new();
+    private List<LocationDto> _dealerTypes = new();
+    private List<OptionDto> _products = new();   // keyed product ids ("P:123" / "I:456")
+    private List<OptionDto> _dealers = new();   // keyed ids ("R123"/"I456")
+
+    private List<int> _selectedStates = new();
+    private List<int> _selectedDistricts = new();
+    private List<int> _selectedDealerTypes = new();
+    private List<string> _selectedProducts = new();
+    private List<string> _selectedDealers = new();
+    private List<string> _selectedAgeStatuses = new();
+
+    private DotNetObjectReference<CompanySales>? _objRef;
+
+    // Local to this view (not part of the shared DTOs).
+    public class LocationDto
     {
-        activeTab = tabName;
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public int? StateId { get; set; }
     }
-    
-    private void OpenRecordDetails()
+
+    // For dealers, whose id is a keyed string ("R123" / "I456").
+    public class OptionDto
     {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+    }
+
+    // ---------- Lifecycle ----------
+    private bool _masterDataLoaded;
+    private bool _select2Initialized;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Start dashboard and filter master requests together. This allows Blazor
+        // to show the filters and full dashboard skeleton immediately.
+        _isLoading = true;
+        _loadError = null;
+
+        var dashboardTask = LoadDashboard(renderLoadingState: false);
+
+        try
+        {
+            await LoadMasterData();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[PendingAck] master: {ex}");
+        }
+        finally
+        {
+            // The options must be rendered before Select2 is attached.
+            _masterDataLoaded = true;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        await dashboardTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_masterDataLoaded || _select2Initialized)
+            return;
+
+        _select2Initialized = true;
+
+        try
+        {
+            _objRef ??= DotNetObjectReference.Create(this);
+            await InitSelect2();
+        }
+        catch (Exception ex)
+        {
+            // Allow a later render to retry if Select2 was not ready yet.
+            _select2Initialized = false;
+            Console.WriteLine($"[PendingAck] select2: {ex}");
+        }
+    }
+
+    private async Task LoadMasterData()
+    {
+        // TODO: confirm these master endpoints. Each should return [{ id, name, (stateId for districts) }].
+        var statesTask = FetchData("api/State/all");
+        var districtsTask = FetchData("api/District/all");
+        var dealerTypesTask = FetchData("api/PendingAck/dealer-types");   // from DealerTypes
+        var productsTask = FetchOptions("api/PendingAck/products"); // Products + IFMS Products
+        var dealersTask = FetchOptions("api/PendingAck/dealers");     // DealerRegistrations + IfmsDealers (keyed ids)
+
+        await Task.WhenAll(statesTask, districtsTask, dealerTypesTask, productsTask, dealersTask);
+
+        _allStates    = statesTask.Result;
+        _allDistricts = districtsTask.Result;
+
+        // Role-based visibility: if user has an associated StateId, restrict to it for non-admins
+        if (LoginState != null && !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP) && LoginState.StateId > 0)
+        {
+            _states = _allStates.Where(s => s.Id == LoginState.StateId).ToList();
+            _districts = _allDistricts.Where(d => d.StateId == LoginState.StateId).ToList();
+        }
+        else
+        {
+            _states      = _allStates;
+            _districts   = _allDistricts;
+        }
+        _dealerTypes = dealerTypesTask.Result;
+        _products    = productsTask.Result;
+        _dealers     = dealersTask.Result;
+    }
+
+    // ---------- Dashboard load ----------
+    private async Task LoadDashboard(bool renderLoadingState = true)
+    {
+        // Cancel the previous request. Its own finally block disposes its CTS.
+        _loadCts?.Cancel();
+
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        _loadCts = cts;
+        var token = cts.Token;
+
+        _isLoading = true;
+        _loadError = null;
+
+        if (renderLoadingState)
+            await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/PendingAck/dashboard", _filter, token);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var dashboard = await response.Content.ReadFromJsonAsync<PendingAckDashboardDto>(cancellationToken: token);
+
+                if (dashboard is null)
+                {
+                    if (_dashboard is null)
+                        _loadError = "The server returned an empty dashboard response.";
+                }
+                else
+                {
+                    _dashboard = dashboard;
+                    _axisMax = NiceMax(
+                        dashboard.StateWise.Count > 0
+                            ? dashboard.StateWise.Max(s => s.TotalPending)
+                            : 0);
+                }
+            }
+            else
+            {
+                // Keep old content visible during refresh failures.
+                _loadError = $"Server returned {(int)response.StatusCode} {response.ReasonPhrase}.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer request owns the screen now.
+            if (!ReferenceEquals(_loadCts, cts))
+                return;
+
+            _loadError = "Request timed out - the server took too long to respond.";
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+        finally
+        {
+            var isCurrentRequest = ReferenceEquals(_loadCts, cts);
+
+            if (isCurrentRequest)
+            {
+                _isLoading = false;
+                _loadCts = null;
+                await InvokeAsync(StateHasChanged);
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    private void SyncSelectionsToFilter()
+    {
+        _filter.StateIds      = _selectedStates.ToList();
+        _filter.DistrictIds   = _selectedDistricts.ToList();
+        _filter.DealerTypeIds = _selectedDealerTypes.ToList();
+        // The new page sends typed keys. ProductIds remains populated for
+        // approved products so older API clients/logic stay compatible.
+        _filter.ProductKeys   = _selectedProducts.ToList();
+        _filter.ProductIds    = ParseProductIds(_selectedProducts, "P:");
+        _filter.DealerKeys    = _selectedDealers.ToList();
+        _filter.AgeStatuses   = _selectedAgeStatuses.ToList();
+    }
+
+    private async Task ApplyFilters()
+    {
+        SyncSelectionsToFilter();
+        _filter.Page = 1;
+        await LoadDashboard();
+    }
+
+    private async Task RefreshData() => await LoadDashboard();
+
+    private async Task ClearAll()
+    {
+        _selectedStates.Clear(); _selectedDistricts.Clear(); _selectedDealerTypes.Clear();
+        _selectedProducts.Clear(); _selectedDealers.Clear(); _selectedAgeStatuses.Clear();
+
+        _states = _allStates; _districts = _allDistricts;
+
+        SyncSelectionsToFilter();
+        _filter.Search = null;
+        _filter.DateFrom = null;
+        _filter.DateTo = null;
+        _filter.Page = 1;
+
+        StateHasChanged();
+        await RefreshSelect2Hierarchy();
+        await LoadDashboard();
+    }
+
+    // ---------- Tabs / grid ----------
+    private async Task SetActiveTab(string source)
+    {
+        if (_filter.Source == source) return;
+        _filter.Source = source;
+        _filter.Page = 1;
+        await LoadDashboard();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || page > TotalPages || page == _filter.Page) return;
+        _filter.Page = page;
+        await LoadDashboard();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var size))
+        {
+            _filter.PageSize = size;
+            _filter.Page = 1;
+            await LoadDashboard();
+        }
+    }
+
+    private async Task Sort(string column)
+    {
+        if (_filter.SortColumn == column)
+            _filter.SortDir = _filter.SortDir == "asc" ? "desc" : "asc";
+        else { _filter.SortColumn = column; _filter.SortDir = "asc"; }
+        await LoadDashboard();
+    }
+
+    private void OnSearchKeyUp()
+    {
+        _searchDebounce?.Stop();
+        _searchDebounce?.Dispose();
+        _searchDebounce = new System.Timers.Timer(400) { AutoReset = false };
+        _searchDebounce.Elapsed += async (_, _) =>
+        {
+            await InvokeAsync(async () =>
+            {
+                _filter.Page = 1;
+                await LoadDashboard();
+            });
+        };
+        _searchDebounce.Start();
+    }
+
+    private IEnumerable<int> PageNumbers()
+    {
+        int total = TotalPages, current = _filter.Page;
+        if (total <= 7) { for (int i = 1; i <= total; i++) yield return i; yield break; }
+        yield return 1;
+        if (current > 4) yield return -1;
+        for (int i = Math.Max(2, current - 1); i <= Math.Min(total - 1, current + 1); i++) yield return i;
+        if (current < total - 3) yield return -1;
+        yield return total;
+    }
+
+    // ---------- Chart helpers ----------
+    private int NiceMax(int max)
+    {
+        if (max <= 0) return 60;
+        var step = (int)Math.Ceiling(max / 6.0);
+        var mag = (int)Math.Pow(10, Math.Floor(Math.Log10(step)));
+        step = (int)Math.Ceiling(step / (double)mag) * mag;
+        return step * 6;
+    }
+
+    private IEnumerable<int> AxisLabels()
+    {
+        var step = _axisMax / 6;
+        for (var i = 0; i <= 6; i++) yield return _axisMax - i * step;
+    }
+
+    // ---------- Presentation helpers -> existing CSS classes ----------
+    private (string cssClass, string label) StatusBadge(string s) => s switch
+    {
+        "Overdue" => ("cs-badge-red", "Overdue"),
+        "Critical" => ("cs-badge-orange", "Critical"),
+        "Pending" => ("cs-badge-yellow", "Pending"),
+        "Fresh" => ("cs-badge-green", "Fresh"),
+        "Completed" => ("cs-badge-green", "Completed"),
+        _ => ("cs-badge-green", s)
+    };
+
+    private string AgeTextClass(string s) => s switch
+    {
+        "Overdue" => "cs-age-text-red",
+        "Critical" => "cs-age-text-orange",
+        "Pending" => "cs-age-text-yellow",
+        "Fresh" => "cs-age-text-green",
+        _ => "cs-age-text-gray"
+    };
+
+    private string SourcePillClass(string source) =>
+        source == "Company Sales" ? "cs-pill-solid" : "cs-pill-outline-green";
+
+    private string DealerTypePillClass(string dealerType) =>
+        (dealerType ?? "").IndexOf("Retail", StringComparison.OrdinalIgnoreCase) >= 0
+            ? "cs-pill-outline-orange" : "cs-pill-outline-purple";
+
+    private string WorkflowPillClass(string status)
+    {
+        var s = status ?? "";
+        if (s.IndexOf("Acknowledg", StringComparison.OrdinalIgnoreCase) >= 0) return "cs-pill-green";
+        if (s.IndexOf("Consent", StringComparison.OrdinalIgnoreCase) >= 0) return "cs-pill-purple";
+        return "cs-pill-blue";
+    }
+
+    // ---------- Row actions ----------
+    private void OpenRecordDetails(PendingAckRowDto row)
+    {
+        _selectedRow = row;
         isRecordDetailsOpen = true;
+        StateHasChanged();
+    }
+
+    // ---------- Export / mail ----------
+    private async Task ExportExcel()
+    {
+        SyncSelectionsToFilter();
+        await JS.InvokeVoidAsync("spicDownload.post", "api/PendingAck/export/excel", _filter, "PendingAcknowledgement.xlsx");
+    }
+
+    private async Task ExportPdf()
+    {
+        SyncSelectionsToFilter();
+        await JS.InvokeVoidAsync("spicDownload.post", "api/PendingAck/export/pdf", _filter, "PendingAcknowledgement.pdf");
+    }
+
+    private async Task SendMail()
+    {
+        SyncSelectionsToFilter();
+        await Http.PostAsJsonAsync("api/PendingAck/send-mail", _filter);
+    }
+
+    private static List<int> ParseIntValues(IEnumerable<string>? values) =>
+        (values ?? Enumerable.Empty<string>())
+            .Select(value => int.TryParse(value, out var id) ? (int?)id : null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+    private static List<int> ParseProductIds(
+        IEnumerable<string>? values,
+        string prefix)
+    {
+        return (values ?? Enumerable.Empty<string>())
+            .Where(value =>
+                !string.IsNullOrWhiteSpace(value) &&
+                value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Select(value => value[prefix.Length..])
+            .Where(value => int.TryParse(value, out _))
+            .Select(int.Parse)
+            .Distinct()
+            .ToList();
+    }
+
+    // ==========================================================
+    //  Select2 cascade logic (State -> District; others independent)
+    // ==========================================================
+    private async Task InitSelect2()
+    {
+        var configs = new[]
+        {
+            new { id = "state-select",      method = nameof(OnStateChanged) },
+            new { id = "district-select",   method = nameof(OnDistrictChanged) },
+            new { id = "dealertype-select", method = nameof(OnDealerTypeChanged) },
+            new { id = "dealer-select",     method = nameof(OnDealerChanged) },
+            new { id = "product-select",    method = nameof(OnProductChanged) },
+            new { id = "agestatus-select",  method = nameof(OnAgeStatusChanged) }
+        };
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef!);
+    }
+
+    [JSInvokable]
+    public async Task OnStateChanged(List<string>? values)
+    {
+        var newSelected = ParseIntValues(values);
+        if (_selectedStates.SequenceEqual(newSelected)) return;
+        _selectedStates = newSelected;
+
+        // Drop districts no longer under a selected state.
+        if (_selectedStates.Any())
+            _selectedDistricts.RemoveAll(did =>
+            {
+                var d = _allDistricts.FirstOrDefault(x => x.Id == did);
+                return d == null || !_selectedStates.Contains(d.StateId ?? 0);
+            });
+
+        _districts = _selectedStates.Any()
+            ? _allDistricts.Where(d => _selectedStates.Contains(d.StateId ?? 0)).ToList()
+            : _allDistricts;
+
+        StateHasChanged();
+        await RefreshSelect2Hierarchy();
+    }
+
+    [JSInvokable]
+    public async Task OnDistrictChanged(List<string>? values)
+    {
+        var newSelected = ParseIntValues(values);
+        if (_selectedDistricts.SequenceEqual(newSelected)) return;
+        _selectedDistricts = newSelected;
+
+        // Infer parent states from chosen districts.
+        if (_selectedDistricts.Any())
+        {
+            var inferred = _allDistricts
+                .Where(d => _selectedDistricts.Contains(d.Id) && d.StateId.HasValue)
+                .Select(d => d.StateId!.Value).Distinct().ToList();
+            _selectedStates = _selectedStates.Union(inferred).ToList();
+        }
+
+        _districts = _selectedStates.Any()
+            ? _allDistricts.Where(d => _selectedStates.Contains(d.StateId ?? 0)).ToList()
+            : _allDistricts;
+
+        StateHasChanged();
+        await RefreshSelect2Hierarchy();
+    }
+
+    [JSInvokable]
+    public void OnDealerTypeChanged(List<string>? values) { _selectedDealerTypes = ParseIntValues(values); StateHasChanged(); }
+
+    [JSInvokable]
+    public void OnDealerChanged(List<string>? values) { _selectedDealers = values ?? new(); StateHasChanged(); }
+
+    [JSInvokable]
+    public void OnProductChanged(List<string>? values)
+    {
+        _selectedProducts = (values ?? new List<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnAgeStatusChanged(List<string>? values)
+    {
+        _selectedAgeStatuses = (values ?? new List<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        StateHasChanged();
+    }
+
+    private async Task RefreshSelect2Hierarchy()
+    {
+        var ids = new[] { "state-select", "district-select" };
+        await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", ids);
+        await Task.Delay(50);
+
+        var configs = new[]
+        {
+            new { id = "state-select",    method = nameof(OnStateChanged) },
+            new { id = "district-select", method = nameof(OnDistrictChanged) }
+        };
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef!);
+    }
+
+    // Tolerant master-data fetch (same approach as StockReport.FetchData).
+    private async Task<List<LocationDto>> FetchData(string url)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var raw = await Http.GetFromJsonAsync<List<JsonElement>>(url, cts.Token);
+            var list = new List<LocationDto>();
+            if (raw == null) return list;
+
+            foreach (var item in raw)
+            {
+                var id = item.GetProperty("id").GetInt32();
+                string name = "";
+                if (item.TryGetProperty("name", out var nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("stateName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("districtName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("dealerTypeName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("productName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("agencyName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("dealerName", out nProp)) name = nProp.GetString() ?? "";
+
+                var dto = new LocationDto { Id = id, Name = name };
+                if (item.TryGetProperty("stateId", out var sProp) && sProp.ValueKind == JsonValueKind.Number)
+                    dto.StateId = sProp.GetInt32();
+
+                list.Add(dto);
+            }
+            return list;
+        }
+        catch { return new List<LocationDto>(); }
+    }
+
+    // Like FetchData, but reads the id as a STRING (dealer keys "R123"/"I456").
+    private async Task<List<OptionDto>> FetchOptions(string url)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var raw = await Http.GetFromJsonAsync<List<JsonElement>>(url, cts.Token);
+            var list = new List<OptionDto>();
+            if (raw == null) return list;
+
+            foreach (var item in raw)
+            {
+                var id = item.TryGetProperty("id", out var idProp)
+                    ? (idProp.ValueKind == JsonValueKind.String ? idProp.GetString() : idProp.ToString())
+                    : null;
+                if (string.IsNullOrEmpty(id)) continue;
+
+                string name = "";
+                if (item.TryGetProperty("name", out var nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("agencyName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("dealerName", out nProp)) name = nProp.GetString() ?? "";
+                else if (item.TryGetProperty("firmName", out nProp)) name = nProp.GetString() ?? "";
+
+                list.Add(new OptionDto { Id = id!, Name = name });
+            }
+            return list;
+        }
+        catch { return new List<OptionDto>(); }
+    }
+
+    public void Dispose()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _searchDebounce?.Dispose();
+        _objRef?.Dispose();
     }
 }

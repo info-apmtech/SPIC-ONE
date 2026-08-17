@@ -1,4 +1,4 @@
-﻿@page "/Warehouse"
+@page "/Warehouse"
 @using System.Net.Http.Json
 @using System.Text.RegularExpressions
 @using System.Globalization
@@ -88,7 +88,7 @@
 									<div class="dropdown-item-custom text-muted" @onmousedown='() => SelectWarehouse(0, "")'>
 										-- Select Facility Name --
 									</div>
-									@foreach (var w in _warehouses.Where(x => string.IsNullOrWhiteSpace(_warehouseSearchText) ||
+									@foreach (var w in ApprovedWarehouses.Where(x => string.IsNullOrWhiteSpace(_warehouseSearchText) ||
 																			  $"{x.WarehouseCode} - {x.Name}".Contains(_warehouseSearchText, StringComparison.OrdinalIgnoreCase)))
 									{
 										<div class="dropdown-item-custom" @onmousedown='() => SelectWarehouse(w.Id, $"{w.WarehouseCode} - {w.Name}")'>
@@ -99,7 +99,7 @@
 							}
 						</div>
 
-						<div class="row g-2 mb-4">
+						<div class="row g-2 mb-4 align-items-end">
 							<div class="col-6">
 								<label class="custom-label">Distance (KM)</label>
 								<div class="input-icon-wrapper">
@@ -156,7 +156,7 @@
 									<div class="dropdown-item-custom text-muted" @onmousedown='() => SelectRail(0, "")'>
 										-- Select Facility Name --
 									</div>
-									@foreach (var r in _rackPoints.Where(x => string.IsNullOrWhiteSpace(_railSearchText) ||
+									@foreach (var r in ApprovedRackPoints.Where(x => string.IsNullOrWhiteSpace(_railSearchText) ||
 																			  x.Name.Contains(_railSearchText, StringComparison.OrdinalIgnoreCase)))
 									{
 										<div class="dropdown-item-custom" @onmousedown='() => SelectRail(r.Id, r.Name)'>
@@ -167,7 +167,7 @@
 							}
 						</div>
 
-						<div class="row g-2 mb-4">
+						<div class="row g-2 mb-4 align-items-end">
 							<div class="col-6">
 								<label class="custom-label">Distance (KM)</label>
 								<div class="input-icon-wrapper">
@@ -235,7 +235,7 @@
 							}
 						</div>
 
-						<div class="row g-2 mb-4">
+						<div class="row g-2 mb-4 align-items-end">
 							<div class="col-6">
 								<label class="custom-label">Distance (KM)</label>
 								<div class="input-icon-wrapper">
@@ -291,7 +291,7 @@
 					<div class="col-md-4">
 						<div class="active-infra-card">
 							<div class="d-flex justify-content-between align-items-start">
-								<div class="d-flex gap-3">
+								<div class="d-flex gap-3" style="min-width: 0; flex: 1; padding-right: 10px;">
 									<div class="facility-icon-wrapper bg-soft-green text-green m-0">
 										<i class="bi bi-shop"></i>
 									</div>
@@ -336,7 +336,7 @@
 					<div class="col-md-4">
 						<div class="active-infra-card">
 							<div class="d-flex justify-content-between align-items-start">
-								<div class="d-flex gap-3">
+								<div class="d-flex gap-3" style="min-width: 0; flex: 1; padding-right: 10px;">
 									<div class="facility-icon-wrapper bg-soft-blue text-blue m-0">
 										<i class="bi bi-train-front"></i>
 									</div>
@@ -381,7 +381,7 @@
 					<div class="col-md-4">
 						<div class="active-infra-card">
 							<div class="d-flex justify-content-between align-items-start">
-								<div class="d-flex gap-3">
+								<div class="d-flex gap-3" style="min-width: 0; flex: 1; padding-right: 10px;">
 									<div class="facility-icon-wrapper bg-soft-pink text-pink m-0">
 										<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/PortIcon.svg"
 											 class="formicon" />
@@ -480,13 +480,28 @@
 	public int? DealerId { get; set; }
 	[SupplyParameterFromQuery(Name = "mode")]
 	public string? Mode { get; set; }
+	[SupplyParameterFromQuery(Name = "flow")]
+	public string? Flow { get; set; }
 
 	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+	private bool IsNewDealerFlow => string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase);
+	private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
 
 	// Lookup lists
+	// Keep the full lookup lists unchanged because they are also used by the
+	// existing saved-card, edit and delete flows.
 	private List<WarehouseEntity> _warehouses = new();
 	private List<RackPoint> _rackPoints = new();
 	private List<Port> _ports = new();
+
+	// Dropdown-only lists:
+	// Only AVP-final-approved Warehouse and Rack Point records are selectable.
+	// Port intentionally remains unchanged because it is not part of this approval filter.
+	private IEnumerable<WarehouseEntity> ApprovedWarehouses =>
+		_warehouses.Where(x => x.AVPApproved == true);
+
+	private IEnumerable<RackPoint> ApprovedRackPoints =>
+		_rackPoints.Where(x => x.AVPApproved == true);
 
 	// Dealer location
 	private double? _dealerLat;
@@ -567,19 +582,32 @@
 {
     try
     {
-        var whTask   = Http.GetFromJsonAsync<List<WarehouseEntity>>("api/Warehouse");
-        var rackTask = Http.GetFromJsonAsync<List<RackPoint>>("api/RackPoint");
-        var portTask = Http.GetFromJsonAsync<List<Port>>("api/Port");
+        var whTask =
+            Http.GetFromJsonAsync<List<WarehouseEntity>>(
+                "api/Warehouse/approved");
 
-        await Task.WhenAll(whTask, rackTask, portTask);
+        var rackTask =
+            Http.GetFromJsonAsync<List<RackPoint>>(
+                "api/RackPoint");
 
-        _warehouses = whTask.Result   ?? new();
+        var portTask =
+            Http.GetFromJsonAsync<List<Port>>(
+                "api/Port");
+
+        await Task.WhenAll(
+            whTask,
+            rackTask,
+            portTask);
+
+        _warehouses = whTask.Result ?? new();
         _rackPoints = rackTask.Result ?? new();
-        _ports      = portTask.Result ?? new();
+        _ports = portTask.Result ?? new();
     }
     catch (Exception ex)
     {
-        ShowMessage($"Failed to load facilities: {ex.Message}", true);
+        ShowMessage(
+            $"Failed to load facilities: {ex.Message}",
+            true);
     }
 }
 
@@ -626,7 +654,7 @@
         ShowMessage($"Failed to load saved facilities: {ex.Message}", true);
     }
 
-    var hasErrorAfterLoad = _savedWarehouses.Count < 1 || _savedRails.Count < 1 || _savedPorts.Count < 1;
+    var hasErrorAfterLoad = _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2;
     FormStepData.MarkStepError(4, hasErrorAfterLoad);
 }
 
@@ -771,7 +799,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 				}
 			}
 			ResetWarehouseForm();
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -823,7 +851,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		{
 			await Http.DeleteAsync($"api/DealerWarehouseFacilities/{wh.Id}");
 			_savedWarehouses.Remove(wh);
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -903,7 +931,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 				}
 			}
 			ResetRailForm();
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -970,7 +998,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		{
 			await Http.DeleteAsync($"api/DealerRailFacilities/{rail.Id}");
 			_savedRails.Remove(rail);
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -1050,7 +1078,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 				}
 			}
 			ResetPortForm();
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -1087,7 +1115,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		{
 			await Http.DeleteAsync($"api/DealerPortFacilities/{port.Id}");
 			_savedPorts.Remove(port);
-			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1);
+			FormStepData.MarkStepError(4, _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2);
 		}
 		catch (Exception ex)
 		{
@@ -1145,7 +1173,7 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		if (IsViewOnly)
 		{
 			Loading.Show();
-			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}&mode=view");
+			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}&mode=view{FlowParam}");
 			return;
 		}
 		if (!DealerId.HasValue || DealerId.Value <= 0)
@@ -1157,10 +1185,18 @@ private async Task<double> ComputeDistanceAsync(string? googleUrl)
 		_isSaving = true;
 		try
 		{
-			var hasError = _savedWarehouses.Count < 2 || _savedRails.Count < 1 || _savedPorts.Count < 1;
+			var hasError = _savedWarehouses.Count < 2 || _savedRails.Count < 2 || _savedPorts.Count < 2;
 			FormStepData.MarkStepError(4, hasError);
+
+			if (hasError)
+			{
+				ShowMessage("A minimum of two Warehouses, two Rail Heads, and two Ports must be configured to proceed further.", true);
+				_isSaving = false;
+				return;
+			}
+
 			Loading.Show();
-			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}");
+			Nav.NavigateTo($"/MarketDetails?dealerId={DealerId}{FlowParam}");
 		}
 		catch (Exception ex)
 		{

@@ -1,0 +1,3057 @@
+﻿@page "/SubDealerRegistration"
+@implements IDisposable
+@using System.Net.Http.Json
+@using System.Text.RegularExpressions
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject LoadingService Loading
+@inject LoginState LoginState
+@inject LookupCacheService LookupCache
+
+<style>
+    fieldset:disabled .file-remove-x {
+        display: none !important;
+    }
+
+    .input-with-loader {
+        position: relative;
+    }
+
+        .input-with-loader .form-control-sm {
+            padding-right: 2rem;
+        }
+
+        .input-with-loader .field-loader-icon {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(calc(-50% - 2px));
+            font-size: 1rem;
+            color: #6c757d;
+            z-index: 4;
+            pointer-events: none;
+        }
+
+    .ocr-warning {
+        font-size: 0.75rem;
+        color: #856404;
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        padding: 4px 8px;
+        margin-top: 4px;
+    }
+
+    .searchable-select-input {
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 32px;
+    }
+
+    .searchable-dropdown-container {
+        position: absolute;
+        width: 100%;
+        background: #ffffff;
+        border: 1px solid #059669;
+        border-radius: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+        z-index: 1050;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        margin-top: 4px;
+    }
+
+    .searchable-dropdown-item {
+        padding: 10px 14px;
+        font-size: 0.85rem;
+        color: #374151;
+        cursor: pointer;
+        border-bottom: 1px solid #F3F4F6;
+        transition: background-color 0.1s ease;
+    }
+
+        .searchable-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .searchable-dropdown-item:hover {
+            background-color: #DCFCE7;
+            color: #059669;
+        }
+
+
+    .subdealer-page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .subdealer-import-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.48);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .subdealer-import-modal {
+        width: min(620px, 100%);
+        max-height: 88vh;
+        overflow-y: auto;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+    }
+
+    .subdealer-import-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .subdealer-import-modal-body {
+        padding: 1.25rem;
+    }
+
+    .subdealer-import-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: .75rem;
+        padding: 1rem 1.25rem;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .subdealer-excel-dropzone {
+        border: 1px dashed #86b79d;
+        border-radius: 10px;
+        padding: 1.25rem;
+        background: #f6fbf8;
+        text-align: center;
+    }
+
+    .subdealer-import-errors {
+        max-height: 190px;
+        overflow-y: auto;
+        margin-top: .75rem;
+        font-size: .82rem;
+    }
+
+    .subdealer-pan-card {
+        background: #eef5ff;
+        border: 1px solid #d7e3f4;
+        border-radius: 12px;
+        padding: 20px;
+        height: 100%;
+        min-height: 220px;
+    }
+
+        .subdealer-pan-card .pan-card-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            margin-bottom: 18px;
+            color: #172033;
+        }
+
+            .subdealer-pan-card .pan-card-title i {
+                color: #2563eb;
+            }
+
+        .subdealer-pan-card .form-control-custom {
+            background: #ffffff;
+        }
+
+    fieldset:disabled .subdealer-pan-card .form-control-custom {
+        background: #eef1f5;
+        opacity: 1;
+    }
+</style>
+
+<div class="container-fluid py-4 px-0">
+
+    @* No FormLoader: Sub Dealer is a single-page direct-save form. *@
+
+    <div class="subdealer-page-header">
+        <h5 class="fw-bold m-0 reg-page-heading">Sub Dealer Creation</h5>
+
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @* Available for all roles. Opens the separate Sub Dealer list page. *@
+            <button type="button"
+                    class="btn btn-outline-success btn-sm px-3 py-2 fw-semibold"
+                    @onclick="GoToSubDealerList">
+                <i class="bi bi-list-ul me-2"></i>
+                Sub Dealer List
+            </button>
+
+            @*   @if (LoginState.IsAdmin)
+            {
+                <button type="button"
+                        class="btn btn-success btn-sm px-3 py-2 fw-semibold"
+                        @onclick="OpenImportModal">
+                    <i class="bi bi-file-earmark-excel me-2"></i>
+                    Import Sub Dealers
+                </button>
+            } *@
+        </div>
+    </div>
+
+    <fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
+
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+                @_message
+                <button type="button" class="btn-close" @onclick='() => _message = null'></button>
+            </div>
+        }
+
+        <form @onsubmit:preventDefault>
+
+            @* BASIC INFORMATION
+               Removed: Dealer / Department / Institution buttons.
+               Removed: SPIC / Greenstar company checkbox cards.
+               Status: Active / Inactive only.
+            *@
+            <div class="basic-info-card">
+                <div class="basic-info-header">
+                    <h3 class="basic-info-title">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                             class="formicon"
+                             alt="icon" />
+                        Basic Information
+                    </h3>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-12 col-sm-6 col-md-3">
+                        <label class="form-label-custom">State <span class="text-danger">*</span></label>
+                        <select class="form-select-custom w-100 @(_errors.ContainsKey("StateId") ? "is-invalid" : "")"
+                                @bind="_basicInfoStateId"
+                                @bind:after="OnBasicInfoStateChanged"
+                                disabled="@(_isStateLocked || _isEditMode)">
+                            <option value="0">-- Select State --</option>
+                            @foreach (var stateItem in _statesAll)
+                            {
+                                <option value="@stateItem.Id">@stateItem.StateName</option>
+                            }
+                        </select>
+                        @if (_errors.TryGetValue("StateId", out var stateError))
+                        {
+                            <div class="field-error">@stateError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-md-3">
+                        <label class="form-label-custom">Region <span class="text-danger">*</span></label>
+                        <select class="form-select-custom w-100 @(_errors.ContainsKey("Region") ? "is-invalid" : "")"
+                                @bind="_basicInfoRegionId"
+                                @bind:after="OnBasicInfoRegionChanged"
+                                disabled="@(_isRegionLocked || _isEditMode)">
+                            <option value="0">-- Select Region --</option>
+                            @foreach (var region in _filteredRegions)
+                            {
+                                <option value="@region.Id">@region.RegionName</option>
+                            }
+                        </select>
+                        @if (_errors.TryGetValue("Region", out var regionError))
+                        {
+                            <div class="field-error">@regionError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-md-3">
+                        <label class="form-label-custom">HQ <span class="text-danger">*</span></label>
+                        <select class="form-select-custom w-100 @(_errors.ContainsKey("HQ") ? "is-invalid" : "")"
+                                @bind="_basicInfoHqId"
+                                @bind:after="OnBasicInfoHqChanged"
+                                disabled="@(_isHqLocked || _isEditMode)">
+                            <option value="0">-- Select HQ --</option>
+                            @foreach (var hq in _filteredHeadquarters)
+                            {
+                                <option value="@hq.Id">@hq.HeadquarterName</option>
+                            }
+                        </select>
+                        @if (_errors.TryGetValue("HQ", out var hqError))
+                        {
+                            <div class="field-error">@hqError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-md-3">
+                        <label class="form-label-custom">Status</label>
+                        <div class="status-btn-group">
+                            <button type="button"
+                                    class="btn btn_active @(status == "Active" ? "active" : "")"
+                                    @onclick='() => SelectStatus("Active")'>
+                                Active
+                            </button>
+
+                            <button type="button"
+                                    class="btn btn_inactive @(status == "Inactive" ? "active" : "")"
+                                    @onclick='() => SelectStatus("Inactive")'>
+                                Inactive
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* BUSINESS INFORMATION
+               New searchable Sub Dealer Code dropdown.
+               -- New Entry -- creates a new Sub Dealer.
+               Selecting an existing code loads it for edit.
+            *@
+            <div class="basic-info-card business-info-card">
+                <div class="business-info-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                             class="formicon"
+                             alt="icon" />
+                        <h5 class="fw-semibold m-0 business-info-title">Business Information</h5>
+                    </div>
+
+                    @if (_isEditMode)
+                    {
+                        <span class="business-info-pill business-info-pill-edit">
+                            <i class="bi bi-pencil-square me-1"></i>Editing
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="business-info-pill business-info-pill-new">
+                            <i class="bi bi-plus-circle me-1"></i>New Entry
+                        </span>
+                    }
+                </div>
+
+                <div class="business-info-body">
+                    <div class="row g-3">
+                        <div class="col-12 @(IsViewOnly ? "col-md-12" : "col-md-6")">
+                            <label class="form-label-custom">Sub Dealer Code &amp; Name  <span class="text-danger">*</span></label>
+
+                            <div class="position-relative">
+                                <input type="text"
+                                       class="form-select-custom searchable-select-input w-100"
+                                       placeholder="-- New Entry --"
+                                       @bind="_subDealerSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showSubDealerDropdown = true"
+                                       @onblur="HideSubDealerDropdown" />
+
+                                @if (_showSubDealerDropdown)
+                                {
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item"
+                                             @onmousedown='() => SelectSubDealer(0, "")'>
+                                            -- New Entry --
+                                        </div>
+
+                                        @foreach (var item in FilteredSubDealersForDropdown)
+                                        {
+                                            <div class="searchable-dropdown-item"
+                                                 @onmousedown='() => SelectSubDealer(item.Id, $"{item.SubDealerCode} - {item.FirmName}")'>
+                                                @item.SubDealerCode - @item.FirmName
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        @if (!IsViewOnly)
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">
+                                    Firm Name
+                                    <small class="text-muted fw-normal">(As per GST Trade Name)</small>
+                                </label>
+
+                                <div class="firm-name-input-wrap">
+                                    <span class="firm-name-prefix">M/s.</span>
+                                    <input type="text"
+                                           class="form-control-custom w-100 firm-name-input @(_errors.ContainsKey("FirmName") ? "is-invalid" : "")"
+                                           @bind="_model.FirmName"
+                                           @bind:after="SanitizeFirmName"
+                                           placeholder="Enter Firm Business Name" />
+                                </div>
+
+                                @if (_errors.TryGetValue("FirmName", out var firmError))
+                                {
+                                    <div class="field-error">@firmError</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* PRIMARY LOCATION - same structure as Dealer Register.
+               Mandatory only when Status = Active; optional for Inactive. *@
+            <div class="form-card">
+                <div class="primary-location-header">
+                    <div class="card-header-title mb-0">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LocationIcon.svg"
+                             alt="Location"
+                             class="formicon" />
+                        Primary Location
+                    </div>
+
+                    <button type="button"
+                            class="btn btn-outline-success btn-sm rounded-pill px-3 card-header-title use-current-loc-btn"
+                            @onclick="UseCurrentLocation"
+                            disabled="@_isGettingLocation">
+                        @if (_isGettingLocation)
+                        {
+                            <i class="bi bi-arrow-repeat spin"></i>
+                            <span>Getting Location...</span>
+                        }
+                        else
+                        {
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CurrentLocation.svg"
+                                 alt="Current Location"
+                                 class="verifyicon" />
+                            <span>Use Current Location</span>
+                        }
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_locationMessage))
+                {
+                    <div class="alert @(_locationSuccess ? "alert-success" : "alert-warning") py-1 px-2 small mb-2">
+                        @_locationMessage
+                    </div>
+                }
+
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <div class="map-box-wrap">
+                            <div id="subDealerLeafletMap" class="leaflet-map-el"></div>
+
+                            <button type="button"
+                                    class="btn btn-sm btn-success rounded-pill px-3 shadow-sm map-loc-btn"
+                                    @onclick="UseCurrentLocation"
+                                    disabled="@_isGettingLocation">
+                                <i class="bi bi-crosshair"></i> Use current location
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-8">
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">
+                                    Google Map URL
+                                    @if (IsActiveSubDealer)
+                                    {
+                                        <span class="text-danger">*</span>
+                                    }
+                                </label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       @bind="_model.GoogleMapURL"
+                                       @bind:after="OnGoogleMapUrlChanged"
+                                       placeholder="Click map or Paste Google Maps link" />
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">
+                                    Latitude &amp; Longitude
+                                    @if (IsActiveSubDealer)
+                                    {
+                                        <span class="text-danger">*</span>
+                                    }
+                                </label>
+                                <input type="text"
+                                       class="form-control-custom w-100 @(_errors.ContainsKey("Latitude") || _errors.ContainsKey("Longitude") ? "is-invalid" : "")"
+                                       value="@_latitudeLongitudeText"
+                                       @onchange="OnLatitudeLongitudeChanged"
+                                       placeholder="e.g. 10.7905, 78.7047" />
+
+                                @if (_errors.TryGetValue("Latitude", out var latitudeError))
+                                {
+                                    <div class="field-error">@latitudeError</div>
+                                }
+                                @if (_errors.TryGetValue("Longitude", out var longitudeError))
+                                {
+                                    <div class="field-error">@longitudeError</div>
+                                }
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">
+                                    Shop No / Room No / Block No
+                                    @if (IsActiveSubDealer)
+                                    {
+                                        <span class="text-danger">*</span>
+                                    }
+                                </label>
+                                <input type="text"
+                                       class="form-control-custom w-100 @(_errors.ContainsKey("ShopNo") ? "is-invalid" : "")"
+                                       @bind="_model.ShopNoORRoomNoOrBlockNo"
+                                       @bind:after='() => ValidateFieldOnChange("ShopNo", !string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo))' />
+
+                                @if (_errors.TryGetValue("ShopNo", out var shopError))
+                                {
+                                    <div class="field-error">@shopError</div>
+                                }
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">
+                                    Street / Area / Locality
+                                    @if (IsActiveSubDealer)
+                                    {
+                                        <span class="text-danger">*</span>
+                                    }
+                                </label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       @bind="_model.Street" />
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">
+                                    Sub Village
+                                    @if (IsActiveSubDealer)
+                                    {
+                                        <span class="text-danger">*</span>
+                                    }
+                                </label>
+                                <input type="text"
+                                       class="form-control-custom w-100"
+                                       @bind="_model.SubVillage"
+                                       placeholder="Enter Sub Village" />
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">
+                                    Pincode
+                                    @if (IsActiveSubDealer)
+                                    {
+                                        <span class="text-danger">*</span>
+                                    }
+                                </label>
+                                <input type="text"
+                                       class="form-control-custom w-100 @(_errors.ContainsKey("PinCode") ? "is-invalid" : "")"
+                                       @bind="_model.PinCode"
+                                       @bind:event="oninput"
+                                       @bind:after="OnPincodeChanged"
+                                       placeholder="Enter Pincode"
+                                       maxlength="6"
+                                       inputmode="numeric" />
+
+                                @if (_isPincodeLookup)
+                                {
+                                    <div class="small text-muted mt-1">
+                                        <i class="bi bi-arrow-repeat spin"></i> Looking up pincode...
+                                    </div>
+                                }
+
+                                @if (_errors.TryGetValue("PinCode", out var pincodeError))
+                                {
+                                    <div class="field-error">@pincodeError</div>
+                                }
+
+                                @if (!string.IsNullOrEmpty(_pincodeMessage))
+                                {
+                                    <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">
+                                        @_pincodeMessage
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="col-12 col-sm-6">
+                                <label class="form-label-custom">
+                                    Village
+                                    @if (IsActiveSubDealer)
+                                    {
+                                        <span class="text-danger">*</span>
+                                    }
+                                </label>
+                                <input type="text"
+                                       class="form-control-custom w-100 @(_errors.ContainsKey("Village") ? "is-invalid" : "")"
+                                       @bind="_model.Village"
+                                       @bind:after='() => ValidateFieldOnChange("Village", !string.IsNullOrWhiteSpace(_model.Village))'
+                                       placeholder="Village" />
+
+                                @if (_errors.TryGetValue("Village", out var villageError))
+                                {
+                                    <div class="field-error">@villageError</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-6 col-sm-6 col-md-3">
+                        <label class="form-label-custom">
+                            Block
+                            @if (IsActiveSubDealer)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                        </label>
+                        <input type="text"
+                               class="form-control-custom w-100"
+                               @bind="_model.Block"
+                               placeholder="Enter Block" />
+                    </div>
+
+                    <div class="col-6 col-sm-6 col-md-3">
+                        <label class="form-label-custom">
+                            Taluk
+                            @if (IsActiveSubDealer)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                        </label>
+                        <input type="text"
+                               class="form-control-custom w-100"
+                               @bind="_model.Taluk"
+                               placeholder="Enter Taluk" />
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-md-3">
+                        <label class="form-label-custom">
+                            District
+                            @if (IsActiveSubDealer)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                        </label>
+
+                        <div class="position-relative">
+                            <input type="text"
+                                   class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DistrictId") ? "is-invalid" : "")"
+                                   placeholder="-- Select District --"
+                                   @bind="_districtSearchText"
+                                   @bind:event="oninput"
+                                   @onfocus="() => _showDistrictDropdown = true"
+                                   @onblur="HideDistrictDropdown" />
+
+                            @if (_showDistrictDropdown)
+                            {
+                                <div class="searchable-dropdown-container">
+                                    <div class="searchable-dropdown-item"
+                                         @onmousedown='() => SelectDistrict(0, "")'>
+                                        -- Select District --
+                                    </div>
+
+                                    @foreach (var district in FilteredDistrictsForDropdown)
+                                    {
+                                        <div class="searchable-dropdown-item"
+                                             @onmousedown='() => SelectDistrict(district.Id, district.DistrictName)'>
+                                            @district.DistrictName
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        @if (_errors.TryGetValue("DistrictId", out var districtError))
+                        {
+                            <div class="field-error">@districtError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-md-3">
+                        <label class="form-label-custom">
+                            State
+                            @if (IsActiveSubDealer)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                        </label>
+
+                        <div class="position-relative">
+                            <input type="text"
+                                   class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DealerStateId") ? "is-invalid" : "")"
+                                   placeholder="-- Select State --"
+                                   @bind="_stateSearchText"
+                                   @bind:event="oninput"
+                                   @onfocus="() => _showStateDropdown = true"
+                                   @onblur="HideStateDropdown" />
+
+                            @if (_showStateDropdown)
+                            {
+                                <div class="searchable-dropdown-container">
+                                    <div class="searchable-dropdown-item"
+                                         @onmousedown='() => SelectState(0, "")'>
+                                        -- Select State --
+                                    </div>
+
+                                    @foreach (var stateItem in FilteredStatesForDropdown)
+                                    {
+                                        <div class="searchable-dropdown-item"
+                                             @onmousedown='() => SelectState(stateItem.Id, stateItem.StateName)'>
+                                            @stateItem.StateName
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        @if (_errors.TryGetValue("DealerStateId", out var locationStateError))
+                        {
+                            <div class="field-error">@locationStateError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label class="form-label-custom">
+                            Official Contact Number
+                            @if (IsActiveSubDealer)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                        </label>
+                        <input type="tel"
+                               inputmode="numeric"
+                               pattern="[0-9]*"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("OfficialContactNumber") ? "is-invalid" : "")"
+                               @bind="_model.OfficialContactNumber"
+                               @bind:after="SanitizeOfficialContact"
+                               placeholder="10-digit mobile number"
+                               maxlength="10"
+                               oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+
+                        @if (_errors.TryGetValue("OfficialContactNumber", out var officialContactError))
+                        {
+                            <div class="field-error">@officialContactError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label class="form-label-custom">
+                            WhatsApp Number
+                            @if (IsActiveSubDealer)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                        </label>
+                        <input type="tel"
+                               inputmode="numeric"
+                               pattern="[0-9]*"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("WhatsAppNumber") ? "is-invalid" : "")"
+                               @bind="_model.WhatsAppNumber"
+                               @bind:after="SanitizeWhatsAppNumber"
+                               placeholder="10-digit mobile number"
+                               maxlength="10"
+                               oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+
+                        @if (_errors.TryGetValue("WhatsAppNumber", out var whatsappError))
+                        {
+                            <div class="field-error">@whatsappError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label class="form-label-custom">
+                            Alternative Number
+                            @if (IsActiveSubDealer)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                        </label>
+                        <input type="tel"
+                               inputmode="numeric"
+                               pattern="[0-9]*"
+                               class="form-control-custom w-100"
+                               @bind="_model.AlternativeNumber"
+                               @bind:after="SanitizeAlternativeNumber"
+                               placeholder="10-digit mobile number"
+                               maxlength="10"
+                               oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+                    </div>
+                </div>
+            </div>
+
+            @* TAX & COMPLIANCE
+               GST and PAN are shown as separate visual cards inside Tax & Compliance.
+               The outer fieldset already makes inputs read-only in View mode. *@
+            <div class="basic-info-card">
+                <div class="card-header-title mb-3">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/TaxComplience.svg"
+                         class="formicon"
+                         alt="icon" />
+                    Tax &amp; Compliance
+                </div>
+
+                <div class="row g-3">
+                    @* GST INFORMATION *@
+                    <div class="col-12 col-lg-8">
+                        <div class="compliance-card gst h-100">
+                            <div class="fw-bold small mb-3">
+                                <i class="bi bi-file-earmark-text text-success me-2"></i>
+                                GST Information
+                                @if (IsActiveSubDealer)
+                                {
+                                    <span class="text-danger">*</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted fw-normal ms-1">(Optional for Inactive)</span>
+                                }
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label-custom">
+                                        GST Number
+                                        @if (IsActiveSubDealer)
+                                        {
+                                            <span class="text-danger">*</span>
+                                        }
+                                    </label>
+                                    <div class="input-with-loader">
+                                        <input type="text"
+                                               class="form-control form-control-sm @(_errors.ContainsKey("GSTNumber") ? "is-invalid" : "")"
+                                               @bind="_model.GSTNumber"
+                                               @bind:after="OnGSTNumberChanged"
+                                               placeholder="15-character GST Number"
+                                               maxlength="15"
+                                               style="text-transform: uppercase" />
+
+                                        @if (_isExtractingGst)
+                                        {
+                                            <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                        }
+                                    </div>
+
+                                    @if (_errors.TryGetValue("GSTNumber", out var gstError))
+                                    {
+                                        <div class="field-error">@gstError</div>
+                                    }
+
+                                    @if (!string.IsNullOrEmpty(_ocrWarningGst))
+                                    {
+                                        <div class="ocr-warning">@_ocrWarningGst</div>
+                                    }
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label-custom">Legal Name</label>
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           @bind="_model.GSTLegalName"
+                                           placeholder="GST Legal Name" />
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label-custom">Trade Name</label>
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           @bind="_model.GSTTradeName"
+                                           placeholder="GST Trade Name" />
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label-custom">Constitution of Business</label>
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           @bind="_model.GSTConstitutionofBusiness"
+                                           placeholder="Constitution of Business" />
+                                </div>
+
+                                <div class="col-12">
+                                    <label class="upload-area">
+                                        <i class="bi bi-cloud-arrow-up text-success"></i>
+                                        <span class="small text-success fw-600">
+                                            Upload GST Certificate (PDF)
+                                            @if (IsActiveSubDealer)
+                                            {
+                                                <span class="text-danger">*</span>
+                                            }
+                                        </span>
+
+                                        <InputFile OnChange="HandleGstUpload"
+                                                   accept=".pdf"
+                                                   hidden />
+
+                                        @if (_errors.TryGetValue("GSTFile", out var gstFileError))
+                                        {
+                                            <div class="field-error">@gstFileError</div>
+                                        }
+
+                                        @if (!string.IsNullOrEmpty(_model.GSTFilePath))
+                                        {
+                                            <div class="mt-1 small text-success file-name-display">
+                                                <i class="bi bi-check-circle"></i>
+                                                @_model.GSTFilePath
+
+                                                @if (!IsViewOnly)
+                                                {
+                                                    <i class="bi bi-x-circle text-danger ms-2 file-remove-x"
+                                                       @onclick="RemoveGstFile"
+                                                       @onclick:preventDefault="true"
+                                                       @onclick:stopPropagation="true"></i>
+                                                }
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* PAN INFORMATION - Register-page style, Aadhaar intentionally excluded. *@
+                    <div class="col-12 col-lg-4">
+                        <div class="subdealer-pan-card">
+                            <div class="pan-card-title">
+                                <i class="bi bi-file-earmark-person"></i>
+                                <span>PAN Information</span>
+
+                                @if (IsActiveSubDealer)
+                                {
+                                    <span class="text-danger">*</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted fw-normal ms-1">(Optional for Inactive)</span>
+                                }
+                            </div>
+
+                            <label class="form-label-custom">
+                                PAN Number
+                                @if (IsActiveSubDealer)
+                                {
+                                    <span class="text-danger">*</span>
+                                }
+                            </label>
+
+                            <input type="text"
+                                   class="form-control-custom w-100 @(_errors.ContainsKey("PANNo") ? "is-invalid" : "")"
+                                   @bind="_model.PANNo"
+                                   @bind:after="OnPANNumberChanged"
+                                   placeholder="10-CHARACTER PAN NUMBER"
+                                   maxlength="10"
+                                   style="text-transform: uppercase" />
+
+                            @if (_errors.TryGetValue("PANNo", out var panError))
+                            {
+                                <div class="field-error">@panError</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* mFMS DETAILS - separate card after Tax & Compliance. *@
+            <div class="basic-info-card">
+                <div class="card-header-title mb-3">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                         class="formicon"
+                         alt="icon" />
+                    mFMS Information
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label-custom">
+                            Wholesale mFMS ID
+                            <small class="text-muted fw-normal">(Optional)</small>
+                        </label>
+
+                        <input type="text"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("WholesaleMFMSId") ? "is-invalid" : "")"
+                               @bind="_model.WholesaleMFMSId"
+                               @bind:after='() => ValidateFieldOnChange("WholesaleMFMSId", !string.IsNullOrWhiteSpace(_model.WholesaleMFMSId))'
+                               placeholder="Enter Wholesale mFMS ID"
+                               maxlength="50" />
+
+                        @if (_errors.TryGetValue("WholesaleMFMSId", out var wholesaleMfmsError))
+                        {
+                            <div class="field-error">@wholesaleMfmsError</div>
+                        }
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label-custom">
+                            Retail mFMS ID
+                            @if (IsActiveSubDealer)
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                            else
+                            {
+                                <small class="text-muted fw-normal">(Optional for Inactive)</small>
+                            }
+                        </label>
+
+                        <input type="text"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("RetailMFMSId") ? "is-invalid" : "")"
+                               @bind="_model.RetailMFMSId"
+                               @bind:after='() => ValidateFieldOnChange("RetailMFMSId", !string.IsNullOrWhiteSpace(_model.RetailMFMSId))'
+                               placeholder="Enter Retail mFMS ID"
+                               maxlength="50" />
+
+                        @if (_errors.TryGetValue("RetailMFMSId", out var retailMfmsError))
+                        {
+                            <div class="field-error">@retailMfmsError</div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* Removed completely:
+               Bank Details
+               Wholesale Fertilizer Details
+               Retail Fertilizer Details
+               Office Automation
+               Enrollment Status
+            *@
+        </form>
+    </fieldset>
+
+    @if (!IsViewOnly)
+    {
+        <div class="d-flex justify-content-end align-items-center gap-2 mt-4 mb-4 px-2">
+            <button type="button"
+                    class="btn btn-success px-4 py-2 fw-semibold rounded-2"
+                    @onclick="HandleSubmit"
+                    disabled="@_isSaving">
+                @if (_isSaving)
+                {
+                    <span class="spinner-border spinner-border-sm me-2"
+                          role="status"
+                          aria-hidden="true"></span>
+                    <span>Submitting...</span>
+                }
+                else
+                {
+                    <i class="bi bi-check-circle me-2"></i>
+                    <span>Submit</span>
+                }
+            </button>
+        </div>
+    }
+
+    @if (_showImportModal && LoginState.IsAdmin)
+    {
+        <div class="subdealer-import-backdrop" @onclick="CloseImportModal">
+            <div class="subdealer-import-modal" @onclick:stopPropagation="true">
+                <div class="subdealer-import-modal-header">
+                    <div>
+                        <h5 class="fw-bold mb-1">Import Sub Dealer Master</h5>
+                        <div class="small text-muted">Upload the approved .xlsx master file.</div>
+                    </div>
+
+                    <button type="button"
+                            class="btn-close"
+                            aria-label="Close"
+                            disabled="@_isImporting"
+                            @onclick="CloseImportModal"></button>
+                </div>
+
+                <div class="subdealer-import-modal-body">
+                    <div class="alert alert-light border small mb-3">
+                        <div class="fw-semibold mb-1">Required Excel columns</div>
+                        <div>Sub Dealer Code, Sub Dealer Name, HQ, Region, State</div>
+                    </div>
+
+                    <div class="subdealer-excel-dropzone">
+                        <i class="bi bi-file-earmark-excel fs-2 text-success"></i>
+                        <div class="fw-semibold mt-2">Choose Excel file</div>
+                        <div class="small text-muted mb-3">Only .xlsx files, maximum 10 MB</div>
+
+                        <InputFile OnChange="HandleImportFileSelected"
+                                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+
+                        @if (_importFile != null)
+                        {
+                            <div class="small text-success mt-3">
+                                <i class="bi bi-check-circle me-1"></i>
+                                @_importFile.Name
+                            </div>
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_importMessage))
+                    {
+                        <div class="alert @(_importHasError ? "alert-danger" : "alert-success") py-2 mt-3 mb-0 small">
+                            @_importMessage
+                        </div>
+                    }
+
+                    @if (_importErrors.Count > 0)
+                    {
+                        <div class="subdealer-import-errors alert alert-danger mb-0">
+                            <div class="fw-semibold mb-1">Import validation errors</div>
+                            <ul class="mb-0 ps-3">
+                                @foreach (var error in _importErrors)
+                                {
+                                    <li>@error</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+
+                <div class="subdealer-import-modal-footer">
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            disabled="@_isImporting"
+                            @onclick="CloseImportModal">
+                        Cancel
+                    </button>
+
+                    <button type="button"
+                            class="btn btn-success px-4"
+                            disabled="@(_isImporting || _importFile == null)"
+                            @onclick="ImportSubDealersFromExcel">
+                        @if (_isImporting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"
+                                  role="status"
+                                  aria-hidden="true"></span>
+                            <span>Importing...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-upload me-2"></i>
+                            <span>Upload &amp; Import</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "subDealerId")]
+    public int? SubDealerIdFromQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
+    private bool IsViewOnly =>
+        string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+    // Only Active Sub Dealers require the full Primary Location,
+    // contact and GST information.
+    private bool IsActiveSubDealer =>
+        string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase);
+
+    private SubDealerFormModel _model = new()
+    {
+        Status = SubDealerStatus.Active
+    };
+
+    private bool _isEditMode;
+    private bool _isSaving;
+    private string status = "Active";
+
+    private readonly Dictionary<string, string> _errors = new();
+
+    private List<LocationItemDto> _statesAll = new();
+    private List<LocationItemDto> _districtsAll = new();
+    private List<LocationItemDto> _regionsAll = new();
+    private List<LocationItemDto> _headquartersAll = new();
+
+    private List<LocationItemDto> _filteredRegions = new();
+    private List<LocationItemDto> _filteredHeadquarters = new();
+
+    private List<SubDealerLookupDto> _subDealersAll = new();
+    private List<SubDealerLookupDto> _filteredSubDealers = new();
+
+    private int _basicInfoStateId;
+    private int _basicInfoRegionId;
+    private int _basicInfoHqId;
+    private int _subDealerId;
+
+    private bool _isStateLocked;
+    private bool _isRegionLocked;
+    private bool _isHqLocked;
+
+    private string _subDealerSearchText = "";
+    private bool _showSubDealerDropdown;
+
+    private string _stateSearchText = "";
+    private bool _showStateDropdown;
+
+    private string _districtSearchText = "";
+    private bool _showDistrictDropdown;
+
+    private string _latitudeLongitudeText = "";
+    private string? _message;
+    private bool _isError;
+
+    private bool _isPincodeLookup;
+    private string? _pincodeMessage;
+    private bool _pincodeSuccess;
+
+    private bool _isGettingLocation;
+    private string? _locationMessage;
+    private bool _locationSuccess;
+
+    private IBrowserFile? _gstFile;
+    private bool _isExtractingGst;
+    private bool _ocrPopulatedGst;
+    private string? _ocrWarningGst;
+
+    // Admin Excel import state
+    private bool _showImportModal;
+    private bool _isImporting;
+    private IBrowserFile? _importFile;
+    private string? _importMessage;
+    private bool _importHasError;
+    private List<string> _importErrors = new();
+    private const long MaxImportFileSize = 10 * 1024 * 1024;
+
+    private DotNetObjectReference<SubDealerRegistration>? _objRef;
+
+    private IEnumerable<SubDealerLookupDto> FilteredSubDealersForDropdown =>
+        _filteredSubDealers.Where(x =>
+            string.IsNullOrWhiteSpace(_subDealerSearchText) ||
+            $"{x.SubDealerCode} - {x.FirmName}"
+                .Contains(_subDealerSearchText, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<LocationItemDto> FilteredStatesForDropdown =>
+        _statesAll.Where(x =>
+            string.IsNullOrWhiteSpace(_stateSearchText) ||
+            x.StateName.Contains(_stateSearchText, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<LocationItemDto> FilteredDistrictsForDropdown =>
+        _districtsAll.Where(x =>
+            x.StateId == (_model.DealerStateId ?? 0) &&
+            (string.IsNullOrWhiteSpace(_districtSearchText) ||
+             x.DistrictName.Contains(_districtSearchText, StringComparison.OrdinalIgnoreCase)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _objRef = DotNetObjectReference.Create(this);
+
+        Loading.Show();
+        try
+        {
+            await LoadData();
+            ApplyLockedEmployeeLocation();
+
+            if (SubDealerIdFromQuery.HasValue && SubDealerIdFromQuery.Value > 0)
+            {
+                await LoadSubDealer(SubDealerIdFromQuery.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to initialize Sub Dealer form: {ex.Message}", true);
+        }
+        finally
+        {
+            Loading.Hide();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("initLeafletMap", "subDealerLeafletMap", _objRef);
+
+            if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+                await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Sub Dealer map initialization failed: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        _objRef?.Dispose();
+    }
+
+    private async Task LoadData()
+    {
+        // Lookup masters and Sub Dealers can still load in parallel.
+        // The Sub Dealer API is now role-scoped, so the browser no longer
+        // downloads the complete SubDealerRegistrations table.
+        var cacheTask = LookupCache.EnsureLoadedAsync();
+
+        var subDealerLookupUrl = BuildRoleScopedSubDealerLookupUrl();
+        var subDealerTask = Http.GetFromJsonAsync<List<SubDealerLookupDto>>(
+            subDealerLookupUrl);
+
+        await Task.WhenAll(cacheTask, subDealerTask);
+
+        _statesAll = LookupCache.States;
+        _districtsAll = LookupCache.Districts;
+        _regionsAll = LookupCache.Regions;
+        _headquartersAll = LookupCache.Headquarters;
+
+        _subDealersAll = subDealerTask.Result ?? new();
+
+        // ApplyLockedEmployeeLocation() runs immediately after LoadData().
+        // It will set the correct State / Region / HQ and call this again.
+        ApplySubDealerClientFilter();
+    }
+
+    private string CurrentLoginRole =>
+        LoginState?.UserRole?.ToString() ?? string.Empty;
+
+    private bool IsLoginMoRole =>
+        string.Equals(CurrentLoginRole, "MO", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentLoginRole, "MDO", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentLoginRole, "JMDO", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsLoginRmRole =>
+        string.Equals(CurrentLoginRole, "RM", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentLoginRole, "RMD", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsLoginSmmRole =>
+        string.Equals(CurrentLoginRole, "SMM", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentLoginRole, "SMD", StringComparison.OrdinalIgnoreCase);
+
+    private string BuildRoleScopedSubDealerLookupUrl()
+    {
+        const string baseUrl = "api/SubDealerRegistration/lookup";
+
+        if (LoginState is null ||
+            LoginState.IsAdmin ||
+            LoginState.IsDirectorOrAVP)
+        {
+            return baseUrl;
+        }
+
+        // MO / MDO / JMDO: ALWAYS HQ scope.
+        // Explicit UserRole check is included so an MO never falls through
+        // and downloads the full Sub Dealer master.
+        if ((IsLoginMoRole || LoginState.IsHQRole) && LoginState.HQId > 0)
+            return $"{baseUrl}?hqId={LoginState.HQId}";
+
+        // RM / RMD: Region scope. Do not narrow RM by a stored HQId.
+        if ((IsLoginRmRole || LoginState.IsRegionRole) && LoginState.RegionId > 0)
+            return $"{baseUrl}?regionId={LoginState.RegionId}";
+
+        // SMM / SMD: State scope.
+        if ((IsLoginSmmRole || LoginState.IsStateRole) && LoginState.StateId > 0)
+            return $"{baseUrl}?stateId={LoginState.StateId}";
+
+        return baseUrl;
+    }
+
+    private void ApplySubDealerClientFilter()
+    {
+        IEnumerable<SubDealerLookupDto> query = _subDealersAll;
+
+        if (_basicInfoStateId > 0)
+            query = query.Where(x => x.StateId == _basicInfoStateId);
+
+        if (_basicInfoRegionId > 0)
+            query = query.Where(x => x.RegionId == _basicInfoRegionId);
+
+        if (_basicInfoHqId > 0)
+            query = query.Where(x => x.HQId == _basicInfoHqId);
+
+        _filteredSubDealers = query.ToList();
+    }
+
+    private async Task LoadSubDealer(int id)
+    {
+        var model = await Http.GetFromJsonAsync<SubDealerFormModel>(
+            $"api/SubDealerRegistration/{id}");
+
+        if (model == null)
+            return;
+
+        // Keep the saved Sub Dealer values. Do not overwrite saved State/Region/HQ
+        // with the currently logged-in employee location after loading.
+        _model = model;
+        _model.FirmName ??= string.Empty;
+
+        _subDealerId = model.Id;
+        _isEditMode = true;
+
+        _basicInfoStateId = model.StateId;
+        _basicInfoRegionId = model.Region;
+        _basicInfoHqId = model.HQ;
+
+        status = model.Status == SubDealerStatus.InActive
+            ? "Inactive"
+            : "Active";
+
+        // Rebuild the dependent dropdown lists from the SAVED values.
+        _filteredRegions = _regionsAll
+            .Where(x => x.StateId == _basicInfoStateId)
+            .ToList();
+
+        _filteredHeadquarters = _headquartersAll
+            .Where(x => x.RegionId == _basicInfoRegionId)
+            .ToList();
+
+        ApplySubDealerClientFilter();
+
+        // Same behavior as Dealer selection: selected code loads the firm name.
+        _subDealerSearchText =
+            $"{model.SubDealerCode} - {model.FirmName}";
+
+        InitializeLocationSearchTexts();
+        SyncLatitudeLongitudeText();
+
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+        {
+            await TriggerMapUpdate(
+                _model.Latitude.Value,
+                _model.Longitude.Value);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyLockedEmployeeLocation()
+    {
+        _isStateLocked = false;
+        _isRegionLocked = false;
+        _isHqLocked = false;
+
+        // Admin / Director / AVP keep the existing unrestricted behavior.
+        if (LoginState is null ||
+            LoginState.IsAdmin ||
+            LoginState.IsDirectorOrAVP)
+        {
+            ApplySubDealerClientFilter();
+            return;
+        }
+
+        // MO / MDO / JMDO:
+        // Lock State + Region + HQ to the logged-in user's assigned HQ.
+        if ((IsLoginMoRole || LoginState.IsHQRole) && LoginState.HQId > 0)
+        {
+            var hqId = LoginState.HQId;
+            var hq = _headquartersAll.FirstOrDefault(x => x.Id == hqId);
+
+            var regionId = hq?.RegionId ??
+                (LoginState.RegionId > 0
+                    ? LoginState.RegionId
+                    : 0);
+
+            var stateId = regionId > 0
+                ? _regionsAll.FirstOrDefault(x => x.Id == regionId)?.StateId ?? 0
+                : 0;
+
+            if (stateId <= 0 && LoginState.StateId > 0)
+                stateId = LoginState.StateId;
+
+            _basicInfoStateId = stateId;
+            _basicInfoRegionId = regionId;
+            _basicInfoHqId = hqId;
+
+            _filteredRegions = _regionsAll
+                .Where(x => x.StateId == _basicInfoStateId)
+                .ToList();
+
+            _filteredHeadquarters = _headquartersAll
+                .Where(x => x.RegionId == _basicInfoRegionId)
+                .ToList();
+
+            _isStateLocked = _basicInfoStateId > 0;
+            _isRegionLocked = _basicInfoRegionId > 0;
+            _isHqLocked = true;
+
+            ApplySubDealerClientFilter();
+            return;
+        }
+
+        // RM / RMD:
+        // Lock State + Region. HQ remains selectable within that Region.
+        if ((IsLoginRmRole || LoginState.IsRegionRole) && LoginState.RegionId > 0)
+        {
+            var regionId = LoginState.RegionId;
+            var stateId = _regionsAll
+                .FirstOrDefault(x => x.Id == regionId)?.StateId ?? 0;
+
+            if (stateId <= 0 && LoginState.StateId > 0)
+                stateId = LoginState.StateId;
+
+            _basicInfoStateId = stateId;
+            _basicInfoRegionId = regionId;
+            _basicInfoHqId = 0;
+
+            _filteredRegions = _regionsAll
+                .Where(x => x.StateId == _basicInfoStateId)
+                .ToList();
+
+            _filteredHeadquarters = _headquartersAll
+                .Where(x => x.RegionId == _basicInfoRegionId)
+                .ToList();
+
+            _isStateLocked = _basicInfoStateId > 0;
+            _isRegionLocked = true;
+            _isHqLocked = false;
+
+            ApplySubDealerClientFilter();
+            return;
+        }
+
+        // SMM / SMD:
+        // Lock only State. Region and HQ remain selectable inside the State.
+        if ((IsLoginSmmRole || LoginState.IsStateRole) && LoginState.StateId > 0)
+        {
+            _basicInfoStateId = LoginState.StateId;
+            _basicInfoRegionId = 0;
+            _basicInfoHqId = 0;
+
+            _filteredRegions = _regionsAll
+                .Where(x => x.StateId == _basicInfoStateId)
+                .ToList();
+
+            _filteredHeadquarters = new();
+
+            _isStateLocked = true;
+            _isRegionLocked = false;
+            _isHqLocked = false;
+
+            ApplySubDealerClientFilter();
+            return;
+        }
+
+        // Fallback: preserve the old behavior for any custom role that does not
+        // expose IsHQRole / IsRegionRole / IsStateRole.
+        if (LoginState.StateId > 0)
+        {
+            _basicInfoStateId = LoginState.StateId;
+            _filteredRegions = _regionsAll
+                .Where(x => x.StateId == _basicInfoStateId)
+                .ToList();
+            _isStateLocked = true;
+        }
+
+        if (LoginState.RegionId > 0)
+        {
+            _basicInfoRegionId = LoginState.RegionId;
+            _filteredHeadquarters = _headquartersAll
+                .Where(x => x.RegionId == _basicInfoRegionId)
+                .ToList();
+            _isRegionLocked = true;
+        }
+
+        if (LoginState.HQId > 0)
+        {
+            _basicInfoHqId = LoginState.HQId;
+            _isHqLocked = true;
+        }
+
+        ApplySubDealerClientFilter();
+    }
+
+    private void OnBasicInfoStateChanged()
+    {
+        ValidateFieldOnChange("StateId", _basicInfoStateId > 0);
+
+        _basicInfoRegionId = 0;
+        _basicInfoHqId = 0;
+
+        _filteredRegions = _regionsAll
+            .Where(x => x.StateId == _basicInfoStateId)
+            .ToList();
+
+        _filteredHeadquarters = new();
+
+        ApplySubDealerClientFilter();
+
+        if (_subDealerId == 0)
+            _subDealerSearchText = "";
+    }
+
+    private void OnBasicInfoRegionChanged()
+    {
+        ValidateFieldOnChange("Region", _basicInfoRegionId > 0);
+
+        _basicInfoHqId = 0;
+
+        _filteredHeadquarters = _headquartersAll
+            .Where(x => x.RegionId == _basicInfoRegionId)
+            .ToList();
+
+        ApplySubDealerClientFilter();
+
+        if (_subDealerId == 0)
+            _subDealerSearchText = "";
+    }
+
+    private void OnBasicInfoHqChanged()
+    {
+        ValidateFieldOnChange("HQ", _basicInfoHqId > 0);
+
+        ApplySubDealerClientFilter();
+
+        if (_subDealerId == 0)
+            _subDealerSearchText = "";
+    }
+
+    private void SelectStatus(string value)
+    {
+        status = value;
+        _model.Status = value == "Inactive"
+            ? SubDealerStatus.InActive
+            : SubDealerStatus.Active;
+
+        // If validation was already triggered while Active, remove those
+        // red errors immediately when the record becomes Inactive.
+        if (!IsActiveSubDealer)
+            ClearActiveOnlyValidationErrors();
+    }
+
+    private void ClearActiveOnlyValidationErrors()
+    {
+        var activeOnlyKeys = new[]
+        {
+            "ShopNo",
+            "Village",
+            "Latitude",
+            "Longitude",
+            "PinCode",
+            "DistrictId",
+            "DealerStateId",
+            "OfficialContactNumber",
+            "WhatsAppNumber",
+            "WholesaleMFMSId",
+            "RetailMFMSId",
+            "PANNo",
+            "GSTNumber",
+            "GSTFile"
+        };
+
+        foreach (var key in activeOnlyKeys)
+            _errors.Remove(key);
+    }
+
+    private async Task SelectSubDealer(int id, string displayText)
+    {
+        _showSubDealerDropdown = false;
+        _subDealerId = id;
+        _subDealerSearchText = displayText;
+        _errors.Clear();
+        _message = null;
+
+        if (id > 0)
+        {
+            // Show Firm Name immediately from the lookup, then load the full record.
+            var selectedItem = _subDealersAll.FirstOrDefault(x => x.Id == id);
+            if (selectedItem != null)
+                _model.FirmName = selectedItem.FirmName ?? string.Empty;
+
+            await LoadSubDealer(id);
+        }
+        else
+        {
+            ResetForNewEntry();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ResetForNewEntry()
+    {
+        _model = new SubDealerFormModel
+        {
+            Status = SubDealerStatus.Active
+        };
+
+        _subDealerId = 0;
+        _isEditMode = false;
+        _subDealerSearchText = "";
+        _showSubDealerDropdown = false;
+        status = "Active";
+
+        // File / OCR state
+        _gstFile = null;
+        _ocrPopulatedGst = false;
+        _ocrWarningGst = null;
+        _isExtractingGst = false;
+
+        // Primary-location UI state
+        _stateSearchText = "";
+        _districtSearchText = "";
+        _latitudeLongitudeText = "";
+        _showStateDropdown = false;
+        _showDistrictDropdown = false;
+
+        _pincodeMessage = null;
+        _pincodeSuccess = false;
+        _isPincodeLookup = false;
+
+        _locationMessage = null;
+        _locationSuccess = false;
+        _isGettingLocation = false;
+
+        _errors.Clear();
+        _message = null;
+        _isError = false;
+
+        // Keep only the logged-in user's allowed State / Region / HQ.
+        ApplyLockedEmployeeLocation();
+    }
+
+    private async Task HideSubDealerDropdown()
+    {
+        await Task.Delay(200);
+        _showSubDealerDropdown = false;
+        StateHasChanged();
+    }
+
+    private async Task HideStateDropdown()
+    {
+        await Task.Delay(200);
+        _showStateDropdown = false;
+        StateHasChanged();
+    }
+
+    private async Task HideDistrictDropdown()
+    {
+        await Task.Delay(200);
+        _showDistrictDropdown = false;
+        StateHasChanged();
+    }
+
+    private void SelectState(int id, string displayText)
+    {
+        _stateSearchText = displayText;
+        _showStateDropdown = false;
+        _model.DealerStateId = id == 0 ? null : id;
+
+        ValidateFieldOnChange("DealerStateId", id > 0);
+
+        if ((_model.DistrictId ?? 0) > 0)
+        {
+            var belongsToState = _districtsAll.Any(x =>
+                x.Id == _model.DistrictId &&
+                x.StateId == id);
+
+            if (!belongsToState)
+            {
+                _model.DistrictId = null;
+                _districtSearchText = "";
+            }
+        }
+    }
+
+    private void SelectDistrict(int id, string displayText)
+    {
+        _districtSearchText = displayText;
+        _showDistrictDropdown = false;
+        _model.DistrictId = id == 0 ? null : id;
+        ValidateFieldOnChange("DistrictId", id > 0);
+    }
+
+    private void InitializeLocationSearchTexts()
+    {
+        var stateItem = _statesAll.FirstOrDefault(x =>
+            x.Id == (_model.DealerStateId ?? 0));
+        _stateSearchText = stateItem?.StateName ?? "";
+
+        var district = _districtsAll.FirstOrDefault(x =>
+            x.Id == (_model.DistrictId ?? 0));
+        _districtSearchText = district?.DistrictName ?? "";
+    }
+
+    private void ValidateFieldOnChange(string key, bool isValid)
+    {
+        if (isValid)
+            _errors.Remove(key);
+    }
+
+    private void SanitizeFirmName()
+    {
+        if (!string.IsNullOrWhiteSpace(_model.FirmName))
+            _model.FirmName = _model.FirmName.ToUpperInvariant();
+
+        ValidateFieldOnChange(
+            "FirmName",
+            !string.IsNullOrWhiteSpace(_model.FirmName));
+    }
+
+    private void SanitizeOfficialContact()
+    {
+        _model.OfficialContactNumber =
+            new string((_model.OfficialContactNumber ?? "")
+                .Where(char.IsDigit)
+                .ToArray());
+
+        ValidateFieldOnChange(
+            "OfficialContactNumber",
+            _model.OfficialContactNumber.Length == 10);
+    }
+
+    private void SanitizeWhatsAppNumber()
+    {
+        _model.WhatsAppNumber =
+            new string((_model.WhatsAppNumber ?? "")
+                .Where(char.IsDigit)
+                .ToArray());
+
+        ValidateFieldOnChange(
+            "WhatsAppNumber",
+            _model.WhatsAppNumber.Length == 10);
+    }
+
+    private void SanitizeAlternativeNumber()
+    {
+        _model.AlternativeNumber =
+            new string((_model.AlternativeNumber ?? "")
+                .Where(char.IsDigit)
+                .ToArray());
+    }
+
+    private void OnPANNumberChanged()
+    {
+        _errors.Remove("PANNo");
+
+        if (string.IsNullOrWhiteSpace(_model.PANNo))
+        {
+            _model.PANNo = null;
+            return;
+        }
+
+        _model.PANNo = _model.PANNo
+            .Trim()
+            .ToUpperInvariant();
+
+        if (Regex.IsMatch(
+            _model.PANNo,
+            @"^[A-Z]{5}[0-9]{4}[A-Z]$"))
+        {
+            _errors.Remove("PANNo");
+        }
+    }
+
+    private void OnGSTNumberChanged()
+    {
+        if (_ocrPopulatedGst)
+        {
+            _ocrPopulatedGst = false;
+        }
+        else
+        {
+            _ocrWarningGst = null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_model.GSTNumber))
+            _model.GSTNumber = _model.GSTNumber.ToUpperInvariant();
+
+        if (!string.IsNullOrWhiteSpace(_model.GSTNumber) &&
+            Regex.IsMatch(
+                _model.GSTNumber,
+                @"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"))
+        {
+            _errors.Remove("GSTNumber");
+        }
+    }
+
+    private async Task HandleGstUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        _errors.Remove("GSTFile");
+
+        if (!string.Equals(
+                Path.GetExtension(file.Name),
+                ".pdf",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _errors["GSTFile"] =
+                "Only PDF files are allowed for GST Certificate";
+            _gstFile = null;
+            _model.GSTFilePath = null;
+            return;
+        }
+
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _errors["GSTFile"] =
+                "File size must be less than 5 MB";
+            _gstFile = null;
+            _model.GSTFilePath = null;
+            return;
+        }
+
+        _gstFile = file;
+        _model.GSTFilePath = file.Name;
+
+        if (_ocrPopulatedGst)
+        {
+            _model.GSTNumber = null;
+            _ocrPopulatedGst = false;
+        }
+
+        _ocrWarningGst = null;
+        _isExtractingGst = true;
+
+        try
+        {
+            // Reuse your EXISTING GST OCR endpoint from Dealer Register.
+            using var content = new MultipartFormDataContent();
+            await using var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+
+            var response = await Http.PostAsync(
+                "api/DealerFile/ocr-extract",
+                content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result =
+                    await response.Content.ReadFromJsonAsync<GstOcrExtractResult>();
+
+                if (!string.IsNullOrWhiteSpace(result?.GSTLegalName))
+                    _model.GSTLegalName = result.GSTLegalName;
+
+                if (!string.IsNullOrWhiteSpace(result?.GSTTradeName))
+                    _model.GSTTradeName = result.GSTTradeName;
+
+                if (!string.IsNullOrWhiteSpace(result?.GSTConstitutionofBusiness))
+                    _model.GSTConstitutionofBusiness =
+                        result.GSTConstitutionofBusiness;
+
+                if (!string.IsNullOrWhiteSpace(result?.GST))
+                {
+                    _model.GSTNumber = result.GST;
+                    _ocrPopulatedGst = true;
+                    _ocrWarningGst =
+                        "⚠️ This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
+                    OnGSTNumberChanged();
+                }
+                else
+                {
+                    _ocrWarningGst =
+                        "⚠️ OCR could not extract the GST number. Please verify and enter it manually.";
+                }
+            }
+            else
+            {
+                _ocrWarningGst =
+                    "⚠️ OCR could not extract the GST information. Please verify and enter it manually.";
+            }
+        }
+        catch
+        {
+            _ocrWarningGst =
+                "⚠️ OCR could not extract the GST information. Please verify and enter it manually.";
+        }
+        finally
+        {
+            _isExtractingGst = false;
+        }
+    }
+
+    private async Task RemoveGstFile()
+    {
+        try
+        {
+            var existingPath = _model.GSTFilePath;
+
+            if (!string.IsNullOrWhiteSpace(existingPath) &&
+                existingPath.StartsWith("/uploads/subdealers/", StringComparison.OrdinalIgnoreCase))
+            {
+                await Http.DeleteAsync(
+                    $"api/SubDealerFile/delete?filePath={Uri.EscapeDataString(existingPath)}");
+            }
+
+            _gstFile = null;
+            _model.GSTFilePath = null;
+            _errors.Remove("GSTFile");
+
+            if (_isEditMode && _model.Id > 0)
+            {
+                _model.UpdatedBy = LoginState.UserId ?? "System";
+                _model.UpdatedAt = DateTime.Now;
+
+                await Http.PutAsJsonAsync(
+                    $"api/SubDealerRegistration/{_model.Id}",
+                    _model);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to remove GST file: {ex.Message}", true);
+        }
+    }
+
+    private async Task<SubDealerFileUploadResponse?> UploadGstToServer(
+        int subDealerId,
+        IBrowserFile file)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            await using var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+
+            var response = await Http.PostAsync(
+                $"api/SubDealerFile/upload/{subDealerId}/GST",
+                content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content
+                    .ReadFromJsonAsync<SubDealerFileUploadResponse>();
+            }
+
+            var body = await response.Content.ReadAsStringAsync();
+            ShowMessage($"GST upload failed: {body}", true);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"GST upload failed: {ex.Message}", true);
+        }
+
+        return null;
+    }
+
+    private void GoToSubDealerList()
+    {
+        Nav.NavigateTo("/SubDealerList");
+    }
+
+    private void OpenImportModal()
+    {
+        if (!LoginState.IsAdmin)
+            return;
+
+        _showImportModal = true;
+        _importFile = null;
+        _importMessage = null;
+        _importHasError = false;
+        _importErrors.Clear();
+    }
+
+    private void CloseImportModal()
+    {
+        if (_isImporting)
+            return;
+
+        _showImportModal = false;
+        _importFile = null;
+        _importMessage = null;
+        _importHasError = false;
+        _importErrors.Clear();
+    }
+
+    private void HandleImportFileSelected(InputFileChangeEventArgs e)
+    {
+        _importMessage = null;
+        _importHasError = false;
+        _importErrors.Clear();
+        _importFile = null;
+
+        var file = e.File;
+        var extension = Path.GetExtension(file.Name);
+
+        if (!string.Equals(extension, ".xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            _importHasError = true;
+            _importMessage = "Only .xlsx Excel files are allowed.";
+            return;
+        }
+
+        if (file.Size <= 0)
+        {
+            _importHasError = true;
+            _importMessage = "The selected Excel file is empty.";
+            return;
+        }
+
+        if (file.Size > MaxImportFileSize)
+        {
+            _importHasError = true;
+            _importMessage = "Excel file size must be less than 10 MB.";
+            return;
+        }
+
+        _importFile = file;
+        _importMessage = $"Ready to import {file.Name}";
+    }
+
+    private async Task ImportSubDealersFromExcel()
+    {
+        if (!LoginState.IsAdmin)
+        {
+            _importHasError = true;
+            _importMessage = "Only Admin can import the Sub Dealer master.";
+            return;
+        }
+
+        if (_importFile == null || _isImporting)
+            return;
+
+        _isImporting = true;
+        _importHasError = false;
+        _importMessage = null;
+        _importErrors.Clear();
+
+        try
+        {
+            // Step 1: Read Excel rows through the API.
+            using var fileContent = new MultipartFormDataContent();
+            await using var stream = _importFile.OpenReadStream(MaxImportFileSize);
+            fileContent.Add(new StreamContent(stream), "file", _importFile.Name);
+
+            var parseResponse = await Http.PostAsync(
+                "api/SubDealerRegistration/parse-import-excel",
+                fileContent);
+
+            if (!parseResponse.IsSuccessStatusCode)
+            {
+                var errorBody = await parseResponse.Content.ReadAsStringAsync();
+                _importHasError = true;
+                _importMessage = $"Could not read Excel file: {errorBody}";
+                return;
+            }
+
+            var parsed = await parseResponse.Content
+                .ReadFromJsonAsync<SubDealerExcelParseResponse>();
+
+            if (parsed == null)
+            {
+                _importHasError = true;
+                _importMessage = "The API returned an empty Excel import response.";
+                return;
+            }
+
+            // Structural Excel problems still stop the import because these are not
+            // master-mapping issues (missing columns, duplicate codes, blank required cells, etc.).
+            if (parsed.Errors.Count > 0)
+            {
+                _importErrors.AddRange(parsed.Errors);
+                _importHasError = true;
+                _importMessage = "Excel validation failed. Nothing was saved.";
+                return;
+            }
+
+            if (parsed.Rows.Count == 0)
+            {
+                _importHasError = true;
+                _importMessage = "No Sub Dealer rows were found in the Excel file.";
+                return;
+            }
+
+            // Step 2: Build lookup dictionaries once for fast mapping.
+            // Exact hierarchy is preferred. If the Excel hierarchy differs from the
+            // current application master, a globally UNIQUE Region/HQ name is allowed
+            // as a safe fallback and the application's actual hierarchy is used.
+            var statesByName = _statesAll
+                .Where(x => !string.IsNullOrWhiteSpace(x.StateName))
+                .GroupBy(x => NormalizeMasterValue(x.StateName))
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
+
+            var statesById = _statesAll
+                .GroupBy(x => x.Id)
+                .ToDictionary(x => x.Key, x => x.First());
+
+            var regionsByStateAndName = _regionsAll
+                .Where(x => !string.IsNullOrWhiteSpace(x.RegionName))
+                .GroupBy(x => $"{x.StateId}|{NormalizeMasterValue(x.RegionName)}")
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
+
+            var regionsById = _regionsAll
+                .GroupBy(x => x.Id)
+                .ToDictionary(x => x.Key, x => x.First());
+
+            var uniqueRegionsByName = _regionsAll
+                .Where(x => !string.IsNullOrWhiteSpace(x.RegionName))
+                .GroupBy(x => NormalizeMasterValue(x.RegionName), StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Select(x => x.Id).Distinct().Count() == 1)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            var hqsByRegionAndName = _headquartersAll
+                .Where(x => !string.IsNullOrWhiteSpace(x.HeadquarterName))
+                .GroupBy(x => $"{x.RegionId}|{NormalizeMasterValue(x.HeadquarterName)}")
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
+
+            var uniqueHqsByName = _headquartersAll
+                .Where(x => !string.IsNullOrWhiteSpace(x.HeadquarterName))
+                .GroupBy(x => NormalizeMasterValue(x.HeadquarterName), StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Select(x => x.Id).Distinct().Count() == 1)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            var mappedRows = new List<SubDealerBulkImportRowDto>();
+            var seenCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var row in parsed.Rows)
+            {
+                var code = row.SubDealerCode?.Trim() ?? string.Empty;
+                var name = row.SubDealerName?.Trim() ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(code))
+                {
+                    _importErrors.Add($"Excel row {row.RowNumber}: Sub Dealer Code is empty.");
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    _importErrors.Add($"Excel row {row.RowNumber}: Sub Dealer Name is empty.");
+                    continue;
+                }
+
+                if (!seenCodes.Add(code))
+                {
+                    _importErrors.Add($"Excel row {row.RowNumber}: duplicate Sub Dealer Code '{code}'.");
+                    continue;
+                }
+
+                var normalizedState = NormalizeMasterValue(row.State);
+                if (!statesByName.TryGetValue(normalizedState, out var stateItem))
+                {
+                    _importErrors.Add(
+                        $"Excel row {row.RowNumber}: State '{row.State}' was not found in State master.");
+                    continue;
+                }
+
+                var normalizedRegion = NormalizeMasterValue(row.Region);
+                var normalizedHq = NormalizeMasterValue(row.HQ);
+
+                var resolvedState = stateItem;
+                LocationItemDto? resolvedRegion = null;
+                LocationItemDto? resolvedHq = null;
+
+                // 1. Exact Region under Excel State.
+                var exactRegionKey = $"{resolvedState.Id}|{normalizedRegion}";
+                regionsByStateAndName.TryGetValue(exactRegionKey, out resolvedRegion);
+
+                if (resolvedRegion != null)
+                {
+                    // 2. Exact HQ under the exact Region.
+                    var exactHqKey = $"{resolvedRegion.Id}|{normalizedHq}";
+                    hqsByRegionAndName.TryGetValue(exactHqKey, out resolvedHq);
+                }
+
+                // 3. If exact hierarchy failed, a globally unique HQ is the strongest
+                // fallback because HQ identifies its real Region and State in the app master.
+                if (resolvedHq == null &&
+                    uniqueHqsByName.TryGetValue(normalizedHq, out var uniqueHq) &&
+                    regionsById.TryGetValue(uniqueHq.RegionId, out var hqRegion) &&
+                    statesById.TryGetValue(hqRegion.StateId, out var hqState))
+                {
+                    resolvedHq = uniqueHq;
+                    resolvedRegion = hqRegion;
+                    resolvedState = hqState;
+                }
+
+                // 4. If HQ is not globally resolvable, try a globally unique Region name.
+                if (resolvedRegion == null &&
+                    uniqueRegionsByName.TryGetValue(normalizedRegion, out var uniqueRegion) &&
+                    statesById.TryGetValue(uniqueRegion.StateId, out var regionState))
+                {
+                    resolvedRegion = uniqueRegion;
+                    resolvedState = regionState;
+
+                    var hqKey = $"{resolvedRegion.Id}|{normalizedHq}";
+                    hqsByRegionAndName.TryGetValue(hqKey, out resolvedHq);
+                }
+
+                if (resolvedRegion == null)
+                {
+                    _importErrors.Add(
+                        $"Excel row {row.RowNumber}: Region '{row.Region}' could not be matched to the application master.");
+                    continue;
+                }
+
+                if (resolvedHq == null)
+                {
+                    _importErrors.Add(
+                        $"Excel row {row.RowNumber}: HQ '{row.HQ}' could not be matched to the application master.");
+                    continue;
+                }
+
+                mappedRows.Add(new SubDealerBulkImportRowDto
+                {
+                    ExcelRowNumber = row.RowNumber,
+                    SubDealerCode = code.ToUpperInvariant(),
+                    FirmName = name.ToUpperInvariant(),
+                    StateId = resolvedState.Id,
+                    RegionId = resolvedRegion.Id,
+                    HQId = resolvedHq.Id
+                });
+            }
+
+            // Important V5 behavior:
+            // Do NOT cancel 37k valid rows because a few master rows cannot map.
+            // Save all mapped rows and report only the unresolved rows as skipped.
+            var skippedCount = _importErrors.Count;
+
+            if (mappedRows.Count == 0)
+            {
+                _importHasError = true;
+                _importMessage =
+                    $"No rows could be mapped. Skipped: {skippedCount}. Nothing was saved.";
+                return;
+            }
+
+            var request = new SubDealerBulkImportRequest
+            {
+                ImportedBy = LoginState.UserId ?? "Admin Excel Import",
+                Rows = mappedRows
+            };
+
+            // Step 3: backend upserts only the successfully mapped rows.
+            var saveResponse = await Http.PostAsJsonAsync(
+                "api/SubDealerRegistration/bulk-import",
+                request);
+
+            if (!saveResponse.IsSuccessStatusCode)
+            {
+                var responseBody = await saveResponse.Content.ReadAsStringAsync();
+                _importHasError = true;
+                _importMessage = $"Excel import failed: {responseBody}";
+                return;
+            }
+
+            var result = await saveResponse.Content
+                .ReadFromJsonAsync<SubDealerBulkImportResponse>();
+
+            if (result == null)
+            {
+                _importHasError = true;
+                _importMessage = "Excel import completed but the API response was empty.";
+                return;
+            }
+
+            if (result.Errors.Count > 0)
+            {
+                _importErrors.AddRange(result.Errors);
+                _importHasError = true;
+                _importMessage = "Excel import failed during database save.";
+                return;
+            }
+
+            // Step 4: refresh dropdown immediately.
+            await RefreshSubDealerLookup();
+            _importFile = null;
+
+            if (skippedCount > 0)
+            {
+                // Keep popup open so Admin can see which rows were skipped.
+                _importHasError = true;
+                _importMessage =
+                    $"Import completed. Inserted: {result.Inserted}, Updated: {result.Updated}, Skipped: {skippedCount}. " +
+                    "Valid rows were saved. Review the skipped rows below.";
+            }
+            else
+            {
+                _showImportModal = false;
+                _importHasError = false;
+                _importMessage = null;
+
+                ShowMessage(
+                    $"Sub Dealer master imported successfully. Inserted: {result.Inserted}, Updated: {result.Updated}.",
+                    false);
+            }
+        }
+        catch (Exception ex)
+        {
+            _importHasError = true;
+            _importMessage = $"Import error: {ex.Message}";
+        }
+        finally
+        {
+            _isImporting = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string NormalizeMasterValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var normalized = new string(value
+            .Trim()
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToUpperInvariant)
+            .ToArray());
+
+        // Common legacy/current naming equivalence in master files.
+        // Apply this normalization to BOTH Excel values and application master values.
+        return normalized switch
+        {
+            "PONDICHERRY" => "PUDUCHERRY",
+            "PUDUCHERRY" => "PUDUCHERRY",
+            _ => normalized
+        };
+    }
+
+    private bool Validate()
+    {
+        _errors.Clear();
+
+        // These are the core Sub Dealer master fields and remain required
+        // for both Active and Inactive records.
+        if (_basicInfoStateId <= 0)
+            _errors["StateId"] = "State is required in Basic Information";
+
+        if (_basicInfoRegionId <= 0)
+            _errors["Region"] = "Region is required in Basic Information";
+
+        if (_basicInfoHqId <= 0)
+            _errors["HQ"] = "HQ is required in Basic Information";
+
+        if (string.IsNullOrWhiteSpace(_model.FirmName))
+            _errors["FirmName"] = "Firm Name is required";
+
+        if (IsActiveSubDealer)
+        {
+            // ACTIVE SUB DEALER:
+            // Primary Location + Contact + Retail mFMS + PAN + GST are mandatory.
+
+            if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo))
+                _errors["ShopNo"] =
+                    "Shop No / Room No / Block No is required";
+
+            if (string.IsNullOrWhiteSpace(_model.Village))
+                _errors["Village"] = "Village is required";
+
+            if (!_model.Latitude.HasValue)
+                _errors["Latitude"] =
+                    "Latitude is required (click the map or use current location)";
+
+            if (!_model.Longitude.HasValue)
+                _errors["Longitude"] =
+                    "Longitude is required (click the map or use current location)";
+
+            if (string.IsNullOrWhiteSpace(_model.PinCode))
+            {
+                _errors["PinCode"] = "Pincode is required";
+            }
+            else if (_model.PinCode.Length != 6)
+            {
+                _errors["PinCode"] = "Pincode must be 6 digits";
+            }
+
+            if ((_model.DistrictId ?? 0) <= 0)
+                _errors["DistrictId"] =
+                    "District is required in Primary Location";
+
+            if ((_model.DealerStateId ?? 0) <= 0)
+                _errors["DealerStateId"] =
+                    "State is required in Primary Location";
+
+            if (string.IsNullOrWhiteSpace(_model.OfficialContactNumber))
+            {
+                _errors["OfficialContactNumber"] =
+                    "Official Contact Number is required";
+            }
+            else if (_model.OfficialContactNumber.Length != 10)
+            {
+                _errors["OfficialContactNumber"] =
+                    "Official Contact Number must be 10 digits";
+            }
+
+            if (string.IsNullOrWhiteSpace(_model.WhatsAppNumber))
+            {
+                _errors["WhatsAppNumber"] =
+                    "WhatsApp Number is required";
+            }
+            else if (_model.WhatsAppNumber.Length != 10)
+            {
+                _errors["WhatsAppNumber"] =
+                    "WhatsApp Number must be 10 digits";
+            }
+
+            if (string.IsNullOrWhiteSpace(_model.RetailMFMSId))
+            {
+                _errors["RetailMFMSId"] =
+                    "Retail mFMS ID is required for Active Sub Dealer";
+            }
+
+            if (string.IsNullOrWhiteSpace(_model.PANNo))
+            {
+                _errors["PANNo"] =
+                    "PAN No is required for Active Sub Dealer";
+            }
+            else if (!Regex.IsMatch(
+                         _model.PANNo.Trim().ToUpperInvariant(),
+                         @"^[A-Z]{5}[0-9]{4}[A-Z]$"))
+            {
+                _errors["PANNo"] =
+                    "Invalid PAN format (e.g., ABCDE1234F)";
+            }
+
+            if (string.IsNullOrWhiteSpace(_model.GSTNumber))
+            {
+                _errors["GSTNumber"] = "GST Number is required";
+            }
+            else if (!Regex.IsMatch(
+                         _model.GSTNumber,
+                         @"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"))
+            {
+                _errors["GSTNumber"] =
+                    "Invalid GST format (e.g., 22AAAAA0000A1Z5)";
+            }
+
+            if (string.IsNullOrWhiteSpace(_model.GSTFilePath))
+                _errors["GSTFile"] =
+                    "GST Certificate PDF is required";
+        }
+        else
+        {
+            // INACTIVE SUB DEALER:
+            // The same fields are optional. If the user enters a value,
+            // validate only its format so malformed data is not stored.
+
+            if (!string.IsNullOrWhiteSpace(_model.PinCode) &&
+                _model.PinCode.Length != 6)
+            {
+                _errors["PinCode"] = "Pincode must be 6 digits";
+            }
+
+            if (!string.IsNullOrWhiteSpace(_model.OfficialContactNumber) &&
+                _model.OfficialContactNumber.Length != 10)
+            {
+                _errors["OfficialContactNumber"] =
+                    "Official Contact Number must be 10 digits";
+            }
+
+            if (!string.IsNullOrWhiteSpace(_model.WhatsAppNumber) &&
+                _model.WhatsAppNumber.Length != 10)
+            {
+                _errors["WhatsAppNumber"] =
+                    "WhatsApp Number must be 10 digits";
+            }
+
+            if (!string.IsNullOrWhiteSpace(_model.GSTNumber) &&
+                !Regex.IsMatch(
+                    _model.GSTNumber,
+                    @"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"))
+            {
+                _errors["GSTNumber"] =
+                    "Invalid GST format (e.g., 22AAAAA0000A1Z5)";
+            }
+
+            if (!string.IsNullOrWhiteSpace(_model.PANNo) &&
+                !Regex.IsMatch(
+                    _model.PANNo.Trim().ToUpperInvariant(),
+                    @"^[A-Z]{5}[0-9]{4}[A-Z]$"))
+            {
+                _errors["PANNo"] =
+                    "Invalid PAN format (e.g., ABCDE1234F)";
+            }
+
+            // Wholesale/Retail mFMS IDs are intentionally optional for Inactive.
+
+            // Coordinates are optional for Inactive.
+            // If one coordinate exists, require the matching pair.
+            if (_model.Latitude.HasValue && !_model.Longitude.HasValue)
+                _errors["Longitude"] =
+                    "Longitude is required when Latitude is entered";
+
+            if (_model.Longitude.HasValue && !_model.Latitude.HasValue)
+                _errors["Latitude"] =
+                    "Latitude is required when Longitude is entered";
+        }
+
+        // Intentionally NO validation for:
+        // Bank, PAN, Aadhaar, Wholesale/Retail fertilizer,
+        // Office Automation, Enrollment, approval workflow,
+        // SPIC/Greenstar Trade Deposit.
+
+        return _errors.Count == 0;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (IsViewOnly || _isSaving)
+            return;
+
+        if (!Validate())
+        {
+            ShowMessage(
+                "Please correct the highlighted fields.",
+                true);
+            return;
+        }
+
+        _isSaving = true;
+        _message = null;
+
+        try
+        {
+            _model.StateId = _basicInfoStateId;
+            _model.Region = _basicInfoRegionId;
+            _model.HQ = _basicInfoHqId;
+
+            _model.Status = status == "Inactive"
+                ? SubDealerStatus.InActive
+                : SubDealerStatus.Active;
+
+            _model.FirmName ??= "";
+            _model.ShopNoORRoomNoOrBlockNo ??= "";
+            _model.Village ??= "";
+            _model.PinCode ??= "";
+            _model.OfficialContactNumber ??= "";
+            _model.WhatsAppNumber ??= "";
+
+            _model.UpdatedBy = LoginState.UserId ?? "System";
+            _model.UpdatedAt = DateTime.Now;
+
+            HttpResponseMessage response;
+
+            if (_isEditMode && _model.Id > 0)
+            {
+                response = await Http.PutAsJsonAsync(
+                    $"api/SubDealerRegistration/{_model.Id}",
+                    _model);
+            }
+            else
+            {
+                _model.CreatedBy = LoginState.UserId ?? "System";
+                _model.CreatedAt = DateTime.Now;
+
+                response = await Http.PostAsJsonAsync(
+                    "api/SubDealerRegistration",
+                    _model);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                ShowMessage($"Failed to save Sub Dealer: {errorBody}", true);
+                return;
+            }
+
+            var savedModel =
+                await response.Content.ReadFromJsonAsync<SubDealerFormModel>();
+
+            if (savedModel == null)
+            {
+                ShowMessage(
+                    "Sub Dealer was saved but the server response was empty.",
+                    true);
+                return;
+            }
+
+            _model = savedModel;
+            _subDealerId = savedModel.Id;
+            _isEditMode = true;
+
+            if (_gstFile != null)
+            {
+                var upload =
+                    await UploadGstToServer(savedModel.Id, _gstFile);
+
+                if (upload == null)
+                    return;
+
+                _model.GSTFilePath = upload.FilePath;
+                _model.UpdatedBy = LoginState.UserId ?? "System";
+                _model.UpdatedAt = DateTime.Now;
+
+                var fileUpdateResponse = await Http.PutAsJsonAsync(
+                    $"api/SubDealerRegistration/{savedModel.Id}",
+                    _model);
+
+                if (!fileUpdateResponse.IsSuccessStatusCode)
+                {
+                    var body =
+                        await fileUpdateResponse.Content.ReadAsStringAsync();
+                    ShowMessage(
+                        $"Sub Dealer saved, but GST file path update failed: {body}",
+                        true);
+                    return;
+                }
+
+                var updatedModel =
+                    await fileUpdateResponse.Content
+                        .ReadFromJsonAsync<SubDealerFormModel>();
+
+                if (updatedModel != null)
+                    _model = updatedModel;
+
+                _gstFile = null;
+            }
+
+            await RefreshSubDealerLookup();
+
+            // Preserve the saved code for the success message, then clear the
+            // complete form so the next Sub Dealer can be entered immediately.
+            var savedSubDealerCode = _model.SubDealerCode ?? savedModel.SubDealerCode ?? string.Empty;
+
+            ResetForNewEntry();
+
+            ShowMessage(
+                $"Sub Dealer {savedSubDealerCode} saved successfully!",
+                false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task RefreshSubDealerLookup()
+    {
+        _subDealersAll =
+            await Http.GetFromJsonAsync<List<SubDealerLookupDto>>(
+                BuildRoleScopedSubDealerLookupUrl()) ?? new();
+
+        ApplySubDealerClientFilter();
+    }
+
+    private async Task OnPincodeChanged()
+    {
+        _pincodeMessage = null;
+        _pincodeSuccess = false;
+        _errors.Remove("PinCode");
+
+        if (!string.IsNullOrEmpty(_model.PinCode))
+        {
+            var digitsOnly = new string(_model.PinCode.Where(char.IsDigit).ToArray());
+            if (digitsOnly != _model.PinCode)
+                _model.PinCode = digitsOnly;
+        }
+
+        if (string.IsNullOrWhiteSpace(_model.PinCode) || _model.PinCode.Length != 6)
+            return;
+
+        _isPincodeLookup = true;
+        StateHasChanged();
+
+        try
+        {
+            using var response = await Http.GetAsync($"api/PincodeLookup/{_model.PinCode}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _pincodeMessage = $"Lookup failed (HTTP {(int)response.StatusCode}): {body}";
+                return;
+            }
+
+            var results = await response.Content.ReadFromJsonAsync<List<PincodeApiResponse>>();
+            var result = results?.FirstOrDefault();
+
+            if (result == null
+                || !string.Equals(result.Status, "Success", StringComparison.OrdinalIgnoreCase)
+                || result.PostOffice == null
+                || result.PostOffice.Count == 0)
+            {
+                _pincodeMessage = $"No data found for pincode {_model.PinCode}";
+                return;
+            }
+
+            var postOffice = result.PostOffice[0];
+
+            var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
+            var matchedState = _statesAll.FirstOrDefault(s =>
+                s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
+            if (matchedState != null)
+            {
+                _model.DealerStateId = matchedState.Id;
+                _stateSearchText = matchedState.StateName;
+                _errors.Remove("DealerStateId");
+            }
+
+            var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
+            var matchedDistrict = _districtsAll.FirstOrDefault(d =>
+                d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+            if (matchedDistrict != null)
+            {
+                _model.DistrictId = matchedDistrict.Id;
+                _districtSearchText = matchedDistrict.DistrictName;
+                _errors.Remove("DistrictId");
+            }
+
+            if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+            {
+                _model.Block = postOffice.Block;
+                _model.Taluk = postOffice.Block;
+            }
+            else if (!string.IsNullOrWhiteSpace(postOffice.Division))
+            {
+                _model.Taluk = postOffice.Division;
+            }
+
+            if (!string.IsNullOrWhiteSpace(postOffice.Name))
+            {
+                _model.Village = postOffice.Name;
+                _errors.Remove("Village");
+            }
+
+            var details = new List<string>();
+            if (!string.IsNullOrWhiteSpace(postOffice.Name))
+                details.Add($"Village: {postOffice.Name}");
+            if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+                details.Add($"Block: {postOffice.Block}");
+            if (!string.IsNullOrWhiteSpace(_model.Taluk))
+                details.Add($"Taluk: {_model.Taluk}");
+            if (matchedDistrict != null)
+                details.Add($"District: {matchedDistrict.DistrictName}");
+            if (matchedState != null)
+                details.Add($"State: {matchedState.StateName}");
+
+            _pincodeSuccess = true;
+            _pincodeMessage = "Auto-filled: " + string.Join(", ", details);
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _pincodeMessage = $"Network error: {httpEx.Message}";
+        }
+        catch (TaskCanceledException)
+        {
+            _pincodeMessage = "Lookup timed out - try again.";
+        }
+        catch (Exception ex)
+        {
+            _pincodeMessage = $"{ex.GetType().Name}: {ex.Message}";
+        }
+        finally
+        {
+            _isPincodeLookup = false;
+        }
+    }
+
+    private async Task OnGoogleMapUrlChanged()
+    {
+        _locationMessage = null;
+        if (string.IsNullOrWhiteSpace(_model.GoogleMapURL))
+        {
+            _model.Latitude = null;
+            _model.Longitude = null;
+            SyncLatitudeLongitudeText();
+            return;
+        }
+
+        var url = _model.GoogleMapURL.Trim();
+
+        if (url.Contains("goo.gl") || url.Contains("maps.app.goo.gl"))
+        {
+            _locationMessage = "Shortened URL detected. Please open the link in browser, copy the full URL from address bar, and paste it here.";
+            _locationSuccess = false;
+            return;
+        }
+
+        var match = Regex.Match(url, @"@(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"/dir//(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"(-?\d+\.\d+),\s*(-?\d+\.\d+)");
+
+        if (match.Success
+            && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var lat)
+            && double.TryParse(match.Groups[2].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var lng))
+        {
+            _model.Latitude = lat;
+            _model.Longitude = lng;
+            SyncLatitudeLongitudeText();
+            _errors.Remove("Latitude");
+            _errors.Remove("Longitude");
+            _locationMessage = $"Coordinates extracted: {lat:F6}, {lng:F6}";
+            _locationSuccess = true;
+            await TriggerMapUpdate(lat, lng);
+        }
+        else
+        {
+            _model.Latitude = null;
+            _model.Longitude = null;
+            SyncLatitudeLongitudeText();
+            _locationMessage = "Could not extract coordinates from this URL. Try pasting the full Google Maps link.";
+            _locationSuccess = false;
+        }
+    }
+
+    private void OnLatitudeLongitudeChanged(ChangeEventArgs e)
+    {
+        _latitudeLongitudeText = e.Value?.ToString() ?? "";
+
+        _errors.Remove("Latitude");
+        _errors.Remove("Longitude");
+
+        // Empty coordinates are allowed for Inactive Sub Dealers.
+        if (!IsActiveSubDealer &&
+            string.IsNullOrWhiteSpace(_latitudeLongitudeText))
+        {
+            _model.Latitude = null;
+            _model.Longitude = null;
+            return;
+        }
+
+        var parts = _latitudeLongitudeText
+            .Trim()
+            .Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length >= 2 &&
+            double.TryParse(
+                parts[0].Trim(),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var lat) &&
+            double.TryParse(
+                parts[1].Trim(),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var lng))
+        {
+            _model.Latitude = lat;
+            _model.Longitude = lng;
+            _ = TriggerMapUpdate(lat, lng);
+        }
+        else
+        {
+            _model.Latitude = null;
+            _model.Longitude = null;
+            _errors["Latitude"] =
+                "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+            _errors["Longitude"] =
+                "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+        }
+    }
+
+    private void SyncLatitudeLongitudeText()
+    {
+        string Fmt(double d) => d.ToString("G17", System.Globalization.CultureInfo.InvariantCulture);
+
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            _latitudeLongitudeText = $"{Fmt(_model.Latitude.Value)}, {Fmt(_model.Longitude.Value)}";
+        else if (_model.Latitude.HasValue)
+            _latitudeLongitudeText = Fmt(_model.Latitude.Value);
+        else if (_model.Longitude.HasValue)
+            _latitudeLongitudeText = Fmt(_model.Longitude.Value);
+        else
+            _latitudeLongitudeText = "";
+    }
+
+    private async Task UseCurrentLocation()
+    {
+        _isGettingLocation = true;
+        _locationMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result =
+                await JS.InvokeAsync<GeoLocationResult>(
+                    "getCurrentPosition");
+
+            if (!string.IsNullOrWhiteSpace(result.Error))
+            {
+                _locationMessage =
+                    $"Location error: {result.Error}";
+                _locationSuccess = false;
+                return;
+            }
+
+            _model.Latitude = result.Latitude;
+            _model.Longitude = result.Longitude;
+            SyncLatitudeLongitudeText();
+
+            _model.GoogleMapURL =
+                $"http://maps.google.com/maps?q={result.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{result.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+
+            _errors.Remove("Latitude");
+            _errors.Remove("Longitude");
+
+            _locationMessage =
+                $"Location captured: {result.Latitude:F6}, {result.Longitude:F6}";
+            _locationSuccess = true;
+
+            await TriggerMapUpdate(
+                result.Latitude,
+                result.Longitude);
+        }
+        catch (Exception ex)
+        {
+            _locationMessage =
+                $"Failed to get location: {ex.Message}";
+            _locationSuccess = false;
+        }
+        finally
+        {
+            _isGettingLocation = false;
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public void UpdateLocationFromMap(double lat, double lng)
+    {
+        _model.Latitude = lat;
+        _model.Longitude = lng;
+        SyncLatitudeLongitudeText();
+
+        _model.GoogleMapURL =
+            $"http://maps.google.com/maps?q={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+
+        _errors.Remove("Latitude");
+        _errors.Remove("Longitude");
+
+        _locationMessage =
+            $"Location selected from Map: {lat:F6}, {lng:F6}";
+        _locationSuccess = true;
+
+        StateHasChanged();
+    }
+
+    private async Task TriggerMapUpdate(double lat, double lng)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "updateLeafletMap",
+                "subDealerLeafletMap",
+                lat,
+                lng);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"Sub Dealer map update failed: {ex.Message}");
+        }
+    }
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+    public class GeoLocationResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+
+    public class PincodeApiResponse
+    {
+        public string Status { get; set; } = "";
+        public string Message { get; set; } = "";
+        public List<PostOfficeDto>? PostOffice { get; set; }
+    }
+
+    public class PostOfficeDto
+    {
+        public string Name { get; set; } = "";
+        public string District { get; set; } = "";
+        public string State { get; set; } = "";
+        public string Block { get; set; } = "";
+        public string Division { get; set; } = "";
+        public string Region { get; set; } = "";
+        public string Country { get; set; } = "";
+        public string Pincode { get; set; } = "";
+    }
+}

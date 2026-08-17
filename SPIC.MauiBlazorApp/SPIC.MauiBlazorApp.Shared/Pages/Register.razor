@@ -85,7 +85,7 @@
         }
 </style>
 <div class="container-fluid py-4 px-0">
-    <FormLoader IsSingleStep="IsRestrictedNavFlow || IsDepartmentSelected" />
+    <FormLoader IsSingleStep="IsRestrictedNavFlow || IsDepartmentSelected" IsRestrictedFlow="IsInactiveToBeTerminated" />
 
    
     <fieldset disabled="@IsViewOnly" style="@(IsViewOnly ? "border:0;padding:0;margin:0;" : "border:0;padding:0;margin:0;")">
@@ -165,7 +165,7 @@
                         <div class="col-12 col-md-7">
                             <div class="row g-3">
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">State</label>
+                                    <label class="form-label-custom">State <span class="text-danger">*</span></label>
                                     <select class="form-select-custom w-100 @(_errors.ContainsKey("StateId") ? "is-invalid" : "")" @bind="_basicInfoStateId" @bind:after="OnBasicInfoStateChanged" disabled="@_isStateLocked">
                                         <option value="0">-- Select State --</option>
                                         @foreach (var state in _statesAll)
@@ -179,7 +179,7 @@
                                     }
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Region</label>
+                                    <label class="form-label-custom">Region <span class="text-danger">*</span></label>
                                     <select class="form-select-custom w-100 @(_errors.ContainsKey("Region") ? "is-invalid" : "")"
                                             @bind="_basicInfoRegionId"
                                             @bind:after="OnBasicInfoRegionChanged"
@@ -196,7 +196,7 @@
                                     }
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">HQ</label>
+                                    <label class="form-label-custom">HQ <span class="text-danger">*</span></label>
                                     <select class="form-select-custom w-100 @(_errors.ContainsKey("HQ") ? "is-invalid" : "")"
                                             @bind="_basicInfoHqId"
                                             @bind:after='() => ValidateFieldOnChange("HQ", _basicInfoHqId > 0)'
@@ -212,36 +212,153 @@
                                         <div class="field-error">@_errors["HQ"]</div>
                                     }
                                 </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Status</label>
+                                @if (!IsNewDealerFlow)
+                                {
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label-custom">Status</label>
 
-                                    <div class="status-btn-group">
-                                        <button type="button"
-                                                class="btn btn_active @(status == "Active" ? "active" : "")"
-                                                @onclick='() => SelectStatus("Active")'>
-                                            Active
-                                        </button>
+                                        <div class="status-btn-group">
+                                            <button type="button"
+                                                    class="btn btn_active @(status == "Active" ? "active" : "")"
+                                                    @onclick='() => SelectStatus("Active")'>
+                                                Active
+                                            </button>
 
-                                        <button type="button"
-                                                class="btn btn_inactive @(status == "Inactive" ? "active" : "")"
-                                                @onclick='() => SelectStatus("Inactive")'>
-                                            Inactive
-                                        </button>
+                                            <button type="button"
+                                                    class="btn btn_inactive @(status == "Inactive" ? "active" : "")"
+                                                    @onclick='() => SelectStatus("Inactive")'>
+                                                Inactive
+                                            </button>
 
-                                        <button type="button"
-                                                class="btn btn_terminated @(status == "Terminated" ? "active" : "")"
-                                                @onclick='() => SelectStatus("Terminated")'>
-                                            Terminated
-                                        </button>
+                                            <button type="button"
+                                                    class="btn btn_terminated @(status == "Terminated" ? "active" : "")"
+                                                    @onclick='() => SelectStatus("Terminated")'>
+                                                Terminated
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
+                                }
                             </div>
                         </div>
                     </div>
                 </div>
             }
 
-         @if (IsRestrictedNavFlow)
+
+            <div class="basic-info-card business-info-card">
+                <div class="business-info-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg" class="formicon" alt="icon" />
+                        <h5 class="fw-semibold m-0 business-info-title">Business Information</h5>
+                    </div>
+                    @if (_isEditMode)
+                    {
+                        <span class="business-info-pill business-info-pill-edit">
+                            <i class="bi bi-pencil-square me-1"></i>Editing
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="business-info-pill business-info-pill-new">
+                            <i class="bi bi-plus-circle me-1"></i>New Entry
+                        </span>
+                    }
+                </div>
+
+                <div class="business-info-body">
+                    <div class="row g-3 mb-3">
+                        @if (!IsNewDealerFlow)
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">Dealer Code & Name <span class="text-danger">*</span></label>
+                                <div class="position-relative">
+                                    <input type="text" class="form-select-custom searchable-select-input w-100"
+                                           placeholder="-- New Entry --"
+                                           @bind="_dealerSearchText"
+                                           @bind:event="oninput"
+                                           @onfocus="() => _showDealerDropdown = true"
+                                           @onblur="HideDealerDropdown" />
+                                    @if (_showDealerDropdown)
+                                    {
+                                        <div class="searchable-dropdown-container">
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(0, "")'>
+                                                -- New Entry --
+                                            </div>
+                                            @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_dealerSearchText) ||
+                                                $"{d.DealerCode} - {d.FirmName}".Contains(_dealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                            {
+                                                <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
+                                                    @dealer.DealerCode - @dealer.FirmName
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">Parent Dealer Code & Name</label>
+                                <div class="position-relative">
+                                    <input type="text" class="form-select-custom searchable-select-input w-100"
+                                           placeholder="-- Select Parent Dealer --"
+                                           @bind="_parentDealerSearchText"
+                                           @bind:event="oninput"
+                                           @onfocus="() => _showParentDealerDropdown = true"
+                                           @onblur="HideParentDealerDropdown" />
+                                    @if (_showParentDealerDropdown)
+                                    {
+                                        <div class="searchable-dropdown-container">
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(0, "")'>
+                                                -- Select Parent Dealer --
+                                            </div>
+                                            @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_parentDealerSearchText) ||
+                                                $"{d.DealerCode} - {d.FirmName}".Contains(_parentDealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                            {
+                                                <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
+                                                    @dealer.DealerCode - @dealer.FirmName
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label-custom">Firm Name <span class="text-danger">*</span> <small class="text-muted fw-normal">(As per Fertilizer License@*  or GST Trade Name *@)</small></label>
+                            <div class="firm-name-input-wrap">
+                                <span class="firm-name-prefix">M/s.</span>
+                                <input type="text" class="form-control-custom w-100 firm-name-input @(_errors.ContainsKey("FirmName") ? "is-invalid" : "")" @bind="_model.FirmName" @bind:after="SanitizeFirmName" placeholder="Enter Firm Business Name">
+                            </div>
+                            @if (_errors.ContainsKey("FirmName"))
+                            {
+                                <div class="field-error">@_errors["FirmName"]</div>
+                            }
+                        </div>
+                        @if (isSpic && !IsNewDealerFlow)
+                        {
+                            <div class="col-12 col-md-3">
+                                <label class="form-label-custom">Date of Appointment for SPIC</label>
+                                <input type="date" class="form-control-custom w-100"
+                                       value="@_dateOfAppointmentText"
+                                       @onchange="OnDateOfAppointmentChanged">
+                            </div>
+                        }
+                        @if (isGreenStar && !IsNewDealerFlow)
+                        {
+                            <div class="col-12 col-md-3">
+                                <label class="form-label-custom">Date of Appointment for Greenstar</label>
+                                <input type="date" class="form-control-custom w-100"
+                                       value="@_greenstarDateOfAppointmentText"
+                                       @onchange="OnGreenstarDateOfAppointmentChanged">
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @if (ShowTerminatedStatus)
             {
                 <div class="basic-info-card">
                     <div class="card-header-title mb-2">
@@ -266,7 +383,7 @@
                             </div>
                         </div>
                         <div class="col-12 col-sm-6 col-md-3">
-                            <label class="form-label-custom">Final Approval Date</label>
+                            <label class="form-label-custom">Final Approval Date <span class="text-danger">*</span></label>
                             <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("FinalApprovalDate") ? "is-invalid" : "")"
                                    value="@_finalApprovalDateText"
                                    @onchange="OnFinalApprovalDateChanged">
@@ -276,7 +393,7 @@
                             }
                         </div>
                         <div class="col-12 col-sm-6 col-md-3">
-                            <label class="form-label-custom">Settlement Date</label>
+                            <label class="form-label-custom">Settlement Date <span class="text-danger">*</span></label>
                             <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SettlementDate") ? "is-invalid" : "")"
                                    value="@_settlementDateText"
                                    @onchange="OnSettlementDateChanged">
@@ -300,103 +417,6 @@
                 </div>
             }
 
-            <div class="basic-info-card business-info-card">
-                <div class="business-info-header">
-                    <div class="d-flex align-items-center gap-2">
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg" class="formicon" alt="icon" />
-                        <h5 class="fw-semibold m-0 business-info-title">Business Information</h5>
-                    </div>
-                    @if (_isEditMode)
-                    {
-                        <span class="business-info-pill business-info-pill-edit">
-                            <i class="bi bi-pencil-square me-1"></i>Editing
-                        </span>
-                    }
-                    else
-                    {
-                        <span class="business-info-pill business-info-pill-new">
-                            <i class="bi bi-plus-circle me-1"></i>New Entry
-                        </span>
-                    }
-                </div>
-
-                <div class="business-info-body">
-                    <div class="row g-3 mb-3">
-                        <div class="col-12 col-md-6">
-                            <label class="form-label-custom">Dealer Code & Name</label>
-                            <div class="position-relative">
-                                <input type="text" class="form-select-custom searchable-select-input w-100"
-                                       placeholder="-- New Entry --"
-                                       @bind="_dealerSearchText"
-                                       @bind:event="oninput"
-                                       @onfocus="() => _showDealerDropdown = true"
-                                       @onblur="HideDealerDropdown" />
-                                @if (_showDealerDropdown)
-                                {
-                                    <div class="searchable-dropdown-container">
-                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(0, "")'>
-                                            -- New Entry --
-                                        </div>
-                                        @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_dealerSearchText) ||
-                                            $"{d.DealerCode} - {d.FirmName}".Contains(_dealerSearchText, StringComparison.OrdinalIgnoreCase)))
-                                        {
-                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
-                                                @dealer.DealerCode - @dealer.FirmName
-                                            </div>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                        <div class="col-12 col-md-6">
-                            <label class="form-label-custom">Parent Dealer Code & Name</label>
-                            <div class="position-relative">
-                                <input type="text" class="form-select-custom searchable-select-input w-100"
-                                       placeholder="-- Select Parent Dealer --"
-                                       @bind="_parentDealerSearchText"
-                                       @bind:event="oninput"
-                                       @onfocus="() => _showParentDealerDropdown = true"
-                                       @onblur="HideParentDealerDropdown" />
-                                @if (_showParentDealerDropdown)
-                                {
-                                    <div class="searchable-dropdown-container">
-                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(0, "")'>
-                                            -- Select Parent Dealer --
-                                        </div>
-                                        @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_parentDealerSearchText) ||
-                                            $"{d.DealerCode} - {d.FirmName}".Contains(_parentDealerSearchText, StringComparison.OrdinalIgnoreCase)))
-                                        {
-                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
-                                                @dealer.DealerCode - @dealer.FirmName
-                                            </div>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row g-3">
-                        <div class="col-12 col-md-8">
-                            <label class="form-label-custom">Firm Name <small class="text-muted fw-normal">(As per Fertilizer License@*  or GST Trade Name *@)</small></label>
-                            <div class="firm-name-input-wrap">
-                                <span class="firm-name-prefix">M/s.</span>
-                                <input type="text" class="form-control-custom w-100 firm-name-input @(_errors.ContainsKey("FirmName") ? "is-invalid" : "")" @bind="_model.FirmName" @bind:after="SanitizeFirmName" placeholder="Enter Firm Business Name">
-                            </div>
-                            @if (_errors.ContainsKey("FirmName"))
-                            {
-                                <div class="field-error">@_errors["FirmName"]</div>
-                            }
-                        </div>
-                        <div class="col-12 col-md-4">
-                            <label class="form-label-custom">Date of Appointment</label>
-                            <input type="date" class="form-control-custom w-100"
-                                   value="@_dateOfAppointmentText"
-                                   @onchange="OnDateOfAppointmentChanged">
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             @if (ShowInactiveStatus)
             {
@@ -408,7 +428,7 @@
                     </div>
                     <div class="row g-3">
                         <div class="col-12 col-sm-6 col-md-4">
-                            <label class="form-label-custom">Last Transaction Date</label>
+                            <label class="form-label-custom">Last Transaction Date @if (!IsRestrictedNavFlow) { <span class="text-danger">*</span> }</label>
                             <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("LastTransactionDate") ? "is-invalid" : "")"
                                    value="@_lastTransactionDateText"
                                    @onchange="OnLastTransactionDateChanged">
@@ -438,6 +458,7 @@
                                     @bind="_inactiveProposal">
                                 <option value="@FutureBusinessProposal.FutureBusiness">Future Business</option>
                                 <option value="@FutureBusinessProposal.Terminated">To Be Terminated</option>
+                                <option value="@FutureBusinessProposal.NotTraceable">Not Traceable</option>
                             </select>
                         </div>
                     </div>
@@ -478,11 +499,26 @@
                         <div class="col-12 col-md-8">
                             <div class="row g-3">
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Google Map URL</label>
+                                    <label class="form-label-custom">Google Map URL @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text" class="form-control-custom w-100" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Click map or Paste Google Maps link">
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Shop No / Room No / Block No</label>
+                                    <label class="form-label-custom">Latitude & Longitude @if (ShowLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Latitude") || _errors.ContainsKey("Longitude") ? "is-invalid" : "")"
+                                           value="@_latitudeLongitudeText"
+                                           @onchange="OnLatitudeLongitudeChanged"
+                                           placeholder="e.g. 10.7905, 78.7047">
+                                    @if (_errors.ContainsKey("Latitude"))
+                                    {
+                                        <div class="field-error">@_errors["Latitude"]</div>
+                                    }
+                                    @if (_errors.ContainsKey("Longitude"))
+                                    {
+                                        <div class="field-error">@_errors["Longitude"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Shop No / Room No / Block No @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("ShopNo") ? "is-invalid" : "")" @bind="_model.ShopNoORRoomNoOrBlockNo" @bind:after='() => ValidateFieldOnChange("ShopNo", !string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo))' placeholder="">
                                     @if (_errors.ContainsKey("ShopNo"))
                                     {
@@ -490,16 +526,16 @@
                                     }
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Street / Area / Locality</label>
+                                    <label class="form-label-custom">Street / Area / Locality @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text" class="form-control-custom w-100" @bind="_model.Street" placeholder="">
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Sub Village</label>
+                                    <label class="form-label-custom">Sub Village @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text" class="form-control-custom w-100" @bind="_model.SubVillage" placeholder="Enter Sub Village">
                                 </div>
 
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Pincode</label>
+                                    <label class="form-label-custom">Pincode @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text"
                                            class="form-control-custom w-100 @(_errors.ContainsKey("PinCode") ? "is-invalid" : "")"
                                            @bind="_model.PinCode"
@@ -522,7 +558,7 @@
                                     }
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Village</label>
+                                    <label class="form-label-custom">Village @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Village") ? "is-invalid" : "")" @bind="_model.Village" @bind:after='() => ValidateFieldOnChange("Village", !string.IsNullOrWhiteSpace(_model.Village))' placeholder="Village">
                                     @if (_errors.ContainsKey("Village"))
                                     {
@@ -533,15 +569,15 @@
                         </div>
 
                         <div class="col-6 col-sm-6 col-md-3">
-                            <label class="form-label-custom">Block</label>
+                            <label class="form-label-custom">Block @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="text" class="form-control-custom w-100" @bind="_model.Block" placeholder="Enter Block">
                         </div>
                         <div class="col-6 col-sm-6 col-md-3">
-                            <label class="form-label-custom">Taluk</label>
+                            <label class="form-label-custom">Taluk @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="text" class="form-control-custom w-100" @bind="_model.Taluk" placeholder="Enter Taluk">
                         </div>
                         <div class="col-12 col-sm-6 col-md-3">
-                            <label class="form-label-custom">District</label>
+                            <label class="form-label-custom">District @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <div class="position-relative">
                                 <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DistrictId") ? "is-invalid" : "")"
                                        placeholder="-- Select District --"
@@ -573,7 +609,7 @@
                         </div>
 
                         <div class="col-12 col-sm-6 col-md-3">
-                            <label class="form-label-custom">State</label>
+                            <label class="form-label-custom">State @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <div class="position-relative">
                                 <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DealerStateId") ? "is-invalid" : "")"
                                        placeholder="-- Select State --"
@@ -604,7 +640,7 @@
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label class="form-label-custom">Official Contact Number</label>
+                            <label class="form-label-custom">Official Contact Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="tel"
                                    inputmode="numeric"
                                    pattern="[0-9]*"
@@ -622,7 +658,7 @@
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label class="form-label-custom">WhatsApp Number</label>
+                            <label class="form-label-custom">WhatsApp Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="tel"
                                    inputmode="numeric"
                                    pattern="[0-9]*"
@@ -640,7 +676,7 @@
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label class="form-label-custom">Alternative Number</label>
+                            <label class="form-label-custom">Alternative Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="tel"
                                    inputmode="numeric"
                                    pattern="[0-9]*"
@@ -654,32 +690,89 @@
                     </div>
                 </div>
 
-                <div class="basic-info-card">
-                    <div class="card-header-title mb-2">
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
-                             class="formicon"
-                             alt="icon" /> Trade Deposit Details
-                    </div>
-                    <div class="row g-3">
-                        <div class="col-12 col-sm-6 col-md-4">
-                            <label class="form-label-custom">Trade Deposit Amount (₹ in lakhs)</label>
-                            <div class="input-icon-left-wrapper">
-                                <span class="input-icon-left">₹</span>
-                                <input type="number" class="form-control-custom w-100 input-with-left-icon" placeholder="0.00" step="0.01" @bind="_model.TradeDepositAmount">
+                @if (isSpic && !IsNewDealerFlow)
+                {
+                    <div class="basic-info-card">
+                        <div class="card-header-title mb-2">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                                 class="formicon"
+                                 alt="icon" /> Trade Deposit Details for SPIC
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Trade Deposit Amount (₹ in lakhs) @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <div class="input-icon-left-wrapper">
+                                    <span class="input-icon-left">₹</span>
+                                    <input type="number" class="form-control-custom w-100 input-with-left-icon @(_errors.ContainsKey("TradeDepositAmount") ? "is-invalid" : "")" placeholder="0.00" step="0.01" @bind="_model.TradeDepositAmount" @bind:after='() => ValidateFieldOnChange("TradeDepositAmount", _model.TradeDepositAmount > 0)'>
+                                </div>
+                                @if (_errors.ContainsKey("TradeDepositAmount"))
+                                {
+                                    <div class="field-error">@_errors["TradeDepositAmount"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Receipt No @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("TradeDepositReceiptNo") ? "is-invalid" : "")" @bind="_model.TradeDepositReceiptNo" @bind:after='() => ValidateFieldOnChange("TradeDepositReceiptNo", !string.IsNullOrWhiteSpace(_model.TradeDepositReceiptNo))' placeholder="Enter Receipt Number">
+                                @if (_errors.ContainsKey("TradeDepositReceiptNo"))
+                                {
+                                    <div class="field-error">@_errors["TradeDepositReceiptNo"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Deposit Date @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("TradeDepositDate") ? "is-invalid" : "")"
+                                       value="@_tradeDepositDateText"
+                                       @onchange="OnTradeDepositDateChanged">
+                                @if (_errors.ContainsKey("TradeDepositDate"))
+                                {
+                                    <div class="field-error">@_errors["TradeDepositDate"]</div>
+                                }
                             </div>
                         </div>
-                        <div class="col-12 col-sm-6 col-md-4">
-                            <label class="form-label-custom">Receipt No</label>
-                            <input type="text" class="form-control-custom w-100" @bind="_model.TradeDepositReceiptNo" placeholder="Enter Receipt Number">
+                    </div>
+                }
+
+                @if (isGreenStar && !IsNewDealerFlow)
+                {
+                    <div class="basic-info-card">
+                        <div class="card-header-title mb-2">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                                 class="formicon"
+                                 alt="icon" /> Trade Deposit Details for Greenstar
                         </div>
-                        <div class="col-12 col-sm-6 col-md-4">
-                            <label class="form-label-custom">Deposit Date</label>
-                            <input type="date" class="form-control-custom w-100"
-                                   value="@_tradeDepositDateText"
-                                   @onchange="OnTradeDepositDateChanged">
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Trade Deposit Amount (₹ in lakhs) @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <div class="input-icon-left-wrapper">
+                                    <span class="input-icon-left">₹</span>
+                                    <input type="number" class="form-control-custom w-100 input-with-left-icon @(_errors.ContainsKey("GreenstarTradeDepositAmountReg") ? "is-invalid" : "")" placeholder="0.00" step="0.01" @bind="_model.GreenstarTradeDepositAmountReg" @bind:after='() => ValidateFieldOnChange("GreenstarTradeDepositAmountReg", (_model.GreenstarTradeDepositAmountReg ?? 0) > 0)'>
+                                </div>
+                                @if (_errors.ContainsKey("GreenstarTradeDepositAmountReg"))
+                                {
+                                    <div class="field-error">@_errors["GreenstarTradeDepositAmountReg"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Receipt No @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("GreenstarTradeDepositReceiptNoReg") ? "is-invalid" : "")" @bind="_model.GreenstarTradeDepositReceiptNoReg" @bind:after='() => ValidateFieldOnChange("GreenstarTradeDepositReceiptNoReg", !string.IsNullOrWhiteSpace(_model.GreenstarTradeDepositReceiptNoReg))' placeholder="Enter Receipt Number">
+                                @if (_errors.ContainsKey("GreenstarTradeDepositReceiptNoReg"))
+                                {
+                                    <div class="field-error">@_errors["GreenstarTradeDepositReceiptNoReg"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Deposit Date @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("GreenstarTradeDepositDateReg") ? "is-invalid" : "")"
+                                       value="@_greenstarTradeDepositDateText"
+                                       @onchange="OnGreenstarTradeDepositDateChanged">
+                                @if (_errors.ContainsKey("GreenstarTradeDepositDateReg"))
+                                {
+                                    <div class="field-error">@_errors["GreenstarTradeDepositDateReg"]</div>
+                                }
+                            </div>
                         </div>
                     </div>
-                </div>
+                }
 
                 <div class="basic-info-card">
                     <div class="card-header-title mb-2">
@@ -689,7 +782,7 @@
                     </div>
                     <div class="row g-3">
                         <div class="col-12 col-md-6">
-                            <label class="form-label-custom">Account Holder Name</label>
+                            <label class="form-label-custom">Account Holder Name @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("AccountHolderName") ? "is-invalid" : "")" @bind="_model.AccountHolderName" @bind:after='() => ValidateFieldOnChange("AccountHolderName", !string.IsNullOrWhiteSpace(_model.AccountHolderName))' placeholder="Enter Account Holder Name">
                             @if (_errors.ContainsKey("AccountHolderName"))
                             {
@@ -697,7 +790,7 @@
                             }
                         </div>
                         <div class="col-12 col-md-6">
-                            <label class="form-label-custom">Account Number</label>
+                            <label class="form-label-custom">Account Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("AccountNumber") ? "is-invalid" : "")" @bind="_model.AccountNumber" @bind:after='() => ValidateFieldOnChange("AccountNumber", !string.IsNullOrWhiteSpace(_model.AccountNumber))' placeholder="Enter Account Number">
                             @if (_errors.ContainsKey("AccountNumber"))
                             {
@@ -705,7 +798,7 @@
                             }
                         </div>
                         <div class="col-12 col-sm-6 col-md-4">
-                            <label class="form-label-custom">Bank Name</label>
+                            <label class="form-label-custom">Bank Name @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <div class="position-relative">
                                 <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("BankId") ? "is-invalid" : "")"
                                        placeholder="-- Select Bank --"
@@ -735,7 +828,7 @@
                             }
                         </div>
                         <div class="col-12 col-sm-6 col-md-4">
-                            <label class="form-label-custom">Bank Branch</label>
+                            <label class="form-label-custom">Bank Branch @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Branch") ? "is-invalid" : "")" @bind="_model.Branch" @bind:after='() => ValidateFieldOnChange("Branch", !string.IsNullOrWhiteSpace(_model.Branch))' placeholder="Enter Bank Branch">
                             @if (_errors.ContainsKey("Branch"))
                             {
@@ -743,7 +836,7 @@
                             }
                         </div>
                         <div class="col-12 col-sm-6 col-md-4">
-                            <label class="form-label-custom">IFSC Code</label>
+                            <label class="form-label-custom">IFSC Code @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("IFSC") ? "is-invalid" : "")" @bind="_model.IFSC" @bind:after='() => ValidateFieldOnChange("IFSC", !string.IsNullOrWhiteSpace(_model.IFSC))' placeholder="Enter IFSC Code">
                             @if (_errors.ContainsKey("IFSC"))
                             {
@@ -812,18 +905,15 @@
                                 }
                                 <label class="form-label-custom mt-2">Legal Name</label>
 <input type="text" class="form-control form-control-sm"
-      @bind="_model.GSTLegalName"
-       readonly />
+      @bind="_model.GSTLegalName"/>
 
 <label class="form-label-custom mt-2">Trade Name</label>
 <input type="text" class="form-control form-control-sm"
-       @bind="_model.GSTTradeName"
-       readonly />
+       @bind="_model.GSTTradeName"/>
 
 <label class="form-label-custom mt-2">Constitution of Business</label>
 <input type="text" class="form-control form-control-sm"
-      @bind="_model.GSTConstitutionofBusiness"
-       readonly />
+      @bind="_model.GSTConstitutionofBusiness"/>
                                
                                 <div class="mt-2">
                                     <label class="upload-area">
@@ -1073,27 +1163,30 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-12 col-md-6">
-                        <div class="small-card h-100">
-                            <div class="fw-bold mb-3 card-header-title">
-                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/EnrollmentStatus.svg"
-                                     class="formicon" /> Enrollment Status
-                            </div>
-                            <label class="form text-muted mb-2 d-block">Are you Enrolled in SDWA?</label>
-                            <div class="yes-no-group">
-                                <button type="button"
-                                        class="btn-yes @(_model.IsSDWA == true ? "active" : "")"
-                                        @onclick='() => _model.IsSDWA = true'>
-                                    Yes
-                                </button>
-                                <button type="button"
-                                        class="btn-no @(_model.IsSDWA == false ? "active" : "")"
-                                        @onclick='() => _model.IsSDWA = false'>
-                                    No
-                                </button>
+                    @if (!IsNewDealerFlow)
+                    {
+                        <div class="col-12 col-md-6">
+                            <div class="small-card h-100">
+                                <div class="fw-bold mb-3 card-header-title">
+                                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/EnrollmentStatus.svg"
+                                         class="formicon" /> Enrollment Status
+                                </div>
+                                <label class="form text-muted mb-2 d-block">Are you Enrolled in SDWA?</label>
+                                <div class="yes-no-group">
+                                    <button type="button"
+                                            class="btn-yes @(_model.IsSDWA == true ? "active" : "")"
+                                            @onclick='() => _model.IsSDWA = true'>
+                                        Yes
+                                    </button>
+                                    <button type="button"
+                                            class="btn-no @(_model.IsSDWA == false ? "active" : "")"
+                                            @onclick='() => _model.IsSDWA = false'>
+                                        No
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    }
                 </div>
             }
 
@@ -1135,25 +1228,93 @@
     public int? DealerIdFromQuery { get; set; }
     [SupplyParameterFromQuery(Name = "mode")]
     public string? Mode { get; set; }
+    [SupplyParameterFromQuery(Name = "flow")]
+    public string? Flow { get; set; }
 
     private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+    // Dashboard-only maintenance route used after a New Dealer has completed AVP approval.
+    // It intentionally renders this approved record through the normal Existing Dealer UI,
+    // but does NOT erase its permanent IsNewDealerRegistration source/history flag.
+    private bool IsApprovedNewDealerMaintenanceRequested =>
+        string.Equals(Flow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
+
+    private bool _approvedNewDealerMaintenanceMode;
+
+    private bool IsApprovedNewDealerExistingMaintenanceFlow =>
+        _approvedNewDealerMaintenanceMode;
+
+    // Backward-compatible recovery for approved New Dealers that were created in
+    // the New Dealer flow but whose permanent flag was accidentally cleared by an
+    // older maintenance build. These fields belong only to the New Dealer commercial
+    // application/trade-deposit flow, so normal Existing Dealers are not reclassified.
+    private static bool HasNewDealerRegistrationEvidence(DealerFormModel dealer)
+    {
+        if (dealer.IsNewDealerRegistration)
+            return true;
+
+        return
+            dealer.DealershipApplicationFeeBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeDDNumber) ||
+            dealer.DealershipApplicationFeeDDDate.HasValue ||
+            (dealer.DealershipApplicationFeeAmount ?? 0m) > 0m ||
+            !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeFilePath) ||
+            dealer.SpicTradeDepositDDBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.SpicTradeDepositDDNumber) ||
+            dealer.SpicTradeDepositDDDate.HasValue ||
+            (dealer.SpicTradeDepositDDAmount ?? 0m) > 0m ||
+            !string.IsNullOrWhiteSpace(dealer.SpicTradeDepositFilePath) ||
+            dealer.GflTradeDepositDDBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.GflTradeDepositDDNumber) ||
+            dealer.GflTradeDepositDDDate.HasValue ||
+            (dealer.GflTradeDepositDDAmount ?? 0m) > 0m ||
+            !string.IsNullOrWhiteSpace(dealer.GflTradeDepositFilePath);
+    }
+
+    // New Dealer Creation flow: no existing dealer is selected. Dealer ID is generated
+    // when the record is first saved and Dealer Code is only assigned after final approval.
+    // An approved New Dealer opened from Dashboard with flow=existing-maintenance is the
+    // only exception: it uses Existing Dealer maintenance fields after approval.
+    private bool IsNewDealerFlow =>
+        !IsApprovedNewDealerExistingMaintenanceFlow &&
+        (string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) || _model.IsNewDealerRegistration);
+
+    // Preserve the maintenance marker while the approved New Dealer moves through the
+    // normal Existing Dealer registration pages. The permanent DB source flag remains true.
+    private string RegistrationFlowParam =>
+        IsApprovedNewDealerExistingMaintenanceFlow
+            ? "&flow=existing-maintenance"
+            : IsNewDealerFlow
+                ? "&flow=new"
+                : string.Empty;
 
     // Controls whether the FULL registration page (Location/Bank/Tax/License/etc.) is hidden.
     // Only pure Terminated status hides these — Inactive+Terminated still shows the full page.
     private bool IsRestrictedFlow => status == "Terminated";
 
-    // Controls NAVIGATION only: both pure Terminated AND Inactive+Terminated use the
-    // restricted 3-step flow (Register -> Proprietor -> Investment), and both show the
-    // "Terminated Status" card + require Final Approval/Settlement dates.
-    private bool IsRestrictedNavFlow => status == "Terminated";
+   // Controls NAVIGATION + submit for the PURE Terminated case ONLY:
+    // single Register page, "Terminated Status" card, submit straight to Dashboard.
+    private bool IsRestrictedNavFlow => status == "Terminated" || IsInactiveNotTraceable;
+
+    // Inactive dealer whose Future Business Proposal is "To Be Terminated".
+    // Uses a restricted 3-PAGE flow (Register -> Proprietor -> Investment):
+    // Next on Register goes to Proprietor (NOT Experience), and IsSubmittedForReview
+    // is set only on the FINAL restricted page — so this stays Draft/Editable here.
+    private bool IsInactiveToBeTerminated =>
+        status == "Inactive" && _inactiveProposal == FutureBusinessProposal.Terminated;
+
+    private bool IsInactiveNotTraceable =>
+        status == "Inactive" && _inactiveProposal == FutureBusinessProposal.NotTraceable;
 
     private DealerFormModel _model = new()
     {
         DateOfAppointment = DateTime.Today,
+        GreenstarDateOfAppointment = DateTime.Today,
         LastTransactionDate = DateTime.Today,
         FinalApprovalDate = DateTime.Today,
         SettlementDate = DateTime.Today,
         TradeDepositDate = DateTime.Today,
+        GreenstarTradeDepositDateReg = DateTime.Today,
         WholesaleLicenseExpiryDate = DateTime.Today,
         RetailLicenseExpiryDate = DateTime.Today
     };
@@ -1163,6 +1324,7 @@
 
     private string selected = "Dealer";
     private string status = "Active";
+    private DealerStatus _originalStatus = DealerStatus.Active;
     private FutureBusinessProposal _inactiveProposal = FutureBusinessProposal.FutureBusiness;
 
     private bool _entityTypeManuallySet;
@@ -1171,6 +1333,18 @@
     private bool IsDealerSelected => selected == "Dealer";
     private bool IsDepartmentSelected => selected == "Department";
     private bool IsInstitutionSelected => selected == "Institution";
+
+    // Mirrors the mandatory-field conditions used in Validate(): full sections shown for
+    // Dealer/Institution/Department-active, but location/bank/tax fields are only required
+    // for Dealer and Institution (Department skips them, as does Inactive Not Traceable).
+    private bool ShowFullSectionRequiredMarks => !IsDepartmentSelected && !IsInactiveNotTraceable;
+
+    // Latitude & Longitude are additionally required only for the New Dealer flow or an
+    // existing Dealer selected from Dealer Code & Name (same rule as Validate()).
+    private bool ShowLocationRequiredMarks => ShowFullSectionRequiredMarks && (IsNewDealerFlow || IsDealerSelected);
+
+    // Trade Deposit Details (SPIC/Greenstar) are mandatory only when registration type = Dealer.
+    private bool ShowTradeDepositRequiredMarks => IsDealerSelected && ShowFullRegistrationSections && !IsInactiveNotTraceable;
 
     private bool ShowInactiveStatus => status == "Inactive";
     private bool ShowTerminatedStatus => status == "Terminated";
@@ -1258,12 +1432,15 @@
     private string? _pincodeMessage;
     private bool _pincodeSuccess;
     private string _dateOfAppointmentText = "";
+    private string _greenstarDateOfAppointmentText = "";
     private string _lastTransactionDateText = "";
     private string _finalApprovalDateText = "";
     private string _settlementDateText = "";
     private string _tradeDepositDateText = "";
+    private string _greenstarTradeDepositDateText = "";
     private string _wholesaleLicenseExpiryDateText = "";
     private string _retailLicenseExpiryDateText = "";
+    private string _latitudeLongitudeText = "";
     protected override void OnInitialized()
     {
         SyncDateBuffersFromModel();
@@ -1285,12 +1462,18 @@
             await LoadData();
             ApplyEmployeeLocationDefaults();
 
+            if (IsNewDealerFlow && !_isEditMode)
+            {
+                isSpic = false;
+                isGreenStar = false;
+            }
+
             if (dealerTask != null)
             {
                 try
                 {
                     var dealer = await dealerTask;
-                    await ApplyDealerToForm(dealer, preserveCompanySelection: true);
+                    await ApplyDealerToForm(dealer, preserveCompanySelection: false);
                 }
                 catch (Exception ex)
                 {
@@ -1323,8 +1506,20 @@
         if (dealer == null) return;
 
         _model = dealer;
+
+        // Only a genuinely approved New Dealer with an allocated Dealer Code may switch
+        // to Existing Dealer maintenance UI. A manually crafted query string cannot turn
+        // a pending New Dealer into the Existing Dealer flow.
+        _approvedNewDealerMaintenanceMode =
+            IsApprovedNewDealerMaintenanceRequested &&
+            HasNewDealerRegistrationEvidence(_model) &&
+            _model.AVPApproved == true &&
+            !string.IsNullOrWhiteSpace(_model.DealerCode);
+
         if (!_model.DateOfAppointment.HasValue || _model.DateOfAppointment.Value == DateTime.MinValue)
             _model.DateOfAppointment = DateTime.Today;
+        if (!_model.GreenstarDateOfAppointment.HasValue || _model.GreenstarDateOfAppointment.Value == DateTime.MinValue)
+            _model.GreenstarDateOfAppointment = DateTime.Today;
         if (!_model.LastTransactionDate.HasValue || _model.LastTransactionDate.Value == DateTime.MinValue)
             _model.LastTransactionDate = DateTime.Today;
         if (!_model.FinalApprovalDate.HasValue || _model.FinalApprovalDate.Value == DateTime.MinValue)
@@ -1333,13 +1528,17 @@
             _model.SettlementDate = DateTime.Today;
         if (!_model.TradeDepositDate.HasValue || _model.TradeDepositDate.Value == DateTime.MinValue)
             _model.TradeDepositDate = DateTime.Today;
+        if (!_model.GreenstarTradeDepositDateReg.HasValue || _model.GreenstarTradeDepositDateReg.Value == DateTime.MinValue)
+            _model.GreenstarTradeDepositDateReg = DateTime.Today;
         if (!_model.WholesaleLicenseExpiryDate.HasValue || _model.WholesaleLicenseExpiryDate.Value == DateTime.MinValue)
             _model.WholesaleLicenseExpiryDate = DateTime.Today;
         if (!_model.RetailLicenseExpiryDate.HasValue || _model.RetailLicenseExpiryDate.Value == DateTime.MinValue)
             _model.RetailLicenseExpiryDate = DateTime.Today;
         SyncDateBuffersFromModel();
+        SyncLatitudeLongitudeText();
 
         _isEditMode = true;
+        _originalStatus = _model.Status;
 
         int? entityCode = null;
 
@@ -1404,6 +1603,7 @@
     {
         _model.Latitude = lat;
         _model.Longitude = lng;
+        SyncLatitudeLongitudeText();
         _model.GoogleMapURL = $"http://maps.google.com/maps?q={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         _locationMessage = $"Location selected from Map: {lat:F6}, {lng:F6}";
         _locationSuccess = true;
@@ -1465,7 +1665,11 @@
         _filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
         _filteredHeadquarters = new();
         _filteredDealers = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
-        if (!_isEditMode) _model = new();
+        if (!_isEditMode)
+        {
+            _model = new();
+            SyncLatitudeLongitudeText();
+        }
     }
 
     private void OnBasicInfoRegionChanged()
@@ -1687,14 +1891,17 @@
             _model = new()
             {
                 DateOfAppointment = DateTime.Today,
+                GreenstarDateOfAppointment = DateTime.Today,
                 LastTransactionDate = DateTime.Today,
                 FinalApprovalDate = DateTime.Today,
                 SettlementDate = DateTime.Today,
                 TradeDepositDate = DateTime.Today,
+                GreenstarTradeDepositDateReg = DateTime.Today,
                 WholesaleLicenseExpiryDate = DateTime.Today,
                 RetailLicenseExpiryDate = DateTime.Today
             };
             SyncDateBuffersFromModel();
+            SyncLatitudeLongitudeText();
 
             isSpic = true;
             isGreenStar = true;
@@ -1802,10 +2009,12 @@
         _model = new()
         {
             DateOfAppointment = DateTime.Today,
+            GreenstarDateOfAppointment = DateTime.Today,
             LastTransactionDate = DateTime.Today,
             FinalApprovalDate = DateTime.Today,
             SettlementDate = DateTime.Today,
             TradeDepositDate = DateTime.Today,
+            GreenstarTradeDepositDateReg = DateTime.Today,
             WholesaleLicenseExpiryDate = DateTime.Today,
             RetailLicenseExpiryDate = DateTime.Today
         }; 
@@ -1868,7 +2077,7 @@
         {
             if (_model.LastTransactionDate == null) _errors["LastTransactionDate"] = "Last Transaction Date is required";
         }
-     if (IsRestrictedNavFlow)
+     if (ShowTerminatedStatus)
         {
             if (_model.FinalApprovalDate == null)
                 _errors["FinalApprovalDate"] = "Final Approval Date is required";
@@ -1878,10 +2087,23 @@
         }
         bool isDept = IsDepartmentSelected;
 
-        if (ShowFullRegistrationSections && !isDept)
+        if (ShowFullRegistrationSections && !isDept && !IsInactiveNotTraceable)
         {
             if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
             if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";
+            // Location is mandatory for both:
+            // 1) the existing New Dealer flow, and
+            // 2) an Existing Dealer selected/edited from Dealer Code & Name.
+            // Keep Institution/Department legacy behaviour unchanged unless it is already
+            // part of the New Dealer flow.
+            if (IsNewDealerFlow || IsDealerSelected)
+            {
+                if (!_model.Latitude.HasValue)
+                    _errors["Latitude"] = "Latitude is required (click the map or use current location)";
+
+                if (!_model.Longitude.HasValue)
+                    _errors["Longitude"] = "Longitude is required (click the map or use current location)";
+            }
             if (string.IsNullOrWhiteSpace(_model.PinCode)) _errors["PinCode"] = "Pincode is required";
             else if (_model.PinCode.Length != 6) _errors["PinCode"] = "Pincode must be 6 digits";
            if ((_model.DistrictId ?? 0) == 0) _errors["DistrictId"] = "District is required in Primary Location";
@@ -1928,6 +2150,25 @@
             }
         }
 
+        // Trade Deposit Details (SPIC/Greenstar) are mandatory ONLY for the Dealer type.
+        // Department and Institution can save without them.
+        if (ShowTradeDepositRequiredMarks)
+        {
+            if (isSpic && !IsNewDealerFlow)
+            {
+                if (_model.TradeDepositAmount <= 0) _errors["TradeDepositAmount"] = "Trade Deposit Amount is required";
+                if (string.IsNullOrWhiteSpace(_model.TradeDepositReceiptNo)) _errors["TradeDepositReceiptNo"] = "Trade Deposit Receipt No is required";
+                if (!_model.TradeDepositDate.HasValue) _errors["TradeDepositDate"] = "Trade Deposit Date is required";
+            }
+
+            if (isGreenStar && !IsNewDealerFlow)
+            {
+                if (!_model.GreenstarTradeDepositAmountReg.HasValue || _model.GreenstarTradeDepositAmountReg <= 0) _errors["GreenstarTradeDepositAmountReg"] = "Trade Deposit Amount is required";
+                if (string.IsNullOrWhiteSpace(_model.GreenstarTradeDepositReceiptNoReg)) _errors["GreenstarTradeDepositReceiptNoReg"] = "Trade Deposit Receipt No is required";
+                if (!_model.GreenstarTradeDepositDateReg.HasValue) _errors["GreenstarTradeDepositDateReg"] = "Trade Deposit Date is required";
+            }
+        }
+
         return _errors.Count == 0;
     }
 
@@ -1942,6 +2183,15 @@
         try
         {
             _model.IsDealer = selected == "Dealer";
+
+            // Preserve the permanent source identity for an approved dealer that originally
+            // came through Create New Dealer. The maintenance screen behaves like Existing
+            // Dealer, but the New/Existing Dashboard filter must continue to classify it by
+            // how it was originally registered. All other flows keep the previous assignment.
+            if (IsApprovedNewDealerExistingMaintenanceFlow)
+                _model.IsNewDealerRegistration = true;
+            else
+                _model.IsNewDealerRegistration = IsNewDealerFlow;
 
             _model.DealerType = selected switch
             {
@@ -1965,13 +2215,20 @@
     ? _inactiveProposal
     : null;
 
-_model.Status = status switch
-{
-    "Active" => DealerStatus.Active,
-    "Inactive" => DealerStatus.InActive,
-    "Terminated" => DealerStatus.Terminated,
-    _ => DealerStatus.Active
-};
+            _model.Status = status switch
+            {
+                "Active" => DealerStatus.Active,
+                "Inactive" => DealerStatus.InActive,
+                "Terminated" => DealerStatus.Terminated,
+                _ => DealerStatus.Active
+            };
+
+            if (_isEditMode && _originalStatus != DealerStatus.Terminated && _model.Status == DealerStatus.Terminated)
+            {
+                _model.RMApproved = null;
+                _model.SMApproved = null;
+                _model.AVPApproved = null;
+            }
 
             _model.FirmName ??= "";
             _model.ShopNoORRoomNoOrBlockNo ??= "";
@@ -2094,19 +2351,55 @@ _model.Status = status switch
                 return;
 
             Loading.Show();
-            var viewNext = "/Experience";
-            Nav.NavigateTo($"{viewNext}?dealerId={_model.Id}&mode=view");
+
+            // Inactive + To-Be-Terminated uses the restricted flow even in view mode.
+            if (IsInactiveToBeTerminated)
+            {
+                var viewNextRestricted = SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData
+                    .GetNextRoute("/Register", _model.InGreenStar, true);
+                Nav.NavigateTo($"{viewNextRestricted}?dealerId={_model.Id}&mode=view&flow=restricted");
+                return;
+            }
+
+            Nav.NavigateTo($"/Experience?dealerId={_model.Id}&mode=view{RegistrationFlowParam}");
             return;
         }
 
-       if (IsRestrictedNavFlow || IsDepartmentSelected)
+        // Pure Terminated + Department: single step, submit straight to Dashboard.
+        if (IsRestrictedNavFlow || IsDepartmentSelected)
         {
-            if (IsDepartmentSelected)
+            if (IsDepartmentSelected || IsRestrictedNavFlow)
+            {
                 _model.IsSubmittedForReview = true;
+                if (_model.AVPApproved == false) _model.AVPApproved = null;
+                else if (_model.SMApproved == false) { _model.SMApproved = null; _model.AVPApproved = null; }
+                else if (_model.RMApproved == false) { _model.RMApproved = null; _model.SMApproved = null; _model.AVPApproved = null; }
+            }
 
             var deptSaved = await SaveDealer();
             if (deptSaved)
                 Nav.NavigateTo("/Dashboard");
+            return;
+        }
+
+        // Inactive + To-Be-Terminated: restricted 3-page flow. Save this page then move
+        // to the next restricted step (Proprietor) instead of Experience. Do NOT set
+        // IsSubmittedForReview here — that happens on the final restricted page.
+        if (IsInactiveToBeTerminated)
+        {
+            var termSaved = await SaveDealer();
+            if (termSaved)
+            {
+                SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, false);
+                Loading.Show();
+                var nextRestricted = SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData
+                    .GetNextRoute("/Register", _model.InGreenStar, true);
+                Nav.NavigateTo($"{nextRestricted}?dealerId={_model.Id}&flow=restricted");
+            }
+            else
+            {
+                SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, _errors.Count > 0);
+            }
             return;
         }
 
@@ -2115,7 +2408,8 @@ _model.Status = status switch
         {
             SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, false);
             Loading.Show();
-            Nav.NavigateTo($"/Experience?dealerId={_model.Id}");
+            var flowParam = RegistrationFlowParam;
+            Nav.NavigateTo($"/Experience?dealerId={_model.Id}{flowParam}");
         }
         else
         {
@@ -2589,6 +2883,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         {
             _model.Latitude = null;
             _model.Longitude = null;
+            SyncLatitudeLongitudeText();
             return;
         }
 
@@ -2613,6 +2908,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         {
             _model.Latitude = lat;
             _model.Longitude = lng;
+            SyncLatitudeLongitudeText();
             _locationMessage = $"Coordinates extracted: {lat:F6}, {lng:F6}";
             _locationSuccess = true;
             await TriggerMapUpdate(lat, lng);
@@ -2621,9 +2917,72 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         {
             _model.Latitude = null;
             _model.Longitude = null;
+            SyncLatitudeLongitudeText();
             _locationMessage = "Could not extract coordinates from this URL. Try pasting the full Google Maps link.";
             _locationSuccess = false;
         }
+    }
+
+    private async Task OnLatitudeChanged()
+    {
+        if (_model.Latitude.HasValue)
+            _errors.Remove("Latitude");
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+    }
+
+    private async Task OnLongitudeChanged()
+    {
+        if (_model.Longitude.HasValue)
+            _errors.Remove("Longitude");
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+    }
+
+    private void OnLatitudeLongitudeChanged(ChangeEventArgs e)
+    {
+        _latitudeLongitudeText = e.Value?.ToString() ?? "";
+        _errors.Remove("Latitude");
+        _errors.Remove("Longitude");
+
+        var text = _latitudeLongitudeText.Trim();
+        var parts = text.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        double? lat = null;
+        double? lng = null;
+        if (parts.Length >= 2
+            && double.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedLat)
+            && double.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedLng))
+        {
+            lat = parsedLat;
+            lng = parsedLng;
+        }
+
+        _model.Latitude = lat;
+        _model.Longitude = lng;
+
+        if (!lat.HasValue || !lng.HasValue)
+        {
+            _errors["Latitude"] = "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+            _errors["Longitude"] = "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+        }
+        else
+        {
+            _ = TriggerMapUpdate(lat.Value, lng.Value);
+        }
+    }
+
+    private void SyncLatitudeLongitudeText()
+    {
+        string Fmt(double d) => d.ToString("G17", System.Globalization.CultureInfo.InvariantCulture);
+
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            _latitudeLongitudeText = $"{Fmt(_model.Latitude.Value)}, {Fmt(_model.Longitude.Value)}";
+        else if (_model.Latitude.HasValue)
+            _latitudeLongitudeText = Fmt(_model.Latitude.Value);
+        else if (_model.Longitude.HasValue)
+            _latitudeLongitudeText = Fmt(_model.Longitude.Value);
+        else
+            _latitudeLongitudeText = "";
     }
 
     private async Task UseCurrentLocation()
@@ -2644,6 +3003,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
             {
                 _model.Latitude = result.Latitude;
                 _model.Longitude = result.Longitude;
+                SyncLatitudeLongitudeText();
                 _model.GoogleMapURL = $"http://maps.google.com/maps?q={result.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{result.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
                 _locationMessage = $"Location captured: {result.Latitude:F6}, {result.Longitude:F6}";
                 _locationSuccess = true;
@@ -2666,10 +3026,12 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         string Fmt(DateTime? d) => d.HasValue && d.Value != DateTime.MinValue ? d.Value.ToString("yyyy-MM-dd") : "";
 
         _dateOfAppointmentText = Fmt(_model.DateOfAppointment);
+        _greenstarDateOfAppointmentText = Fmt(_model.GreenstarDateOfAppointment);
         _lastTransactionDateText = Fmt(_model.LastTransactionDate);
         _finalApprovalDateText = Fmt(_model.FinalApprovalDate);
         _settlementDateText = Fmt(_model.SettlementDate);
         _tradeDepositDateText = Fmt(_model.TradeDepositDate);
+        _greenstarTradeDepositDateText = Fmt(_model.GreenstarTradeDepositDateReg);
         _wholesaleLicenseExpiryDateText = Fmt(_model.WholesaleLicenseExpiryDate);
         _retailLicenseExpiryDateText = Fmt(_model.RetailLicenseExpiryDate);
     }
@@ -2681,6 +3043,15 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         _dateOfAppointmentText = newVal;
         if (DateTime.TryParse(newVal, out var dt))
             _model.DateOfAppointment = dt;
+    }
+    private void OnGreenstarDateOfAppointmentChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return;
+
+        _greenstarDateOfAppointmentText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+            _model.GreenstarDateOfAppointment = dt;
     }
 
     private void OnLastTransactionDateChanged(ChangeEventArgs e)
@@ -2729,7 +3100,22 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
 
         _tradeDepositDateText = newVal;
         if (DateTime.TryParse(newVal, out var dt))
+        {
             _model.TradeDepositDate = dt;
+            ValidateFieldOnChange("TradeDepositDate", true);
+        }
+    }
+    private void OnGreenstarTradeDepositDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return;
+
+        _greenstarTradeDepositDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.GreenstarTradeDepositDateReg = dt;
+            ValidateFieldOnChange("GreenstarTradeDepositDateReg", true);
+        }
     }
 
     private void OnWholesaleLicenseExpiryDateChanged(ChangeEventArgs e)
@@ -2794,6 +3180,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         public int ParentDealer { get; set; }
         public string? FirmName { get; set; }
         public DateTime? DateOfAppointment { get; set; }
+        public DateTime? GreenstarDateOfAppointment { get; set; }
         public string? BusinessEntityType { get; set; }
         public DateTime? LastTransactionDate { get; set; }
         public bool? IsLastTransactionIsSale { get; set; }
@@ -2865,12 +3252,32 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         public decimal TradeDepositAmount { get; set; }
         public string? TradeDepositReceiptNo { get; set; }
         public DateTime? TradeDepositDate { get; set; }
+        public decimal? GreenstarTradeDepositAmountReg { get; set; }
+        public string? GreenstarTradeDepositReceiptNoReg { get; set; }
+        public DateTime? GreenstarTradeDepositDateReg { get; set; }
        public string? GSTLegalName { get; set; }
 public string? GSTTradeName { get; set; }
 public string? GSTConstitutionofBusiness { get; set; }
 public DealerStatus Status { get; set; }
 public FutureBusinessProposal? InactiveProposal { get; set; }
 public bool? IsSubmittedForReview { get; set; } = false;
+public bool IsNewDealerRegistration { get; set; }
+public int? DealershipApplicationFeeBankId { get; set; }
+public string? DealershipApplicationFeeDDNumber { get; set; }
+public DateTime? DealershipApplicationFeeDDDate { get; set; }
+public decimal? DealershipApplicationFeeAmount { get; set; }
+public string? DealershipApplicationFeePayableAt { get; set; }
+public string? SpicTradeDepositDDNumber { get; set; }
+public int? SpicTradeDepositDDBankId { get; set; }
+public DateTime? SpicTradeDepositDDDate { get; set; }
+public decimal? SpicTradeDepositDDAmount { get; set; }
+public string? GflTradeDepositDDNumber { get; set; }
+public int? GflTradeDepositDDBankId { get; set; }
+public DateTime? GflTradeDepositDDDate { get; set; }
+public decimal? GflTradeDepositDDAmount { get; set; }
+public string? DealershipApplicationFeeFilePath { get; set; }
+public string? SpicTradeDepositFilePath { get; set; }
+public string? GflTradeDepositFilePath { get; set; }
     }
 
     

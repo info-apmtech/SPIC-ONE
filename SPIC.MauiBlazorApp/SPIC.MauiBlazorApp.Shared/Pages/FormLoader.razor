@@ -1,246 +1,289 @@
-﻿@using System.Net.Http.Json
+@implements IDisposable
+@using System.Net.Http.Json
 @using SPIC.MauiBlazorApp.Shared.FormFlow
 @using SPIC.Core.Entities
 @inject NavigationManager Nav
 @inject LoadingService Loading
 @inject HttpClient Http
+@inject IJSRuntime JS
 
-@if (CurrentStep is not null)
+@if (CurrentStep is not null && !IsDashboardCreditLimitModeFromUrl)
 {
-	var steps = StepsList;
-	var currentIndex = CurrentIndex;
+    var steps = StepsList;
+    var currentIndex = CurrentIndex;
 
-	<div class="mb-4">
-		<div class="d-flex justify-content-between align-items-center">
-			<div class="step-text">Step @(currentIndex + 1) of @TotalSteps</div>
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="step-text">Step @(currentIndex + 1) of @TotalSteps</div>
 
-			@if (currentIndex + 1 == TotalSteps)
-			{
-				<span class="status-badge">
-					Completed
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SuccessCompleteIcon.svg"
-						 class="verifyicon" />
-				</span>
-			}
-			else
-			{
-				<span class="status-badge">Registration In Progress</span>
-			}
-		</div>
+            @if (currentIndex + 1 == TotalSteps)
+            {
+                <span class="status-badge">
+                    Completed
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SuccessCompleteIcon.svg"
+                         class="verifyicon" />
+                </span>
+            }
+            else
+            {
+                <span class="status-badge">Registration In Progress</span>
+            }
+        </div>
 
-		<div class="step-subtext">@CurrentStep.Title</div>
+        <div class="step-subtext">@FormStepData.GetDisplayTitle(CurrentStep, _isNewDealerFlow)</div>
 
-		<div class="progress-bar-custom-header">
-			@for (int idx = 0; idx < steps.Count; idx++)
-			{
-				var step = steps[idx];
+        <div class="progress-bar-custom-header">
+            @for (var idx = 0; idx < steps.Count; idx++)
+            {
+                var step = steps[idx];
 
-				<div class="progress-segment @GetStepClass(idx, step)"
-					 title="@step.Title"
-					 @onclick="() => NavigateToStep(step)">
-				</div>
-			}
-		</div>
-	</div>
+                <div class="progress-segment @GetStepClass(idx, step)"
+                     title="@FormStepData.GetDisplayTitle(step, _isNewDealerFlow)"
+                     @onclick="() => NavigateToStep(step)">
+                </div>
+            }
+        </div>
+    </div>
 }
 
 @code {
-	private FormStepModel? CurrentStep;
+    private FormStepModel? CurrentStep;
+    private List<FormStepModel> _visibleSteps = FormStepData.GetVisibleSteps(false);
+    private bool _isRestrictedFlow;
+    private bool _hasGreenStar;
+    private bool _isNewDealerFlow;
+    private bool _isExistingMaintenanceFlow;
+    private bool _isDashboardCreditLimitMode;
 
-	private List<FormStepModel> _visibleSteps = FormStepData.GetVisibleSteps(false);
-	private bool _isRestrictedFlow;
+    // Standalone Credit Limit entry from the Dealer Dashboard: hides the Dealer
+    // Creation 13-step header/progress so only the Credit Limit content shows.
+    private bool IsDashboardCreditLimitModeFromUrl =>
+        GetQueryValues().TryGetValue("source", out var source) &&
+        string.Equals(source, "dashboard", StringComparison.OrdinalIgnoreCase);
 
-	[Parameter]
-	public bool IsSingleStep { get; set; }
+    [Parameter] public bool IsSingleStep { get; set; }
+    [Parameter] public bool IsRestrictedFlow { get; set; }
 
-	private List<FormStepModel> StepsList => IsSingleStep
-		? _visibleSteps.Where(s => s.Route.Contains("/Register", StringComparison.OrdinalIgnoreCase)).Take(1).ToList()
-		: _visibleSteps;
+    private List<FormStepModel> StepsList => IsSingleStep
+        ? _visibleSteps.Where(s => s.Route.Contains("/Register", StringComparison.OrdinalIgnoreCase)).Take(1).ToList()
+        : _visibleSteps;
 
-	private int TotalSteps => IsSingleStep ? 1 : StepsList.Count;
+    private int TotalSteps => IsSingleStep ? 1 : StepsList.Count;
 
-	private int CurrentIndex
-	{
-		get
-		{
-			if (CurrentStep == null)
-				return 0;
+    private int CurrentIndex
+    {
+        get
+        {
+            if (CurrentStep == null)
+                return 0;
 
-			var idx = StepsList.FindIndex(s =>
-				s.Route.Equals(CurrentStep.Route, StringComparison.OrdinalIgnoreCase));
+            var idx = StepsList.FindIndex(s =>
+                s.Route.Equals(CurrentStep.Route, StringComparison.OrdinalIgnoreCase));
 
-			return idx >= 0 ? idx : 0;
-		}
-	}
+            return idx >= 0 ? idx : 0;
+        }
+    }
 
-	protected override async Task OnInitializedAsync()
-	{
-		SetCurrentStep();
+    protected override async Task OnInitializedAsync()
+    {
+        SetCurrentStep();
+        Nav.LocationChanged += HandleLocationChanged;
+        FormStepData.OnStateChanged += HandleStateChanged;
 
-		Nav.LocationChanged += HandleLocationChanged;
-		FormStepData.OnStateChanged += HandleStateChanged;
+        await LoadVisibleSteps();
+        await EvaluateFromQuery();
+    }
 
-		await LoadVisibleSteps();
-		await EvaluateFromQuery();
-	}
+    protected override void OnParametersSet()
+    {
+        _visibleSteps = FormStepData.GetVisibleSteps(
+            _hasGreenStar,
+            _isRestrictedFlow || IsRestrictedFlow);
 
-	private async Task LoadVisibleSteps()
-	{
-		var dealerId = GetDealerIdFromQuery();
-		_isRestrictedFlow = GetFlowRestricted();
+        SetCurrentStep();
+    }
 
-		if (dealerId <= 0)
-		{
-			// Create mode / no dealerId yet
-			// Default should be 12 steps, no GreenStar page
-			_visibleSteps = FormStepData.GetVisibleSteps(false, _isRestrictedFlow);
-			SetCurrentStep();
-			return;
-		}
+    private async Task LoadVisibleSteps()
+    {
+        var dealerId = GetDealerIdFromQuery();
+        var urlFlow = GetFlowValue();
 
-		var dealer = await GetDealer(dealerId);
-		var hasGreenStar = dealer?.InGreenStar ?? false;
+        _isRestrictedFlow = string.Equals(urlFlow, "restricted", StringComparison.OrdinalIgnoreCase);
+        _isExistingMaintenanceFlow = string.Equals(urlFlow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
+        _isNewDealerFlow = string.Equals(urlFlow, "new", StringComparison.OrdinalIgnoreCase);
+        _isDashboardCreditLimitMode = IsDashboardCreditLimitModeFromUrl;
 
-		// Even if the URL doesn't carry "flow=restricted" (e.g. opening an
-		// existing dealer straight from the Dashboard), a Terminated or
-		// Inactive-Terminated dealer must still use the restricted step flow.
-		if (!_isRestrictedFlow && dealer != null)
-		{
-			_isRestrictedFlow = dealer.Status == DealerStatus.Terminated ||
-				(dealer.Status == DealerStatus.InActive && dealer.InactiveProposal == FutureBusinessProposal.Terminated);
-		}
+        if (dealerId > 0)
+        {
+            var dealer = await GetDealer(dealerId);
+            _hasGreenStar = dealer?.InGreenStar ?? false;
 
-		_visibleSteps = FormStepData.GetVisibleSteps(hasGreenStar, _isRestrictedFlow);
+            if (dealer != null)
+            {
+                var approvedNewDealerMaintenance =
+                    !_isDashboardCreditLimitMode &&
+                    !_isNewDealerFlow &&
+                    dealer.IsNewDealerRegistration &&
+                    dealer.AVPApproved == true &&
+                    !string.IsNullOrWhiteSpace(dealer.DealerCode);
 
-		SetCurrentStep();
-	}
+                if (!_isExistingMaintenanceFlow && approvedNewDealerMaintenance)
+                    _isExistingMaintenanceFlow = true;
 
-	private bool GetFlowRestricted()
-	{
-		var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
-		var qIndex = baseRelative.IndexOf('?');
+                if (!_isExistingMaintenanceFlow)
+                    _isNewDealerFlow = _isNewDealerFlow || dealer.IsNewDealerRegistration;
+            }
 
-		if (qIndex < 0)
-			return false;
+            if (!_isRestrictedFlow && dealer != null)
+            {
+                _isRestrictedFlow = dealer.Status == DealerStatus.Terminated ||
+                    (dealer.Status == DealerStatus.InActive &&
+                     dealer.InactiveProposal == FutureBusinessProposal.Terminated);
+            }
+        }
+        else
+        {
+            _hasGreenStar = false;
+        }
 
-		var queryString = baseRelative[(qIndex + 1)..];
+        _visibleSteps = FormStepData.GetVisibleSteps(
+            _hasGreenStar,
+            _isRestrictedFlow || IsRestrictedFlow);
 
-		var parts = queryString.Split('&')
-			.Select(p => p.Split('=', 2))
-			.Where(p => p.Length == 2)
-			.ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
+        SetCurrentStep();
+    }
 
-		return parts.TryGetValue("flow", out var flow) &&
-			string.Equals(flow, "restricted", StringComparison.OrdinalIgnoreCase);
-	}
+    private string? GetFlowValue()
+    {
+        var values = GetQueryValues();
+        return values.TryGetValue("flow", out var flow) ? flow : null;
+    }
 
-	private async Task<SPIC.Core.Entities.DealerRegistration?> GetDealer(int dealerId)
-	{
-		try
-		{
-			return await Http.GetFromJsonAsync<SPIC.Core.Entities.DealerRegistration>($"api/DealerRegistration/{dealerId}");
-		}
-		catch
-		{
-			return null;
-		}
-	}
+    private async Task<DealerRegistration?> GetDealer(int dealerId)
+    {
+        try
+        {
+            return await Http.GetFromJsonAsync<DealerRegistration>($"api/DealerRegistration/{dealerId}");
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
-	private int GetDealerIdFromQuery()
-	{
-		var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
-		var qIndex = baseRelative.IndexOf('?');
+    private int GetDealerIdFromQuery()
+    {
+        var values = GetQueryValues();
+        return values.TryGetValue("dealerId", out var value) &&
+               int.TryParse(value, out var id) && id > 0
+            ? id
+            : 0;
+    }
 
-		if (qIndex < 0)
-			return 0;
+    private Dictionary<string, string> GetQueryValues()
+    {
+        var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+        var qIndex = baseRelative.IndexOf('?');
 
-		var queryString = baseRelative[(qIndex + 1)..];
+        if (qIndex < 0)
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-		var parts = queryString.Split('&')
-			.Select(p => p.Split('=', 2))
-			.Where(p => p.Length == 2)
-			.ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
+        return baseRelative[(qIndex + 1)..]
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Split('=', 2))
+            .Where(p => p.Length == 2)
+            .GroupBy(p => p[0], StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => Uri.UnescapeDataString(g.Last()[1]), StringComparer.OrdinalIgnoreCase);
+    }
 
-		if (parts.TryGetValue("dealerId", out var idStr) &&
-			int.TryParse(idStr, out var id) &&
-			id > 0)
-		{
-			return id;
-		}
+    private string GetStepClass(int idx, FormStepModel step)
+    {
+        if (idx == CurrentIndex)
+            return "current";
+        if (step.HasError)
+            return "error";
+        if (step.IsEvaluated)
+            return "active";
 
-		return 0;
-	}
+        return "";
+    }
 
-	private string GetStepClass(int idx, FormStepModel step)
-	{
-		if (idx == CurrentIndex)
-			return "current";
+    private async Task EvaluateFromQuery()
+    {
+        var dealerId = GetDealerIdFromQuery();
+        FormStepData.ClearAllErrors();
 
-		if (step.HasError)
-			return "error";
+        if (dealerId > 0)
+            await FormStepChecker.EvaluateStepsAsync(Http, dealerId);
+    }
 
-		if (step.IsEvaluated)
-			return "active";
+    private void HandleStateChanged() => InvokeAsync(StateHasChanged);
 
-		return "";
-	}
+    private async void HandleLocationChanged(
+        object? sender,
+        Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        try
+        {
+            _ = JS.InvokeVoidAsync(
+                "eval",
+                "var el = document.querySelector('.main-content'); if(el) el.scrollTop = 0;");
+        }
+        catch { }
 
-	private async Task EvaluateFromQuery()
-	{
-		var dealerId = GetDealerIdFromQuery();
+        SetCurrentStep();
+        await LoadVisibleSteps();
+        await EvaluateFromQuery();
+        await InvokeAsync(StateHasChanged);
+    }
 
-		FormStepData.ClearAllErrors();
+    private void SetCurrentStep()
+    {
+        var relativePath = "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+        CurrentStep = FormStepData.GetStepByRoute(relativePath);
+    }
 
-		if (dealerId > 0)
-		{
-			await FormStepChecker.EvaluateStepsAsync(Http, dealerId);
-		}
-	}
+    private void NavigateToStep(FormStepModel? step)
+    {
+        if (step == null ||
+            CurrentStep?.Route.Equals(step.Route, StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return;
+        }
 
-	private void HandleStateChanged()
-	{
-		InvokeAsync(StateHasChanged);
-	}
+        Loading.Show();
 
-	private async void HandleLocationChanged(
-		object? sender,
-		Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
-	{
-		SetCurrentStep();
+        var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+        var qIndex = baseRelative.IndexOf('?');
+        var queryString = qIndex >= 0 ? baseRelative[qIndex..] : string.Empty;
 
-		await LoadVisibleSteps();
-		await EvaluateFromQuery();
+        queryString = EnsureFlowParameter(queryString);
+        Nav.NavigateTo(step.Route + queryString);
+    }
 
-		await InvokeAsync(StateHasChanged);
-	}
+    private string EnsureFlowParameter(string queryString)
+    {
+        if (_isRestrictedFlow && !queryString.Contains("flow=restricted", StringComparison.OrdinalIgnoreCase))
+            return AppendQuery(queryString, "flow=restricted");
 
-	private void SetCurrentStep()
-	{
-		var relativePath = "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+        if (_isExistingMaintenanceFlow &&
+            !queryString.Contains("flow=existing-maintenance", StringComparison.OrdinalIgnoreCase))
+        {
+            return AppendQuery(queryString, "flow=existing-maintenance");
+        }
 
-		CurrentStep = FormStepData.GetStepByRoute(relativePath);
-	}
+        if (_isNewDealerFlow && !queryString.Contains("flow=new", StringComparison.OrdinalIgnoreCase))
+            return AppendQuery(queryString, "flow=new");
 
-	private void NavigateToStep(FormStepModel? step)
-	{
-		if (step is not null)
-		{
-			Loading.Show();
+        return queryString;
+    }
 
-			var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
-			var qIndex = baseRelative.IndexOf('?');
-			var queryString = qIndex >= 0 ? baseRelative[qIndex..] : string.Empty;
+    private static string AppendQuery(string queryString, string value) =>
+        queryString + (queryString.Contains('?') ? "&" : "?") + value;
 
-			if (_isRestrictedFlow && !queryString.Contains("flow=restricted", StringComparison.OrdinalIgnoreCase))
-				queryString += (queryString.Contains('?') ? "&" : "?") + "flow=restricted";
-
-			Nav.NavigateTo(step.Route + queryString);
-		}
-	}
-
-	public void Dispose()
-	{
-		Nav.LocationChanged -= HandleLocationChanged;
-		FormStepData.OnStateChanged -= HandleStateChanged;
-	}
+    public void Dispose()
+    {
+        Nav.LocationChanged -= HandleLocationChanged;
+        FormStepData.OnStateChanged -= HandleStateChanged;
+    }
 }

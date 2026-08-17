@@ -1,125 +1,32 @@
 ﻿@page "/Acknowledgement"
+@implements IDisposable
+@inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
+@using System.Text.Json
+@using System.Net.Http.Json
+@using System.Globalization
+@using SPIC.Core.DTOs
+@using SPIC.MauiBlazorApp.Shared.Pages
 
 
-<div class="container-fluid py-4 px-0">
-        
-    <!-- Header Section -->
+<div class="container-fluid py-4 px-0 ac-page-container">
+
+    <!-- Header -->
     <div class="ac-header-container">
         <div class="ac-header-text">
             <h1>Acknowledgement Cycle</h1>
             <p>Track and monitor acknowledgement turnaround time</p>
         </div>
-        
         <div class="ac-action-buttons">
-            <button class="ac-btn ac-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg>
-                Refresh Data
-            </button>
-            <button class="ac-btn ac-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg>
-                Excel
-            </button>
-            <button class="ac-btn ac-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg>
-                PDF
-            </button>
-            <button class="ac-btn ac-btn-solid">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
-                Send Mail
-            </button>
+            <button class="ac-btn ac-btn-outline" @onclick="RefreshData" disabled="@(!_masterDataLoaded || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg> Refresh Data</button>
+            <button class="ac-btn ac-btn-outline" @onclick="ExportExcel" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg> Excel</button>
+            <button class="ac-btn ac-btn-outline" @onclick="ExportPdf" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg> PDF</button>
+            <button class="ac-btn ac-btn-solid" @onclick="SendMail" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
         </div>
     </div>
 
-    <!-- 5-Column Statistics Grid -->
-    <div class="ac-stats-grid">
-        
-        <!-- Total Transactions -->
-        <div class="ac-stat-card ac-theme-purple">
-            <div class="ac-card-top">
-                <div class="ac-stat-info">
-                    <span class="ac-stat-title">Total Transactions</span>
-                    <span class="ac-stat-value">12,480</span>
-                </div>
-                <div class="ac-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-2 2 2 2-2 2 2 2-2 2 2 2-2 2 2V2H4z"></path><line x1="16" y1="8" x2="8" y2="8"></line><line x1="16" y1="12" x2="8" y2="12"></line><line x1="10" y1="16" x2="8" y2="16"></line></svg>
-                </div>
-            </div>
-            <div class="ac-stat-trend ac-text-purple">
-                <span>All time</span>
-            </div>
-        </div>
-
-        <!-- Fast -->
-        <div class="ac-stat-card ac-theme-green">
-            <div class="ac-card-top">
-                <div class="ac-stat-info">
-                    <span class="ac-stat-title">Fast (0-2 Days)</span>
-                    <span class="ac-stat-value">4,216</span>
-                </div>
-                <div class="ac-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M9 16l2 2 4-4"></path></svg>
-                </div>
-            </div>
-            <div class="ac-stat-trend ac-text-green">
-                <svg class="ac-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>3.18 Days vs last period</span>
-            </div>
-        </div>
-
-        <!-- Normal -->
-        <div class="ac-stat-card ac-theme-yellow">
-            <div class="ac-card-top">
-                <div class="ac-stat-info">
-                    <span class="ac-stat-title">Normal (3-5 Days)</span>
-                    <span class="ac-stat-value">1,530</span>
-                </div>
-                <div class="ac-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                </div>
-            </div>
-            <div class="ac-stat-trend ac-text-green">
-                <svg class="ac-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>2.15% vs last period</span>
-            </div>
-        </div>
-
-        <!-- Delayed -->
-        <div class="ac-stat-card ac-theme-orange">
-            <div class="ac-card-top">
-                <div class="ac-stat-info">
-                    <span class="ac-stat-title">Delayed (6-7 Days)</span>
-                    <span class="ac-stat-value">10,300</span>
-                </div>
-                <div class="ac-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                </div>
-            </div>
-            <div class="ac-stat-trend ac-text-green">
-                <svg class="ac-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>1.85% vs last period</span>
-            </div>
-        </div>
-
-        <!-- Critical -->
-        <div class="ac-stat-card ac-theme-red">
-            <div class="ac-card-top">
-                <div class="ac-stat-info">
-                    <span class="ac-stat-title">Critical (> 7 Days)</span>
-                    <span class="ac-stat-value">10,300</span>
-                </div>
-                <div class="ac-icon-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                </div>
-            </div>
-            <div class="ac-stat-trend ac-text-green">
-                <svg class="ac-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span>1.85% vs last period</span>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Filters Section (8 fields -> 4 Columns) -->
+    <!-- Filters -->
     <div class="ac-filter-card">
         <div class="ac-filter-header">
             <div class="ac-filter-title">
@@ -128,130 +35,1051 @@
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
         </div>
-        
+
         <div class="ac-filter-body">
             <div class="ac-filter-grid">
                 <div class="ac-form-group">
-                    <label class="ac-form-label">Date Range</label>
-                    <input type="text" class="ac-form-input ac-input-calendar" placeholder="01 Apr 2025 - 28 Apr 2025">
+                    <label class="ac-form-label">State</label>
+                    <select id="ac-state-select" class="ac-form-select" multiple="multiple">
+                        @foreach (var s in _states)
+                        {
+                            <option value="@s.Id" selected="@(_selStates.Contains(s.Id))">@s.Name</option>
+                        }
+                    </select>
                 </div>
-                <div class="ac-form-group"><label class="ac-form-label">State</label><select class="ac-form-select"><option>All State</option></select></div>
-                <div class="ac-form-group"><label class="ac-form-label">Region</label><select class="ac-form-select"><option>All Region</option></select></div>
-                <div class="ac-form-group"><label class="ac-form-label">Head Quarters</label><select class="ac-form-select"><option>All Head Quarters</option></select></div>
-                
-                <div class="ac-form-group"><label class="ac-form-label">District</label><select class="ac-form-select"><option>All District</option></select></div>
-                <div class="ac-form-group"><label class="ac-form-label">Sub District</label><select class="ac-form-select"><option>All Sub Districts</option></select></div>
-                <div class="ac-form-group"><label class="ac-form-label">Dealer Name</label><select class="ac-form-select"><option>Select Dealer</option></select></div>
-                <div class="ac-form-group"><label class="ac-form-label">Status</label><select class="ac-form-select"><option>All Status</option></select></div>
+                <div class="ac-form-group">
+                    <label class="ac-form-label">Region</label>
+                    <select id="ac-region-select" class="ac-form-select" multiple="multiple">
+                        @foreach (var r in _regions)
+                        {
+                            <option value="@r.Id" selected="@(_selRegions.Contains(r.Id))">@r.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="ac-form-group">
+                    <label class="ac-form-label">Head Quarters</label>
+                    <select id="ac-hq-select" class="ac-form-select" multiple="multiple">
+                        @foreach (var h in _hq)
+                        {
+                            <option value="@h.Id" selected="@(_selHqs.Contains(h.Id))">@h.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="ac-form-group">
+                    <label class="ac-form-label">District</label>
+                    <select id="ac-district-select" class="ac-form-select" multiple="multiple">
+                        @foreach (var d in _districts)
+                        {
+                            <option value="@d.Id" selected="@(_selDistricts.Contains(d.Id))">@d.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="ac-form-group">
+                    <label class="ac-form-label">Sub District</label>
+                    <select id="ac-subdistrict-select" class="ac-form-select" multiple="multiple">
+                        @foreach (var sd in _subDistricts)
+                        {
+                            <option value="@sd.Id" selected="@(_selSubDistricts.Contains(sd.Id))">@sd.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="ac-form-group">
+                    <label class="ac-form-label">Product</label>
+                    <select id="ac-product-select" class="ac-form-select" multiple="multiple">
+                        @foreach (var p in _products)
+                        {
+                            <option value="@p.Id" selected="@(_selProducts.Contains(p.Id))">@p.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="ac-form-group">
+                    <label class="ac-form-label">Dealer Name</label>
+                    <select id="ac-dealer-select" class="ac-form-select" multiple="multiple">
+                        @foreach (var d in _dealers)
+                        {
+                            <option value="@d.Id" selected="@(_selDealerKeys.Contains(d.Id))">@d.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="ac-form-group">
+                    <label class="ac-form-label">Status</label>
+                    <select id="ac-status-select" class="ac-form-select" multiple="multiple">
+                        @foreach (var s in _statuses)
+                        {
+                            <option value="@s.Id" selected="@(_selStatuses.Contains(s.Id))">@s.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="ac-form-group">
+                    <label class="ac-form-label">Cycle Bucket</label>
+                    <select id="ac-bucket-select" class="ac-form-select" multiple="multiple">
+                        <option value="Fast" selected="@(_selBuckets.Contains("Fast"))">Fast (0–2 Days)</option>
+                        <option value="Normal" selected="@(_selBuckets.Contains("Normal"))">Normal (3–5 Days)</option>
+                        <option value="Delayed" selected="@(_selBuckets.Contains("Delayed"))">Delayed (6–10 Days)</option>
+                        <option value="Critical" selected="@(_selBuckets.Contains("Critical"))">Critical (&gt;10 Days)</option>
+                    </select>
+                </div>
+                <div class="ac-form-group">
+                    <label class="ac-form-label">Invoice Date From</label>
+                    <input type="date" class="ac-form-input" @bind="_dateFrom" />
+                </div>
+                <div class="ac-form-group">
+                    <label class="ac-form-label">Invoice Date To</label>
+                    <input type="date" class="ac-form-input" @bind="_dateTo" />
+                </div>
             </div>
-            
+
             <div class="ac-filter-actions">
-                <button class="ac-btn ac-btn-outline"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Clear All</button>
-                <button class="ac-btn ac-btn-solid"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg> Apply Filters</button>
+                <button class="ac-btn ac-btn-outline" @onclick="ClearAll" disabled="@(!_select2Initialized || _isLoading)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    Clear All
+                </button>
+                <button class="ac-btn ac-btn-solid" @onclick="ApplyFilters" disabled="@(!_select2Initialized || _isLoading)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="12" x2="18" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line></svg>
+                    Search
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Table Section -->
-    <div class="ac-table-card">
-        <div class="ac-table-top">
-            <h3>Acknowledgement Cycle List</h3>
-            <input type="text" class="ac-search-input" placeholder="Search zones...">
-        </div>
-
-        <div class="ac-table-wrapper">
-            <table class="ac-main-table">
-                <thead>
-                    <tr>
-                        <th><input type="checkbox" class="ac-checkbox"></th>
-                        <th style="text-align: left;">Dealer Name</th>
-                        <th>Product</th>
-                        <th>Invoice No.</th>
-                        <th>Invoice Date</th>
-                        <th>Receipt Date</th>
-                        <th>Ack Cycle (Days)</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><input type="checkbox" class="ac-checkbox"></td>
-                        <td style="text-align: left; color: #475569; font-weight: 500;">Monsoon Agro Centre</td>
-                        <td>Neem Coated Urea (45 Kg)</td>
-                        <td>SAP2527/2025-26</td>
-                        <td>01-05-2026</td>
-                        <td>07-05-2026</td>
-                        <td class="ac-txt-orange">7</td>
-                        <td><div class="ac-status ac-st-orange"><div class="dot"></div>Delayed</div></td>
-                        <td><button class="ac-action-btn" @onclick="OpenAcknowledgementDetails"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                    </tr>
-                    <tr>
-                        <td><input type="checkbox" class="ac-checkbox"></td>
-                        <td style="text-align: left; color: #475569; font-weight: 500;">Monsoon Agro Centre</td>
-                        <td>Neem Coated Urea (45 Kg)</td>
-                        <td>SAP2527/2025-26</td>
-                        <td>01-05-2026</td>
-                        <td>01-05-2026</td>
-                        <td class="ac-txt-green">0</td>
-                        <td><div class="ac-status ac-st-green"><div class="dot"></div>Fast</div></td>
-                        <td><button class="ac-action-btn" @onclick="OpenAcknowledgementDetails"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                    </tr>
-                    <tr>
-                        <td><input type="checkbox" class="ac-checkbox"></td>
-                        <td style="text-align: left; color: #475569; font-weight: 500;">Monsoon Agro Centre</td>
-                        <td>Neem Coated Urea (45 Kg)</td>
-                        <td>SAP2527/2025-26</td>
-                        <td>01-05-2026</td>
-                        <td>06-05-2026</td>
-                        <td class="ac-txt-yellow">5</td>
-                        <td><div class="ac-status ac-st-yellow"><div class="dot"></div>Normal</div></td>
-                        <td><button class="ac-action-btn" @onclick="OpenAcknowledgementDetails"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                    </tr>
-                    <tr>
-                        <td><input type="checkbox" class="ac-checkbox"></td>
-                        <td style="text-align: left; color: #475569; font-weight: 500;">Monsoon Agro Centre</td>
-                        <td>Neem Coated Urea (45 Kg)</td>
-                        <td>SAP2527/2025-26</td>
-                        <td>01-05-2026</td>
-                        <td>10-05-2026</td>
-                        <td class="ac-txt-red">10</td>
-                        <td><div class="ac-status ac-st-red"><div class="dot"></div>Critical</div></td>
-                        <td><button class="ac-action-btn" @onclick="OpenAcknowledgementDetails"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="ac-pagination">
-            <div class="ac-page-size">
-                <span>Items Per Page</span>
-                <select class="ac-form-select" style="padding: 6px 32px 6px 12px; width: 65px; margin:0; background-position: right 8px center;">
-                    <option>16</option>
-                </select>
+    @if (_dashboard is null && _isLoading)
+    {
+        <!-- Keep the complete lower-page layout visible during the first request. -->
+        <section class="ac-dashboard-skeleton" aria-busy="true" aria-label="Loading acknowledgement cycle dashboard">
+            <div class="ac-loading-status" role="status">
+                <span class="ac-inline-spinner" aria-hidden="true"></span>
+                <span>Loading dashboard data…</span>
             </div>
-            <div class="ac-page-controls">
-                <button class="ac-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <button class="ac-page-btn active">1</button>
-                <button class="ac-page-btn">2</button>
-                <button class="ac-page-btn">3</button>
-                <button class="ac-page-btn dots">..</button>
-                <button class="ac-page-btn">8</button>
-                <button class="ac-page-btn">9</button>
-                <button class="ac-page-btn">10</button>
-                <button class="ac-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+
+            <div class="ac-stats-grid">
+                @for (var cardIndex = 0; cardIndex < 5; cardIndex++)
+                {
+                    <div class="ac-stat-card ac-skeleton-stat-card">
+                        <div class="ac-skeleton-stat-top">
+                            <div class="ac-skeleton-stat-copy">
+                                <span class="ac-skeleton-block ac-skeleton-title"></span>
+                                <span class="ac-skeleton-block ac-skeleton-value"></span>
+                            </div>
+                            <span class="ac-skeleton-block ac-skeleton-icon"></span>
+                        </div>
+                        <span class="ac-skeleton-block ac-skeleton-trend"></span>
+                    </div>
+                }
+            </div>
+
+            <div class="ac-chart-toolbar ac-skeleton-toolbar">
+                <span class="ac-skeleton-block"></span>
+            </div>
+
+            <div class="ac-top-charts-grid">
+                @for (var chartIndex = 0; chartIndex < 2; chartIndex++)
+                {
+                    <div class="ac-chart-card ac-skeleton-chart-card">
+                        <span class="ac-skeleton-block ac-skeleton-chart-title"></span>
+                        <span class="ac-skeleton-block ac-skeleton-chart-subtitle"></span>
+                        <div class="ac-skeleton-ranking-list">
+                            @for (var rowIndex = 0; rowIndex < 5; rowIndex++)
+                            {
+                                <div class="ac-skeleton-ranking-row">
+                                    <span class="ac-skeleton-block ac-skeleton-rank"></span>
+                                    <span class="ac-skeleton-block ac-skeleton-label"></span>
+                                    <span class="ac-skeleton-block ac-skeleton-bar"></span>
+                                    <span class="ac-skeleton-block ac-skeleton-rate"></span>
+                                </div>
+                            }
+                        </div>
+                        <div class="ac-skeleton-axis">
+                            @for (var tickIndex = 0; tickIndex < 6; tickIndex++)
+                            {
+                                <span class="ac-skeleton-block"></span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="ac-table-card ac-skeleton-table-card">
+                <div class="ac-table-top">
+                    <span class="ac-skeleton-block ac-skeleton-table-title"></span>
+                    <span class="ac-skeleton-block ac-skeleton-search"></span>
+                </div>
+                <div class="ac-skeleton-table-scroll">
+                    <div class="ac-skeleton-table-head">
+                        @for (var columnIndex = 0; columnIndex < 9; columnIndex++)
+                        {
+                            <span class="ac-skeleton-block"></span>
+                        }
+                    </div>
+                    <div class="ac-skeleton-table-body">
+                        @for (var rowIndex = 0; rowIndex < 5; rowIndex++)
+                        {
+                            <div class="ac-skeleton-table-row">
+                                @for (var cellIndex = 0; cellIndex < 9; cellIndex++)
+                                {
+                                    <span class="ac-skeleton-block"></span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="ac-skeleton-pagination">
+                    <span class="ac-skeleton-block"></span>
+                    <span class="ac-skeleton-block"></span>
+                </div>
+            </div>
+        </section>
+    }
+    else if (_dashboard is null)
+    {
+        <div class="ac-empty-state" role="alert">
+            @(_loadError is null ? "No Data Available" : $"Could not load report: {_loadError}")
+        </div>
+    }
+    else
+    {
+        <!-- Preserve the last successful dashboard while filters/search/sort/paging reload. -->
+        <div class="ac-dashboard-content @(_isLoading ? "is-refreshing" : string.Empty)">
+            @if (_isLoading)
+            {
+                <div class="ac-refresh-indicator" role="status">
+                    <span class="ac-inline-spinner" aria-hidden="true"></span>
+                    <span>Updating…</span>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_loadError))
+            {
+                <div class="ac-dashboard-warning" role="alert">@_loadError</div>
+            }
+
+            <!-- 5 KPI cards -->
+            <div class="ac-stats-grid">
+                <div class="ac-stat-card ac-theme-purple">
+                    <div class="ac-card-top">
+                        <div class="ac-stat-info">
+                            <span class="ac-stat-title">Total Transactions</span>
+                            <span class="ac-stat-value">@_dashboard.Summary.Total.ToString("N0")</span>
+                        </div>
+                        <div class="ac-icon-box"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-2 2 2 2-2 2 2 2-2 2 2 2-2 2 2V2H4z"></path><line x1="16" y1="8" x2="8" y2="8"></line><line x1="16" y1="12" x2="8" y2="12"></line><line x1="10" y1="16" x2="8" y2="16"></line></svg></div>
+                    </div>
+                    <div class="ac-stat-trend ac-text-purple"><span>Avg cycle @_dashboard.Summary.AverageCycleDays days</span></div>
+                </div>
+
+                <div class="ac-stat-card ac-theme-green">
+                    <div class="ac-card-top">
+                        <div class="ac-stat-info">
+                            <span class="ac-stat-title">Fast (0-2 Days)</span>
+                            <span class="ac-stat-value">@_dashboard.Summary.Fast.ToString("N0")</span>
+                        </div>
+                        <div class="ac-icon-box"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M9 16l2 2 4-4"></path></svg></div>
+                    </div>
+                    <div class="ac-stat-trend ac-text-green"><span>@_dashboard.Summary.FastPct% of total</span></div>
+                </div>
+
+                <div class="ac-stat-card ac-theme-yellow">
+                    <div class="ac-card-top">
+                        <div class="ac-stat-info">
+                            <span class="ac-stat-title">Normal (3-5 Days)</span>
+                            <span class="ac-stat-value">@_dashboard.Summary.Normal.ToString("N0")</span>
+                        </div>
+                        <div class="ac-icon-box"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></div>
+                    </div>
+                    <div class="ac-stat-trend ac-text-yellow"><span>@_dashboard.Summary.NormalPct% of total</span></div>
+                </div>
+
+                <div class="ac-stat-card ac-theme-orange">
+                    <div class="ac-card-top">
+                        <div class="ac-stat-info">
+                            <span class="ac-stat-title">Delayed (6-10 Days)</span>
+                            <span class="ac-stat-value">@_dashboard.Summary.Delayed.ToString("N0")</span>
+                        </div>
+                        <div class="ac-icon-box"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></div>
+                    </div>
+                    <div class="ac-stat-trend ac-text-orange"><span>@_dashboard.Summary.DelayedPct% of total</span></div>
+                </div>
+
+                <div class="ac-stat-card ac-theme-red">
+                    <div class="ac-card-top">
+                        <div class="ac-stat-info">
+                            <span class="ac-stat-title">Critical (&gt; 10 Days)</span>
+                            <span class="ac-stat-value">@_dashboard.Summary.Critical.ToString("N0")</span>
+                        </div>
+                        <div class="ac-icon-box"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></div>
+                    </div>
+                    <div class="ac-stat-trend ac-text-red"><span>@_dashboard.Summary.CriticalPct% of total</span></div>
+                </div>
+            </div>
+
+            <!-- Toolbar: single group-by control — one active at a time, click regroups both charts -->
+            <div class="ac-chart-toolbar">
+                <div class="ac-seg-group">
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "State", false)" @onclick='() => SetGroupBy("State")'>State</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "Region", false)" @onclick='() => SetGroupBy("Region")'>Region</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "HeadQuarter", false)" @onclick='() => SetGroupBy("HeadQuarter")'>Head Quarters</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "District", false)" @onclick='() => SetGroupBy("District")'>District</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "SubDistrict", false)" @onclick='() => SetGroupBy("SubDistrict")'>Sub District</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "Product", false)" @onclick='() => SetGroupBy("Product")'>Product</button>
+                    <button type="button" style="@SegStyle(_filter.GroupBy, "Dealer", false)" @onclick='() => SetGroupBy("Dealer")'>Dealer Name</button>
+                </div>
+            </div>
+
+            <!-- Top 5 lists -->
+            <div class="ac-top-charts-grid">
+
+                <div class="ac-chart-card">
+                    <div style="margin-bottom: 24px;">
+                        <h3 style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 4px 0;">Top 5 Fast Performing @GroupByPlural by Fast Rate</h3>
+                        <p style="font-size: 13px; color: #64748b; margin: 0;">Based on Fast (0-2 Days) Total Transaction</p>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 20px;">
+                        @if (_dashboard.TopFastStates.Count == 0)
+                        {
+                            <div style="font-size:13px; color:#94a3b8;">No data for the current filters.</div>
+                        }
+                        @foreach (var (s, i) in _dashboard.TopFastStates.Select((s, i) => (s, i)))
+                        {
+                            <div class="ac-chart-row">
+                                <div class="ac-rank-circle">@(i + 1)</div>
+                                <div title="@s.Label" style="width: 80px; font-size: 13px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;">@s.Label</div>
+                                <div style="flex-grow: 1; height: 16px; background: #f1f5f9; border-radius: 4px; position: relative;">
+                                    <div style="position: absolute; left: 0; top: 0; height: 100%; width: @(s.Rate.ToString("0.##", Inv))%; background: #34d399; border-radius: 4px;"></div>
+                                </div>
+                                <div style="width: 42px; text-align: right; font-size: 13px; font-weight: 600; color: #334155; flex-shrink: 0;">@s.Rate%</div>
+                                <div class="ac-row-tooltip">
+                                    <div style="font-weight: 600; color: #16a34a; margin-bottom: 12px; font-size: 13px;">@s.Label</div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Total Transaction</span><span style="color:#1e293b; font-weight:500;">@s.Total.ToString("N0")</span></div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Fast (0-2 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Fast.ToString("N0")</span></div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Normal (3-5 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Normal.ToString("N0")</span></div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Delayed (6-10 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Delayed.ToString("N0")</span></div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px;"><span>Critical (&gt;10 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Critical.ToString("N0")</span></div>
+                                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569; font-weight: 500;"><span>Fast Rate</span><span style="color:#1e293b; font-weight:600;">@s.Rate%</span></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-left: 120px; margin-right: 51px; margin-top: 16px; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+                        <span>0%</span><span>20%</span><span>40%</span><span>60%</span><span>80%</span><span>100%</span>
+                    </div>
+                </div>
+
+                <div class="ac-chart-card">
+                    <div style="margin-bottom: 24px;">
+                        <h3 style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 4px 0;">Top 5 Delayed @GroupByPlural by Delay Rate</h3>
+                        <p style="font-size: 13px; color: #64748b; margin: 0;">Based on Delayed (6-10 Days) + Critical (&gt;10 Days) Transactions</p>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 20px;">
+                        @if (_dashboard.TopDelayedStates.Count == 0)
+                        {
+                            <div style="font-size:13px; color:#94a3b8;">No data for the current filters.</div>
+                        }
+                        @foreach (var (s, i) in _dashboard.TopDelayedStates.Select((s, i) => (s, i)))
+                        {
+                            <div class="ac-chart-row">
+                                <div class="ac-rank-circle">@(i + 1)</div>
+                                <div title="@s.Label" style="width: 80px; font-size: 13px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;">@s.Label</div>
+                                <div style="flex-grow: 1; height: 16px; background: #f1f5f9; border-radius: 4px; position: relative;">
+                                    <div style="position: absolute; left: 0; top: 0; height: 100%; width: @(s.Rate.ToString("0.##", Inv))%; background: #f87171; border-radius: 4px;"></div>
+                                </div>
+                                <div style="width: 42px; text-align: right; font-size: 13px; font-weight: 600; color: #334155; flex-shrink: 0;">@s.Rate%</div>
+                                <div class="ac-row-tooltip">
+                                    <div style="font-weight: 600; color: #dc2626; margin-bottom: 12px; font-size: 13px;">@s.Label</div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Total Transaction</span><span style="color:#1e293b; font-weight:500;">@s.Total.ToString("N0")</span></div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Fast (0-2 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Fast.ToString("N0")</span></div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Normal (3-5 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Normal.ToString("N0")</span></div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #64748b;"><span>Delayed (6-10 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Delayed.ToString("N0")</span></div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px;"><span>Critical (&gt;10 Days)</span><span style="color:#1e293b; font-weight:500;">@s.Critical.ToString("N0")</span></div>
+                                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569; font-weight: 500;"><span>Delay Rate</span><span style="color:#1e293b; font-weight:600;">@s.Rate%</span></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-left: 120px; margin-right: 51px; margin-top: 16px; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+                        <span>0%</span><span>20%</span><span>40%</span><span>60%</span><span>80%</span><span>100%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="ac-table-card">
+                <div class="ac-table-top">
+                    <h3>Acknowledgement Cycle List</h3>
+                    <input type="text" class="ac-search-input" placeholder="Search dealer, product, invoice..."
+                           @bind="_filter.Search" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+                </div>
+
+                <div class="ac-table-wrapper">
+                    <table class="ac-main-table">
+                        <thead>
+                            <tr>
+                                <th style="width:60px;">S.No</th>
+                                <th class="ac-sortable" style="text-align:left;" @onclick='() => Sort("dealer")'>Dealer Name</th>
+                                <th class="ac-sortable" @onclick='() => Sort("product")'>Product</th>
+                                <th class="ac-sortable" @onclick='() => Sort("invoiceno")'>Invoice No.</th>
+                                <th class="ac-sortable" @onclick='() => Sort("invoicedate")'>Invoice Date</th>
+                                <th class="ac-sortable" @onclick='() => Sort("receiptdate")'>Receipt Date</th>
+                                <th class="ac-sortable" @onclick='() => Sort("cycledays")'>Ack Cycle (Days)</th>
+                                <th class="ac-sortable" @onclick='() => Sort("status")'>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_dashboard.Grid.Items.Count == 0)
+                            {
+                                <tr><td colspan="9" style="text-align:center; padding:24px; color:#94a3b8;">No acknowledged transactions found.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _dashboard.Grid.Items)
+                                {
+                                    <tr>
+                                        <td>@row.SNo</td>
+                                        <td style="text-align:left; color:#475569; font-weight:500;">@row.DealerName</td>
+                                        <td>@row.ProductName</td>
+                                        <td>@row.InvoiceNo</td>
+                                        <td>@(row.InvoiceDate?.ToString("dd-MM-yyyy") ?? "-")</td>
+                                        <td>@(row.ReceiptDate?.ToString("dd-MM-yyyy") ?? "-")</td>
+                                        <td class="@CycleTextClass(row.Bucket)">@row.CycleDays</td>
+                                        <td><div class="ac-status @StatusClass(row.Bucket)"><div class="dot"></div>@row.Bucket</div></td>
+                                        <td>
+                                            <button type="button" class="ac-action-btn" @onclick="() => OpenAcknowledgementDetails(row)">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="ac-pagination">
+                    <div class="ac-page-size">
+                        <span>Items Per Page</span>
+                        <select class="ac-form-select" style="padding:6px 32px 6px 12px; width:70px; margin:0;" @onchange="OnPageSizeChanged">
+                            <option value="16" selected="@(_filter.PageSize == 16)">16</option>
+                            <option value="25" selected="@(_filter.PageSize == 25)">25</option>
+                            <option value="50" selected="@(_filter.PageSize == 50)">50</option>
+                            <option value="100" selected="@(_filter.PageSize == 100)">100</option>
+                        </select>
+                    </div>
+                    <div class="ac-page-controls">
+                        <button type="button" class="ac-page-btn" disabled="@(_filter.Page <= 1)" @onclick="() => GoToPage(_filter.Page - 1)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        </button>
+                        @foreach (var pg in PageNumbers())
+                        {
+                            if (pg == -1)
+                            {
+                                <button type="button" class="ac-page-btn dots" disabled>..</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="ac-page-btn @(pg == _filter.Page ? "active" : "")" @onclick="() => GoToPage(pg)">@pg</button>
+                            }
+                        }
+                        <button type="button" class="ac-page-btn" disabled="@(_filter.Page >= TotalPages)" @onclick="() => GoToPage(_filter.Page + 1)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
+    }
 </div>
 
-<AcknowledgementDetailsDrawer @bind-IsOpen="isAcknowledgementDetailsOpen" />
+<AcknowledgementDetailsDrawer @bind-IsOpen="isAcknowledgementDetailsOpen" Row="_selectedRow" />
 
 @code {
-    private bool isAcknowledgementDetailsOpen = false;
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    private void OpenAcknowledgementDetails()
+    private AckCycleDashboardDto? _dashboard;
+    private readonly AckCycleFilter _filter = new();
+    private bool _isLoading = true;
+    private string? _loadError;
+    private CancellationTokenSource? _loadCts;
+    private System.Timers.Timer? _searchDebounce;
+
+    private bool isAcknowledgementDetailsOpen = false;
+    private AckCycleRowDto? _selectedRow;
+
+    // Date range (bound to the two date inputs)
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+
+    private int TotalPages => _dashboard is null || _dashboard.Grid.PageSize == 0
+        ? 1 : (int)Math.Ceiling((double)_dashboard.Grid.TotalCount / _dashboard.Grid.PageSize);
+
+    // ---- Master data ----
+    private List<LocationDto> _allStates = new(), _allRegions = new(), _allHqs = new(), _allDistricts = new(), _allSubDistricts = new();
+    private List<LocationDto> _states = new(), _regions = new(), _hq = new(), _districts = new(), _subDistricts = new();
+    private List<LocationDto> _products = new();
+    private List<AckLookupItemDto> _dealers = new();
+    private List<AckLookupItemDto> _statuses = new();
+
+    private List<int> _selStates = new(), _selRegions = new(), _selHqs = new(), _selDistricts = new(), _selSubDistricts = new(), _selProducts = new();
+    private List<string> _selDealerKeys = new();   // "R{id}" / "I{id}"
+    private List<string> _selStatuses = new();      // status id as string
+    private List<string> _selBuckets = new();       // Fast/Normal/Delayed/Critical
+
+    private DotNetObjectReference<Acknowledgement>? _objRef;
+
+    public class LocationDto
     {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public int? StateId { get; set; }
+        public int? RegionId { get; set; }
+        public int? DistrictId { get; set; }
+    }
+
+    // ---- Lifecycle ----
+    private bool _masterDataLoaded;
+    private bool _select2Initialized;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Start dashboard and master-data requests together. This lets the full
+        // lower-page skeleton render immediately instead of showing a blank gap.
+        _isLoading = true;
+        _loadError = null;
+
+        var dashboardTask = LoadDashboard(renderLoadingState: false);
+
+        try
+        {
+            await LoadMasterData();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Ack] master: {ex}");
+        }
+        finally
+        {
+            // Render all option elements; Select2 is attached after this render.
+            _masterDataLoaded = true;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        await dashboardTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_masterDataLoaded || _select2Initialized)
+            return;
+
+        _select2Initialized = true;
+
+        try
+        {
+            _objRef ??= DotNetObjectReference.Create(this);
+            await InitSelect2();
+        }
+        catch (Exception ex)
+        {
+            // Permit a later render to retry if Select2 was not ready yet.
+            _select2Initialized = false;
+            Console.WriteLine($"[Ack] select2: {ex}");
+        }
+    }
+
+    private async Task LoadMasterData()
+    {
+        var statesTask = FetchData("api/State/all");
+        var regionsTask = FetchData("api/Region/all");
+        var hqTask = FetchData("api/Headquarter/all");
+        var districtsTask = FetchData("api/District/all");
+        var subDistrictsTask = FetchData("api/SubDistrict/all");
+        var productsTask = FetchData("api/Product/all");
+        var dealersTask = FetchLookup("api/AckCycle/dealers");
+        var statusesTask = FetchLookup("api/AckCycle/statuses");
+
+        await Task.WhenAll(statesTask, regionsTask, hqTask, districtsTask, subDistrictsTask, productsTask, dealersTask, statusesTask);
+
+        _allStates = statesTask.Result; _allRegions = regionsTask.Result; _allHqs = hqTask.Result;
+        _allDistricts = districtsTask.Result; _allSubDistricts = subDistrictsTask.Result;
+
+        // Enrich HQ/SubDistrict with their StateId for the cascade (same as AgeingReport).
+        foreach (var hq in _allHqs) { var p = _allRegions.FirstOrDefault(r => r.Id == hq.RegionId); if (p != null) hq.StateId = p.StateId; }
+        foreach (var sd in _allSubDistricts) { var p = _allDistricts.FirstOrDefault(d => d.Id == sd.DistrictId); if (p != null) sd.StateId = p.StateId; }
+
+        // Apply role-based visibility same as DealerRegistration
+        if (LoginState != null && !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP))
+        {
+            if (LoginState.IsHQRole && LoginState.HQId > 0)
+            {
+                _hq = _allHqs.Where(h => h.Id == LoginState.HQId).ToList();
+                var regionId = _allHqs.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionId ?? LoginState.RegionId;
+                if (regionId > 0) _regions = _allRegions.Where(r => r.Id == regionId).ToList();
+                var stateId = _allRegions.FirstOrDefault(r => r.Id == regionId)?.StateId ?? LoginState.StateId;
+                if (stateId > 0) _states = _allStates.Where(s => s.Id == stateId).ToList();
+            }
+            else if (LoginState.IsRegionRole && LoginState.RegionId > 0)
+            {
+                _regions = _allRegions.Where(r => r.Id == LoginState.RegionId).ToList();
+                var stateId = _allRegions.FirstOrDefault(r => r.Id == LoginState.RegionId)?.StateId ?? LoginState.StateId;
+                if (stateId > 0) _states = _allStates.Where(s => s.Id == stateId).ToList();
+                _hq = _allHqs.Where(h => h.RegionId == LoginState.RegionId).ToList();
+            }
+            else if (LoginState.IsStateRole && LoginState.StateId > 0)
+            {
+                _states = _allStates.Where(s => s.Id == LoginState.StateId).ToList();
+                _regions = _allRegions.Where(r => r.StateId == LoginState.StateId).ToList();
+                _hq = _allHqs.Where(h => h.StateId == LoginState.StateId).ToList();
+                _districts = _allDistricts.Where(d => d.StateId == LoginState.StateId).ToList();
+                _subDistricts = _allSubDistricts.Where(sd => sd.StateId == LoginState.StateId).ToList();
+            }
+            else
+            {
+                _states = _allStates; _regions = _allRegions; _hq = _allHqs; _districts = _allDistricts; _subDistricts = _allSubDistricts;
+            }
+        }
+        else
+        {
+            _states = _allStates; _regions = _allRegions; _hq = _allHqs; _districts = _allDistricts; _subDistricts = _allSubDistricts;
+        }
+        _products = productsTask.Result;
+        _dealers = dealersTask.Result;
+        _statuses = statusesTask.Result;
+    }
+
+    // ---- Dashboard ----
+    private async Task LoadDashboard(bool renderLoadingState = true)
+    {
+        // Cancel any superseded request. The superseded request disposes its own CTS.
+        _loadCts?.Cancel();
+
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        _loadCts = cts;
+        var token = cts.Token;
+
+        _isLoading = true;
+        _loadError = null;
+
+        if (renderLoadingState)
+            await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/AckCycle/dashboard", _filter, token);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var dashboard = await response.Content.ReadFromJsonAsync<AckCycleDashboardDto>(cancellationToken: token);
+
+                if (dashboard is null)
+                {
+                    if (_dashboard is null)
+                        _loadError = "The server returned an empty dashboard response.";
+                }
+                else
+                {
+                    _dashboard = dashboard;
+                }
+            }
+            else
+            {
+                // Keep the previous successful dashboard visible if a refresh fails.
+                _loadError = $"Server returned {(int)response.StatusCode} {response.ReasonPhrase}.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer request owns the UI, so this request must finish silently.
+            if (!ReferenceEquals(_loadCts, cts))
+                return;
+
+            _loadError = "Request timed out - the server took too long to respond.";
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+        finally
+        {
+            var isCurrentRequest = ReferenceEquals(_loadCts, cts);
+
+            if (isCurrentRequest)
+            {
+                _isLoading = false;
+                _loadCts = null;
+                await InvokeAsync(StateHasChanged);
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    private void SyncSelectionsToFilter()
+    {
+        // The geography cascade resolves region/HQ/subdistrict picks down into
+        // _selStates / _selDistricts, which is all the sales tables can filter on.
+        _filter.StateIds    = _selStates.ToList();
+        _filter.DistrictIds = _selDistricts.ToList();
+        _filter.ProductIds  = _selProducts.ToList();
+        _filter.StatusIds   = _selStatuses.Select(s => int.TryParse(s, out var n) ? n : 0).Where(n => n > 0).ToList();
+        _filter.DealerKeys  = _selDealerKeys.ToList();
+        _filter.Buckets     = _selBuckets.ToList();
+        _filter.DateFrom    = _dateFrom;
+        _filter.DateTo      = _dateTo;
+    }
+
+    private async Task ApplyFilters() { SyncSelectionsToFilter(); _filter.Page = 1; await LoadDashboard(); }
+    private async Task RefreshData() => await LoadDashboard();
+
+    // ---- Shared chart toolbar: channel (All/Company/Wholesaler) + view-by grouping ----
+    private string SegStyle(string? current, string val, bool nullIsAll)
+    {
+        var cur = nullIsAll && string.IsNullOrWhiteSpace(current) ? "All" : (current ?? "");
+        var active = cur == val;
+        const string basis = "border:none; cursor:pointer; font-size:12px; padding:6px 14px; border-radius:6px; transition:.15s; white-space:nowrap;";
+        return active
+            ? basis + "background:#ffffff; color:#1e293b; font-weight:600; box-shadow:0 1px 2px rgba(15,23,42,0.12);"
+            : basis + "background:transparent; color:#64748b; font-weight:500;";
+    }
+
+    private async Task SetSource(string source)
+    {
+        var val = source == "All" ? null : source;
+        if (_filter.Source == val) return;
+        _filter.Source = val;
+        _filter.Page = 1;
+        await LoadDashboard();
+    }
+
+    // View-By grouping for the two Top-5 charts. Only affects the charts, so no page reset.
+    private async Task SetGroupBy(string groupBy)
+    {
+        if (_filter.GroupBy == groupBy) return;
+        _filter.GroupBy = groupBy;
+        await LoadDashboard();
+    }
+
+    // Plural chart-title label matching the selected grouping.
+    private string GroupByPlural => _filter.GroupBy switch
+    {
+        "Region" => "Regions",
+        "HeadQuarter" => "Head Quarters",
+        "District" => "Districts",
+        "SubDistrict" => "Sub Districts",
+        "Product" => "Products",
+        "Dealer" => "Dealers",
+        _ => "States"
+    };
+
+    private async Task ClearAll()
+    {
+        _selStates.Clear(); _selRegions.Clear(); _selHqs.Clear(); _selDistricts.Clear(); _selSubDistricts.Clear();
+        _selProducts.Clear(); _selDealerKeys.Clear(); _selStatuses.Clear(); _selBuckets.Clear();
+        _dateFrom = _dateTo = null;
+        _filter.Source = null;
+        _filter.GroupBy = "State";
+        _states = _allStates; _regions = _allRegions; _hq = _allHqs; _districts = _allDistricts; _subDistricts = _allSubDistricts;
+        SyncSelectionsToFilter(); _filter.Search = null; _filter.Page = 1;
+        await InvokeAsync(StateHasChanged);
+        await RefreshAllSelect2();
+        await LoadDashboard();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || page > TotalPages || page == _filter.Page) return;
+        _filter.Page = page; await LoadDashboard();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var size)) { _filter.PageSize = size; _filter.Page = 1; await LoadDashboard(); }
+    }
+
+    private async Task Sort(string column)
+    {
+        if (_filter.SortColumn == column) _filter.SortDesc = !_filter.SortDesc;
+        else { _filter.SortColumn = column; _filter.SortDesc = false; }
+        await LoadDashboard();
+    }
+
+    private void OnSearchKeyUp()
+    {
+        _searchDebounce?.Stop();
+        _searchDebounce?.Dispose();
+        _searchDebounce = new System.Timers.Timer(400) { AutoReset = false };
+        _searchDebounce.Elapsed += async (_, _) =>
+        {
+            await InvokeAsync(async () =>
+            {
+                _filter.Page = 1;
+                await LoadDashboard();
+            });
+        };
+        _searchDebounce.Start();
+    }
+
+    private IEnumerable<int> PageNumbers()
+    {
+        int total = TotalPages, current = _filter.Page;
+        if (total <= 7) { for (int i = 1; i <= total; i++) yield return i; yield break; }
+        yield return 1;
+        if (current > 4) yield return -1;
+        for (int i = Math.Max(2, current - 1); i <= Math.Min(total - 1, current + 1); i++) yield return i;
+        if (current < total - 3) yield return -1;
+        yield return total;
+    }
+
+    private string StatusClass(string bucket) => bucket switch
+    {
+        "Fast" => "ac-st-green",
+        "Normal" => "ac-st-yellow",
+        "Delayed" => "ac-st-orange",
+        "Critical" => "ac-st-red",
+        _ => "ac-st-green"
+    };
+
+    private string CycleTextClass(string bucket) => bucket switch
+    {
+        "Fast" => "ac-txt-green",
+        "Normal" => "ac-txt-yellow",
+        "Delayed" => "ac-txt-orange",
+        "Critical" => "ac-txt-red",
+        _ => "ac-txt-green"
+    };
+
+    private void OpenAcknowledgementDetails(AckCycleRowDto row)
+    {
+        _selectedRow = row;
         isAcknowledgementDetailsOpen = true;
+        StateHasChanged();
+    }
+
+    private async Task ExportExcel() { SyncSelectionsToFilter(); await JS.InvokeVoidAsync("spicDownload.post", "api/AckCycle/export/excel", _filter, "AcknowledgementCycle.xlsx"); }
+    private async Task ExportPdf() { SyncSelectionsToFilter(); await JS.InvokeVoidAsync("spicDownload.post", "api/AckCycle/export/pdf", _filter, "AcknowledgementCycle.pdf"); }
+    private async Task SendMail() { SyncSelectionsToFilter(); await Http.PostAsJsonAsync("api/AckCycle/send-mail", _filter); }
+
+    // ==========================================================
+    //  Select2
+    // ==========================================================
+    private async Task InitSelect2()
+    {
+        var configs = new[]
+        {
+            new { id = "ac-state-select",       method = nameof(OnStateChanged) },
+            new { id = "ac-region-select",      method = nameof(OnRegionChanged) },
+            new { id = "ac-hq-select",          method = nameof(OnHqChanged) },
+            new { id = "ac-district-select",    method = nameof(OnDistrictChanged) },
+            new { id = "ac-subdistrict-select", method = nameof(OnSubDistrictChanged) },
+            new { id = "ac-product-select",     method = nameof(OnProductChanged) },
+            new { id = "ac-dealer-select",      method = nameof(OnDealerChanged) },
+            new { id = "ac-status-select",      method = nameof(OnStatusChanged) },
+            new { id = "ac-bucket-select",      method = nameof(OnBucketChanged) }
+        };
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    private static List<int> ParseIntValues(IEnumerable<string>? values) =>
+        values?
+            .Select(value => int.TryParse(value, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList() ?? new List<int>();
+
+    private static List<string> NormalizeStringValues(IEnumerable<string>? values) =>
+        values?
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<string>();
+
+    [JSInvokable]
+    public async Task OnStateChanged(List<string>? values)
+    {
+        var selected = ParseIntValues(values);
+        if (_selStates.SequenceEqual(selected)) return;
+        _selStates = selected;
+        await Cascade("State");
+    }
+
+    [JSInvokable]
+    public async Task OnRegionChanged(List<string>? values)
+    {
+        var selected = ParseIntValues(values);
+        if (_selRegions.SequenceEqual(selected)) return;
+        _selRegions = selected;
+        await Cascade("Region");
+    }
+
+    [JSInvokable]
+    public async Task OnHqChanged(List<string>? values)
+    {
+        var selected = ParseIntValues(values);
+        if (_selHqs.SequenceEqual(selected)) return;
+        _selHqs = selected;
+        await Cascade("HQ");
+    }
+
+    [JSInvokable]
+    public async Task OnDistrictChanged(List<string>? values)
+    {
+        var selected = ParseIntValues(values);
+        if (_selDistricts.SequenceEqual(selected)) return;
+        _selDistricts = selected;
+        await Cascade("District");
+    }
+
+    [JSInvokable]
+    public async Task OnSubDistrictChanged(List<string>? values)
+    {
+        var selected = ParseIntValues(values);
+        if (_selSubDistricts.SequenceEqual(selected)) return;
+        _selSubDistricts = selected;
+        await Cascade("SubDistrict");
+    }
+
+    [JSInvokable]
+    public void OnProductChanged(List<string>? values)
+    {
+        _selProducts = ParseIntValues(values);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnDealerChanged(List<string>? values)
+    {
+        _selDealerKeys = NormalizeStringValues(values);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnStatusChanged(List<string>? values)
+    {
+        _selStatuses = NormalizeStringValues(values);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnBucketChanged(List<string>? values)
+    {
+        _selBuckets = NormalizeStringValues(values);
+        StateHasChanged();
+    }
+
+    private async Task Cascade(string filterType)
+    {
+        if (filterType == "State" && _selStates.Any())
+        {
+            _selRegions.RemoveAll(id => { var r = _allRegions.FirstOrDefault(x => x.Id == id); return r == null || !_selStates.Contains(r.StateId ?? 0); });
+            _selHqs.RemoveAll(id => { var h = _allHqs.FirstOrDefault(x => x.Id == id); return h == null || !_selStates.Contains(h.StateId ?? 0); });
+            _selDistricts.RemoveAll(id => { var d = _allDistricts.FirstOrDefault(x => x.Id == id); return d == null || !_selStates.Contains(d.StateId ?? 0); });
+            _selSubDistricts.RemoveAll(id => { var sd = _allSubDistricts.FirstOrDefault(x => x.Id == id); return sd == null || !_selStates.Contains(sd.StateId ?? 0); });
+        }
+        else if (filterType == "Region" && _selRegions.Any())
+        {
+            _selStates = _selStates.Union(_allRegions.Where(r => _selRegions.Contains(r.Id) && r.StateId.HasValue).Select(r => r.StateId!.Value)).Distinct().ToList();
+            _selHqs.RemoveAll(id => { var h = _allHqs.FirstOrDefault(x => x.Id == id); return h == null || !_selRegions.Contains(h.RegionId ?? 0); });
+            _selDistricts.RemoveAll(id => { var d = _allDistricts.FirstOrDefault(x => x.Id == id); return d == null || !_selStates.Contains(d.StateId ?? 0); });
+            _selSubDistricts.RemoveAll(id => { var sd = _allSubDistricts.FirstOrDefault(x => x.Id == id); return sd == null || !_selStates.Contains(sd.StateId ?? 0); });
+        }
+        else if (filterType == "HQ" && _selHqs.Any())
+        {
+            _selRegions = _selRegions.Union(_allHqs.Where(h => _selHqs.Contains(h.Id) && h.RegionId.HasValue).Select(h => h.RegionId!.Value)).Distinct().ToList();
+            _selStates = _selStates.Union(_allHqs.Where(h => _selHqs.Contains(h.Id) && h.StateId.HasValue).Select(h => h.StateId!.Value)).Distinct().ToList();
+        }
+        else if (filterType == "District" && _selDistricts.Any())
+        {
+            _selStates = _selStates.Union(_allDistricts.Where(d => _selDistricts.Contains(d.Id) && d.StateId.HasValue).Select(d => d.StateId!.Value)).Distinct().ToList();
+            _selSubDistricts.RemoveAll(id => { var sd = _allSubDistricts.FirstOrDefault(x => x.Id == id); return sd == null || !_selDistricts.Contains(sd.DistrictId ?? 0); });
+        }
+        else if (filterType == "SubDistrict" && _selSubDistricts.Any())
+        {
+            _selDistricts = _selDistricts.Union(_allSubDistricts.Where(sd => _selSubDistricts.Contains(sd.Id) && sd.DistrictId.HasValue).Select(sd => sd.DistrictId!.Value)).Distinct().ToList();
+            _selStates = _selStates.Union(_allSubDistricts.Where(sd => _selSubDistricts.Contains(sd.Id) && sd.StateId.HasValue).Select(sd => sd.StateId!.Value)).Distinct().ToList();
+        }
+
+        _states = _allStates;
+        _regions = _selStates.Any() ? _allRegions.Where(r => _selStates.Contains(r.StateId ?? 0)).ToList() : _allRegions;
+        _hq = _selRegions.Any() ? _allHqs.Where(h => _selRegions.Contains(h.RegionId ?? 0)).ToList()
+              : (_selStates.Any() ? _allHqs.Where(h => _selStates.Contains(h.StateId ?? 0)).ToList() : _allHqs);
+        _districts = _selStates.Any() ? _allDistricts.Where(d => _selStates.Contains(d.StateId ?? 0)).ToList() : _allDistricts;
+        _subDistricts = _selDistricts.Any() ? _allSubDistricts.Where(sd => _selDistricts.Contains(sd.DistrictId ?? 0)).ToList()
+                        : (_selStates.Any() ? _allSubDistricts.Where(sd => _selStates.Contains(sd.StateId ?? 0)).ToList() : _allSubDistricts);
+
+        StateHasChanged();
+        await RefreshGeoSelect2();
+    }
+
+    // Re-init the 5 geography selects after their option lists change.
+    private async Task RefreshGeoSelect2()
+    {
+        var ids = new[] { "ac-state-select", "ac-region-select", "ac-hq-select", "ac-district-select", "ac-subdistrict-select" };
+        await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", ids);
+        await Task.Delay(50);
+        var configs = new[]
+        {
+            new { id = "ac-state-select",       method = nameof(OnStateChanged) },
+            new { id = "ac-region-select",      method = nameof(OnRegionChanged) },
+            new { id = "ac-hq-select",          method = nameof(OnHqChanged) },
+            new { id = "ac-district-select",    method = nameof(OnDistrictChanged) },
+            new { id = "ac-subdistrict-select", method = nameof(OnSubDistrictChanged) }
+        };
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    // Re-init ALL selects (used by Clear All so the non-geo ones clear visually too).
+    private async Task RefreshAllSelect2()
+    {
+        var ids = new[] { "ac-state-select", "ac-region-select", "ac-hq-select", "ac-district-select",
+                          "ac-subdistrict-select", "ac-product-select", "ac-dealer-select", "ac-status-select", "ac-bucket-select" };
+        await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", ids);
+        await Task.Delay(50);
+        await InitSelect2();
+    }
+
+    // ---- Master-data fetch (int-id lookups: State/Region/HQ/District/SubDistrict/Product) ----
+    private async Task<List<LocationDto>> FetchData(string url)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var raw = await Http.GetFromJsonAsync<List<JsonElement>>(url, cts.Token);
+            var list = new List<LocationDto>();
+            if (raw == null) return list;
+            foreach (var item in raw)
+            {
+                var id = item.GetProperty("id").GetInt32();
+                string name = "";
+                if (item.TryGetProperty("name", out var n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("stateName", out n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("regionName", out n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("headquarterName", out n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("districtName", out n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("subDistrictName", out n)) name = n.GetString() ?? "";
+                else if (item.TryGetProperty("productName", out n)) name = n.GetString() ?? "";
+
+                var dto = new LocationDto { Id = id, Name = name };
+                if (item.TryGetProperty("stateId", out var s) && s.ValueKind == JsonValueKind.Number) dto.StateId = s.GetInt32();
+                if (item.TryGetProperty("regionId", out var r) && r.ValueKind == JsonValueKind.Number) dto.RegionId = r.GetInt32();
+                if (item.TryGetProperty("districtId", out var d) && d.ValueKind == JsonValueKind.Number) dto.DistrictId = d.GetInt32();
+                list.Add(dto);
+            }
+            return list;
+        }
+        catch { return new List<LocationDto>(); }
+    }
+
+    // ---- Lookup fetch (string-id lookups: Dealer keyed "R/I", Status) ----
+    private async Task<List<AckLookupItemDto>> FetchLookup(string url)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            return await Http.GetFromJsonAsync<List<AckLookupItemDto>>(url, cts.Token) ?? new();
+        }
+        catch { return new List<AckLookupItemDto>(); }
+    }
+
+    public void Dispose()
+    {
+        _loadCts?.Cancel(); _loadCts?.Dispose();
+        _searchDebounce?.Dispose();
+        _objRef?.Dispose();
     }
 }

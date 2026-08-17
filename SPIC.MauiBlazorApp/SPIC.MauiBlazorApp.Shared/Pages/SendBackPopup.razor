@@ -2,108 +2,704 @@
 @using DR = SPIC.Core.Entities
 @inject HttpClient Http
 
-
-<div class="modal-backdrop-custom" @onclick="ClosePopup">
-    <div class="modal-content-custom" @onclick:stopPropagation="true"> 
-        
-        <header class="d-flex justify-content-between align-items-start">
-            <div>
-                <h1 class="sb-title">Send Back Application</h1>
-                <div class="sb-subtitle">@ApplicationText</div>
+<div class="sbp-overlay" @onclick="ClosePopup">
+    <div class="sbp-modal" @onclick:stopPropagation="true" role="dialog" aria-modal="true" aria-labelledby="sbp-title">
+        <header class="sbp-header">
+            <div class="sbp-header-copy">
+                <div class="sbp-header-icon" aria-hidden="true">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                </div>
+                <div>
+                    <h1 id="sbp-title" class="sbp-title">Send Back Application</h1>
+                    <p class="sbp-subtitle">Review the correction details before returning this application.</p>
+                </div>
             </div>
-            <button type="button" class="btn-close-custom" @onclick="ClosePopup" aria-label="Close">
-                <i class="bi bi-x" style="font-size: 1.2rem;"></i>
+
+            <button type="button"
+                    class="sbp-close"
+                    @onclick="ClosePopup"
+                    disabled="@IsSubmitting"
+                    aria-label="Close">
+                <i class="bi bi-x-lg"></i>
             </button>
         </header>
 
-        <div class="alert-red">
-            <div class="icon-circle-red">
-                <i class="bi bi-exclamation-circle" style="font-size: 1.1rem; color: #dc2626;"></i>
-            </div>
-            <div>
-                <p class="alert-title-red">This action will send the application back to @GetRoleTargetText()</p>
-                <p class="alert-body-red">Please provide the reason and select sections that require correction.</p>
-            </div>
-        </div>
+        <div class="sbp-body">
+            <section class="sbp-summary-section">
+                <div class="sbp-section-heading">Application Summary</div>
+                <div class="sbp-summary-grid">
+                    <div class="sbp-summary-item">
+                        <span class="sbp-summary-label">Dealer</span>
+                        <span class="sbp-summary-value">@(Dealer?.FirmName ?? "-")</span>
+                    </div>
+                    <div class="sbp-summary-item">
+                        <span class="sbp-summary-label">Dealer Code</span>
+                        <span class="sbp-summary-value">@(Dealer?.DealerCode ?? $"DL-{Dealer?.Id}")</span>
+                    </div>
+                    <div class="sbp-summary-item">
+                        <span class="sbp-summary-label">Action</span>
+                        <span class="sbp-summary-value">Send Back</span>
+                    </div>
+                    <div class="sbp-summary-item">
+                        <span class="sbp-summary-label">Send Back To</span>
+                        <span class="sbp-summary-value">@GetRoleTargetText()</span>
+                    </div>
+                </div>
+            </section>
 
-        <div>
-            <h3 class="section-title mt-0">Reason for sending back</h3>
-            <textarea class="reason-textarea"
-                      placeholder="Please provide the reason and select sections that require correction."
-                      maxlength="500"
-                      rows="4"
-                      @bind="Reason"
-                      @bind:event="oninput">
-            </textarea>
-            <div class="d-flex justify-content-end mt-1">
-                <span class="char-count">@Reason.Length/500</span>
-            </div>
+            <section class="sbp-warning" aria-label="Send back warning">
+                <div class="sbp-warning-icon">
+                    <i class="bi bi-exclamation-triangle"></i>
+                </div>
+                <div>
+                    <div class="sbp-warning-title">Application will be returned for correction</div>
+                    <p class="sbp-warning-text">
+                        This action sends the application back to <strong>@GetRoleTargetText()</strong>.
+                        Provide a clear reason and select the sections that need correction before proceeding.
+                    </p>
+                </div>
+            </section>
+
+            <section class="sbp-form-section">
+                <div class="sbp-section-title-row">
+                    <div>
+                        <div class="sbp-section-heading">Reason for Sending Back</div>
+                        <div class="sbp-section-help">Give a concise explanation so the reviewer knows what must be corrected.</div>
+                    </div>
+                    <span class="sbp-required">Required</span>
+                </div>
+
+                <textarea class="sbp-textarea"
+                          placeholder="Enter the reason for sending this application back..."
+                          maxlength="500"
+                          rows="4"
+                          @bind="Reason"
+                          @bind:event="oninput"
+                          disabled="@IsSubmitting">
+                </textarea>
+
+                <div class="sbp-field-meta">
+                    <span></span>
+                    <span class="sbp-char-count">@Reason.Length / 500</span>
+                </div>
+            </section>
+
+            <section class="sbp-form-section">
+                <div class="sbp-section-title-row">
+                    <div>
+                        <div class="sbp-section-heading">Sections Requiring Correction</div>
+                        <div class="sbp-section-help">Select one or more sections that need to be updated.</div>
+                    </div>
+                    <span class="sbp-selection-count">@SelectedSections.Count selected</span>
+                </div>
+
+                <div class="sbp-corrections-grid">
+                    @foreach (var sec in CorrectionSections)
+                    {
+                        var isSelected = SelectedSections.Contains(sec);
+                        <label class="sbp-correction-card @(isSelected ? "is-selected" : "")">
+                            <input type="checkbox"
+                                   checked="@isSelected"
+                                   @onchange="e => ToggleSection(sec, e)"
+                                   disabled="@IsSubmitting" />
+                            <span class="sbp-check-visual">
+                                <i class="bi bi-check-lg"></i>
+                            </span>
+                            <span class="sbp-correction-label">@sec</span>
+                        </label>
+                    }
+                </div>
+            </section>
+
+            <section class="sbp-form-section">
+                <div class="sbp-section-heading">Priority Level</div>
+                <div class="sbp-section-help">Choose how urgently the correction should be addressed.</div>
+
+                <div class="sbp-priority-grid">
+                    @foreach (var priority in Priorities)
+                    {
+                        var isSelected = Priority == priority;
+                        <label class="sbp-priority-card sbp-priority-@priority.ToLowerInvariant() @(isSelected ? "is-selected" : "")">
+                            <input type="radio"
+                                   name="priority"
+                                   value="@priority"
+                                   checked="@isSelected"
+                                   @onchange="() => Priority = priority"
+                                   disabled="@IsSubmitting" />
+                            <span class="sbp-radio-dot"></span>
+                            <span class="sbp-priority-copy">
+                                <strong>@priority</strong>
+                                <small>@GetPriorityDescription(priority)</small>
+                            </span>
+                        </label>
+                    }
+                </div>
+            </section>
+
             @if (!string.IsNullOrWhiteSpace(ErrorMessage))
             {
-                <div class="text-danger small mt-2 fw-bold">@ErrorMessage</div>
+                <div class="sbp-error" role="alert">
+                    <i class="bi bi-exclamation-circle"></i>
+                    <span>@ErrorMessage</span>
+                </div>
             }
-        </div>
 
-        <div>
-            <h3 class="section-title">What needs to be corrected? (Select all that apply)</h3>
-            <div class="corrections-grid">
-                @foreach (var sec in CorrectionSections)
-                {
-                    bool isSelected = SelectedSections.Contains(sec);
-                    <label class="correction-item @(isSelected ? "selected" : "")">
-                        <input type="checkbox"
-                               class="d-none"
-                               checked="@isSelected"
-                               @onchange="e => ToggleSection(sec, e)" />
-                        <div class="custom-checkbox"></div>
-                        <span class="correction-label">@sec</span>
-                    </label>
-                }
-            </div>
-        </div>
-
-        <div>
-            <h3 class="section-title">Priority Level</h3>
-            <div class="priority-group">
-                @foreach (var priority in Priorities)
-                {
-                    <label class="priority-item">
-                        <input type="radio"
-                               name="priority"
-                               value="@priority"
-                               checked="@(Priority == priority)"
-                               @onchange="() => Priority = priority" />
-                        <span>@priority</span>
-                    </label>
-                }
-            </div>
-        </div>
-
-        <div class="alert-yellow">
-            <div class="icon-circle-yellow">
-                <i class="bi bi-exclamation-circle" style="font-size: 1rem; color: #ca8a04;"></i>
-            </div>
-            <div>
-                <p class="alert-title-yellow">Please Note:</p>
-                <p class="alert-body-yellow">
-                    The application will be moved back to @GetRoleTargetText(). They will be notified to make the required corrections and resubmit.
+            <section class="sbp-note">
+                <div class="sbp-note-icon"><i class="bi bi-info-circle"></i></div>
+                <p>
+                    The application will be moved back to <strong>@GetRoleTargetText()</strong>.
+                    They can make the selected corrections and resubmit it through the existing review flow.
                 </p>
-            </div>
+            </section>
         </div>
 
-        <div class="action-buttons">
-            <button type="button" class="btn-cancel" @onclick="ClosePopup" disabled="@IsSubmitting">
+        <footer class="sbp-footer">
+            <button type="button"
+                    class="sbp-btn sbp-btn-cancel"
+                    @onclick="ClosePopup"
+                    disabled="@IsSubmitting">
                 <i class="bi bi-x-lg"></i>
                 Cancel
             </button>
-            <button type="button" class="btn-send-back" @onclick="RejectDealer" disabled="@IsSubmitting">
-                <i class="bi bi-send"></i>
-                @(IsSubmitting ? "Sending..." : SendBackButtonText())
-            </button>
-        </div>
 
+            <button type="button"
+                    class="sbp-btn sbp-btn-send"
+                    @onclick="RejectDealer"
+                    disabled="@IsSubmitting">
+                @if (IsSubmitting)
+                {
+                    <span class="sbp-spinner" aria-hidden="true"></span>
+                    <span>Sending...</span>
+                }
+                else
+                {
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                    <span>@SendBackButtonText()</span>
+                }
+            </button>
+        </footer>
     </div>
 </div>
+
+<style>
+    .sbp-overlay,
+    .sbp-overlay * {
+        box-sizing: border-box;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .sbp-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        background: rgba(17, 24, 39, 0.46);
+        backdrop-filter: blur(1px);
+    }
+
+    .sbp-modal {
+        width: min(760px, 100%);
+        max-height: min(90vh, 860px);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        box-shadow: 0 24px 70px rgba(17, 24, 39, 0.24);
+    }
+
+    .sbp-header {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 20px 24px 16px;
+        border-bottom: 1px solid #eef0f3;
+        background: #ffffff;
+    }
+
+    .sbp-header-copy {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .sbp-header-icon {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        background: #fff1f2;
+        color: #be123c;
+        font-size: 1rem;
+    }
+
+    .sbp-title {
+        margin: 0;
+        color: #1f2937;
+        font-size: 1.18rem;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+
+    .sbp-subtitle {
+        margin: 4px 0 0;
+        color: #6b7280;
+        font-size: 0.82rem;
+        line-height: 1.45;
+    }
+
+    .sbp-close {
+        width: 34px;
+        height: 34px;
+        flex: 0 0 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 1px solid #e5e7eb;
+        border-radius: 50%;
+        background: #ffffff;
+        color: #9ca3af;
+        cursor: pointer;
+        transition: 0.18s ease;
+    }
+
+    .sbp-close:hover:not(:disabled) {
+        color: #374151;
+        background: #f9fafb;
+        border-color: #d1d5db;
+    }
+
+    .sbp-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 18px 24px 20px;
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 transparent;
+    }
+
+    .sbp-body::-webkit-scrollbar { width: 7px; }
+    .sbp-body::-webkit-scrollbar-track { background: transparent; }
+    .sbp-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+
+    .sbp-summary-section,
+    .sbp-form-section {
+        margin-bottom: 18px;
+    }
+
+    .sbp-section-heading {
+        color: #374151;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.45px;
+    }
+
+    .sbp-section-help {
+        margin-top: 3px;
+        color: #8a94a3;
+        font-size: 0.75rem;
+        line-height: 1.45;
+    }
+
+    .sbp-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 22px;
+        margin-top: 9px;
+        padding: 12px 16px;
+        border-radius: 9px;
+        background: #f8fafc;
+        border: 1px solid #f1f5f9;
+    }
+
+    .sbp-summary-item {
+        display: flex;
+        align-items: baseline;
+        min-width: 0;
+        font-size: 0.81rem;
+        line-height: 1.5;
+    }
+
+    .sbp-summary-label {
+        flex: 0 0 100px;
+        color: #7b8493;
+    }
+
+    .sbp-summary-value {
+        min-width: 0;
+        color: #1f2937;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+
+    .sbp-warning {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 18px;
+        padding: 12px 14px;
+        border: 1px solid #fecdd3;
+        border-radius: 9px;
+        background: #fff7f8;
+    }
+
+    .sbp-warning-icon {
+        width: 30px;
+        height: 30px;
+        flex: 0 0 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: #ffe4e6;
+        color: #be123c;
+        font-size: 0.88rem;
+    }
+
+    .sbp-warning-title {
+        color: #9f1239;
+        font-size: 0.81rem;
+        font-weight: 700;
+        line-height: 1.4;
+    }
+
+    .sbp-warning-text {
+        margin: 3px 0 0;
+        color: #6f3846;
+        font-size: 0.76rem;
+        line-height: 1.5;
+    }
+
+    .sbp-section-title-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 9px;
+    }
+
+    .sbp-required,
+    .sbp-selection-count {
+        flex: 0 0 auto;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .sbp-required {
+        color: #9f1239;
+        background: #fff1f2;
+    }
+
+    .sbp-selection-count {
+        color: #475569;
+        background: #f1f5f9;
+    }
+
+    .sbp-textarea {
+        width: 100%;
+        min-height: 92px;
+        resize: vertical;
+        padding: 11px 12px;
+        border: 1px solid #dbe0e7;
+        border-radius: 7px;
+        outline: none;
+        background: #ffffff;
+        color: #374151;
+        font-size: 0.82rem;
+        line-height: 1.5;
+        transition: border-color .18s ease, box-shadow .18s ease;
+    }
+
+    .sbp-textarea:focus {
+        border-color: #9ca3af;
+        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.12);
+    }
+
+    .sbp-textarea:disabled {
+        background: #f9fafb;
+        cursor: not-allowed;
+    }
+
+    .sbp-field-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 5px;
+    }
+
+    .sbp-char-count {
+        color: #9ca3af;
+        font-size: 0.7rem;
+    }
+
+    .sbp-corrections-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .sbp-correction-card {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-height: 42px;
+        padding: 9px 11px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #ffffff;
+        cursor: pointer;
+        transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+    }
+
+    .sbp-correction-card:hover {
+        border-color: #cbd5e1;
+        background: #fbfdff;
+    }
+
+    .sbp-correction-card.is-selected {
+        border-color: #99d8c9;
+        background: #f2fbf8;
+        box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.04);
+    }
+
+    .sbp-correction-card input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .sbp-check-visual {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 4px;
+        background: #ffffff;
+        color: transparent;
+        font-size: 0.72rem;
+        transition: .16s ease;
+    }
+
+    .sbp-correction-card.is-selected .sbp-check-visual {
+        border-color: #0f766e;
+        background: #0f766e;
+        color: #ffffff;
+    }
+
+    .sbp-correction-label {
+        color: #4b5563;
+        font-size: 0.77rem;
+        font-weight: 500;
+        line-height: 1.35;
+    }
+
+    .sbp-priority-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 9px;
+    }
+
+    .sbp-priority-card {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-height: 54px;
+        padding: 9px 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #ffffff;
+        cursor: pointer;
+        transition: .16s ease;
+    }
+
+    .sbp-priority-card input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .sbp-radio-dot {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 16px;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 50%;
+        background: #ffffff;
+        box-shadow: inset 0 0 0 4px #ffffff;
+        transition: .16s ease;
+    }
+
+    .sbp-priority-card.is-selected {
+        border-color: #cbd5e1;
+        background: #f8fafc;
+    }
+
+    .sbp-priority-high.is-selected { border-color: #fda4af; background: #fff7f8; }
+    .sbp-priority-high.is-selected .sbp-radio-dot { border-color: #e11d48; background: #e11d48; }
+    .sbp-priority-medium.is-selected { border-color: #fcd34d; background: #fffbeb; }
+    .sbp-priority-medium.is-selected .sbp-radio-dot { border-color: #d97706; background: #d97706; }
+    .sbp-priority-low.is-selected { border-color: #93c5fd; background: #eff6ff; }
+    .sbp-priority-low.is-selected .sbp-radio-dot { border-color: #2563eb; background: #2563eb; }
+
+    .sbp-priority-copy {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+    }
+
+    .sbp-priority-copy strong {
+        color: #374151;
+        font-size: 0.76rem;
+        line-height: 1.3;
+    }
+
+    .sbp-priority-copy small {
+        color: #8a94a3;
+        font-size: 0.66rem;
+        line-height: 1.25;
+    }
+
+    .sbp-error {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 14px;
+        padding: 9px 11px;
+        border: 1px solid #fecaca;
+        border-radius: 7px;
+        background: #fef2f2;
+        color: #b91c1c;
+        font-size: 0.77rem;
+        font-weight: 500;
+        line-height: 1.45;
+    }
+
+    .sbp-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid #dbeafe;
+        border-radius: 8px;
+        background: #f7fbff;
+    }
+
+    .sbp-note-icon {
+        color: #3b82f6;
+        font-size: 0.86rem;
+        line-height: 1.3;
+    }
+
+    .sbp-note p {
+        margin: 0;
+        color: #64748b;
+        font-size: 0.73rem;
+        line-height: 1.5;
+    }
+
+    .sbp-footer {
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 12px 24px 16px;
+        border-top: 1px solid #eef0f3;
+        background: #ffffff;
+        box-shadow: 0 -8px 18px rgba(15, 23, 42, 0.025);
+    }
+
+    .sbp-btn {
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 8px 17px;
+        border-radius: 7px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: .18s ease;
+    }
+
+    .sbp-btn:disabled,
+    .sbp-close:disabled {
+        opacity: 0.62;
+        cursor: not-allowed;
+    }
+
+    .sbp-btn-cancel {
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #4b5563;
+    }
+
+    .sbp-btn-cancel:hover:not(:disabled) {
+        background: #f9fafb;
+        color: #1f2937;
+    }
+
+    .sbp-btn-send {
+        border: 1px solid #be123c;
+        background: #be123c;
+        color: #ffffff;
+        box-shadow: 0 1px 2px rgba(190, 18, 60, 0.14);
+    }
+
+    .sbp-btn-send:hover:not(:disabled) {
+        border-color: #9f1239;
+        background: #9f1239;
+    }
+
+    .sbp-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255,255,255,.38);
+        border-top-color: #ffffff;
+        border-radius: 50%;
+        animation: sbp-spin .7s linear infinite;
+    }
+
+    @@keyframes sbp-spin {
+        to { transform: rotate(360deg); }
+    }
+
+    @@media (max-width: 640px) {
+        .sbp-overlay { padding: 10px; }
+        .sbp-modal { max-height: 94vh; border-radius: 11px; }
+        .sbp-header { padding: 16px 16px 13px; }
+        .sbp-body { padding: 15px 16px 18px; }
+        .sbp-footer { padding: 11px 16px 14px; }
+        .sbp-summary-grid,
+        .sbp-corrections-grid,
+        .sbp-priority-grid { grid-template-columns: 1fr; }
+        .sbp-summary-label { flex-basis: 90px; }
+        .sbp-btn { flex: 1; padding-left: 10px; padding-right: 10px; }
+    }
+</style>
 
 @code {
     [Parameter] public DR.DealerRegistration? Dealer { get; set; } = default!;
@@ -136,7 +732,7 @@
         "Enclosures",
         "Retail Fertilizer Details",
         "Sales Performance Review",
-        "Other (Please specify in remarks)"
+        "Other"
     };
 
     private string SendBackButtonText()
@@ -156,14 +752,20 @@
     }
 
     private string ApplicationText =>
-    Dealer == null
-        ? "Dealer Application"
-        : $"{Dealer.DealerCode ?? $"DL-{Dealer.Id}"} - {Dealer.FirmName ?? "Dealer Application"}";
+        Dealer == null
+            ? "Dealer Application"
+            : $"{Dealer.DealerCode ?? $"DL-{Dealer.Id}"} - {Dealer.FirmName ?? "Dealer Application"}";
 
     protected override void OnInitialized()
     {
-        // Removed the pre-populated default values so checkboxes start unchecked.
-        SelectedSections = new HashSet<string>();
+        SelectedSections = new HashSet<string>
+        {
+            "Tax & Compliance",
+            "Ownership Information",
+            "Loan Liabilities",
+            "Primary Location",
+            "Enclosures"
+        };
     }
 
     private void ToggleSection(string section, ChangeEventArgs e)
@@ -230,6 +832,9 @@
                 Dealer.AVPApproved = false;
             }
 
+            // Change this status name according to your enum
+            // Dealer.Status = DR.DealerStatus.SentBack;
+
             var updateResponse = await Http.PutAsJsonAsync(
                 $"api/DealerRegistration/{Dealer.Id}",
                 Dealer
@@ -286,6 +891,14 @@
 
         return null;
     }
+
+    private static string GetPriorityDescription(string priority) => priority switch
+    {
+        "High" => "Needs prompt correction",
+        "Medium" => "Standard follow-up",
+        "Low" => "Minor correction",
+        _ => "Correction priority"
+    };
 
     public class DealerSendBackRequest
     {

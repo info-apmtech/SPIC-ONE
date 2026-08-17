@@ -1,4 +1,4 @@
-﻿@using DealerReg = SPIC.Core.Entities.DealerRegistration
+@using DealerReg = SPIC.Core.Entities.DealerRegistration
 
 <div class="form-card">
     <div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
@@ -46,7 +46,7 @@
                 <div class="info-value">
                     @Dealer.YearsofExperiance years
                     <div style="font-size: 0.85rem; color: #6B7280; margin-top: 4px;">
-                        (in SPIC @* @Dealer.DateOfAppointment.ToString("dd/MM/yyyy") - *@ @GetSpicTenure())
+                        (in @(SelectedCompany == "GreenStar" ? "Greenstar" : "SPIC") @* @Dealer.DateOfAppointment.ToString("dd/MM/yyyy") - *@ @GetTenure())
                     </div>
                 </div>
             </div>
@@ -58,14 +58,25 @@
     [Parameter] public DealerReg Dealer { get; set; } = new();
     [Parameter] public decimal LandTotal { get; set; }
     [Parameter] public decimal BuildingTotal { get; set; }
+    [Parameter] public string SelectedCompany { get; set; } = "SPIC";
 
-    private string GetSpicTenure()
+    private string GetTenure()
     {
-        if (Dealer.DateOfAppointment == default || Dealer.DateOfAppointment > DateTime.Now)
+        DateTime appointmentDate = default;
+        
+        if (SelectedCompany == "GreenStar" && Dealer.GreenstarDateOfAppointment.HasValue)
+        {
+            appointmentDate = Dealer.GreenstarDateOfAppointment.Value;
+        }
+        else
+        {
+            appointmentDate = Dealer.DateOfAppointment;
+        }
+
+        if (appointmentDate == default || appointmentDate > DateTime.Now)
             return "0 days";
 
         var today = DateTime.Now;
-        var appointmentDate = Dealer.DateOfAppointment;
         var totalDays = (today - appointmentDate).Days;
 
         // Calculate years, months, days

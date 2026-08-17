@@ -5,15 +5,17 @@ using Microsoft.AspNetCore.DataProtection;
 using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
-// ✅ ADD THIS HERE
+
 builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(
-        Path.Combine(builder.Environment.ContentRootPath, "keys")))
     .SetApplicationName("SPIC");
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddHubOptions(options =>
+    {
+        options.MaximumReceiveMessageSize = 100 * 1024 * 1024; // 100 MB
+    });
 
 // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
@@ -33,8 +35,8 @@ builder.Services.AddScoped(sp =>
     var handler = sp.GetRequiredService<AuthHttpMessageHandler>();
     handler.InnerHandler = new HttpClientHandler();
     var config = sp.GetRequiredService<IConfiguration>();
-    var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
-    //var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
+   // var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
+    var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
     return new HttpClient(handler)
     {
         BaseAddress = new Uri(baseUrl),

@@ -5,11 +5,11 @@
 @inject LoadingService Loading
 @inject HttpClient Http
 
-@if (CurrentStep is FormStepModel step)
+@if (CurrentStep is FormStepModel)
 {
     <div class="footer-nav">
         <div>
-            @if (CurrentIndex > 0)
+            @if (!_isDashboardCreditLimitMode && CurrentIndex > 0)
             {
                 <button type="button" class="btn btn-prev" @onclick="GoToPrevious">
                     <i class="bi bi-chevron-left"></i>
@@ -19,7 +19,7 @@
         </div>
 
         <div>
-            @if (CurrentIndex < TotalSteps - 1)
+            @if (_isDashboardCreditLimitMode || CurrentIndex < TotalSteps - 1)
             {
                 @if (OnNextClick.HasDelegate)
                 {
@@ -32,21 +32,19 @@
                             <span class="spinner-border spinner-border-sm me-1"></span>
                         }
 
-                        @(NextButtonText ?? "Next")
+                        @(NextButtonText ?? (_isDashboardCreditLimitMode ? "Submit" : "Next"))
                         <i class="bi bi-chevron-right"></i>
                     </button>
                 }
                 else
                 {
-                    <button type="button"
-                            class="btn btn-next"
-                            @onclick="GoToNext">
-                        @(NextButtonText ?? "Next")
+                    <button type="button" class="btn btn-next" @onclick="GoToNext">
+                        @(NextButtonText ?? (_isDashboardCreditLimitMode ? "Submit" : "Next"))
                         <i class="bi bi-chevron-right"></i>
                     </button>
                 }
             }
-            else
+            else if (!HideFinalSubmit)
             {
                 @if (OnNextClick.HasDelegate)
                 {
@@ -67,7 +65,7 @@
                 }
                 else
                 {
-                    <button class="btn btn-next">
+                    <button type="button" class="btn btn-next">
                         <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/SendIcon.svg"
                              class="verifyicon"
                              alt="sendicon" />
@@ -83,9 +81,16 @@
     [Parameter] public EventCallback OnNextClick { get; set; }
     [Parameter] public bool IsNextDisabled { get; set; }
     [Parameter] public string? NextButtonText { get; set; }
+    [Parameter] public bool HideFinalSubmit { get; set; }
 
     private FormStepModel? CurrentStep;
     private List<FormStepModel> VisibleSteps = new();
+    private string _queryString = string.Empty;
+    private bool _hasGreenStar;
+    private bool _isRestrictedFlow;
+    private bool _isNewDealerFlow;
+    private bool _isExistingMaintenanceFlow;
+    private bool _isDashboardCreditLimitMode;
 
     private int TotalSteps => VisibleSteps.Count;
 
@@ -93,7 +98,7 @@
     {
         get
         {
-            if (CurrentStep is null)
+            if (CurrentStep == null)
                 return 0;
 
             var idx = VisibleSteps.FindIndex(x =>
@@ -103,125 +108,110 @@
         }
     }
 
-    private string _queryString = string.Empty;
-    private bool _hasGreenStar;
-    private bool _isRestrictedFlow;
-
     protected override async Task OnInitializedAsync()
     {
         LoadQueryString();
         SetCurrentStep();
-        _isRestrictedFlow = GetFlowRestricted();
+
+        var urlFlow = GetFlowValue();
+        var statusRestricted = false;
+        var queryValues = GetQueryValues();
+
+        _isRestrictedFlow = string.Equals(urlFlow, "restricted", StringComparison.OrdinalIgnoreCase);
+        _isExistingMaintenanceFlow = string.Equals(urlFlow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
+        _isNewDealerFlow = string.Equals(urlFlow, "new", StringComparison.OrdinalIgnoreCase);
+        _isDashboardCreditLimitMode = queryValues.TryGetValue("source", out var source) &&
+            string.Equals(source, "dashboard", StringComparison.OrdinalIgnoreCase);
 
         var dealerId = GetDealerIdFromQuery();
-
         if (dealerId > 0)
         {
             try
             {
                 var dealer = await Http.GetFromJsonAsync<DealerRegistration>($"api/DealerRegistration/{dealerId}");
                 _hasGreenStar = dealer?.InGreenStar ?? false;
+
+                if (dealer != null)
+                {
+                    var approvedNewDealerMaintenance =
+                        !_isDashboardCreditLimitMode &&
+                        !_isNewDealerFlow &&
+                        dealer.IsNewDealerRegistration &&
+                        dealer.AVPApproved == true &&
+                        !string.IsNullOrWhiteSpace(dealer.DealerCode);
+
+                    if (!_isExistingMaintenanceFlow && approvedNewDealerMaintenance)
+                        _isExistingMaintenanceFlow = true;
+
+                    if (!_isExistingMaintenanceFlow)
+                        _isNewDealerFlow = _isNewDealerFlow || dealer.IsNewDealerRegistration;
+
+                    statusRestricted = dealer.Status == DealerStatus.Terminated ||
+                        (dealer.Status == DealerStatus.InActive &&
+                         dealer.InactiveProposal == FutureBusinessProposal.Terminated);
+                }
             }
             catch
             {
                 _hasGreenStar = false;
             }
         }
-        else
-        {
-            // Create mode / no dealerId
-            // Default should be 12 steps
-            _hasGreenStar = false;
-        }
 
+        _isRestrictedFlow = _isRestrictedFlow || statusRestricted;
+        _queryString = EnsureFlowParameter(_queryString);
         VisibleSteps = FormStepData.GetVisibleSteps(_hasGreenStar, _isRestrictedFlow);
     }
 
-    private bool GetFlowRestricted()
+    private string? GetFlowValue()
     {
-        var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
-        var qIndex = baseRelative.IndexOf('?');
-
-        if (qIndex < 0)
-            return false;
-
-        var queryString = baseRelative[(qIndex + 1)..];
-
-        var parts = queryString.Split('&')
-            .Select(p => p.Split('=', 2))
-            .Where(p => p.Length == 2)
-            .ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
-
-        return parts.TryGetValue("flow", out var flow) &&
-            string.Equals(flow, "restricted", StringComparison.OrdinalIgnoreCase);
+        var values = GetQueryValues();
+        return values.TryGetValue("flow", out var flow) ? flow : null;
     }
 
     private void LoadQueryString()
     {
         var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
         var qIndex = baseRelative.IndexOf('?');
-
-        _queryString = qIndex >= 0
-            ? baseRelative[qIndex..]
-            : string.Empty;
+        _queryString = qIndex >= 0 ? baseRelative[qIndex..] : string.Empty;
     }
 
     private void SetCurrentStep()
     {
         var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
         var relativePath = "/" + baseRelative.Split('?')[0];
-
         CurrentStep = FormStepData.GetStepByRoute(relativePath);
     }
 
     private int GetDealerIdFromQuery()
     {
-        var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
-        var qIndex = baseRelative.IndexOf('?');
-
-        if (qIndex < 0)
-            return 0;
-
-        var queryString = baseRelative[(qIndex + 1)..];
-
-        var parts = queryString.Split('&')
-            .Select(p => p.Split('=', 2))
-            .Where(p => p.Length == 2)
-            .ToDictionary(
-                p => p[0],
-                p => p[1],
-                StringComparer.OrdinalIgnoreCase);
-
-        if (parts.TryGetValue("dealerId", out var idStr) &&
-            int.TryParse(idStr, out var id) &&
-            id > 0)
-        {
-            return id;
-        }
-
-        return 0;
+        var values = GetQueryValues();
+        return values.TryGetValue("dealerId", out var value) &&
+               int.TryParse(value, out var id) && id > 0
+            ? id
+            : 0;
     }
 
-    private async Task<bool> HasGreenStarCompany(int dealerId)
+    private Dictionary<string, string> GetQueryValues()
     {
-        try
-        {
-            return await Http.GetFromJsonAsync<bool>(
-                $"api/DealerCompaniesOperatingInArea/dealer/{dealerId}/has-greenstar");
-        }
-        catch
-        {
-            return false;
-        }
+        var baseRelative = Nav.ToBaseRelativePath(Nav.Uri);
+        var qIndex = baseRelative.IndexOf('?');
+        if (qIndex < 0)
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        return baseRelative[(qIndex + 1)..]
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Split('=', 2))
+            .Where(p => p.Length == 2)
+            .GroupBy(p => p[0], StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => Uri.UnescapeDataString(g.Last()[1]), StringComparer.OrdinalIgnoreCase);
     }
 
     private void GoToPrevious()
     {
-        if (CurrentStep is null)
+        if (CurrentStep == null)
             return;
 
         Loading.Show();
-
         var previousRoute = FormStepData.GetPreviousRoute(
             CurrentStep.Route,
             _hasGreenStar,
@@ -232,11 +222,10 @@
 
     private void GoToNext()
     {
-        if (CurrentStep is null)
+        if (CurrentStep == null)
             return;
 
         Loading.Show();
-
         var nextRoute = FormStepData.GetNextRoute(
             CurrentStep.Route,
             _hasGreenStar,
@@ -244,4 +233,24 @@
 
         Nav.NavigateTo(nextRoute + _queryString);
     }
+
+    private string EnsureFlowParameter(string queryString)
+    {
+        if (_isRestrictedFlow && !queryString.Contains("flow=restricted", StringComparison.OrdinalIgnoreCase))
+            return AppendQuery(queryString, "flow=restricted");
+
+        if (_isExistingMaintenanceFlow &&
+            !queryString.Contains("flow=existing-maintenance", StringComparison.OrdinalIgnoreCase))
+        {
+            return AppendQuery(queryString, "flow=existing-maintenance");
+        }
+
+        if (_isNewDealerFlow && !queryString.Contains("flow=new", StringComparison.OrdinalIgnoreCase))
+            return AppendQuery(queryString, "flow=new");
+
+        return queryString;
+    }
+
+    private static string AppendQuery(string queryString, string value) =>
+        queryString + (queryString.Contains('?') ? "&" : "?") + value;
 }

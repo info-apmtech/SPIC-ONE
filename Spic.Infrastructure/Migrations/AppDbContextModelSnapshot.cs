@@ -154,6 +154,36 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("AppUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.AckThrough", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AckThroughs");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.AnnualSaleDataLastFYofDealerRegistration", b =>
                 {
                     b.Property<int>("Id")
@@ -263,6 +293,36 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("Categories");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.Company", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Companies");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Competitor", b =>
                 {
                     b.Property<int>("Id")
@@ -291,6 +351,55 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Competitors");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CreditLimitHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("AVPApprovedCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("AdditionalCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("CreditType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("ExistingCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("ExistingValidFrom")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("ExistingValidTo")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal?>("MORecommendedCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("RMApprovedCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("SMApprovedCreditLimit")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CreditLimitHistories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Crop", b =>
@@ -880,6 +989,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<bool>("IsCanal")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsRainfed")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsTank")
                         .HasColumnType("boolean");
 
@@ -1127,6 +1239,24 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("DealerType")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("DealershipApplicationFeeAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("DealershipApplicationFeeBankId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DealershipApplicationFeeDDDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("DealershipApplicationFeeDDNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DealershipApplicationFeeFilePath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DealershipApplicationFeePayableAt")
+                        .HasColumnType("text");
+
                     b.Property<decimal>("DebitorBalance")
                         .HasColumnType("numeric");
 
@@ -1161,10 +1291,37 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("GSTTradeName")
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("GflTradeDepositDDAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("GflTradeDepositDDBankId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("GflTradeDepositDDDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("GflTradeDepositDDNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GflTradeDepositFilePath")
+                        .HasColumnType("text");
+
                     b.Property<string>("GoogleMapURL")
                         .HasColumnType("text");
 
                     b.Property<string>("GreenStarCode")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("GreenstarDateOfAppointment")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal?>("GreenstarTradeDepositAmountReg")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("GreenstarTradeDepositDateReg")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("GreenstarTradeDepositReceiptNoReg")
                         .HasColumnType("text");
 
                     b.Property<int>("HQ")
@@ -1190,6 +1347,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool?>("IsLastTransactionIsSale")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsNewDealerRegistration")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsOfficeAutomation")
@@ -1273,6 +1433,21 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("SpicTradeDepositDDAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("SpicTradeDepositDDBankId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SpicTradeDepositDDDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SpicTradeDepositDDNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SpicTradeDepositFilePath")
+                        .HasColumnType("text");
+
                     b.Property<int>("StateId")
                         .HasColumnType("integer");
 
@@ -1294,7 +1469,7 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("TradeDepositAmount")
                         .HasColumnType("numeric");
 
-                    b.Property<DateTime>("TradeDepositDate")
+                    b.Property<DateTime?>("TradeDepositDate")
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("TradeDepositReceiptNo")
@@ -1308,7 +1483,6 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("UserTableId")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("Village")
@@ -1350,6 +1524,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("AffidavitFilePath")
                         .HasColumnType("text");
 
+                    b.Property<string>("ArticlesOfAssociationFilePath")
+                        .HasColumnType("text");
+
                     b.Property<string>("AuthorizationLetterFilePath")
                         .HasColumnType("text");
 
@@ -1358,6 +1535,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("BoardReasolutionFilePath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ByLaw")
                         .HasColumnType("text");
 
                     b.Property<int>("DealerId")
@@ -1383,7 +1563,16 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("GreenstarSpecimanFilePath")
                         .HasColumnType("text");
 
+                    b.Property<string>("LlpAgreementFilePath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MemorandumOfAssociationFilePath")
+                        .HasColumnType("text");
+
                     b.Property<string>("PartnershipDeadFilePath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RequestLetterFilePath")
                         .HasColumnType("text");
 
                     b.Property<string>("RetailerListFilePath")
@@ -1399,6 +1588,36 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("DealerRegistrationDocuments");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DealerType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DealerTypes");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerWarehouseFacilities", b =>
@@ -1424,6 +1643,36 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("DealerWarehouseFacilities");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DealershipNature", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DealershipNatures");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Designation", b =>
@@ -1494,6 +1743,80 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("StateId");
 
                     b.ToTable("Districts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DptReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Availability")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("ClosingBalance")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("DealerRegistrationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DealershipNatureId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MobileNo")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("OpeningBalance")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("PlantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ReceivedQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("RetailerName")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("SoldQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SubDistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DptReports");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.EmployeeRegistration+EmployeeInformation", b =>
@@ -1651,6 +1974,185 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("Headquarters");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.IfmsDealer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("DealerTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DealershipNatureId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MobileNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("IfmsDealers");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.IfmsProduct", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CategoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("IfmsProducts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LyingWithMaster", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("LyingWithMasters");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Retailer",
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Wholesaler",
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Rake Point",
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Warehouse",
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        });
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.PVTMaster", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PVTMasters");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.PartnerFamilyDetails", b =>
                 {
                     b.Property<int>("Id")
@@ -1707,6 +2209,36 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("PartnerOccupations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.Plant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Plants");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Port", b =>
@@ -1833,8 +2365,35 @@ namespace Spic.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool?>("AVPApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("AVPApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("AVPApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ApprovalRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("BasicStateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Block")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactNumber")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
 
                     b.Property<int>("DistrictId")
                         .HasColumnType("integer");
@@ -1842,24 +2401,84 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("GoogleURL")
                         .HasColumnType("text");
 
+                    b.Property<int?>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("InGreenStar")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("InSpic")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSubmittedForReview")
+                        .HasColumnType("boolean");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("OperatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OtherDocumentPathsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PinCode")
+                        .HasColumnType("text");
+
+                    b.Property<bool?>("RMApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("RMApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("RMApprovedBy")
+                        .HasColumnType("text");
+
                     b.Property<string>("RailwayCode")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SAPCode")
+                        .HasColumnType("text");
+
+                    b.Property<bool?>("SMApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("SMApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SMApprovedBy")
                         .HasColumnType("text");
 
                     b.Property<int>("StateId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("SubVillage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Taluk")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("UpdatedBy")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Village")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -1869,6 +2488,46 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("StateId");
 
                     b.ToTable("RackPoints");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RakePointMaster", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RakePointCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RakePointMasters");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Region", b =>
@@ -1934,6 +2593,232 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Relationships");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SalesAndReceipt", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AgencyName")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("BalanceWithWs")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CompWsSale")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CompWsSaleRcpt")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("DealerRegistrationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DealershipNatureId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("OpeningBalance")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("PlantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ReceivedFromWs")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("ReceivedFromWsAck")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("StockTransferWsToRetailer")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("StockTransferWsToRetailerAck")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalAckToWs")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalSalesByWs")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("WsRtSale")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("WsRtSaleRcpt")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("WsWsSale")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("WsWsSaleRcpt")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SalesAndReceipts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SalesCompanySale", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AckThroughId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ChallanNo")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("DdNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DealerName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DealerRegistrationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DealerTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DealershipNatureId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("EntryDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("IfmsDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("InvoiceDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("InvoiceNo")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LockDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal?>("LorryCapacity")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("LorryNo")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ManufacturerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MarketerId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MobileNo")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("Month1Qty")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Month2Qty")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("PlantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("QuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("ReceivedQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("RetailerReceiptDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StatusId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubsidyMonth1")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubsidyMonth2")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubsidyYear1")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubsidyYear2")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TransactionId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TxnRemark")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("UnitId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SalesCompanySales");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SalesPlanningInDealerRegistration", b =>
@@ -2030,6 +2915,155 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("SalesPlannings");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.SalesWholesaler", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AckThroughId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AgencyName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("BuyerDistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ChallanNo")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("DealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DealerNatureId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DealerTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DispatchNo")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("EntryDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("IfmsDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsWholesalerId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("InvoiceDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("InvoiceNo")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LockDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal?>("LorryCapacity")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("LorryNo")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ManufacturerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MarketerId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MobileNo")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("Month1Qty")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Month2Qty")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("PlantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("QuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("ReceivedQuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("RetailerReceiptDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("SellerDistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StatusId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubsidyMonth1")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubsidyMonth2")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubsidyYear1")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubsidyYear2")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TransactionId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TxnRemark")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("TxnTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("UnitId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("WholesalerAgencyName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("WholesalerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("WholesalerNatureId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SalesWholesalers");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Sector", b =>
                 {
                     b.Property<int>("Id")
@@ -2095,6 +3129,219 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("States");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.StateGlobalStockReconciliation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ClosingGIT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("ClosingStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("Dispatches")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("IfmsProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("OpeningGIT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("OpeningStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("PlantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ProductionImports")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Receipt")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Sales")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SalesReturn")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("StockAdjustment")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("StateGlobalStockReconciliations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.Status", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Statuses");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SubDealerRegistration", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AlternativeNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Block")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DealerStateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FirmName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("GSTConstitutionofBusiness")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GSTFilePath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GSTLegalName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GSTNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GSTTradeName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GoogleMapURL")
+                        .HasColumnType("text");
+
+                    b.Property<int>("HQ")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("OfficialContactNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PANNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PinCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Region")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RetailMFMSId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ShopNoORRoomNoOrBlockNo")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Street")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubDealerCode")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubVillage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Taluk")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Village")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("WhatsAppNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("WholesaleMFMSId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SubDealerRegistrations");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.SubDistrict", b =>
                 {
                     b.Property<int>("Id")
@@ -2128,6 +3375,36 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("DistrictId");
 
                     b.ToTable("SubDistricts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.TxnType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TxnTypes");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Unit", b =>
@@ -2263,17 +3540,137 @@ namespace Spic.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool?>("AVPApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("AVPApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("AVPApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ApprovalRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("BasicStateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Block")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactNumber")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DoorNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FertilizerLicenseDocumentPath")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("GflAdditionalReservationQuantityLitres")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("GflAdditionalReservationQuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("GflApprovedReservationQuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("GflReservationQuantityMT")
+                        .HasColumnType("numeric");
+
                     b.Property<string>("GoogleURL")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GstDocumentPath")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("InGreenStar")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("InSpic")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("InsuranceDocumentPath")
                         .HasColumnType("text");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsSubmittedForReview")
+                        .HasColumnType("boolean");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("OperatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OtherDocumentPathsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PinCode")
+                        .HasColumnType("text");
+
+                    b.Property<bool?>("RMApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("RMApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("RMApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("SMApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("SMApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SMApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("SpicAdditionalReservationQuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("SpicApprovedReservationQuantityMT")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Street")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubVillage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Taluk")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -2283,13 +3680,155 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Village")
+                        .HasColumnType("text");
+
+                    b.Property<int>("WarehouseCategory")
+                        .HasColumnType("integer");
+
                     b.Property<string>("WarehouseCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("WarehouseType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Warehouses");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.WarehouseDistrictGlobalStockReconciliation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ClosingGIT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("ClosingStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("Dispatches")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("OpeningStockAtLocation")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("OpeningStockGIT")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("PlantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ProductionImports")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Receipt")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Sales")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SalesReturn")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("StockAdjustment")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("WarehouseId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("WarehouseDistrictGlobalStockReconciliations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.WholesalerStockAsOnToday", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AgencyName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("DealerRegistrationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DealerTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DealershipNatureId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PlantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Stock")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("StockDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Warehouses");
+                    b.ToTable("WholesalerStockAsOnTodays");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Zone", b =>

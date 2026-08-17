@@ -159,16 +159,16 @@
 				</div>
 			</div>
 			<div class="col-12 col-md-4">
-				<label class="form-label-custom opacity-0 d-none d-md-block">placeholder</label>
-				<div class="active-box">
+				<label class="form-label-custom d-block">&nbsp;</label>
+				<div class="status-toggle-box @(_form.IsActive ? "" : "status-toggle-inactive")">
 					<div>
-						<div class="active-box-title">Still Active</div>
-						<div class="active-box-sub">Is this an ongoing engagement?</div>
+						<div class="active-box-title" style="color: inherit;">Still Active</div>
+						<div class="active-box-sub" style="color: inherit; opacity: 0.8;">Is this an ongoing engagement?</div>
 					</div>
-					<div class="form-check form-switch m-0">
-						<input class="form-check-input" type="checkbox" role="switch"
-							   @bind="_form.IsActive">
-					</div>
+					<label class="switch">
+						<input type="checkbox" @bind="_form.IsActive">
+						<span class="slider"></span>
+					</label>
 				</div>
 			</div>
 		</div>
@@ -222,11 +222,11 @@
 								<div class="saved-actions">
 									@if (exp.IsActive)
 									{
-										<span class="badge-active">Active</span>
+										<span class="status-pill status-active">Active</span>
 									}
 									else
 									{
-										<span class="badge-active" style="background:#dc3545;">Inactive</span>
+										<span class="status-pill status-inactive-red">Inactive</span>
 									}
 									@if (CanEdit)
 									{
@@ -292,8 +292,14 @@
 	public int? DealerId { get; set; }
 	[SupplyParameterFromQuery(Name = "mode")]
 	public string? Mode { get; set; }
+	[SupplyParameterFromQuery(Name = "flow")]
+	public string? Flow { get; set; }
 
 	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+	private bool IsNewDealerFlow => string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase);
+
+	private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
 
 	private List<DealerExperience> _experiences = new();
 	private List<Competitor> _companyAll = new();
@@ -502,14 +508,14 @@
 		if (IsViewOnly)
 		{
 			Loading.Show();
-			Nav.NavigateTo($"/AnnualSales?dealerId={DealerId}&mode=view");
+			Nav.NavigateTo($"/AnnualSales?dealerId={DealerId}&mode=view{FlowParam}");
 			return;
 		}
 		await SaveYearsOfExperience();
 		var hasError = _yearsOfExperience <= 0 || _experiences.Count == 0;
 		FormStepData.MarkStepError(2, hasError);
 		Loading.Show();
-		Nav.NavigateTo($"/AnnualSales?dealerId={DealerId}");
+		Nav.NavigateTo($"/AnnualSales?dealerId={DealerId}{FlowParam}");
 	}
 
 	private void ShowMessage(string message, bool isError)
