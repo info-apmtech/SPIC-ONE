@@ -459,6 +459,16 @@ namespace SpicAPI.Controllers
 			var now = DateTime.Now;
 			var role = CurrentRole();
 
+			// Server-side duplicate SAP Code check.
+			if (!string.IsNullOrWhiteSpace(entity.SAPCode))
+			{
+				var sapCode = entity.SAPCode.Trim();
+				if (await _repo.ExistsAsync(x => x.SAPCode != null && x.SAPCode.Trim() == sapCode))
+				{
+					return Conflict(new { message = $"Rake Point with SAP Code '{sapCode}' already exists." });
+				}
+			}
+
 			entity.CreatedBy = userId;
 			entity.CreatedByName = CurrentUserName();
 			entity.IsSubmittedForReview = IsCreatorRole(role);
@@ -498,6 +508,16 @@ namespace SpicAPI.Controllers
 
 			// Preserve approval state during normal edits and the document-path second PUT.
 			PreserveApprovalState(existing, entity);
+
+			// Server-side duplicate SAP Code check (exclude current record).
+			if (!string.IsNullOrWhiteSpace(entity.SAPCode))
+			{
+				var sapCode = entity.SAPCode.Trim();
+				if (await _repo.ExistsAsync(x => x.Id != id && x.SAPCode != null && x.SAPCode.Trim() == sapCode))
+				{
+					return Conflict(new { message = $"Rake Point with SAP Code '{sapCode}' already exists." });
+				}
+			}
 
 			var userId = CurrentUserId();
 			entity.UpdatedAt = DateTime.Now;

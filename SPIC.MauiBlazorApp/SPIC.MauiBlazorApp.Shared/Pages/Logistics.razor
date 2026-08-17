@@ -1694,11 +1694,11 @@
                 else if (IsRakePointTab)
                 {
                     <div class="lm-doc-grid">
-                            <div class="lm-doc-card required @(_errors.ContainsKey("InsuranceDocument") ? "border-danger" : "")">
+                            <div class="lm-doc-card @(_errors.ContainsKey("InsuranceDocument") ? "border-danger" : "")">
                                 <div>
                                     <div class="lm-doc-card-title">
                                         Insurance Document
-                                        <span class="lm-doc-required-badge">Required</span>
+                                        <span class="text-muted fw-normal">(Optional)</span>
                                     </div>
                                 @if (_insuranceDocumentFile != null)
                                 {
@@ -2164,9 +2164,9 @@
     private bool RequiresCompanySpecificInsurance =>
         IsWarehouseTab && (IsPvtWarehouseCategory || IsBothWarehouseCategory);
 
-    // C&F WH and Rake Point keep their existing single insurance upload, but it is mandatory.
+    // C&F WH keeps its existing single insurance upload as mandatory. Rake Point insurance is optional.
     private bool RequiresGenericInsurance =>
-        IsCandFWarehouseCategory || IsRakePointTab;
+        IsCandFWarehouseCategory;
 
 
 
@@ -2661,6 +2661,18 @@
         if (string.IsNullOrWhiteSpace(_form.SapCode))
             _errors["SapCode"] = "SAP Code is required.";
 
+        // Client-side duplicate SAP Code check for Rake Point.
+        if (IsRakePointTab && !string.IsNullOrWhiteSpace(_form.SapCode) && !_errors.ContainsKey("SapCode"))
+        {
+            var sapCode = _form.SapCode.Trim();
+            bool duplicateExists = _rakePointAll.Any(x =>
+                string.Equals(x.SAPCode, sapCode, StringComparison.OrdinalIgnoreCase) &&
+                (!_editingId.HasValue || x.Id != _editingId.Value));
+
+            if (duplicateExists)
+                _errors["SapCode"] = $"Rake Point with SAP Code '{sapCode}' already exists.";
+        }
+
         if (string.IsNullOrWhiteSpace(_form.Name))
             _errors["Name"] = $"{ActiveTabDisplayName} name is required.";
 
@@ -2694,7 +2706,7 @@
         }
 
         // Document validation follows the Excel reference.
-        // Insurance is intentionally optional for PVT WH, C&F WH, Both and Rake Point.
+        // Insurance is mandatory for PVT WH / Both (company-specific) and C&F WH. Optional for Rake Point.
         if (ArePvtMatrixDocumentsRequired)
         {
             // PVT/Both: validate only the company rows selected above.
@@ -2745,14 +2757,12 @@
             }
         }
 
-        // C&F WH and Rake Point use the existing single insurance document field.
+        // C&F WH uses the existing single insurance document field as mandatory.
         if (RequiresGenericInsurance &&
             string.IsNullOrWhiteSpace(CurrentInsuranceDocumentPath) &&
             _insuranceDocumentFile == null)
         {
-            _errors["InsuranceDocument"] = IsCandFWarehouseCategory
-                ? "Insurance document is required for C&F WH."
-                : "Insurance document is required for Rake Point.";
+            _errors["InsuranceDocument"] = "Insurance document is required for C&F WH.";
         }
 
         return _errors.Count == 0;
