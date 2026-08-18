@@ -715,6 +715,16 @@
 
 </style>
 
+@if (PdfViewMode && PdfViewId > 0)
+{
+    <LogisticsPdf RouteTab="@PdfViewTab"
+                  RouteId="@PdfViewId"
+                  Company="@PdfViewCompany" />
+}
+else
+{
+
+
 <div class="container-fluid py-4 px-0">
     <h5 class="fw-bold mb-4 reg-page-heading">Logistics Master</h5>
 
@@ -2289,9 +2299,9 @@
                 <th>Created By</th>
                 <th>Approval Status</th>
                 <th>Created At</th>
-                @if (IsWarehouseTab)
+                @if (IsWarehouseTab || IsRakePointTab)
                 {
-                    <th>Docs</th>
+                    <th class="text-center">Docs</th>
                 }
                 <th class="text-center">PDF</th>
                 @if (CanShowLogisticsActionColumn)
@@ -2385,7 +2395,7 @@
                     </span>
                 </td>
                 <td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
-                @if (IsWarehouseTab)
+                @if (IsWarehouseTab || IsRakePointTab)
                 {
                     <td class="text-center">
                         @{
@@ -2411,7 +2421,7 @@
                         {
                             <button type="button"
                                     class="lm-company-pdf-btn"
-                                    title="View SPIC PDF"
+                                    title="View SPIC @ActiveTabDisplayName PDF"
                                     @onclick='() => OpenLogisticsPdf(item, "SPIC")'>
                                 <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png"
                                      class="lm-company-pdf-logo"
@@ -2423,7 +2433,7 @@
                         {
                             <button type="button"
                                     class="lm-company-pdf-btn"
-                                    title="View GreenStar PDF"
+                                    title="View GreenStar @ActiveTabDisplayName PDF"
                                     @onclick='() => OpenLogisticsPdf(item, "GreenStar")'>
                                 <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg"
                                      class="lm-company-pdf-logo greenstar"
@@ -2742,7 +2752,28 @@
     </div>
 }
 
+
+}
+
 @code {
+
+    // ===============================================================
+    // INLINE PDF MODE
+    // Keep PDF rendering inside the already-authorized /Logistics route.
+    // ===============================================================
+    [SupplyParameterFromQuery(Name = "pdf")]
+    public bool PdfViewMode { get; set; }
+
+    [SupplyParameterFromQuery(Name = "pdfTab")]
+    public string? PdfViewTab { get; set; }
+
+    [SupplyParameterFromQuery(Name = "pdfId")]
+    public int PdfViewId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "company")]
+    public string? PdfViewCompany { get; set; }
+
+
     // Warehouse is now one tab and one entity/table/API.
     // WarehouseCategory decides whether PVT, C&F or Both-specific content is shown/saved.
     private string ActiveTab { get; set; } = "Warehouse";
@@ -2914,7 +2945,7 @@
     private bool _showDeleteConfirm;
     private LogisticsItemDto? _deleteTarget;
 
-    // Warehouse list document popup state.
+    // Warehouse + Rake Point list document popup state.
     // View/Download actions do NOT close this modal.
     private bool _showDocumentsModal;
     private LogisticsItemDto? _documentsModalItem;
@@ -3743,20 +3774,32 @@
         try { await _firstInputRef.FocusAsync(); } catch { }
     }
 
-    private void OpenLogisticsPdf(LogisticsItemDto item, string? company = null)
+    private void OpenLogisticsPdf(
+        LogisticsItemDto item,
+        string? company = null)
     {
         if (item is null || item.Id <= 0)
             return;
 
-        // Keep PDF navigation inside the same Blazor/browser session.
-        // company=SPIC / GreenStar creates two separate company PDF views.
-        var tab = Uri.EscapeDataString(ActiveTab);
-        var url = $"/LogisticsPdf?tab={tab}&id={item.Id}";
+        // Stay on the already-authorized Logistics route.
+        // This bypasses any app-level fallback that redirects
+        // the separate /LogisticsPdf route to Dashboard.
+        var tab =
+            Uri.EscapeDataString(
+                ActiveTab);
+
+        var url =
+            $"/Logistics?pdf=true&pdfTab={tab}&pdfId={item.Id}";
 
         if (!string.IsNullOrWhiteSpace(company))
-            url += $"&company={Uri.EscapeDataString(company)}";
+        {
+            url +=
+                $"&company={Uri.EscapeDataString(company)}";
+        }
 
-        Nav.NavigateTo(url, forceLoad: false);
+        Nav.NavigateTo(
+            url,
+            forceLoad: false);
     }
 
     private void DeleteItem(LogisticsItemDto item)
