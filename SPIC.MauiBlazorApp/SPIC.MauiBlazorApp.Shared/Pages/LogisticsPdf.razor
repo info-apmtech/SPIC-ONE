@@ -1,0 +1,2691 @@
+﻿@page "/LogisticsPdf"
+@page "/LogisticsPdf/{RouteTab}/{RouteId:int}"
+@layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+
+@using System.Net.Http.Json
+@using System.Text.Json
+@using System.Globalization
+@using Microsoft.AspNetCore.Components
+@using SPIC.Core.Entities
+
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+<PageTitle>@PageTitleText</PageTitle>
+
+
+<div class="page-wrapper">
+
+    @if (_isLoading)
+    {
+        <div class="state-card">
+            <div class="loading-spinner"></div>
+            <span>Loading logistics details...</span>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="state-card error">
+            <strong>Unable to load Logistics PDF view.</strong>
+            <span>@_errorMessage</span>
+        </div>
+    }
+    else if (_item is null)
+    {
+        <div class="state-card error">
+            <strong>Logistics record not found.</strong>
+        </div>
+    }
+    else
+    {
+        <div class="pdf-back-row">
+            <button type="button"
+                    class="pdf-back-btn"
+                    @onclick="BackToLogistics">
+                <i class="bi bi-arrow-left"></i>
+                Back
+            </button>
+
+            <button type="button"
+                    class="pdf-print-btn"
+                    @onclick="PrintDocument">
+                <i class="bi bi-printer-fill"></i>
+                Print / Save PDF
+            </button>
+        </div>
+
+        <main id="logistics-pdf-document" class="view-document">
+
+            <!-- =====================================================
+                 HEADER
+                 ===================================================== -->
+            <header class="view-header">
+
+                <div class="view-logo">
+
+                    @if (IsActualPort || ShowSpicCompanyData)
+                    {
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png"
+                             alt="SPIC" />
+                    }
+
+                    @if (!IsActualPort && ShowGreenStarCompanyData)
+                    {
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg"
+                             class="greenstar-pdf-logo"
+                             alt="Green Star" />
+                    }
+
+                    @if (!IsActualPort &&
+                                             !ShowSpicCompanyData &&
+                                             !ShowGreenStarCompanyData)
+                    {
+                        <span class="logo-placeholder">LOGISTICS</span>
+                    }
+
+                </div>
+
+                <div class="header-content">
+                    <h1>LOGISTICS MASTER</h1>
+                    <h2>@DocumentTitle</h2>
+                    <p>@HeaderCompanyText</p>
+                </div>
+
+                <div class="header-meta">
+                    REF: @DocumentReference
+                    <br />
+                    @FormatDate(_item.CreatedAt)
+                </div>
+
+            </header>
+
+
+            <!-- =====================================================
+                 DOCUMENT BODY
+                 ===================================================== -->
+            <div class="view-body">
+
+                <!-- =================================================
+                     BASIC INFORMATION
+                     ================================================= -->
+                <section class="view-section">
+
+                    <div class="view-section-title">
+                        <div class="view-section-icon">
+                            <i class="bi bi-building"></i>
+                        </div>
+                        <div class="view-section-text">
+                            @(IsActualPort ? "Port Information" : "Basic Information")
+                        </div>
+                    </div>
+
+                    @if (IsActualPort)
+                    {
+                        <div class="grid-2">
+
+                            <div class="inline-field">
+                                <label>Port Name</label>
+                                <div class="inline-val">@TextOrDash(_item.Name)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Status</label>
+                                <div class="inline-val">
+                                    <span class="status-pill @(_item.IsActive ? "status-active" : "status-inactive")">
+                                        @(_item.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>State</label>
+                                <div class="inline-val">@GetStateName(_item.StateId)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>District</label>
+                                <div class="inline-val">@GetDistrictName(_item.DistrictId)</div>
+                            </div>
+
+                            <div class="inline-field grid-span-2">
+                                <label>Google Map URL</label>
+                                <div class="inline-val url-value">@TextOrDash(_item.GoogleURL)</div>
+                            </div>
+
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="grid-2">
+
+                            <div class="inline-field">
+                                <label>Company</label>
+                                <div class="inline-val">
+                                    @if (ShowSpicCompanyData)
+                                    {
+                                        <span class="company-pill company-spic">SPIC</span>
+                                    }
+
+                                    @if (ShowGreenStarCompanyData)
+                                    {
+                                        <span class="company-pill company-gfl">GREEN STAR</span>
+                                    }
+
+                                    @if (!ShowSpicCompanyData && !ShowGreenStarCompanyData)
+                                    {
+                                        <span>-</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Status</label>
+                                <div class="inline-val">
+                                    <span class="status-pill @(_item.IsActive ? "status-active" : "status-inactive")">
+                                        @(_item.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>State</label>
+                                <div class="inline-val">@GetStateName(_item.BasicStateId)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Region</label>
+                                <div class="inline-val">@GetRegionName(_item.RegionId)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>HQ</label>
+                                <div class="inline-val">@GetHeadquarterName(_item.HeadquarterId)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>SAP Code</label>
+                                <div class="inline-val">@DisplayCode</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Name</label>
+                                <div class="inline-val">@TextOrDash(_item.Name)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Operated By</label>
+                                <div class="inline-val">@GetOperatedByDisplay(_item.OperatedBy)</div>
+                            </div>
+
+                            @if (IsWarehouse)
+                            {
+                                <div class="inline-field">
+                                    <label>Warehouse Category</label>
+                                    <div class="inline-val">
+                                        @GetWarehouseCategoryDisplay(CurrentWarehouseCategory)
+                                    </div>
+                                </div>
+                            }
+
+                            @if (ShowsPvtWarehouseContent)
+                            {
+                                <div class="inline-field">
+                                    <label>WH Type</label>
+                                    <div class="inline-val">
+                                        @GetWarehouseTypeDisplay(_item.WarehouseType)
+                                    </div>
+                                </div>
+                            }
+
+                        </div>
+                    }
+
+                </section>
+
+
+                @if (IsWarehouse)
+                {
+                    <!-- =================================================
+                         RESERVATION QUANTITY
+                         ================================================= -->
+                    <section class="view-section">
+
+                        <div class="view-section-title">
+                            <div class="view-section-icon">
+                                <i class="bi bi-box-seam"></i>
+                            </div>
+                            <div class="view-section-text">Reservation Quantity</div>
+                        </div>
+
+                        @if (ShowsPvtWarehouseContent)
+                        {
+                            <div class="sub-card">
+
+                                <h3 class="sub-card-title">PVT WH Reservation</h3>
+
+                                @if (ShowSpicCompanyData || ShowGreenStarCompanyData)
+                                {
+                                    <div class="reservation-layout">
+
+                                        @if (ShowSpicCompanyData)
+                                        {
+                                            <div class="reservation-card">
+
+                                                <div class="reservation-card-title">
+                                                    SPIC Reservation
+                                                </div>
+
+                                                <div class="grid-1">
+
+                                                    <div class="inline-field">
+                                                        <label>Approved Reservation Quantity (MT)</label>
+                                                        <div class="inline-val">
+                                                            @FormatQuantity(_item.SpicApprovedReservationQuantityMT)
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="inline-field">
+                                                        <label>Additional Reservation Quantity (MT)</label>
+                                                        <div class="inline-val">
+                                                            @FormatQuantity(_item.SpicAdditionalReservationQuantityMT)
+                                                        </div>
+                                                    </div>
+
+                                                </div>
+
+                                            </div>
+                                        }
+
+                                        @if (ShowGreenStarCompanyData)
+                                        {
+                                            <div class="reservation-card">
+
+                                                <div class="reservation-card-title">
+                                                    GFL / GREEN STAR Reservation
+                                                </div>
+
+                                                <div class="grid-1">
+
+                                                    <div class="inline-field">
+                                                        <label>Approved Reservation Quantity (MT)</label>
+                                                        <div class="inline-val">
+                                                            @FormatQuantity(_item.GflApprovedReservationQuantityMT)
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="inline-field">
+                                                        <label>Additional Reservation Quantity (MT)</label>
+                                                        <div class="inline-val">
+                                                            @FormatQuantity(_item.GflAdditionalReservationQuantityMT)
+                                                        </div>
+                                                    </div>
+
+                                                </div>
+
+                                            </div>
+                                        }
+
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="empty-state">
+                                        No SPIC / GREEN STAR company is selected for PVT reservation.
+                                    </div>
+                                }
+
+                            </div>
+                        }
+
+                        @if (ShowsCandFWarehouseContent)
+                        {
+                            <div class="sub-card">
+
+                                <h3 class="sub-card-title">C&amp;F WH Reservation</h3>
+
+                                <div class="grid-2">
+
+                                    <div class="inline-field">
+                                        <label>Reservation Quantity (MT)</label>
+                                        <div class="inline-val">
+                                            @FormatQuantity(_item.GflReservationQuantityMT)
+                                        </div>
+                                    </div>
+
+                                    <div class="inline-field">
+                                        <label>Reservation Quantity (Litres)</label>
+                                        <div class="inline-val">
+                                            @FormatQuantity(_item.GflAdditionalReservationQuantityLitres)
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                            </div>
+                        }
+
+                    </section>
+                }
+
+
+                @if (!IsActualPort)
+                {
+                    <!-- =================================================
+                         PRIMARY LOCATION
+                         ================================================= -->
+                    <section class="view-section">
+
+                        <div class="view-section-title">
+                            <div class="view-section-icon">
+                                <i class="bi bi-geo-alt-fill"></i>
+                            </div>
+                            <div class="view-section-text">Primary Location</div>
+                        </div>
+
+                        <div class="grid-2">
+
+                            <div class="inline-field grid-span-2">
+                                <label>Google Map URL</label>
+                                <div class="inline-val url-value">
+                                    @TextOrDash(_item.GoogleURL)
+                                </div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Latitude &amp; Longitude</label>
+                                <div class="inline-val">@LatitudeLongitudeDisplay</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Sub Village</label>
+                                <div class="inline-val">@TextOrDash(_item.SubVillage)</div>
+                            </div>
+
+                            @if (!IsRakePoint)
+                            {
+                                <div class="inline-field">
+                                    <label>Door / Shop / Room / Block No</label>
+                                    <div class="inline-val">@TextOrDash(_item.DoorNo)</div>
+                                </div>
+
+                                <div class="inline-field">
+                                    <label>Street / Area / Locality</label>
+                                    <div class="inline-val">@TextOrDash(_item.Street)</div>
+                                </div>
+                            }
+
+                            <div class="inline-field">
+                                <label>Pincode</label>
+                                <div class="inline-val">@TextOrDash(_item.PinCode)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Village</label>
+                                <div class="inline-val">@TextOrDash(_item.Village)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Block</label>
+                                <div class="inline-val">@TextOrDash(_item.Block)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Taluk</label>
+                                <div class="inline-val">@TextOrDash(_item.Taluk)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>District</label>
+                                <div class="inline-val">@GetDistrictName(_item.DistrictId)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>State</label>
+                                <div class="inline-val">@GetStateName(_item.StateId)</div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>@ContactLabel</label>
+                                <div class="inline-val">@TextOrDash(_item.ContactNumber)</div>
+                            </div>
+
+                        </div>
+
+                    </section>
+
+
+                    <!-- =================================================
+                         DOCUMENTS
+                         ================================================= -->
+                    <section class="view-section">
+
+                        <div class="view-section-title">
+                            <div class="view-section-icon">
+                                <i class="bi bi-file-earmark-text"></i>
+                            </div>
+                            <div class="view-section-text">Documents</div>
+                        </div>
+
+                        @if (_documentEntries.Count == 0)
+                        {
+                            <div class="empty-state">
+                                No documents available.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-wrapper">
+
+                                <table class="view-table">
+
+                                    <thead>
+                                        <tr>
+                                            <th>Document Type</th>
+                                            <th>Company</th>
+                                            <th>File Name</th>
+                                        </tr>
+                                    </thead>
+
+                                    <tbody>
+
+                                        @foreach (var document in _documentEntries)
+                                        {
+                                            <tr>
+                                                <td class="strong-cell">
+                                                    @document.TypeName
+                                                </td>
+
+                                                <td>
+                                                    @if (string.Equals(document.Company, "SPIC", StringComparison.OrdinalIgnoreCase))
+                                                    {
+                                                        <span class="company-pill company-spic">SPIC</span>
+                                                    }
+                                                    else if (string.Equals(document.Company, "Green Star", StringComparison.OrdinalIgnoreCase))
+                                                    {
+                                                        <span class="company-pill company-gfl">GREEN STAR</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>-</span>
+                                                    }
+                                                </td>
+
+                                                <td class="value-cell">
+                                                    @TextOrDash(document.FileName)
+                                                </td>
+
+                                            </tr>
+                                        }
+
+                                    </tbody>
+
+                                </table>
+
+                            </div>
+                        }
+
+                    </section>
+
+
+
+                    <!-- =================================================
+                         APPROVAL DETAILS
+                         ================================================= -->
+                    <section class="view-section">
+
+                        <div class="view-section-title">
+                            <div class="view-section-icon">
+                                <i class="bi bi-check2-circle"></i>
+                            </div>
+                            <div class="view-section-text">Approval Details</div>
+                        </div>
+
+                        <div class="grid-2">
+
+                            <div class="inline-field">
+                                <label>Submitted for Review</label>
+                                <div class="inline-val">
+                                    @(_item.IsSubmittedForReview ? "Yes" : "No")
+                                </div>
+                            </div>
+
+                            <div class="inline-field">
+                                <label>Approval Status</label>
+                                <div class="inline-val">
+                                    <span class="approval-pill @GetApprovalBadgeClass(_item)">
+                                        @GetApprovalStatus(_item)
+                                    </span>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="table-wrapper" style="margin-top:8px;">
+
+                            <table class="view-table">
+
+                                <thead>
+                                    <tr>
+                                        <th>Approval Stage</th>
+                                        <th>Status</th>
+                                        <th>Action By</th>
+                                        <th>Action Date</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+
+                                    <tr>
+                                        <td class="strong-cell">RM</td>
+                                        <td>@GetApprovalDecision(_item.RMApproved)</td>
+                                        <td class="value-cell">@GetUserDisplay(_item.RMApprovedBy)</td>
+                                        <td>@FormatNullableDateTime(_item.RMApprovedAt)</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="strong-cell">SMM</td>
+                                        <td>@GetApprovalDecision(_item.SMApproved)</td>
+                                        <td class="value-cell">@GetUserDisplay(_item.SMApprovedBy)</td>
+                                        <td>@FormatNullableDateTime(_item.SMApprovedAt)</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="strong-cell">AVP</td>
+                                        <td>@GetApprovalDecision(_item.AVPApproved)</td>
+                                        <td class="value-cell">@GetUserDisplay(_item.AVPApprovedBy)</td>
+                                        <td>@FormatNullableDateTime(_item.AVPApprovedAt)</td>
+                                    </tr>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(_item.ApprovalRemarks))
+                        {
+                            <div class="remarks-box">
+                                <div class="remarks-title">Approval Remarks</div>
+                                <div>@_item.ApprovalRemarks</div>
+                            </div>
+                        }
+
+                    </section>
+                }
+
+
+                <!-- =================================================
+                     AUDIT INFORMATION
+                     ================================================= -->
+                <section class="view-section">
+
+                    <div class="view-section-title">
+                        <div class="view-section-icon">
+                            <i class="bi bi-clock-history"></i>
+                        </div>
+                        <div class="view-section-text">Audit Information</div>
+                    </div>
+
+                    <div class="grid-2">
+
+                        @if (!IsActualPort)
+                        {
+                            <div class="inline-field">
+                                <label>Created By</label>
+                                <div class="inline-val">@GetCreatedByDisplay(_item)</div>
+                            </div>
+                        }
+
+                        <div class="inline-field">
+                            <label>Created At</label>
+                            <div class="inline-val">@FormatDateTime(_item.CreatedAt)</div>
+                        </div>
+
+                        <div class="inline-field">
+                            <label>Updated By</label>
+                            <div class="inline-val">@GetUserDisplay(_item.UpdatedBy)</div>
+                        </div>
+
+                        <div class="inline-field">
+                            <label>Updated At</label>
+                            <div class="inline-val">@FormatDateTime(_item.UpdatedAt)</div>
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- =================================================
+                         ATTACHED SAVED DOCUMENTS
+                         DealerPDF-style inline preview.
+                         Existing Documents table above is intentionally kept.
+                         ================================================= -->
+                @if (_documentEntries.Count > 0)
+                {
+                    <section class="view-section logistics-attached-documents"
+                             style="page-break-before: always; break-before: page;">
+
+                        <div class="view-section-title">
+                            <div class="view-section-icon">
+                                <i class="bi bi-files"></i>
+                            </div>
+                            <div class="view-section-text">
+                                Attached Documents
+                            </div>
+                        </div>
+
+                        @foreach (var document in _documentEntries)
+                        {
+                            var documentUrl =
+                                GetSavedDocumentViewUrl(
+                                    document.Path);
+
+                            var isImage =
+                                IsImageDocument(
+                                    document.Path);
+
+                            var isPdf =
+                                IsPdfDocument(
+                                    document.Path);
+
+                            <div class="logistics-document-preview-card"
+                                 style="
+                                margin-bottom: 14px;
+                                padding: 14px;
+                                border: 1px solid #e5e7eb;
+                                border-radius: 8px;
+                                background: #ffffff;
+                                overflow: visible;
+                                page-break-inside: auto;
+                                break-inside: auto;">
+
+                                <div style="
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: space-between;
+                                    gap: 12px;
+                                    margin-bottom: 10px;
+                                    padding-bottom: 8px;
+                                    border-bottom: 2px solid #e5e7eb;
+                                    page-break-after: avoid;
+                                    break-after: avoid;">
+
+                                    <div style="min-width: 0;">
+
+                                        <div style="
+                                            color: #1f2937;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            line-height: 1.35;">
+                                            @document.TypeName
+                                        </div>
+
+                                        <div style="
+                                            margin-top: 3px;
+                                            color: #6b7280;
+                                            font-size: 10px;
+                                            line-height: 1.3;
+                                            overflow-wrap: anywhere;">
+                                            @TextOrDash(document.FileName)
+                                        </div>
+
+                                    </div>
+
+                                    <div class="screen-only"
+                                         style="flex-shrink: 0;">
+
+                                        <a href="@documentUrl"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               style="
+                                            min-height: 26px;
+                                            padding: 4px 9px;
+                                            display: inline-flex;
+                                            align-items: center;
+                                            gap: 5px;
+                                            border: 1px solid #d1d5db;
+                                            border-radius: 4px;
+                                            background: #ffffff;
+                                            color: #1f2937;
+                                            text-decoration: none;
+                                            font-size: 10px;
+                                            font-weight: 600;">
+                                            <i class="bi @GetSavedDocumentIcon(document.Path)"></i>
+                                            @GetSavedDocumentViewLabel(document.Path)
+                                        </a>
+
+                                    </div>
+
+                                </div>
+
+                                @if (isImage)
+                                {
+                                    <img src="@documentUrl"
+                                         alt="@document.TypeName"
+                                         style="
+                                    display: block;
+                                    width: auto;
+                                    max-width: 100%;
+                                    max-height: 250mm;
+                                    height: auto;
+                                    margin: 0 auto;
+                                    object-fit: contain;
+                                    page-break-inside: avoid;
+                                    break-inside: avoid;"
+                                         onerror="this.style.display='none';" />
+                                }
+                                else if (isPdf)
+                                {
+                                    <div class="logistics-saved-pdf-target"
+                                         data-pdf-url="@documentUrl"
+                                         data-document-title="@document.TypeName"
+                                         style="
+                                        width: 100%;
+                                        min-height: 60px;
+                                        overflow: visible;">
+
+                                        <div class="logistics-document-loading"
+                                             style="
+                                            padding: 20px;
+                                            text-align: center;
+                                            color: #6b7280;
+                                            font-size: 11px;">
+                                            Loading saved PDF pages...
+                                        </div>
+
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div style="
+                                        padding: 14px;
+                                        display: flex;
+                                        align-items: center;
+                                        gap: 10px;
+                                        border: 1px dashed #d1d5db;
+                                        border-radius: 6px;
+                                        background: #f9fafb;">
+
+                                        <i class="bi @GetSavedDocumentIcon(document.Path)"
+                                           style="font-size: 20px; color: #6b7280;"></i>
+
+                                        <div style="min-width: 0;">
+                                            <div style="
+                                                color: #1f2937;
+                                                font-weight: 600;
+                                                overflow-wrap: anywhere;">
+                                                @TextOrDash(document.FileName)
+                                            </div>
+
+                                            <div style="
+                                                margin-top: 2px;
+                                                color: #6b7280;
+                                                font-size: 10px;">
+                                                Preview is not available for this file type.
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                }
+
+                            </div>
+                        }
+
+                    </section>
+                }
+
+            </div>
+
+        </main>
+    }
+
+</div>
+
+
+@code {
+
+    // ===============================================================
+    // ROUTE / QUERY PARAMETERS
+    //
+    // Current Logistics.razor mapping:
+    //
+    // Warehouse  -> Warehouse
+    // Port       -> Rake Point
+    // PortMaster -> Actual Port
+    //
+    // Supported examples:
+    //
+    // /LogisticsPdf?tab=Warehouse&id=10
+    // /LogisticsPdf?tab=Port&id=20
+    // /LogisticsPdf?tab=PortMaster&id=30
+    //
+    // Also supported:
+    //
+    // /LogisticsPdf/Warehouse/10
+    // /LogisticsPdf/Port/20
+    // /LogisticsPdf/PortMaster/30
+    // ===============================================================
+
+    [Parameter]
+    public string? RouteTab { get; set; }
+
+    [Parameter]
+    public int RouteId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tab")]
+    public string? QueryTab { get; set; }
+
+    [SupplyParameterFromQuery(Name = "type")]
+    public string? QueryType { get; set; }
+
+    [SupplyParameterFromQuery(Name = "id")]
+    public int? QueryId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "company")]
+    public string? QueryCompany { get; set; }
+
+
+    private bool _isLoading = true;
+
+    private string? _errorMessage;
+
+    private string? _loadedKey;
+
+    // EmptyLayout does not run MainLayout's refresh/session restore.
+    // These flags let this PDF restore the existing session first,
+    // then call the protected Logistics APIs.
+    private bool _sessionReady;
+    private bool _pendingDataLoad;
+
+    private bool _pendingSavedDocumentRender;
+
+    private LogisticsItemDto? _item;
+
+    private List<StateDto> _states = new();
+
+    private List<DistrictDto> _districts = new();
+
+    private List<RegionDto> _regions = new();
+
+    private List<HeadquarterDto> _headquarters = new();
+
+    private Dictionary<string, string> _userNamesById =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private List<DocumentEntry> _documentEntries = new();
+
+
+    private string SelectedCompany =>
+        NormalizeCompany(QueryCompany);
+
+
+    private bool HasCompanyFilter =>
+        !string.IsNullOrWhiteSpace(SelectedCompany);
+
+
+    private bool IsSpicPdf =>
+        string.Equals(
+            SelectedCompany,
+            "SPIC",
+            StringComparison.OrdinalIgnoreCase);
+
+
+    private bool IsGreenStarPdf =>
+        string.Equals(
+            SelectedCompany,
+            "GreenStar",
+            StringComparison.OrdinalIgnoreCase);
+
+
+    private bool ShowSpicCompanyData =>
+        _item?.InSpic == true
+        && (!HasCompanyFilter || IsSpicPdf);
+
+
+    private bool ShowGreenStarCompanyData =>
+        _item?.InGreenStar == true
+        && (!HasCompanyFilter || IsGreenStarPdf);
+
+
+    private string RequestedTab =>
+        NormalizeTab(
+            !string.IsNullOrWhiteSpace(RouteTab)
+                ? RouteTab
+                : !string.IsNullOrWhiteSpace(QueryTab)
+                    ? QueryTab
+                    : !string.IsNullOrWhiteSpace(QueryType)
+                        ? QueryType
+                        : "Warehouse");
+
+
+    private int RequestedId =>
+        RouteId > 0
+            ? RouteId
+            : QueryId.GetValueOrDefault();
+
+
+    private bool IsWarehouse =>
+        RequestedTab == "Warehouse";
+
+
+    // IMPORTANT:
+    // The existing Logistics.razor uses ActiveTab == "Port"
+    // for the Rake Point tab.
+    private bool IsRakePoint =>
+        RequestedTab == "Port";
+
+
+    // IMPORTANT:
+    // The existing Logistics.razor uses ActiveTab == "PortMaster"
+    // for the actual Port tab.
+    private bool IsActualPort =>
+        RequestedTab == "PortMaster";
+
+
+    private LogisticsWarehouseCategory CurrentWarehouseCategory =>
+        _item?.WarehouseCategory
+        ?? LogisticsWarehouseCategory.PvtWH;
+
+
+    private bool ShowsPvtWarehouseContent =>
+        IsWarehouse
+        && CurrentWarehouseCategory
+            is LogisticsWarehouseCategory.PvtWH
+            or LogisticsWarehouseCategory.Both;
+
+
+    private bool ShowsCandFWarehouseContent =>
+        IsWarehouse
+        && CurrentWarehouseCategory
+            is LogisticsWarehouseCategory.CandFWH
+            or LogisticsWarehouseCategory.Both;
+
+
+    private string ContactLabel =>
+        IsWarehouse
+            ? CurrentWarehouseCategory switch
+            {
+                LogisticsWarehouseCategory.CandFWH =>
+                    "C&F Operator Contact No",
+
+                LogisticsWarehouseCategory.Both =>
+                    "Contact No / C&F Operator Contact No",
+
+                _ =>
+                    "Contact No"
+            }
+            : "Contact No";
+
+
+    private string DocumentTitle =>
+        RequestedTab switch
+        {
+            "Warehouse" => CurrentWarehouseCategory switch
+            {
+                LogisticsWarehouseCategory.PvtWH =>
+                    "PVT WAREHOUSE DETAILS",
+
+                LogisticsWarehouseCategory.CandFWH =>
+                    "C&F WAREHOUSE DETAILS",
+
+                LogisticsWarehouseCategory.Both =>
+                    "PVT + C&F WAREHOUSE DETAILS",
+
+                _ =>
+                    "WAREHOUSE DETAILS"
+            },
+
+            "Port" =>
+                "RAKE POINT DETAILS",
+
+            "PortMaster" =>
+                "PORT DETAILS",
+
+            _ =>
+                "LOGISTICS DETAILS"
+        };
+
+
+    private string HeaderCompanyText
+    {
+        get
+        {
+            if (IsActualPort)
+                return "SOUTHERN PETROCHEMICAL INDUSTRIES CORPORATION";
+
+            if (IsSpicPdf)
+                return "SOUTHERN PETROCHEMICAL INDUSTRIES CORPORATION";
+
+            if (IsGreenStarPdf)
+                return "GREENSTAR FERTILIZERS LIMITED";
+
+            if (_item?.InSpic == true
+                && _item?.InGreenStar == true)
+            {
+                return "SPIC / GREEN STAR";
+            }
+
+            if (_item?.InSpic == true)
+                return "SOUTHERN PETROCHEMICAL INDUSTRIES CORPORATION";
+
+            if (_item?.InGreenStar == true)
+                return "GREENSTAR FERTILIZERS LIMITED";
+
+            return "Logistics";
+        }
+    }
+
+
+    private string DocumentReference =>
+        HasCompanyFilter
+            ? $"{GetDocumentPrefix()}-{RequestedId:00000}-{(IsSpicPdf ? "SPIC" : "GFL")}"
+            : $"{GetDocumentPrefix()}-{RequestedId:00000}";
+
+
+    private string PageTitleText =>
+        _item is null
+            ? "Logistics PDF"
+            : HasCompanyFilter
+                ? $"{(IsSpicPdf ? "SPIC" : "GreenStar")} - {DocumentTitle} - {_item.Name}"
+                : $"{DocumentTitle} - {_item.Name}";
+
+
+    private string DisplayCode
+    {
+        get
+        {
+            if (_item is null)
+                return "-";
+
+            if (IsRakePoint)
+            {
+                if (!string.IsNullOrWhiteSpace(_item.SAPCode))
+                    return _item.SAPCode!;
+
+                return TextOrDash(_item.RailwayCode);
+            }
+
+            if (IsWarehouse)
+                return TextOrDash(_item.WarehouseCode);
+
+            return "-";
+        }
+    }
+
+
+    private string LatitudeLongitudeDisplay
+    {
+        get
+        {
+            if (_item is null)
+                return "-";
+
+            if (!_item.Latitude.HasValue
+                && !_item.Longitude.HasValue)
+            {
+                return "-";
+            }
+
+            if (_item.Latitude.HasValue
+                && _item.Longitude.HasValue)
+            {
+                return
+                    $"{FormatCoordinate(_item.Latitude)}, {FormatCoordinate(_item.Longitude)}";
+            }
+
+            return _item.Latitude.HasValue
+                ? FormatCoordinate(_item.Latitude)
+                : FormatCoordinate(_item.Longitude);
+        }
+    }
+
+
+    protected override Task OnParametersSetAsync()
+    {
+        var key =
+            $"{RequestedTab}:{RequestedId}:{SelectedCompany}";
+
+        if (string.Equals(
+                key,
+                _loadedKey,
+                StringComparison.Ordinal))
+        {
+            return Task.CompletedTask;
+        }
+
+        _loadedKey = key;
+
+        // Do not call protected APIs yet. On a browser refresh the shared
+        // LoginState/Http authorization header is recreated only after
+        // sessionStorage is available in the interactive browser.
+        _pendingDataLoad = true;
+        _isLoading = true;
+        _errorMessage = null;
+        _item = null;
+        _documentEntries = new();
+
+        return Task.CompletedTask;
+    }
+
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_sessionReady)
+        {
+            var restored =
+                await RestorePdfSessionAsync();
+
+            if (!restored)
+            {
+                Nav.NavigateTo(
+                    "/login",
+                    forceLoad: false);
+
+                return;
+            }
+
+            _sessionReady = true;
+        }
+
+        if (_pendingDataLoad)
+        {
+            _pendingDataLoad = false;
+
+            await LoadPdfData();
+
+            // Render the saved-document previews only after the data-bound
+            // document cards exist in the DOM.
+            _pendingSavedDocumentRender =
+                _documentEntries.Count > 0;
+
+            StateHasChanged();
+            return;
+        }
+
+        if (_pendingSavedDocumentRender)
+        {
+            _pendingSavedDocumentRender = false;
+
+            await RenderSavedDocumentPreviewsAsync();
+        }
+    }
+
+
+    private async Task<bool> RestorePdfSessionAsync()
+    {
+        try
+        {
+            // Same-tab navigation normally already has LoginState.Token.
+            // Direct browser refresh recreates the app, so restore it from
+            // the same sessionStorage keys used by MainLayout.
+            var token =
+                LoginState.Token;
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                token =
+                    await JS.InvokeAsync<string?>(
+                        "sessionStorage.getItem",
+                        "jwt_token");
+            }
+
+            if (string.IsNullOrWhiteSpace(token))
+                return false;
+
+            var rawToken =
+                token.StartsWith(
+                    "Bearer ",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? token["Bearer ".Length..]
+                    : token;
+
+            Http.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue(
+                    "Bearer",
+                    rawToken);
+
+            LoginState.Token =
+                rawToken;
+
+            // Restore the same optional client state MainLayout restores.
+            var roleAccess =
+                await JS.InvokeAsync<string?>(
+                    "sessionStorage.getItem",
+                    "spic_role_access");
+
+            LoginState.SetAllowedPages(
+                roleAccess);
+
+            var expStr =
+                await JS.InvokeAsync<string?>(
+                    "sessionStorage.getItem",
+                    "jwt_expiration");
+
+            if (!string.IsNullOrWhiteSpace(expStr)
+                && DateTime.TryParse(
+                    expStr,
+                    out var expiration))
+            {
+                LoginState.Expiration =
+                    expiration;
+
+                if (expiration <= DateTime.Now)
+                    return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+
+    private async Task LoadPdfData()
+    {
+        _isLoading = true;
+
+        _errorMessage = null;
+
+        _item = null;
+
+        _documentEntries = new();
+
+        try
+        {
+            if (RequestedId <= 0)
+            {
+                throw new InvalidOperationException(
+                    "A valid logistics record id is required.");
+            }
+
+
+            var api =
+                RequestedTab switch
+                {
+                    // Same source used in Logistics.razor.
+                    "Warehouse" =>
+                        "api/Warehouse/all",
+
+                    // ActiveTab == Port is Rake Point.
+                    "Port" =>
+                        "api/RackPoint/all",
+
+                    // ActiveTab == PortMaster is actual Port.
+                    "PortMaster" =>
+                        "api/Port/all",
+
+                    _ =>
+                        throw new InvalidOperationException(
+                            "Invalid logistics tab. Use Warehouse, Port, or PortMaster.")
+                };
+
+
+            var items =
+                await Http.GetFromJsonAsync<List<LogisticsItemDto>>(
+                    api)
+                ?? new();
+
+
+            _item =
+                items.FirstOrDefault(
+                    x => x.Id == RequestedId);
+
+
+            if (_item is null)
+            {
+                throw new InvalidOperationException(
+                    $"No {GetEntityDisplayName()} record was found for ID {RequestedId}.");
+            }
+
+            if (!IsActualPort && HasCompanyFilter)
+            {
+                if (IsSpicPdf && _item.InSpic != true)
+                {
+                    throw new InvalidOperationException(
+                        "SPIC is not selected for this Logistics record.");
+                }
+
+                if (IsGreenStarPdf && _item.InGreenStar != true)
+                {
+                    throw new InvalidOperationException(
+                        "GreenStar is not selected for this Logistics record.");
+                }
+            }
+
+
+            // Lookup failures should not block the PDF itself.
+            // If a lookup is unavailable, the corresponding display falls back to "-".
+            var statesTask =
+                SafeGetList<StateDto>(
+                    "api/State/all");
+
+            var districtsTask =
+                SafeGetList<DistrictDto>(
+                    "api/District/all");
+
+            var regionsTask =
+                SafeGetList<RegionDto>(
+                    "api/Region/all");
+
+            var headquartersTask =
+                SafeGetList<HeadquarterDto>(
+                    "api/Headquarter/all");
+
+            var usersTask =
+                SafeGetList<UserInfoLookupDto>(
+                    "api/UserInfo/all");
+
+
+            await Task.WhenAll(
+                statesTask,
+                districtsTask,
+                regionsTask,
+                headquartersTask,
+                usersTask);
+
+
+            _states =
+                await statesTask;
+
+            _districts =
+                await districtsTask;
+
+            _regions =
+                await regionsTask;
+
+            _headquarters =
+                await headquartersTask;
+
+
+            BuildUserNameLookup(
+                await usersTask);
+
+
+            if (!IsActualPort)
+            {
+                _documentEntries =
+                    BuildDocumentEntries(
+                        _item);
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+
+    private async Task<List<T>> SafeGetList<T>(
+        string url)
+    {
+        try
+        {
+            return
+                await Http.GetFromJsonAsync<List<T>>(
+                    url)
+                ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+
+    private void BuildUserNameLookup(
+        List<UserInfoLookupDto> users)
+    {
+        _userNamesById =
+            users
+                .Where(
+                    x =>
+                        !string.IsNullOrWhiteSpace(
+                            x.Id))
+                .GroupBy(
+                    x =>
+                        x.Id.Trim(),
+                    StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g =>
+                        g.Key,
+                    g =>
+                    {
+                        var user =
+                            g.First();
+
+                        if (!string.IsNullOrWhiteSpace(
+                                user.Name))
+                        {
+                            return
+                                user.Name.Trim();
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(
+                                user.UserName))
+                        {
+                            return
+                                user.UserName.Trim();
+                        }
+
+                        return
+                            user.Id.Trim();
+                    },
+                    StringComparer.OrdinalIgnoreCase);
+    }
+
+
+    private static string NormalizeCompany(
+        string? value)
+    {
+        var normalized =
+            (value ?? string.Empty)
+                .Trim()
+                .Replace(" ", string.Empty)
+                .Replace("-", string.Empty)
+                .Replace("_", string.Empty)
+                .ToLowerInvariant();
+
+        return normalized switch
+        {
+            "spic" =>
+                "SPIC",
+
+            "greenstar" =>
+                "GreenStar",
+
+            "gfl" =>
+                "GreenStar",
+
+            "greenstarfertilizers" =>
+                "GreenStar",
+
+            _ =>
+                string.Empty
+        };
+    }
+
+
+    private static string NormalizeTab(
+        string? value)
+    {
+        var normalized =
+            (value ?? string.Empty)
+                .Trim()
+                .Replace(
+                    " ",
+                    string.Empty)
+                .Replace(
+                    "-",
+                    string.Empty)
+                .Replace(
+                    "_",
+                    string.Empty)
+                .ToLowerInvariant();
+
+
+        return normalized switch
+        {
+            "warehouse" =>
+                "Warehouse",
+
+            // Existing Logistics.razor internal value.
+            "port" =>
+                "Port",
+
+            // Friendly Rake Point aliases.
+            "rakepoint" =>
+                "Port",
+
+            "rackpoint" =>
+                "Port",
+
+            "rake" =>
+                "Port",
+
+            // Existing Logistics.razor internal value.
+            "portmaster" =>
+                "PortMaster",
+
+            // Friendly actual-Port aliases.
+            "actualport" =>
+                "PortMaster",
+
+            "seaport" =>
+                "PortMaster",
+
+            _ =>
+                value?.Trim()
+                ?? string.Empty
+        };
+    }
+
+
+    private string GetEntityDisplayName() =>
+        RequestedTab switch
+        {
+            "Warehouse" =>
+                "Warehouse",
+
+            "Port" =>
+                "Rake Point",
+
+            "PortMaster" =>
+                "Port",
+
+            _ =>
+                "Logistics"
+        };
+
+
+    private string GetDocumentPrefix() =>
+        RequestedTab switch
+        {
+            "Warehouse" =>
+                "WH",
+
+            "Port" =>
+                "RP",
+
+            "PortMaster" =>
+                "PORT",
+
+            _ =>
+                "LOG"
+        };
+
+
+    private string GetStateName(
+        int? id)
+    {
+        if (!id.HasValue
+            || id.Value <= 0)
+        {
+            return "-";
+        }
+
+        return
+            _states
+                .FirstOrDefault(
+                    x =>
+                        x.Id == id.Value)
+                ?.StateName
+            ?? "-";
+    }
+
+
+    private string GetDistrictName(
+        int? id)
+    {
+        if (!id.HasValue
+            || id.Value <= 0)
+        {
+            return "-";
+        }
+
+        return
+            _districts
+                .FirstOrDefault(
+                    x =>
+                        x.Id == id.Value)
+                ?.DistrictName
+            ?? "-";
+    }
+
+
+    private string GetRegionName(
+        int? id)
+    {
+        if (!id.HasValue
+            || id.Value <= 0)
+        {
+            return "-";
+        }
+
+        return
+            _regions
+                .FirstOrDefault(
+                    x =>
+                        x.Id == id.Value)
+                ?.RegionName
+            ?? "-";
+    }
+
+
+    private string GetHeadquarterName(
+        int? id)
+    {
+        if (!id.HasValue
+            || id.Value <= 0)
+        {
+            return "-";
+        }
+
+        return
+            _headquarters
+                .FirstOrDefault(
+                    x =>
+                        x.Id == id.Value)
+                ?.HeadquarterName
+            ?? "-";
+    }
+
+
+    private static string GetOperatedByDisplay(
+        LogisticsOperatedBy? value) =>
+        value switch
+        {
+            LogisticsOperatedBy.Dealer =>
+                "Dealer",
+
+            LogisticsOperatedBy.Others =>
+                "Others",
+
+            _ =>
+                "-"
+        };
+
+
+    private static string GetWarehouseCategoryDisplay(
+        LogisticsWarehouseCategory? value) =>
+        value switch
+        {
+            LogisticsWarehouseCategory.PvtWH =>
+                "PVT WH",
+
+            LogisticsWarehouseCategory.CandFWH =>
+                "C&F WH",
+
+            LogisticsWarehouseCategory.Both =>
+                "Both",
+
+            _ =>
+                "PVT WH"
+        };
+
+
+    private static string GetWarehouseTypeDisplay(
+        LogisticsWarehouseType? value) =>
+        value switch
+        {
+            LogisticsWarehouseType.FieldWH =>
+                "Field WH",
+
+            LogisticsWarehouseType.RakepointWH =>
+                "Rake Point WH",
+
+            _ =>
+                "-"
+        };
+
+
+    // Same current status logic used by Logistics.razor.
+    private static string GetApprovalStatus(
+        LogisticsItemDto item)
+    {
+        if (item.IsSubmittedForReview != true)
+            return "Draft";
+
+        if (item.RMApproved == false)
+            return "Rejected by RM";
+
+        if (item.SMApproved == false)
+            return "Rejected by SMM";
+
+        if (item.AVPApproved == false)
+            return "Rejected by AVP";
+
+        if (item.AVPApproved == true)
+            return "Approved";
+
+        if (item.RMApproved == null)
+            return "Pending RM";
+
+        if (item.RMApproved == true
+            && item.SMApproved == null)
+        {
+            return "Pending SMM";
+        }
+
+        if (item.RMApproved == true
+            && item.SMApproved == true
+            && item.AVPApproved == null)
+        {
+            return "Pending AVP";
+        }
+
+        return "Submitted";
+    }
+
+
+    private static string GetApprovalBadgeClass(
+        LogisticsItemDto item)
+    {
+        var status =
+            GetApprovalStatus(
+                item);
+
+        if (status == "Approved")
+            return "approval-approved";
+
+        if (status.StartsWith(
+                "Rejected",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "approval-rejected";
+        }
+
+        if (status.StartsWith(
+                "Pending",
+                StringComparison.OrdinalIgnoreCase)
+            || status == "Submitted")
+        {
+            return "approval-pending";
+        }
+
+        return "approval-draft";
+    }
+
+
+    private static string GetApprovalDecision(
+        bool? value) =>
+        value switch
+        {
+            true =>
+                "Approved",
+
+            false =>
+                "Rejected",
+
+            null =>
+                "Not Processed"
+        };
+
+
+    private string GetCreatedByDisplay(
+        LogisticsItemDto item)
+    {
+        if (!string.IsNullOrWhiteSpace(
+                item.CreatedByName))
+        {
+            return
+                item.CreatedByName.Trim();
+        }
+
+        return
+            GetUserDisplay(
+                item.CreatedBy);
+    }
+
+
+    private string GetUserDisplay(
+        string? userId)
+    {
+        if (string.IsNullOrWhiteSpace(
+                userId))
+        {
+            return "-";
+        }
+
+        var id =
+            userId.Trim();
+
+        if (_userNamesById.TryGetValue(
+                id,
+                out var name)
+            && !string.IsNullOrWhiteSpace(
+                name))
+        {
+            return name;
+        }
+
+        return id;
+    }
+
+
+    // ===============================================================
+    // DOCUMENT BINDING
+    //
+    // Same saved fields used by Logistics.razor:
+    //
+    // GstDocumentPath
+    // InsuranceDocumentPath
+    // FertilizerLicenseDocumentPath
+    // OtherDocumentPathsJson
+    //
+    // Supplemental company-specific document type is detected from
+    // the same folder naming convention used by Logistics.razor.
+    // ===============================================================
+
+    private List<DocumentEntry> BuildDocumentEntries(
+        LogisticsItemDto item)
+    {
+        var entries =
+            new List<DocumentEntry>();
+
+        var seen =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+
+        void AddEntry(
+            string? path,
+            string? fallbackType = null,
+            string? fallbackCompany = null)
+        {
+            if (string.IsNullOrWhiteSpace(
+                    path))
+            {
+                return;
+            }
+
+            var cleanPath =
+                path.Trim();
+
+            if (!seen.Add(
+                    cleanPath))
+            {
+                return;
+            }
+
+
+            var fileName =
+                GetFileName(
+                    cleanPath);
+
+
+            var detectedType =
+                GetDocumentTypeName(
+                    cleanPath);
+
+
+            // Existing helper returns the raw filename when a folder does not
+            // identify the type. Primary DB fields still have a known type,
+            // so use that field meaning as the fallback.
+            if (!string.IsNullOrWhiteSpace(
+                    fallbackType)
+                && string.Equals(
+                    detectedType,
+                    fileName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                detectedType =
+                    fallbackType;
+            }
+
+
+            var detectedCompany =
+                GetDocumentCompany(
+                    cleanPath);
+
+
+            entries.Add(
+                new DocumentEntry
+                {
+                    Path =
+                        cleanPath,
+
+                    TypeName =
+                        string.IsNullOrWhiteSpace(
+                            detectedType)
+                            ? fallbackType
+                                ?? "Document"
+                            : detectedType,
+
+                    Company =
+                        detectedCompany
+                        ?? fallbackCompany,
+
+                    FileName =
+                        fileName
+                });
+        }
+
+
+        if (IsWarehouse)
+        {
+            var category =
+                item.WarehouseCategory
+                ?? LogisticsWarehouseCategory.PvtWH;
+
+
+            var pvtOrBoth =
+                category
+                    is LogisticsWarehouseCategory.PvtWH
+                    or LogisticsWarehouseCategory.Both;
+
+
+            AddEntry(
+                item.GstDocumentPath,
+                pvtOrBoth
+                    && item.InSpic == true
+                        ? "SPIC GST"
+                        : "GST Document",
+                pvtOrBoth
+                    && item.InSpic == true
+                        ? "SPIC"
+                        : null);
+
+
+            AddEntry(
+                item.InsuranceDocumentPath,
+                "Insurance Document");
+
+
+            AddEntry(
+                item.FertilizerLicenseDocumentPath,
+                pvtOrBoth
+                    && item.InSpic == true
+                        ? "SPIC Fertilizer License"
+                        : "Fertilizer License",
+                pvtOrBoth
+                    && item.InSpic == true
+                        ? "SPIC"
+                        : null);
+        }
+        else
+        {
+            AddEntry(
+                item.GstDocumentPath,
+                "GST Document");
+
+            AddEntry(
+                item.InsuranceDocumentPath,
+                "Insurance Document");
+
+            AddEntry(
+                item.FertilizerLicenseDocumentPath,
+                "Fertilizer License");
+        }
+
+
+        foreach (
+            var path
+            in DeserializeDocumentPaths(
+                item.OtherDocumentPathsJson))
+        {
+            AddEntry(
+                path);
+        }
+
+
+        if (!HasCompanyFilter)
+            return entries;
+
+        return entries
+            .Where(entry =>
+                string.IsNullOrWhiteSpace(entry.Company)
+                || (IsSpicPdf
+                    && string.Equals(
+                        entry.Company,
+                        "SPIC",
+                        StringComparison.OrdinalIgnoreCase))
+                || (IsGreenStarPdf
+                    && string.Equals(
+                        entry.Company,
+                        "Green Star",
+                        StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+
+    private static List<string> DeserializeDocumentPaths(
+        string? json)
+    {
+        if (string.IsNullOrWhiteSpace(
+                json))
+        {
+            return new();
+        }
+
+        try
+        {
+            return
+                JsonSerializer
+                    .Deserialize<List<string>>(
+                        json)
+                    ?.Where(
+                        x =>
+                            !string.IsNullOrWhiteSpace(
+                                x))
+                    .Distinct(
+                        StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+
+    private static string GetFileName(
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(
+                path))
+        {
+            return string.Empty;
+        }
+
+        var normalized =
+            path.Replace(
+                '\\',
+                '/');
+
+        var lastSlash =
+            normalized.LastIndexOf('/');
+
+        return lastSlash >= 0
+            ? normalized[
+                (lastSlash + 1)..]
+            : normalized;
+    }
+
+
+    private static string GetDocumentTypeName(
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(
+                path))
+        {
+            return "Document";
+        }
+
+        var normalized =
+            path
+                .Replace(
+                    '\\',
+                    '/')
+                .ToLowerInvariant();
+
+
+        if (normalized.Contains(
+                "/gst_spic/"))
+        {
+            return "SPIC GST";
+        }
+
+        if (normalized.Contains(
+                "/gst_gfl/"))
+        {
+            return "GREEN STAR GST";
+        }
+
+        if (normalized.Contains(
+                "/gst_trading/"))
+        {
+            return "Trading Document";
+        }
+
+        if (normalized.Contains(
+                "/insurance_spic/"))
+        {
+            return "SPIC Insurance";
+        }
+
+        if (normalized.Contains(
+                "/insurance_gfl/"))
+        {
+            return "GREEN STAR Insurance";
+        }
+
+        if (normalized.Contains(
+                "/insurance/"))
+        {
+            return "Insurance Document";
+        }
+
+        if (normalized.Contains(
+                "/fertilizerlicense_spic/"))
+        {
+            return "SPIC Fertilizer License";
+        }
+
+        if (normalized.Contains(
+                "/fertilizerlicense_gfl/"))
+        {
+            return "GREEN STAR Fertilizer License";
+        }
+
+        if (normalized.Contains(
+                "/other/"))
+        {
+            return "Other Document";
+        }
+
+
+        var name =
+            GetFileName(
+                path);
+
+
+        return string.IsNullOrWhiteSpace(
+                name)
+            ? "Document"
+            : name;
+    }
+
+
+    private static string? GetDocumentCompany(
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(
+                path))
+        {
+            return null;
+        }
+
+        var normalized =
+            path
+                .Replace(
+                    '\\',
+                    '/')
+                .ToLowerInvariant();
+
+
+        if (normalized.Contains(
+                "/gst_spic/")
+            || normalized.Contains(
+                "/insurance_spic/")
+            || normalized.Contains(
+                "/fertilizerlicense_spic/"))
+        {
+            return "SPIC";
+        }
+
+
+        if (normalized.Contains(
+                "/gst_gfl/")
+            || normalized.Contains(
+                "/insurance_gfl/")
+            || normalized.Contains(
+                "/fertilizerlicense_gfl/"))
+        {
+            return "Green Star";
+        }
+
+
+        return null;
+    }
+
+
+    // ===============================================================
+    // SAVED DOCUMENT PREVIEW
+    //
+    // Uses the same LogisticsFile/view endpoint as Logistics.razor.
+    // Nothing is re-saved or changed here; this is display-only.
+    // ===============================================================
+
+    private static string ToSavedDocumentRelativePath(
+        string path)
+    {
+        var normalized =
+            (path ?? string.Empty)
+                .Replace('\\', '/')
+                .TrimStart('/');
+
+        if (normalized.StartsWith(
+                "uploads/",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            normalized =
+                normalized["uploads/".Length..];
+        }
+
+        return normalized;
+    }
+
+
+    private string GetSavedDocumentViewUrl(
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        if (path.StartsWith(
+                "http://",
+                StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(
+                "https://",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return path;
+        }
+
+        var baseUrl =
+            Http.BaseAddress
+                ?.ToString()
+                .TrimEnd('/')
+            ?? string.Empty;
+
+        var relative =
+            ToSavedDocumentRelativePath(
+                path);
+
+        var url =
+            $"{baseUrl}/api/LogisticsFile/view/{relative}";
+
+        var token =
+            LoginState.Token;
+
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            var rawToken =
+                token.StartsWith(
+                    "Bearer ",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? token["Bearer ".Length..]
+                    : token;
+
+            url +=
+                $"?access_token={Uri.EscapeDataString(rawToken)}";
+        }
+
+        return url;
+    }
+
+
+    private static bool IsPdfDocument(
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        return string.Equals(
+            System.IO.Path.GetExtension(path),
+            ".pdf",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    private static bool IsImageDocument(
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        var ext =
+            System.IO.Path
+                .GetExtension(path)
+                .ToLowerInvariant();
+
+        return ext
+            is ".jpg"
+            or ".jpeg"
+            or ".png"
+            or ".gif"
+            or ".webp"
+            or ".bmp";
+    }
+
+
+    private static string GetSavedDocumentIcon(
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "bi-file-earmark";
+
+        var ext =
+            System.IO.Path
+                .GetExtension(path)
+                .ToLowerInvariant();
+
+        return ext switch
+        {
+            ".pdf" =>
+                "bi-file-earmark-pdf-fill",
+
+            ".jpg" or ".jpeg" or ".png"
+                or ".gif" or ".webp" or ".bmp" =>
+                "bi-file-earmark-image-fill",
+
+            ".doc" or ".docx" =>
+                "bi-file-earmark-word-fill",
+
+            ".xls" or ".xlsx" =>
+                "bi-file-earmark-excel-fill",
+
+            _ =>
+                "bi-file-earmark-fill"
+        };
+    }
+
+
+    private static string GetSavedDocumentViewLabel(
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "View File";
+
+        var ext =
+            System.IO.Path
+                .GetExtension(path)
+                .ToLowerInvariant();
+
+        return ext switch
+        {
+            ".pdf" =>
+                "View PDF",
+
+            ".jpg" or ".jpeg" or ".png"
+                or ".gif" or ".webp" or ".bmp" =>
+                "View Image",
+
+            ".doc" or ".docx" =>
+                "View Doc",
+
+            ".xls" or ".xlsx" =>
+                "View Excel",
+
+            _ =>
+                "View File"
+        };
+    }
+
+
+    private async Task RenderSavedDocumentPreviewsAsync()
+    {
+        try
+        {
+            var module =
+                await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>(
+                    "import",
+                    "./_content/SPIC.MauiBlazorApp.Shared/js/logisticsPdfDocuments.js");
+
+            try
+            {
+                await module.InvokeVoidAsync(
+                    "renderSavedDocuments",
+                    ".logistics-saved-pdf-target");
+            }
+            finally
+            {
+                await module.DisposeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            // The Logistics PDF itself must continue to work even if a
+            // particular attachment preview cannot be rendered.
+            Console.WriteLine(
+                $"Saved document preview failed: {ex.Message}");
+        }
+    }
+
+
+    private async Task PrintDocument()
+    {
+        try
+        {
+            // Print from an isolated hidden frame. This removes the app's
+            // 100vh/scroll-container clipping and lets the browser paginate
+            // the complete Logistics document across every A4 page.
+            var module =
+                await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>(
+                    "import",
+                    "./_content/SPIC.MauiBlazorApp.Shared/js/logisticsPdfPrint.js");
+
+            try
+            {
+                await module.InvokeVoidAsync(
+                    "printAllPages",
+                    "logistics-pdf-document",
+                    PageTitleText);
+            }
+            finally
+            {
+                await module.DisposeAsync();
+            }
+        }
+        catch
+        {
+            // Fallback for a host that does not support dynamic JS modules.
+            await JS.InvokeVoidAsync("window.print");
+        }
+    }
+
+
+    private void BackToLogistics()
+    {
+        Nav.NavigateTo("/Logistics", forceLoad: false);
+    }
+
+
+    private static string TextOrDash(
+        string? value) =>
+        string.IsNullOrWhiteSpace(
+            value)
+            ? "-"
+            : value.Trim();
+
+
+    private static string FormatCoordinate(
+        double? value) =>
+        value.HasValue
+            ? value.Value.ToString(
+                "0.######",
+                CultureInfo.InvariantCulture)
+            : "-";
+
+
+    private static string FormatQuantity(
+        decimal? value) =>
+        value.HasValue
+            ? value.Value.ToString(
+                "N2",
+                CultureInfo.InvariantCulture)
+            : "-";
+
+
+    private static string FormatDate(
+        DateTime value) =>
+        value == default
+            ? "-"
+            : value.ToString(
+                "dd MMM yyyy");
+
+
+    private static string FormatDateTime(
+        DateTime value) =>
+        value == default
+            ? "-"
+            : value.ToString(
+                "dd MMM yyyy hh:mm tt");
+
+
+    private static string FormatNullableDateTime(
+        DateTime? value) =>
+        value.HasValue
+            ? value.Value.ToString(
+                "dd MMM yyyy hh:mm tt")
+            : "-";
+
+
+    // ===============================================================
+    // PDF VIEW DTOs
+    //
+    // These match the fields currently consumed by Logistics.razor.
+    // ===============================================================
+
+    private sealed class DocumentEntry
+    {
+        public string Path { get; set; } = "";
+
+        public string TypeName { get; set; } = "";
+
+        public string? Company { get; set; }
+
+        public string FileName { get; set; } = "";
+    }
+
+
+    public class LogisticsItemDto
+    {
+        public int Id { get; set; }
+
+        public string Name { get; set; } = "";
+
+        public string? WarehouseCode { get; set; }
+
+        public LogisticsWarehouseCategory? WarehouseCategory { get; set; }
+
+        public string? RailwayCode { get; set; }
+
+        public string? SAPCode { get; set; }
+
+        public bool? InSpic { get; set; }
+
+        public bool? InGreenStar { get; set; }
+
+        public int? BasicStateId { get; set; }
+
+        public int? RegionId { get; set; }
+
+        public int? HeadquarterId { get; set; }
+
+        public LogisticsOperatedBy? OperatedBy { get; set; }
+
+        public LogisticsWarehouseType? WarehouseType { get; set; }
+
+        public string? GoogleURL { get; set; }
+
+        public double? Latitude { get; set; }
+
+        public double? Longitude { get; set; }
+
+        public string? DoorNo { get; set; }
+
+        public string? Street { get; set; }
+
+        public string? SubVillage { get; set; }
+
+        public string? PinCode { get; set; }
+
+        public string? Village { get; set; }
+
+        public string? Block { get; set; }
+
+        public string? Taluk { get; set; }
+
+        public int StateId { get; set; }
+
+        public int DistrictId { get; set; }
+
+        public string? ContactNumber { get; set; }
+
+        public decimal? SpicApprovedReservationQuantityMT { get; set; }
+
+        public decimal? SpicAdditionalReservationQuantityMT { get; set; }
+
+        public decimal? GflApprovedReservationQuantityMT { get; set; }
+
+        public decimal? GflAdditionalReservationQuantityMT { get; set; }
+
+        public decimal? GflReservationQuantityMT { get; set; }
+
+        public decimal? GflAdditionalReservationQuantityLitres { get; set; }
+
+        public string? GstDocumentPath { get; set; }
+
+        public string? InsuranceDocumentPath { get; set; }
+
+        public string? FertilizerLicenseDocumentPath { get; set; }
+
+        public string? OtherDocumentPathsJson { get; set; }
+
+        public bool IsActive { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
+        public DateTime UpdatedAt { get; set; }
+
+        public string UpdatedBy { get; set; } = "";
+
+        // Creator + approval flow returned by Warehouse / RackPoint APIs.
+        public string? CreatedBy { get; set; }
+
+        public string? CreatedByName { get; set; }
+
+        public bool IsSubmittedForReview { get; set; }
+
+        public bool? RMApproved { get; set; }
+
+        public bool? SMApproved { get; set; }
+
+        public bool? AVPApproved { get; set; }
+
+        public string? RMApprovedBy { get; set; }
+
+        public DateTime? RMApprovedAt { get; set; }
+
+        public string? SMApprovedBy { get; set; }
+
+        public DateTime? SMApprovedAt { get; set; }
+
+        public string? AVPApprovedBy { get; set; }
+
+        public DateTime? AVPApprovedAt { get; set; }
+
+        public string? ApprovalRemarks { get; set; }
+    }
+
+
+    public class StateDto
+    {
+        public int Id { get; set; }
+
+        public string StateName { get; set; } = "";
+    }
+
+
+    public class DistrictDto
+    {
+        public int Id { get; set; }
+
+        public string DistrictName { get; set; } = "";
+
+        public int StateId { get; set; }
+    }
+
+
+    public class RegionDto
+    {
+        public int Id { get; set; }
+
+        public string RegionName { get; set; } = "";
+
+        public int StateId { get; set; }
+    }
+
+
+    public class HeadquarterDto
+    {
+        public int Id { get; set; }
+
+        public string HeadquarterName { get; set; } = "";
+
+        public int RegionId { get; set; }
+    }
+
+
+    public class UserInfoLookupDto
+    {
+        public string Id { get; set; } = string.Empty;
+
+        public string? UserName { get; set; }
+
+        public string? Name { get; set; }
+    }
+}

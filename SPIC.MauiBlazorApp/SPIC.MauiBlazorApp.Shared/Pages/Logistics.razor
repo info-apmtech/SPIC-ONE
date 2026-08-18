@@ -9,6 +9,7 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject NavigationManager Nav
 
 <style>
     .lm-field-error {
@@ -42,6 +43,64 @@
         font-weight: 600;
         color: #374151;
     }
+
+    /* Logistics list -> PDF detail view.
+       Uses internal Blazor navigation so MAUI authentication state is preserved. */
+    .lm-pdf-view-icon {
+        color: #dc3545;
+        font-size: 1.18rem;
+        cursor: pointer;
+        transition: transform .15s ease, color .15s ease;
+    }
+
+    .lm-pdf-view-icon:hover {
+        color: #b02a37;
+        transform: scale(1.08);
+    }
+
+
+    .lm-company-pdf-actions {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-width: 42px;
+    }
+
+    .lm-company-pdf-btn {
+        width: 40px;
+        height: 34px;
+        padding: 3px 5px;
+        border: 1px solid #e5e7eb;
+        border-radius: 7px;
+        background: #ffffff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, .05);
+        transition: border-color .15s ease, background .15s ease, transform .15s ease;
+    }
+
+    .lm-company-pdf-btn:hover {
+        border-color: #059669;
+        background: #f0fdf4;
+        transform: translateY(-1px);
+    }
+
+    .lm-company-pdf-logo {
+        display: block;
+        max-width: 30px;
+        max-height: 25px;
+        object-fit: contain;
+        pointer-events: none;
+    }
+
+    .lm-company-pdf-logo.greenstar {
+        max-width: 36px;
+        max-height: 27px;
+    }
+
 
     .lm-reservation-card {
         border: 1px solid #e5e7eb;
@@ -433,6 +492,227 @@
             font-size: .8rem;
         }
     }
+
+    /* =========================================================
+       Logistics list - compact Documents modal
+       ========================================================= */
+
+    .lm-doc-modal-open-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-width: 78px;
+        padding: 6px 10px;
+        border: 1px solid #059669;
+        border-radius: 7px;
+        background: #ecfdf5;
+        color: #047857;
+        font-size: .76rem;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+        transition: background .15s ease, border-color .15s ease, transform .15s ease;
+        white-space: nowrap;
+    }
+
+    .lm-doc-modal-open-btn:hover:not(:disabled) {
+        background: #d1fae5;
+        border-color: #047857;
+        transform: translateY(-1px);
+    }
+
+    .lm-doc-modal-open-btn:disabled {
+        border-color: #d1d5db;
+        background: #f8fafc;
+        color: #94a3b8;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .lm-doc-count-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 19px;
+        height: 19px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: #059669;
+        color: #fff;
+        font-size: .65rem;
+        font-weight: 800;
+    }
+
+    .lm-doc-modal-open-btn:disabled .lm-doc-count-badge {
+        background: #cbd5e1;
+    }
+
+    .lm-doc-list-modal .modal-dialog {
+        max-width: 780px;
+    }
+
+    .lm-doc-list-modal .modal-content {
+        border: 0;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 18px 50px rgba(15, 23, 42, .22);
+    }
+
+    .lm-doc-list-modal .modal-header {
+        padding: 15px 18px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #f8fafc;
+    }
+
+    .lm-doc-modal-title-wrap {
+        min-width: 0;
+    }
+
+    .lm-doc-modal-title {
+        margin: 0;
+        color: #1f2937;
+        font-size: 1rem;
+        font-weight: 800;
+    }
+
+    .lm-doc-modal-subtitle {
+        margin-top: 3px;
+        color: #64748b;
+        font-size: .76rem;
+        overflow-wrap: anywhere;
+    }
+
+    .lm-doc-list-modal .modal-body {
+        padding: 16px 18px;
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+
+    .lm-doc-modal-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+    }
+
+    .lm-doc-modal-table {
+        width: 100%;
+        min-width: 620px;
+        margin: 0;
+        border-collapse: collapse;
+        background: #fff;
+    }
+
+    .lm-doc-modal-table th {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #f8fafc;
+        color: #64748b;
+        font-size: .72rem;
+        font-weight: 700;
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    .lm-doc-modal-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #eef2f7;
+        color: #374151;
+        font-size: .78rem;
+        vertical-align: middle;
+    }
+
+    .lm-doc-modal-table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .lm-doc-modal-type {
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .lm-doc-modal-file {
+        max-width: 310px;
+        color: #475569;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .lm-doc-modal-icon-btn {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: 1px solid #d1d5db;
+        border-radius: 7px;
+        background: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background .15s ease, border-color .15s ease, transform .15s ease;
+    }
+
+    .lm-doc-modal-icon-btn.download {
+        color: #059669;
+    }
+
+    .lm-doc-modal-icon-btn.view {
+        color: #2563eb;
+    }
+
+    .lm-doc-modal-icon-btn:hover:not(:disabled) {
+        background: #f8fafc;
+        border-color: currentColor;
+        transform: translateY(-1px);
+    }
+
+    .lm-doc-modal-icon-btn:disabled {
+        opacity: .5;
+        cursor: wait;
+        transform: none;
+    }
+
+    .lm-doc-list-modal .modal-footer {
+        padding: 11px 18px;
+        border-top: 1px solid #e5e7eb;
+        background: #fff;
+    }
+
+    .lm-doc-modal-close-btn {
+        min-width: 86px;
+        padding: 7px 14px;
+        border: 1px solid #d1d5db;
+        border-radius: 7px;
+        background: #fff;
+        color: #374151;
+        font-size: .8rem;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .lm-doc-modal-close-btn:hover {
+        background: #f3f4f6;
+    }
+
+    .lm-doc-modal-empty {
+        padding: 24px 16px;
+        text-align: center;
+        color: #64748b;
+        font-size: .82rem;
+    }
+
+    @@media (max-width: 767.98px) {
+        .lm-doc-list-modal .modal-dialog {
+            margin: 12px;
+        }
+
+        .lm-doc-list-modal .modal-body {
+            padding: 12px;
+            max-height: 66vh;
+        }
+    }
+
 </style>
 
 <div class="container-fluid py-4 px-0">
@@ -1188,10 +1468,27 @@
                                     }
                                 </div>
 
-                                <label class="lm-upload-btn">
-                                    <i class="bi bi-cloud-arrow-up"></i> Choose SPIC GST File
-                                    <InputFile OnChange="OnGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                                </label>
+                                <div class="lm-doc-actions">
+                                    <label class="lm-upload-btn">
+                                        <i class="bi bi-cloud-arrow-up"></i> Choose SPIC GST File
+                                        <InputFile OnChange="OnGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                                    </label>
+                                    @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath))
+                                    {
+                                        <button type="button" class="lm-doc-action-btn" title="View SPIC GST Document" @onclick="() => ViewLogisticsDocument(_form.GstDocumentPath)">
+                                            <i class="bi bi-eye"></i> View
+                                        </button>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath) || _gstDocumentFile != null)
+                                    {
+                                        <button type="button"
+                                                class="lm-doc-action-btn"
+                                                title="Remove SPIC GST Document"
+                                                @onclick="RemoveGstDocument">
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
+                                    }
+                                </div>
                             </div>
                         }
 
@@ -1230,10 +1527,27 @@
                                     }
                                 </div>
 
-                                <label class="lm-upload-btn">
-                                    <i class="bi bi-cloud-arrow-up"></i> Choose GREEN STAR GST File
-                                    <InputFile OnChange="OnGflGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                                </label>
+                                <div class="lm-doc-actions">
+                                    <label class="lm-upload-btn">
+                                        <i class="bi bi-cloud-arrow-up"></i> Choose GREEN STAR GST File
+                                        <InputFile OnChange="OnGflGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                                    </label>
+                                    @if (!string.IsNullOrWhiteSpace(_gflGstDocumentPath))
+                                    {
+                                        <button type="button" class="lm-doc-action-btn" title="View GREEN STAR GST Document" @onclick="() => ViewLogisticsDocument(_gflGstDocumentPath)">
+                                            <i class="bi bi-eye"></i> View
+                                        </button>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(_gflGstDocumentPath) || _gflGstDocumentFile != null)
+                                    {
+                                        <button type="button"
+                                                class="lm-doc-action-btn"
+                                                title="Remove GREEN STAR GST Document"
+                                                @onclick="RemoveGflGstDocument">
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
+                                    }
+                                </div>
                             </div>
                         }
 
@@ -1248,8 +1562,7 @@
                                 @if (_tradingDocumentFile != null)
                                 {
                                     <div class="lm-doc-selected">
-                                        <i class="bi bi-arrow-repeat me-1"></i>@_tradingDocumentFile.Name
-                                        <span class="lm-doc-replace-note">(will replace the current document on save)</span>
+                                        <i class="bi bi-paperclip me-1"></i>@_tradingDocumentFile.Name
                                     </div>
                                 }
                                 else if (!string.IsNullOrWhiteSpace(_tradingDocumentPath))
@@ -1265,29 +1578,19 @@
                                     <i class="bi bi-cloud-arrow-up"></i> Choose Trading File
                                     <InputFile OnChange="OnTradingDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                 </label>
-                                @if (HasUploadedTradingDocument)
+                                @if (!string.IsNullOrWhiteSpace(_tradingDocumentPath))
                                 {
                                     <button type="button" class="lm-doc-action-btn" title="View Trading Document" @onclick="() => ViewLogisticsDocument(_tradingDocumentPath)">
                                         <i class="bi bi-eye"></i> View
                                     </button>
                                 }
-                                else
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="No uploaded document to view" disabled>
-                                        <i class="bi bi-eye"></i> View
-                                    </button>
-                                }
                                 @if (HasTradingDocument)
                                 {
-                                    <label class="lm-doc-action-btn" title="Replace Trading Document">
-                                        <i class="bi bi-arrow-repeat"></i> Replace
-                                        <InputFile OnChange="OnTradingDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                                    </label>
-                                }
-                                else
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="No document to replace" disabled>
-                                        <i class="bi bi-arrow-repeat"></i> Replace
+                                    <button type="button"
+                                            class="lm-doc-action-btn"
+                                            title="Remove Trading Document"
+                                            @onclick="RemoveTradingDocument">
+                                        <i class="bi bi-trash"></i> Remove
                                     </button>
                                 }
                             </div>
@@ -1308,8 +1611,7 @@
                                         @if (_spicInsuranceDocumentFile != null)
                                         {
                                             <div class="lm-doc-selected">
-                                                <i class="bi bi-arrow-repeat me-1"></i>@_spicInsuranceDocumentFile.Name
-                                                <span class="lm-doc-replace-note">(will replace the current document on save)</span>
+                                                <i class="bi bi-paperclip me-1"></i>@_spicInsuranceDocumentFile.Name
                                             </div>
                                         }
                                         else if (!string.IsNullOrWhiteSpace(_spicInsuranceDocumentPath))
@@ -1330,29 +1632,19 @@
                                             <i class="bi bi-cloud-arrow-up"></i> Choose SPIC Insurance File
                                             <InputFile OnChange="OnSpicInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                         </label>
-                                        @if (!string.IsNullOrWhiteSpace(_spicInsuranceDocumentPath) && _spicInsuranceDocumentFile == null)
+                                        @if (!string.IsNullOrWhiteSpace(_spicInsuranceDocumentPath))
                                         {
                                             <button type="button" class="lm-doc-action-btn" title="View SPIC Insurance Document" @onclick="() => ViewLogisticsDocument(_spicInsuranceDocumentPath)">
                                                 <i class="bi bi-eye"></i> View
                                             </button>
                                         }
-                                        else
-                                        {
-                                            <button type="button" class="lm-doc-action-btn" title="No uploaded document to view" disabled>
-                                                <i class="bi bi-eye"></i> View
-                                            </button>
-                                        }
                                         @if (!string.IsNullOrWhiteSpace(_spicInsuranceDocumentPath) || _spicInsuranceDocumentFile != null)
                                         {
-                                            <label class="lm-doc-action-btn" title="Replace SPIC Insurance Document">
-                                                <i class="bi bi-arrow-repeat"></i> Replace
-                                                <InputFile OnChange="OnSpicInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                                            </label>
-                                        }
-                                        else
-                                        {
-                                            <button type="button" class="lm-doc-action-btn" title="No document to replace" disabled>
-                                                <i class="bi bi-arrow-repeat"></i> Replace
+                                            <button type="button"
+                                                    class="lm-doc-action-btn"
+                                                    title="Remove SPIC Insurance Document"
+                                                    @onclick="RemoveSpicInsuranceDocument">
+                                                <i class="bi bi-trash"></i> Remove
                                             </button>
                                         }
                                     </div>
@@ -1371,8 +1663,7 @@
                                         @if (_gflInsuranceDocumentFile != null)
                                         {
                                             <div class="lm-doc-selected">
-                                                <i class="bi bi-arrow-repeat me-1"></i>@_gflInsuranceDocumentFile.Name
-                                                <span class="lm-doc-replace-note">(will replace the current document on save)</span>
+                                                <i class="bi bi-paperclip me-1"></i>@_gflInsuranceDocumentFile.Name
                                             </div>
                                         }
                                         else if (!string.IsNullOrWhiteSpace(_gflInsuranceDocumentPath))
@@ -1393,29 +1684,19 @@
                                             <i class="bi bi-cloud-arrow-up"></i> Choose GREEN STAR Insurance File
                                             <InputFile OnChange="OnGflInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                         </label>
-                                        @if (!string.IsNullOrWhiteSpace(_gflInsuranceDocumentPath) && _gflInsuranceDocumentFile == null)
+                                        @if (!string.IsNullOrWhiteSpace(_gflInsuranceDocumentPath))
                                         {
                                             <button type="button" class="lm-doc-action-btn" title="View GREEN STAR Insurance Document" @onclick="() => ViewLogisticsDocument(_gflInsuranceDocumentPath)">
                                                 <i class="bi bi-eye"></i> View
                                             </button>
                                         }
-                                        else
-                                        {
-                                            <button type="button" class="lm-doc-action-btn" title="No uploaded document to view" disabled>
-                                                <i class="bi bi-eye"></i> View
-                                            </button>
-                                        }
                                         @if (!string.IsNullOrWhiteSpace(_gflInsuranceDocumentPath) || _gflInsuranceDocumentFile != null)
                                         {
-                                            <label class="lm-doc-action-btn" title="Replace GREEN STAR Insurance Document">
-                                                <i class="bi bi-arrow-repeat"></i> Replace
-                                                <InputFile OnChange="OnGflInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                                            </label>
-                                        }
-                                        else
-                                        {
-                                            <button type="button" class="lm-doc-action-btn" title="No document to replace" disabled>
-                                                <i class="bi bi-arrow-repeat"></i> Replace
+                                            <button type="button"
+                                                    class="lm-doc-action-btn"
+                                                    title="Remove GREEN STAR Insurance Document"
+                                                    @onclick="RemoveGflInsuranceDocument">
+                                                <i class="bi bi-trash"></i> Remove
                                             </button>
                                         }
                                     </div>
@@ -1458,10 +1739,27 @@
                                     }
                                 </div>
 
-                                <label class="lm-upload-btn">
-                                    <i class="bi bi-cloud-arrow-up"></i> Choose SPIC License File
-                                    <InputFile OnChange="OnFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                                </label>
+                                <div class="lm-doc-actions">
+                                    <label class="lm-upload-btn">
+                                        <i class="bi bi-cloud-arrow-up"></i> Choose SPIC License File
+                                        <InputFile OnChange="OnFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                                    </label>
+                                    @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath))
+                                    {
+                                        <button type="button" class="lm-doc-action-btn" title="View SPIC Fertilizer License" @onclick="() => ViewLogisticsDocument(_form.FertilizerLicenseDocumentPath)">
+                                            <i class="bi bi-eye"></i> View
+                                        </button>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath) || _fertilizerLicenseDocumentFile != null)
+                                    {
+                                        <button type="button"
+                                                class="lm-doc-action-btn"
+                                                title="Remove SPIC Fertilizer License"
+                                                @onclick="RemoveFertilizerLicenseDocument">
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
+                                    }
+                                </div>
                             </div>
                         }
 
@@ -1500,10 +1798,27 @@
                                     }
                                 </div>
 
-                                <label class="lm-upload-btn">
-                                    <i class="bi bi-cloud-arrow-up"></i> Choose GREEN STAR License File
-                                    <InputFile OnChange="OnGflFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                                </label>
+                                <div class="lm-doc-actions">
+                                    <label class="lm-upload-btn">
+                                        <i class="bi bi-cloud-arrow-up"></i> Choose GREEN STAR License File
+                                        <InputFile OnChange="OnGflFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                                    </label>
+                                    @if (!string.IsNullOrWhiteSpace(_gflFertilizerLicenseDocumentPath))
+                                    {
+                                        <button type="button" class="lm-doc-action-btn" title="View GREEN STAR Fertilizer License" @onclick="() => ViewLogisticsDocument(_gflFertilizerLicenseDocumentPath)">
+                                            <i class="bi bi-eye"></i> View
+                                        </button>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(_gflFertilizerLicenseDocumentPath) || _gflFertilizerLicenseDocumentFile != null)
+                                    {
+                                        <button type="button"
+                                                class="lm-doc-action-btn"
+                                                title="Remove GREEN STAR Fertilizer License"
+                                                @onclick="RemoveGflFertilizerLicenseDocument">
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
+                                    }
+                                </div>
                             </div>
                         }
 
@@ -1517,16 +1832,34 @@
                                     <ul class="lm-doc-existing-list">
                                         @foreach (var path in VisibleOtherDocumentPaths)
                                         {
-                                            <li class="lm-doc-viewable" title="Click to view" @onclick="() => ViewLogisticsDocument(path)">@GetFileName(path) <i class="bi bi-eye"></i></li>
+                                            <li>
+                                                <span class="lm-doc-viewable" title="Click to view" @onclick="() => ViewLogisticsDocument(path)">
+                                                    @GetFileName(path) <i class="bi bi-eye"></i>
+                                                </span>
+                                                <button type="button"
+                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
+                                                        title="Remove document"
+                                                        @onclick="() => RemoveOtherDocumentPath(path)">
+                                                    <i class="bi bi-trash"></i> Remove
+                                                </button>
+                                            </li>
                                         }
                                     </ul>
                                 }
                                 @if (_otherDocumentFiles.Count > 0)
                                 {
                                     <ul class="lm-doc-existing-list text-success">
-                                        @foreach (var file in _otherDocumentFiles)
+                                        @foreach (var file in _otherDocumentFiles.ToList())
                                         {
-                                            <li>@file.Name</li>
+                                            <li>
+                                                <span>@file.Name</span>
+                                                <button type="button"
+                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
+                                                        title="Remove selected document"
+                                                        @onclick="() => RemoveSelectedOtherDocument(file)">
+                                                    <i class="bi bi-trash"></i> Remove
+                                                </button>
+                                            </li>
                                         }
                                     </ul>
                                 }
@@ -1542,25 +1875,7 @@
                                         <i class="bi bi-eye"></i> View
                                     </button>
                                 }
-                                else
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="No uploaded document to view" disabled>
-                                        <i class="bi bi-eye"></i> View
-                                    </button>
-                                }
-                                @if (HasOtherDocuments)
-                                {
-                                    <label class="lm-doc-action-btn" title="Replace Other Documents">
-                                        <i class="bi bi-arrow-repeat"></i> Replace
-                                        <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
-                                    </label>
-                                }
-                                else
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="No document to replace" disabled>
-                                        <i class="bi bi-arrow-repeat"></i> Replace
-                                    </button>
-                                }
+
                             </div>
                         </div>
                     </div>
@@ -1594,10 +1909,27 @@
                                     <div class="lm-field-error">@candfGstError</div>
                                 }
                             </div>
-                            <label class="lm-upload-btn">
-                                <i class="bi bi-cloud-arrow-up"></i> Choose GST File
-                                <InputFile OnChange="OnGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                            </label>
+                            <div class="lm-doc-actions">
+                                <label class="lm-upload-btn">
+                                    <i class="bi bi-cloud-arrow-up"></i> Choose GST File
+                                    <InputFile OnChange="OnGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                                </label>
+                                @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath))
+                                {
+                                    <button type="button" class="lm-doc-action-btn" title="View GST Document" @onclick="() => ViewLogisticsDocument(_form.GstDocumentPath)">
+                                        <i class="bi bi-eye"></i> View
+                                    </button>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath) || _gstDocumentFile != null)
+                                {
+                                    <button type="button"
+                                            class="lm-doc-action-btn"
+                                            title="Remove GST Document"
+                                            @onclick="RemoveGstDocument">
+                                        <i class="bi bi-trash"></i> Remove
+                                    </button>
+                                }
+                            </div>
                         </div>
 
                             <div class="lm-doc-card required @(_errors.ContainsKey("InsuranceDocument") ? "border-danger" : "")">
@@ -1608,7 +1940,7 @@
                                     </div>
                                 @if (_insuranceDocumentFile != null)
                                 {
-                                    <div class="lm-doc-selected"><i class="bi bi-arrow-repeat me-1"></i>@_insuranceDocumentFile.Name <span class="lm-doc-replace-note">(will replace the current document on save)</span></div>
+                                    <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_insuranceDocumentFile.Name</div>
                                 }
                                 else if (!string.IsNullOrWhiteSpace(CurrentInsuranceDocumentPath))
                                 {
@@ -1624,29 +1956,19 @@
                                         <i class="bi bi-cloud-arrow-up"></i> Choose Insurance File
                                         <InputFile OnChange="OnInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                     </label>
-                                    @if (HasUploadedInsuranceDocument)
+                                    @if (!string.IsNullOrWhiteSpace(CurrentInsuranceDocumentPath))
                                     {
                                         <button type="button" class="lm-doc-action-btn" title="View Insurance Document" @onclick="() => ViewLogisticsDocument(CurrentInsuranceDocumentPath)">
                                             <i class="bi bi-eye"></i> View
                                         </button>
                                     }
-                                    else
-                                    {
-                                        <button type="button" class="lm-doc-action-btn" title="No uploaded document to view" disabled>
-                                            <i class="bi bi-eye"></i> View
-                                        </button>
-                                    }
                                     @if (HasInsuranceDocument)
                                     {
-                                        <label class="lm-doc-action-btn" title="Replace Insurance Document">
-                                            <i class="bi bi-arrow-repeat"></i> Replace
-                                            <InputFile OnChange="OnInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                                        </label>
-                                    }
-                                    else
-                                    {
-                                        <button type="button" class="lm-doc-action-btn" title="No document to replace" disabled>
-                                            <i class="bi bi-arrow-repeat"></i> Replace
+                                        <button type="button"
+                                                class="lm-doc-action-btn"
+                                                title="Remove Insurance Document"
+                                                @onclick="RemoveInsuranceDocument">
+                                            <i class="bi bi-trash"></i> Remove
                                         </button>
                                     }
                                 </div>
@@ -1678,10 +2000,27 @@
                                     <div class="lm-field-error">@candfFertilizerError</div>
                                 }
                             </div>
-                            <label class="lm-upload-btn">
-                                <i class="bi bi-cloud-arrow-up"></i> Choose License File
-                                <InputFile OnChange="OnFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                            </label>
+                            <div class="lm-doc-actions">
+                                <label class="lm-upload-btn">
+                                    <i class="bi bi-cloud-arrow-up"></i> Choose License File
+                                    <InputFile OnChange="OnFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                                </label>
+                                @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath))
+                                {
+                                    <button type="button" class="lm-doc-action-btn" title="View Fertilizer License" @onclick="() => ViewLogisticsDocument(_form.FertilizerLicenseDocumentPath)">
+                                        <i class="bi bi-eye"></i> View
+                                    </button>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath) || _fertilizerLicenseDocumentFile != null)
+                                {
+                                    <button type="button"
+                                            class="lm-doc-action-btn"
+                                            title="Remove Fertilizer License"
+                                            @onclick="RemoveFertilizerLicenseDocument">
+                                        <i class="bi bi-trash"></i> Remove
+                                    </button>
+                                }
+                            </div>
                         </div>
 
                         <div class="lm-doc-card">
@@ -1692,16 +2031,34 @@
                                     <ul class="lm-doc-existing-list">
                                         @foreach (var path in VisibleOtherDocumentPaths)
                                         {
-                                            <li class="lm-doc-viewable" title="Click to view" @onclick="() => ViewLogisticsDocument(path)">@GetFileName(path) <i class="bi bi-eye"></i></li>
+                                            <li>
+                                                <span class="lm-doc-viewable" title="Click to view" @onclick="() => ViewLogisticsDocument(path)">
+                                                    @GetFileName(path) <i class="bi bi-eye"></i>
+                                                </span>
+                                                <button type="button"
+                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
+                                                        title="Remove document"
+                                                        @onclick="() => RemoveOtherDocumentPath(path)">
+                                                    <i class="bi bi-trash"></i> Remove
+                                                </button>
+                                            </li>
                                         }
                                     </ul>
                                 }
                                 @if (_otherDocumentFiles.Count > 0)
                                 {
                                     <ul class="lm-doc-existing-list text-success">
-                                        @foreach (var file in _otherDocumentFiles)
+                                        @foreach (var file in _otherDocumentFiles.ToList())
                                         {
-                                            <li>@file.Name</li>
+                                            <li>
+                                                <span>@file.Name</span>
+                                                <button type="button"
+                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
+                                                        title="Remove selected document"
+                                                        @onclick="() => RemoveSelectedOtherDocument(file)">
+                                                    <i class="bi bi-trash"></i> Remove
+                                                </button>
+                                            </li>
                                         }
                                     </ul>
                                 }
@@ -1717,25 +2074,7 @@
                                         <i class="bi bi-eye"></i> View
                                     </button>
                                 }
-                                else
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="No uploaded document to view" disabled>
-                                        <i class="bi bi-eye"></i> View
-                                    </button>
-                                }
-                                @if (HasOtherDocuments)
-                                {
-                                    <label class="lm-doc-action-btn" title="Replace Other Documents">
-                                        <i class="bi bi-arrow-repeat"></i> Replace
-                                        <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
-                                    </label>
-                                }
-                                else
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="No document to replace" disabled>
-                                        <i class="bi bi-arrow-repeat"></i> Replace
-                                    </button>
-                                }
+
                             </div>
                         </div>
                     </div>
@@ -1751,7 +2090,7 @@
                                     </div>
                                 @if (_insuranceDocumentFile != null)
                                 {
-                                    <div class="lm-doc-selected"><i class="bi bi-arrow-repeat me-1"></i>@_insuranceDocumentFile.Name <span class="lm-doc-replace-note">(will replace the current document on save)</span></div>
+                                    <div class="lm-doc-selected"><i class="bi bi-paperclip me-1"></i>@_insuranceDocumentFile.Name</div>
                                 }
                                 else if (!string.IsNullOrWhiteSpace(CurrentInsuranceDocumentPath))
                                 {
@@ -1767,29 +2106,19 @@
                                         <i class="bi bi-cloud-arrow-up"></i> Choose Insurance File
                                         <InputFile OnChange="OnInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                     </label>
-                                    @if (HasUploadedInsuranceDocument)
+                                    @if (!string.IsNullOrWhiteSpace(CurrentInsuranceDocumentPath))
                                     {
                                         <button type="button" class="lm-doc-action-btn" title="View Insurance Document" @onclick="() => ViewLogisticsDocument(CurrentInsuranceDocumentPath)">
                                             <i class="bi bi-eye"></i> View
                                         </button>
                                     }
-                                    else
-                                    {
-                                        <button type="button" class="lm-doc-action-btn" title="No uploaded document to view" disabled>
-                                            <i class="bi bi-eye"></i> View
-                                        </button>
-                                    }
                                     @if (HasInsuranceDocument)
                                     {
-                                        <label class="lm-doc-action-btn" title="Replace Insurance Document">
-                                            <i class="bi bi-arrow-repeat"></i> Replace
-                                            <InputFile OnChange="OnInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
-                                        </label>
-                                    }
-                                    else
-                                    {
-                                        <button type="button" class="lm-doc-action-btn" title="No document to replace" disabled>
-                                            <i class="bi bi-arrow-repeat"></i> Replace
+                                        <button type="button"
+                                                class="lm-doc-action-btn"
+                                                title="Remove Insurance Document"
+                                                @onclick="RemoveInsuranceDocument">
+                                            <i class="bi bi-trash"></i> Remove
                                         </button>
                                     }
                                 </div>
@@ -1803,16 +2132,34 @@
                                     <ul class="lm-doc-existing-list">
                                         @foreach (var path in VisibleOtherDocumentPaths)
                                         {
-                                            <li class="lm-doc-viewable" title="Click to view" @onclick="() => ViewLogisticsDocument(path)">@GetFileName(path) <i class="bi bi-eye"></i></li>
+                                            <li>
+                                                <span class="lm-doc-viewable" title="Click to view" @onclick="() => ViewLogisticsDocument(path)">
+                                                    @GetFileName(path) <i class="bi bi-eye"></i>
+                                                </span>
+                                                <button type="button"
+                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
+                                                        title="Remove document"
+                                                        @onclick="() => RemoveOtherDocumentPath(path)">
+                                                    <i class="bi bi-trash"></i> Remove
+                                                </button>
+                                            </li>
                                         }
                                     </ul>
                                 }
                                 @if (_otherDocumentFiles.Count > 0)
                                 {
                                     <ul class="lm-doc-existing-list text-success">
-                                        @foreach (var file in _otherDocumentFiles)
+                                        @foreach (var file in _otherDocumentFiles.ToList())
                                         {
-                                            <li>@file.Name</li>
+                                            <li>
+                                                <span>@file.Name</span>
+                                                <button type="button"
+                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
+                                                        title="Remove selected document"
+                                                        @onclick="() => RemoveSelectedOtherDocument(file)">
+                                                    <i class="bi bi-trash"></i> Remove
+                                                </button>
+                                            </li>
                                         }
                                     </ul>
                                 }
@@ -1828,25 +2175,7 @@
                                         <i class="bi bi-eye"></i> View
                                     </button>
                                 }
-                                else
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="No uploaded document to view" disabled>
-                                        <i class="bi bi-eye"></i> View
-                                    </button>
-                                }
-                                @if (HasOtherDocuments)
-                                {
-                                    <label class="lm-doc-action-btn" title="Replace Other Documents">
-                                        <i class="bi bi-arrow-repeat"></i> Replace
-                                        <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
-                                    </label>
-                                }
-                                else
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="No document to replace" disabled>
-                                        <i class="bi bi-arrow-repeat"></i> Replace
-                                    </button>
-                                }
+
                             </div>
                         </div>
                     </div>
@@ -1933,6 +2262,7 @@
                 <th>District</th>
                 <th>Status</th>
                 <th>Created At</th>
+                <th class="text-center">PDF</th>
                 @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") || CanDeleteLogistics)
                 {
                     <th>Action</th>
@@ -1963,6 +2293,7 @@
                 {
                     <th>Docs</th>
                 }
+                <th class="text-center">PDF</th>
                 @if (CanShowLogisticsActionColumn)
                 {
                     <th>Action</th>
@@ -1984,6 +2315,11 @@
                     </span>
                 </td>
                 <td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
+                <td class="text-center">
+                    <i class="bi bi-file-earmark-pdf-fill lm-pdf-view-icon"
+                       title="View @ActiveTabDisplayName PDF"
+                       @onclick="() => OpenLogisticsPdf(item, null)"></i>
+                </td>
                 @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") || CanDeleteLogistics)
                 {
                     <td>
@@ -2051,32 +2387,59 @@
                 <td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
                 @if (IsWarehouseTab)
                 {
-                    <td>
-                        @{ var docEntries = GetItemDocumentEntries(item); }
-                        @if (docEntries.Count == 0)
-                        {
-                            <span class="text-muted small">No documents</span>
+                    <td class="text-center">
+                        @{
+                            var docCount =
+                                GetItemDocumentEntries(item).Count;
                         }
-                        else
-                        {
-                            @foreach (var entry in docEntries)
-                            {
-                                <div class="lm-doc-entry">
-                                    <span class="lm-doc-entry-name" title="@GetFileName(entry.Path)">@entry.TypeName</span>
-                                    <span class="lm-doc-entry-actions">
-                                        <i class="bi @(_isDownloadingDocuments ? "bi-hourglass-split" : "bi-download") lm-download-icon"
-                                           title="Download @entry.TypeName"
-                                           style="cursor:pointer"
-                                           @onclick="() => DownloadSingleDocument(entry.Path)"></i>
-                                        <i class="bi bi-eye lm-doc-viewable"
-                                           title="View @entry.TypeName"
-                                           @onclick="() => ViewLogisticsDocument(entry.Path)"></i>
-                                    </span>
-                                </div>
-                            }
-                        }
+
+                        <button type="button"
+                                class="lm-doc-modal-open-btn"
+                                title="View saved documents"
+                                disabled="@(docCount == 0)"
+                                @onclick="() => OpenDocumentsModal(item)">
+                            <i class="bi bi-folder2-open"></i>
+                            <span>View</span>
+                            <span class="lm-doc-count-badge">@docCount</span>
+                        </button>
                     </td>
                 }
+                <td class="text-center">
+                    <div class="lm-company-pdf-actions">
+
+                        @if (item.InSpic == true)
+                        {
+                            <button type="button"
+                                    class="lm-company-pdf-btn"
+                                    title="View SPIC PDF"
+                                    @onclick='() => OpenLogisticsPdf(item, "SPIC")'>
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png"
+                                     class="lm-company-pdf-logo"
+                                     alt="SPIC PDF" />
+                            </button>
+                        }
+
+                        @if (item.InGreenStar == true)
+                        {
+                            <button type="button"
+                                    class="lm-company-pdf-btn"
+                                    title="View GreenStar PDF"
+                                    @onclick='() => OpenLogisticsPdf(item, "GreenStar")'>
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg"
+                                     class="lm-company-pdf-logo greenstar"
+                                     alt="GreenStar PDF" />
+                            </button>
+                        }
+
+                        @if (item.InSpic != true && item.InGreenStar != true)
+                        {
+                            <i class="bi bi-file-earmark-pdf-fill lm-pdf-view-icon"
+                               title="View @ActiveTabDisplayName PDF"
+                               @onclick="() => OpenLogisticsPdf(item, null)"></i>
+                        }
+
+                    </div>
+                </td>
                 @if (CanShowLogisticsActionColumn)
                 {
                     <td>
@@ -2114,6 +2477,172 @@
         </TableRow>
     </SpicDataTable>
 </div>
+
+
+@if (_showDocumentsModal)
+{
+    <!--
+        IMPORTANT:
+        The backdrop intentionally has NO @onclick handler.
+        Download/View actions also do not change _showDocumentsModal.
+        The popup closes only from X or Close.
+    -->
+    <div class="modal-backdrop fade show"></div>
+
+    <div class="modal fade show d-block lm-doc-list-modal"
+         tabindex="-1"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="logisticsDocumentsModalTitle">
+
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"
+             role="document">
+
+            <div class="modal-content">
+
+                <div class="modal-header">
+
+                    <div class="lm-doc-modal-title-wrap">
+                        <h5 id="logisticsDocumentsModalTitle"
+                            class="lm-doc-modal-title">
+                            <i class="bi bi-folder2-open me-2 text-success"></i>
+                            Documents
+                        </h5>
+
+                        @if (_documentsModalItem is not null)
+                        {
+                            <div class="lm-doc-modal-subtitle">
+                                @_documentsModalItem.Name
+                                @if (!string.IsNullOrWhiteSpace(GetDisplayCode(_documentsModalItem)))
+                                {
+                                    <span>
+                                        &nbsp;•&nbsp; @GetDisplayCode(_documentsModalItem)
+                                    </span>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <button type="button"
+                            class="btn-close"
+                            aria-label="Close"
+                            @onclick="CloseDocumentsModal">
+                    </button>
+
+                </div>
+
+                <div class="modal-body">
+
+                    @if (_documentsModalEntries.Count == 0)
+                    {
+                        <div class="lm-doc-modal-empty">
+                            <i class="bi bi-folder-x d-block mb-2 fs-4"></i>
+                            No saved documents available.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="lm-doc-modal-table-wrap">
+
+                            <table class="lm-doc-modal-table">
+
+                                <thead>
+                                    <tr>
+                                        <th>Document Name</th>
+                                        <th>File Name</th>
+                                        <th class="text-center">Download</th>
+                                        <th class="text-center">View</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+
+                                    @foreach (var entry in _documentsModalEntries)
+                                    {
+                                        var isDownloading =
+                                            _downloadingDocumentPaths.Contains(
+                                                entry.Path);
+
+                                        <tr>
+
+                                            <td>
+                                                <div class="lm-doc-modal-type">
+                                                    @entry.TypeName
+                                                </div>
+
+                                                @if (!string.IsNullOrWhiteSpace(entry.Company))
+                                                {
+                                                    <div class="mt-1">
+                                                        <span class="lm-doc-entry-company @(string.Equals(entry.Company, "SPIC", StringComparison.OrdinalIgnoreCase) ? "spic" : "gfl")">
+                                                            @entry.Company
+                                                        </span>
+                                                    </div>
+                                                }
+                                            </td>
+
+                                            <td>
+                                                <div class="lm-doc-modal-file"
+                                                     title="@GetFileName(entry.Path)">
+                                                    @GetFileName(entry.Path)
+                                                </div>
+                                            </td>
+
+                                            <td class="text-center">
+
+                                                <button type="button"
+                                                        class="lm-doc-modal-icon-btn download"
+                                                        title="Download @entry.TypeName"
+                                                        disabled="@isDownloading"
+                                                        @onclick="() => DownloadSingleDocument(entry.Path)">
+
+                                                    <i class="bi @(isDownloading ? "bi-hourglass-split" : "bi-download")"></i>
+
+                                                </button>
+
+                                            </td>
+
+                                            <td class="text-center">
+
+                                                <button type="button"
+                                                        class="lm-doc-modal-icon-btn view"
+                                                        title="View @entry.TypeName"
+                                                        @onclick="() => ViewLogisticsDocument(entry.Path)">
+
+                                                    <i class="bi bi-eye"></i>
+
+                                                </button>
+
+                                            </td>
+
+                                        </tr>
+                                    }
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+                    }
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <button type="button"
+                            class="lm-doc-modal-close-btn"
+                            @onclick="CloseDocumentsModal">
+                        Close
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+}
+
 
 @if (_showDeleteConfirm)
 {
@@ -2384,6 +2913,13 @@
     private bool _isDeleting;
     private bool _showDeleteConfirm;
     private LogisticsItemDto? _deleteTarget;
+
+    // Warehouse list document popup state.
+    // View/Download actions do NOT close this modal.
+    private bool _showDocumentsModal;
+    private LogisticsItemDto? _documentsModalItem;
+    private List<(string Path, string TypeName, string? Company)> _documentsModalEntries = new();
+
     private int? _approvingId;
 
     // Reject action uses the same RM -> SMM -> AVP stage eligibility as Approve.
@@ -2443,6 +2979,7 @@
 
     private bool _isUploadingDocuments;
     private bool _isDownloadingDocuments;
+    private readonly HashSet<string> _downloadingDocumentPaths = new(StringComparer.OrdinalIgnoreCase);
 
     private DotNetObjectReference<Logistics>? _objRef;
 
@@ -3206,6 +3743,22 @@
         try { await _firstInputRef.FocusAsync(); } catch { }
     }
 
+    private void OpenLogisticsPdf(LogisticsItemDto item, string? company = null)
+    {
+        if (item is null || item.Id <= 0)
+            return;
+
+        // Keep PDF navigation inside the same Blazor/browser session.
+        // company=SPIC / GreenStar creates two separate company PDF views.
+        var tab = Uri.EscapeDataString(ActiveTab);
+        var url = $"/LogisticsPdf?tab={tab}&id={item.Id}";
+
+        if (!string.IsNullOrWhiteSpace(company))
+            url += $"&company={Uri.EscapeDataString(company)}";
+
+        Nav.NavigateTo(url, forceLoad: false);
+    }
+
     private void DeleteItem(LogisticsItemDto item)
     {
         _deleteTarget = item;
@@ -3899,6 +4452,96 @@
         _otherDocumentFiles = e.GetMultipleFiles(10).ToList();
     }
 
+    // Document Remove actions only clear the current form/reference.
+    // Existing Save/Update persists these values; upload/API flow is unchanged.
+    private void RemoveGstDocument()
+    {
+        _gstDocumentFile = null;
+        _form.GstDocumentPath = null;
+        _errors.Remove("GstDocument");
+    }
+
+    private void RemoveGflGstDocument()
+    {
+        _gflGstDocumentFile = null;
+        RemoveSupplementalDocumentPath(ref _gflGstDocumentPath);
+        _errors.Remove("GflGstDocument");
+    }
+
+    private void RemoveTradingDocument()
+    {
+        _tradingDocumentFile = null;
+        RemoveSupplementalDocumentPath(ref _tradingDocumentPath);
+    }
+
+    private void RemoveInsuranceDocument()
+    {
+        _insuranceDocumentFile = null;
+
+        if (IsRakePointTab)
+            RemoveSupplementalDocumentPath(ref _rakePointInsuranceDocumentPath);
+        else
+            _form.InsuranceDocumentPath = null;
+
+        _errors.Remove("InsuranceDocument");
+    }
+
+    private void RemoveSpicInsuranceDocument()
+    {
+        _spicInsuranceDocumentFile = null;
+        RemoveSupplementalDocumentPath(ref _spicInsuranceDocumentPath);
+        _errors.Remove("SpicInsuranceDocument");
+    }
+
+    private void RemoveGflInsuranceDocument()
+    {
+        _gflInsuranceDocumentFile = null;
+        RemoveSupplementalDocumentPath(ref _gflInsuranceDocumentPath);
+        _errors.Remove("GflInsuranceDocument");
+    }
+
+    private void RemoveFertilizerLicenseDocument()
+    {
+        _fertilizerLicenseDocumentFile = null;
+        _form.FertilizerLicenseDocumentPath = null;
+        _errors.Remove("FertilizerLicenseDocument");
+    }
+
+    private void RemoveGflFertilizerLicenseDocument()
+    {
+        _gflFertilizerLicenseDocumentFile = null;
+        RemoveSupplementalDocumentPath(ref _gflFertilizerLicenseDocumentPath);
+        _errors.Remove("GflFertilizerLicenseDocument");
+    }
+
+    private void RemoveOtherDocumentPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        _otherDocumentPaths.RemoveAll(x =>
+            string.Equals(x, path, StringComparison.OrdinalIgnoreCase));
+        _form.OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths);
+    }
+
+    private void RemoveSelectedOtherDocument(IBrowserFile file)
+    {
+        _otherDocumentFiles.Remove(file);
+    }
+
+    private void RemoveSupplementalDocumentPath(ref string? path)
+    {
+        var currentPath = path;
+        if (!string.IsNullOrWhiteSpace(currentPath))
+        {
+            _otherDocumentPaths.RemoveAll(x =>
+                string.Equals(x, currentPath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        path = null;
+        _form.OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths);
+    }
+
     private void ClearSelectedDocumentFiles()
     {
         _gstDocumentFile = null;
@@ -4209,9 +4852,46 @@
         return entries;
     }
 
+    private void OpenDocumentsModal(
+        LogisticsItemDto item)
+    {
+        if (item is null)
+            return;
+
+        _documentsModalItem =
+            item;
+
+        _documentsModalEntries =
+            GetItemDocumentEntries(
+                item);
+
+        _showDocumentsModal =
+            true;
+    }
+
+
+    private void CloseDocumentsModal()
+    {
+        _showDocumentsModal =
+            false;
+
+        _documentsModalItem =
+            null;
+
+        _documentsModalEntries =
+            new();
+    }
+
+
     private async Task DownloadSingleDocument(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
+
+        // Track the exact document being downloaded so only that row/icon shows progress.
+        // If the same document is already downloading, ignore duplicate clicks.
+        if (!_downloadingDocumentPaths.Add(path))
+            return;
+
         _isDownloadingDocuments = true;
         StateHasChanged();
         try
@@ -4226,15 +4906,42 @@
         }
         finally
         {
-            _isDownloadingDocuments = false;
+            _downloadingDocumentPaths.Remove(path);
+            _isDownloadingDocuments = _downloadingDocumentPaths.Count > 0;
+            StateHasChanged();
         }
     }
 
     private async Task ViewLogisticsDocument(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
-        var url = BuildLogisticsFileUrl("view", path, includeToken: true);
-        await JS.InvokeVoidAsync("open", url, "_blank");
+
+        try
+        {
+            // Open the existing view endpoint in a new tab. Keep the current backend/API flow.
+            // If LoginState.Token is not populated in this component, use the same session token
+            // already used by the page so View does not silently open an unauthorized response.
+            var url = BuildLogisticsFileUrl("view", path, includeToken: true);
+
+            if (string.IsNullOrWhiteSpace(LoginState.Token) && !url.Contains("access_token=", StringComparison.OrdinalIgnoreCase))
+            {
+                var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+                if (!string.IsNullOrWhiteSpace(token))
+                {
+                    var rawToken = token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                        ? token["Bearer ".Length..]
+                        : token;
+                    var separator = url.Contains('?') ? "&" : "?";
+                    url += $"{separator}access_token={Uri.EscapeDataString(rawToken)}";
+                }
+            }
+
+            await JS.InvokeVoidAsync("window.open", url, "_blank");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to view document: {ex.Message}", true);
+        }
     }
 
     private async Task DownloadWarehouseDocuments(LogisticsItemDto item)
