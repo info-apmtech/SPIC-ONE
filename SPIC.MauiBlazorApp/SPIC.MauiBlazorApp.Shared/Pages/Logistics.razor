@@ -2299,13 +2299,15 @@
 
     private string ActiveTabDisplayName => ActiveTab switch
     {
-        "Warehouse" => CurrentWarehouseCategory switch
-        {
-            LogisticsWarehouseCategory.PvtWH => "PVT WH",
-            LogisticsWarehouseCategory.CandFWH => "C&F WH",
-            LogisticsWarehouseCategory.Both => "PVT + C&F WH",
-            _ => "Warehouse"
-        },
+        "Warehouse" => LoginState.IsAdmin
+            ? "Warehouse"
+            : CurrentWarehouseCategory switch
+            {
+                LogisticsWarehouseCategory.PvtWH => "PVT WH",
+                LogisticsWarehouseCategory.CandFWH => "C&F WH",
+                LogisticsWarehouseCategory.Both => "PVT + C&F WH",
+                _ => "Warehouse"
+            },
         "Port" => "Rake Point",
         "PortMaster" => "Port",
         _ => ActiveTab
@@ -2363,9 +2365,11 @@
 
     private List<LogisticsItemDto> CurrentAllItems => ActiveTab switch
     {
-        "Warehouse" => _warehouseAll
-            .Where(x => GetWarehouseCategory(x) == CurrentWarehouseCategory)
-            .ToList(),
+        "Warehouse" => LoginState.IsAdmin
+            ? _warehouseAll
+            : _warehouseAll
+                .Where(x => GetWarehouseCategory(x) == CurrentWarehouseCategory)
+                .ToList(),
         "Port" => _rakePointAll,
         "PortMaster" => _portAll,
         _ => new()
@@ -2923,7 +2927,7 @@
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync();
-                ShowMessage($"Save failed: {body}", true);
+                ShowMessage($"Save failed: {ParseErrorMessage(body)}", true);
                 return;
             }
 
@@ -2960,7 +2964,7 @@
                 if (!documentPathUpdate.IsSuccessStatusCode)
                 {
                     var body = await documentPathUpdate.Content.ReadAsStringAsync();
-                    ShowMessage($"Documents uploaded, but saving document paths failed: {body}", true);
+                    ShowMessage($"Documents uploaded, but saving document paths failed: {ParseErrorMessage(body)}", true);
                     await LoadData();
                     return;
                 }
@@ -3220,7 +3224,7 @@
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync();
-                ShowMessage($"Delete failed: {body}", true);
+                ShowMessage($"Delete failed: {ParseErrorMessage(body)}", true);
                 return;
             }
 
@@ -3330,7 +3334,7 @@
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync();
-                ShowMessage($"Approval failed: {body}", true);
+                ShowMessage($"Approval failed: {ParseErrorMessage(body)}", true);
                 return;
             }
 
@@ -3408,7 +3412,7 @@
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync();
-                ShowMessage($"Rejection failed: {body}", true);
+                ShowMessage($"Rejection failed: {ParseErrorMessage(body)}", true);
                 return;
             }
 
@@ -3422,7 +3426,7 @@
                 {
                     var deleteBody = await deleteResponse.Content.ReadAsStringAsync();
                     ShowMessage(
-                        $"Rejection completed, but deleting '{target.Name}' failed: {deleteBody}",
+                        $"Rejection completed, but deleting '{target.Name}' failed: {ParseErrorMessage(deleteBody)}",
                         true);
                     return;
                 }
@@ -3511,7 +3515,7 @@
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync();
-                ShowMessage($"Status change failed: {body}", true);
+                ShowMessage($"Status change failed: {ParseErrorMessage(body)}", true);
                 return;
             }
 
@@ -4337,6 +4341,19 @@
     {
         _message = message;
         _isError = isError;
+    }
+
+    private static string ParseErrorMessage(string body)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(body)) return body;
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("message", out var msg))
+                return msg.GetString() ?? body;
+        }
+        catch { }
+        return body;
     }
 
     private async Task TriggerMapUpdate(double lat, double lng)
