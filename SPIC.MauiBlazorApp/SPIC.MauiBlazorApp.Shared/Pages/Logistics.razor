@@ -2341,6 +2341,11 @@
     private List<DistrictDto> _districts = new();
     private List<RegionDto> _regions = new();
     private List<HeadquarterDto> _headquarters = new();
+
+    // Export-only identity lookup. Approval fields store user GUIDs in the DB;
+    // this dictionary converts those IDs to user names for Excel display only.
+    private Dictionary<string, string> _userNamesById = new(StringComparer.OrdinalIgnoreCase);
+
     private List<RegionDto> _filteredRegions = new();
     private List<HeadquarterDto> _filteredHeadquarters = new();
     private List<DistrictDto> _filteredDistricts = new();
@@ -2455,6 +2460,7 @@
         await LoadLookups();
         await LoadPvtMasters();
         await LoadRakePointMasters();
+        await LoadUserNamesForExport();
         ApplyAssignedMoLocation();
         await LoadData();
     }
@@ -2502,6 +2508,36 @@
         catch (Exception ex)
         {
             ShowMessage($"Failed to load location lookups: {ex.Message}", true);
+        }
+    }
+
+    private async Task LoadUserNamesForExport()
+    {
+        try
+        {
+            var users = await Http.GetFromJsonAsync<List<UserInfoLookupDto>>("api/UserInfo/all") ?? new();
+
+            _userNamesById = users
+                .Where(x => !string.IsNullOrWhiteSpace(x.Id))
+                .GroupBy(x => x.Id.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g =>
+                    {
+                        var user = g.First();
+                        return !string.IsNullOrWhiteSpace(user.Name)
+                            ? user.Name.Trim()
+                            : !string.IsNullOrWhiteSpace(user.UserName)
+                                ? user.UserName.Trim()
+                                : user.Id.Trim();
+                    },
+                    StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            // Export enhancement only. If user lookup is unavailable, keep the
+            // existing page/save/approval flow untouched and fall back to the stored value.
+            _userNamesById = new(StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -3501,23 +3537,33 @@
             .ToList();
     }
 
+    // Export is intentionally richer than the on-screen table.
+    // The table UI stays compact, while Excel contains all values already loaded/saved for the record.
+    // Existing export columns are kept first and in the same order; additional saved values are appended.
     private List<ExportColumn<LogisticsItemDto>> GetExportColumns()
     {
         if (IsPortTab)
         {
             return new List<ExportColumn<LogisticsItemDto>>
             {
+                // Existing export columns - keep order unchanged.
                 new() { Header = "S:No", ValueSelector = item => (_filteredItems.IndexOf(item) + 1).ToString() },
                 new() { Header = "Port Name", ValueSelector = item => item.Name },
                 new() { Header = "State", ValueSelector = item => GetStateName(item.StateId) },
                 new() { Header = "District", ValueSelector = item => GetDistrictName(item.DistrictId) },
                 new() { Header = "Status", ValueSelector = item => item.IsActive ? "Active" : "Inactive" },
-                new() { Header = "Created At", ValueSelector = item => item.CreatedAt.ToString("yyyy-MM-dd") }
+                new() { Header = "Created At", ValueSelector = item => item.CreatedAt.ToString("yyyy-MM-dd") },
+
+                // Additional saved Port values.
+                new() { Header = "Google Map URL", ValueSelector = item => item.GoogleURL ?? "" },
+                new() { Header = "Updated At", ValueSelector = item => item.UpdatedAt == default ? "" : item.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss") },
+                new() { Header = "Updated By", ValueSelector = item => GetUserNameForExport(item.UpdatedBy) }
             };
         }
 
         var columns = new List<ExportColumn<LogisticsItemDto>>
         {
+            // Existing export columns - keep order unchanged.
             new() { Header = "S:No", ValueSelector = item => (_filteredItems.IndexOf(item) + 1).ToString() },
             new() { Header = "Name", ValueSelector = item => item.Name },
             new() { Header = "SAP Code", ValueSelector = GetDisplayCode }
@@ -3528,15 +3574,7 @@
             columns.Add(new ExportColumn<LogisticsItemDto>
             {
                 Header = "Company",
-                ValueSelector = item =>
-                {
-                    var spic = item.InSpic == true;
-                    var gfl = item.InGreenStar == true;
-                    if (spic && gfl) return "SPIC, Green Star";
-                    if (spic) return "SPIC";
-                    if (gfl) return "Green Star";
-                    return "";
-                }
+                ValueSelector = GetCompanyDisplayForExport
             });
             columns.Add(new ExportColumn<LogisticsItemDto>
             {
@@ -3552,6 +3590,7 @@
         });
 
         if (ShowsPvtWarehouseContent)
+        {
             columns.Add(new ExportColumn<LogisticsItemDto>
             {
                 Header = "WH Type",
@@ -3559,6 +3598,7 @@
                     ? GetWarehouseTypeDisplay(item.WarehouseType)
                     : ""
             });
+        }
 
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "State", ValueSelector = item => GetStateName(item.StateId) });
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "District", ValueSelector = item => GetDistrictName(item.DistrictId) });
@@ -3572,7 +3612,159 @@
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Approval Status", ValueSelector = GetApprovalStatus });
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Created At", ValueSelector = item => item.CreatedAt.ToString("yyyy-MM-dd") });
 
+        // -----------------------------------------------------------------
+        // Full saved values - export only. No table/save/approval flow change.
+        // -----------------------------------------------------------------
+
+        // Rake Point also stores company selection, although it is not shown in the table.
+        if (IsRakePointTab)
+        {
+            columns.Add(new ExportColumn<LogisticsItemDto>
+            {
+                Header = "Company",
+                ValueSelector = GetCompanyDisplayForExport
+            });
+        }
+
+        columns.Add(new ExportColumn<LogisticsItemDto>
+        {
+            Header = "Basic State",
+            ValueSelector = item => item.BasicStateId.HasValue ? GetStateName(item.BasicStateId.Value) : ""
+        });
+        columns.Add(new ExportColumn<LogisticsItemDto>
+        {
+            Header = "Region",
+            ValueSelector = item => GetRegionNameForExport(item.RegionId)
+        });
+        columns.Add(new ExportColumn<LogisticsItemDto>
+        {
+            Header = "HQ",
+            ValueSelector = item => GetHeadquarterNameForExport(item.HeadquarterId)
+        });
+
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Google Map URL", ValueSelector = item => item.GoogleURL ?? "" });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Latitude", ValueSelector = item => FormatExportNumber(item.Latitude) });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Longitude", ValueSelector = item => FormatExportNumber(item.Longitude) });
+
+        // Door No and Street are Warehouse fields. Rake Point intentionally does not save them.
+        if (IsWarehouseTab)
+        {
+            columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Door No / Shop No / Room No / Block No", ValueSelector = item => item.DoorNo ?? "" });
+            columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Street / Area / Locality", ValueSelector = item => item.Street ?? "" });
+        }
+
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Sub Village", ValueSelector = item => item.SubVillage ?? "" });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Pincode", ValueSelector = item => item.PinCode ?? "" });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Village", ValueSelector = item => item.Village ?? "" });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Block", ValueSelector = item => item.Block ?? "" });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Taluk", ValueSelector = item => item.Taluk ?? "" });
+
+        if (IsWarehouseTab)
+        {
+            // PVT / Both reservation values.
+            columns.Add(new ExportColumn<LogisticsItemDto> { Header = "SPIC Approved Reservation Qty (MT)", ValueSelector = item => FormatExportNumber(item.SpicApprovedReservationQuantityMT) });
+            columns.Add(new ExportColumn<LogisticsItemDto> { Header = "SPIC Additional Reservation Qty (MT)", ValueSelector = item => FormatExportNumber(item.SpicAdditionalReservationQuantityMT) });
+            columns.Add(new ExportColumn<LogisticsItemDto> { Header = "GFL Approved Reservation Qty (MT)", ValueSelector = item => FormatExportNumber(item.GflApprovedReservationQuantityMT) });
+            columns.Add(new ExportColumn<LogisticsItemDto> { Header = "GFL Additional Reservation Qty (MT)", ValueSelector = item => FormatExportNumber(item.GflAdditionalReservationQuantityMT) });
+
+            // C&F / Both reservation values.
+            columns.Add(new ExportColumn<LogisticsItemDto> { Header = "C&F Reservation Qty (MT)", ValueSelector = item => FormatExportNumber(item.GflReservationQuantityMT) });
+            columns.Add(new ExportColumn<LogisticsItemDto> { Header = "C&F Reservation Qty (Litres)", ValueSelector = item => FormatExportNumber(item.GflAdditionalReservationQuantityLitres) });
+        }
+
+        // Documents are represented by their saved file names. The actual files are not embedded in Excel.
+        columns.Add(new ExportColumn<LogisticsItemDto>
+        {
+            Header = "Documents",
+            ValueSelector = GetDocumentSummaryForExport
+        });
+
+        columns.Add(new ExportColumn<LogisticsItemDto>
+        {
+            Header = "Submitted For Review",
+            ValueSelector = item => item.IsSubmittedForReview ? "Yes" : "No"
+        });
+        columns.Add(new ExportColumn<LogisticsItemDto>
+        {
+            Header = "RM Status",
+            ValueSelector = item => GetApprovalValueForExport(item.RMApproved)
+        });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "RM Approved By", ValueSelector = item => GetUserNameForExport(item.RMApprovedBy) });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "RM Approved At", ValueSelector = item => FormatExportDate(item.RMApprovedAt) });
+        columns.Add(new ExportColumn<LogisticsItemDto>
+        {
+            Header = "SMM Status",
+            ValueSelector = item => GetApprovalValueForExport(item.SMApproved)
+        });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "SMM Approved By", ValueSelector = item => GetUserNameForExport(item.SMApprovedBy) });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "SMM Approved At", ValueSelector = item => FormatExportDate(item.SMApprovedAt) });
+        columns.Add(new ExportColumn<LogisticsItemDto>
+        {
+            Header = "AVP Status",
+            ValueSelector = item => GetApprovalValueForExport(item.AVPApproved)
+        });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "AVP Approved By", ValueSelector = item => GetUserNameForExport(item.AVPApprovedBy) });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "AVP Approved At", ValueSelector = item => FormatExportDate(item.AVPApprovedAt) });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Approval Remarks", ValueSelector = item => item.ApprovalRemarks ?? "" });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Updated At", ValueSelector = item => item.UpdatedAt == default ? "" : item.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss") });
+        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Updated By", ValueSelector = item => GetUserNameForExport(item.UpdatedBy) });
+
         return columns;
+    }
+
+    private static string GetCompanyDisplayForExport(LogisticsItemDto item)
+    {
+        var spic = item.InSpic == true;
+        var gfl = item.InGreenStar == true;
+        if (spic && gfl) return "SPIC, Green Star";
+        if (spic) return "SPIC";
+        if (gfl) return "Green Star";
+        return "";
+    }
+
+    private string GetRegionNameForExport(int? id) =>
+        id.HasValue ? _regions.FirstOrDefault(x => x.Id == id.Value)?.RegionName ?? "" : "";
+
+    private string GetHeadquarterNameForExport(int? id) =>
+        id.HasValue ? _headquarters.FirstOrDefault(x => x.Id == id.Value)?.HeadquarterName ?? "" : "";
+
+    private string GetDocumentSummaryForExport(LogisticsItemDto item)
+    {
+        var entries = GetItemDocumentEntries(item);
+        return entries.Count == 0
+            ? ""
+            : string.Join(" | ", entries.Select(x => $"{x.TypeName}: {GetFileName(x.Path)}"));
+    }
+
+    private static string GetApprovalValueForExport(bool? value) => value switch
+    {
+        true => "Approved",
+        false => "Rejected",
+        null => ""
+    };
+
+    private static string FormatExportDate(DateTime? value) =>
+        value.HasValue ? value.Value.ToString("yyyy-MM-dd HH:mm:ss") : "";
+
+    private static string FormatExportNumber(double? value) =>
+        value.HasValue
+            ? value.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : "";
+
+    private static string FormatExportNumber(decimal? value) =>
+        value.HasValue
+            ? value.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : "";
+
+    private string GetUserNameForExport(string? userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return "";
+
+        var key = userId.Trim();
+        return _userNamesById.TryGetValue(key, out var name) && !string.IsNullOrWhiteSpace(name)
+            ? name
+            : key;
     }
 
     private string GetDisplayCode(LogisticsItemDto item)
@@ -4483,6 +4675,13 @@
         public int Id { get; set; }
         public string RakePointCode { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+    }
+
+    public class UserInfoLookupDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string? UserName { get; set; }
+        public string? Name { get; set; }
     }
 
     public class LogisticsFormModel
