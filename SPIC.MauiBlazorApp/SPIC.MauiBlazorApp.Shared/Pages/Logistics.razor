@@ -2299,13 +2299,15 @@
 
     private string ActiveTabDisplayName => ActiveTab switch
     {
-        "Warehouse" => CurrentWarehouseCategory switch
-        {
-            LogisticsWarehouseCategory.PvtWH => "PVT WH",
-            LogisticsWarehouseCategory.CandFWH => "C&F WH",
-            LogisticsWarehouseCategory.Both => "PVT + C&F WH",
-            _ => "Warehouse"
-        },
+        "Warehouse" => LoginState.IsAdmin
+            ? "Warehouse"
+            : CurrentWarehouseCategory switch
+            {
+                LogisticsWarehouseCategory.PvtWH => "PVT WH",
+                LogisticsWarehouseCategory.CandFWH => "C&F WH",
+                LogisticsWarehouseCategory.Both => "PVT + C&F WH",
+                _ => "Warehouse"
+            },
         "Port" => "Rake Point",
         "PortMaster" => "Port",
         _ => ActiveTab
@@ -2358,9 +2360,11 @@
 
     private List<LogisticsItemDto> CurrentAllItems => ActiveTab switch
     {
-        "Warehouse" => _warehouseAll
-            .Where(x => GetWarehouseCategory(x) == CurrentWarehouseCategory)
-            .ToList(),
+        "Warehouse" => LoginState.IsAdmin
+            ? _warehouseAll
+            : _warehouseAll
+                .Where(x => GetWarehouseCategory(x) == CurrentWarehouseCategory)
+                .ToList(),
         "Port" => _rakePointAll,
         "PortMaster" => _portAll,
         _ => new()
