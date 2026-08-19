@@ -91,6 +91,9 @@ namespace SPIC.Core.Entities
         [Display(Name = "Aadhaar Number")]
         public string? AadhaarNumber { get; set; }
         public string? AadhaarFilePath { get; set; }
+        [Display(Name = "TAN Number")]
+        public string? TANNumber { get; set; }
+        public string? TANFilePath { get; set; }
 
         //Trade Deposit Details
         public decimal TradeDepositAmount { get; set; }
