@@ -144,10 +144,12 @@ namespace SpicAPI.Controllers
 			var dataRows = worksheet.RowsUsed().Skip(1).ToList();
 			var now = DateTime.Now;
 			var insertedCount = 0;
-			var updatedCount = 0;
+			var totalRows = 0;
 			var rejectedRecords = new List<RejectedRecord>();
+			var duplicateRecords = new List<object>();
+			var uploadedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-			// Pre-load existing rows keyed by code so re-uploads update instead of duplicating.
+			// Pre-load existing rows keyed by code to detect database duplicates.
 			var existingByCode = new Dictionary<string, RakePointMaster>(StringComparer.OrdinalIgnoreCase);
 			foreach (var existing in _context.RakePointMasters)
 				existingByCode[existing.RakePointCode.Trim()] = existing;
@@ -171,31 +173,49 @@ namespace SpicAPI.Controllers
 						continue;
 					}
 
+					totalRows++;
+
 					var key = code.Trim();
-					if (existingByCode.TryGetValue(key, out var existing))
+
+					// Duplicate SAP Code within the same uploaded Excel file
+					if (!uploadedCodes.Add(key))
 					{
-						existing.Name = name.Trim();
-						existing.IsActive = true;
-						existing.UpdatedAt = now;
-						existing.UpdatedBy = "bulk-upload";
-						updatedCount++;
-					}
-					else
-					{
-						var ent = new RakePointMaster
+						duplicateRecords.Add(new
 						{
-							RakePointCode = key,
-							Name = name.Trim(),
-							IsActive = true,
-							CreatedAt = now,
-							UpdatedAt = now,
-							CreatedBy = "bulk-upload",
-							UpdatedBy = "bulk-upload"
-						};
-						_context.RakePointMasters.Add(ent);
-						existingByCode[key] = ent;
-						insertedCount++;
+							rowNumber = row.RowNumber(),
+							sapCode = key,
+							rakePointName = name.Trim(),
+							reason = "Duplicate SAP Code in uploaded file"
+						});
+						continue;
 					}
+
+					// SAP Code already exists in database — skip instead of updating
+					if (existingByCode.ContainsKey(key))
+					{
+						duplicateRecords.Add(new
+						{
+							rowNumber = row.RowNumber(),
+							sapCode = key,
+							rakePointName = name.Trim(),
+							reason = "SAP Code already exists in database"
+						});
+						continue;
+					}
+
+					var ent = new RakePointMaster
+					{
+						RakePointCode = key,
+						Name = name.Trim(),
+						IsActive = true,
+						CreatedAt = now,
+						UpdatedAt = now,
+						CreatedBy = "bulk-upload",
+						UpdatedBy = "bulk-upload"
+					};
+					_context.RakePointMasters.Add(ent);
+					existingByCode[key] = ent;
+					insertedCount++;
 				}
 
 				await _context.SaveChangesAsync();
@@ -207,11 +227,11 @@ namespace SpicAPI.Controllers
 
 			var response = new BulkUploadResponse
 			{
-				TotalRecords = dataRows.Count,
+				TotalRecords = totalRows,
 				InsertedCount = insertedCount,
-				UpdatedCount = updatedCount,
 				RejectedCount = rejectedRecords.Count,
-				RejectedRecords = rejectedRecords
+				RejectedRecords = rejectedRecords,
+				DuplicateRecords = duplicateRecords
 			};
 
 			return Ok(response);

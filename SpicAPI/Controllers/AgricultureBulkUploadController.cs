@@ -407,5 +407,6 @@ namespace SpicAPI.Controllers
         public int UpdatedCount { get; set; }
         public int RejectedCount { get; set; }
         public List<RejectedRecord> RejectedRecords { get; set; } = new();
+        public List<object> DuplicateRecords { get; set; } = new();
     }
 }
