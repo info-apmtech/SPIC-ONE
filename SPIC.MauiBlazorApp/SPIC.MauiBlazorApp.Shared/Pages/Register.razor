@@ -1032,6 +1032,57 @@
 
                             </div>
                         </div>
+
+                        <div class="col-12 col-md-4">
+                            <div class="compliance-card tan">
+                                <div class="fw-bold small mb-2"><i class="bi bi-file-earmark-person text-warning me-2"></i>TAN Number @if (ShowTanRequiredMark) { <span class="text-danger">*</span> }</div>
+                                <label class="form-label-custom">TAN Number</label>
+                                <div class="input-with-loader">
+                                    <input type="text"
+                                           class="form-control form-control-sm @(_errors.ContainsKey("TANNumber") ? "is-invalid" : "")"
+                                           @bind="_model.TANNumber"
+                                           @bind:after="OnTANNumberChanged"
+                                           placeholder="10-character TAN Number"
+                                           maxlength="10"
+                                           style="text-transform: uppercase">
+                                    @if (_isExtractingTan)
+                                    {
+                                        <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                    }
+                                </div>
+
+                                @if (_errors.ContainsKey("TANNumber"))
+                                {
+                                    <div class="field-error">@_errors["TANNumber"]</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_ocrWarningTan))
+                                {
+                                    <div class="ocr-warning">@_ocrWarningTan</div>
+                                }
+
+                                <div class="mt-2">
+                                    <label class="upload-area">
+                                        <i class="bi bi-cloud-arrow-up text-warning"></i>
+                                        <span class="small text-warning fw-600">Upload TAN Document (PDF)@(ShowTanRequiredMark ? " *" : "")</span>
+                                        <InputFile OnChange="HandleTanUpload" accept=".pdf" hidden />
+                                        @if (_errors.ContainsKey("TANFile"))
+                                        {
+                                            <div class="field-error">@_errors["TANFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.TANFilePath))
+                                        {
+                                            <div class="mt-1 small text-warning file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.TANFilePath
+                                                @if (CanDelete)
+                                                {
+                                                    <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveTanFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                                }
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1346,6 +1397,10 @@
     // Trade Deposit Details (SPIC/Greenstar) are mandatory only when registration type = Dealer.
     private bool ShowTradeDepositRequiredMarks => IsDealerSelected && ShowFullRegistrationSections && !IsInactiveNotTraceable;
 
+    // TAN is mandatory only while the dealer status is Active; Inactive (any sub-reason)
+    // and Terminated leave it optional (format is still validated if a value is entered).
+    private bool ShowTanRequiredMark => status == "Active";
+
     private bool ShowInactiveStatus => status == "Inactive";
     private bool ShowTerminatedStatus => status == "Terminated";
 
@@ -1369,19 +1424,23 @@
     private bool _isExtractingGst;
     private bool _isExtractingPan;
     private bool _isExtractingAadhaar;
+    private bool _isExtractingTan;
     private bool _isExtractingCheque;
     private string? _ocrWarningGst;
     private string? _ocrWarningPan;
     private string? _ocrWarningAadhaar;
+    private string? _ocrWarningTan;
     private string? _ocrWarningCheque;
     private bool _ocrPopulatedGst;
     private bool _ocrPopulatedPan;
     private bool _ocrPopulatedAadhaar;
+    private bool _ocrPopulatedTan;
     private bool _ocrPopulatedCheque;
 
     private IBrowserFile? _gstFile;
     private IBrowserFile? _panFile;
     private IBrowserFile? _aadhaarFile;
+    private IBrowserFile? _tanFile;
     private IBrowserFile? _chequeFile;
     private IBrowserFile? _wholesaleFile;
     private IBrowserFile? _retailFile;
@@ -1751,6 +1810,22 @@
             _errors.Remove("AadhaarNumber");
     }
 
+    private void OnTANNumberChanged()
+    {
+        if (_ocrPopulatedTan)
+        {
+            _ocrPopulatedTan = false;
+        }
+        else
+        {
+            _ocrWarningTan = null;
+        }
+        if (!string.IsNullOrEmpty(_model.TANNumber))
+            _model.TANNumber = _model.TANNumber.ToUpper();
+        if (!string.IsNullOrWhiteSpace(_model.TANNumber) && Regex.IsMatch(_model.TANNumber, @"^[A-Z]{4}[0-9]{5}[A-Z]{1}$"))
+            _errors.Remove("TANNumber");
+    }
+
     private void OnFertilizerLicenseChanged()
     {
         if (!string.IsNullOrWhiteSpace(_model.WholeSaleFertilizerLicenseNumber) || !string.IsNullOrWhiteSpace(_model.RetailFertilizerLicenseNumber))
@@ -2042,20 +2117,24 @@
         _gstFile = null;
         _panFile = null;
         _aadhaarFile = null;
+        _tanFile = null;
         _chequeFile = null;
         _wholesaleFile = null;
         _retailFile = null;
         _isExtractingGst = false;
         _isExtractingPan = false;
         _isExtractingAadhaar = false;
+        _isExtractingTan = false;
         _isExtractingCheque = false;
         _ocrWarningGst = null;
         _ocrWarningPan = null;
         _ocrWarningAadhaar = null;
+        _ocrWarningTan = null;
         _ocrWarningCheque = null;
         _ocrPopulatedGst = false;
         _ocrPopulatedPan = false;
         _ocrPopulatedAadhaar = false;
+        _ocrPopulatedTan = false;
         _ocrPopulatedCheque = false;
         _errors.Clear();
         _message = null;
@@ -2133,6 +2212,18 @@
             else if (!Regex.IsMatch(_model.AadhaarNumber, @"^[0-9]{12}$"))
                 _errors["AadhaarNumber"] = "Aadhaar must be exactly 12 digits";
             if (string.IsNullOrEmpty(_model.AadhaarFilePath)) _errors["AadhaarFile"] = "Aadhaar Card PDF is required";
+
+            if (ShowTanRequiredMark)
+            {
+                if (string.IsNullOrWhiteSpace(_model.TANNumber)) _errors["TANNumber"] = "TAN Number is required";
+                else if (!Regex.IsMatch(_model.TANNumber, @"^[A-Z]{4}[0-9]{5}[A-Z]{1}$"))
+                    _errors["TANNumber"] = "Invalid TAN format (e.g., ABCD12345E)";
+                if (string.IsNullOrEmpty(_model.TANFilePath)) _errors["TANFile"] = "TAN Document PDF is required";
+            }
+            else if (!string.IsNullOrWhiteSpace(_model.TANNumber) && !Regex.IsMatch(_model.TANNumber, @"^[A-Z]{4}[0-9]{5}[A-Z]{1}$"))
+            {
+                _errors["TANNumber"] = "Invalid TAN format (e.g., ABCD12345E)";
+            }
 
             bool hasWholesale = !string.IsNullOrWhiteSpace(_model.WholeSaleFertilizerLicenseNumber);
             bool hasRetail = !string.IsNullOrWhiteSpace(_model.RetailFertilizerLicenseNumber);
@@ -2299,6 +2390,9 @@
                     if (_aadhaarFile != null)
                         uploads.Add(UploadFileToServer(dealerId, "Aadhaar", _aadhaarFile)
                             .ContinueWith(t => { if (t.Result != null) { _model.AadhaarFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.Aadhaar) && string.IsNullOrWhiteSpace(_model.AadhaarNumber)) { _model.AadhaarNumber = t.Result.Aadhaar; OnAadhaarNumberChanged(); } filesUpdated = true; } }));
+                    if (_tanFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "TAN", _tanFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.TANFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.TAN) && string.IsNullOrWhiteSpace(_model.TANNumber)) { _model.TANNumber = t.Result.TAN; OnTANNumberChanged(); } filesUpdated = true; } }));
                     if (_chequeFile != null)
                         uploads.Add(UploadFileToServer(dealerId, "Cheque", _chequeFile)
                             .ContinueWith(t => { if (t.Result != null) { _model.ChequeFilePath = t.Result.FilePath; filesUpdated = true; } }));
@@ -2318,6 +2412,7 @@
                 _gstFile = null;
                 _panFile = null;
                 _aadhaarFile = null;
+                _tanFile = null;
                 _chequeFile = null;
                 _wholesaleFile = null;
                 _retailFile = null;
@@ -2644,6 +2739,86 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         OpenDeleteModal("Aadhaar", "Aadhaar Card", _model.AadhaarFilePath);
     }
 
+    async Task HandleTanUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        _errors.Remove("TANFile");
+
+        if (Path.GetExtension(file.Name).ToLowerInvariant() != ".pdf")
+        {
+            _errors["TANFile"] = "Only PDF files are allowed for TAN Document";
+            _tanFile = null;
+            _model.TANFilePath = null;
+            return;
+        }
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _errors["TANFile"] = "File size must be less than 5 MB";
+            _tanFile = null;
+            _model.TANFilePath = null;
+            return;
+        }
+
+        _tanFile = file;
+        _model.TANFilePath = file.Name;
+
+        if (_ocrPopulatedTan)
+        {
+            _model.TANNumber = null;
+            _ocrPopulatedTan = false;
+        }
+        _ocrWarningTan = null;
+
+        _isExtractingTan = true;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync("api/DealerFile/ocr-extract", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
+                if (!string.IsNullOrEmpty(result?.TAN))
+                {
+                    _model.TANNumber = result.TAN;
+                    _ocrPopulatedTan = true;
+                    if (Regex.IsMatch(_model.TANNumber, @"^[A-Z]{4}[0-9]{5}[A-Z]{1}$"))
+                    {
+                        _ocrWarningTan = "⚠️ This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
+                    }
+                    else
+                    {
+                        _ocrWarningTan = "⚠️ Invalid TAN document. Please upload a valid TAN document.";
+                    }
+                    OnTANNumberChanged();
+                }
+                else
+                {
+                    _ocrWarningTan = "⚠️ Unable to detect TAN from the uploaded document. Please upload a clear TAN document.";
+                }
+            }
+            else
+            {
+                _ocrWarningTan = "⚠️ Unable to detect TAN from the uploaded document. Please upload a clear TAN document.";
+            }
+        }
+        catch
+        {
+            _ocrWarningTan = "⚠️ Unable to detect TAN from the uploaded document. Please upload a clear TAN document.";
+        }
+        finally
+        {
+            _isExtractingTan = false;
+        }
+    }
+
+    private void RemoveTanFile()
+    {
+        if (string.IsNullOrEmpty(_model.TANFilePath)) return;
+        OpenDeleteModal("TAN", "TAN Document", _model.TANFilePath);
+    }
+
     async Task HandleChequeUpload(InputFileChangeEventArgs e)
     {
         var file = e.File;
@@ -2835,6 +3010,11 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
                     _aadhaarFile = null;
                     _model.AadhaarFilePath = null;
                     _errors.Remove("AadhaarFile");
+                    break;
+                case "TAN":
+                    _tanFile = null;
+                    _model.TANFilePath = null;
+                    _errors.Remove("TANFile");
                     break;
                 case "WholesaleLicense":
                     _wholesaleFile = null;
@@ -3215,6 +3395,8 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         public string? PANFilePath { get; set; }
         public string? AadhaarNumber { get; set; }
         public string? AadhaarFilePath { get; set; }
+        public string? TANNumber { get; set; }
+        public string? TANFilePath { get; set; }
         public string? ChequeFilePath { get; set; }
         public string? WholeSaleFertilizerLicenseNumber { get; set; }
         public DateTime? WholesaleLicenseExpiryDate { get; set; }
@@ -3315,6 +3497,7 @@ public string? GflTradeDepositFilePath { get; set; }
         public string? Aadhaar { get; set; }
         public string? PAN { get; set; }
         public string? GST { get; set; }
+        public string? TAN { get; set; }
     }
 
     public class OcrExtractResult
@@ -3322,6 +3505,7 @@ public string? GflTradeDepositFilePath { get; set; }
         public string? Aadhaar { get; set; }
         public string? PAN { get; set; }
         public string? GST { get; set; }
+        public string? TAN { get; set; }
        public string? GSTLegalName { get; set; }
 public string? GSTTradeName { get; set; }
 public string? GSTConstitutionofBusiness { get; set; }

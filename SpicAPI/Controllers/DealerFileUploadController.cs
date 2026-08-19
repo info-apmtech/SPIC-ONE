@@ -51,7 +51,7 @@ namespace SpicAPI.Controllers
 
 			var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
 
-			var pdfOrImageDocTypes = new[] { "GST", "PAN", "Aadhaar", "Cheque", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN",
+			var pdfOrImageDocTypes = new[] { "GST", "PAN", "Aadhaar", "TAN", "Cheque", "WholesaleLicense", "RetailLicense", "PartnerAadhaar", "PartnerPAN",
 				"Specimen", "GreenstarSpecimen", "BankGuarantee", "DeedOfGuarantee", "ITReturn1", "ITReturn2", "ValuationCertificate", "PartnershipDeed", "BoardResolution", "Affidavit",
 				   "LlpAgreement", "AuthorizationLetter", "RequestLetter",
 				// Investment / Assets related docs
@@ -119,6 +119,7 @@ namespace SpicAPI.Controllers
 					Aadhaar = (string?)null,
 					PAN = (string?)null,
 					GST = (string?)null,
+					TAN = (string?)null,
 					GSTLegalName = (string?)null,
 					GSTTradeName = (string?)null,
 					GSTConstitutionofBusiness = (string?)null
@@ -127,6 +128,7 @@ namespace SpicAPI.Controllers
 			string? extractedAadhaar = null;
 			string? extractedPan = null;
 			string? extractedGst = null;
+			string? extractedTan = null;
 			string? legalName = null;
 			string? tradeName = null;
 			string? gstConstitution = null;
@@ -137,7 +139,7 @@ namespace SpicAPI.Controllers
 				var imageExts = new[] { ".jpg", ".jpeg", ".png", ".webp" };
 
 				if (!imageExts.Contains(ext) && ext != ".pdf")
-					return Ok(new { Aadhaar = extractedAadhaar, PAN = extractedPan, GST = extractedGst, GSTLegalName = legalName, GSTTradeName = tradeName, GSTConstitutionofBusiness = gstConstitution });
+					return Ok(new { Aadhaar = extractedAadhaar, PAN = extractedPan, GST = extractedGst, TAN = extractedTan, GSTLegalName = legalName, GSTTradeName = tradeName, GSTConstitutionofBusiness = gstConstitution });
 
 				if (imageExts.Contains(ext))
 				{
@@ -145,7 +147,7 @@ namespace SpicAPI.Controllers
 					await file.CopyToAsync(ms);
 					ms.Position = 0;
 
-					(extractedAadhaar, extractedPan, extractedGst, legalName, tradeName, gstConstitution) = OcrImageBytes(ms.ToArray());
+					(extractedAadhaar, extractedPan, extractedGst, extractedTan, legalName, tradeName, gstConstitution) = OcrImageBytes(ms.ToArray());
 				}
 				else
 				{
@@ -160,7 +162,7 @@ namespace SpicAPI.Controllers
 						await using (var fs = new FileStream(tempFile, FileMode.Create))
 							await file.CopyToAsync(fs);
 
-						(extractedAadhaar, extractedPan, extractedGst, legalName, tradeName, gstConstitution) = ExtractFromPdf(tempFile);
+						(extractedAadhaar, extractedPan, extractedGst, extractedTan, legalName, tradeName, gstConstitution) = ExtractFromPdf(tempFile);
 					}
 					finally
 					{
@@ -179,18 +181,19 @@ namespace SpicAPI.Controllers
 				Aadhaar = extractedAadhaar,
 				PAN = extractedPan,
 				GST = extractedGst,
+				TAN = extractedTan,
 				GSTLegalName = legalName,
 				GSTTradeName = tradeName,
 				GSTConstitutionofBusiness = gstConstitution
 			});
 		}
 
-		private (string? aadhaar, string? pan, string? gst, string? legalName, string? tradeName, string? gstConstitution)
+		private (string? aadhaar, string? pan, string? gst, string? tan, string? legalName, string? tradeName, string? gstConstitution)
 		ExtractFromPdf(string pdfPath)
 		{
 			var result = ExtractTextFromPdfPig(pdfPath);
 
-			if (result.aadhaar != null || result.pan != null || result.gst != null ||
+			if (result.aadhaar != null || result.pan != null || result.gst != null || result.tan != null ||
 				result.legalName != null || result.tradeName != null || result.gstConstitution != null)
 			{
 				return result;
@@ -199,7 +202,7 @@ namespace SpicAPI.Controllers
 			return OcrPdfPages(pdfPath);
 		}
 
-		private static (string? aadhaar, string? pan, string? gst, string? legalName, string? tradeName, string? gstConstitution)
+		private static (string? aadhaar, string? pan, string? gst, string? tan, string? legalName, string? tradeName, string? gstConstitution)
 		ExtractTextFromPdfPig(string pdfPath)
 		{
 			using var pdf = UglyToad.PdfPig.PdfDocument.Open(pdfPath);
@@ -226,12 +229,13 @@ namespace SpicAPI.Controllers
 			return ExtractValuesFromText(norm);
 		}
 
-		private (string? aadhaar, string? pan, string? gst, string? legalName, string? tradeName, string? gstConstitution)
+		private (string? aadhaar, string? pan, string? gst, string? tan, string? legalName, string? tradeName, string? gstConstitution)
 		OcrPdfPages(string pdfPath)
 		{
 			string? aadhaar = null;
 			string? pan = null;
 			string? gst = null;
+			string? tan = null;
 			string? legalName = null;
 			string? tradeName = null;
 			string? gstConstitution = null;
@@ -267,11 +271,12 @@ namespace SpicAPI.Controllers
 					aadhaar ??= result.aadhaar;
 					pan ??= result.pan;
 					gst ??= result.gst;
+					tan ??= result.tan;
 					legalName ??= result.legalName;
 					tradeName ??= result.tradeName;
 					gstConstitution ??= result.gstConstitution;
 
-					if (aadhaar != null && pan != null && gst != null &&
+					if (aadhaar != null && pan != null && gst != null && tan != null &&
 						legalName != null && tradeName != null && gstConstitution != null)
 					{
 						break;
@@ -283,10 +288,10 @@ namespace SpicAPI.Controllers
 				}
 			}
 
-			return (aadhaar, pan, gst, legalName, tradeName, gstConstitution);
+			return (aadhaar, pan, gst, tan, legalName, tradeName, gstConstitution);
 		}
 
-		private static (string? aadhaar, string? pan, string? gst, string? legalName, string? tradeName, string? gstConstitution)
+		private static (string? aadhaar, string? pan, string? gst, string? tan, string? legalName, string? tradeName, string? gstConstitution)
 		OcrImageBytes(byte[] imageBytes)
 		{
 			using var engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default);
@@ -798,12 +803,13 @@ namespace SpicAPI.Controllers
 		//  Aadhaar / PAN / GST field extraction (regex)
 		// =====================================================================
 
-		private static (string? aadhaar, string? pan, string? gst, string? legalName, string? tradeName, string? gstConstitution)
+		private static (string? aadhaar, string? pan, string? gst, string? tan, string? legalName, string? tradeName, string? gstConstitution)
 		ExtractValuesFromText(string text)
 		{
 			string? aadhaar = null;
 			string? pan = null;
 			string? gst = null;
+			string? tan = null;
 			string? legalName = null;
 			string? tradeName = null;
 			string? gstConstitution = null;
@@ -816,6 +822,12 @@ namespace SpicAPI.Controllers
 			var panMatch = Regex.Match(normalized, @"\b[A-Z]{5}[0-9]{4}[A-Z]\b", RegexOptions.IgnoreCase);
 			if (panMatch.Success)
 				pan = panMatch.Value.ToUpperInvariant();
+
+			// TAN: 4 letters + 5 digits + 1 letter (e.g. AAAA99999A) — structurally
+			// distinct from PAN (5 letters + 4 digits + 1 letter), so no overlap.
+			var tanMatch = Regex.Match(normalized, @"\b[A-Z]{4}[0-9]{5}[A-Z]\b", RegexOptions.IgnoreCase);
+			if (tanMatch.Success)
+				tan = tanMatch.Value.ToUpperInvariant();
 
 			var gstMatch = Regex.Match(normalized, @"\b\d{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b", RegexOptions.IgnoreCase);
 			if (gstMatch.Success)
@@ -866,7 +878,7 @@ namespace SpicAPI.Controllers
 				}
 			}
 
-			return (aadhaar, pan, gst, legalName, tradeName, gstConstitution);
+			return (aadhaar, pan, gst, tan, legalName, tradeName, gstConstitution);
 		}
 
 		// Extract the value following a GST-certificate field label, stopping at the next known label.
