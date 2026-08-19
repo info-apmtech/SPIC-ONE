@@ -69,6 +69,11 @@
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault() ?? "";
 
+        // Dealers can always access the SDWA Dashboard
+        if (LoginState.UserRole == AppRole.Dealer
+            && firstSegment.Equals("SDWADashboard", StringComparison.OrdinalIgnoreCase))
+            return;
+
         // Users with NO designation assigned (no allowed pages) can ONLY see the
         // Welcome page. Infrastructure pages (login / AccountSelector / error /
         // notfound / forbidden) stay reachable so the login and multi-role flows
@@ -76,10 +81,12 @@
         if (LoginState.AllowedPages.Count == 0)
         {
             bool isWelcome = firstSegment.Equals("Welcome", StringComparison.OrdinalIgnoreCase);
+            bool isDealerDash = LoginState.UserRole == AppRole.Dealer
+                                && firstSegment.Equals("SDWADashboard", StringComparison.OrdinalIgnoreCase);
             bool isInfra = _alwaysOpen.Contains(firstSegment)
                            && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase);
 
-            if (!isWelcome && !isInfra)
+            if (!isWelcome && !isDealerDash && !isInfra)
             {
                 Nav.NavigateTo("/Welcome", replace: true);
             }
@@ -92,7 +99,8 @@
         // is granted) as well as legacy bare page tokens.
         if (!LoginState.CanAccess(firstSegment))
         {
-            Nav.NavigateTo("/Dashboard", replace: true);
+            var fallback = LoginState.UserRole == AppRole.Dealer ? "/SDWADashboard" : "/Dashboard";
+            Nav.NavigateTo(fallback, replace: true);
         }
     }
     public void Dispose()

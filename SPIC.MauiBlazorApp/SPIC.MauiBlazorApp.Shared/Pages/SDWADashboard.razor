@@ -1,5 +1,7 @@
 ﻿@page "/SDWADashboard"
 @inject NavigationManager NavigationManager
+@inject HttpClient Http
+@using SPIC.Core.DTOs
 
 
 <div class="pgr-title">Dashboard</div>
@@ -8,11 +10,11 @@
 <div class="hdr-row">
 
   <div class="wlc-tile">
-    <img class="wlc-avatar-img" src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" alt="Rajesh Kumar Patel" onerror="this.src='https://ui-avatars.com/api/?name=RK&background=c7d2fe&color=3730a3&size=64&rounded=true'" />
+    <img class="wlc-avatar-img" src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" alt="@_dealer.DealerName" onerror="this.src='https://ui-avatars.com/api/?name=@(System.Net.WebUtility.UrlEncode(_dealer.DealerName?.Length >= 2 ? _dealer.DealerName.Substring(0, 2) : "DL") )&background=c7d2fe&color=3730a3&size=64&rounded=true'" />
     <div class="wlc-text-content">
       <div class="wlc-name">
         <span class="wlc-greeting">WELCOME BACK,</span> 
-        <span class="wlc-user-name">RAJESH KUMAR PATEL TRADERS</span> 👋
+        <span class="wlc-user-name">@_dealer.DealerName.ToUpper()</span> 👋
       </div>
       <div class="wlc-sub">Manage Your Welfare Applications And Guest House Bookings Easily.</div>
     </div>
@@ -35,7 +37,7 @@
       </span>
       <div>
         <div class="dlr-caption">Dealer Code</div>
-        <div class="dlr-val">DLR-102458</div>
+        <div class="dlr-val">@_dealer.DealerCode</div>
       </div>
     </div>
     <div class="dlr-row">
@@ -50,7 +52,7 @@
       </span>
       <div>
         <div class="dlr-caption">Region</div>
-        <div class="dlr-val">Tamil Nadu</div>
+        <div class="dlr-val">@_dealer.Region</div>
       </div>
     </div>
   </div>
@@ -58,9 +60,9 @@
   <div class="prf-tile">
     <div class="prf-top-row">
       <span class="prf-label">Profile Completion</span>
-      <span class="prf-pct">80%</span>
+      <span class="prf-pct">@_dealer.ProfileCompletion%</span>
     </div>
-    <div class="prf-bar-track"><div class="prf-bar-fill"></div></div>
+    <div class="prf-bar-track"><div class="prf-bar-fill" style="width: @_dealer.ProfileCompletion%;"></div></div>
     <button class="prf-cta-btn">Complete Profile</button>
   </div>
 
@@ -475,6 +477,22 @@
 </div>
 
 @code {
+    private SDWADashboardDealerDto _dealer = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<SDWADashboardDealerDto>("api/SDWADashboard/dealer-details");
+            if (result != null)
+                _dealer = result;
+        }
+        catch (Exception)
+        {
+            _dealer = new SDWADashboardDealerDto();
+        }
+    }
+
     private void NavigateToApplyWelfare()
     {
         NavigationManager.NavigateTo("WelfareSchemes");

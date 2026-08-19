@@ -187,6 +187,11 @@
         border-color: #bbf7d0;
     }
 
+    .bg-orange-light {
+        background-color: #fffbeb;
+        border-color: #fde68a;
+    }
+
     .metric-val {
         font-size: 2rem;
         font-weight: 700;
@@ -333,6 +338,71 @@
             }
         </div>
 
+        @if (_lastUploadResult != null)
+        {
+            <div class="main-card">
+                <div class="section-header">
+                    <h3 class="section-title">Upload Result</h3>
+                </div>
+
+                <div class="row">
+                    <div class="metric-card bg-blue-light">
+                        <h4 class="metric-title">Total Records</h4>
+                        <div class="metric-val">@_lastUploadResult.TotalRows</div>
+                    </div>
+                    <div class="metric-card bg-mint-light">
+                        <h4 class="metric-title">Successfully Inserted</h4>
+                        <div class="metric-val">@_lastUploadResult.Inserted</div>
+                    </div>
+                    <div class="metric-card bg-orange-light">
+                        <h4 class="metric-title">Duplicate/Skipped</h4>
+                        <div class="metric-val">@(_lastUploadResult.Skipped)</div>
+                    </div>
+                </div>
+
+                @if (_lastUploadResult.Inserted > 0)
+                {
+                    <div class="alert alert-success">
+                        @_lastUploadResult.Inserted record(s) inserted successfully.
+                    </div>
+                }
+
+                @if (_lastUploadResult.Skipped > 0)
+                {
+                    <div class="alert alert-warning">
+                        @_lastUploadResult.Skipped record(s) were skipped due to duplicate SAP Codes.
+                    </div>
+                }
+
+                @if (_lastUploadResult.DuplicateRecords != null && _lastUploadResult.DuplicateRecords.Any())
+                {
+                    <div class="table-responsive" style="margin-top: 1rem;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Excel Row</th>
+                                    <th>SAP Code</th>
+                                    <th>Name</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var dup in _lastUploadResult.DuplicateRecords)
+                                {
+                                    <tr>
+                                        <td>@dup.RowNumber</td>
+                                        <td>@dup.SapCode</td>
+                                        <td>@dup.WarehouseName</td>
+                                        <td>@dup.Reason</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+
         <!-- Metrics -->
         <div class="row">
             <div class="metric-card bg-blue-light">
@@ -346,51 +416,35 @@
         </div>
 
         <!-- Data Table -->
-        <div class="main-card">
-            <div class="section-header">
-                <h3 class="section-title">PVT Master List</h3>
-                <input type="text"
-                       placeholder="Search by code or name..."
-                       @bind="_searchText"
-                       @bind:event="oninput"
-                       style="padding: 0.5rem 1rem; border: 1px solid #d1d5db; border-radius: 6px; width: 300px;" />
-            </div>
+        <SpicDataTable Items="@_allData"
+                       IsLoading="false"
+                       Title="PVT Master List"
+                       FileName="PVT_Master_List"
+                       ExportColumns="GetPvtExportColumns()"
+                       SearchText="@_searchText">
 
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>S.No</th>
-                            <th>Code</th>
-                            <th>Name</th>
-                            <th>Created At</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (_filteredData.Any())
-                        {
-                            @foreach (var (item, index) in _filteredData.Select((x, i) => (x, i + 1)))
-                            {
-                                <tr>
-                                    <td>@index</td>
-                                    <td>@item.Code</td>
-                                    <td>@item.Name</td>
-                                    <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
-                                </tr>
-                            }
-                        }
-                        else
-                        {
-                            <tr>
-                                <td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">
-                                    No data available
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            <FilterControls>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text"
+                           placeholder="Search by code or name..."
+                           @bind="_searchText"
+                           @bind:event="oninput" />
+                </div>
+            </FilterControls>
+
+            <TableHeader>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Created At</th>
+            </TableHeader>
+
+            <TableRow Context="item">
+                <td>@item.Code</td>
+                <td>@item.Name</td>
+                <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
+            </TableRow>
+        </SpicDataTable>
     }
     else
     {
@@ -425,6 +479,68 @@
             }
         </div>
 
+        @if (_lastRakePointUploadResult != null)
+        {
+            <div class="main-card">
+                <div class="section-header">
+                    <h3 class="section-title">Upload Result</h3>
+                </div>
+
+                <div class="row">
+                    <div class="metric-card bg-blue-light">
+                        <h4 class="metric-title">Total Records</h4>
+                        <div class="metric-val">@_lastRakePointUploadResult.TotalRecords</div>
+                    </div>
+                    <div class="metric-card bg-mint-light">
+                        <h4 class="metric-title">Successfully Inserted</h4>
+                        <div class="metric-val">@_lastRakePointUploadResult.InsertedCount</div>
+                    </div>
+                    <div class="metric-card bg-orange-light">
+                        <h4 class="metric-title">Duplicate/Skipped</h4>
+                        <div class="metric-val">@(_lastRakePointUploadResult.DuplicateRecords?.Count ?? 0)</div>
+                    </div>
+                </div>
+
+                @if (_lastRakePointUploadResult.InsertedCount > 0)
+                {
+                    <div class="alert alert-success">
+                        @_lastRakePointUploadResult.InsertedCount record(s) inserted successfully.
+                    </div>
+                }
+
+                @if (_lastRakePointUploadResult.DuplicateRecords != null && _lastRakePointUploadResult.DuplicateRecords.Any())
+                {
+                    <div class="alert alert-warning">
+                        @_lastRakePointUploadResult.DuplicateRecords.Count record(s) were skipped due to duplicate SAP Codes.
+                    </div>
+
+                    <div class="table-responsive" style="margin-top: 1rem;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Excel Row</th>
+                                    <th>SAP Code</th>
+                                    <th>Name</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var dup in _lastRakePointUploadResult.DuplicateRecords)
+                                {
+                                    <tr>
+                                        <td>@dup.RowNumber</td>
+                                        <td>@dup.SapCode</td>
+                                        <td>@dup.RakePointName</td>
+                                        <td>@dup.Reason</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+
         <!-- Rake Point Master Metrics -->
         <div class="row">
             <div class="metric-card bg-blue-light">
@@ -438,51 +554,35 @@
         </div>
 
         <!-- Rake Point Master Data Table -->
-        <div class="main-card">
-            <div class="section-header">
-                <h3 class="section-title">Rake Point Master List</h3>
-                <input type="text"
-                       placeholder="Search by code or name..."
-                       @bind="_rakePointSearchText"
-                       @bind:event="oninput"
-                       style="padding: 0.5rem 1rem; border: 1px solid #d1d5db; border-radius: 6px; width: 300px;" />
-            </div>
+        <SpicDataTable Items="@_rakePointAllData"
+                       IsLoading="false"
+                       Title="Rake Point Master List"
+                       FileName="Rake_Point_Master_List"
+                       ExportColumns="GetRakePointExportColumns()"
+                       SearchText="@_rakePointSearchText">
 
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>S.No</th>
-                            <th>Rake Point Code</th>
-                            <th>Name</th>
-                            <th>Created At</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (_rakePointFilteredData.Any())
-                        {
-                            @foreach (var (item, index) in _rakePointFilteredData.Select((x, i) => (x, i + 1)))
-                            {
-                                <tr>
-                                    <td>@index</td>
-                                    <td>@item.RakePointCode</td>
-                                    <td>@item.Name</td>
-                                    <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
-                                </tr>
-                            }
-                        }
-                        else
-                        {
-                            <tr>
-                                <td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">
-                                    No data available
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            <FilterControls>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text"
+                           placeholder="Search by code or name..."
+                           @bind="_rakePointSearchText"
+                           @bind:event="oninput" />
+                </div>
+            </FilterControls>
+
+            <TableHeader>
+                <th>Rake Point Code</th>
+                <th>Name</th>
+                <th>Created At</th>
+            </TableHeader>
+
+            <TableRow Context="item">
+                <td>@item.RakePointCode</td>
+                <td>@item.Name</td>
+                <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
+            </TableRow>
+        </SpicDataTable>
     }
 </div>
 
@@ -502,27 +602,12 @@
     private List<PVTMasterDto> _allData = new();
     private BulkUploadResponse? _lastUploadResult;
 
-    private List<PVTMasterDto> _filteredData => _allData
-        .Where(x =>
-            string.IsNullOrWhiteSpace(_searchText) ||
-            (x.Code?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (x.Name?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false))
-        .OrderBy(x => x.Code)
-        .ToList();
-
     private bool _isRakePointUploading = false;
     private string _rakePointSearchText = "";
     private int _rakePointTotalRecords = 0;
     private int _rakePointUploadedToday = 0;
 
     private List<RakePointMasterDto> _rakePointAllData = new();
-
-    private List<RakePointMasterDto> _rakePointFilteredData => _rakePointAllData
-        .Where(x => string.IsNullOrEmpty(_rakePointSearchText) ||
-                    (x.RakePointCode?.Contains(_rakePointSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    (x.Name?.Contains(_rakePointSearchText, StringComparison.OrdinalIgnoreCase) ?? false))
-        .OrderByDescending(x => x.CreatedAt)
-        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -624,12 +709,9 @@
             {
                 var errorMessage = result?.Message;
 
-                if (string.IsNullOrWhiteSpace(errorMessage))
-                    errorMessage = await response.Content.ReadAsStringAsync();
-
                 ShowMessage(
                     string.IsNullOrWhiteSpace(errorMessage)
-                        ? "Excel upload failed."
+                        ? "PVT Master upload failed. Please check the file and try again."
                         : errorMessage,
                     true);
 
@@ -638,15 +720,9 @@
 
             _lastUploadResult = result;
 
-            if (result != null)
+            if (result == null)
             {
-                ShowMessage(
-                    $"Upload completed successfully. Inserted: {result.Inserted}, Updated: {result.Updated}, Skipped: {result.Skipped}.",
-                    false);
-            }
-            else
-            {
-                ShowMessage("Excel uploaded successfully.", false);
+                ShowMessage("PVT Master upload completed.", false);
             }
 
             await LoadData();
@@ -661,6 +737,8 @@
         }
     }
 
+    private RakePointBulkUploadResponse? _lastRakePointUploadResult;
+
     private async Task OnRakePointFileSelected(InputFileChangeEventArgs e)
     {
         var file = e.File;
@@ -669,6 +747,7 @@
 
         _isRakePointUploading = true;
         _message = "";
+        _lastRakePointUploadResult = null;
 
         try
         {
@@ -690,15 +769,17 @@
             var response = await Http.PostAsync("api/RakePointMaster/bulk-upload", content);
             if (!response.IsSuccessStatusCode)
             {
-                var error = await response.Content.ReadAsStringAsync();
-                ShowMessage($"Upload failed: {error}", true);
+                ShowMessage("Rake Point upload failed. Please check the file and try again.", true);
                 return;
             }
 
             var result = await response.Content.ReadFromJsonAsync<RakePointBulkUploadResponse>();
-            ShowMessage(
-                $"Successfully processed {file.Name}: {result?.InsertedCount} inserted, {result?.UpdatedCount} updated, {result?.RejectedCount} rejected.",
-                false);
+            _lastRakePointUploadResult = result;
+
+            if (result == null)
+            {
+                ShowMessage("Rake Point upload completed.", false);
+            }
 
             await LoadRakePointData();
         }
@@ -742,6 +823,26 @@
         _isError = isError;
     }
 
+    private List<ExportColumn<PVTMasterDto>> GetPvtExportColumns()
+    {
+        return new List<ExportColumn<PVTMasterDto>>
+        {
+            new() { Header = "Code", ValueSelector = item => item.Code ?? "" },
+            new() { Header = "Name", ValueSelector = item => item.Name ?? "" },
+            new() { Header = "Created At", ValueSelector = item => item.CreatedAt?.ToString("yyyy-MM-dd") ?? "" }
+        };
+    }
+
+    private List<ExportColumn<RakePointMasterDto>> GetRakePointExportColumns()
+    {
+        return new List<ExportColumn<RakePointMasterDto>>
+        {
+            new() { Header = "Rake Point Code", ValueSelector = item => item.RakePointCode ?? "" },
+            new() { Header = "Name", ValueSelector = item => item.Name ?? "" },
+            new() { Header = "Created At", ValueSelector = item => item.CreatedAt?.ToString("yyyy-MM-dd") ?? "" }
+        };
+    }
+
     public class PVTMasterDto
     {
         public int Id { get; set; }
@@ -768,6 +869,15 @@
         public int Updated { get; set; }
         public int Skipped { get; set; }
         public List<string> Errors { get; set; } = new();
+        public List<DuplicateRecordDto> DuplicateRecords { get; set; } = new();
+    }
+
+    public class DuplicateRecordDto
+    {
+        public int RowNumber { get; set; }
+        public string SapCode { get; set; } = string.Empty;
+        public string WarehouseName { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
     }
 
     public class RakePointBulkUploadResponse
@@ -776,5 +886,14 @@
         public int InsertedCount { get; set; }
         public int UpdatedCount { get; set; }
         public int RejectedCount { get; set; }
+        public List<RakePointDuplicateRecordDto> DuplicateRecords { get; set; } = new();
+    }
+
+    public class RakePointDuplicateRecordDto
+    {
+        public int RowNumber { get; set; }
+        public string SapCode { get; set; } = string.Empty;
+        public string RakePointName { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
     }
 }

@@ -384,6 +384,7 @@ namespace SpicAPI.Controllers
 				int skippedCount = 0;
 
 				var errors = new List<string>();
+				var duplicateRecords = new List<object>();
 
 				var now = DateTime.Now;
 				var userName = User?.Identity?.Name ?? "System";
@@ -406,134 +407,145 @@ namespace SpicAPI.Controllers
 						.GetFormattedString()
 						.Trim();
 
-					// Ignore completely empty rows
-					if (string.IsNullOrWhiteSpace(code) &&
-						string.IsNullOrWhiteSpace(name))
-					{
-						continue;
-					}
-
-					totalRows++;
-
-					// Code validation
-					if (string.IsNullOrWhiteSpace(code))
-					{
-						skippedCount++;
-						errors.Add($"Row {rowNumber}: Code is empty.");
-						continue;
-					}
-
-					// Name validation
-					if (string.IsNullOrWhiteSpace(name))
-					{
-						skippedCount++;
-						errors.Add($"Row {rowNumber}: Name is empty.");
-						continue;
-					}
-
-					// Duplicate code inside same uploaded Excel
-					if (!uploadedCodes.Add(code))
-					{
-						skippedCount++;
-						errors.Add(
-							$"Row {rowNumber}: Duplicate Code '{code}' found in Excel.");
-						continue;
-					}
-
-					// ------------------------------------------------
-					// Update existing record
-					// ------------------------------------------------
-
-					if (existingByCode.TryGetValue(
-						code,
-						out var existingRecord))
-					{
-						existingRecord.Name = name;
-						existingRecord.IsActive = true;
-						existingRecord.UpdatedAt = now;
-						existingRecord.UpdatedBy = userName;
-
-						updatedCount++;
-					}
-					else
-					{
-						// ------------------------------------------------
-						// Insert new record
-						// ------------------------------------------------
-
-						var newRecord = new PVTMaster
-						{
-							Code = code,
-							Name = name,
-							IsActive = true,
-							CreatedAt = now,
-							UpdatedAt = now,
-							CreatedBy = userName,
-							UpdatedBy = userName
-						};
-
-						_context.PVTMasters.Add(newRecord);
-
-						existingByCode[code] = newRecord;
-
-						insertedCount++;
-					}
-				}
-
-				// ----------------------------------------------------
-				// No usable data
-				// ----------------------------------------------------
-
-				if (totalRows == 0)
+				// Ignore completely empty rows
+				if (string.IsNullOrWhiteSpace(code) &&
+					string.IsNullOrWhiteSpace(name))
 				{
-					return BadRequest(new
-					{
-						message =
-							$"No data was found below the Code and Name headers in sheet '{worksheet.Name}'."
-					});
+					continue;
 				}
 
-				if (insertedCount == 0 &&
-					updatedCount == 0)
+				// Code validation
+				if (string.IsNullOrWhiteSpace(code))
 				{
-					return BadRequest(new
-					{
-						message =
-							"Excel contains records, but no valid records could be processed.",
-						totalRows,
-						inserted = insertedCount,
-						updated = updatedCount,
-						skipped = skippedCount,
-						errors
-					});
+					errors.Add($"Row {rowNumber}: Code is empty.");
+					continue;
 				}
 
-				// ----------------------------------------------------
-				// Save database
-				// ----------------------------------------------------
+				// Name validation
+				if (string.IsNullOrWhiteSpace(name))
+				{
+					errors.Add($"Row {rowNumber}: Name is empty.");
+					continue;
+				}
 
-				await _context.SaveChangesAsync();
+				totalRows++;
 
+				// Duplicate code inside same uploaded Excel
+				if (!uploadedCodes.Add(code))
+				{
+					skippedCount++;
+					duplicateRecords.Add(new
+					{
+						rowNumber = rowNumber,
+						sapCode = code,
+						warehouseName = name,
+						reason = "Duplicate SAP Code in uploaded file"
+					});
+					errors.Add(
+						$"Row {rowNumber}: Duplicate Code '{code}' found in Excel.");
+					continue;
+				}
+
+				// ------------------------------------------------
+				// Skip existing record (SAP Code already in database)
+				// ------------------------------------------------
+
+				if (existingByCode.TryGetValue(
+					code,
+					out var existingRecord))
+				{
+					skippedCount++;
+					duplicateRecords.Add(new
+					{
+						rowNumber = rowNumber,
+						sapCode = code,
+						warehouseName = name,
+						reason = "SAP Code already exists in database"
+					});
+					errors.Add(
+						$"Row {rowNumber}: SAP Code '{code}' already exists in database.");
+				}
+				else
+				{
+					// ------------------------------------------------
+					// Insert new record
+					// ------------------------------------------------
+
+					var newRecord = new PVTMaster
+					{
+						Code = code,
+						Name = name,
+						IsActive = true,
+						CreatedAt = now,
+						UpdatedAt = now,
+						CreatedBy = userName,
+						UpdatedBy = userName
+					};
+
+					_context.PVTMasters.Add(newRecord);
+
+					existingByCode[code] = newRecord;
+
+				insertedCount++;
+				}
+			}
+
+			// ----------------------------------------------------
+			// No usable data
+			// ----------------------------------------------------
+
+			if (totalRows == 0)
+			{
+				return BadRequest(new
+				{
+					message =
+						$"No data was found below the Code and Name headers in sheet '{worksheet.Name}'."
+				});
+			}
+
+			if (insertedCount == 0 &&
+				updatedCount == 0)
+			{
 				return Ok(new
 				{
-					message = "PVT Master Excel uploaded successfully.",
-					fileName = file.FileName,
-					sheetName = worksheet.Name,
+					message =
+						"Excel contains records, but no valid records could be processed.",
 					totalRows,
 					inserted = insertedCount,
 					updated = updatedCount,
 					skipped = skippedCount,
-					errors
+					errors,
+					duplicateRecords
 				});
 			}
-			catch (Exception ex)
+
+			// ----------------------------------------------------
+			// Save database
+			// ----------------------------------------------------
+
+			await _context.SaveChangesAsync();
+
+			return Ok(new
 			{
-				return StatusCode(500, new
-				{
-					message =
-						$"Excel upload failed. Please make sure the file is a valid .xlsx workbook. Details: {ex.Message}"
-				});
-			}
+				message = "PVT Master Excel uploaded successfully.",
+				fileName = file.FileName,
+				sheetName = worksheet.Name,
+				totalRows,
+				inserted = insertedCount,
+				updated = updatedCount,
+				skipped = skippedCount,
+				errors,
+				duplicateRecords
+			});
+		}
+		catch (Exception ex)
+		{
+			return StatusCode(500, new
+			{
+				message =
+					$"Excel upload failed. Please make sure the file is a valid .xlsx workbook. Details: {ex.Message}"
+			});
+		}
 		}
 
 		// ============================================================
