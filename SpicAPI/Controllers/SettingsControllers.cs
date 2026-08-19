@@ -37,8 +37,13 @@ namespace SpicAPI.Controllers
 	[Route("api/[controller]")]
 	public class WarehouseController : GenericCrudController<Warehouse>
 	{
-		public WarehouseController(IGenericRepository<Warehouse> repo) : base(repo)
+		private readonly IGenericRepository<LogisticsApprovalHistory> _historyRepo;
+
+		public WarehouseController(
+			IGenericRepository<Warehouse> repo,
+			IGenericRepository<LogisticsApprovalHistory> historyRepo) : base(repo)
 		{
+			_historyRepo = historyRepo;
 		}
 
 		[HttpGet("all")]
@@ -155,10 +160,41 @@ namespace SpicAPI.Controllers
 			var existing = await _repo.GetByIdAsync(id);
 			if (existing == null) return NotFound();
 
+			var userId = CurrentUserId();
+			var role = CurrentRole();
+
+			// If RM sent this record back to its original MO/MDO/JMDO creator,
+			// saving the corrected record resubmits the SAME row to RM.
+			// No delete/recreate is performed.
+			var isCreatorResubmission =
+				existing.IsSubmittedForReview &&
+				existing.RMApproved == false &&
+				IsCreatorRole(role) &&
+				!string.IsNullOrWhiteSpace(userId) &&
+				string.Equals(existing.CreatedBy, userId, StringComparison.OrdinalIgnoreCase);
+
 			// IMPORTANT: existing Logistics.razor performs a second PUT after document upload.
-			// Preserve every workflow-owned value so that normal edit/document saves cannot
-			// accidentally clear creator or approval state through GenericRepository.PatchAsync.
+			// Preserve every workflow-owned value so normal edit/document saves cannot
+			// accidentally clear approval state.
 			PreserveApprovalState(existing, entity);
+
+			if (isCreatorResubmission)
+			{
+				// RM had sent the request back to the creator. The creator's save now
+				// places it back in Pending RM while preserving the same record Id.
+				entity.IsSubmittedForReview = true;
+				entity.RMApproved = null;
+				entity.RMApprovedBy = null;
+				entity.RMApprovedAt = null;
+				entity.SMApproved = null;
+				entity.SMApprovedBy = null;
+				entity.SMApprovedAt = null;
+				entity.AVPApproved = null;
+				entity.AVPApprovedBy = null;
+				entity.AVPApprovedAt = null;
+				// Keep ApprovalRemarks until the next workflow action so the latest
+				// Send Back reason remains available to the resubmitting creator/RM.
+			}
 
 			// Server-side duplicate SAP Code check (exclude current record).
 			if (!string.IsNullOrWhiteSpace(entity.WarehouseCode))
@@ -170,7 +206,6 @@ namespace SpicAPI.Controllers
 				}
 			}
 
-			var userId = CurrentUserId();
 			entity.UpdatedAt = DateTime.Now;
 			entity.UpdatedBy = string.IsNullOrWhiteSpace(userId)
 				? existing.UpdatedBy
@@ -181,7 +216,9 @@ namespace SpicAPI.Controllers
 
 			return Ok(new
 			{
-				message = "Warehouse updated successfully",
+				message = isCreatorResubmission
+					? "Warehouse updated and resubmitted to RM for approval."
+					: "Warehouse updated successfully",
 				data = updated
 			});
 		}
@@ -195,13 +232,16 @@ namespace SpicAPI.Controllers
 			if (!entity.IsSubmittedForReview)
 				return BadRequest(new { message = "This Warehouse is not submitted for approval." });
 
+			var remarks = request?.Remarks?.Trim();
+			if (string.IsNullOrWhiteSpace(remarks))
+				return BadRequest(new { message = "Approval remarks are required." });
+
 			var role = CurrentRole();
 			var userId = CurrentUserId();
 			if (string.IsNullOrWhiteSpace(userId))
 				return Unauthorized(new { message = "User not logged in." });
 
 			var now = DateTime.Now;
-			var remarks = request?.Remarks?.Trim();
 
 			if (IsRegionRole(role))
 			{
@@ -209,12 +249,23 @@ namespace SpicAPI.Controllers
 				if (!regionId.HasValue || entity.RegionId != regionId.Value)
 					return Forbid();
 
-				if (entity.RMApproved != null)
-					return BadRequest(new { message = "RM action is already completed." });
+				// RM can act on the initial RM review OR when SMM sent it back to RM.
+				var isInitialRmReview = entity.RMApproved == null;
+				var isReturnedFromSmm = entity.RMApproved == true && entity.SMApproved == false;
+				if (!isInitialRmReview && !isReturnedFromSmm)
+					return BadRequest(new { message = "This Warehouse is not pending RM approval." });
 
 				entity.RMApproved = true;
 				entity.RMApprovedBy = userId;
 				entity.RMApprovedAt = now;
+
+				// Forward to SMM again. Any SMM/AVP Send Back marker is cleared.
+				entity.SMApproved = null;
+				entity.SMApprovedBy = null;
+				entity.SMApprovedAt = null;
+				entity.AVPApproved = null;
+				entity.AVPApprovedBy = null;
+				entity.AVPApprovedAt = null;
 			}
 			else if (IsStateRole(role))
 			{
@@ -225,12 +276,20 @@ namespace SpicAPI.Controllers
 				if (entity.RMApproved != true)
 					return BadRequest(new { message = "RM approval is required first." });
 
-				if (entity.SMApproved != null)
-					return BadRequest(new { message = "SMM action is already completed." });
+				// SMM can act initially OR when AVP sent it back to SMM.
+				var isInitialSmmReview = entity.SMApproved == null;
+				var isReturnedFromAvp = entity.SMApproved == true && entity.AVPApproved == false;
+				if (!isInitialSmmReview && !isReturnedFromAvp)
+					return BadRequest(new { message = "This Warehouse is not pending SMM approval." });
 
 				entity.SMApproved = true;
 				entity.SMApprovedBy = userId;
 				entity.SMApprovedAt = now;
+
+				// Forward to AVP again. Clear the AVP Send Back marker.
+				entity.AVPApproved = null;
+				entity.AVPApprovedBy = null;
+				entity.AVPApprovedAt = null;
 			}
 			else if (IsUnrestrictedRole(role))
 			{
@@ -238,7 +297,7 @@ namespace SpicAPI.Controllers
 					return BadRequest(new { message = "RM and SMM approval are required first." });
 
 				if (entity.AVPApproved != null)
-					return BadRequest(new { message = "Final approval is already completed." });
+					return BadRequest(new { message = "This Warehouse is not pending final approval." });
 
 				entity.AVPApproved = true;
 				entity.AVPApprovedBy = userId;
@@ -249,12 +308,15 @@ namespace SpicAPI.Controllers
 				return Forbid();
 			}
 
-			entity.ApprovalRemarks = string.IsNullOrWhiteSpace(remarks) ? entity.ApprovalRemarks : remarks;
+			entity.ApprovalRemarks = remarks;
 			entity.UpdatedAt = now;
 			entity.UpdatedBy = userId;
 
 			await _repo.PatchAsync(id, entity);
 
+			// Save every approval action in the common LogisticsApprovalHistory table.
+			await SaveApprovalHistoryAsync(
+				entity.Id, userId, role, now, remarks, isApproved: true);
 			return Ok(new
 			{
 				message = IsRegionRole(role)
@@ -276,7 +338,7 @@ namespace SpicAPI.Controllers
 
 			var remarks = request?.Remarks?.Trim();
 			if (string.IsNullOrWhiteSpace(remarks))
-				return BadRequest(new { message = "Rejection remarks are required." });
+				return BadRequest(new { message = "Send Back remarks are required." });
 
 			var role = CurrentRole();
 			var userId = CurrentUserId();
@@ -291,12 +353,22 @@ namespace SpicAPI.Controllers
 				if (!regionId.HasValue || entity.RegionId != regionId.Value)
 					return Forbid();
 
-				if (entity.RMApproved != null)
-					return BadRequest(new { message = "RM action is already completed." });
+				// RM can Send Back on initial review or after SMM has returned it to RM.
+				var canRmAct = entity.RMApproved == null ||
+					(entity.RMApproved == true && entity.SMApproved == false);
+				if (!canRmAct)
+					return BadRequest(new { message = "This Warehouse is not pending RM review." });
 
+				// Send Back to MO/MDO/JMDO. Keep the row; do not delete it.
 				entity.RMApproved = false;
 				entity.RMApprovedBy = userId;
 				entity.RMApprovedAt = now;
+				entity.SMApproved = null;
+				entity.SMApprovedBy = null;
+				entity.SMApprovedAt = null;
+				entity.AVPApproved = null;
+				entity.AVPApprovedBy = null;
+				entity.AVPApprovedAt = null;
 			}
 			else if (IsStateRole(role))
 			{
@@ -307,12 +379,19 @@ namespace SpicAPI.Controllers
 				if (entity.RMApproved != true)
 					return BadRequest(new { message = "RM approval is required first." });
 
-				if (entity.SMApproved != null)
-					return BadRequest(new { message = "SMM action is already completed." });
+				// SMM can Send Back on initial review or after AVP has returned it to SMM.
+				var canSmmAct = entity.SMApproved == null ||
+					(entity.SMApproved == true && entity.AVPApproved == false);
+				if (!canSmmAct)
+					return BadRequest(new { message = "This Warehouse is not pending SMM review." });
 
+				// Send Back to RM.
 				entity.SMApproved = false;
 				entity.SMApprovedBy = userId;
 				entity.SMApprovedAt = now;
+				entity.AVPApproved = null;
+				entity.AVPApprovedBy = null;
+				entity.AVPApprovedAt = null;
 			}
 			else if (IsUnrestrictedRole(role))
 			{
@@ -320,8 +399,9 @@ namespace SpicAPI.Controllers
 					return BadRequest(new { message = "RM and SMM approval are required first." });
 
 				if (entity.AVPApproved != null)
-					return BadRequest(new { message = "Final action is already completed." });
+					return BadRequest(new { message = "This Warehouse is not pending final review." });
 
+				// Send Back to SMM.
 				entity.AVPApproved = false;
 				entity.AVPApprovedBy = userId;
 				entity.AVPApprovedAt = now;
@@ -337,13 +417,36 @@ namespace SpicAPI.Controllers
 
 			await _repo.PatchAsync(id, entity);
 
+			// Save every Send Back action. The Warehouse row remains saved.
+			await SaveApprovalHistoryAsync(
+				entity.Id, userId, role, now, remarks, isApproved: false);
 			return Ok(new
 			{
 				message = IsRegionRole(role)
-					? "Warehouse rejected by RM."
+					? "Warehouse sent back to MO/MDO/JMDO."
 					: IsStateRole(role)
-						? "Warehouse rejected by SMM."
-						: "Warehouse rejected by AVP."
+						? "Warehouse sent back to RM."
+						: "Warehouse sent back to SMM."
+			});
+		}
+
+		private async Task SaveApprovalHistoryAsync(
+			int sourceId,
+			string approvedBy,
+			string role,
+			DateTime approvedAt,
+			string remarks,
+			bool isApproved)
+		{
+			await _historyRepo.CreateAsync(new LogisticsApprovalHistory
+			{
+				LogisticsSourceId = sourceId,
+				LogisticsType = LogisticsType.Warehouse,
+				ApprovedBy = approvedBy,
+				Role = role,
+				ApprovedAt = approvedAt,
+				Remarks = remarks,
+				IsApproved = isApproved
 			});
 		}
 
@@ -424,8 +527,13 @@ namespace SpicAPI.Controllers
 	[Route("api/[controller]")]
 	public class RackPointController : GenericCrudController<RackPoint>
 	{
-		public RackPointController(IGenericRepository<RackPoint> repo) : base(repo)
+		private readonly IGenericRepository<LogisticsApprovalHistory> _historyRepo;
+
+		public RackPointController(
+			IGenericRepository<RackPoint> repo,
+			IGenericRepository<LogisticsApprovalHistory> historyRepo) : base(repo)
 		{
+			_historyRepo = historyRepo;
 		}
 
 		[HttpGet("all")]
@@ -526,8 +634,41 @@ namespace SpicAPI.Controllers
 			var existing = await _repo.GetByIdAsync(id);
 			if (existing == null) return NotFound();
 
-			// Preserve approval state during normal edits and the document-path second PUT.
+			var userId = CurrentUserId();
+			var role = CurrentRole();
+
+			// If RM sent this record back to its original MO/MDO/JMDO creator,
+			// saving the corrected record resubmits the SAME row to RM.
+			// No delete/recreate is performed.
+			var isCreatorResubmission =
+				existing.IsSubmittedForReview &&
+				existing.RMApproved == false &&
+				IsCreatorRole(role) &&
+				!string.IsNullOrWhiteSpace(userId) &&
+				string.Equals(existing.CreatedBy, userId, StringComparison.OrdinalIgnoreCase);
+
+			// IMPORTANT: existing Logistics.razor performs a second PUT after document upload.
+			// Preserve every workflow-owned value so normal edit/document saves cannot
+			// accidentally clear approval state.
 			PreserveApprovalState(existing, entity);
+
+			if (isCreatorResubmission)
+			{
+				// RM had sent the request back to the creator. The creator's save now
+				// places it back in Pending RM while preserving the same record Id.
+				entity.IsSubmittedForReview = true;
+				entity.RMApproved = null;
+				entity.RMApprovedBy = null;
+				entity.RMApprovedAt = null;
+				entity.SMApproved = null;
+				entity.SMApprovedBy = null;
+				entity.SMApprovedAt = null;
+				entity.AVPApproved = null;
+				entity.AVPApprovedBy = null;
+				entity.AVPApprovedAt = null;
+				// Keep ApprovalRemarks until the next workflow action so the latest
+				// Send Back reason remains available to the resubmitting creator/RM.
+			}
 
 			// Server-side duplicate SAP Code check (exclude current record).
 			if (!string.IsNullOrWhiteSpace(entity.SAPCode))
@@ -539,7 +680,6 @@ namespace SpicAPI.Controllers
 				}
 			}
 
-			var userId = CurrentUserId();
 			entity.UpdatedAt = DateTime.Now;
 			entity.UpdatedBy = string.IsNullOrWhiteSpace(userId)
 				? existing.UpdatedBy
@@ -550,7 +690,9 @@ namespace SpicAPI.Controllers
 
 			return Ok(new
 			{
-				message = "RackPoint updated successfully",
+				message = isCreatorResubmission
+					? "Rake Point updated and resubmitted to RM for approval."
+					: "RackPoint updated successfully",
 				data = updated
 			});
 		}
@@ -564,13 +706,16 @@ namespace SpicAPI.Controllers
 			if (!entity.IsSubmittedForReview)
 				return BadRequest(new { message = "This Rake Point is not submitted for approval." });
 
+			var remarks = request?.Remarks?.Trim();
+			if (string.IsNullOrWhiteSpace(remarks))
+				return BadRequest(new { message = "Approval remarks are required." });
+
 			var role = CurrentRole();
 			var userId = CurrentUserId();
 			if (string.IsNullOrWhiteSpace(userId))
 				return Unauthorized(new { message = "User not logged in." });
 
 			var now = DateTime.Now;
-			var remarks = request?.Remarks?.Trim();
 
 			if (IsRegionRole(role))
 			{
@@ -578,12 +723,23 @@ namespace SpicAPI.Controllers
 				if (!regionId.HasValue || entity.RegionId != regionId.Value)
 					return Forbid();
 
-				if (entity.RMApproved != null)
-					return BadRequest(new { message = "RM action is already completed." });
+				// RM can act on the initial RM review OR when SMM sent it back to RM.
+				var isInitialRmReview = entity.RMApproved == null;
+				var isReturnedFromSmm = entity.RMApproved == true && entity.SMApproved == false;
+				if (!isInitialRmReview && !isReturnedFromSmm)
+					return BadRequest(new { message = "This Rake Point is not pending RM approval." });
 
 				entity.RMApproved = true;
 				entity.RMApprovedBy = userId;
 				entity.RMApprovedAt = now;
+
+				// Forward to SMM again. Any SMM/AVP Send Back marker is cleared.
+				entity.SMApproved = null;
+				entity.SMApprovedBy = null;
+				entity.SMApprovedAt = null;
+				entity.AVPApproved = null;
+				entity.AVPApprovedBy = null;
+				entity.AVPApprovedAt = null;
 			}
 			else if (IsStateRole(role))
 			{
@@ -594,12 +750,20 @@ namespace SpicAPI.Controllers
 				if (entity.RMApproved != true)
 					return BadRequest(new { message = "RM approval is required first." });
 
-				if (entity.SMApproved != null)
-					return BadRequest(new { message = "SMM action is already completed." });
+				// SMM can act initially OR when AVP sent it back to SMM.
+				var isInitialSmmReview = entity.SMApproved == null;
+				var isReturnedFromAvp = entity.SMApproved == true && entity.AVPApproved == false;
+				if (!isInitialSmmReview && !isReturnedFromAvp)
+					return BadRequest(new { message = "This Rake Point is not pending SMM approval." });
 
 				entity.SMApproved = true;
 				entity.SMApprovedBy = userId;
 				entity.SMApprovedAt = now;
+
+				// Forward to AVP again. Clear the AVP Send Back marker.
+				entity.AVPApproved = null;
+				entity.AVPApprovedBy = null;
+				entity.AVPApprovedAt = null;
 			}
 			else if (IsUnrestrictedRole(role))
 			{
@@ -607,7 +771,7 @@ namespace SpicAPI.Controllers
 					return BadRequest(new { message = "RM and SMM approval are required first." });
 
 				if (entity.AVPApproved != null)
-					return BadRequest(new { message = "Final approval is already completed." });
+					return BadRequest(new { message = "This Rake Point is not pending final approval." });
 
 				entity.AVPApproved = true;
 				entity.AVPApprovedBy = userId;
@@ -618,12 +782,15 @@ namespace SpicAPI.Controllers
 				return Forbid();
 			}
 
-			entity.ApprovalRemarks = string.IsNullOrWhiteSpace(remarks) ? entity.ApprovalRemarks : remarks;
+			entity.ApprovalRemarks = remarks;
 			entity.UpdatedAt = now;
 			entity.UpdatedBy = userId;
 
 			await _repo.PatchAsync(id, entity);
 
+			// Save every approval action in the common LogisticsApprovalHistory table.
+			await SaveApprovalHistoryAsync(
+				entity.Id, userId, role, now, remarks, isApproved: true);
 			return Ok(new
 			{
 				message = IsRegionRole(role)
@@ -645,7 +812,7 @@ namespace SpicAPI.Controllers
 
 			var remarks = request?.Remarks?.Trim();
 			if (string.IsNullOrWhiteSpace(remarks))
-				return BadRequest(new { message = "Rejection remarks are required." });
+				return BadRequest(new { message = "Send Back remarks are required." });
 
 			var role = CurrentRole();
 			var userId = CurrentUserId();
@@ -660,12 +827,22 @@ namespace SpicAPI.Controllers
 				if (!regionId.HasValue || entity.RegionId != regionId.Value)
 					return Forbid();
 
-				if (entity.RMApproved != null)
-					return BadRequest(new { message = "RM action is already completed." });
+				// RM can Send Back on initial review or after SMM has returned it to RM.
+				var canRmAct = entity.RMApproved == null ||
+					(entity.RMApproved == true && entity.SMApproved == false);
+				if (!canRmAct)
+					return BadRequest(new { message = "This Rake Point is not pending RM review." });
 
+				// Send Back to MO/MDO/JMDO. Keep the row; do not delete it.
 				entity.RMApproved = false;
 				entity.RMApprovedBy = userId;
 				entity.RMApprovedAt = now;
+				entity.SMApproved = null;
+				entity.SMApprovedBy = null;
+				entity.SMApprovedAt = null;
+				entity.AVPApproved = null;
+				entity.AVPApprovedBy = null;
+				entity.AVPApprovedAt = null;
 			}
 			else if (IsStateRole(role))
 			{
@@ -676,12 +853,19 @@ namespace SpicAPI.Controllers
 				if (entity.RMApproved != true)
 					return BadRequest(new { message = "RM approval is required first." });
 
-				if (entity.SMApproved != null)
-					return BadRequest(new { message = "SMM action is already completed." });
+				// SMM can Send Back on initial review or after AVP has returned it to SMM.
+				var canSmmAct = entity.SMApproved == null ||
+					(entity.SMApproved == true && entity.AVPApproved == false);
+				if (!canSmmAct)
+					return BadRequest(new { message = "This Rake Point is not pending SMM review." });
 
+				// Send Back to RM.
 				entity.SMApproved = false;
 				entity.SMApprovedBy = userId;
 				entity.SMApprovedAt = now;
+				entity.AVPApproved = null;
+				entity.AVPApprovedBy = null;
+				entity.AVPApprovedAt = null;
 			}
 			else if (IsUnrestrictedRole(role))
 			{
@@ -689,8 +873,9 @@ namespace SpicAPI.Controllers
 					return BadRequest(new { message = "RM and SMM approval are required first." });
 
 				if (entity.AVPApproved != null)
-					return BadRequest(new { message = "Final action is already completed." });
+					return BadRequest(new { message = "This Rake Point is not pending final review." });
 
+				// Send Back to SMM.
 				entity.AVPApproved = false;
 				entity.AVPApprovedBy = userId;
 				entity.AVPApprovedAt = now;
@@ -706,13 +891,36 @@ namespace SpicAPI.Controllers
 
 			await _repo.PatchAsync(id, entity);
 
+			// Save every Send Back action. The Rake Point row remains saved.
+			await SaveApprovalHistoryAsync(
+				entity.Id, userId, role, now, remarks, isApproved: false);
 			return Ok(new
 			{
 				message = IsRegionRole(role)
-					? "Rake Point rejected by RM."
+					? "Rake Point sent back to MO/MDO/JMDO."
 					: IsStateRole(role)
-						? "Rake Point rejected by SMM."
-						: "Rake Point rejected by AVP."
+						? "Rake Point sent back to RM."
+						: "Rake Point sent back to SMM."
+			});
+		}
+
+		private async Task SaveApprovalHistoryAsync(
+			int sourceId,
+			string approvedBy,
+			string role,
+			DateTime approvedAt,
+			string remarks,
+			bool isApproved)
+		{
+			await _historyRepo.CreateAsync(new LogisticsApprovalHistory
+			{
+				LogisticsSourceId = sourceId,
+				LogisticsType = LogisticsType.RakePoint,
+				ApprovedBy = approvedBy,
+				Role = role,
+				ApprovedAt = approvedAt,
+				Remarks = remarks,
+				IsApproved = isApproved
 			});
 		}
 
@@ -783,6 +991,37 @@ namespace SpicAPI.Controllers
 			role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
 			role.Equals("CorporateAdmin", StringComparison.OrdinalIgnoreCase) ||
 			role.Equals("Director", StringComparison.OrdinalIgnoreCase);
+	}
+
+	// ---------------------------------------------------------------------
+	// LOGISTICS APPROVAL HISTORY
+	// Common audit trail for Warehouse + Rake Point.
+	// ---------------------------------------------------------------------
+	[Route("api/[controller]")]
+	public class LogisticsApprovalHistoryController
+		: GenericCrudController<LogisticsApprovalHistory>
+	{
+		public LogisticsApprovalHistoryController(
+			IGenericRepository<LogisticsApprovalHistory> repo) : base(repo)
+		{
+		}
+
+		[HttpGet("by-source/{logisticsType}/{sourceId:int}")]
+		public async Task<IActionResult> GetBySource(LogisticsType logisticsType, int sourceId)
+		{
+			if (sourceId <= 0)
+				return BadRequest(new { message = "Invalid Logistics source id." });
+
+			var history = await _repo
+				.GetAllWithInactive()
+				.Where(x => x.LogisticsType == logisticsType && x.LogisticsSourceId == sourceId)
+				.AsNoTracking()
+				.OrderBy(x => x.ApprovedAt)
+				.ThenBy(x => x.Id)
+				.ToListAsync();
+
+			return Ok(history);
+		}
 	}
 
 	// Existing Port controller remains exactly on the old generic flow.

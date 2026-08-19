@@ -113,6 +113,35 @@ namespace SPIC.Core.Entities
 	/// Category-specific columns stay nullable so one table can safely store
 	/// all three warehouse categories without affecting existing flows.
 	/// </summary>
+	public enum LogisticsType
+	{
+		Warehouse = 0,
+		RakePoint = 1
+	}
+
+	/// <summary>
+	/// Common approval-history table for Warehouse and Rake Point.
+	/// Warehouse/RackPoint current approval fields continue to hold the latest workflow state.
+	/// This table stores every Approve / Send Back action and its remarks.
+	/// </summary>
+	public class LogisticsApprovalHistory
+	{
+		public int Id { get; set; }	
+		public int LogisticsSourceId { get; set; }
+
+		public LogisticsType LogisticsType { get; set; }
+		public string ApprovedBy { get; set; } = string.Empty;
+
+		public string Role { get; set; } = string.Empty;
+
+		public DateTime ApprovedAt { get; set; }
+
+		public string Remarks { get; set; } = string.Empty;
+
+		public bool IsApproved { get; set; }
+	}
+
+
 	public class Warehouse
 	{
 		public int Id { get; set; }
@@ -165,7 +194,9 @@ namespace SPIC.Core.Entities
 		public decimal? GflReservationQuantityMT { get; set; }
 		public decimal? GflAdditionalReservationQuantityLitres { get; set; }
 
-		// Legacy document-path columns. Exact PVT WH upload is currently inactive; Both can retain the previous document flow.
+		// Legacy document-path columns.
+		// Exact PVT WH upload is currently inactive;
+		// Both can retain the previous document flow.
 		public string? GstDocumentPath { get; set; }
 		public string? InsuranceDocumentPath { get; set; }
 		public string? FertilizerLicenseDocumentPath { get; set; }
@@ -173,7 +204,13 @@ namespace SPIC.Core.Entities
 		// Optional for all Warehouse categories.
 		public string? OtherDocumentPathsJson { get; set; }
 
-		// Logistics approval metadata.
+		// ---------------------------------------------------------
+		// CURRENT Logistics workflow state.
+		// Keep these fields.
+		//
+		// LogisticsApprovalHistory stores the complete audit trail.
+		// ---------------------------------------------------------
+
 		// MO/MDO/JMDO creation starts RM -> SMM -> AVP approval.
 		public string? CreatedBy { get; set; }
 		public string? CreatedByName { get; set; }
@@ -185,17 +222,25 @@ namespace SPIC.Core.Entities
 
 		public string? RMApprovedBy { get; set; }
 		public DateTime? RMApprovedAt { get; set; }
+
 		public string? SMApprovedBy { get; set; }
 		public DateTime? SMApprovedAt { get; set; }
+
 		public string? AVPApprovedBy { get; set; }
 		public DateTime? AVPApprovedAt { get; set; }
+
+		// Latest/current workflow remark.
+		// Complete remarks history is stored in LogisticsApprovalHistory.
 		public string? ApprovalRemarks { get; set; }
 
 		public bool IsActive { get; set; }
+
 		public DateTime CreatedAt { get; set; }
 		public DateTime UpdatedAt { get; set; }
+
 		public required string UpdatedBy { get; set; }
 	}
+
 
 	/// <summary>
 	/// Existing Rake Point entity retained unchanged in behavior.
@@ -231,10 +276,17 @@ namespace SPIC.Core.Entities
 
 		public int StateId { get; set; } = 0;
 		public State? State { get; set; }
+
 		public int DistrictId { get; set; } = 0;
 		public District? District { get; set; }
 
-		// Logistics approval metadata.
+		// ---------------------------------------------------------
+		// CURRENT Logistics workflow state.
+		// Keep these fields.
+		//
+		// LogisticsApprovalHistory stores the complete audit trail.
+		// ---------------------------------------------------------
+
 		// MO/MDO/JMDO creation starts RM -> SMM -> AVP approval.
 		public string? CreatedBy { get; set; }
 		public string? CreatedByName { get; set; }
@@ -246,15 +298,22 @@ namespace SPIC.Core.Entities
 
 		public string? RMApprovedBy { get; set; }
 		public DateTime? RMApprovedAt { get; set; }
+
 		public string? SMApprovedBy { get; set; }
 		public DateTime? SMApprovedAt { get; set; }
+
 		public string? AVPApprovedBy { get; set; }
 		public DateTime? AVPApprovedAt { get; set; }
+
+		// Latest/current workflow remark.
+		// Complete remarks history is stored in LogisticsApprovalHistory.
 		public string? ApprovalRemarks { get; set; }
 
 		public bool IsActive { get; set; }
+
 		public DateTime CreatedAt { get; set; }
 		public DateTime UpdatedAt { get; set; }
+
 		public required string UpdatedBy { get; set; }
 	}
 
