@@ -13,10 +13,30 @@
     <img class="wlc-avatar-img" src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" alt="@_dealer.DealerName" onerror="this.src='https://ui-avatars.com/api/?name=@(System.Net.WebUtility.UrlEncode(_dealer.DealerName?.Length >= 2 ? _dealer.DealerName.Substring(0, 2) : "DL") )&background=c7d2fe&color=3730a3&size=64&rounded=true'" />
     <div class="wlc-text-content">
       <div class="wlc-name">
-        <span class="wlc-greeting">WELCOME BACK,</span> 
-        <span class="wlc-user-name">@_dealer.DealerName.ToUpper()</span> 👋
+        <span class="wlc-greeting">WELCOME BACK,</span>
+        <span class="wlc-user-name">
+          @if (_isLoadingDealer)
+          {
+            <text>Loading...</text>
+          }
+          else if (_dealerLoadError != null)
+          {
+            <text>Dealer</text>
+          }
+          else
+          {
+            @_dealer.DealerName.ToUpper()
+          }
+        </span> 👋
       </div>
-      <div class="wlc-sub">Manage Your Welfare Applications And Guest House Bookings Easily.</div>
+      @if (_dealerLoadError != null)
+      {
+        <div class="wlc-sub text-danger">@_dealerLoadError</div>
+      }
+      else
+      {
+        <div class="wlc-sub">Manage Your Welfare Applications And Guest House Bookings Easily.</div>
+      }
     </div>
   </div>
 
@@ -37,7 +57,20 @@
       </span>
       <div>
         <div class="dlr-caption">Dealer Code</div>
-        <div class="dlr-val">@_dealer.DealerCode</div>
+        <div class="dlr-val">
+          @if (_isLoadingDealer)
+          {
+            <text>Loading...</text>
+          }
+          else if (_dealerLoadError != null)
+          {
+            <text>—</text>
+          }
+          else
+          {
+            @_dealer.DealerCode
+          }
+        </div>
       </div>
     </div>
     <div class="dlr-row">
@@ -52,7 +85,20 @@
       </span>
       <div>
         <div class="dlr-caption">Region</div>
-        <div class="dlr-val">@_dealer.Region</div>
+        <div class="dlr-val">
+          @if (_isLoadingDealer)
+          {
+            <text>Loading...</text>
+          }
+          else if (_dealerLoadError != null)
+          {
+            <text>—</text>
+          }
+          else
+          {
+            @_dealer.Region
+          }
+        </div>
       </div>
     </div>
   </div>
@@ -84,7 +130,16 @@
 </div>
       <div class="qact-lbl">Apply Welfare</div>
       <div class="qact-hint">Apply for available SDWA welfare schemes.</div>
-      <button class="qact-go-btn" @onclick="NavigateToApplyWelfare">Apply Now</button>
+      <button class="qact-go-btn" @onclick="CheckEligibilityAndNavigate" disabled="@_isCheckingEligibility">
+        @if (_isCheckingEligibility)
+        {
+          <text>Checking...</text>
+        }
+        else
+        {
+          <text>Apply Now</text>
+        }
+      </button>
     </div>
 
     <div class="qact-cell theme-cyan">
@@ -476,11 +531,130 @@
   </div>
 </div>
 
+@if (_showEligibilityModal)
+{
+    <div class="elig-overlay" @onclick="CloseEligibilityModal">
+        <div class="elig-modal" @onclick:stopPropagation="true">
+            <div class="elig-header">
+                <div class="elig-header-icon">
+                    @if (_eligibilityResult?.IsEligible == true)
+                    {
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    }
+                    else
+                    {
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                    }
+                </div>
+                <h3 class="elig-title">Welfare Eligibility</h3>
+                <button class="elig-close-btn" @onclick="CloseEligibilityModal">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+
+            @if (_eligibilityError != null)
+            {
+                <div class="elig-error-box">
+                    <span>@_eligibilityError</span>
+                </div>
+            }
+            else if (_eligibilityResult != null)
+            {
+                <div class="elig-body">
+                    <div class="elig-info-grid">
+                        <div class="elig-info-item">
+                            <span class="elig-info-label">State</span>
+                            <span class="elig-info-value">@_eligibilityResult.State</span>
+                        </div>
+                        <div class="elig-info-item">
+                            <span class="elig-info-label">State Group</span>
+                            <span class="elig-info-value">@_eligibilityResult.StateGroup</span>
+                        </div>
+                        <div class="elig-info-item">
+                            <span class="elig-info-label">Dealer Type</span>
+                            <span class="elig-info-value">@_eligibilityResult.DealerType</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_eligibilityResult.SchemeName))
+                        {
+                            <div class="elig-info-item">
+                                <span class="elig-info-label">Scheme</span>
+                                <span class="elig-info-value">@_eligibilityResult.SchemeName</span>
+                            </div>
+                        }
+                    </div>
+
+                    @if (_eligibilityResult.IsEligible)
+                    {
+                        <div class="elig-success-msg">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span>Eligibility criteria satisfied. You may proceed to apply.</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="elig-fail-msg">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                            <span>You are currently not eligible to apply. Please satisfy the criteria below.</span>
+                        </div>
+                    }
+
+                    <div class="elig-criteria-section">
+                        <div class="elig-criteria-header">Eligibility Criteria</div>
+                        @foreach (var c in _eligibilityResult.Criteria)
+                        {
+                            <div class="elig-criterion @(c.IsSatisfied ? "satisfied" : "failed")">
+                                <div class="elig-criterion-icon">
+                                    @if (c.IsSatisfied)
+                                    {
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                    }
+                                    else
+                                    {
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                    }
+                                </div>
+                                <div class="elig-criterion-body">
+                                    <div class="elig-criterion-name">@c.Name</div>
+                                    <div class="elig-criterion-detail">
+                                        <span class="elig-criterion-req">Required: @c.Required</span>
+                                        <span class="elig-criterion-actual">Your dealership: @c.Actual</span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="elig-footer">
+                    @if (_eligibilityResult.IsEligible)
+                    {
+                        <button class="elig-btn elig-btn-close" @onclick="CloseEligibilityModal">Close</button>
+                        <button class="elig-btn elig-btn-proceed" @onclick="ProceedToApplyWelfare">Proceed to Apply</button>
+                    }
+                    else
+                    {
+                        <button class="elig-btn elig-btn-close full" @onclick="CloseEligibilityModal">Close</button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
 @code {
     private SDWADashboardDealerDto _dealer = new();
+    private bool _isLoadingDealer = true;
+    private string? _dealerLoadError;
+
+    private bool _isCheckingEligibility = false;
+    private bool _showEligibilityModal = false;
+    private EligibilityResultDto? _eligibilityResult;
+    private string? _eligibilityError;
 
     protected override async Task OnInitializedAsync()
     {
+        _isLoadingDealer = true;
+        _dealerLoadError = null;
         try
         {
             var result = await Http.GetFromJsonAsync<SDWADashboardDealerDto>("api/SDWADashboard/dealer-details");
@@ -490,11 +664,55 @@
         catch (Exception)
         {
             _dealer = new SDWADashboardDealerDto();
+            _dealerLoadError = "Unable to load your dealer details right now. Please refresh the page or try again later.";
+        }
+        finally
+        {
+            _isLoadingDealer = false;
         }
     }
 
-    private void NavigateToApplyWelfare()
+    private async Task CheckEligibilityAndNavigate()
     {
-        NavigationManager.NavigateTo("WelfareSchemes");
+        _isCheckingEligibility = true;
+        _eligibilityError = null;
+        _eligibilityResult = null;
+
+        try
+        {
+            var response = await Http.GetAsync("api/SDWADashboard/welfare/eligibility");
+            if (response.IsSuccessStatusCode)
+            {
+                _eligibilityResult = await response.Content.ReadFromJsonAsync<EligibilityResultDto>();
+                _showEligibilityModal = true;
+            }
+            else
+            {
+                _eligibilityError = "Unable to verify eligibility. Please try again later.";
+                _showEligibilityModal = true;
+            }
+        }
+        catch (Exception)
+        {
+            _eligibilityError = "Unable to connect to the server. Please check your connection and try again.";
+            _showEligibilityModal = true;
+        }
+        finally
+        {
+            _isCheckingEligibility = false;
+        }
+    }
+
+    private void CloseEligibilityModal()
+    {
+        _showEligibilityModal = false;
+        _eligibilityResult = null;
+        _eligibilityError = null;
+    }
+
+    private void ProceedToApplyWelfare()
+    {
+        _showEligibilityModal = false;
+        NavigationManager.NavigateTo("/WelfareSchemes", forceLoad: true);
     }
 }

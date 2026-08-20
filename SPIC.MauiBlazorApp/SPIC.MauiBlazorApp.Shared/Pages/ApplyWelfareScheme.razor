@@ -1,5 +1,7 @@
 ﻿@page "/ApplyWelfareScheme"
 @inject NavigationManager NavigationManager
+@inject HttpClient Http
+@using SPIC.Core.DTOs
 
 <div class="container-fluid py-4 px-0">
     
@@ -31,367 +33,6 @@
     </div>
     }
 
-    @if (SelectedScheme == "Educational Assistance")
-    {
-    <div class="aws-section-card">
-        
-        <div class="aws-section-header">
-            <span class="aws-step-number">1</span>
-            <h2>Details of the Dealers family undergoing college education</h2>
-        </div>
-
-        <div class="aws-form-grid">
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Application Type</label>
-                <div style="display: flex; gap: 16px; margin-top: 4px;">
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="radio" name="eduAppType" value="first" checked="@IsEduFirstApplication" @onchange="OnEduAppTypeChanged" />
-                        <span>First Application</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="radio" name="eduAppType" value="renewal" checked="@(!IsEduFirstApplication)" @onchange="OnEduAppTypeChanged" />
-                        <span>Renewal</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Total Number of Courses (Duration in Years)</label>
-                <input type="number" class="aws-form-control" placeholder="e.g. 4" @bind="EduTotalCourses" min="1" max="10">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Course</label>
-                <input type="text" class="aws-form-control" placeholder="Enter course name" @bind="EduCourse">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Year</label>
-                <select class="aws-form-select" @bind="EduYear">
-                    <option value="" disabled selected hidden>Select year</option>
-                    <option value="1">1st Year</option>
-                    <option value="2">2nd Year</option>
-                    <option value="3">3rd Year</option>
-                    <option value="4">4th Year</option>
-                        <option value="5">5th Year</option>
-                        <option value="6">6th Year</option>
-                </select>
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">College Name</label>
-                <input type="text" class="aws-form-control" placeholder="Enter college name" @bind="EduCollegeName">
-            </div>
-
-        </div>
-
-        <div class="aws-form-grid" style="margin-top: 24px; margin-bottom: 0;">
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Upload Certificates</label>
-                <div class="aws-drop-zone">
-                    <div class="aws-drop-icon-wrap">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                    </div>
-                    <p class="aws-drop-title">Drag & drop files here or click to browse</p>
-                    <p class="aws-drop-subtitle">Accepted: PDF, JPG, PNG · Max 5MB per file</p>
-                </div>
-            </div>
-
-        </div>
-
-        @if (IsEduFirstApplication)
-        {
-        <div class="aws-form-grid" style="margin-top: 24px; margin-bottom: 0;">
-            <div class="aws-form-group">
-                <label class="aws-form-label">Upload Admission Certificate (Required for First Application)</label>
-                @if (IsAdmissionCertificateUploaded)
-                {
-                <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #f0fdf4; border: 1px solid #27ae60; border-radius: 8px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                    </svg>
-                    <span style="color: #27ae60; font-weight: 500;">Admission Certificate uploaded</span>
-                    <button class="aws-btn-upload-action" style="margin-left: auto;" @onclick="RemoveAdmissionCertificate">Remove</button>
-                </div>
-                }
-                else
-                {
-                <div class="aws-drop-zone" style="border-color: #e74c3c; cursor: pointer;" @onclick="SimulateAdmissionCertificateUpload">
-                    <div class="aws-drop-icon-wrap">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                    </div>
-                    <p class="aws-drop-title">Drag & drop Admission Certificate here or click to browse</p>
-                    <p class="aws-drop-subtitle">Accepted: PDF, JPG, PNG · Max 5MB per file</p>
-                </div>
-                }
-                <span style="color: #e74c3c; font-size: 12px; margin-top: 4px; display: block;">* Admission Certificate is mandatory for first-time applications</span>
-            </div>
-        </div>
-        }
-
-    </div>
-    }
-
-    @if (SelectedScheme == "Merit Award")
-    {
-    <div class="aws-section-card">
-        
-        <div class="aws-section-header">
-            <span class="aws-step-number">1</span>
-            <h2>Details required for Merit Award</h2>
-        </div>
-
-        <div class="aws-form-grid">
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Name of the Candidate</label>
-                <input type="text" class="aws-form-control" placeholder="Candidate's full name" @bind="MeritCandidateName">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Candidate's Father Name</label>
-                <input type="text" class="aws-form-control" placeholder="Father's name" @bind="MeritFatherName">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Examination Appeared (10th/12th)</label>
-                <select class="aws-form-select" @bind="MeritExamination">
-                    <option value="" disabled selected hidden>Select examination</option>
-                    <option value="10th">10th</option>
-                    <option value="12th">12th</option>
-                </select>
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Name of the Board</label>
-                <input type="text" class="aws-form-control" placeholder="Enter board name" @bind="MeritBoardName">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Maximum Marks</label>
-                <input type="number" class="aws-form-control" placeholder="Enter maximum marks" @bind="MeritMaximumMarks" @bind:event="oninput" @onchange="CalculatePercentage">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Marks Obtained</label>
-                <input type="number" class="aws-form-control" placeholder="Enter marks obtained" @bind="MeritMarksObtained" @bind:event="oninput" @onchange="CalculatePercentage">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Percentage</label>
-                <input type="text" class="aws-input-readonly" value="@($"{MeritPercentage:F2}%")" readonly>
-            </div>
-
-        </div>
-
-        <div class="aws-form-grid" style="margin-top: 24px; margin-bottom: 0;">
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Upload Certificate / Marksheet</label>
-                <div class="aws-drop-zone">
-                    <div class="aws-drop-icon-wrap">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                    </div>
-                    <p class="aws-drop-title">Drag & drop files here or click to browse</p>
-                    <p class="aws-drop-subtitle">Accepted: PDF, JPG, PNG · Max 5MB per file</p>
-                </div>
-            </div>
-
-        </div>
-
-    </div>
-    }
-
-    @if (SelectedScheme == "Medical Assistance")
-    {
-    <div class="aws-section-card">
-        
-        <div class="aws-section-header">
-            <span class="aws-step-number">1</span>
-            <h2>Medical Assistance Details</h2>
-        </div>
-
-        <div class="aws-form-grid">
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Treatment / Medical Condition <span style="color: #e74c3c;">*</span></label>
-                <input type="text" class="aws-form-control" placeholder="e.g. Surgery, Hospitalization, Cancer treatment, Kidney treatment" @bind="MedicalTreatmentType">
-            </div>
-
-        </div>
-
-    </div>
-    }
-
-    @if (SelectedScheme == "Distinction Award")
-    {
-    <div class="aws-section-card">
-        
-        <div class="aws-section-header">
-            <span class="aws-step-number">1</span>
-            <h2>Details required for Distinction Award</h2>
-        </div>
-
-        <div class="aws-form-grid">
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Candidate Name <span style="color: #e74c3c;">*</span></label>
-                <input type="text" class="aws-form-control" placeholder="Candidate's full name" @bind="DistinctionCandidateName">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Candidate's Father Name</label>
-                <input type="text" class="aws-form-control" placeholder="Father's name" @bind="DistinctionFatherName">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Professional Course Name <span style="color: #e74c3c;">*</span></label>
-                <input type="text" class="aws-form-control" placeholder="e.g. B.Tech, MBBS, B.Sc Agriculture" @bind="DistinctionProfessionalCourse">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Course Completion Year</label>
-                <input type="text" class="aws-form-control" placeholder="e.g. 2025" @bind="DistinctionCourseYear">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">University / Institution Name</label>
-                <input type="text" class="aws-form-control" placeholder="Enter university or institution name" @bind="DistinctionUniversityName">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Total / Maximum Marks <span style="color: #e74c3c;">*</span></label>
-                <input type="number" class="aws-form-control" placeholder="Enter total marks" @bind="DistinctionMaximumMarks" @bind:event="oninput" @onchange="CalculateDistinctionPercentage">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Marks Obtained <span style="color: #e74c3c;">*</span></label>
-                <input type="number" class="aws-form-control" placeholder="Enter marks obtained" @bind="DistinctionMarksObtained" @bind:event="oninput" @onchange="CalculateDistinctionPercentage">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Aggregate Percentage</label>
-                <input type="text" class="aws-input-readonly" value="@($"{DistinctionAggregatePercentage:F2}%")" readonly>
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Any Arrears / Backlogs? <span style="color: #e74c3c;">*</span></label>
-                <div style="display: flex; gap: 16px; margin-top: 4px;">
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="radio" name="distArrears" value="no" checked="@(DistinctionHasArrears == false)" @onchange="() => DistinctionHasArrears = false" />
-                        <span>No</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="radio" name="distArrears" value="yes" checked="@(DistinctionHasArrears == true)" @onchange="() => DistinctionHasArrears = true" />
-                        <span>Yes</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Are you an approved Employee of a Wholesale Dealer? (TN only)</label>
-                <div style="display: flex; gap: 16px; margin-top: 4px;">
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="radio" name="distEmployee" value="no" checked="@(DistinctionIsWholesaleEmployee == false)" @onchange="() => DistinctionIsWholesaleEmployee = false" />
-                        <span>No</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="radio" name="distEmployee" value="yes" checked="@(DistinctionIsWholesaleEmployee == true)" @onchange="() => DistinctionIsWholesaleEmployee = true" />
-                        <span>Yes</span>
-                    </label>
-                </div>
-            </div>
-
-        </div>
-
-        @if (DistinctionAggregatePercentage > 0 && DistinctionAggregatePercentage <= 80)
-        {
-        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 16px;">
-            <div class="aws-alert-icon" style="color: #e74c3c;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-            </div>
-            <div style="color: #c0392b;">
-                The aggregate percentage must be more than 80% to be eligible for the Distinction Award. Your current percentage is @($"{DistinctionAggregatePercentage:F2}%").
-            </div>
-        </div>
-        }
-
-        <div class="aws-form-grid" style="margin-top: 24px; margin-bottom: 0;">
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Upload Course Completion Certificate <span style="color: #e74c3c;">*</span></label>
-                <div class="aws-drop-zone">
-                    <div class="aws-drop-icon-wrap">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                    </div>
-                    <p class="aws-drop-title">Drag & drop files here or click to browse</p>
-                    <p class="aws-drop-subtitle">Accepted: PDF, JPG, PNG · Max 5MB per file</p>
-                </div>
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Upload Marksheets / Aggregate Certificate <span style="color: #e74c3c;">*</span></label>
-                <div class="aws-drop-zone">
-                    <div class="aws-drop-icon-wrap">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                    </div>
-                    <p class="aws-drop-title">Drag & drop files here or click to browse</p>
-                    <p class="aws-drop-subtitle">Accepted: PDF, JPG, PNG · Max 5MB per file</p>
-                </div>
-            </div>
-
-        </div>
-
-        @if (DistinctionIsWholesaleEmployee == true)
-        {
-        <div class="aws-form-grid" style="margin-top: 24px; margin-bottom: 0;">
-            <div class="aws-form-group">
-                <label class="aws-form-label">Upload Employee Approval Letter / Dealer Authentication <span style="color: #e74c3c;">*</span></label>
-                <div class="aws-drop-zone">
-                    <div class="aws-drop-icon-wrap">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                    </div>
-                    <p class="aws-drop-title">Drag & drop files here or click to browse</p>
-                    <p class="aws-drop-subtitle">Accepted: PDF, JPG, PNG · Max 5MB per file</p>
-                </div>
-            </div>
-        </div>
-        }
-
-    </div>
-    }
-
     <div class="di-wrapper">
         
         <div class="di-header">
@@ -401,11 +42,11 @@
                     <span style="font-size: 20px; display: none;">🌱</span>
                 </div>
                 <div class="di-title-group">
-                    <h2 class="di-title">S S AGRO CENTRE</h2>
+                    <h2 class="di-title">@(_isLoadingDealer ? "Loading..." : _dealer.DealerName)</h2>
                     <p class="di-subtitle">Dealer Information Overview</p>
                 </div>
             </div>
-            <div class="di-badge">DL-223331</div>
+            <div class="di-badge">@_dealer.DealerCode</div>
         </div>
 
         <div class="di-cards-container">
@@ -421,7 +62,7 @@
                             </div>
                             <div class="di-info-text">
                                 <span class="di-info-label">State:</span>
-                                <span class="di-info-value">Tamil Nadu</span>
+                                <span class="di-info-value">@_dealer.State</span>
                             </div>
                         </div>
                         <div class="di-info-item">
@@ -430,7 +71,7 @@
                             </div>
                             <div class="di-info-text">
                                 <span class="di-info-label">Region:</span>
-                                <span class="di-info-value">Southern</span>
+                                <span class="di-info-value">@_dealer.Region</span>
                             </div>
                         </div>
                     </div>
@@ -442,7 +83,7 @@
                             </div>
                             <div class="di-info-text">
                                 <span class="di-info-label">District:</span>
-                                <span class="di-info-value">Chennai</span>
+                                <span class="di-info-value">@_dealer.District</span>
                             </div>
                         </div>
                         <div class="di-info-item">
@@ -451,7 +92,7 @@
                             </div>
                             <div class="di-info-text">
                                 <span class="di-info-label">Head Quarters:</span>
-                                <span class="di-info-value">Chennai</span>
+                                <span class="di-info-value">@_dealer.HQ</span>
                             </div>
                         </div>
                     </div>
@@ -473,7 +114,7 @@
                             </div>
                             <div class="di-info-text">
                                 <span class="di-info-label">Full Name:</span>
-                                <span class="di-info-value">Rajesh</span>
+                                <span class="di-info-value">@_dealer.DealerName</span>
                             </div>
                         </div>
                         <div class="di-info-item flex-1-5 with-divider">
@@ -482,7 +123,7 @@
                             </div>
                             <div class="di-info-text">
                                 <span class="di-info-label">Email:</span>
-                                <span class="di-info-value" style="word-break: break-all;">example@gmail.com</span>
+                                <span class="di-info-value" style="word-break: break-all;">@_dealer.Email</span>
                             </div>
                         </div>
                         <div class="di-info-item">
@@ -491,7 +132,7 @@
                             </div>
                             <div class="di-info-text">
                                 <span class="di-info-label">Phone:</span>
-                                <span class="di-info-value">9876543210</span>
+                                <span class="di-info-value">@_dealer.Phone</span>
                             </div>
                         </div>
                     </div>
@@ -503,7 +144,7 @@
                             </div>
                             <div class="di-info-text">
                                 <span class="di-info-label">Address:</span>
-                                <span class="di-info-value">No.2, SPIC House, Chennai.</span>
+                                <span class="di-info-value">@_dealer.Address</span>
                             </div>
                         </div>
                     </div>
@@ -676,12 +317,54 @@
         
         <div class="aws-section-header">
             <span class="aws-step-number">4</span>
-            <h2>Grahapravesam Details</h2>
+            <h2>@SchemeDetailsTitle</h2>
         </div>
 
+        @if (SelectedScheme == "Wedding")
+        {
         <div class="aws-form-grid-2col">
-
-            
+            <div class="aws-form-group">
+                <label class="aws-form-label">Wedding Date</label>
+                <div class="aws-input-with-icon">
+                    <input type="text" class="aws-form-control" placeholder="dd-mm-yyyy">
+                    <svg class="aws-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                </div>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Event Venue</label>
+                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3"></textarea>
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Sathabhishekam")
+        {
+        <div class="aws-form-grid-2col">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Event Date</label>
+                <div class="aws-input-with-icon">
+                    <input type="text" class="aws-form-control" placeholder="dd-mm-yyyy">
+                    <svg class="aws-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                </div>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Event Venue</label>
+                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3"></textarea>
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Grahapravesam")
+        {
+        <div class="aws-form-grid-2col">
             <div class="aws-form-group">
                 <label class="aws-form-label">Housewarming Date</label>
                 <div class="aws-input-with-icon">
@@ -694,7 +377,6 @@
                     </svg>
                 </div>
             </div>
-
             <div class="aws-form-group">
                 <label class="aws-form-label">Ownership Type</label>
                 <select class="aws-form-select">
@@ -703,32 +385,229 @@
                     <option value="rented">Rented</option>
                 </select>
             </div>
-
-@*             <div class="aws-form-group">
-                <label class="aws-form-label">Relationship</label>
-                <select class="aws-form-select">
-                    <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="self">Self</option>
-                    <option value="spouse">Spouse</option>
-                    <option value="child">Child</option>
-                </select>
-            </div> *@
-
         </div>
-
         <div class="aws-form-grid-2col" style="margin-top: 24px; margin-bottom: 0;">
-            
-            @* <div class="aws-form-group">
-                <label class="aws-form-label">House Address</label>
-                <textarea class="aws-form-control" placeholder="Full address of the new house" rows="3"></textarea>
-            </div> *@
-
             <div class="aws-form-group">
                 <label class="aws-form-label">Event Venue (if different from house address)</label>
                 <textarea class="aws-form-control" placeholder="Venue name or address" rows="3"></textarea>
             </div>
-
         </div>
+        }
+        else if (SelectedScheme == "Death Relief")
+        {
+        <div class="aws-form-grid-2col">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Date of Death</label>
+                <div class="aws-input-with-icon">
+                    <input type="text" class="aws-form-control" placeholder="dd-mm-yyyy">
+                    <svg class="aws-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                </div>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Legal Heir Name</label>
+                <input type="text" class="aws-form-control" placeholder="Full Name of Legal Heir">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Relationship to Dealer</label>
+                <select class="aws-form-select">
+                    <option value="" disabled selected hidden>Select relationship</option>
+                    <option value="spouse">Spouse</option>
+                    <option value="child">Child</option>
+                    <option value="parent">Parent</option>
+                </select>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Cause of Death</label>
+                <input type="text" class="aws-form-control" placeholder="e.g. Natural, Illness, Accident">
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Educational Assistance")
+        {
+        <div class="aws-form-grid">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Application Type</label>
+                <div style="display: flex; gap: 16px; margin-top: 4px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="eduAppType" value="first" checked="@IsEduFirstApplication" @onchange="OnEduAppTypeChanged" />
+                        <span>First Application</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="eduAppType" value="renewal" checked="@(!IsEduFirstApplication)" @onchange="OnEduAppTypeChanged" />
+                        <span>Renewal</span>
+                    </label>
+                </div>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Total Number of Courses (Duration in Years)</label>
+                <input type="number" class="aws-form-control" placeholder="e.g. 4" @bind="EduTotalCourses" min="1" max="10">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Course</label>
+                <input type="text" class="aws-form-control" placeholder="Enter course name" @bind="EduCourse">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Year</label>
+                <select class="aws-form-select" @bind="EduYear">
+                    <option value="" disabled selected hidden>Select year</option>
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                    <option value="4">4th Year</option>
+                    <option value="5">5th Year</option>
+                    <option value="6">6th Year</option>
+                </select>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">College Name</label>
+                <input type="text" class="aws-form-control" placeholder="Enter college name" @bind="EduCollegeName">
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Medical Assistance")
+        {
+        <div class="aws-form-grid">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Treatment / Medical Condition <span style="color: #e74c3c;">*</span></label>
+                <input type="text" class="aws-form-control" placeholder="e.g. Surgery, Hospitalization, Cancer treatment, Kidney treatment" @bind="MedicalTreatmentType">
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Merit Award")
+        {
+        <div class="aws-form-grid">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Name of the Candidate</label>
+                <input type="text" class="aws-form-control" placeholder="Candidate's full name" @bind="MeritCandidateName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Candidate's Father Name</label>
+                <input type="text" class="aws-form-control" placeholder="Father's name" @bind="MeritFatherName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Examination Appeared (10th/12th)</label>
+                <select class="aws-form-select" @bind="MeritExamination">
+                    <option value="" disabled selected hidden>Select examination</option>
+                    <option value="10th">10th</option>
+                    <option value="12th">12th</option>
+                </select>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Name of the Board</label>
+                <input type="text" class="aws-form-control" placeholder="Enter board name" @bind="MeritBoardName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Maximum Marks</label>
+                <input type="number" class="aws-form-control" placeholder="Enter maximum marks" @bind="MeritMaximumMarks" @bind:event="oninput" @onchange="CalculatePercentage">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Marks Obtained</label>
+                <input type="number" class="aws-form-control" placeholder="Enter marks obtained" @bind="MeritMarksObtained" @bind:event="oninput" @onchange="CalculatePercentage">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Percentage</label>
+                <input type="text" class="aws-input-readonly" value="@($"{MeritPercentage:F2}%")" readonly>
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Distinction Award")
+        {
+        <div class="aws-form-grid">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Candidate Name <span style="color: #e74c3c;">*</span></label>
+                <input type="text" class="aws-form-control" placeholder="Candidate's full name" @bind="DistinctionCandidateName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Candidate's Father Name</label>
+                <input type="text" class="aws-form-control" placeholder="Father's name" @bind="DistinctionFatherName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Professional Course Name <span style="color: #e74c3c;">*</span></label>
+                <input type="text" class="aws-form-control" placeholder="e.g. B.Tech, MBBS, B.Sc Agriculture" @bind="DistinctionProfessionalCourse">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Course Completion Year</label>
+                <input type="text" class="aws-form-control" placeholder="e.g. 2025" @bind="DistinctionCourseYear">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">University / Institution Name</label>
+                <input type="text" class="aws-form-control" placeholder="Enter university or institution name" @bind="DistinctionUniversityName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Total / Maximum Marks <span style="color: #e74c3c;">*</span></label>
+                <input type="number" class="aws-form-control" placeholder="Enter total marks" @bind="DistinctionMaximumMarks" @bind:event="oninput" @onchange="CalculateDistinctionPercentage">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Marks Obtained <span style="color: #e74c3c;">*</span></label>
+                <input type="number" class="aws-form-control" placeholder="Enter marks obtained" @bind="DistinctionMarksObtained" @bind:event="oninput" @onchange="CalculateDistinctionPercentage">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Aggregate Percentage</label>
+                <input type="text" class="aws-input-readonly" value="@($"{DistinctionAggregatePercentage:F2}%")" readonly>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Any Arrears / Backlogs? <span style="color: #e74c3c;">*</span></label>
+                <div style="display: flex; gap: 16px; margin-top: 4px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="distArrears" value="no" checked="@(DistinctionHasArrears == false)" @onchange="() => DistinctionHasArrears = false" />
+                        <span>No</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="distArrears" value="yes" checked="@(DistinctionHasArrears == true)" @onchange="() => DistinctionHasArrears = true" />
+                        <span>Yes</span>
+                    </label>
+                </div>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Are you an approved Employee of a Wholesale Dealer? (TN only)</label>
+                <div style="display: flex; gap: 16px; margin-top: 4px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="distEmployee" value="no" checked="@(DistinctionIsWholesaleEmployee == false)" @onchange="() => DistinctionIsWholesaleEmployee = false" />
+                        <span>No</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="distEmployee" value="yes" checked="@(DistinctionIsWholesaleEmployee == true)" @onchange="() => DistinctionIsWholesaleEmployee = true" />
+                        <span>Yes</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        @if (DistinctionAggregatePercentage > 0 && DistinctionAggregatePercentage <= 80)
+        {
+        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 16px;">
+            <div class="aws-alert-icon" style="color: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+            </div>
+            <div style="color: #c0392b;">
+                The aggregate percentage must be more than 80% to be eligible for the Distinction Award. Your current percentage is @($"{DistinctionAggregatePercentage:F2}%").
+            </div>
+        </div>
+        }
+        }
+        else
+        {
+        <div class="aws-alert-info">
+            <div class="aws-alert-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+            </div>
+            <div>
+                Please refer to the Eligibility Conditions section above for the benefit details and required documents for @SelectedScheme.
+            </div>
+        </div>
+        }
 
     </div>
     <div class="aws-section-card">
@@ -738,74 +617,77 @@
             <h2>Document Upload</h2>
         </div>
 
-        <div class="aws-upload-grid">
-            
-            <div class="aws-drop-zone">
-                <div class="aws-drop-icon-wrap">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="17 8 12 3 7 8"></polyline>
-                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
+        <div class="aws-doc-upload-list">
+            @foreach (var doc in CurrentDocuments)
+            {
+                var uploadedFile = UploadedFiles.TryGetValue(doc.Name, out var f) ? f : null;
+            <div class="aws-doc-upload-item">
+                <div class="aws-doc-upload-info">
+                    <svg class="aws-doc-icon @doc.IconClass" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    <span class="aws-doc-name">@doc.Name</span>
+                    @if (SelectedScheme == "Educational Assistance" && doc.Name == "Admission Certificate (First Year only)" && !IsEduFirstApplication)
+                    {
+                        <span class="aws-doc-skip-badge">Renewal – not required</span>
+                    }
+                    @if (SelectedScheme == "Educational Assistance" && doc.Name == "Marks list of previous year / semesters duly cleared" && IsEduFirstApplication)
+                    {
+                        <span class="aws-doc-skip-badge">First year – not required</span>
+                    }
                 </div>
-                <p class="aws-drop-title">Drag & drop files here or click to browse</p>
-                <p class="aws-drop-subtitle">Accepted: PDF, JPG, PNG · Max 5MB per file</p>
+                @if (uploadedFile != null)
+                {
+                <div class="aws-doc-upload-done">
+                    <div class="aws-doc-upload-file-info">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <span class="aws-doc-upload-filename">@uploadedFile.Name</span>
+                        <span class="aws-doc-upload-size">(@FormatFileSize(uploadedFile.Size))</span>
+                    </div>
+                    <button class="aws-btn-upload-action aws-btn-upload-remove" @onclick="() => RemoveUploadedFile(doc.Name)">Remove</button>
+                </div>
+                }
+                else if (SelectedScheme == "Educational Assistance" && doc.Name == "Admission Certificate (First Year only)" && !IsEduFirstApplication)
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required for first-year applications</span>
+                </div>
+                }
+                else if (SelectedScheme == "Educational Assistance" && doc.Name == "Marks list of previous year / semesters duly cleared" && IsEduFirstApplication)
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required for renewal applications</span>
+                </div>
+                }
+                else
+                {
+                <div class="aws-doc-upload-zone">
+                    <InputFile OnChange="e => HandleFileUpload(doc.Name, e)" accept=".pdf,.jpg,.jpeg,.png" class="aws-doc-upload-input" />
+                    <div class="aws-doc-upload-placeholder">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <span>Click to upload</span>
+                    </div>
+                </div>
+                }
             </div>
+            }
+        </div>
 
-            <div class="aws-doc-list">
-                
-                <div class="aws-doc-item">
-                    <div class="aws-doc-info">
-                        <svg class="aws-doc-icon aws-icon-red" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                        <span class="aws-doc-name">Invitation / Housewarming Card Copy</span>
-                    </div>
-                    <div class="aws-doc-status-group">
-                        <div class="aws-status-indicator aws-status-uploaded">
-                            <span class="aws-status-dot"></span> Uploaded
-                        </div>
-                        <button class="aws-btn-upload-action">Replace</button>
-                    </div>
-                </div>
-
-                <div class="aws-doc-item">
-                    <div class="aws-doc-info">
-                        <svg class="aws-doc-icon aws-icon-blue" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                        <span class="aws-doc-name">House Ownership Proof</span>
-                    </div>
-                    <div class="aws-doc-status-group">
-                        <div class="aws-status-indicator aws-status-required">
-                            <span class="aws-status-dot"></span> Required
-                        </div>
-                        <button class="aws-btn-upload-action">Upload</button>
-                    </div>
-                </div>
-
-                <div class="aws-doc-item">
-                    <div class="aws-doc-info">
-                        <svg class="aws-doc-icon aws-icon-green" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                        <span class="aws-doc-name">Dealer ID / Membership Card</span>
-                    </div>
-                    <div class="aws-doc-status-group">
-                        <div class="aws-status-indicator aws-status-uploaded">
-                            <span class="aws-status-dot"></span> Uploaded
-                        </div>
-                        <button class="aws-btn-upload-action">Replace</button>
-                    </div>
-                </div>
-
-                <div class="aws-doc-item">
-                    <div class="aws-doc-info">
-                        <svg class="aws-doc-icon aws-icon-pink" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                        <span class="aws-doc-name">Address Proof</span>
-                    </div>
-                    <div class="aws-doc-status-group">
-                        <div class="aws-status-indicator aws-status-uploaded">
-                            <span class="aws-status-dot"></span> Uploaded
-                        </div>
-                        <button class="aws-btn-upload-action">Replace</button>
-                    </div>
-                </div>
-
+        <div class="aws-alert-info" style="margin-top: 12px;">
+            <div class="aws-alert-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+            </div>
+            <div>
+                Accepted formats: PDF, JPG, PNG. Maximum 5MB per file. All documents listed above are required for your application.
             </div>
         </div>
 
@@ -829,7 +711,7 @@
         <div class="aws-declaration-box">
             <input type="checkbox" class="aws-checkbox-large" id="declarationCheck">
             <label class="aws-declaration-text" for="declarationCheck">
-                I, Rajesh Kumar, hereby declare that all information provided in this application is true, accurate, and complete to the best of my knowledge. I understand that any false information or suppression of facts will lead to rejection of the application and may result in appropriate action as deemed necessary by SDWA.
+                I, @_dealer.DealerName, hereby declare that all information provided in this application is true, accurate, and complete to the best of my knowledge. I understand that any false information or suppression of facts will lead to rejection of the application and may result in appropriate action as deemed necessary by SDWA.
             </label>
         </div>
 
@@ -900,17 +782,17 @@
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">Dealer Code</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">DLR-TN-04782</span>
+                        <span class="aws-modal-value">@_dealer.DealerCode</span>
                     </div>
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">Name</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">Rajesh Kumar</span>
+                        <span class="aws-modal-value">@_dealer.DealerName</span>
                     </div>
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">Region</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">Tamil Nadu – Southern</span>
+                        <span class="aws-modal-value">@_dealer.State – @_dealer.Region</span>
                     </div>
                 </div>
 
@@ -1024,11 +906,15 @@
 
                 <div class="aws-modal-section">
                     <h3>Documents Uploaded</h3>
+                    @foreach (var doc in CurrentDocuments)
+                    {
+                        var uploaded = UploadedFiles.ContainsKey(doc.Name);
                     <div class="aws-modal-row">
-                        <span class="aws-modal-label">Invitation Card</span>
+                        <span class="aws-modal-label">@doc.Name</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">Yes</span>
+                        <span class="aws-modal-value">@(uploaded ? "Yes" : "No")</span>
                     </div>
+                    }
                 </div>
 
                 <div class="aws-modal-section">
@@ -1070,7 +956,7 @@
                 <div class="aws-submit-divider"></div>
                 <div class="aws-submit-info-row">
                     <span class="aws-submit-info-label">Dealer</span>
-                    <span class="aws-submit-info-value">Rajesh Kumar</span>
+                    <span class="aws-submit-info-value">@_dealer.DealerName</span>
                 </div>
             </div>
 
@@ -1150,58 +1036,183 @@
     [SupplyParameterFromQuery(Name = "scheme")]
     private string? Scheme { get; set; }
 
+    private SDWADashboardDealerDto _dealer = new();
+    private bool _isLoadingDealer = true;
+
     private string SelectedScheme => string.IsNullOrWhiteSpace(Scheme) ? "Grahapravesam" : Uri.UnescapeDataString(Scheme);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoadingDealer = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<SDWADashboardDealerDto>("api/SDWADashboard/dealer-details");
+            if (result != null)
+                _dealer = result;
+        }
+        catch (Exception)
+        {
+            _dealer = new SDWADashboardDealerDto();
+        }
+        finally
+        {
+            _isLoadingDealer = false;
+        }
+    }
 
     private static readonly Dictionary<string, List<string>> EligibilityConditionsMap = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Wedding"] = new List<string>
         {
-            "Minimum one year SPIC dealership",
-            "Minimum average annual sales of 100 MT fertilizers in the last 3 years"
+            "Direct Dealers - All States: ₹15,000",
+            "Sub Dealers / Employees - TN/PY: ₹7,500",
+            "Wholesale Dealer's Subdealer & approved employees are eligible (TN/PY only)",
+            "Invitation to be sent 7 days in advance",
+            "Required Document: Invitation"
         },
         ["Sathabhishekam"] = new List<string>
         {
-            "Minimum one year SPIC dealership",
-            "No specific volume lifting"
+            "Benefit: ₹12,000 (All States)",
+            "No specific volume lifting required",
+            "Eligible for Dealers & their parents",
+            "Invitation to be sent 7 days in advance",
+            "Required Document: Invitation"
         },
         ["Grahapravesam"] = new List<string>
         {
-            "Minimum one year SPIC dealership",
-            "Minimum average annual sales of 100 MT fertilizers in the last 3 years",
-            "Market Share TN Dealers - 50%; KN & AP Dealers - 30%"
+            "Direct Dealers - All States: ₹5,000",
+            "Invitation to be sent 7 days in advance",
+            "Required Document: Invitation"
         },
         ["Educational Assistance"] = new List<string>
         {
-            "Minimum one year SPIC dealership",
-            "Minimum average annual sales of 100 MT fertilizers in the last 3 years",
-            "No arrears / backlogs for the current application",
-            "Students should pass in all subjects for renewal of their Educational Assistance",
+            "MBBS - All States: ₹20,000",
+            "MCA / MBA / BDS / BPT / B Pharm / BGL / B Sc (Agri) / B Sc (Horti) / B Sc (Nursing) - All States: ₹15,000",
+            "All Engineering Courses - All States: ₹15,000",
+            "PG Course Professional - All States: ₹15,000",
+            "PG Course Non Professional - All States: ₹10,000",
+            "Students should pass in all subjects for renewal",
             "Proposal to be submitted within 3 months from the date of fees receipt",
-            "Hostel expenses / Caution Deposit / Others/Misc. will not be considered for educational assistance",
-            "Market Share TN Dealers - 50%; KN & AP Dealers - 30%"
+            "Hostel expenses / Caution Deposit / Others/Misc. will not be considered",
+            "Eligible: Children of dealers, partners, Wholesale Dealer's approved Employees (TN/PY only)",
+            "Employees shall be eligible for 50% of dealer member's eligibility",
+            "First Year Documents: Admission Certificate, Fees Receipt",
+            "Subsequent Years Documents: Fees Receipt, Marks list of previous year/semesters duly cleared"
         },
         ["Medical Assistance"] = new List<string>
         {
-            "Minimum one year SPIC dealership",
-            "Minimum average annual sales of 100 MT fertilizers in the last 3 years",
-            "Market Share TN Dealers - 50%; KN & AP Dealers - 30%"
+            "Expenditure below ₹1.50 Lakhs - All States: ₹30,000",
+            "Expenditure exceeding ₹1.50 Lakhs - All States: ₹50,000",
+            "50% of eligible expenditure with a cap of ₹25,000",
+            "Total reimbursement shall not exceed ₹50,000 in a period of 3 years from the first claim",
+            "Minimum expenditure for claim should be ₹20,000",
+            "Room rent & diet charges are not allowed",
+            "Doctor fees, medicines, lab expenses, surgery & hospital charges are considered",
+            "Eligible: Self, spouse and their children, Wholesale Dealer's approved Employees (TN/PY only)",
+            "Parents are NOT eligible",
+            "Required Documents: Hospital Discharge Summary, Bills issued by Hospital/Lab, Bills for purchase of medicines"
         },
         ["Death Relief"] = new List<string>
         {
-            "Minimum one year SPIC dealership",
-            "Minimum average annual sales of 100 MT in the last 3 years",
-            "TN Dealers - 50%; KN & AP Dealers - 30%"
+            "Age < 50 AND SPIC Exp >= 10 years - All States: ₹30,000",
+            "Age < 50 AND SPIC Exp < 10 years - All States: ₹25,000",
+            "Age >= 50 AND SPIC Exp >= 10 years - All States: ₹20,000",
+            "Age >= 50 AND SPIC Exp < 10 years - All States: ₹15,000",
+            "No relief for suicide case",
+            "Spouse is natural legal heir",
+            "Wholesale Dealer's approved Employees are eligible (TN/PY only)",
+            "Employees shall be eligible for 50% of dealer member's eligibility",
+            "Required Documents: Death Certificate, Legal heir certificate (in case spouse is not alive), Affidavit from other legal heirs"
+        },
+        ["Merit Award"] = new List<string>
+        {
+            "First Rank - All States: ₹15,000",
+            "Second Rank - All States: ₹12,000",
+            "Third Rank - All States: ₹10,000",
+            "Fourth Rank - TN/PY only: ₹8,000",
+            "Fifth Rank - TN/PY only: ₹5,000",
+            "Minimum 80% marks scored only considered",
+            "No specific volume lifting required",
+            "Travel reimbursement: ₹2,500 (within state), ₹5,000 (other state)",
+            "Required Documents: Marks list of 10th standard & +2 examinations"
         },
         ["Distinction Award"] = new List<string>
         {
-            "Distinction award for completing Professional Courses without any arrears and scored more than 80% aggregate.",
-            "Wholesale Dealer's approved Employees (only for TN).",
-            "Employees shall be eligible for 50% of dealer member's eligibility on their schemes."
+            "Professional Course - All States: ₹15,000",
+            "Ph.D Scholars (Dealers) - All States: ₹20,000",
+            "Ph.D Scholars (Employees) - TN/PY only: ₹10,000",
+            "Must have completed Professional Course without any arrears and scored more than 80% aggregate",
+            "Wholesale Dealer's approved Employees eligible (TN/PY only)",
+            "Employees shall be eligible for 50% of dealer member's eligibility",
+            "Required Documents: Marks list of all semesters"
         }
     };
 
     private List<string> CurrentEligibilityConditions =>
         EligibilityConditionsMap.TryGetValue(SelectedScheme, out var conditions) ? conditions : new List<string>();
+
+    private string SchemeDetailsTitle => SelectedScheme switch
+    {
+        "Wedding" => "Wedding Details",
+        "Sathabhishekam" => "Sathabhishekam Details",
+        "Grahapravesam" => "Grahapravesam Details",
+        "Educational Assistance" => "Educational Details",
+        "Medical Assistance" => "Medical Assistance Details",
+        "Death Relief" => "Death Relief Details",
+        "Merit Award" => "Merit Award Details",
+        "Distinction Award" => "Distinction Award Details",
+        _ => $"{SelectedScheme} Details"
+    };
+
+    private record DocumentInfo(string Name, string IconClass);
+
+    private static readonly Dictionary<string, List<DocumentInfo>> DocumentsMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Wedding"] = new List<DocumentInfo>
+        {
+            new("Invitation", "aws-icon-red")
+        },
+        ["Sathabhishekam"] = new List<DocumentInfo>
+        {
+            new("Invitation", "aws-icon-red")
+        },
+        ["Grahapravesam"] = new List<DocumentInfo>
+        {
+            new("Invitation / Housewarming Card Copy", "aws-icon-red"),
+            new("House Ownership Proof", "aws-icon-blue")
+        },
+        ["Educational Assistance"] = new List<DocumentInfo>
+        {
+            new("Admission Certificate (First Year only)", "aws-icon-green"),
+            new("Fees Receipt", "aws-icon-blue"),
+            new("Marks list of previous year / semesters duly cleared", "aws-icon-pink")
+        },
+        ["Medical Assistance"] = new List<DocumentInfo>
+        {
+            new("Hospital Discharge Summary", "aws-icon-red"),
+            new("Bills issued by Hospital / Lab", "aws-icon-blue"),
+            new("Bills for purchase of medicines", "aws-icon-green")
+        },
+        ["Death Relief"] = new List<DocumentInfo>
+        {
+            new("Death Certificate", "aws-icon-red"),
+            new("Legal Heir Certificate (if spouse is not alive)", "aws-icon-blue"),
+            new("Affidavit from other legal heirs", "aws-icon-pink")
+        },
+        ["Merit Award"] = new List<DocumentInfo>
+        {
+            new("Marks list of 10th standard", "aws-icon-green"),
+            new("Marks list of +2 examinations", "aws-icon-blue")
+        },
+        ["Distinction Award"] = new List<DocumentInfo>
+        {
+            new("Course Completion Certificate", "aws-icon-green"),
+            new("Marksheets / Aggregate Certificate", "aws-icon-blue")
+        }
+    };
+
+    private List<DocumentInfo> CurrentDocuments =>
+        DocumentsMap.TryGetValue(SelectedScheme, out var docs) ? docs : new List<DocumentInfo>();
 
     private string EduCourse { get; set; } = string.Empty;
     private string EduYear { get; set; } = string.Empty;
@@ -1260,20 +1271,44 @@
         }
     }
 
-    private void SimulateAdmissionCertificateUpload()
+    private Dictionary<string, IBrowserFile> UploadedFiles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    private async Task HandleFileUpload(string docName, InputFileChangeEventArgs e)
     {
-        IsAdmissionCertificateUploaded = true;
+        var file = e.File;
+        if (file == null) return;
+
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            return;
+        }
+
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        if (ext is not (".pdf" or ".jpg" or ".jpeg" or ".png"))
+        {
+            return;
+        }
+
+        UploadedFiles[docName] = file;
+        StateHasChanged();
     }
 
-    private void RemoveAdmissionCertificate()
+    private void RemoveUploadedFile(string docName)
     {
-        IsAdmissionCertificateUploaded = false;
+        UploadedFiles.Remove(docName);
+        StateHasChanged();
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
     }
 
     private bool IsPreviewModalOpen { get; set; } = false;
     private bool IsSubmitModalOpen { get; set; } = false;
     private bool IsSuccessModalOpen { get; set; } = false;
-    private bool IsAdmissionCertificateUploaded { get; set; } = false;
     private bool ShowValidation { get; set; } = false;
     private List<string> ValidationErrors { get; set; } = new();
 
@@ -1333,8 +1368,14 @@
             if (string.IsNullOrWhiteSpace(EduCollegeName))
                 errors.Add("College Name is required.");
 
-            if (IsEduFirstApplication && !IsAdmissionCertificateUploaded)
+            if (IsEduFirstApplication && !UploadedFiles.ContainsKey("Admission Certificate (First Year only)"))
                 errors.Add("Admission Certificate is mandatory for first-time applications.");
+
+            if (!UploadedFiles.ContainsKey("Fees Receipt"))
+                errors.Add("Fees Receipt is required.");
+
+            if (!IsEduFirstApplication && !UploadedFiles.ContainsKey("Marks list of previous year / semesters duly cleared"))
+                errors.Add("Marks list is mandatory for renewal applications.");
 
             if (errors.Any())
             {
