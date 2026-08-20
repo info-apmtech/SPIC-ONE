@@ -4452,7 +4452,12 @@ else
         LoginState.UserRole == AppRole.Admin ||
         LoginState.UserRole == AppRole.CorporateAdmin;
 
-    // Warehouse / Rake Point list Edit is intentionally limited to maker roles.
+    // Admin roles can edit Warehouse / Rake Point records at any approval stage.
+    private bool IsAdminLogisticsEditRole =>
+        LoginState.UserRole == AppRole.Admin ||
+        LoginState.UserRole == AppRole.CorporateAdmin;
+
+    // Maker-role edit behavior remains unchanged.
     private bool IsMoCreatorRole =>
         LoginState.UserRole == AppRole.MO ||
         LoginState.UserRole == AppRole.MDO ||
@@ -4463,10 +4468,13 @@ else
         if (item == null || IsPortTab)
             return false;
 
-        if (!IsMoCreatorRole)
+        if (!LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update"))
             return false;
 
-        if (!LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update"))
+        if (IsAdminLogisticsEditRole)
+            return true;
+
+        if (!IsMoCreatorRole)
             return false;
 
         // After final AVP approval, even the maker no longer receives Edit.

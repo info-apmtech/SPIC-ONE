@@ -1,14 +1,19 @@
 ﻿@page "/SubDealerList"
 @implements IDisposable
+@using System.IO.Compression
 @using System.Net.Http.Json
+@using System.Text
+@using System.Xml
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Services
 
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @inject LoginState LoginState
 @inject LookupCacheService LookupCache
 
@@ -654,6 +659,24 @@
                 Refresh
             </button>
 
+            <button type="button"
+                    class="sd-btn"
+                    @onclick="ExportAllSavedSubDealersAsync"
+                    disabled="@_isExporting">
+                @if (_isExporting)
+                {
+                    <span class="spinner-border spinner-border-sm"
+                          role="status"
+                          aria-hidden="true"></span>
+                    <span>Exporting...</span>
+                }
+                else
+                {
+                    <i class="bi bi-file-earmark-excel"></i>
+                    <span>Export All Saved</span>
+                }
+            </button>
+
             @if (CanImportSubDealers)
             {
                 <button type="button"
@@ -1011,8 +1034,8 @@
         </div>
 
         @if (!_isStateSummaryLoading &&
-                             string.IsNullOrWhiteSpace(_stateSummaryError) &&
-                             _stateWiseSummary.Count > 0)
+                                     string.IsNullOrWhiteSpace(_stateSummaryError) &&
+                                     _stateWiseSummary.Count > 0)
         {
             <div class="sd-state-datatable-tools">
                 <div class="sd-search-wrap sd-state-search-wrap">
@@ -1313,6 +1336,20 @@
         public int InactiveSubDealers { get; init; }
     }
 
+    private sealed class SubDealerExportRow
+    {
+        public string SubDealerCode { get; init; } = string.Empty;
+        public string FirmName { get; init; } = string.Empty;
+        public string State { get; init; } = string.Empty;
+        public string Region { get; init; } = string.Empty;
+        public string Hq { get; init; } = string.Empty;
+        public string GstNumber { get; init; } = string.Empty;
+        public string PanNumber { get; init; } = string.Empty;
+        public string OfficialContactNumber { get; init; } = string.Empty;
+        public string WhatsAppNumber { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
+    }
+
     private SubDealerPagedListResponse _response = new()
     {
         Page = 1,
@@ -1352,11 +1389,19 @@
     private int _pageSize = 20;
 
     private bool _isLoading;
+    private bool _isExporting;
     private CancellationTokenSource? _searchCts;
     private CancellationTokenSource? _listLoadCts;
     private CancellationTokenSource? _stateSummaryLoadCts;
+    private CancellationTokenSource? _exportCts;
     private long _listLoadRequestId;
     private bool _isDisposed;
+
+    private const int ExportPageSize = 100;
+    private const string ExcelContentType =
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    private const string ExcelSpreadsheetNamespace =
+        "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
     // Admin / MO Excel import state
     private bool _showImportModal;
@@ -2017,6 +2062,534 @@
             LoadStateWiseSummaryAsync());
     }
 
+    private async Task ExportAllSavedSubDealersAsync()
+    {
+        if (_isExporting || _isDisposed)
+            return;
+
+        var requestCts = new CancellationTokenSource();
+        _exportCts = requestCts;
+        _isExporting = true;
+        _pageMessage = null;
+
+        try
+        {
+            var exportRows = new List<SubDealerExportRow>();
+            var exportPage = 1;
+
+            while (true)
+            {
+                var result =
+                    await Http.GetFromJsonAsync<SubDealerPagedListResponse>(
+                        BuildAllSavedSubDealerExportUrl(
+                            exportPage,
+                            ExportPageSize),
+                        requestCts.Token);
+
+                if (result == null || result.Items.Count == 0)
+                    break;
+
+                foreach (var item in result.Items)
+                {
+                    exportRows.Add(new SubDealerExportRow
+                    {
+                        SubDealerCode = item.SubDealerCode ?? string.Empty,
+                        FirmName = item.FirmName ?? string.Empty,
+                        State = StateName(item.StateId),
+                        Region = RegionName(item.RegionId),
+                        Hq = HqName(item.HQId),
+                        GstNumber = item.GSTNumber ?? string.Empty,
+                        PanNumber = item.PANNo ?? string.Empty,
+                        OfficialContactNumber = item.OfficialContactNumber ?? string.Empty,
+                        WhatsAppNumber = item.WhatsAppNumber ?? string.Empty,
+                        Status = item.Status == SubDealerStatus.Active
+                            ? "Active"
+                            : "Inactive"
+                    });
+                }
+
+                if (result.TotalPages <= exportPage)
+                    break;
+
+                exportPage++;
+            }
+
+            if (exportRows.Count == 0)
+            {
+                _pageMessageIsError = true;
+                _pageMessage = "No saved Sub Dealer records are available to export.";
+                return;
+            }
+
+            var workbookBytes = CreateSubDealerExcelWorkbook(exportRows);
+            var fileName =
+                $"Saved_Sub_Dealers_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+
+            await JS.InvokeVoidAsync(
+                "downloadFileFromBytes",
+                fileName,
+                ExcelContentType,
+                Convert.ToBase64String(workbookBytes));
+
+            _pageMessageIsError = false;
+            _pageMessage =
+                $"Export completed successfully. {exportRows.Count} saved Sub Dealer record(s) exported.";
+        }
+        catch (OperationCanceledException) when (requestCts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Sub Dealer Excel export failed: {ex.Message}");
+            _pageMessageIsError = true;
+            _pageMessage = "Could not export the saved Sub Dealer records. Please try again.";
+        }
+        finally
+        {
+            _isExporting = false;
+
+            if (ReferenceEquals(_exportCts, requestCts))
+                _exportCts = null;
+
+            requestCts.Dispose();
+        }
+    }
+
+    private string BuildAllSavedSubDealerExportUrl(
+        int page,
+        int pageSize)
+    {
+        var query = new List<string>
+        {
+            $"page={page}",
+            $"pageSize={pageSize}"
+        };
+
+        // Export every saved record available to the logged-in role. Current
+        // screen search/status/geography filters intentionally stay independent.
+        if (!IsUnrestricted)
+        {
+            if (IsMoRole && LoginState.HQId > 0)
+            {
+                query.Add($"hqId={LoginState.HQId}");
+            }
+            else if (IsRmRole && LoginState.RegionId > 0)
+            {
+                query.Add($"regionId={LoginState.RegionId}");
+            }
+            else if (IsSmmRole && LoginState.StateId > 0)
+            {
+                query.Add($"stateId={LoginState.StateId}");
+            }
+            else
+            {
+                if (LoginState.StateId > 0)
+                    query.Add($"stateId={LoginState.StateId}");
+
+                if (LoginState.RegionId > 0)
+                    query.Add($"regionId={LoginState.RegionId}");
+
+                if (LoginState.HQId > 0)
+                    query.Add($"hqId={LoginState.HQId}");
+            }
+        }
+
+        return "api/SubDealerRegistration/list?" + string.Join("&", query);
+    }
+
+    private static byte[] CreateSubDealerExcelWorkbook(
+        IReadOnlyList<SubDealerExportRow> rows)
+    {
+        const string contentTypesXml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
+            "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
+            "<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
+            "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>" +
+            "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>" +
+            "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>" +
+            "</Types>";
+
+        const string rootRelationshipsXml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+            "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/>" +
+            "</Relationships>";
+
+        const string workbookXml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" " +
+            "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">" +
+            "<sheets><sheet name=\"Saved Sub Dealers\" sheetId=\"1\" r:id=\"rId1\"/></sheets>" +
+            "</workbook>";
+
+        const string workbookRelationshipsXml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+            "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>" +
+            "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>" +
+            "</Relationships>";
+
+        const string stylesXml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">" +
+            "<fonts count=\"2\">" +
+            "<font><sz val=\"11\"/><name val=\"Calibri\"/><family val=\"2\"/><scheme val=\"minor\"/></font>" +
+            "<font><b/><color rgb=\"FFFFFFFF\"/><sz val=\"11\"/><name val=\"Calibri\"/></font>" +
+            "</fonts>" +
+            "<fills count=\"3\">" +
+            "<fill><patternFill patternType=\"none\"/></fill>" +
+            "<fill><patternFill patternType=\"gray125\"/></fill>" +
+            "<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF07864F\"/><bgColor indexed=\"64\"/></patternFill></fill>" +
+            "</fills>" +
+            "<borders count=\"2\">" +
+            "<border><left/><right/><top/><bottom/><diagonal/></border>" +
+            "<border><left style=\"thin\"><color rgb=\"FFD9E1E7\"/></left>" +
+            "<right style=\"thin\"><color rgb=\"FFD9E1E7\"/></right>" +
+            "<top style=\"thin\"><color rgb=\"FFD9E1E7\"/></top>" +
+            "<bottom style=\"thin\"><color rgb=\"FFD9E1E7\"/></bottom><diagonal/></border>" +
+            "</borders>" +
+            "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>" +
+            "<cellXfs count=\"2\">" +
+            "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>" +
+            "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"1\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\">" +
+            "<alignment horizontal=\"center\" vertical=\"center\"/></xf>" +
+            "</cellXfs>" +
+            "<cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles>" +
+            "</styleSheet>";
+
+        using var workbookStream = new MemoryStream();
+
+        using (var archive = new ZipArchive(
+            workbookStream,
+            ZipArchiveMode.Create,
+            leaveOpen: true))
+        {
+            WriteExcelTextEntry(
+                archive,
+                "[Content_Types].xml",
+                contentTypesXml);
+            WriteExcelTextEntry(
+                archive,
+                "_rels/.rels",
+                rootRelationshipsXml);
+            WriteExcelTextEntry(
+                archive,
+                "xl/workbook.xml",
+                workbookXml);
+            WriteExcelTextEntry(
+                archive,
+                "xl/_rels/workbook.xml.rels",
+                workbookRelationshipsXml);
+            WriteExcelTextEntry(
+                archive,
+                "xl/styles.xml",
+                stylesXml);
+            WriteSubDealerWorksheet(archive, rows);
+        }
+
+        return workbookStream.ToArray();
+    }
+
+    private static void WriteExcelTextEntry(
+        ZipArchive archive,
+        string entryName,
+        string content)
+    {
+        var entry = archive.CreateEntry(
+            entryName,
+            CompressionLevel.Fastest);
+
+        using var writer = new StreamWriter(
+            entry.Open(),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        writer.Write(content);
+    }
+
+    private static void WriteSubDealerWorksheet(
+        ZipArchive archive,
+        IReadOnlyList<SubDealerExportRow> rows)
+    {
+        var entry = archive.CreateEntry(
+            "xl/worksheets/sheet1.xml",
+            CompressionLevel.Fastest);
+
+        using var entryStream = entry.Open();
+        using var writer = XmlWriter.Create(
+            entryStream,
+            new XmlWriterSettings
+            {
+                Encoding = new UTF8Encoding(
+                    encoderShouldEmitUTF8Identifier: false),
+                Indent = false,
+                CloseOutput = false
+            });
+
+        var headers = new[]
+        {
+            "S.No",
+            "Sub Dealer Code",
+            "Firm Name",
+            "State",
+            "Region",
+            "HQ",
+            "GST Number",
+            "PAN Number",
+            "Official Contact Number",
+            "WhatsApp Number",
+            "Status"
+        };
+
+        var columnLetters = new[]
+        {
+            "A", "B", "C", "D", "E", "F",
+            "G", "H", "I", "J", "K"
+        };
+
+        var columnWidths = new[]
+        {
+            8d, 20d, 32d, 20d, 22d, 22d,
+            20d, 16d, 23d, 21d, 14d
+        };
+
+        writer.WriteStartDocument(standalone: true);
+        writer.WriteStartElement(
+            "worksheet",
+            ExcelSpreadsheetNamespace);
+
+        writer.WriteStartElement(
+            "dimension",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString(
+            "ref",
+            $"A1:K{Math.Max(1, rows.Count + 1)}");
+        writer.WriteEndElement();
+
+        writer.WriteStartElement(
+            "sheetViews",
+            ExcelSpreadsheetNamespace);
+        writer.WriteStartElement(
+            "sheetView",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("workbookViewId", "0");
+        writer.WriteStartElement(
+            "pane",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("ySplit", "1");
+        writer.WriteAttributeString("topLeftCell", "A2");
+        writer.WriteAttributeString("activePane", "bottomLeft");
+        writer.WriteAttributeString("state", "frozen");
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+
+        writer.WriteStartElement(
+            "sheetFormatPr",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("defaultRowHeight", "15");
+        writer.WriteEndElement();
+
+        writer.WriteStartElement(
+            "cols",
+            ExcelSpreadsheetNamespace);
+
+        for (var index = 0; index < columnWidths.Length; index++)
+        {
+            writer.WriteStartElement(
+                "col",
+                ExcelSpreadsheetNamespace);
+            writer.WriteAttributeString(
+                "min",
+                (index + 1).ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+            writer.WriteAttributeString(
+                "max",
+                (index + 1).ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+            writer.WriteAttributeString(
+                "width",
+                columnWidths[index].ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+            writer.WriteAttributeString("customWidth", "1");
+            writer.WriteEndElement();
+        }
+
+        writer.WriteEndElement();
+        writer.WriteStartElement(
+            "sheetData",
+            ExcelSpreadsheetNamespace);
+
+        writer.WriteStartElement(
+            "row",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("r", "1");
+        writer.WriteAttributeString("ht", "22");
+        writer.WriteAttributeString("customHeight", "1");
+
+        for (var index = 0; index < headers.Length; index++)
+        {
+            WriteExcelTextCell(
+                writer,
+                $"{columnLetters[index]}1",
+                headers[index],
+                styleIndex: 1);
+        }
+
+        writer.WriteEndElement();
+
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var excelRowNumber = index + 2;
+            var row = rows[index];
+            var values = new[]
+            {
+                row.SubDealerCode,
+                row.FirmName,
+                row.State,
+                row.Region,
+                row.Hq,
+                row.GstNumber,
+                row.PanNumber,
+                row.OfficialContactNumber,
+                row.WhatsAppNumber,
+                row.Status
+            };
+
+            writer.WriteStartElement(
+                "row",
+                ExcelSpreadsheetNamespace);
+            writer.WriteAttributeString(
+                "r",
+                excelRowNumber.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+
+            WriteExcelNumberCell(
+                writer,
+                $"A{excelRowNumber}",
+                index + 1);
+
+            for (var valueIndex = 0;
+                valueIndex < values.Length;
+                valueIndex++)
+            {
+                WriteExcelTextCell(
+                    writer,
+                    $"{columnLetters[valueIndex + 1]}{excelRowNumber}",
+                    values[valueIndex]);
+            }
+
+            writer.WriteEndElement();
+        }
+
+        writer.WriteEndElement();
+
+        writer.WriteStartElement(
+            "autoFilter",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString(
+            "ref",
+            $"A1:K{Math.Max(1, rows.Count + 1)}");
+        writer.WriteEndElement();
+
+        writer.WriteEndElement();
+        writer.WriteEndDocument();
+    }
+
+    private static void WriteExcelTextCell(
+        XmlWriter writer,
+        string cellReference,
+        string? value,
+        int styleIndex = 0)
+    {
+        var safeValue = NormalizeExcelCellText(value);
+
+        writer.WriteStartElement(
+            "c",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("r", cellReference);
+        writer.WriteAttributeString("t", "inlineStr");
+
+        if (styleIndex > 0)
+        {
+            writer.WriteAttributeString(
+                "s",
+                styleIndex.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        writer.WriteStartElement(
+            "is",
+            ExcelSpreadsheetNamespace);
+        writer.WriteStartElement(
+            "t",
+            ExcelSpreadsheetNamespace);
+
+        if (safeValue.Length > 0 &&
+            (char.IsWhiteSpace(safeValue[0]) ||
+             char.IsWhiteSpace(safeValue[safeValue.Length - 1])))
+        {
+            writer.WriteAttributeString(
+                "xml",
+                "space",
+                "http://www.w3.org/XML/1998/namespace",
+                "preserve");
+        }
+
+        writer.WriteString(safeValue);
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+    }
+
+    private static void WriteExcelNumberCell(
+        XmlWriter writer,
+        string cellReference,
+        int value)
+    {
+        writer.WriteStartElement(
+            "c",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("r", cellReference);
+        writer.WriteStartElement(
+            "v",
+            ExcelSpreadsheetNamespace);
+        writer.WriteString(
+            value.ToString(
+                System.Globalization.CultureInfo.InvariantCulture));
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+    }
+
+    private static string NormalizeExcelCellText(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        const int excelCellCharacterLimit = 32767;
+        var normalized = new StringBuilder(
+            Math.Min(value.Length, excelCellCharacterLimit));
+
+        foreach (var character in value)
+        {
+            var isValidXmlCharacter =
+                character == '\t' ||
+                character == '\n' ||
+                character == '\r' ||
+                (character >= '\u0020' && character <= '\uD7FF') ||
+                (character >= '\uE000' && character <= '\uFFFD');
+
+            if (!isValidXmlCharacter)
+                continue;
+
+            normalized.Append(character);
+
+            if (normalized.Length == excelCellCharacterLimit)
+                break;
+        }
+
+        return normalized.ToString();
+    }
+
     private async Task OnSearchInput(ChangeEventArgs e)
     {
         _searchText = e.Value?.ToString() ?? string.Empty;
@@ -2556,5 +3129,8 @@
 
         _stateSummaryLoadCts?.Cancel();
         _stateSummaryLoadCts = null;
+
+        _exportCts?.Cancel();
+        _exportCts = null;
     }
 }
