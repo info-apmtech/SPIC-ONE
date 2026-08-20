@@ -1,4 +1,5 @@
 ﻿@page "/SubDealerList"
+@implements IDisposable
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
@@ -242,7 +243,7 @@
             font-size: .74rem;
             font-weight: 700;
             color: #536273;
-            text-align: left;
+            text-align: center;
             white-space: nowrap;
         }
 
@@ -407,6 +408,123 @@
         font-size: .78rem;
     }
 
+    .sd-state-summary-card {
+        margin-top: 18px;
+    }
+
+    .sd-state-summary-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 3px;
+        font-size: .92rem;
+        font-weight: 700;
+        color: #172033;
+    }
+
+        .sd-state-summary-title i {
+            color: #07864f;
+        }
+
+    .sd-state-summary-table {
+        min-width: 720px;
+    }
+
+        .sd-state-summary-table th:nth-child(n+3),
+        .sd-state-summary-table td:nth-child(n+3) {
+            text-align: center;
+        }
+
+        .sd-state-summary-table tfoot td {
+            border-bottom: 0;
+            background: #eff8f3;
+            color: #172033;
+            font-weight: 700;
+        }
+
+    .sd-state-count {
+        font-weight: 700;
+        color: #334155;
+    }
+
+    .sd-state-summary-card .sd-loading,
+    .sd-state-summary-card .sd-empty {
+        min-height: 150px;
+    }
+
+    .sd-state-summary-error {
+        margin: 14px 16px;
+    }
+
+    .sd-state-datatable-tools {
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid #edf1ef;
+        background: #fbfdfc;
+    }
+
+    .sd-state-search-wrap {
+        width: min(320px, 100%);
+    }
+
+    .sd-state-page-size {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #64748b;
+        font-size: .78rem;
+        white-space: nowrap;
+    }
+
+        .sd-state-page-size select {
+            height: 34px;
+            min-width: 70px;
+            border: 1px solid #dce4e0;
+            border-radius: 7px;
+            padding: 0 8px;
+            background: #fff;
+            color: #334155;
+        }
+
+    .sd-state-sort-button {
+        /* width: 100%; */
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        display: inline-flex;
+        align-items: center;
+        justify-content: inherit;
+        gap: 6px;
+        font: inherit;
+        font-weight: inherit;
+        text-align: inherit;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+
+    .sd-state-summary-table th:nth-child(n+3) .sd-state-sort-button {
+        justify-content: center;
+    }
+
+    .sd-state-sort-button i {
+        color: #07864f;
+        font-size: .68rem;
+    }
+
+    .sd-state-summary-pagination {
+        background: #fff;
+    }
+
+    .sd-state-datatable-empty {
+        height: 90px;
+        text-align: center !important;
+        color: #64748b !important;
+    }
+
     @@media (max-width: 1200px) {
         .sd-filter-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -430,6 +548,15 @@
         .sd-pagination {
             align-items: flex-start;
             flex-direction: column;
+        }
+
+        .sd-state-datatable-tools {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .sd-state-search-wrap {
+            width: 100%;
         }
     }
 
@@ -720,63 +847,66 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var entry in _response.Items.Select((item, index) => new { item, index }))
+                        @{
+                            var rowIndex = 0;
+                        }
+                        @foreach (var item in _response.Items)
                         {
-                            <tr>
+                            <tr @key="item.Id">
                                 <td>
-                                    @((_response.Page - 1) * _response.PageSize + entry.index + 1)
+                                    @((_response.Page - 1) * _response.PageSize + rowIndex + 1)
                                 </td>
 
                                 <td>
                                     <span class="sd-code">
-                                        @(string.IsNullOrWhiteSpace(entry.item.SubDealerCode)
+                                        @(string.IsNullOrWhiteSpace(item.SubDealerCode)
                                             ? "-"
-                                            : entry.item.SubDealerCode)
+                                            : item.SubDealerCode)
                                     </span>
                                 </td>
 
                                 <td>
                                     <div class="sd-name">
-                                        @(string.IsNullOrWhiteSpace(entry.item.FirmName)
+                                        @(string.IsNullOrWhiteSpace(item.FirmName)
                                             ? "-"
-                                            : entry.item.FirmName)
+                                            : item.FirmName)
                                     </div>
                                 </td>
 
-                                <td>@StateName(entry.item.StateId)</td>
-                                <td>@RegionName(entry.item.RegionId)</td>
-                                <td>@HqName(entry.item.HQId)</td>
+                                <td>@StateName(item.StateId)</td>
+                                <td>@RegionName(item.RegionId)</td>
+                                <td>@HqName(item.HQId)</td>
 
                                 <td>
                                     <div>
-                                        @(string.IsNullOrWhiteSpace(entry.item.GSTNumber)
+                                        @(string.IsNullOrWhiteSpace(item.GSTNumber)
                                             ? "-"
-                                            : entry.item.GSTNumber)
+                                            : item.GSTNumber)
                                     </div>
                                     <div class="sd-small-value mt-1">
                                         PAN:
-                                        @(string.IsNullOrWhiteSpace(entry.item.PANNo)
+                                        @(string.IsNullOrWhiteSpace(item.PANNo)
                                             ? "-"
-                                            : entry.item.PANNo)
+                                            : item.PANNo)
                                     </div>
                                 </td>
 
                                 <td>
                                     <div>
-                                        @(string.IsNullOrWhiteSpace(entry.item.OfficialContactNumber)
+                                        @(string.IsNullOrWhiteSpace(item.OfficialContactNumber)
                                             ? "-"
-                                            : entry.item.OfficialContactNumber)
+                                            : item.OfficialContactNumber)
                                     </div>
-                                    @if (!string.IsNullOrWhiteSpace(entry.item.WhatsAppNumber))
+                                    @if (!string.IsNullOrWhiteSpace(item.WhatsAppNumber))
                                     {
                                         <div class="sd-small-value mt-1">
-                                            WA: @entry.item.WhatsAppNumber
+                                            WA: @item.WhatsAppNumber
                                         </div>
                                     }
                                 </td>
 
                                 <td>
-                                    @if (entry.item.Status == SubDealerStatus.Active)
+                                    @if (item.Status == SubDealerStatus.Active)
                                     {
                                         <span class="sd-status active">
                                             <span class="sd-dot"></span>
@@ -797,7 +927,7 @@
                                         <button type="button"
                                                 class="sd-action-btn"
                                                 title="View"
-                                                @onclick="() => ViewSubDealer(entry.item.Id)">
+                                                @onclick="() => ViewSubDealer(item.Id)">
                                             <i class="bi bi-eye"></i>
                                         </button>
 
@@ -806,13 +936,15 @@
                                             <button type="button"
                                                     class="sd-action-btn"
                                                     title="Edit"
-                                                    @onclick="() => EditSubDealer(entry.item.Id)">
+                                                    @onclick="() => EditSubDealer(item.Id)">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>
                                         }
                                     </div>
                                 </td>
                             </tr>
+
+                            rowIndex++;
                         }
                     </tbody>
                 </table>
@@ -856,6 +988,204 @@
                 </button>
             </div>
         </div>
+    </div>
+
+    <div class="sd-table-card sd-state-summary-card">
+        <div class="sd-table-head">
+            <div>
+                <div class="sd-state-summary-title">
+                    <i class="bi bi-bar-chart-line"></i>
+                    State-wise Sub Dealer Summary
+                </div>
+                <div class="sd-result-text">
+                    Total master records compared with saved Active and Inactive Sub Dealers.
+                </div>
+            </div>
+
+            @if (!_isStateSummaryLoading && string.IsNullOrWhiteSpace(_stateSummaryError))
+            {
+                <div class="sd-result-text">
+                    <strong>@_stateWiseSummary.Count</strong> state(s)
+                </div>
+            }
+        </div>
+
+        @if (!_isStateSummaryLoading &&
+                             string.IsNullOrWhiteSpace(_stateSummaryError) &&
+                             _stateWiseSummary.Count > 0)
+        {
+            <div class="sd-state-datatable-tools">
+                <div class="sd-search-wrap sd-state-search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input class="sd-input"
+                           value="@_stateSummarySearchText"
+                           @oninput="OnStateSummarySearchInput"
+                           placeholder="Search state or count" />
+                </div>
+
+                <div class="sd-state-page-size">
+                    <span>Show</span>
+                    <select value="@_stateSummaryPageSize"
+                            @onchange="OnStateSummaryPageSizeChanged"
+                            aria-label="State summary rows per page">
+                        <option value="5">5</option>
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                    <span>entries</span>
+                </div>
+            </div>
+        }
+
+        @if (_isStateSummaryLoading)
+        {
+            <div class="sd-loading">
+                <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+                <div>Loading state-wise summary...</div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_stateSummaryError))
+        {
+            <div class="alert alert-danger sd-state-summary-error" role="alert">
+                @_stateSummaryError
+            </div>
+        }
+        else if (_stateWiseSummary.Count == 0)
+        {
+            <div class="sd-empty">
+                <i class="bi bi-bar-chart"></i>
+                <div class="fw-semibold">No state-wise Sub Dealer data found</div>
+            </div>
+        }
+        else
+        {
+            <div class="sd-table-scroll">
+                <table class="sd-table sd-state-summary-table">
+                    <thead>
+                        <tr>
+                            <th style="width:55px;">#</th>
+                            <th aria-sort="@StateSummaryAriaSort("State")">
+                                <button type="button"
+                                        class="sd-state-sort-button"
+                                        @onclick='() => SortStateSummary("State")'>
+                                    State
+                                    <i class="bi @StateSummarySortIcon("State")"></i>
+                                </button>
+                            </th>
+                            <th aria-sort="@StateSummaryAriaSort("Total")">
+                                <button type="button"
+                                        class="sd-state-sort-button"
+                                        @onclick='() => SortStateSummary("Total")'>
+                                    Total Sub Dealers
+                                    <i class="bi @StateSummarySortIcon("Total")"></i>
+                                </button>
+                            </th>
+                            <th aria-sort="@StateSummaryAriaSort("Saved")">
+                                <button type="button"
+                                        class="sd-state-sort-button"
+                                        @onclick='() => SortStateSummary("Saved")'>
+                                    Total Saved Sub Dealers
+                                    <i class="bi @StateSummarySortIcon("Saved")"></i>
+                                </button>
+                            </th>
+                            <th aria-sort="@StateSummaryAriaSort("Active")">
+                                <button type="button"
+                                        class="sd-state-sort-button"
+                                        @onclick='() => SortStateSummary("Active")'>
+                                    Active
+                                    <i class="bi @StateSummarySortIcon("Active")"></i>
+                                </button>
+                            </th>
+                            <th aria-sort="@StateSummaryAriaSort("Inactive")">
+                                <button type="button"
+                                        class="sd-state-sort-button"
+                                        @onclick='() => SortStateSummary("Inactive")'>
+                                    Inactive
+                                    <i class="bi @StateSummarySortIcon("Inactive")"></i>
+                                </button>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_filteredStateWiseSummary.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="sd-state-datatable-empty">
+                                    No matching states found
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @for (var index = 0; index < _pagedStateWiseSummary.Count; index++)
+                            {
+                                var item = _pagedStateWiseSummary[index];
+
+                                <tr @key="item.StateId">
+                                    <td>@(((_stateSummaryPage - 1) * _stateSummaryPageSize) + index + 1)</td>
+                                    <td>
+                                        <div class="sd-name">@item.StateName</div>
+                                    </td>
+                                    <td><span class="sd-state-count">@item.TotalSubDealers</span></td>
+                                    <td><span class="sd-state-count">@item.SavedSubDealers</span></td>
+                                    <td><span class="sd-status active">@item.ActiveSubDealers</span></td>
+                                    <td><span class="sd-status inactive">@item.InactiveSubDealers</span></td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td></td>
+                            <td>
+                                @(string.IsNullOrWhiteSpace(_stateSummarySearchText)
+                                    ? "Grand Total"
+                                    : "Filtered Total")
+                            </td>
+                            <td>@_filteredStateWiseSummary.Sum(x => x.TotalSubDealers)</td>
+                            <td>@_filteredStateWiseSummary.Sum(x => x.SavedSubDealers)</td>
+                            <td>@_filteredStateWiseSummary.Sum(x => x.ActiveSubDealers)</td>
+                            <td>@_filteredStateWiseSummary.Sum(x => x.InactiveSubDealers)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="sd-pagination sd-state-summary-pagination">
+                <div class="sd-result-text">
+                    Showing <strong>@StateSummaryFirstVisibleRecord</strong>–<strong>@StateSummaryLastVisibleRecord</strong>
+                    of <strong>@_filteredStateWiseSummary.Count</strong> state(s)
+                </div>
+
+                <div class="sd-page-buttons">
+                    <button type="button"
+                            class="sd-page-button"
+                            disabled="@(_stateSummaryPage <= 1)"
+                            @onclick="PreviousStateSummaryPage"
+                            aria-label="Previous state summary page">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+
+                    @foreach (var pageNo in VisibleStateSummaryPageNumbers)
+                    {
+                        <button type="button"
+                                class="sd-page-button @(pageNo == _stateSummaryPage ? "active" : "")"
+                                @onclick="() => GoToStateSummaryPage(pageNo)">
+                            @pageNo
+                        </button>
+                    }
+
+                    <button type="button"
+                            class="sd-page-button"
+                            disabled="@(StateSummaryTotalPages == 0 || _stateSummaryPage >= StateSummaryTotalPages)"
+                            @onclick="NextStateSummaryPage"
+                            aria-label="Next state summary page">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        }
     </div>
 </div>
 
@@ -973,6 +1303,16 @@
 }
 
 @code {
+    private sealed class StateWiseSubDealerSummaryRow
+    {
+        public int StateId { get; init; }
+        public string StateName { get; init; } = string.Empty;
+        public int TotalSubDealers { get; init; }
+        public int SavedSubDealers { get; init; }
+        public int ActiveSubDealers { get; init; }
+        public int InactiveSubDealers { get; init; }
+    }
+
     private SubDealerPagedListResponse _response = new()
     {
         Page = 1,
@@ -982,6 +1322,24 @@
     private List<LocationItemDto> _states = new();
     private List<LocationItemDto> _regions = new();
     private List<LocationItemDto> _hqs = new();
+    private readonly Dictionary<int, LocationItemDto> _statesById = new();
+    private readonly Dictionary<int, LocationItemDto> _regionsById = new();
+    private readonly Dictionary<int, LocationItemDto> _hqsById = new();
+    private readonly Dictionary<int, List<LocationItemDto>> _regionsByStateId = new();
+    private readonly Dictionary<int, List<LocationItemDto>> _hqsByRegionId = new();
+    private List<StateWiseSubDealerSummaryRow> _stateWiseSummary = new();
+    private List<StateWiseSubDealerSummaryRow> _filteredStateWiseSummary = new();
+    private List<StateWiseSubDealerSummaryRow> _pagedStateWiseSummary = new();
+
+    private bool _isStateSummaryLoading;
+    private string? _stateSummaryError;
+    private string _stateSummarySearchText = string.Empty;
+    private string _stateSummarySortColumn = "State";
+    private bool _stateSummarySortAscending = true;
+    private int _stateSummaryPage = 1;
+    private int _stateSummaryPageSize = 10;
+
+    private const int StateSummaryMaxConcurrentRequests = 4;
 
     private string _searchText = string.Empty;
     private string _statusFilter = string.Empty;
@@ -995,6 +1353,10 @@
 
     private bool _isLoading;
     private CancellationTokenSource? _searchCts;
+    private CancellationTokenSource? _listLoadCts;
+    private CancellationTokenSource? _stateSummaryLoadCts;
+    private long _listLoadRequestId;
+    private bool _isDisposed;
 
     // Admin / MO Excel import state
     private bool _showImportModal;
@@ -1065,14 +1427,18 @@
     }
 
     private IEnumerable<LocationItemDto> FilteredRegions =>
-        _stateId > 0
-            ? _regions.Where(x => x.StateId == _stateId)
-            : _regions;
+        _stateId <= 0
+            ? _regions
+            : _regionsByStateId.TryGetValue(_stateId, out var regions)
+                ? regions
+                : Enumerable.Empty<LocationItemDto>();
 
     private IEnumerable<LocationItemDto> FilteredHqs =>
-        _regionId > 0
-            ? _hqs.Where(x => x.RegionId == _regionId)
-            : _hqs;
+        _regionId <= 0
+            ? _hqs
+            : _hqsByRegionId.TryGetValue(_regionId, out var hqs)
+                ? hqs
+                : Enumerable.Empty<LocationItemDto>();
 
     private int FirstVisibleRecord =>
         _response.TotalCount == 0
@@ -1095,6 +1461,41 @@
 
             var start = Math.Max(1, _response.Page - 2);
             var end = Math.Min(_response.TotalPages, start + 4);
+
+            if (end - start < 4)
+                start = Math.Max(1, end - 4);
+
+            return Enumerable.Range(start, end - start + 1);
+        }
+    }
+
+    private int StateSummaryTotalPages =>
+        _filteredStateWiseSummary.Count == 0
+            ? 0
+            : (int)Math.Ceiling(
+                _filteredStateWiseSummary.Count / (double)_stateSummaryPageSize);
+
+    private int StateSummaryFirstVisibleRecord =>
+        _filteredStateWiseSummary.Count == 0
+            ? 0
+            : ((_stateSummaryPage - 1) * _stateSummaryPageSize) + 1;
+
+    private int StateSummaryLastVisibleRecord =>
+        _filteredStateWiseSummary.Count == 0
+            ? 0
+            : Math.Min(
+                _stateSummaryPage * _stateSummaryPageSize,
+                _filteredStateWiseSummary.Count);
+
+    private IEnumerable<int> VisibleStateSummaryPageNumbers
+    {
+        get
+        {
+            if (StateSummaryTotalPages <= 0)
+                return Enumerable.Empty<int>();
+
+            var start = Math.Max(1, _stateSummaryPage - 2);
+            var end = Math.Min(StateSummaryTotalPages, start + 4);
 
             if (end - start < 4)
                 start = Math.Max(1, end - 4);
@@ -1128,9 +1529,50 @@
         _regions = LookupCache.Regions;
         _hqs = LookupCache.Headquarters;
 
+        BuildLocationIndexes();
         ApplyLoggedInRoleScope();
 
-        await LoadListAsync();
+        await Task.WhenAll(
+            LoadListAsync(),
+            LoadStateWiseSummaryAsync());
+    }
+
+    private void BuildLocationIndexes()
+    {
+        _statesById.Clear();
+        _regionsById.Clear();
+        _hqsById.Clear();
+        _regionsByStateId.Clear();
+        _hqsByRegionId.Clear();
+
+        foreach (var state in _states)
+            _statesById.TryAdd(state.Id, state);
+
+        foreach (var region in _regions)
+        {
+            _regionsById.TryAdd(region.Id, region);
+
+            if (!_regionsByStateId.TryGetValue(region.StateId, out var items))
+            {
+                items = new List<LocationItemDto>();
+                _regionsByStateId[region.StateId] = items;
+            }
+
+            items.Add(region);
+        }
+
+        foreach (var hq in _hqs)
+        {
+            _hqsById.TryAdd(hq.Id, hq);
+
+            if (!_hqsByRegionId.TryGetValue(hq.RegionId, out var items))
+            {
+                items = new List<LocationItemDto>();
+                _hqsByRegionId[hq.RegionId] = items;
+            }
+
+            items.Add(hq);
+        }
     }
 
     private void ApplyLoggedInRoleScope()
@@ -1142,10 +1584,10 @@
         {
             _hqId = LoginState.HQId;
 
-            var hq = _hqs.FirstOrDefault(x => x.Id == _hqId);
+            _hqsById.TryGetValue(_hqId, out var hq);
             _regionId = hq?.RegionId ?? LoginState.RegionId;
 
-            var region = _regions.FirstOrDefault(x => x.Id == _regionId);
+            _regionsById.TryGetValue(_regionId, out var region);
             _stateId = region?.StateId ?? LoginState.StateId;
 
             return;
@@ -1155,7 +1597,7 @@
         {
             _regionId = LoginState.RegionId;
 
-            var region = _regions.FirstOrDefault(x => x.Id == _regionId);
+            _regionsById.TryGetValue(_regionId, out var region);
             _stateId = region?.StateId ?? LoginState.StateId;
 
             _hqId = 0;
@@ -1178,9 +1620,14 @@
 
     private async Task LoadListAsync()
     {
-        if (_isLoading)
+        if (_isDisposed)
             return;
 
+        _listLoadCts?.Cancel();
+
+        var requestCts = new CancellationTokenSource();
+        _listLoadCts = requestCts;
+        var requestId = ++_listLoadRequestId;
         _isLoading = true;
 
         try
@@ -1211,7 +1658,12 @@
                 string.Join("&", query);
 
             var result =
-                await Http.GetFromJsonAsync<SubDealerPagedListResponse>(url);
+                await Http.GetFromJsonAsync<SubDealerPagedListResponse>(
+                    url,
+                    requestCts.Token);
+
+            if (requestId != _listLoadRequestId || requestCts.IsCancellationRequested)
+                return;
 
             _response = result ?? new SubDealerPagedListResponse
             {
@@ -1223,8 +1675,14 @@
                 ? 1
                 : _response.Page;
         }
+        catch (OperationCanceledException) when (requestCts.IsCancellationRequested)
+        {
+        }
         catch (Exception ex)
         {
+            if (requestId != _listLoadRequestId)
+                return;
+
             Console.WriteLine($"Sub Dealer list load failed: {ex.Message}");
 
             _response = new SubDealerPagedListResponse
@@ -1235,14 +1693,328 @@
         }
         finally
         {
-            _isLoading = false;
+            if (requestId == _listLoadRequestId)
+            {
+                _isLoading = false;
+
+                if (ReferenceEquals(_listLoadCts, requestCts))
+                    _listLoadCts = null;
+            }
+
+            requestCts.Dispose();
+        }
+    }
+
+    private async Task LoadStateWiseSummaryAsync()
+    {
+        if (_isStateSummaryLoading || _isDisposed)
+            return;
+
+        var requestCts = new CancellationTokenSource();
+        _stateSummaryLoadCts = requestCts;
+        _isStateSummaryLoading = true;
+        _stateSummaryError = null;
+
+        try
+        {
+            var masterRows =
+                await Http.GetFromJsonAsync<List<SubDealerLookupDto>>(
+                    BuildRoleScopedSubDealerLookupUrl(),
+                    requestCts.Token) ?? new();
+
+            var masterCountByState = new Dictionary<int, int>();
+            foreach (var row in masterRows)
+            {
+                masterCountByState.TryGetValue(row.StateId, out var count);
+                masterCountByState[row.StateId] = count + 1;
+            }
+
+            var summaryStates = AllowedStates
+                .Where(x => !IsUnrestricted || masterCountByState.ContainsKey(x.Id))
+                .OrderBy(x => x.StateName)
+                .ToList();
+
+            using var requestGate =
+                new SemaphoreSlim(StateSummaryMaxConcurrentRequests);
+
+            var stateTasks = summaryStates.Select(async state =>
+            {
+                await requestGate.WaitAsync(requestCts.Token);
+
+                try
+                {
+                    var savedResponse =
+                        await Http.GetFromJsonAsync<SubDealerPagedListResponse>(
+                            BuildStateSummaryListUrl(state.Id),
+                            requestCts.Token) ?? new();
+
+                    var activeCount = savedResponse.ActiveCount;
+                    var inactiveCount = savedResponse.InactiveCount;
+
+                    return new StateWiseSubDealerSummaryRow
+                    {
+                        StateId = state.Id,
+                        StateName = state.StateName,
+                        TotalSubDealers = masterCountByState.GetValueOrDefault(state.Id),
+                        SavedSubDealers = activeCount + inactiveCount,
+                        ActiveSubDealers = activeCount,
+                        InactiveSubDealers = inactiveCount
+                    };
+                }
+                finally
+                {
+                    requestGate.Release();
+                }
+            });
+
+            _stateWiseSummary = (await Task.WhenAll(stateTasks)).ToList();
+            _stateSummaryPage = 1;
+            UpdateStateSummaryView();
+        }
+        catch (OperationCanceledException) when (requestCts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"State-wise Sub Dealer summary load failed: {ex.Message}");
+            _stateWiseSummary.Clear();
+            _filteredStateWiseSummary.Clear();
+            _pagedStateWiseSummary.Clear();
+            _stateSummaryError =
+                "Could not load the state-wise Sub Dealer summary. Please refresh and try again.";
+        }
+        finally
+        {
+            _isStateSummaryLoading = false;
+
+            if (ReferenceEquals(_stateSummaryLoadCts, requestCts))
+                _stateSummaryLoadCts = null;
+
+            requestCts.Dispose();
+        }
+    }
+
+    private string BuildRoleScopedSubDealerLookupUrl()
+    {
+        const string baseUrl = "api/SubDealerRegistration/lookup";
+
+        if (IsUnrestricted)
+            return baseUrl;
+
+        if (IsMoRole && LoginState.HQId > 0)
+            return $"{baseUrl}?hqId={LoginState.HQId}";
+
+        if (IsRmRole && LoginState.RegionId > 0)
+            return $"{baseUrl}?regionId={LoginState.RegionId}";
+
+        if (IsSmmRole && LoginState.StateId > 0)
+            return $"{baseUrl}?stateId={LoginState.StateId}";
+
+        return baseUrl;
+    }
+
+    private string BuildStateSummaryListUrl(int stateId)
+    {
+        var query = new List<string>
+        {
+            "page=1",
+            "pageSize=1",
+            $"stateId={stateId}"
+        };
+
+        if (!IsUnrestricted)
+        {
+            if (IsMoRole && LoginState.HQId > 0)
+            {
+                query.Add($"hqId={LoginState.HQId}");
+            }
+            else if (IsRmRole && LoginState.RegionId > 0)
+            {
+                query.Add($"regionId={LoginState.RegionId}");
+            }
+            else if (!IsSmmRole)
+            {
+                if (LoginState.RegionId > 0)
+                    query.Add($"regionId={LoginState.RegionId}");
+
+                if (LoginState.HQId > 0)
+                    query.Add($"hqId={LoginState.HQId}");
+            }
+        }
+
+        return "api/SubDealerRegistration/list?" + string.Join("&", query);
+    }
+
+    private void UpdateStateSummaryView()
+    {
+        IEnumerable<StateWiseSubDealerSummaryRow> query = _stateWiseSummary;
+
+        if (!string.IsNullOrWhiteSpace(_stateSummarySearchText))
+        {
+            var search = _stateSummarySearchText.Trim();
+            query = query.Where(x =>
+                x.StateName.Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase) ||
+                x.TotalSubDealers.ToString().Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase) ||
+                x.SavedSubDealers.ToString().Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase) ||
+                x.ActiveSubDealers.ToString().Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase) ||
+                x.InactiveSubDealers.ToString().Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase));
+        }
+
+        query = _stateSummarySortColumn switch
+        {
+            "Total" => _stateSummarySortAscending
+                ? query.OrderBy(x => x.TotalSubDealers)
+                : query.OrderByDescending(x => x.TotalSubDealers),
+            "Saved" => _stateSummarySortAscending
+                ? query.OrderBy(x => x.SavedSubDealers)
+                : query.OrderByDescending(x => x.SavedSubDealers),
+            "Active" => _stateSummarySortAscending
+                ? query.OrderBy(x => x.ActiveSubDealers)
+                : query.OrderByDescending(x => x.ActiveSubDealers),
+            "Inactive" => _stateSummarySortAscending
+                ? query.OrderBy(x => x.InactiveSubDealers)
+                : query.OrderByDescending(x => x.InactiveSubDealers),
+            _ => _stateSummarySortAscending
+                ? query.OrderBy(
+                    x => x.StateName,
+                    StringComparer.OrdinalIgnoreCase)
+                : query.OrderByDescending(
+                    x => x.StateName,
+                    StringComparer.OrdinalIgnoreCase)
+        };
+
+        _filteredStateWiseSummary = query.ToList();
+
+        var totalPages = StateSummaryTotalPages;
+        if (totalPages == 0)
+        {
+            _stateSummaryPage = 1;
+        }
+        else if (_stateSummaryPage > totalPages)
+        {
+            _stateSummaryPage = totalPages;
+        }
+
+        UpdateStateSummaryPage();
+    }
+
+    private void UpdateStateSummaryPage()
+    {
+        _pagedStateWiseSummary = _filteredStateWiseSummary
+            .Skip((_stateSummaryPage - 1) * _stateSummaryPageSize)
+            .Take(_stateSummaryPageSize)
+            .ToList();
+    }
+
+    private void OnStateSummarySearchInput(ChangeEventArgs e)
+    {
+        _stateSummarySearchText = e.Value?.ToString() ?? string.Empty;
+        _stateSummaryPage = 1;
+        UpdateStateSummaryView();
+    }
+
+    private void OnStateSummaryPageSizeChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var value) || value <= 0)
+            value = 10;
+
+        _stateSummaryPageSize = value;
+        _stateSummaryPage = 1;
+        UpdateStateSummaryView();
+    }
+
+    private void SortStateSummary(string column)
+    {
+        if (string.Equals(
+            _stateSummarySortColumn,
+            column,
+            StringComparison.Ordinal))
+        {
+            _stateSummarySortAscending = !_stateSummarySortAscending;
+        }
+        else
+        {
+            _stateSummarySortColumn = column;
+            _stateSummarySortAscending = true;
+        }
+
+        _stateSummaryPage = 1;
+        UpdateStateSummaryView();
+    }
+
+    private string StateSummarySortIcon(string column)
+    {
+        if (!string.Equals(
+            _stateSummarySortColumn,
+            column,
+            StringComparison.Ordinal))
+        {
+            return "bi-arrow-down-up";
+        }
+
+        return _stateSummarySortAscending
+            ? "bi-chevron-up"
+            : "bi-chevron-down";
+    }
+
+    private string StateSummaryAriaSort(string column)
+    {
+        if (!string.Equals(
+            _stateSummarySortColumn,
+            column,
+            StringComparison.Ordinal))
+        {
+            return "none";
+        }
+
+        return _stateSummarySortAscending
+            ? "ascending"
+            : "descending";
+    }
+
+    private void PreviousStateSummaryPage()
+    {
+        if (_stateSummaryPage > 1)
+        {
+            _stateSummaryPage--;
+            UpdateStateSummaryPage();
+        }
+    }
+
+    private void NextStateSummaryPage()
+    {
+        if (_stateSummaryPage < StateSummaryTotalPages)
+        {
+            _stateSummaryPage++;
+            UpdateStateSummaryPage();
+        }
+    }
+
+    private void GoToStateSummaryPage(int pageNo)
+    {
+        if (pageNo >= 1 && pageNo <= StateSummaryTotalPages)
+        {
+            _stateSummaryPage = pageNo;
+            UpdateStateSummaryPage();
         }
     }
 
     private async Task RefreshAsync()
     {
         _page = 1;
-        await LoadListAsync();
+        await Task.WhenAll(
+            LoadListAsync(),
+            LoadStateWiseSummaryAsync());
     }
 
     private async Task OnSearchInput(ChangeEventArgs e)
@@ -1483,18 +2255,14 @@
                 .GroupBy(x => NormalizeMasterValue(x.StateName))
                 .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
 
-            var statesById = _states
-                .GroupBy(x => x.Id)
-                .ToDictionary(x => x.Key, x => x.First());
+            var statesById = _statesById;
 
             var regionsByStateAndName = _regions
                 .Where(x => !string.IsNullOrWhiteSpace(x.RegionName))
                 .GroupBy(x => $"{x.StateId}|{NormalizeMasterValue(x.RegionName)}")
                 .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
 
-            var regionsById = _regions
-                .GroupBy(x => x.Id)
-                .ToDictionary(x => x.Key, x => x.First());
+            var regionsById = _regionsById;
 
             var uniqueRegionsByName = _regions
                 .Where(x => !string.IsNullOrWhiteSpace(x.RegionName))
@@ -1658,7 +2426,9 @@
             // Refresh the maintained list. Untouched imported master rows remain
             // hidden by the existing list endpoint visibility rule.
             _page = 1;
-            await LoadListAsync();
+            await Task.WhenAll(
+                LoadListAsync(),
+                LoadStateWiseSummaryAsync());
             _importFile = null;
 
             if (skippedCount > 0)
@@ -1695,11 +2465,19 @@
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
 
-        var normalized = new string(value
-            .Trim()
-            .Where(char.IsLetterOrDigit)
-            .Select(char.ToUpperInvariant)
-            .ToArray());
+        var trimmed = value.Trim();
+        var buffer = new char[trimmed.Length];
+        var length = 0;
+
+        foreach (var character in trimmed)
+        {
+            if (!char.IsLetterOrDigit(character))
+                continue;
+
+            buffer[length++] = char.ToUpperInvariant(character);
+        }
+
+        var normalized = new string(buffer, 0, length);
 
         return normalized switch
         {
@@ -1727,13 +2505,19 @@
     }
 
     private string StateName(int id) =>
-        _states.FirstOrDefault(x => x.Id == id)?.StateName ?? "-";
+        _statesById.TryGetValue(id, out var state)
+            ? state.StateName
+            : "-";
 
     private string RegionName(int id) =>
-        _regions.FirstOrDefault(x => x.Id == id)?.RegionName ?? "-";
+        _regionsById.TryGetValue(id, out var region)
+            ? region.RegionName
+            : "-";
 
     private string HqName(int id) =>
-        _hqs.FirstOrDefault(x => x.Id == id)?.HeadquarterName ?? "-";
+        _hqsById.TryGetValue(id, out var hq)
+            ? hq.HeadquarterName
+            : "-";
 
     // Same download/view URL pattern used by Enclosures page.
     // The sample file must exist on the API side at:
@@ -1757,5 +2541,20 @@
         }
 
         return $"{baseUrl}/api/DealerFile/view/{urlPath}";
+    }
+
+    public void Dispose()
+    {
+        _isDisposed = true;
+
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = null;
+
+        _listLoadCts?.Cancel();
+        _listLoadCts = null;
+
+        _stateSummaryLoadCts?.Cancel();
+        _stateSummaryLoadCts = null;
     }
 }

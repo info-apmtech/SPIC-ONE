@@ -1,5 +1,6 @@
 @page "/Logistics"
 @implements IDisposable
+@using System.IO
 @using System.Net.Http.Json
 @using System.Text.RegularExpressions
 @using System.Text.Json
@@ -183,6 +184,7 @@
         display: flex;
         flex-direction: column;
         justify-content: space-between;
+        position: relative;
     }
 
         .lm-doc-card.required {
@@ -195,18 +197,17 @@
         font-size: .9rem;
         font-weight: 700;
         color: #374151;
+        padding-right: 72px;
     }
 
     .lm-doc-required-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 2px 8px;
-        border-radius: 999px;
-        font-size: .7rem;
+        display: inline;
+        padding: 0;
+        font-size: 1rem;
         font-weight: 700;
-        color: #92400e;
-        background: #fef3c7;
-        margin-left: 6px;
+        color: #dc3545;
+        background: transparent;
+        margin-left: 3px;
     }
 
     .lm-doc-selected {
@@ -232,7 +233,19 @@
         .lm-doc-existing-list li {
             margin-bottom: 4px;
             overflow-wrap: anywhere;
+            position: relative;
+            min-height: 28px;
+            padding-right: 66px;
         }
+
+    .lm-doc-list-tools {
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
 
     .lm-upload-btn {
         display: inline-flex;
@@ -277,6 +290,41 @@
         font-size: .82rem;
         font-weight: 600;
         line-height: 1;
+    }
+
+    /* View and Remove remain the same actions; only their document-card UI changes. */
+    .lm-doc-card .lm-doc-icon-btn {
+        position: absolute;
+        top: 10px;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border-radius: 7px;
+        font-size: .9rem;
+        z-index: 2;
+    }
+
+    .lm-doc-card .lm-doc-icon-btn.view {
+        right: 48px;
+        color: #047857;
+    }
+
+    .lm-doc-card .lm-doc-icon-btn.remove {
+        right: 10px;
+        color: #dc3545;
+    }
+
+    .lm-doc-card .lm-doc-icon-btn.remove:hover:not(:disabled) {
+        border-color: #fca5a5;
+        color: #b91c1c;
+        background: #fef2f2;
+    }
+
+    .lm-doc-list-icon-btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border-radius: 6px;
     }
 
         .lm-doc-action-btn:hover:not(:disabled) {
@@ -827,7 +875,8 @@
     .lm-col-createdat { width:108px; min-width:108px; text-align:center; }
     .lm-col-docs      { width:92px;  min-width:92px; text-align:center; }
     .lm-col-pdf       { width:102px; min-width:102px; text-align:center; }
-    .lm-col-action    { width:270px; min-width:270px; }
+    /* Action width follows the buttons available for the current role. */
+    .lm-col-action    { width:1%; min-width:60px; white-space:nowrap; }
 
     .lm-col-name {
         overflow:hidden;
@@ -836,30 +885,7 @@
         color:#1f2937 !important;
     }
 
-    .lm-professional-list thead .lm-col-name,
-    .lm-professional-list tbody .lm-col-name {
-        position:sticky;
-        left:0;
-        z-index:3;
-    }
-
-    .lm-professional-list thead .lm-col-name {
-        z-index:5;
-        background:#f7f9fb !important;
-        box-shadow:6px 0 10px -10px rgba(15,23,42,.45);
-    }
-
-    .lm-professional-list tbody .lm-col-name {
-        background:#fff;
-        box-shadow:6px 0 10px -10px rgba(15,23,42,.35);
-    }
-
-    .lm-professional-list tbody tr:hover .lm-col-name { background:#f8fcfa; }
-
-    /*
-       Action column should scroll normally with the table.
-       Name column remains sticky on the left.
-    */
+    /* All columns, including Name and Action, scroll normally. */
     .lm-professional-list thead .lm-col-action,
     .lm-professional-list tbody .lm-col-action {
         position: static !important;
@@ -994,7 +1020,7 @@
 
     @@media (max-width:1199.98px) {
         .lm-professional-list table { min-width:1800px; }
-        .lm-col-action { width:250px; min-width:250px; }
+        .lm-col-action { width:1%; min-width:60px; }
     }
 
     @@media (max-width:767.98px) {
@@ -1806,8 +1832,23 @@ else
                                        class="form-control-custom w-100"
                                        placeholder="10-digit mobile number"
                                        maxlength="10"
+                                       oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10)"
                                        @bind="_form.ContactNumber" />
                             </div>
+
+                            @if (IsWarehouseTab)
+                            {
+                                <div class="col-12 col-md-4">
+                                    <label class="form-label-custom">Additional Phone No</label>
+                                    <input type="tel"
+                                           inputmode="numeric"
+                                           class="form-control-custom w-100"
+                                           placeholder="10-digit mobile number"
+                                           maxlength="10"
+                                           oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10)"
+                                           @bind="_form.AdditionalPhoneNo" />
+                                </div>
+                            }
                         </div>
                     </div>
                 </div>
@@ -1840,7 +1881,7 @@ else
                                         SPIC GST Document
                                         @if (ArePvtMatrixDocumentsRequired)
                                         {
-                                            <span class="lm-doc-required-badge">Required</span>
+                                            <span class="lm-doc-required-badge" aria-label="Required">*</span>
                                         }
                                         else
                                         {
@@ -1871,19 +1912,20 @@ else
                                         <i class="bi bi-cloud-arrow-up"></i> Choose SPIC GST File
                                         <InputFile OnChange="OnGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                     </label>
-                                    @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath))
+                                    @if (_gstDocumentFile != null || !string.IsNullOrWhiteSpace(_form.GstDocumentPath))
                                     {
-                                        <button type="button" class="lm-doc-action-btn" title="View SPIC GST Document" @onclick="() => ViewLogisticsDocument(_form.GstDocumentPath)">
-                                            <i class="bi bi-eye"></i> View
+                                        <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View SPIC GST Document" title="View SPIC GST Document" @onclick="() => ViewSelectedOrSavedDocument(_gstDocumentFile, _form.GstDocumentPath)">
+                                            <i class="bi bi-eye"></i>
                                         </button>
                                     }
                                     @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath) || _gstDocumentFile != null)
                                     {
                                         <button type="button"
-                                                class="lm-doc-action-btn"
+                                                class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                                aria-label="Remove SPIC GST Document"
                                                 title="Remove SPIC GST Document"
                                                 @onclick="RemoveGstDocument">
-                                            <i class="bi bi-trash"></i> Remove
+                                            <i class="bi bi-trash"></i>
                                         </button>
                                     }
                                 </div>
@@ -1899,7 +1941,7 @@ else
                                         GREEN STAR GST Document
                                         @if (ArePvtMatrixDocumentsRequired)
                                         {
-                                            <span class="lm-doc-required-badge">Required</span>
+                                            <span class="lm-doc-required-badge" aria-label="Required">*</span>
                                         }
                                         else
                                         {
@@ -1930,19 +1972,20 @@ else
                                         <i class="bi bi-cloud-arrow-up"></i> Choose GREEN STAR GST File
                                         <InputFile OnChange="OnGflGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                     </label>
-                                    @if (!string.IsNullOrWhiteSpace(_gflGstDocumentPath))
+                                    @if (_gflGstDocumentFile != null || !string.IsNullOrWhiteSpace(_gflGstDocumentPath))
                                     {
-                                        <button type="button" class="lm-doc-action-btn" title="View GREEN STAR GST Document" @onclick="() => ViewLogisticsDocument(_gflGstDocumentPath)">
-                                            <i class="bi bi-eye"></i> View
+                                        <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View GREEN STAR GST Document" title="View GREEN STAR GST Document" @onclick="() => ViewSelectedOrSavedDocument(_gflGstDocumentFile, _gflGstDocumentPath)">
+                                            <i class="bi bi-eye"></i>
                                         </button>
                                     }
                                     @if (!string.IsNullOrWhiteSpace(_gflGstDocumentPath) || _gflGstDocumentFile != null)
                                     {
                                         <button type="button"
-                                                class="lm-doc-action-btn"
+                                                class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                                aria-label="Remove GREEN STAR GST Document"
                                                 title="Remove GREEN STAR GST Document"
                                                 @onclick="RemoveGflGstDocument">
-                                            <i class="bi bi-trash"></i> Remove
+                                            <i class="bi bi-trash"></i>
                                         </button>
                                     }
                                 </div>
@@ -1976,19 +2019,20 @@ else
                                     <i class="bi bi-cloud-arrow-up"></i> Choose Trading File
                                     <InputFile OnChange="OnTradingDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                 </label>
-                                @if (!string.IsNullOrWhiteSpace(_tradingDocumentPath))
+                                @if (_tradingDocumentFile != null || !string.IsNullOrWhiteSpace(_tradingDocumentPath))
                                 {
-                                    <button type="button" class="lm-doc-action-btn" title="View Trading Document" @onclick="() => ViewLogisticsDocument(_tradingDocumentPath)">
-                                        <i class="bi bi-eye"></i> View
+                                    <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View Trading Document" title="View Trading Document" @onclick="() => ViewSelectedOrSavedDocument(_tradingDocumentFile, _tradingDocumentPath)">
+                                        <i class="bi bi-eye"></i>
                                     </button>
                                 }
                                 @if (HasTradingDocument)
                                 {
                                     <button type="button"
-                                            class="lm-doc-action-btn"
+                                            class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                            aria-label="Remove Trading Document"
                                             title="Remove Trading Document"
                                             @onclick="RemoveTradingDocument">
-                                        <i class="bi bi-trash"></i> Remove
+                                        <i class="bi bi-trash"></i>
                                     </button>
                                 }
                             </div>
@@ -2003,7 +2047,7 @@ else
                                     <div>
                                         <div class="lm-doc-card-title">
                                             SPIC Insurance Document
-                                            <span class="lm-doc-required-badge">Required</span>
+                                            <span class="lm-doc-required-badge" aria-label="Required">*</span>
                                         </div>
 
                                         @if (_spicInsuranceDocumentFile != null)
@@ -2030,19 +2074,20 @@ else
                                             <i class="bi bi-cloud-arrow-up"></i> Choose SPIC Insurance File
                                             <InputFile OnChange="OnSpicInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                         </label>
-                                        @if (!string.IsNullOrWhiteSpace(_spicInsuranceDocumentPath))
+                                        @if (_spicInsuranceDocumentFile != null || !string.IsNullOrWhiteSpace(_spicInsuranceDocumentPath))
                                         {
-                                            <button type="button" class="lm-doc-action-btn" title="View SPIC Insurance Document" @onclick="() => ViewLogisticsDocument(_spicInsuranceDocumentPath)">
-                                                <i class="bi bi-eye"></i> View
+                                            <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View SPIC Insurance Document" title="View SPIC Insurance Document" @onclick="() => ViewSelectedOrSavedDocument(_spicInsuranceDocumentFile, _spicInsuranceDocumentPath)">
+                                                <i class="bi bi-eye"></i>
                                             </button>
                                         }
                                         @if (!string.IsNullOrWhiteSpace(_spicInsuranceDocumentPath) || _spicInsuranceDocumentFile != null)
                                         {
                                             <button type="button"
-                                                    class="lm-doc-action-btn"
+                                                    class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                                    aria-label="Remove SPIC Insurance Document"
                                                     title="Remove SPIC Insurance Document"
                                                     @onclick="RemoveSpicInsuranceDocument">
-                                                <i class="bi bi-trash"></i> Remove
+                                                <i class="bi bi-trash"></i>
                                             </button>
                                         }
                                     </div>
@@ -2055,7 +2100,7 @@ else
                                     <div>
                                         <div class="lm-doc-card-title">
                                             GREEN STAR Insurance Document
-                                            <span class="lm-doc-required-badge">Required</span>
+                                            <span class="lm-doc-required-badge" aria-label="Required">*</span>
                                         </div>
 
                                         @if (_gflInsuranceDocumentFile != null)
@@ -2082,19 +2127,20 @@ else
                                             <i class="bi bi-cloud-arrow-up"></i> Choose GREEN STAR Insurance File
                                             <InputFile OnChange="OnGflInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                         </label>
-                                        @if (!string.IsNullOrWhiteSpace(_gflInsuranceDocumentPath))
+                                        @if (_gflInsuranceDocumentFile != null || !string.IsNullOrWhiteSpace(_gflInsuranceDocumentPath))
                                         {
-                                            <button type="button" class="lm-doc-action-btn" title="View GREEN STAR Insurance Document" @onclick="() => ViewLogisticsDocument(_gflInsuranceDocumentPath)">
-                                                <i class="bi bi-eye"></i> View
+                                            <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View GREEN STAR Insurance Document" title="View GREEN STAR Insurance Document" @onclick="() => ViewSelectedOrSavedDocument(_gflInsuranceDocumentFile, _gflInsuranceDocumentPath)">
+                                                <i class="bi bi-eye"></i>
                                             </button>
                                         }
                                         @if (!string.IsNullOrWhiteSpace(_gflInsuranceDocumentPath) || _gflInsuranceDocumentFile != null)
                                         {
                                             <button type="button"
-                                                    class="lm-doc-action-btn"
+                                                    class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                                    aria-label="Remove GREEN STAR Insurance Document"
                                                     title="Remove GREEN STAR Insurance Document"
                                                     @onclick="RemoveGflInsuranceDocument">
-                                                <i class="bi bi-trash"></i> Remove
+                                                <i class="bi bi-trash"></i>
                                             </button>
                                         }
                                     </div>
@@ -2111,7 +2157,7 @@ else
                                         SPIC Fertilizer License
                                         @if (ArePvtMatrixDocumentsRequired)
                                         {
-                                            <span class="lm-doc-required-badge">Required</span>
+                                            <span class="lm-doc-required-badge" aria-label="Required">*</span>
                                         }
                                         else
                                         {
@@ -2142,19 +2188,20 @@ else
                                         <i class="bi bi-cloud-arrow-up"></i> Choose SPIC License File
                                         <InputFile OnChange="OnFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                     </label>
-                                    @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath))
+                                    @if (_fertilizerLicenseDocumentFile != null || !string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath))
                                     {
-                                        <button type="button" class="lm-doc-action-btn" title="View SPIC Fertilizer License" @onclick="() => ViewLogisticsDocument(_form.FertilizerLicenseDocumentPath)">
-                                            <i class="bi bi-eye"></i> View
+                                        <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View SPIC Fertilizer License" title="View SPIC Fertilizer License" @onclick="() => ViewSelectedOrSavedDocument(_fertilizerLicenseDocumentFile, _form.FertilizerLicenseDocumentPath)">
+                                            <i class="bi bi-eye"></i>
                                         </button>
                                     }
                                     @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath) || _fertilizerLicenseDocumentFile != null)
                                     {
                                         <button type="button"
-                                                class="lm-doc-action-btn"
+                                                class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                                aria-label="Remove SPIC Fertilizer License"
                                                 title="Remove SPIC Fertilizer License"
                                                 @onclick="RemoveFertilizerLicenseDocument">
-                                            <i class="bi bi-trash"></i> Remove
+                                            <i class="bi bi-trash"></i>
                                         </button>
                                     }
                                 </div>
@@ -2170,7 +2217,7 @@ else
                                         GREEN STAR Fertilizer License
                                         @if (ArePvtMatrixDocumentsRequired)
                                         {
-                                            <span class="lm-doc-required-badge">Required</span>
+                                            <span class="lm-doc-required-badge" aria-label="Required">*</span>
                                         }
                                         else
                                         {
@@ -2201,19 +2248,20 @@ else
                                         <i class="bi bi-cloud-arrow-up"></i> Choose GREEN STAR License File
                                         <InputFile OnChange="OnGflFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                     </label>
-                                    @if (!string.IsNullOrWhiteSpace(_gflFertilizerLicenseDocumentPath))
+                                    @if (_gflFertilizerLicenseDocumentFile != null || !string.IsNullOrWhiteSpace(_gflFertilizerLicenseDocumentPath))
                                     {
-                                        <button type="button" class="lm-doc-action-btn" title="View GREEN STAR Fertilizer License" @onclick="() => ViewLogisticsDocument(_gflFertilizerLicenseDocumentPath)">
-                                            <i class="bi bi-eye"></i> View
+                                        <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View GREEN STAR Fertilizer License" title="View GREEN STAR Fertilizer License" @onclick="() => ViewSelectedOrSavedDocument(_gflFertilizerLicenseDocumentFile, _gflFertilizerLicenseDocumentPath)">
+                                            <i class="bi bi-eye"></i>
                                         </button>
                                     }
                                     @if (!string.IsNullOrWhiteSpace(_gflFertilizerLicenseDocumentPath) || _gflFertilizerLicenseDocumentFile != null)
                                     {
                                         <button type="button"
-                                                class="lm-doc-action-btn"
+                                                class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                                aria-label="Remove GREEN STAR Fertilizer License"
                                                 title="Remove GREEN STAR Fertilizer License"
                                                 @onclick="RemoveGflFertilizerLicenseDocument">
-                                            <i class="bi bi-trash"></i> Remove
+                                            <i class="bi bi-trash"></i>
                                         </button>
                                     }
                                 </div>
@@ -2231,15 +2279,23 @@ else
                                         @foreach (var path in VisibleOtherDocumentPaths)
                                         {
                                             <li>
-                                                <span class="lm-doc-viewable" title="Click to view" @onclick="() => ViewLogisticsDocument(path)">
-                                                    @GetFileName(path) <i class="bi bi-eye"></i>
+                                                <span>@GetFileName(path)</span>
+                                                <span class="lm-doc-list-tools">
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="View document"
+                                                            title="View document"
+                                                            @onclick="() => ViewLogisticsDocument(path)">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="Remove document"
+                                                            title="Remove document"
+                                                            @onclick="() => RemoveOtherDocumentPath(path)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
                                                 </span>
-                                                <button type="button"
-                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
-                                                        title="Remove document"
-                                                        @onclick="() => RemoveOtherDocumentPath(path)">
-                                                    <i class="bi bi-trash"></i> Remove
-                                                </button>
                                             </li>
                                         }
                                     </ul>
@@ -2251,12 +2307,22 @@ else
                                         {
                                             <li>
                                                 <span>@file.Name</span>
-                                                <button type="button"
-                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
-                                                        title="Remove selected document"
-                                                        @onclick="() => RemoveSelectedOtherDocument(file)">
-                                                    <i class="bi bi-trash"></i> Remove
-                                                </button>
+                                                <span class="lm-doc-list-tools">
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="View selected document"
+                                                            title="View selected document"
+                                                            @onclick="() => ViewSelectedDocument(file)">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="Remove selected document"
+                                                            title="Remove selected document"
+                                                            @onclick="() => RemoveSelectedOtherDocument(file)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </span>
                                             </li>
                                         }
                                     </ul>
@@ -2267,13 +2333,6 @@ else
                                     <i class="bi bi-cloud-arrow-up"></i> Choose Other Documents
                                     <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
                                 </label>
-                                @if (HasUploadedOtherDocuments)
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="View Other Documents" @onclick="() => ViewLogisticsDocument(VisibleOtherDocumentPaths.FirstOrDefault())">
-                                        <i class="bi bi-eye"></i> View
-                                    </button>
-                                }
-
                             </div>
                         </div>
                     </div>
@@ -2287,7 +2346,7 @@ else
                                     GST Document
                                     @if (AreCandFDocumentsRequired)
                                     {
-                                        <span class="lm-doc-required-badge">Required</span>
+                                        <span class="lm-doc-required-badge" aria-label="Required">*</span>
                                     }
                                     else
                                     {
@@ -2312,19 +2371,20 @@ else
                                     <i class="bi bi-cloud-arrow-up"></i> Choose GST File
                                     <InputFile OnChange="OnGstDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                 </label>
-                                @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath))
+                                @if (_gstDocumentFile != null || !string.IsNullOrWhiteSpace(_form.GstDocumentPath))
                                 {
-                                    <button type="button" class="lm-doc-action-btn" title="View GST Document" @onclick="() => ViewLogisticsDocument(_form.GstDocumentPath)">
-                                        <i class="bi bi-eye"></i> View
+                                    <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View GST Document" title="View GST Document" @onclick="() => ViewSelectedOrSavedDocument(_gstDocumentFile, _form.GstDocumentPath)">
+                                        <i class="bi bi-eye"></i>
                                     </button>
                                 }
                                 @if (!string.IsNullOrWhiteSpace(_form.GstDocumentPath) || _gstDocumentFile != null)
                                 {
                                     <button type="button"
-                                            class="lm-doc-action-btn"
+                                            class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                            aria-label="Remove GST Document"
                                             title="Remove GST Document"
                                             @onclick="RemoveGstDocument">
-                                        <i class="bi bi-trash"></i> Remove
+                                        <i class="bi bi-trash"></i>
                                     </button>
                                 }
                             </div>
@@ -2334,7 +2394,7 @@ else
                                 <div>
                                     <div class="lm-doc-card-title">
                                         Insurance Document
-                                        <span class="lm-doc-required-badge">Required</span>
+                                        <span class="lm-doc-required-badge" aria-label="Required">*</span>
                                     </div>
                                 @if (_insuranceDocumentFile != null)
                                 {
@@ -2354,19 +2414,20 @@ else
                                         <i class="bi bi-cloud-arrow-up"></i> Choose Insurance File
                                         <InputFile OnChange="OnInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                     </label>
-                                    @if (!string.IsNullOrWhiteSpace(CurrentInsuranceDocumentPath))
+                                    @if (_insuranceDocumentFile != null || !string.IsNullOrWhiteSpace(CurrentInsuranceDocumentPath))
                                     {
-                                        <button type="button" class="lm-doc-action-btn" title="View Insurance Document" @onclick="() => ViewLogisticsDocument(CurrentInsuranceDocumentPath)">
-                                            <i class="bi bi-eye"></i> View
+                                        <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View Insurance Document" title="View Insurance Document" @onclick="() => ViewSelectedOrSavedDocument(_insuranceDocumentFile, CurrentInsuranceDocumentPath)">
+                                            <i class="bi bi-eye"></i>
                                         </button>
                                     }
                                     @if (HasInsuranceDocument)
                                     {
                                         <button type="button"
-                                                class="lm-doc-action-btn"
+                                                class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                                aria-label="Remove Insurance Document"
                                                 title="Remove Insurance Document"
                                                 @onclick="RemoveInsuranceDocument">
-                                            <i class="bi bi-trash"></i> Remove
+                                            <i class="bi bi-trash"></i>
                                         </button>
                                     }
                                 </div>
@@ -2378,7 +2439,7 @@ else
                                     Fertilizer License
                                     @if (AreCandFDocumentsRequired)
                                     {
-                                        <span class="lm-doc-required-badge">Required</span>
+                                        <span class="lm-doc-required-badge" aria-label="Required">*</span>
                                     }
                                     else
                                     {
@@ -2403,19 +2464,20 @@ else
                                     <i class="bi bi-cloud-arrow-up"></i> Choose License File
                                     <InputFile OnChange="OnFertilizerLicenseDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                 </label>
-                                @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath))
+                                @if (_fertilizerLicenseDocumentFile != null || !string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath))
                                 {
-                                    <button type="button" class="lm-doc-action-btn" title="View Fertilizer License" @onclick="() => ViewLogisticsDocument(_form.FertilizerLicenseDocumentPath)">
-                                        <i class="bi bi-eye"></i> View
+                                    <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View Fertilizer License" title="View Fertilizer License" @onclick="() => ViewSelectedOrSavedDocument(_fertilizerLicenseDocumentFile, _form.FertilizerLicenseDocumentPath)">
+                                        <i class="bi bi-eye"></i>
                                     </button>
                                 }
                                 @if (!string.IsNullOrWhiteSpace(_form.FertilizerLicenseDocumentPath) || _fertilizerLicenseDocumentFile != null)
                                 {
                                     <button type="button"
-                                            class="lm-doc-action-btn"
+                                            class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                            aria-label="Remove Fertilizer License"
                                             title="Remove Fertilizer License"
                                             @onclick="RemoveFertilizerLicenseDocument">
-                                        <i class="bi bi-trash"></i> Remove
+                                        <i class="bi bi-trash"></i>
                                     </button>
                                 }
                             </div>
@@ -2430,15 +2492,23 @@ else
                                         @foreach (var path in VisibleOtherDocumentPaths)
                                         {
                                             <li>
-                                                <span class="lm-doc-viewable" title="Click to view" @onclick="() => ViewLogisticsDocument(path)">
-                                                    @GetFileName(path) <i class="bi bi-eye"></i>
+                                                <span>@GetFileName(path)</span>
+                                                <span class="lm-doc-list-tools">
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="View document"
+                                                            title="View document"
+                                                            @onclick="() => ViewLogisticsDocument(path)">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="Remove document"
+                                                            title="Remove document"
+                                                            @onclick="() => RemoveOtherDocumentPath(path)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
                                                 </span>
-                                                <button type="button"
-                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
-                                                        title="Remove document"
-                                                        @onclick="() => RemoveOtherDocumentPath(path)">
-                                                    <i class="bi bi-trash"></i> Remove
-                                                </button>
                                             </li>
                                         }
                                     </ul>
@@ -2450,12 +2520,22 @@ else
                                         {
                                             <li>
                                                 <span>@file.Name</span>
-                                                <button type="button"
-                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
-                                                        title="Remove selected document"
-                                                        @onclick="() => RemoveSelectedOtherDocument(file)">
-                                                    <i class="bi bi-trash"></i> Remove
-                                                </button>
+                                                <span class="lm-doc-list-tools">
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="View selected document"
+                                                            title="View selected document"
+                                                            @onclick="() => ViewSelectedDocument(file)">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="Remove selected document"
+                                                            title="Remove selected document"
+                                                            @onclick="() => RemoveSelectedOtherDocument(file)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </span>
                                             </li>
                                         }
                                     </ul>
@@ -2466,13 +2546,6 @@ else
                                     <i class="bi bi-cloud-arrow-up"></i> Choose Other Documents
                                     <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
                                 </label>
-                                @if (HasUploadedOtherDocuments)
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="View Other Documents" @onclick="() => ViewLogisticsDocument(VisibleOtherDocumentPaths.FirstOrDefault())">
-                                        <i class="bi bi-eye"></i> View
-                                    </button>
-                                }
-
                             </div>
                         </div>
                     </div>
@@ -2504,19 +2577,20 @@ else
                                         <i class="bi bi-cloud-arrow-up"></i> Choose Insurance File
                                         <InputFile OnChange="OnInsuranceDocumentSelected" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
                                     </label>
-                                    @if (!string.IsNullOrWhiteSpace(CurrentInsuranceDocumentPath))
+                                    @if (_insuranceDocumentFile != null || !string.IsNullOrWhiteSpace(CurrentInsuranceDocumentPath))
                                     {
-                                        <button type="button" class="lm-doc-action-btn" title="View Insurance Document" @onclick="() => ViewLogisticsDocument(CurrentInsuranceDocumentPath)">
-                                            <i class="bi bi-eye"></i> View
+                                        <button type="button" class="lm-doc-action-btn lm-doc-icon-btn view" aria-label="View Insurance Document" title="View Insurance Document" @onclick="() => ViewSelectedOrSavedDocument(_insuranceDocumentFile, CurrentInsuranceDocumentPath)">
+                                            <i class="bi bi-eye"></i>
                                         </button>
                                     }
                                     @if (HasInsuranceDocument)
                                     {
                                         <button type="button"
-                                                class="lm-doc-action-btn"
+                                                class="lm-doc-action-btn lm-doc-icon-btn remove"
+                                                aria-label="Remove Insurance Document"
                                                 title="Remove Insurance Document"
                                                 @onclick="RemoveInsuranceDocument">
-                                            <i class="bi bi-trash"></i> Remove
+                                            <i class="bi bi-trash"></i>
                                         </button>
                                     }
                                 </div>
@@ -2531,15 +2605,23 @@ else
                                         @foreach (var path in VisibleOtherDocumentPaths)
                                         {
                                             <li>
-                                                <span class="lm-doc-viewable" title="Click to view" @onclick="() => ViewLogisticsDocument(path)">
-                                                    @GetFileName(path) <i class="bi bi-eye"></i>
+                                                <span>@GetFileName(path)</span>
+                                                <span class="lm-doc-list-tools">
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="View document"
+                                                            title="View document"
+                                                            @onclick="() => ViewLogisticsDocument(path)">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="Remove document"
+                                                            title="Remove document"
+                                                            @onclick="() => RemoveOtherDocumentPath(path)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
                                                 </span>
-                                                <button type="button"
-                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
-                                                        title="Remove document"
-                                                        @onclick="() => RemoveOtherDocumentPath(path)">
-                                                    <i class="bi bi-trash"></i> Remove
-                                                </button>
                                             </li>
                                         }
                                     </ul>
@@ -2551,12 +2633,22 @@ else
                                         {
                                             <li>
                                                 <span>@file.Name</span>
-                                                <button type="button"
-                                                        class="lm-doc-action-btn ms-1 py-1 px-2"
-                                                        title="Remove selected document"
-                                                        @onclick="() => RemoveSelectedOtherDocument(file)">
-                                                    <i class="bi bi-trash"></i> Remove
-                                                </button>
+                                                <span class="lm-doc-list-tools">
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="View selected document"
+                                                            title="View selected document"
+                                                            @onclick="() => ViewSelectedDocument(file)">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    <button type="button"
+                                                            class="lm-doc-action-btn lm-doc-list-icon-btn"
+                                                            aria-label="Remove selected document"
+                                                            title="Remove selected document"
+                                                            @onclick="() => RemoveSelectedOtherDocument(file)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </span>
                                             </li>
                                         }
                                     </ul>
@@ -2567,13 +2659,6 @@ else
                                     <i class="bi bi-cloud-arrow-up"></i> Choose Other Documents
                                     <InputFile OnChange="OnOtherDocumentsSelected" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple hidden />
                                 </label>
-                                @if (HasUploadedOtherDocuments)
-                                {
-                                    <button type="button" class="lm-doc-action-btn" title="View Other Documents" @onclick="() => ViewLogisticsDocument(VisibleOtherDocumentPaths.FirstOrDefault())">
-                                        <i class="bi bi-eye"></i> View
-                                    </button>
-                                }
-
                             </div>
                         </div>
                     </div>
@@ -4099,6 +4184,7 @@ else
             StateId = _form.StateId,
             DistrictId = _form.DistrictId,
             ContactNumber = NullIfWhiteSpace(_form.ContactNumber),
+            AdditionalPhoneNo = NullIfWhiteSpace(_form.AdditionalPhoneNo),
 
             // PVT fields are saved for PVT and Both; otherwise null.
             SpicApprovedReservationQuantityMT = includesPvt ? _form.SpicApprovedReservationQuantityMT : null,
@@ -4250,6 +4336,7 @@ else
             StateId = item.StateId,
             DistrictId = item.DistrictId,
             ContactNumber = item.ContactNumber ?? "",
+            AdditionalPhoneNo = IsWarehouseTab ? item.AdditionalPhoneNo ?? "" : "",
 
             SpicApprovedReservationQuantityMT = item.SpicApprovedReservationQuantityMT,
             SpicAdditionalReservationQuantityMT = item.SpicAdditionalReservationQuantityMT,
@@ -4408,10 +4495,15 @@ else
         LoginState.UserRole == AppRole.AVP ||
         LoginState.UserRole == AppRole.Director;
 
-    private bool CanShowLogisticsActionColumn =>
-        LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") ||
+    private bool HasLogisticsRowAction(LogisticsItemDto item) =>
+        CanApprove(item) ||
         CanDeleteLogistics ||
-        IsApprovalRole;
+        CanEditLogisticsItem(item);
+
+    // Do not reserve an empty last column. It is rendered only when at least
+    // one currently displayed record has an action for the logged-in role.
+    private bool CanShowLogisticsActionColumn =>
+        _filteredItems.Any(HasLogisticsRowAction);
 
     private bool CanApprove(LogisticsItemDto item)
     {
@@ -4834,6 +4926,7 @@ else
         {
             columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Door No / Shop No / Room No / Block No", ValueSelector = item => item.DoorNo ?? "" });
             columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Street / Area / Locality", ValueSelector = item => item.Street ?? "" });
+            columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Additional Phone No", ValueSelector = item => item.AdditionalPhoneNo ?? "" });
         }
 
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Sub Village", ValueSelector = item => item.SubVillage ?? "" });
@@ -5538,6 +5631,43 @@ else
         }
     }
 
+    private async Task ViewSelectedOrSavedDocument(IBrowserFile? selectedFile, string? savedPath)
+    {
+        if (selectedFile != null)
+        {
+            await ViewSelectedDocument(selectedFile);
+            return;
+        }
+
+        await ViewLogisticsDocument(savedPath);
+    }
+
+    private async Task ViewSelectedDocument(IBrowserFile? file)
+    {
+        if (file == null) return;
+
+        try
+        {
+            // Match the existing 10 MB upload limit and preview the local selection
+            // without changing its upload state or the saved document path.
+            await using var stream = file.OpenReadStream(10 * 1024 * 1024);
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+
+            var contentType = string.IsNullOrWhiteSpace(file.ContentType)
+                ? GetLogisticsContentType(file.Name)
+                : file.ContentType;
+            var base64 = Convert.ToBase64String(memoryStream.ToArray());
+            var dataUrl = $"data:{contentType};base64,{base64}";
+
+            await JS.InvokeVoidAsync("window.open", dataUrl, "_blank");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to view selected document: {ex.Message}", true);
+        }
+    }
+
     private async Task ViewLogisticsDocument(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
@@ -6059,6 +6189,7 @@ else
         public int StateId { get; set; }
         public int DistrictId { get; set; }
         public string ContactNumber { get; set; } = "";
+        public string AdditionalPhoneNo { get; set; } = "";
 
         // PVT WH reservation quantities (separate SPIC & GFL).
         public decimal? SpicApprovedReservationQuantityMT { get; set; }
@@ -6106,6 +6237,7 @@ else
         public int StateId { get; set; }
         public int DistrictId { get; set; }
         public string? ContactNumber { get; set; }
+        public string? AdditionalPhoneNo { get; set; }
         public decimal? SpicApprovedReservationQuantityMT { get; set; }
         public decimal? SpicAdditionalReservationQuantityMT { get; set; }
         public decimal? GflApprovedReservationQuantityMT { get; set; }
@@ -6163,6 +6295,7 @@ else
         public int StateId { get; set; }
         public int DistrictId { get; set; }
         public string? ContactNumber { get; set; }
+        public string? AdditionalPhoneNo { get; set; }
 
         // PVT WH quantities.
         public decimal? SpicApprovedReservationQuantityMT { get; set; }

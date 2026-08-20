@@ -1,4 +1,5 @@
 @page "/Register"
+@* REQUIRED-VALIDATION BUILD: Parent Dealer and every visible starred field are enforced before navigation. *@
 @implements IDisposable
 @using System.Net.Http.Json
 @using System.Text.RegularExpressions
@@ -43,6 +44,11 @@
         border-radius: 4px;
         padding: 4px 8px;
         margin-top: 4px;
+    }
+
+    .upload-area.is-invalid {
+        border-color: #dc3545 !important;
+        box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.12);
     }
     /* Searchable Dropdown Styles */
     .searchable-select-input {
@@ -272,7 +278,7 @@
                             <div class="col-12 col-md-6">
                                 <label class="form-label-custom">Dealer Code & Name <span class="text-danger">*</span></label>
                                 <div class="position-relative">
-                                    <input type="text" class="form-select-custom searchable-select-input w-100"
+                                    <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DealerCode") ? "is-invalid" : "")"
                                            placeholder="-- New Entry --"
                                            @bind="_dealerSearchText"
                                            @bind:event="oninput"
@@ -294,14 +300,26 @@
                                         </div>
                                     }
                                 </div>
+                                @if (_errors.ContainsKey("DealerCode"))
+                                {
+                                    <div class="field-error">@_errors["DealerCode"]</div>
+                                }
                             </div>
                             <div class="col-12 col-md-6">
-                                <label class="form-label-custom">Parent Dealer Code & Name</label>
+                                <label class="form-label-custom">
+                                    Parent Dealer Code & Name
+                                    <span style="color:#dc3545;font-weight:700;" aria-hidden="true">*</span>
+                                </label>
                                 <div class="position-relative">
-                                    <input type="text" class="form-select-custom searchable-select-input w-100"
+                                    <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("ParentDealer") ? "is-invalid" : "")"
                                            placeholder="-- Select Parent Dealer --"
+                                           required
+                                           aria-required="true"
+                                           aria-invalid="@_errors.ContainsKey("ParentDealer")"
+                                           aria-describedby="parentDealerError"
                                            @bind="_parentDealerSearchText"
                                            @bind:event="oninput"
+                                           @bind:after="OnParentDealerSearchChanged"
                                            @onfocus="() => _showParentDealerDropdown = true"
                                            @onblur="HideParentDealerDropdown" />
                                     @if (_showParentDealerDropdown)
@@ -320,6 +338,10 @@
                                         </div>
                                     }
                                 </div>
+                                @if (_errors.ContainsKey("ParentDealer"))
+                                {
+                                    <div id="parentDealerError" class="field-error" role="alert">@_errors["ParentDealer"]</div>
+                                }
                             </div>
                         }
                     </div>
@@ -500,7 +522,11 @@
                             <div class="row g-3">
                                 <div class="col-12 col-sm-6">
                                     <label class="form-label-custom">Google Map URL @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
-                                    <input type="text" class="form-control-custom w-100" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Click map or Paste Google Maps link">
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("GoogleMapURL") ? "is-invalid" : "")" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Click map or Paste Google Maps link">
+                                    @if (_errors.ContainsKey("GoogleMapURL"))
+                                    {
+                                        <div class="field-error">@_errors["GoogleMapURL"]</div>
+                                    }
                                 </div>
                                 <div class="col-12 col-sm-6">
                                     <label class="form-label-custom">Latitude & Longitude @if (ShowLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
@@ -527,11 +553,19 @@
                                 </div>
                                 <div class="col-12 col-sm-6">
                                     <label class="form-label-custom">Street / Area / Locality @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
-                                    <input type="text" class="form-control-custom w-100" @bind="_model.Street" placeholder="">
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Street") ? "is-invalid" : "")" @bind="_model.Street" @bind:after='() => ValidateFieldOnChange("Street", !string.IsNullOrWhiteSpace(_model.Street))' placeholder="">
+                                    @if (_errors.ContainsKey("Street"))
+                                    {
+                                        <div class="field-error">@_errors["Street"]</div>
+                                    }
                                 </div>
                                 <div class="col-12 col-sm-6">
                                     <label class="form-label-custom">Sub Village @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
-                                    <input type="text" class="form-control-custom w-100" @bind="_model.SubVillage" placeholder="Enter Sub Village">
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("SubVillage") ? "is-invalid" : "")" @bind="_model.SubVillage" @bind:after='() => ValidateFieldOnChange("SubVillage", !string.IsNullOrWhiteSpace(_model.SubVillage))' placeholder="Enter Sub Village">
+                                    @if (_errors.ContainsKey("SubVillage"))
+                                    {
+                                        <div class="field-error">@_errors["SubVillage"]</div>
+                                    }
                                 </div>
 
                                 <div class="col-12 col-sm-6">
@@ -570,11 +604,19 @@
 
                         <div class="col-6 col-sm-6 col-md-3">
                             <label class="form-label-custom">Block @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
-                            <input type="text" class="form-control-custom w-100" @bind="_model.Block" placeholder="Enter Block">
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Block") ? "is-invalid" : "")" @bind="_model.Block" @bind:after='() => ValidateFieldOnChange("Block", !string.IsNullOrWhiteSpace(_model.Block))' placeholder="Enter Block">
+                            @if (_errors.ContainsKey("Block"))
+                            {
+                                <div class="field-error">@_errors["Block"]</div>
+                            }
                         </div>
                         <div class="col-6 col-sm-6 col-md-3">
                             <label class="form-label-custom">Taluk @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
-                            <input type="text" class="form-control-custom w-100" @bind="_model.Taluk" placeholder="Enter Taluk">
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Taluk") ? "is-invalid" : "")" @bind="_model.Taluk" @bind:after='() => ValidateFieldOnChange("Taluk", !string.IsNullOrWhiteSpace(_model.Taluk))' placeholder="Enter Taluk">
+                            @if (_errors.ContainsKey("Taluk"))
+                            {
+                                <div class="field-error">@_errors["Taluk"]</div>
+                            }
                         </div>
                         <div class="col-12 col-sm-6 col-md-3">
                             <label class="form-label-custom">District @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
@@ -680,12 +722,16 @@
                             <input type="tel"
                                    inputmode="numeric"
                                    pattern="[0-9]*"
-                                   class="form-control-custom w-100"
+                                   class="form-control-custom w-100 @(_errors.ContainsKey("AlternativeNumber") ? "is-invalid" : "")"
                                    @bind="_model.AlternativeNumber"
                                    @bind:after="SanitizeAlternativeNumber"
                                    placeholder="10-digit mobile number"
                                    maxlength="10"
                                    oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                            @if (_errors.ContainsKey("AlternativeNumber"))
+                            {
+                                <div class="field-error">@_errors["AlternativeNumber"]</div>
+                            }
                         </div>
                     </div>
                 </div>
@@ -886,7 +932,7 @@
                     <div class="row g-3">
                         <div class="col-12 col-md-4">
                             <div class="compliance-card gst">
-                                <div class="fw-bold small mb-2"><i class="bi bi-file-earmark-text text-success me-2"></i>GST Number <span class="text-danger">*</span></div>
+                                <div class="fw-bold small mb-2"><i class="bi bi-file-earmark-text text-success me-2"></i>GST Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</div>
                                 <label class="form-label-custom">GST Number</label>
                                 <div class="input-with-loader">
                                     <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("GSTNumber") ? "is-invalid" : "")" @bind="_model.GSTNumber" @bind:after="OnGSTNumberChanged" placeholder="15-character GST Number" maxlength="15" style="text-transform: uppercase">
@@ -916,9 +962,9 @@
       @bind="_model.GSTConstitutionofBusiness"/>
                                
                                 <div class="mt-2">
-                                    <label class="upload-area">
+                                    <label class="upload-area @(_errors.ContainsKey("GSTFile") ? "is-invalid" : "")">
                                         <i class="bi bi-cloud-arrow-up text-success"></i>
-                                        <span class="small text-success fw-600">Upload GST Certificate (PDF) *</span>
+                                        <span class="small text-success fw-600">Upload GST Certificate (PDF)@(ShowFullSectionRequiredMarks ? " *" : "")</span>
                                         <InputFile OnChange="HandleGstUpload" accept=".pdf" hidden />
                                         @if (_errors.ContainsKey("GSTFile"))
                                         {
@@ -940,7 +986,7 @@
                         </div>
                         <div class="col-12 col-md-4">
                             <div class="compliance-card pan">
-                                <div class="fw-bold small mb-2"><i class="bi bi-person-badge text-primary me-2"></i>PAN Number <span class="text-danger">*</span></div>
+                                <div class="fw-bold small mb-2"><i class="bi bi-person-badge text-primary me-2"></i>PAN Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</div>
                                 <label class="form-label-custom">PAN Number</label>
                                 <div class="input-with-loader">
                                     <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("PANNumber") ? "is-invalid" : "")" @bind="_model.PANNumber" @bind:after="OnPANNumberChanged" placeholder="10-character PAN Number" maxlength="10" style="text-transform: uppercase">
@@ -958,9 +1004,9 @@
                                     <div class="ocr-warning">@_ocrWarningPan</div>
                                 }
                                 <div class="mt-2">
-                                    <label class="upload-area">
+                                    <label class="upload-area @(_errors.ContainsKey("PANFile") ? "is-invalid" : "")">
                                         <i class="bi bi-cloud-arrow-up text-primary"></i>
-                                        <span class="small text-primary fw-600">Upload PAN Card (PDF) *</span>
+                                        <span class="small text-primary fw-600">Upload PAN Card (PDF)@(ShowFullSectionRequiredMarks ? " *" : "")</span>
                                         <InputFile OnChange="HandlePanUpload" accept=".pdf" hidden />
                                         @if (_errors.ContainsKey("PANFile"))
                                         {
@@ -981,9 +1027,9 @@
                             </div>
                         </div>
 
-                        <div class="col-12 col-md-4">
-                            <div class="compliance-card aadhaar">
-                                <div class="fw-bold small mb-2"><i class="bi bi-fingerprint text-danger me-2"></i>Aadhaar Number <span class="text-danger">*</span></div>
+                        <div class="col-12 col-md-4 d-flex flex-column gap-3">
+                            <div class="compliance-card aadhaar flex-fill">
+                                <div class="fw-bold small mb-2"><i class="bi bi-fingerprint text-danger me-2"></i>Aadhaar Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</div>
                                 <label class="form-label-custom">Aadhaar Number</label>
                                 <div class="input-with-loader">
                                     <input type="text"
@@ -1009,9 +1055,9 @@
                                 }
 
                                 <div class="mt-2">
-                                    <label class="upload-area">
+                                    <label class="upload-area @(_errors.ContainsKey("AadhaarFile") ? "is-invalid" : "")">
                                         <i class="bi bi-cloud-arrow-up text-danger"></i>
-                                        <span class="small text-danger fw-600">Upload E-Aadhaar Card (PDF) *</span>
+                                        <span class="small text-danger fw-600">Upload E-Aadhaar Card (PDF)@(ShowFullSectionRequiredMarks ? " *" : "")</span>
                                         <InputFile OnChange="HandleAadhaarUpload" accept=".pdf" hidden />
                                         @if (_errors.ContainsKey("AadhaarFile"))
                                         {
@@ -1031,11 +1077,9 @@
                                 </div>
 
                             </div>
-                        </div>
 
-                        <div class="col-12 col-md-4">
-                            <div class="compliance-card tan">
-                                <div class="fw-bold small mb-2"><i class="bi bi-file-earmark-person text-warning me-2"></i>TAN Number @if (ShowTanRequiredMark) { <span class="text-danger">*</span> }</div>
+                            <div class="compliance-card tan flex-fill">
+                                <div class="fw-bold small mb-2"><i class="bi bi-file-earmark-person text-warning me-2"></i>TAN Number</div>
                                 <label class="form-label-custom">TAN Number</label>
                                 <div class="input-with-loader">
                                     <input type="text"
@@ -1063,7 +1107,7 @@
                                 <div class="mt-2">
                                     <label class="upload-area">
                                         <i class="bi bi-cloud-arrow-up text-warning"></i>
-                                        <span class="small text-warning fw-600">Upload TAN Document (PDF)@(ShowTanRequiredMark ? " *" : "")</span>
+                                        <span class="small text-warning fw-600">Upload TAN Document (PDF)</span>
                                         <InputFile OnChange="HandleTanUpload" accept=".pdf" hidden />
                                         @if (_errors.ContainsKey("TANFile"))
                                         {
@@ -1397,10 +1441,6 @@
     // Trade Deposit Details (SPIC/Greenstar) are mandatory only when registration type = Dealer.
     private bool ShowTradeDepositRequiredMarks => IsDealerSelected && ShowFullRegistrationSections && !IsInactiveNotTraceable;
 
-    // TAN is mandatory only while the dealer status is Active; Inactive (any sub-reason)
-    // and Terminated leave it optional (format is still validated if a value is entered).
-    private bool ShowTanRequiredMark => status == "Active";
-
     private bool ShowInactiveStatus => status == "Inactive";
     private bool ShowTerminatedStatus => status == "Terminated";
 
@@ -1664,6 +1704,9 @@
         _model.Longitude = lng;
         SyncLatitudeLongitudeText();
         _model.GoogleMapURL = $"http://maps.google.com/maps?q={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        _errors.Remove("GoogleMapURL");
+        _errors.Remove("Latitude");
+        _errors.Remove("Longitude");
         _locationMessage = $"Location selected from Map: {lat:F6}, {lng:F6}";
         _locationSuccess = true;
         StateHasChanged();
@@ -1755,6 +1798,7 @@
     private void SanitizeAlternativeNumber()
     {
         _model.AlternativeNumber = new string(_model.AlternativeNumber?.Where(char.IsDigit).ToArray() ?? []);
+        ValidateFieldOnChange("AlternativeNumber", _model.AlternativeNumber?.Length == 10);
     }
 
     private void SanitizeFirmName()
@@ -2026,6 +2070,7 @@
         _dealerSearchText = displayText;
         _showDealerDropdown = false;
         _dealerCodeId = id;
+        if (id > 0) _errors.Remove("DealerCode");
         await OnDealerCodeChanged();
         StateHasChanged();
     }
@@ -2035,6 +2080,18 @@
         _parentDealerSearchText = displayText;
         _showParentDealerDropdown = false;
         _parentDealerId = id;
+        if (id > 0) _errors.Remove("ParentDealer");
+    }
+
+    private void OnParentDealerSearchChanged()
+    {
+        var selectedParent = _filteredDealers.FirstOrDefault(d => d.Id == _parentDealerId);
+        var selectedDisplayText = selectedParent == null
+            ? ""
+            : $"{selectedParent.DealerCode} - {selectedParent.FirmName}";
+
+        if (!string.Equals(_parentDealerSearchText.Trim(), selectedDisplayText, StringComparison.OrdinalIgnoreCase))
+            _parentDealerId = 0;
     }
 
     private void SelectState(int id, string displayText)
@@ -2042,6 +2099,7 @@
         _stateSearchText = displayText;
         _showStateDropdown = false;
         _model.DealerStateId = id;
+        ValidateFieldOnChange("DealerStateId", _model.DealerStateId > 0);
         OnDealerStateChanged();
     }
 
@@ -2050,6 +2108,7 @@
         _districtSearchText = displayText;
         _showDistrictDropdown = false;
         _model.DistrictId = id;
+        ValidateFieldOnChange("DistrictId", _model.DistrictId > 0);
     }
 
     private void SelectBank(int id, string displayText)
@@ -2149,6 +2208,9 @@
         if (_basicInfoStateId == 0) _errors["StateId"] = "State is required in Basic Information";
         if (_basicInfoRegionId == 0) _errors["Region"] = "Region is required in Basic Information";
         if (_basicInfoHqId == 0) _errors["HQ"] = "HQ is required in Basic Information";
+        if (!IsNewDealerFlow && _dealerCodeId == 0) _errors["DealerCode"] = "Dealer Code & Name is required";
+        if (!IsNewDealerFlow && (_parentDealerId == 0 || string.IsNullOrWhiteSpace(_parentDealerSearchText)))
+            _errors["ParentDealer"] = "Parent Dealer Code & Name is required";
 
         if (string.IsNullOrWhiteSpace(_model.FirmName)) _errors["FirmName"] = "Firm Name is required";
 
@@ -2168,8 +2230,13 @@
 
         if (ShowFullRegistrationSections && !isDept && !IsInactiveNotTraceable)
         {
+            if (string.IsNullOrWhiteSpace(_model.GoogleMapURL)) _errors["GoogleMapURL"] = "Google Map URL is required";
             if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
+            if (string.IsNullOrWhiteSpace(_model.Street)) _errors["Street"] = "Street / Area / Locality is required";
+            if (string.IsNullOrWhiteSpace(_model.SubVillage)) _errors["SubVillage"] = "Sub Village is required";
             if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";
+            if (string.IsNullOrWhiteSpace(_model.Block)) _errors["Block"] = "Block is required";
+            if (string.IsNullOrWhiteSpace(_model.Taluk)) _errors["Taluk"] = "Taluk is required";
             // Location is mandatory for both:
             // 1) the existing New Dealer flow, and
             // 2) an Existing Dealer selected/edited from Dealer Code & Name.
@@ -2191,6 +2258,8 @@
             else if (_model.OfficialContactNumber.Length != 10) _errors["OfficialContactNumber"] = "Official Contact Number must be 10 digits";
             if (string.IsNullOrWhiteSpace(_model.WhatsAppNumber)) _errors["WhatsAppNumber"] = "WhatsApp Number is required";
             else if (_model.WhatsAppNumber.Length != 10) _errors["WhatsAppNumber"] = "WhatsApp Number must be 10 digits";
+            if (string.IsNullOrWhiteSpace(_model.AlternativeNumber)) _errors["AlternativeNumber"] = "Alternative Number is required";
+            else if (_model.AlternativeNumber.Length != 10) _errors["AlternativeNumber"] = "Alternative Number must be 10 digits";
 
             if (string.IsNullOrWhiteSpace(_model.AccountHolderName)) _errors["AccountHolderName"] = "Account Holder Name is required";
             if (string.IsNullOrWhiteSpace(_model.AccountNumber)) _errors["AccountNumber"] = "Account Number is required";
@@ -2213,14 +2282,7 @@
                 _errors["AadhaarNumber"] = "Aadhaar must be exactly 12 digits";
             if (string.IsNullOrEmpty(_model.AadhaarFilePath)) _errors["AadhaarFile"] = "Aadhaar Card PDF is required";
 
-            if (ShowTanRequiredMark)
-            {
-                if (string.IsNullOrWhiteSpace(_model.TANNumber)) _errors["TANNumber"] = "TAN Number is required";
-                else if (!Regex.IsMatch(_model.TANNumber, @"^[A-Z]{4}[0-9]{5}[A-Z]{1}$"))
-                    _errors["TANNumber"] = "Invalid TAN format (e.g., ABCD12345E)";
-                if (string.IsNullOrEmpty(_model.TANFilePath)) _errors["TANFile"] = "TAN Document PDF is required";
-            }
-            else if (!string.IsNullOrWhiteSpace(_model.TANNumber) && !Regex.IsMatch(_model.TANNumber, @"^[A-Z]{4}[0-9]{5}[A-Z]{1}$"))
+            if (!string.IsNullOrWhiteSpace(_model.TANNumber) && !Regex.IsMatch(_model.TANNumber, @"^[A-Z]{4}[0-9]{5}[A-Z]{1}$"))
             {
                 _errors["TANNumber"] = "Invalid TAN format (e.g., ABCD12345E)";
             }
@@ -2457,6 +2519,13 @@
             }
 
             Nav.NavigateTo($"/Experience?dealerId={_model.Id}&mode=view{RegistrationFlowParam}");
+            return;
+        }
+
+        // Block every editable flow before navigation when a visible required field is invalid.
+        if (!Validate())
+        {
+            SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, true);
             return;
         }
 
@@ -3067,6 +3136,8 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
             return;
         }
 
+        _errors.Remove("GoogleMapURL");
+
         var url = _model.GoogleMapURL.Trim();
 
         if (url.Contains("goo.gl") || url.Contains("maps.app.goo.gl"))
@@ -3185,6 +3256,9 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
                 _model.Longitude = result.Longitude;
                 SyncLatitudeLongitudeText();
                 _model.GoogleMapURL = $"http://maps.google.com/maps?q={result.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{result.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+                _errors.Remove("GoogleMapURL");
+                _errors.Remove("Latitude");
+                _errors.Remove("Longitude");
                 _locationMessage = $"Location captured: {result.Latitude:F6}, {result.Longitude:F6}";
                 _locationSuccess = true;
                 await TriggerMapUpdate(result.Latitude, result.Longitude);
@@ -3237,7 +3311,12 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
     private void OnLastTransactionDateChanged(ChangeEventArgs e)
     {
         var newVal = e.Value?.ToString();
-        if (string.IsNullOrEmpty(newVal)) return;
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _lastTransactionDateText = "";
+            _model.LastTransactionDate = null;
+            return;
+        }
 
         _lastTransactionDateText = newVal;
         if (DateTime.TryParse(newVal, out var dt))
@@ -3250,7 +3329,12 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
     private void OnFinalApprovalDateChanged(ChangeEventArgs e)
     {
         var newVal = e.Value?.ToString();
-        if (string.IsNullOrEmpty(newVal)) return;
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _finalApprovalDateText = "";
+            _model.FinalApprovalDate = null;
+            return;
+        }
 
         _finalApprovalDateText = newVal;
         if (DateTime.TryParse(newVal, out var dt))
@@ -3263,7 +3347,12 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
     private void OnSettlementDateChanged(ChangeEventArgs e)
     {
         var newVal = e.Value?.ToString();
-        if (string.IsNullOrEmpty(newVal)) return;
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _settlementDateText = "";
+            _model.SettlementDate = null;
+            return;
+        }
 
         _settlementDateText = newVal;
         if (DateTime.TryParse(newVal, out var dt))
@@ -3276,7 +3365,12 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
     private void OnTradeDepositDateChanged(ChangeEventArgs e)
     {
         var newVal = e.Value?.ToString();
-        if (string.IsNullOrEmpty(newVal)) return;
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _tradeDepositDateText = "";
+            _model.TradeDepositDate = null;
+            return;
+        }
 
         _tradeDepositDateText = newVal;
         if (DateTime.TryParse(newVal, out var dt))
@@ -3288,7 +3382,12 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
     private void OnGreenstarTradeDepositDateChanged(ChangeEventArgs e)
     {
         var newVal = e.Value?.ToString();
-        if (string.IsNullOrEmpty(newVal)) return;
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _greenstarTradeDepositDateText = "";
+            _model.GreenstarTradeDepositDateReg = null;
+            return;
+        }
 
         _greenstarTradeDepositDateText = newVal;
         if (DateTime.TryParse(newVal, out var dt))
