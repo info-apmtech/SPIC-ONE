@@ -259,7 +259,7 @@
     <div class="sts-chip yell">
       <div class="sts-content">
         <div class="sts-lbl">Pending Applications</div>
-        <div class="sts-num">3</div>
+        <div class="sts-num">@(_isLoadingApps ? "…" : CountPending().ToString())</div>
       </div>
       <div class="sts-ico">
         <svg width="61" height="61" viewBox="0 0 61 61" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -275,7 +275,7 @@
     <div class="sts-chip grn">
       <div class="sts-content">
         <div class="sts-lbl">Approved Applications</div>
-        <div class="sts-num">7</div>
+        <div class="sts-num">@(_isLoadingApps ? "…" : CountApproved().ToString())</div>
       </div>
       <div class="sts-ico">
         <svg width="61" height="61" viewBox="0 0 61 61" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -289,7 +289,7 @@
     <div class="sts-chip scarl">
       <div class="sts-content">
         <div class="sts-lbl">Rejected Applications</div>
-        <div class="sts-num">1</div>
+        <div class="sts-num">@(_isLoadingApps ? "…" : CountRejected().ToString())</div>
       </div>
       <div class="sts-ico">
         <svg width="61" height="61" viewBox="0 0 61 61" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -306,7 +306,7 @@
     <div class="sts-chip indg">
       <div class="sts-content">
         <div class="sts-lbl">Processing Applications</div>
-        <div class="sts-num">2</div>
+        <div class="sts-num">@(_isLoadingApps ? "…" : CountProcessing().ToString())</div>
       </div>
       <div class="sts-ico">
         <svg width="61" height="61" viewBox="0 0 61 61" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -330,84 +330,68 @@
   <div class="wht-panel-split">
     <div class="panel-header-row">
       <h2 class="wht-panel-ttl">Recent Applications</h2>
-      <button class="dark-view-btn">View All</button>
+      <button class="dark-view-btn" @onclick="NavigateToMyApplications">View All</button>
     </div>
 
-    <div class="appl-card">
-      <div class="appl-top">
-        <div>
-          <div class="appl-name">Medical Assistance</div>
-          <div class="appl-ref">SDWA-WF-2026-0012<br>Applied: 02 May 2026</div>
+    @if (_isLoadingApps)
+    {
+        <div class="appl-empty">Loading your applications…</div>
+    }
+    else if (_appsLoadError != null)
+    {
+        <div class="appl-empty">
+            @_appsLoadError
+            <div style="margin-top:10px;"><button class="dark-view-btn" @onclick="LoadApplications">Retry</button></div>
         </div>
-        <span class="appl-tag orange">RM Review Pending</span>
-      </div>
-      
-      <div class="appl-trail-wrapper">
-        <div class="trail-bg-line"></div>
-        <div class="appl-trail">
-          <div class="trail-step">
-            <div class="trail-node done"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></div>
-            <div class="trail-step-lbl">Submitted</div>
-          </div>
-          <div class="trail-step">
-            <div class="trail-node done"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></div>
-            <div class="trail-step-lbl">MO Approved</div>
-          </div>
-          <div class="trail-step">
-            <div class="trail-node active">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" /></svg>
+    }
+    else if (_recentApps.Count == 0)
+    {
+        <div class="appl-empty">No applications yet. Tap Apply Welfare to submit your first application.</div>
+    }
+    else
+    {
+        @foreach (var app in _recentApps)
+        {
+            var tag = GetApplTag(app.Status);
+            var trail = BuildDashTrail(app.Status);
+            <div class="appl-card">
+              <div class="appl-top">
+                <div>
+                  <div class="appl-name">@app.SchemeName</div>
+                  <div class="appl-ref">@(app.ApplicationNumber ?? "-")<br>Applied: @FormatDate(app.ApplicationDate)</div>
+                </div>
+                <span class="appl-tag @tag.cls">@tag.txt</span>
+              </div>
+
+              <div class="appl-trail-wrapper">
+                <div class="trail-bg-line"></div>
+                <div class="appl-trail">
+                  @foreach (var step in trail)
+                  {
+                    <div class="trail-step">
+                      @if (step.NodeClass == "done")
+                      {
+                        <div class="trail-node done"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></div>
+                      }
+                      else if (step.NodeClass == "active")
+                      {
+                        <div class="trail-node active">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" /></svg>
+                        </div>
+                      }
+                      else
+                      {
+                        <div class="trail-node idle"></div>
+                      }
+                      <div class="trail-step-lbl">@step.Label</div>
+                    </div>
+                  }
+                </div>
+              </div>
+              <button class="appl-detail-btn" @onclick="() => OpenDetails(app.Id)">View Details</button>
             </div>
-            <div class="trail-step-lbl">RM Review</div>
-          </div>
-          <div class="trail-step">
-            <div class="trail-node idle"></div>
-            <div class="trail-step-lbl">SMM Pending</div>
-          </div>
-          <div class="trail-step">
-            <div class="trail-node idle"></div>
-            <div class="trail-step-lbl">SDWA Pending</div>
-          </div>
-        </div>
-      </div>
-      <button class="appl-detail-btn">View Details</button>
-    </div>
-
-    <div class="appl-card">
-      <div class="appl-top">
-        <div>
-          <div class="appl-name">Wedding Gift</div>
-          <div class="appl-ref">SDWA-WF-2026-0009<br>Applied: 02 May 2026</div>
-        </div>
-        <span class="appl-tag green">Approved</span>
-      </div>
-      
-      <div class="appl-trail-wrapper">
-        <div class="trail-bg-line"></div>
-        <div class="appl-trail">
-          <div class="trail-step">
-            <div class="trail-node done"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></div>
-            <div class="trail-step-lbl">Submitted</div>
-          </div>
-          <div class="trail-step">
-            <div class="trail-node done"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></div>
-            <div class="trail-step-lbl">MO Approved</div>
-          </div>
-          <div class="trail-step">
-            <div class="trail-node done"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></div>
-            <div class="trail-step-lbl">RM Review</div>
-          </div>
-          <div class="trail-step">
-            <div class="trail-node done"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></div>
-            <div class="trail-step-lbl">SMM Pending</div>
-          </div>
-          <div class="trail-step">
-            <div class="trail-node done"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></div>
-            <div class="trail-step-lbl">SDWA Pending</div>
-          </div>
-        </div>
-      </div>
-      <button class="appl-detail-btn">View Details</button>
-    </div>
+        }
+    }
   </div>
 
   <div class="rht-stack">
@@ -448,42 +432,31 @@
     <div class="wht-panel-split">
       <div class="panel-header-row">
         <h2 class="wht-panel-ttl">Notifications</h2>
-        <button class="dark-view-btn">View All</button>
+        <button class="dark-view-btn" @onclick="NavigateToMyApplications">View All</button>
       </div>
-      
+
       <div class="ntf-list">
-        <div class="ntf-item">
-          <div class="ntf-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" /></svg>
-          </div>
-          <div class="ntf-content">
-            <div class="ntf-txt">Your Medical Assistance application is pending RM review.</div>
-            <div class="ntf-time">2 hours ago</div>
-          </div>
-          <div class="ntf-dot"></div>
-        </div>
-
-        <div class="ntf-item">
-          <div class="ntf-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" /></svg>
-          </div>
-          <div class="ntf-content">
-            <div class="ntf-txt">Your Medical Assistance application is pending RM review.</div>
-            <div class="ntf-time">2 hours ago</div>
-          </div>
-          <div class="ntf-dot"></div>
-        </div>
-
-        <div class="ntf-item">
-          <div class="ntf-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" /></svg>
-          </div>
-          <div class="ntf-content">
-            <div class="ntf-txt">Your Medical Assistance application is pending RM review.</div>
-            <div class="ntf-time">2 hours ago</div>
-          </div>
-          <div class="ntf-dot"></div>
-        </div>
+        @if (_isLoadingApps)
+        {
+            <div class="appl-empty">Loading…</div>
+        }
+        else if (_notifItems.Count == 0)
+        {
+            <div class="appl-empty">No notifications yet.</div>
+        }
+        @foreach (var n in _notifItems)
+        {
+            <div class="ntf-item">
+              <div class="ntf-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" /></svg>
+              </div>
+              <div class="ntf-content">
+                <div class="ntf-txt">@n.Text</div>
+                <div class="ntf-time">@n.Time</div>
+              </div>
+              <div class="ntf-dot"></div>
+            </div>
+        }
       </div>
     </div>
 
@@ -495,41 +468,30 @@
   <h2 class="wht-panel-ttl">Recent Activity</h2>
   
   <div class="actvt-list">
-    
-    <div class="actvt-item">
-      <div class="actvt-dot"></div>
-      <div class="actvt-content">
-        <div class="actvt-txt">Applied for Medical Assistance</div>
-        <div class="actvt-when">2 days ago</div>
-      </div>
-    </div>
 
-    <div class="actvt-item">
-      <div class="actvt-dot"></div>
-      <div class="actvt-content">
-        <div class="actvt-txt">Applied for Medical Assistance</div>
-        <div class="actvt-when">2 days ago</div>
-      </div>
-    </div>
-
-    <div class="actvt-item">
-      <div class="actvt-dot"></div>
-      <div class="actvt-content">
-        <div class="actvt-txt">Applied for Medical Assistance</div>
-        <div class="actvt-when">2 days ago</div>
-      </div>
-    </div>
-
-    <div class="actvt-item">
-      <div class="actvt-dot"></div>
-      <div class="actvt-content">
-        <div class="actvt-txt">Applied for Medical Assistance</div>
-        <div class="actvt-when">2 days ago</div>
-      </div>
-    </div>
+    @if (_isLoadingApps)
+    {
+        <div class="appl-empty">Loading…</div>
+    }
+    else if (_activityItems.Count == 0)
+    {
+        <div class="appl-empty">No activity yet.</div>
+    }
+    @foreach (var a in _activityItems)
+    {
+        <div class="actvt-item">
+          <div class="actvt-dot"></div>
+          <div class="actvt-content">
+            <div class="actvt-txt">@a.Text</div>
+            <div class="actvt-when">@a.Time</div>
+          </div>
+        </div>
+    }
 
   </div>
 </div>
+
+<WelfareApplicationDetails IsVisible="@_showDetails" ApplicationId="@_selectedId" OnClose="@((v) => _showDetails = v)" />
 
 @if (_showEligibilityModal)
 {
@@ -646,12 +608,27 @@
     private bool _isLoadingDealer = true;
     private string? _dealerLoadError;
 
+    private List<WelfareApplicationSummaryDto> _applications = new();
+    private List<WelfareApplicationSummaryDto> _recentApps = new();
+    private List<NotifItem> _notifItems = new();
+    private List<ActvtItem> _activityItems = new();
+    private bool _isLoadingApps = true;
+    private string? _appsLoadError;
+
+    private bool _showDetails = false;
+    private int _selectedId;
+
     private bool _isCheckingEligibility = false;
     private bool _showEligibilityModal = false;
     private EligibilityResultDto? _eligibilityResult;
     private string? _eligibilityError;
 
     protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadDealerAsync(), LoadApplications());
+    }
+
+    private async Task LoadDealerAsync()
     {
         _isLoadingDealer = true;
         _dealerLoadError = null;
@@ -670,6 +647,139 @@
         {
             _isLoadingDealer = false;
         }
+    }
+
+    private async Task LoadApplications()
+    {
+        _isLoadingApps = true;
+        _appsLoadError = null;
+        try
+        {
+            _applications = await Http.GetFromJsonAsync<List<WelfareApplicationSummaryDto>>(
+                "api/SDWAWelfareApplication/my-applications") ?? new List<WelfareApplicationSummaryDto>();
+            BuildDerivedSections();
+        }
+        catch (Exception)
+        {
+            _applications = new List<WelfareApplicationSummaryDto>();
+            _recentApps = new();
+            _notifItems = new();
+            _activityItems = new();
+            _appsLoadError = "Unable to load your applications right now.";
+        }
+        finally
+        {
+            _isLoadingApps = false;
+        }
+    }
+
+    private void BuildDerivedSections()
+    {
+        _recentApps = _applications
+            .OrderByDescending(a => a.LastUpdatedAt)
+            .Take(2)
+            .ToList();
+
+        _notifItems = _applications
+            .Where(a => a.Status != 0 && a.Status != 7)
+            .OrderByDescending(a => a.LastUpdatedAt)
+            .Take(3)
+            .Select(a => new NotifItem(GetNotificationText(a), GetRelativeTime(a.LastUpdatedAt)))
+            .ToList();
+
+        _activityItems = _applications
+            .OrderByDescending(a => a.LastUpdatedAt)
+            .Take(4)
+            .Select(a => new ActvtItem(GetActivityText(a), GetRelativeTime(a.LastUpdatedAt)))
+            .ToList();
+    }
+
+    private static string GetNotificationText(WelfareApplicationSummaryDto a) => a.Status switch
+    {
+        1 => $"Your {a.SchemeName} application has been submitted and is awaiting MO review.",
+        2 => $"Your {a.SchemeName} application is under MO review.",
+        3 => $"Your {a.SchemeName} application is pending RM review.",
+        4 => $"Your {a.SchemeName} application is pending SMM review.",
+        5 => $"Your {a.SchemeName} application has been approved.",
+        6 => $"Your {a.SchemeName} application was rejected.",
+        _ => $"Your {a.SchemeName} application was updated."
+    };
+
+    private static string GetActivityText(WelfareApplicationSummaryDto a) => a.Status switch
+    {
+        0 => $"Drafted {a.SchemeName} application",
+        1 => $"Applied for {a.SchemeName}",
+        2 => $"{a.SchemeName} application moved to MO review",
+        3 => $"{a.SchemeName} application moved to RM review",
+        4 => $"{a.SchemeName} application moved to SMM review",
+        5 => $"{a.SchemeName} application approved",
+        6 => $"{a.SchemeName} application rejected",
+        7 => $"{a.SchemeName} application cancelled",
+        _ => $"{a.SchemeName} application updated"
+    };
+
+    private int CountPending() => _applications.Count(a => a.Status == 0 || a.Status == 1);
+    private int CountProcessing() => _applications.Count(a => a.Status >= 2 && a.Status <= 4);
+    private int CountApproved() => _applications.Count(a => a.Status == 5);
+    private int CountRejected() => _applications.Count(a => a.Status == 6);
+
+    private void OpenDetails(int id)
+    {
+        _selectedId = id;
+        _showDetails = true;
+    }
+
+    private static (string cls, string txt) GetApplTag(int status) => status switch
+    {
+        0 => ("gray", "Draft"),
+        1 => ("orange", "Awaiting MO Review"),
+        2 => ("orange", "Under MO Review"),
+        3 => ("orange", "Under RM Review"),
+        4 => ("orange", "Under SMM Review"),
+        5 => ("green", "Approved"),
+        6 => ("red", "Rejected"),
+        7 => ("gray", "Cancelled"),
+        _ => ("gray", "-")
+    };
+
+    private sealed record DashTrailStep(string NodeClass, string Label);
+
+    private static List<DashTrailStep> BuildDashTrail(int status)
+    {
+        string N(bool done, bool active) => done ? "done" : active ? "active" : "idle";
+
+        var dealerDone = status != 0;
+        var moActive = status == 1 || status == 2;
+        var moDone = status >= 3 && status <= 5;
+        var rmActive = status == 3;
+        var rmDone = status == 4 || status == 5;
+        var smmActive = status == 4;
+        var smmDone = status == 5;
+        var sdwaDone = status == 5;
+
+        return new List<DashTrailStep>
+        {
+            new(dealerDone ? "done" : "idle", status == 0 ? "Draft" : "Submitted"),
+            new(N(moDone, moActive), moDone ? "MO Approved" : moActive ? "MO Review" : "MO Pending"),
+            new(N(rmDone, rmActive), rmDone ? "RM Approved" : rmActive ? "RM Review" : "RM Pending"),
+            new(N(smmDone, smmActive), smmDone ? "SMM Approved" : smmActive ? "SMM Review" : "SMM Pending"),
+            new(sdwaDone ? "done" : "idle", sdwaDone ? "SDWA Approved" : "SDWA Approval")
+        };
+    }
+
+    private sealed record NotifItem(string Text, string Time);
+    private sealed record ActvtItem(string Text, string Time);
+
+    private static string FormatDate(DateTime date) => date.ToString("dd MMM yyyy");
+
+    private static string GetRelativeTime(DateTime dateTimeUtcOrLocal)
+    {
+        var span = DateTime.Now - dateTimeUtcOrLocal;
+        if (span.TotalMinutes < 1) return "Just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours} hr ago";
+        if (span.TotalDays < 30) return $"{(int)span.TotalDays} day{((int)span.TotalDays == 1 ? "" : "s")} ago";
+        return dateTimeUtcOrLocal.ToString("dd MMM yyyy");
     }
 
     private async Task CheckEligibilityAndNavigate()

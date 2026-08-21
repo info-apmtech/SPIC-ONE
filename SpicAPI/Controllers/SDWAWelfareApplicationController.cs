@@ -185,6 +185,42 @@ namespace SpicAPI.Controllers
         }
 
         // =====================================================================
+        //  My Applications - acknowledgment PDF download (ownership enforced)
+        // =====================================================================
+
+        [HttpGet("my-application/{id:int}/pdf")]
+        public async Task<IActionResult> GetMyApplicationPdf(int id)
+        {
+            var dealer = await GetDealerAsync();
+            if (dealer == null)
+                return NotFound(new { Message = "Dealer profile not found for the logged-in user." });
+
+            var application = await _db.WelfareApplications
+                .AsNoTracking()
+                .Include(a => a.Documents)
+                .Include(a => a.Approvals)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null || application.DealerId != dealer.Id)
+                return NotFound(new { Message = "Application not found." });
+
+            try
+            {
+                var bytes = Services.WelfareApplicationPdfBuilder.Build(application);
+                var fileName = string.IsNullOrWhiteSpace(application.ApplicationNumber)
+                    ? $"WelfareApplication-{application.Id}.pdf"
+                    : $"{application.ApplicationNumber}.pdf";
+
+                return File(bytes, "application/pdf", fileName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate welfare application PDF for application {ApplicationId}.", id);
+                return StatusCode(500, new { Message = "Failed to generate the PDF. Please try again." });
+            }
+        }
+
+        // =====================================================================
         //  Document view / download (ownership enforced)
         // =====================================================================
 

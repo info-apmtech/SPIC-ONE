@@ -189,8 +189,8 @@ else
   </div>
 
   <div class="apln-action-row">
-    <button class="apln-pdf-btn" onclick="downloadPDF('@app.SchemeName')">
-      Download PDF
+    <button class="apln-pdf-btn" disabled="@(_busyPdfId == app.Id)" @onclick="() => DownloadPdf(app)">
+      @(_busyPdfId == app.Id ? "Downloading…" : _pdfErrorId == app.Id ? "Failed – Tap to Retry" : "Download PDF")
     </button>
     <button class="apln-view-btn" @onclick="() => OpenDetails(app.Id)">View Details</button>
   </div>
@@ -202,21 +202,6 @@ else
 
 <WelfareApplicationDetails IsVisible="@_showDetails" ApplicationId="@_selectedId" OnClose="@((v) => _showDetails = v)" />
 
-<script>
-  function downloadPDF(name) {
-    const btn = event.currentTarget;
-    const orig = btn.innerHTML;
-    btn.textContent = '✓ Downloading...';
-    btn.style.color = '#16a34a';
-    btn.style.borderColor = '#16a34a';
-    setTimeout(() => {
-      btn.innerHTML = orig;
-      btn.style.color = '';
-      btn.style.borderColor = '';
-    }, 2000);
-  }
-</script>
-
 @code {
     private List<WelfareApplicationSummaryDto> _applications = new();
     private bool _loading = true;
@@ -227,9 +212,12 @@ else
     private string _sort = "Latest First";
     private string _statusFilter = "All Statuses";
     private string _search = "";
+    private int? _busyPdfId;
+    private int? _pdfErrorId;
 
     [Inject] private HttpClient Http { get; set; } = default!;
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -259,6 +247,28 @@ else
     {
         _selectedId = id;
         _showDetails = true;
+    }
+
+    private async Task DownloadPdf(WelfareApplicationSummaryDto app)
+    {
+        _busyPdfId = app.Id;
+        _pdfErrorId = null;
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync($"api/SDWAWelfareApplication/my-application/{app.Id}/pdf");
+            var baseName = string.IsNullOrWhiteSpace(app.ApplicationNumber)
+                ? $"WelfareApplication-{app.Id}"
+                : string.Concat(app.ApplicationNumber.Split(Path.GetInvalidFileNameChars()));
+            await JS.InvokeVoidAsync("downloadFileFromBytes", $"{baseName}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+        }
+        catch
+        {
+            _pdfErrorId = app.Id;
+        }
+        finally
+        {
+            _busyPdfId = null;
+        }
     }
 
     private int CountByStatus(int status) =>

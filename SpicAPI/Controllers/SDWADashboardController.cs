@@ -176,7 +176,24 @@ namespace SpicAPI.Controllers
         private static void ValidateDealershipDuration(DealerRegistration dealer, EligibilityResultDto result)
         {
             var today = DateTime.UtcNow.Date;
-            var appointmentDate = dealer.DateOfAppointment.Date;
+
+            var effectiveAppointmentDate = GetEarliestAppointmentDate(
+                dealer.DateOfAppointment,
+                dealer.GreenstarDateOfAppointment);
+
+            if (!effectiveAppointmentDate.HasValue)
+            {
+                result.Criteria.Add(new EligibilityCriterionDto
+                {
+                    Name = "Dealership Duration",
+                    Required = "Minimum 1 year",
+                    Actual = "Dealership appointment date not available",
+                    IsSatisfied = false
+                });
+                return;
+            }
+
+            var appointmentDate = effectiveAppointmentDate.Value;
             var duration = today - appointmentDate;
             var totalDays = duration.TotalDays;
             var years = (int)(totalDays / 365);
@@ -198,6 +215,19 @@ namespace SpicAPI.Controllers
                 Actual = actualText,
                 IsSatisfied = totalDays >= 365
             });
+        }
+
+        private static DateTime? GetEarliestAppointmentDate(DateTime spicDate, DateTime? greenstarDate)
+        {
+            var candidates = new List<DateTime>();
+
+            if (spicDate != default && spicDate.Date <= DateTime.UtcNow.Date)
+                candidates.Add(spicDate.Date);
+
+            if (greenstarDate.HasValue && greenstarDate.Value != default && greenstarDate.Value.Date <= DateTime.UtcNow.Date)
+                candidates.Add(greenstarDate.Value.Date);
+
+            return candidates.Count == 0 ? null : candidates.Min();
         }
 
         private static void ValidateStateConfigured(string stateGroup, EligibilityResultDto result)
