@@ -49,6 +49,11 @@ public class WelfareApplication
 	// Scheme-specific: Medical Assistance
 	public string? MedicalTreatmentType { get; set; }                    // Type of treatment / medical condition (e.g. Surgery, Hospitalization, Cancer treatment)
 
+	// Scheme-specific: Death Relief
+	public DateTime? DateOfDeath { get; set; }                           // Date of death for Death Relief scheme
+	public string? LegalHeirName { get; set; }                           // Legal heir name for Death Relief scheme
+	public string? DeathCause { get; set; }                              // Cause of death
+
 	// Scheme-specific: Merit Award
 	public string? MeritCandidateName { get; set; }                       // Name of the candidate
 	public string? MeritFatherName { get; set; }                          // Father's name of the candidate

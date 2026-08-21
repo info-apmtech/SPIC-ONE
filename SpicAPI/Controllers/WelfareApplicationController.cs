@@ -130,6 +130,11 @@ namespace SpicAPI.Controllers
                 // Scheme-specific: Medical
                 MedicalTreatmentType = dto.MedicalTreatmentType,
 
+                // Scheme-specific: Death Relief
+                DateOfDeath = dto.DateOfDeath,
+                LegalHeirName = dto.LegalHeirName,
+                DeathCause = dto.DeathCause,
+
                 // Scheme-specific: Merit Award
                 MeritCandidateName = dto.MeritCandidateName,
                 MeritFatherName = dto.MeritFatherName,
