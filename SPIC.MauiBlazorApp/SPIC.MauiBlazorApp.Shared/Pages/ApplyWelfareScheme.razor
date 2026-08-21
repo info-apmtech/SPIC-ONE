@@ -318,9 +318,14 @@
             </div>
 
             <div class="aws-form-group">
-                <label class="aws-form-label">Select Beneficiary</label>
-                <select class="aws-form-select">
-                    <option value="" selected>Add new beneficiary</option>
+                <label class="aws-form-label">Select Beneficiary *</label>
+                <select class="aws-form-select" @bind="SelectedExistingBeneficiary" @bind:after="OnExistingBeneficiarySelected">
+                    <option value="" disabled selected hidden>--Select--</option>
+                    <option value="new">Add new beneficiary</option>
+                    @foreach (var b in _existingBeneficiaries)
+                    {
+                        <option value="@b.Name">@b.Name (@b.Relationship)</option>
+                    }
                 </select>
             </div>
             
@@ -341,15 +346,7 @@
 
             <div class="aws-form-group">
                 <label class="aws-form-label">Date of Birth</label>
-                <div class="aws-input-with-icon">
-                    <input type="text" class="aws-form-control" placeholder="dd-mm-yyyy" @bind="BeneficiaryDOB">
-                    <svg class="aws-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                    </svg>
-                </div>
+                <input type="date" class="aws-form-control" @bind="BeneficiaryDateOfBirth" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
             </div>
             
             <div class="aws-form-group">
@@ -465,19 +462,11 @@
         <div class="aws-form-grid-2col">
             <div class="aws-form-group">
                 <label class="aws-form-label">Wedding Date</label>
-                <div class="aws-input-with-icon">
-                    <input type="text" class="aws-form-control" placeholder="dd-mm-yyyy">
-                    <svg class="aws-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                    </svg>
-                </div>
+                <input type="date" class="aws-form-control" @bind="EventDate" min="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
             </div>
             <div class="aws-form-group">
                 <label class="aws-form-label">Event Venue</label>
-                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3"></textarea>
+                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3" @bind="EventVenue"></textarea>
             </div>
         </div>
         }
@@ -486,19 +475,11 @@
         <div class="aws-form-grid-2col">
             <div class="aws-form-group">
                 <label class="aws-form-label">Event Date</label>
-                <div class="aws-input-with-icon">
-                    <input type="text" class="aws-form-control" placeholder="dd-mm-yyyy">
-                    <svg class="aws-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                    </svg>
-                </div>
+                <input type="date" class="aws-form-control" @bind="EventDate" min="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
             </div>
             <div class="aws-form-group">
                 <label class="aws-form-label">Event Venue</label>
-                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3"></textarea>
+                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3" @bind="EventVenue"></textarea>
             </div>
         </div>
         }
@@ -507,29 +488,21 @@
         <div class="aws-form-grid-2col">
             <div class="aws-form-group">
                 <label class="aws-form-label">Housewarming Date</label>
-                <div class="aws-input-with-icon">
-                    <input type="text" class="aws-form-control" placeholder="dd-mm-yyyy">
-                    <svg class="aws-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                    </svg>
-                </div>
+                <input type="date" class="aws-form-control" @bind="EventDate" min="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
             </div>
             <div class="aws-form-group">
                 <label class="aws-form-label">Ownership Type</label>
-                <select class="aws-form-select">
+                <select class="aws-form-select" @bind="OwnershipType">
                     <option value="" disabled selected hidden>Select Ownership Type</option>
-                    <option value="owned">Owned</option>
-                    <option value="rented">Rented</option>
+                    <option value="Owned">Owned</option>
+                    <option value="Rented">Rented</option>
                 </select>
             </div>
         </div>
         <div class="aws-form-grid-2col" style="margin-top: 24px; margin-bottom: 0;">
             <div class="aws-form-group">
                 <label class="aws-form-label">Event Venue (if different from house address)</label>
-                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3"></textarea>
+                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3" @bind="EventVenue"></textarea>
             </div>
         </div>
         }
@@ -538,32 +511,24 @@
         <div class="aws-form-grid-2col">
             <div class="aws-form-group">
                 <label class="aws-form-label">Date of Death</label>
-                <div class="aws-input-with-icon">
-                    <input type="text" class="aws-form-control" placeholder="dd-mm-yyyy">
-                    <svg class="aws-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                    </svg>
-                </div>
+                <input type="date" class="aws-form-control" @bind="DeathDateOfDeath" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
             </div>
             <div class="aws-form-group">
                 <label class="aws-form-label">Legal Heir Name</label>
-                <input type="text" class="aws-form-control" placeholder="Full Name of Legal Heir">
+                <input type="text" class="aws-form-control" placeholder="Full Name of Legal Heir" @bind="LegalHeirName">
             </div>
             <div class="aws-form-group">
                 <label class="aws-form-label">Relationship to Dealer</label>
-                <select class="aws-form-select">
+                <select class="aws-form-select" @bind="BeneficiaryRelationship">
                     <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="spouse">Spouse</option>
-                    <option value="child">Child</option>
-                    <option value="parent">Parent</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
                 </select>
             </div>
             <div class="aws-form-group">
                 <label class="aws-form-label">Cause of Death</label>
-                <input type="text" class="aws-form-control" placeholder="e.g. Natural, Illness, Accident">
+                <input type="text" class="aws-form-control" placeholder="e.g. Natural, Illness, Accident" @bind="DeathCause">
             </div>
         </div>
         }
@@ -849,7 +814,7 @@
         </div>
 
         <div class="aws-declaration-box">
-            <input type="checkbox" class="aws-checkbox-large" id="declarationCheck">
+            <input type="checkbox" class="aws-checkbox-large" id="declarationCheck" @bind="IsDeclarationConfirmed">
             <label class="aws-declaration-text" for="declarationCheck">
                 I, @_dealer.DealerName, hereby declare that all information provided in this application is true, accurate, and complete to the best of my knowledge. I understand that any false information or suppression of facts will lead to rejection of the application and may result in appropriate action as deemed necessary by SDWA.
             </label>
@@ -877,7 +842,16 @@
                 </ul>
             </div>
         }
-        <button class="aws-btn-action aws-btn-draft">Save as Draft</button>
+        @if (!string.IsNullOrEmpty(DraftMessage))
+        {
+            var bgColor = _draftSuccess ? "#f0fff4" : "#fff5f5";
+            var borderColor = _draftSuccess ? "#27ae60" : "#e74c3c";
+            var textColor = _draftSuccess ? "#1e8449" : "#c0392b";
+            <div style="width: 100%; margin-bottom: 12px; background: @bgColor; border: 1px solid @borderColor; border-radius: 8px; padding: 12px 16px; color: @textColor; font-size: 13px;">
+                @DraftMessage
+            </div>
+        }
+        <button class="aws-btn-action aws-btn-draft" @onclick="SaveAsDraft" disabled="@(_isSavingDraft || _isSubmitting)">@( _isSavingDraft ? "Saving..." : "Save as Draft")</button>
         <button @onclick="OpenPreviewModal" class="aws-btn-action aws-btn-primary">Preview Application</button>
     </div>
 
@@ -913,7 +887,7 @@
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">Event Date</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">01/06/2026</span>
+                        <span class="aws-modal-value">@FormatDisplayDate(EventDate)</span>
                     </div>
                 </div>
 
@@ -1120,8 +1094,8 @@
             </div>
 
             <div class="aws-submit-actions">
-                <button class="aws-submit-btn aws-submit-btn-cancel" @onclick="CloseSubmitModal">Cancel</button>
-                <button class="aws-submit-btn aws-submit-btn-confirm" @onclick="ConfirmSubmission">Confirm</button>
+                <button class="aws-submit-btn aws-submit-btn-cancel" @onclick="CloseSubmitModal" disabled="@_isSubmitting">Cancel</button>
+                <button class="aws-submit-btn aws-submit-btn-confirm" @onclick="ConfirmSubmission" disabled="@_isSubmitting">@( _isSubmitting ? "Submitting..." : "Confirm")</button>
             </div>
 
         </div>
@@ -1141,7 +1115,7 @@
 
             <div class="aws-success-id-box">
                 <span class="aws-success-id-label">Application ID</span>
-                <span class="aws-success-id-value">SDWA-GH-2025-00847</span>
+                <span class="aws-success-id-value">@(SubmittedApplicationNumber ?? "-")</span>
             </div>
 
             <div class="aws-success-timeline">
@@ -1225,8 +1199,41 @@
     private string NomineeRelationship { get; set; } = string.Empty;
     private string BeneficiaryName { get; set; } = string.Empty;
     private string BeneficiaryRelationship { get; set; } = string.Empty;
-    private string BeneficiaryDOB { get; set; } = string.Empty;
+    private DateTime? BeneficiaryDateOfBirth { get; set; }
     private string BeneficiaryAge { get; set; } = string.Empty;
+
+    // Scheme-specific: Wedding / Sathabhishekam / Grahapravesam
+    private DateTime? EventDate { get; set; }
+    private string EventVenue { get; set; } = string.Empty;
+    private string OwnershipType { get; set; } = string.Empty;
+
+    // Scheme-specific: Death Relief
+    private DateTime? DeathDateOfDeath { get; set; }
+    private string LegalHeirName { get; set; } = string.Empty;
+    private string DeathCause { get; set; } = string.Empty;
+
+    // Declaration & submission state
+    private bool IsDeclarationConfirmed { get; set; }
+    private bool _isSubmitting = false;
+    private bool _isSavingDraft = false;
+    private bool _draftSuccess = false;
+    private string DraftMessage { get; set; } = string.Empty;
+    private string? SubmittedApplicationNumber { get; set; }
+
+    private void OnDateChanged()
+    {
+        if (BeneficiaryDateOfBirth.HasValue)
+        {
+            var today = DateTime.Today;
+            var age = today.Year - BeneficiaryDateOfBirth.Value.Year;
+            if (BeneficiaryDateOfBirth.Value.Date > today.AddYears(-age)) age--;
+            BeneficiaryAge = age > 0 ? age.ToString() : string.Empty;
+        }
+        else
+        {
+            BeneficiaryAge = string.Empty;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -1274,6 +1281,7 @@
         SelectedSubDealerName = string.Empty;
         SelectedEmployeeId = string.Empty;
         SelectedEmployeeName = string.Empty;
+        SelectedExistingBeneficiary = string.Empty;
 
         if (SelectedBeneficiaryGroup == "Sub Dealer")
         {
@@ -1343,6 +1351,43 @@
     {
         var selected = _employees.FirstOrDefault(e => e.Id.ToString() == SelectedEmployeeId);
         SelectedEmployeeName = selected?.EmployeeName ?? string.Empty;
+    }
+
+    // Existing beneficiaries (static sample data until the beneficiary master API is available)
+    private record ExistingBeneficiary(string Name, string Relationship, DateTime? DateOfBirth);
+
+    private static readonly List<ExistingBeneficiary> _existingBeneficiaries = new()
+    {
+        new("Lakshmi Devi", "Spouse", new DateTime(1985, 3, 12)),
+        new("Arun Kumar", "Child", new DateTime(2008, 7, 25)),
+        new("Divya Rani", "Child", new DateTime(2012, 11, 8)),
+        new("Muthuvel Samy", "Parent", new DateTime(1958, 1, 30))
+    };
+
+    private string SelectedExistingBeneficiary { get; set; } = string.Empty;
+
+    private void OnExistingBeneficiarySelected()
+    {
+        if (SelectedExistingBeneficiary == "new")
+        {
+            BeneficiaryName = string.Empty;
+            BeneficiaryRelationship = string.Empty;
+            BeneficiaryDateOfBirth = null;
+            OnDateChanged();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(SelectedExistingBeneficiary))
+            return;
+
+        var match = _existingBeneficiaries.FirstOrDefault(b => b.Name == SelectedExistingBeneficiary);
+        if (match != null)
+        {
+            BeneficiaryName = match.Name;
+            BeneficiaryRelationship = match.Relationship;
+            BeneficiaryDateOfBirth = match.DateOfBirth;
+            OnDateChanged();
+        }
     }
 
     private static readonly Dictionary<string, List<string>> EligibilityConditionsMap = new(StringComparer.OrdinalIgnoreCase)
@@ -1556,7 +1601,9 @@
         }
     }
 
-    private Dictionary<string, IBrowserFile> UploadedFiles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    private record UploadedFileInfo(string Name, string ContentType, long Size, byte[] Data);
+
+    private Dictionary<string, UploadedFileInfo> UploadedFiles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     private async Task HandleFileUpload(string docName, InputFileChangeEventArgs e)
     {
@@ -1574,7 +1621,13 @@
             return;
         }
 
-        UploadedFiles[docName] = file;
+        // Buffer the bytes now: IBrowserFile references become invalid once the
+        // InputFile element is re-rendered out of the DOM (_blazorFilesById error)
+        await using var stream = file.OpenReadStream(maxAllowedSize: 6 * 1024 * 1024);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+
+        UploadedFiles[docName] = new UploadedFileInfo(file.Name, file.ContentType, file.Size, buffer.ToArray());
         StateHasChanged();
     }
 
@@ -1620,148 +1673,421 @@
         IsSubmitModalOpen = false;
     }
 
-    private void ConfirmSubmission()
+    private async Task ConfirmSubmission()
     {
-        // Validate Beneficiary Group
-        if (string.IsNullOrWhiteSpace(SelectedBeneficiaryGroup))
+        if (_isSubmitting) return;
+
+        var errors = ValidateApplication();
+        if (errors.Any())
         {
-            ValidationErrors = new List<string> { "Beneficiary Group is required." };
+            ValidationErrors = errors;
             ShowValidation = true;
+            IsSubmitModalOpen = false;
             return;
         }
+
+        _isSubmitting = true;
+        ShowValidation = false;
+        ValidationErrors.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var response = await PostApplicationAsync("api/WelfareApplication/submit");
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                SubmittedApplicationNumber = TryGetStringProperty(body, "applicationNumber");
+                IsSubmitModalOpen = false;
+                IsSuccessModalOpen = true;
+            }
+            else
+            {
+                ValidationErrors = new List<string>
+                {
+                    TryGetStringProperty(body, "message") ?? "Application submission failed. Please try again."
+                };
+                ShowValidation = true;
+                IsSubmitModalOpen = false;
+            }
+        }
+        catch (Exception)
+        {
+            ValidationErrors = new List<string> { "Could not reach the server. Please check your connection and try again." };
+            ShowValidation = true;
+            IsSubmitModalOpen = false;
+        }
+        finally
+        {
+            _isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveAsDraft()
+    {
+        if (_isSavingDraft || _isSubmitting) return;
+
+        _isSavingDraft = true;
+        DraftMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var response = await PostApplicationAsync("api/WelfareApplication/draft");
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var reference = TryGetStringProperty(body, "applicationNumber");
+                DraftMessage = string.IsNullOrWhiteSpace(reference)
+                    ? "Draft saved successfully."
+                    : $"Draft saved successfully. Reference: {reference}";
+                _draftSuccess = true;
+            }
+            else
+            {
+                DraftMessage = TryGetStringProperty(body, "message") ?? "Could not save the draft. Please try again.";
+                _draftSuccess = false;
+            }
+        }
+        catch (Exception)
+        {
+            DraftMessage = "Could not reach the server. Please check your connection and try again.";
+            _draftSuccess = false;
+        }
+        finally
+        {
+            _isSavingDraft = false;
+            StateHasChanged();
+        }
+    }
+
+    private List<string> ValidateApplication()
+    {
+        var errors = new List<string>();
+
+        // Beneficiary Group
+        if (string.IsNullOrWhiteSpace(SelectedBeneficiaryGroup))
+            errors.Add("Beneficiary Group is required.");
 
         if (SelectedBeneficiaryGroup == "Sub Dealer")
         {
             if (string.IsNullOrWhiteSpace(SelectedSubDealerId))
-            {
-                ValidationErrors = new List<string> { "Sub Dealer selection is required." };
-                ShowValidation = true;
-                return;
-            }
-            if (_salesHistory != null && !_salesHistory.IsSubDealerEligible)
-            {
-                ValidationErrors = new List<string> { "You do not have sufficient sales quantity to apply for a Sub Dealer. A minimum average annual sales of 50,000 MT over the last 3 years is required." };
-                ShowValidation = true;
-                return;
-            }
+                errors.Add("Sub Dealer selection is required.");
+            else if (_salesHistory != null && !_salesHistory.IsSubDealerEligible)
+                errors.Add("You do not have sufficient sales quantity to apply for a Sub Dealer. A minimum average annual sales of 50,000 MT over the last 3 years is required.");
         }
 
         if (SelectedBeneficiaryGroup == "Approved Employee")
         {
             if (string.IsNullOrWhiteSpace(SelectedEmployeeId))
-            {
-                ValidationErrors = new List<string> { "Employee selection is required." };
-                ShowValidation = true;
-                return;
-            }
-            if (_salesHistory != null && !_salesHistory.IsEmployeeEligible)
-            {
-                ValidationErrors = new List<string> { "You do not have sufficient sales quantity to apply for an Approved Employee. A minimum average annual sales of 5,000 MT over the last 3 years is required." };
-                ShowValidation = true;
-                return;
-            }
+                errors.Add("Employee selection is required.");
+            else if (_salesHistory != null && !_salesHistory.IsEmployeeEligible)
+                errors.Add("You do not have sufficient sales quantity to apply for an Approved Employee. A minimum average annual sales of 5,000 MT over the last 3 years is required.");
         }
 
-        // Validate Nominee
+        // Nominee
         if (string.IsNullOrWhiteSpace(NomineeName))
-        {
-            ValidationErrors = new List<string> { "Nominee Name is required." };
-            ShowValidation = true;
-            return;
-        }
+            errors.Add("Nominee Name is required.");
 
         if (string.IsNullOrWhiteSpace(NomineeRelationship))
+            errors.Add("Nominee Relationship is required.");
+
+        // Beneficiary
+        if (SelectedBeneficiaryGroup == "Direct Dealer" && string.IsNullOrWhiteSpace(SelectedExistingBeneficiary))
+            errors.Add("Please select a beneficiary.");
+
+        if (string.IsNullOrWhiteSpace(BeneficiaryName))
+            errors.Add("Beneficiary Name is required.");
+
+        if (string.IsNullOrWhiteSpace(BeneficiaryRelationship))
+            errors.Add("Beneficiary Relationship is required.");
+
+        // Scheme-specific fields
+        switch (SelectedScheme)
         {
-            ValidationErrors = new List<string> { "Nominee Relationship is required." };
-            ShowValidation = true;
+            case "Wedding":
+            case "Sathabhishekam":
+            case "Grahapravesam":
+                ValidateEventDate(errors);
+                if (SelectedScheme == "Grahapravesam" && string.IsNullOrWhiteSpace(OwnershipType))
+                    errors.Add("Ownership Type is required.");
+                break;
+
+            case "Death Relief":
+                if (DeathDateOfDeath == null)
+                    errors.Add("Date of Death is required.");
+                else if (DeathDateOfDeath.Value.Date > DateTime.Today)
+                    errors.Add("Date of Death cannot be in the future.");
+
+                if (string.IsNullOrWhiteSpace(LegalHeirName))
+                    errors.Add("Legal Heir Name is required.");
+
+                if (string.IsNullOrWhiteSpace(BeneficiaryRelationship))
+                    errors.Add("Relationship to Dealer is required.");
+
+                if (string.IsNullOrWhiteSpace(DeathCause))
+                    errors.Add("Cause of Death is required.");
+                break;
+
+            case "Medical Assistance":
+                if (string.IsNullOrWhiteSpace(MedicalTreatmentType))
+                    errors.Add("Treatment / Medical Condition is required.");
+                break;
+
+            case "Educational Assistance":
+                if (!EduTotalCourses.HasValue || EduTotalCourses.Value <= 0)
+                    errors.Add("Total Number of Courses is required.");
+
+                if (string.IsNullOrWhiteSpace(EduCourse))
+                    errors.Add("Course is required.");
+
+                if (string.IsNullOrWhiteSpace(EduYear))
+                    errors.Add("Year is required.");
+
+                if (string.IsNullOrWhiteSpace(EduCollegeName))
+                    errors.Add("College Name is required.");
+                break;
+
+            case "Merit Award":
+                if (string.IsNullOrWhiteSpace(MeritCandidateName))
+                    errors.Add("Candidate Name is required.");
+
+                if (string.IsNullOrWhiteSpace(MeritFatherName))
+                    errors.Add("Candidate's Father Name is required.");
+
+                if (string.IsNullOrWhiteSpace(MeritExamination))
+                    errors.Add("Examination Appeared is required.");
+
+                if (string.IsNullOrWhiteSpace(MeritBoardName))
+                    errors.Add("Board Name is required.");
+
+                if (MeritMaximumMarks <= 0)
+                    errors.Add("Maximum Marks must be greater than zero.");
+
+                if (MeritMarksObtained <= 0)
+                    errors.Add("Marks Obtained must be greater than zero.");
+
+                if (MeritMaximumMarks > 0 && MeritMarksObtained > MeritMaximumMarks)
+                    errors.Add("Marks Obtained cannot exceed Maximum Marks.");
+
+                if (MeritMaximumMarks > 0 && MeritPercentage < 80)
+                    errors.Add("Minimum 80% marks is required for the Merit Award.");
+                break;
+
+            case "Distinction Award":
+                if (string.IsNullOrWhiteSpace(DistinctionCandidateName))
+                    errors.Add("Candidate Name is required.");
+
+                if (string.IsNullOrWhiteSpace(DistinctionProfessionalCourse))
+                    errors.Add("Professional Course Name is required.");
+
+                if (DistinctionMaximumMarks <= 0)
+                    errors.Add("Total / Maximum Marks must be greater than zero.");
+
+                if (DistinctionMarksObtained <= 0)
+                    errors.Add("Marks Obtained must be greater than zero.");
+
+                if (DistinctionMaximumMarks > 0 && DistinctionMarksObtained > DistinctionMaximumMarks)
+                    errors.Add("Marks Obtained cannot exceed Total / Maximum Marks.");
+
+                if (DistinctionMaximumMarks > 0 && DistinctionAggregatePercentage <= 80)
+                    errors.Add("Aggregate percentage must be more than 80% to qualify for the Distinction Award.");
+
+                if (DistinctionHasArrears == true)
+                    errors.Add("Candidates with arrears / backlogs are not eligible for the Distinction Award.");
+                break;
+        }
+
+        // Document validation based on scheme requirements
+        foreach (var doc in CurrentDocuments)
+        {
+            if (IsDocumentRequired(doc.Name) && !UploadedFiles.ContainsKey(doc.Name))
+                errors.Add($"{doc.Name} is required.");
+        }
+
+        // Declaration
+        if (!IsDeclarationConfirmed)
+            errors.Add("You must confirm the declaration before submitting.");
+
+        return errors;
+    }
+
+    private void ValidateEventDate(List<string> errors)
+    {
+        if (EventDate == null)
+        {
+            errors.Add("Event date is required.");
             return;
         }
 
-        if (SelectedScheme == "Medical Assistance")
-        {
-            var errors = new List<string>();
+        if (EventDate.Value.Date < DateTime.Today.AddDays(7))
+            errors.Add("Invitation must be sent at least 7 days in advance. Please choose an event date at least 7 days from today.");
+    }
 
-            if (string.IsNullOrWhiteSpace(MedicalTreatmentType))
-                errors.Add("Treatment / Medical Condition is required.");
-
-            if (errors.Any())
-            {
-                ValidationErrors = errors;
-                ShowValidation = true;
-                return;
-            }
-        }
-
+    private bool IsDocumentRequired(string docName)
+    {
         if (SelectedScheme == "Educational Assistance")
         {
-            var errors = new List<string>();
-
-            if (!EduTotalCourses.HasValue || EduTotalCourses.Value <= 0)
-                errors.Add("Total Number of Courses is required.");
-
-            if (string.IsNullOrWhiteSpace(EduCourse))
-                errors.Add("Course is required.");
-
-            if (string.IsNullOrWhiteSpace(EduYear))
-                errors.Add("Year is required.");
-
-            if (string.IsNullOrWhiteSpace(EduCollegeName))
-                errors.Add("College Name is required.");
-
-            if (IsEduFirstApplication && !UploadedFiles.ContainsKey("Admission Certificate (First Year only)"))
-                errors.Add("Admission Certificate is mandatory for first-time applications.");
-
-            if (!UploadedFiles.ContainsKey("Fees Receipt"))
-                errors.Add("Fees Receipt is required.");
-
-            if (!IsEduFirstApplication && !UploadedFiles.ContainsKey("Marks list of previous year / semesters duly cleared"))
-                errors.Add("Marks list is mandatory for renewal applications.");
-
-            if (errors.Any())
-            {
-                ValidationErrors = errors;
-                ShowValidation = true;
-                return;
-            }
+            if (docName == "Admission Certificate (First Year only)")
+                return IsEduFirstApplication;
+            if (docName == "Marks list of previous year / semesters duly cleared")
+                return !IsEduFirstApplication;
+            return true;
         }
 
-        if (SelectedScheme == "Distinction Award")
+        if (SelectedScheme == "Death Relief" &&
+            (docName.StartsWith("Legal Heir Certificate") || docName == "Affidavit from other legal heirs"))
+            return false;
+
+        return true;
+    }
+
+    private WelfareApplicationSubmitDto BuildSubmitDto() => new()
+    {
+        SchemeName = SelectedScheme,
+        BeneficiaryName = BeneficiaryName,
+        Relationship = BeneficiaryRelationship,
+        BeneficiaryDateOfBirth = BeneficiaryDateOfBirth,
+        NomineeName = NomineeName,
+        NomineeRelationship = NomineeRelationship,
+        QuantityLifted = MapQuantityRange(QuantityLiftedValue),
+        BeneficiaryGroup = SelectedBeneficiaryGroup,
+        SubDealerId = int.TryParse(SelectedSubDealerId, out var subDealerId) ? subDealerId : null,
+        SubDealerName = SelectedSubDealerName,
+        EmployeeId = int.TryParse(SelectedEmployeeId, out var employeeId) ? employeeId : null,
+        EmployeeName = SelectedEmployeeName,
+        AverageQuantityLifted3Years = _salesHistory?.AverageQuantityLifted3Years,
+        LastYearQuantityLifted = _salesHistory?.LastYearQuantityLifted,
+        EventDate = EventDate,
+        EventVenue = EventVenue,
+        OwnershipType = OwnershipType,
+        DateOfDeath = DeathDateOfDeath,
+        LegalHeirName = LegalHeirName,
+        DeathCause = DeathCause,
+        Course = EduCourse,
+        EduYear = int.TryParse(EduYear, out var eduYear) ? eduYear : null,
+        CollegeName = EduCollegeName,
+        TotalNumberOfCourses = EduTotalCourses,
+        IsFirstApplication = IsEduFirstApplication,
+        MedicalTreatmentType = MedicalTreatmentType,
+        MeritCandidateName = MeritCandidateName,
+        MeritFatherName = MeritFatherName,
+        ExaminationAppeared = MeritExamination,
+        BoardName = MeritBoardName,
+        MaximumMarks = MeritMaximumMarks > 0 ? MeritMaximumMarks : null,
+        MarksObtained = MeritMarksObtained > 0 ? MeritMarksObtained : null,
+        MeritPercentage = MeritPercentage > 0 ? MeritPercentage : null,
+        DistinctionCandidateName = DistinctionCandidateName,
+        DistinctionFatherName = DistinctionFatherName,
+        ProfessionalCourseName = DistinctionProfessionalCourse,
+        CourseCompletionYear = DistinctionCourseYear,
+        UniversityName = DistinctionUniversityName,
+        DistinctionMaximumMarks = DistinctionMaximumMarks > 0 ? DistinctionMaximumMarks : null,
+        DistinctionMarksObtained = DistinctionMarksObtained > 0 ? DistinctionMarksObtained : null,
+        DistinctionAggregatePercentage = DistinctionAggregatePercentage > 0 ? DistinctionAggregatePercentage : null,
+        HasArrears = DistinctionHasArrears,
+        IsWholesaleDealerEmployee = DistinctionIsWholesaleEmployee,
+        IsDeclarationConfirmed = IsDeclarationConfirmed
+    };
+
+    private async Task<HttpResponseMessage> PostApplicationAsync(string url)
+    {
+        var dto = BuildSubmitDto();
+
+        using var content = new MultipartFormDataContent();
+
+        void AddField(string name, string? value) =>
+            content.Add(new StringContent(value ?? string.Empty), name);
+
+        AddField("SchemeName", dto.SchemeName);
+        AddField("BeneficiaryName", dto.BeneficiaryName);
+        AddField("Relationship", dto.Relationship);
+        AddField("BeneficiaryDateOfBirth", dto.BeneficiaryDateOfBirth?.ToString("yyyy-MM-dd"));
+        AddField("NomineeName", dto.NomineeName);
+        AddField("NomineeRelationship", dto.NomineeRelationship);
+        AddField("QuantityLifted", dto.QuantityLifted?.ToString());
+        AddField("BeneficiaryGroup", dto.BeneficiaryGroup);
+        AddField("SubDealerId", dto.SubDealerId?.ToString());
+        AddField("SubDealerName", dto.SubDealerName);
+        AddField("EmployeeId", dto.EmployeeId?.ToString());
+        AddField("EmployeeName", dto.EmployeeName);
+        AddField("AverageQuantityLifted3Years", dto.AverageQuantityLifted3Years?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddField("LastYearQuantityLifted", dto.LastYearQuantityLifted?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddField("EventDate", dto.EventDate?.ToString("yyyy-MM-dd"));
+        AddField("EventVenue", dto.EventVenue);
+        AddField("OwnershipType", dto.OwnershipType);
+        AddField("DateOfDeath", dto.DateOfDeath?.ToString("yyyy-MM-dd"));
+        AddField("LegalHeirName", dto.LegalHeirName);
+        AddField("DeathCause", dto.DeathCause);
+        AddField("Course", dto.Course);
+        AddField("EduYear", dto.EduYear?.ToString());
+        AddField("CollegeName", dto.CollegeName);
+        AddField("TotalNumberOfCourses", dto.TotalNumberOfCourses?.ToString());
+        AddField("IsFirstApplication", dto.IsFirstApplication?.ToString());
+        AddField("MedicalTreatmentType", dto.MedicalTreatmentType);
+        AddField("MeritCandidateName", dto.MeritCandidateName);
+        AddField("MeritFatherName", dto.MeritFatherName);
+        AddField("ExaminationAppeared", dto.ExaminationAppeared);
+        AddField("BoardName", dto.BoardName);
+        AddField("MaximumMarks", dto.MaximumMarks?.ToString());
+        AddField("MarksObtained", dto.MarksObtained?.ToString());
+        AddField("MeritPercentage", dto.MeritPercentage?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddField("DistinctionCandidateName", dto.DistinctionCandidateName);
+        AddField("DistinctionFatherName", dto.DistinctionFatherName);
+        AddField("ProfessionalCourseName", dto.ProfessionalCourseName);
+        AddField("CourseCompletionYear", dto.CourseCompletionYear);
+        AddField("UniversityName", dto.UniversityName);
+        AddField("DistinctionMaximumMarks", dto.DistinctionMaximumMarks?.ToString());
+        AddField("DistinctionMarksObtained", dto.DistinctionMarksObtained?.ToString());
+        AddField("DistinctionAggregatePercentage", dto.DistinctionAggregatePercentage?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddField("HasArrears", dto.HasArrears?.ToString());
+        AddField("IsWholesaleDealerEmployee", dto.IsWholesaleDealerEmployee?.ToString());
+        AddField("IsDeclarationConfirmed", dto.IsDeclarationConfirmed.ToString());
+
+        foreach (var entry in UploadedFiles)
         {
-            var errors = new List<string>();
-
-            if (string.IsNullOrWhiteSpace(DistinctionCandidateName))
-                errors.Add("Candidate Name is required.");
-
-            if (string.IsNullOrWhiteSpace(DistinctionProfessionalCourse))
-                errors.Add("Professional Course Name is required.");
-
-            if (DistinctionMaximumMarks <= 0)
-                errors.Add("Total / Maximum Marks must be greater than zero.");
-
-            if (DistinctionMarksObtained <= 0)
-                errors.Add("Marks Obtained must be greater than zero.");
-
-            if (DistinctionMaximumMarks > 0 && DistinctionMarksObtained > DistinctionMaximumMarks)
-                errors.Add("Marks Obtained cannot exceed Total / Maximum Marks.");
-
-            if (DistinctionMaximumMarks > 0 && DistinctionAggregatePercentage <= 80)
-                errors.Add("Aggregate percentage must be more than 80% to qualify for the Distinction Award.");
-
-            if (DistinctionHasArrears == true)
-                errors.Add("Candidates with arrears / backlogs are not eligible for the Distinction Award.");
-
-            if (errors.Any())
-            {
-                ValidationErrors = errors;
-                ShowValidation = true;
-                return;
-            }
+            var file = entry.Value;
+            var fileContent = new ByteArrayContent(file.Data);
+            fileContent.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+            content.Add(fileContent, "files", file.Name);
+            content.Add(new StringContent(entry.Key), "documentTypes");
         }
 
-        ShowValidation = false;
-        ValidationErrors.Clear();
-        IsSubmitModalOpen = false;
-        IsSuccessModalOpen = true;
+        return await Http.PostAsync(url, content);
+    }
+
+    private static int? MapQuantityRange(string? range) => range switch
+    {
+        "lt1000" => 0,
+        "gt1000" => 1001,
+        "5001-10000" => 5001,
+        "10001-25000" => 10001,
+        "25001-35000" => 25001,
+        "35001-50000" => 35001,
+        "gt50001" => 50001,
+        _ => null
+    };
+
+    private static string FormatDisplayDate(DateTime? date) =>
+        date?.ToString("dd/MM/yyyy") ?? "-";
+
+    private static string? TryGetStringProperty(string json, string propertyName)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty(propertyName, out var element)
+                ? element.GetString()
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private void CloseSuccessModal()

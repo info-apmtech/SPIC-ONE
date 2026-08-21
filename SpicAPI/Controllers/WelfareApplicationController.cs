@@ -23,10 +23,24 @@ namespace SpicAPI.Controllers
         }
 
         [HttpPost("submit")]
-        public async Task<IActionResult> SubmitApplication(
+        public Task<IActionResult> SubmitApplication(
             [FromForm] WelfareApplicationSubmitDto dto,
             [FromForm] List<IFormFile> files,
             [FromForm] List<string> documentTypes)
+            => SaveApplication(dto, files, documentTypes, isDraft: false);
+
+        [HttpPost("draft")]
+        public Task<IActionResult> SaveDraftApplication(
+            [FromForm] WelfareApplicationSubmitDto dto,
+            [FromForm] List<IFormFile> files,
+            [FromForm] List<string> documentTypes)
+            => SaveApplication(dto, files, documentTypes, isDraft: true);
+
+        private async Task<IActionResult> SaveApplication(
+            WelfareApplicationSubmitDto dto,
+            List<IFormFile>? files,
+            List<string>? documentTypes,
+            bool isDraft)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))
@@ -45,8 +59,8 @@ namespace SpicAPI.Controllers
             if (schemeEnum == null)
                 return BadRequest(new { Message = $"Invalid scheme name: {dto.SchemeName}" });
 
-            // Backend eligibility validation for Sub Dealer and Approved Employee
-            if (!string.IsNullOrEmpty(dto.BeneficiaryGroup))
+            // Backend eligibility validation for Sub Dealer and Approved Employee (final submit only; drafts skip this check)
+            if (!isDraft && !string.IsNullOrEmpty(dto.BeneficiaryGroup))
             {
                 var salesHistory = await CalculateDealerSalesAverage(dealer.Id);
 
@@ -79,7 +93,7 @@ namespace SpicAPI.Controllers
                 SchemeName = schemeEnum.Value,
                 ApplicationNumber = applicationNumber,
                 ApplicationDate = DateTime.Now,
-                Status = WelfareApplicationStatus.Submitted,
+                Status = isDraft ? WelfareApplicationStatus.Draft : WelfareApplicationStatus.Submitted,
 
                 // Dealer snapshot
                 DealerCode = dealer.SPICCode ?? dealer.DealerCode,
@@ -215,7 +229,7 @@ namespace SpicAPI.Controllers
                 ApplicationId = app.Id,
                 ApplicationNumber = app.ApplicationNumber,
                 Status = app.Status.ToString(),
-                Message = "Application submitted successfully."
+                Message = isDraft ? "Draft saved successfully." : "Application submitted successfully."
             });
         }
 

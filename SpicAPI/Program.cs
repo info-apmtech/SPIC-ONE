@@ -89,7 +89,8 @@ builder.Services.AddAuthentication(options =>
             if (!string.IsNullOrEmpty(accessToken) &&
                 (path.StartsWithSegments("/api/DealerFile/view") ||
                  path.StartsWithSegments("/api/LogisticsFile/view") ||
-                 path.StartsWithSegments("/api/LogisticsFile/download")))
+                 path.StartsWithSegments("/api/LogisticsFile/download") ||
+                 path.StartsWithSegments("/api/SDWAWelfareApplication/document")))
             {
                 context.Token = accessToken;
             }

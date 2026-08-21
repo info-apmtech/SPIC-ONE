@@ -1,0 +1,624 @@
+@if (IsVisible)
+{
+    <div class="apd-overlay" @onclick="HandleOverlayClick">
+        <div class="apd-drawer" @onclick:stopPropagation="true">
+
+            @if (_loading)
+            {
+                <div class="apd-header">
+                    <div class="apd-header-titles">
+                        <h2>Application Details</h2>
+                        <p>Loading...</p>
+                    </div>
+                    <button class="apd-close-icon" @onclick="HandleDismiss" aria-label="Close">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                            <line x1="9" y1="9" x2="15" y2="15"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="apd-body">
+                    <div class="wapd-loading">Loading application details…</div>
+                </div>
+            }
+            else if (_detail == null)
+            {
+                <div class="apd-header">
+                    <div class="apd-header-titles">
+                        <h2>Application Details</h2>
+                        <p></p>
+                    </div>
+                    <button class="apd-close-icon" @onclick="HandleDismiss" aria-label="Close">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                            <line x1="9" y1="9" x2="15" y2="15"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="apd-body">
+                    <div class="apd-alert apd-alert-danger">@(_error ?? "Unable to load application details.")</div>
+                </div>
+            }
+            else
+            {
+                <!-- Header -->
+                <div class="apd-header">
+                    <div class="apd-header-titles">
+                        <h2>@_detail.SchemeName</h2>
+                        <p>@_detail.ApplicationNumber</p>
+                    </div>
+                    <button class="apd-close-icon" @onclick="HandleDismiss" aria-label="Close">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                            <line x1="9" y1="9" x2="15" y2="15"></line>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="apd-body">
+
+                    <!-- Status Alert -->
+                    <div class="@GetStatusAlertClass()">
+                        @if (_detail.Status == 5)
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            <span>Your application has been approved by SDWA.</span>
+                        }
+                        else if (_detail.Status == 6)
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                            <span>Your application was rejected. Please review the remarks in the approval timeline below.</span>
+                        }
+                        else if (_detail.Status == 7)
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                            <span>This application has been cancelled.</span>
+                        }
+                        else if (_detail.Status == 0)
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            <span>This application is saved as a draft and has not been submitted yet.</span>
+                        }
+                        else
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            <span>Your application is under review with SDWA. Current stage: @_detail.StatusDisplay.</span>
+                        }
+                    </div>
+
+                    <!-- Application Overview -->
+                    <div class="apd-section">
+                        <h3>Application overview</h3>
+                        <div class="apd-fields-grid apd-cols-3">
+                            <div class="apd-field">
+                                <label>Scheme Name</label>
+                                <div class="apd-field-value apd-text-accent">@_detail.SchemeName</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Application ID</label>
+                                <div class="apd-field-value">@_detail.ApplicationNumber</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Beneficiary</label>
+                                <div class="apd-field-value">@(OrDash(_detail.BeneficiaryName))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Applied Date</label>
+                                <div class="apd-field-value">@FormatDate(_detail.ApplicationDate)</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Beneficiary Group</label>
+                                <div class="apd-field-value">@(OrDash(_detail.BeneficiaryGroup))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Current status</label>
+                                <span class="@GetStatusBadgeClass()">@_detail.StatusDisplay</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Approval Timeline (Vertical) -->
+                    <div class="apd-section">
+                        <h3>Approval timeline</h3>
+                        <div class="apd-vtimeline">
+
+                            <!-- Dealer submitted -->
+                            <div class="apd-vstep">
+                                <div class="apd-vstep-indicator">
+                                    @if (_detail.Status != 0)
+                                    {
+                                        <div class="apd-vstep-circle apd-vstep-done">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        </div>
+                                        <div class="apd-vstep-line apd-vline-done"></div>
+                                    }
+                                    else
+                                    {
+                                        <div class="apd-vstep-circle apd-vstep-pending"></div>
+                                        <div class="apd-vstep-line"></div>
+                                    }
+                                </div>
+                                <div class="apd-vstep-content">
+                                    <div class="apd-vstep-title">Dealer Submitted Application</div>
+                                    <div class="apd-vstep-sub">@( _detail.Status == 0 ? "Not submitted yet (draft)" : "Application submitted by dealer" )</div>
+                                    @if (_detail.Status != 0)
+                                    {
+                                        <div class="apd-vstep-time">@FormatDateTime(_detail.ApplicationDate)</div>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Officer levels -->
+                            @foreach (var step in BuildOfficerSteps())
+                            {
+                                <div class="apd-vstep">
+                                    <div class="apd-vstep-indicator">
+                                        @if (step.State == "done")
+                                        {
+                                            <div class="apd-vstep-circle apd-vstep-done">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                            </div>
+                                            <div class="apd-vstep-line apd-vline-done"></div>
+                                        }
+                                        else if (step.State == "rejected")
+                                        {
+                                            <div class="apd-vstep-circle apd-vstep-rejected">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                            </div>
+                                            <div class="apd-vstep-line"></div>
+                                        }
+                                        else
+                                        {
+                                            <div class="apd-vstep-circle apd-vstep-pending"></div>
+                                            <div class="apd-vstep-line"></div>
+                                        }
+                                    </div>
+                                    <div class="apd-vstep-content">
+                                        <div class="apd-vstep-title">@step.Title</div>
+                                        <div class="apd-vstep-sub">@step.Subtitle</div>
+                                        @if (!string.IsNullOrEmpty(step.Time))
+                                        {
+                                            <div class="apd-vstep-time">@step.Time</div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- Final SDWA decision -->
+                            <div class="apd-vstep">
+                                <div class="apd-vstep-indicator">
+                                    @if (_detail.Status == 5)
+                                    {
+                                        <div class="apd-vstep-circle apd-vstep-done">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        </div>
+                                    }
+                                    else if (_detail.Status == 6)
+                                    {
+                                        <div class="apd-vstep-circle apd-vstep-rejected">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="apd-vstep-circle apd-vstep-pending"></div>
+                                    }
+                                </div>
+                                <div class="apd-vstep-content">
+                                    <div class="apd-vstep-title">SDWA Final Approval</div>
+                                    <div class="apd-vstep-sub">@( _detail.Status == 5 ? "Approved – benefit release in progress" : _detail.Status == 6 ? "Application rejected" : "Awaiting final decision" )</div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- Dealer Details -->
+                    <div class="apd-section">
+                        <h3>Dealer details</h3>
+                        <div class="apd-fields-grid apd-cols-4">
+                            <div class="apd-field">
+                                <label>Dealer code</label>
+                                <div class="apd-field-value">@(OrDash(_detail.DealerCode))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Dealer name</label>
+                                <div class="apd-field-value">@(OrDash(_detail.DealerName))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Nature of dealership</label>
+                                <div class="apd-field-value">@(OrDash(_detail.DealershipNature))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Mobile number</label>
+                                <div class="apd-field-value">@(OrDash(_detail.MobileNumber))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Region</label>
+                                <div class="apd-field-value">@(OrDash(_detail.Region))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>District</label>
+                                <div class="apd-field-value">@(OrDash(_detail.District))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Avg quantity lifted (3 yrs)</label>
+                                <div class="apd-field-value">@( _detail.AverageQuantityLifted3Years.HasValue ? _detail.AverageQuantityLifted3Years.Value.ToString("0.##") + " MT" : "-" )</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Last year quantity lifted</label>
+                                <div class="apd-field-value">@( _detail.LastYearQuantityLifted.HasValue ? _detail.LastYearQuantityLifted.Value.ToString("0.##") + " MT" : "-" )</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_detail.BeneficiaryGroup) &&
+                         ((_detail.BeneficiaryGroup == "Sub Dealer" && !string.IsNullOrWhiteSpace(_detail.SubDealerName)) ||
+                          (_detail.BeneficiaryGroup == "Approved Employee" && !string.IsNullOrWhiteSpace(_detail.EmployeeName))))
+                    {
+                        <div class="apd-section">
+                            <h3>@_detail.BeneficiaryGroup details</h3>
+                            <div class="apd-fields-grid apd-cols-4">
+                                @if (_detail.BeneficiaryGroup == "Sub Dealer")
+                                {
+                                    <div class="apd-field">
+                                        <label>Sub dealer name</label>
+                                        <div class="apd-field-value">@_detail.SubDealerName</div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="apd-field">
+                                        <label>Employee name</label>
+                                        <div class="apd-field-value">@_detail.EmployeeName</div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Beneficiary Information -->
+                    <div class="apd-section">
+                        <h3>Beneficiary information</h3>
+                        <div class="apd-fields-grid apd-cols-4">
+                            <div class="apd-field">
+                                <label>Beneficiary name</label>
+                                <div class="apd-field-value">@(OrDash(_detail.BeneficiaryName))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Relationship</label>
+                                <div class="apd-field-value">@(OrDash(_detail.Relationship))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Date of birth</label>
+                                <div class="apd-field-value">@( _detail.BeneficiaryDateOfBirth.HasValue ? FormatDate(_detail.BeneficiaryDateOfBirth.Value) : "-" )</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Nominee name</label>
+                                <div class="apd-field-value">@(OrDash(_detail.NomineeName))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Nominee relationship</label>
+                                <div class="apd-field-value">@(OrDash(_detail.NomineeRelationship))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Name as in cheque / passbook</label>
+                                <div class="apd-field-value">@(OrDash(_detail.BeneficiaryNameAsInCheque))</div>
+                            </div>
+                            <div class="apd-field">
+                                <label>Name taken from</label>
+                                <div class="apd-field-value">@(OrDash(_detail.LeafOrBankPassbook))</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scheme Specific Details -->
+                    @if (GetSchemeSpecificFields().Count > 0)
+                    {
+                        <div class="apd-section">
+                            <h3>@(_detail.SchemeName) details</h3>
+                            <div class="apd-fields-grid apd-cols-4">
+                                @foreach (var field in GetSchemeSpecificFields())
+                                {
+                                    <div class="apd-field">
+                                        <label>@field.Label</label>
+                                        <div class="apd-field-value">@field.Value</div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Uploaded Documents -->
+                    <div class="apd-section">
+                        <h3>Uploaded documents</h3>
+                        @if (_detail.Documents.Count == 0)
+                        {
+                            <div class="wapd-empty-docs">No documents were uploaded with this application.</div>
+                        }
+                        else
+                        {
+                            <div class="apd-doc-list">
+                                @foreach (var doc in _detail.Documents)
+                                {
+                                    <div class="apd-doc-item">
+                                        <div class="apd-doc-icon">
+                                            <svg width="21" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                            </svg>
+                                        </div>
+                                        <div class="apd-doc-info">
+                                            <div class="apd-doc-name">@(doc.DocumentName ?? doc.FileName ?? "Document")</div>
+                                            <div class="apd-doc-status">@(doc.IsVerified ? "Verified" : "Pending verification") · @FormatFileSize(doc.FileSize)</div>
+                                        </div>
+                                        <button class="apd-btn-download" @onclick="() => OpenDocument(doc.Id, false)">View</button>
+                                        <button class="apd-btn-download" @onclick="() => OpenDocument(doc.Id, true)">Download</button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                </div>
+
+                <!-- Footer -->
+                <div class="apd-footer">
+                    <button class="apd-btn-outline" @onclick="HandleDismiss">Close</button>
+                </div>
+            }
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public int ApplicationId { get; set; }
+    [Parameter] public EventCallback<bool> OnClose { get; set; }
+
+    [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState { get; set; } = default!;
+
+    private SPIC.Core.DTOs.WelfareApplicationDetailDto? _detail;
+    private bool _loading;
+    private string? _error;
+    private int _loadedForId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && ApplicationId > 0 && _loadedForId != ApplicationId)
+        {
+            await LoadDetail(ApplicationId);
+        }
+    }
+
+    private async Task LoadDetail(int id)
+    {
+        _loading = true;
+        _error = null;
+        _detail = null;
+        try
+        {
+            _detail = await Http.GetFromJsonAsync<SPIC.Core.DTOs.WelfareApplicationDetailDto>(
+                $"api/SDWAWelfareApplication/my-application/{id}");
+            _loadedForId = id;
+        }
+        catch (Exception)
+        {
+            _error = "Unable to load application details. Please try again.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task HandleDismiss()
+    {
+        await OnClose.InvokeAsync(false);
+    }
+
+    private async Task HandleOverlayClick()
+    {
+        await OnClose.InvokeAsync(false);
+    }
+
+    private async Task OpenDocument(int documentId, bool download)
+    {
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        var token = GetRawToken();
+        var url = $"{baseUrl}/api/SDWAWelfareApplication/document/{documentId}";
+        if (download) url += "?disposition=attachment";
+        if (!string.IsNullOrWhiteSpace(token))
+            url += (url.Contains('?') ? "&" : "?") + "access_token=" + Uri.EscapeDataString(token);
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private string? GetRawToken()
+    {
+        try
+        {
+            var token = LoginState.Token;
+            if (string.IsNullOrWhiteSpace(token)) return null;
+            return token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                ? token["Bearer ".Length..]
+                : token;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string GetStatusAlertClass() => _detail!.Status switch
+    {
+        5 => "apd-alert apd-alert-success",
+        6 => "apd-alert apd-alert-danger",
+        7 => "apd-alert apd-alert-danger",
+        0 => "apd-alert apd-alert-warn",
+        _ => "apd-alert apd-alert-info"
+    };
+
+    private string GetStatusBadgeClass() => _detail!.Status switch
+    {
+        5 => "apd-badge apd-badge-green",
+        6 => "apd-badge apd-badge-red",
+        7 => "apd-badge apd-badge-red",
+        0 => "apd-badge apd-badge-gray",
+        _ => "apd-badge apd-badge-blue"
+    };
+
+    private sealed record OfficerStep(string Title, string Subtitle, string Time, string State);
+
+    private List<OfficerStep> BuildOfficerSteps()
+    {
+        var steps = new List<OfficerStep>();
+        if (_detail == null) return steps;
+
+        foreach (var ap in _detail.Approvals)
+        {
+            var state = ap.ApprovalStatus == "Rejected" ? "rejected"
+                : ap.ApprovalStatus == "Approved" ? "done"
+                : "pending";
+
+            var subtitle = state switch
+            {
+                "done" => $"Approved{(string.IsNullOrWhiteSpace(ap.ApprovedBy) ? "" : $" by {ap.ApprovedBy}")}",
+                "rejected" => $"Rejected{(string.IsNullOrWhiteSpace(ap.ApprovedBy) ? "" : $" by {ap.ApprovedBy}")}{(string.IsNullOrWhiteSpace(ap.Remarks) ? "" : $" — {ap.Remarks}")}",
+                _ => "Pending review"
+            };
+
+            steps.Add(new OfficerStep(
+                $"{ap.ApprovalLevel} Review",
+                subtitle,
+                ap.ApprovedAt.HasValue ? FormatDateTime(ap.ApprovedAt.Value) : "",
+                state));
+        }
+
+        // Show the next expected level as pending when no record exists yet.
+        string? expected = _detail.Status switch
+        {
+            1 or 2 => _detail.Approvals.Any(a => a.ApprovalLevel.StartsWith("Marketing")) ? null : "MO",
+            3 => _detail.Approvals.Any(a => a.ApprovalLevel.StartsWith("Regional")) ? null : "RM",
+            4 => _detail.Approvals.Any(a => a.ApprovalLevel.StartsWith("Senior")) ? null : "SMM",
+            _ => null
+        };
+
+        if (expected != null)
+        {
+            steps.Add(new OfficerStep($"{expected} Review", "Pending review", "", "pending"));
+        }
+
+        return steps;
+    }
+
+    private sealed record DetailField(string Label, string Value);
+
+    private List<DetailField> GetSchemeSpecificFields()
+    {
+        var fields = new List<DetailField>();
+        if (_detail == null) return fields;
+        var d = _detail;
+
+        switch (d.SchemeType)
+        {
+            case 0:
+                AddIfAny(fields, "Treatment type", d.MedicalTreatmentType);
+                break;
+            case 1:
+                if (d.MarriageDate.HasValue)
+                    fields.Add(new DetailField("Date of marriage", FormatDate(d.MarriageDate.Value)));
+                break;
+            case 2:
+            case 4:
+                if (d.EventDate.HasValue)
+                    fields.Add(new DetailField("Event date", FormatDate(d.EventDate.Value)));
+                AddIfAny(fields, "Ownership type", d.OwnershipType);
+                AddIfAny(fields, "Event venue", d.EventVenue);
+                break;
+            case 3:
+                AddIfAny(fields, "Course", d.Course);
+                if (d.EduYear.HasValue)
+                    fields.Add(new DetailField("Year of study", OrdinalSuffix(d.EduYear.Value)));
+                AddIfAny(fields, "College name", d.CollegeName);
+                if (d.TotalNumberOfCourses.HasValue)
+                    fields.Add(new DetailField("Course duration (years)", d.TotalNumberOfCourses.Value.ToString()));
+                if (d.IsFirstApplication.HasValue)
+                    fields.Add(new DetailField("First application", d.IsFirstApplication.Value ? "Yes" : "No"));
+                break;
+            case 5:
+                if (d.DateOfDeath.HasValue)
+                    fields.Add(new DetailField("Date of death", FormatDate(d.DateOfDeath.Value)));
+                AddIfAny(fields, "Legal heir name", d.LegalHeirName);
+                AddIfAny(fields, "Cause of death", d.DeathCause);
+                break;
+            case 6:
+                AddIfAny(fields, "Candidate name", d.MeritCandidateName);
+                AddIfAny(fields, "Father's name", d.MeritFatherName);
+                AddIfAny(fields, "Examination appeared", d.ExaminationAppeared);
+                AddIfAny(fields, "Board", d.BoardName);
+                if (d.MaximumMarks.HasValue)
+                    fields.Add(new DetailField("Maximum marks", d.MaximumMarks.Value.ToString()));
+                if (d.MarksObtained.HasValue)
+                    fields.Add(new DetailField("Marks obtained", d.MarksObtained.Value.ToString()));
+                if (d.MeritPercentage.HasValue)
+                    fields.Add(new DetailField("Percentage", d.MeritPercentage.Value.ToString("0.00") + "%"));
+                break;
+            case 7:
+                AddIfAny(fields, "Candidate name", d.DistinctionCandidateName);
+                AddIfAny(fields, "Father's name", d.DistinctionFatherName);
+                AddIfAny(fields, "Professional course", d.ProfessionalCourseName);
+                AddIfAny(fields, "Completion year", d.CourseCompletionYear);
+                AddIfAny(fields, "University", d.UniversityName);
+                if (d.DistinctionMaximumMarks.HasValue)
+                    fields.Add(new DetailField("Maximum marks", d.DistinctionMaximumMarks.Value.ToString()));
+                if (d.DistinctionMarksObtained.HasValue)
+                    fields.Add(new DetailField("Marks obtained", d.DistinctionMarksObtained.Value.ToString()));
+                if (d.DistinctionAggregatePercentage.HasValue)
+                    fields.Add(new DetailField("Aggregate percentage", d.DistinctionAggregatePercentage.Value.ToString("0.00") + "%"));
+                if (d.HasArrears.HasValue)
+                    fields.Add(new DetailField("Any arrears", d.HasArrears.Value ? "Yes" : "No"));
+                if (d.IsWholesaleDealerEmployee.HasValue)
+                    fields.Add(new DetailField("Wholesale dealer employee", d.IsWholesaleDealerEmployee.Value ? "Yes" : "No"));
+                break;
+        }
+
+        return fields;
+    }
+
+    private static void AddIfAny(List<DetailField> fields, string label, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            fields.Add(new DetailField(label, value));
+    }
+
+    private static string OrDash(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string FormatDate(DateTime date) =>
+        date.ToString("dd MMM yyyy");
+
+    private static string FormatDateTime(DateTime date) =>
+        date.ToString("dd MMM yyyy · hh:mm tt");
+
+    private static string FormatFileSize(long? bytes)
+    {
+        if (!bytes.HasValue || bytes.Value <= 0) return "";
+        if (bytes.Value < 1024) return $"{bytes.Value} B";
+        if (bytes.Value < 1024 * 1024) return $"{bytes.Value / 1024.0:0.#} KB";
+        return $"{bytes.Value / (1024.0 * 1024.0):0.#} MB";
+    }
+
+    private static string OrdinalSuffix(int number) => number switch
+    {
+        1 => "1st Year",
+        2 => "2nd Year",
+        3 => "3rd Year",
+        _ => $"{number}th Year"
+    };
+}
