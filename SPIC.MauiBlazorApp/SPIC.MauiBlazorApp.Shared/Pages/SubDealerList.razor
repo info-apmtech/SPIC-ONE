@@ -1,13 +1,19 @@
 ﻿@page "/SubDealerList"
+@implements IDisposable
+@using System.IO.Compression
 @using System.Net.Http.Json
+@using System.Text
+@using System.Xml
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Services
 
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @inject LoginState LoginState
 @inject LookupCacheService LookupCache
 
@@ -242,7 +248,7 @@
             font-size: .74rem;
             font-weight: 700;
             color: #536273;
-            text-align: left;
+            text-align: center;
             white-space: nowrap;
         }
 
@@ -407,6 +413,123 @@
         font-size: .78rem;
     }
 
+    .sd-state-summary-card {
+        margin-top: 18px;
+    }
+
+    .sd-state-summary-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 3px;
+        font-size: .92rem;
+        font-weight: 700;
+        color: #172033;
+    }
+
+        .sd-state-summary-title i {
+            color: #07864f;
+        }
+
+    .sd-state-summary-table {
+        min-width: 720px;
+    }
+
+        .sd-state-summary-table th:nth-child(n+3),
+        .sd-state-summary-table td:nth-child(n+3) {
+            text-align: center;
+        }
+
+        .sd-state-summary-table tfoot td {
+            border-bottom: 0;
+            background: #eff8f3;
+            color: #172033;
+            font-weight: 700;
+        }
+
+    .sd-state-count {
+        font-weight: 700;
+        color: #334155;
+    }
+
+    .sd-state-summary-card .sd-loading,
+    .sd-state-summary-card .sd-empty {
+        min-height: 150px;
+    }
+
+    .sd-state-summary-error {
+        margin: 14px 16px;
+    }
+
+    .sd-state-datatable-tools {
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid #edf1ef;
+        background: #fbfdfc;
+    }
+
+    .sd-state-search-wrap {
+        width: min(320px, 100%);
+    }
+
+    .sd-state-page-size {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #64748b;
+        font-size: .78rem;
+        white-space: nowrap;
+    }
+
+        .sd-state-page-size select {
+            height: 34px;
+            min-width: 70px;
+            border: 1px solid #dce4e0;
+            border-radius: 7px;
+            padding: 0 8px;
+            background: #fff;
+            color: #334155;
+        }
+
+    .sd-state-sort-button {
+        /* width: 100%; */
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        display: inline-flex;
+        align-items: center;
+        justify-content: inherit;
+        gap: 6px;
+        font: inherit;
+        font-weight: inherit;
+        text-align: inherit;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+
+    .sd-state-summary-table th:nth-child(n+3) .sd-state-sort-button {
+        justify-content: center;
+    }
+
+    .sd-state-sort-button i {
+        color: #07864f;
+        font-size: .68rem;
+    }
+
+    .sd-state-summary-pagination {
+        background: #fff;
+    }
+
+    .sd-state-datatable-empty {
+        height: 90px;
+        text-align: center !important;
+        color: #64748b !important;
+    }
+
     @@media (max-width: 1200px) {
         .sd-filter-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -430,6 +553,15 @@
         .sd-pagination {
             align-items: flex-start;
             flex-direction: column;
+        }
+
+        .sd-state-datatable-tools {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .sd-state-search-wrap {
+            width: 100%;
         }
     }
 
@@ -525,6 +657,24 @@
                     disabled="@_isLoading">
                 <i class="bi bi-arrow-clockwise"></i>
                 Refresh
+            </button>
+
+            <button type="button"
+                    class="sd-btn"
+                    @onclick="ExportAllSavedSubDealersAsync"
+                    disabled="@_isExporting">
+                @if (_isExporting)
+                {
+                    <span class="spinner-border spinner-border-sm"
+                          role="status"
+                          aria-hidden="true"></span>
+                    <span>Exporting...</span>
+                }
+                else
+                {
+                    <i class="bi bi-file-earmark-excel"></i>
+                    <span>Export All Saved</span>
+                }
             </button>
 
             @if (CanImportSubDealers)
@@ -720,63 +870,66 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var entry in _response.Items.Select((item, index) => new { item, index }))
+                        @{
+                            var rowIndex = 0;
+                        }
+                        @foreach (var item in _response.Items)
                         {
-                            <tr>
+                            <tr @key="item.Id">
                                 <td>
-                                    @((_response.Page - 1) * _response.PageSize + entry.index + 1)
+                                    @((_response.Page - 1) * _response.PageSize + rowIndex + 1)
                                 </td>
 
                                 <td>
                                     <span class="sd-code">
-                                        @(string.IsNullOrWhiteSpace(entry.item.SubDealerCode)
+                                        @(string.IsNullOrWhiteSpace(item.SubDealerCode)
                                             ? "-"
-                                            : entry.item.SubDealerCode)
+                                            : item.SubDealerCode)
                                     </span>
                                 </td>
 
                                 <td>
                                     <div class="sd-name">
-                                        @(string.IsNullOrWhiteSpace(entry.item.FirmName)
+                                        @(string.IsNullOrWhiteSpace(item.FirmName)
                                             ? "-"
-                                            : entry.item.FirmName)
+                                            : item.FirmName)
                                     </div>
                                 </td>
 
-                                <td>@StateName(entry.item.StateId)</td>
-                                <td>@RegionName(entry.item.RegionId)</td>
-                                <td>@HqName(entry.item.HQId)</td>
+                                <td>@StateName(item.StateId)</td>
+                                <td>@RegionName(item.RegionId)</td>
+                                <td>@HqName(item.HQId)</td>
 
                                 <td>
                                     <div>
-                                        @(string.IsNullOrWhiteSpace(entry.item.GSTNumber)
+                                        @(string.IsNullOrWhiteSpace(item.GSTNumber)
                                             ? "-"
-                                            : entry.item.GSTNumber)
+                                            : item.GSTNumber)
                                     </div>
                                     <div class="sd-small-value mt-1">
                                         PAN:
-                                        @(string.IsNullOrWhiteSpace(entry.item.PANNo)
+                                        @(string.IsNullOrWhiteSpace(item.PANNo)
                                             ? "-"
-                                            : entry.item.PANNo)
+                                            : item.PANNo)
                                     </div>
                                 </td>
 
                                 <td>
                                     <div>
-                                        @(string.IsNullOrWhiteSpace(entry.item.OfficialContactNumber)
+                                        @(string.IsNullOrWhiteSpace(item.OfficialContactNumber)
                                             ? "-"
-                                            : entry.item.OfficialContactNumber)
+                                            : item.OfficialContactNumber)
                                     </div>
-                                    @if (!string.IsNullOrWhiteSpace(entry.item.WhatsAppNumber))
+                                    @if (!string.IsNullOrWhiteSpace(item.WhatsAppNumber))
                                     {
                                         <div class="sd-small-value mt-1">
-                                            WA: @entry.item.WhatsAppNumber
+                                            WA: @item.WhatsAppNumber
                                         </div>
                                     }
                                 </td>
 
                                 <td>
-                                    @if (entry.item.Status == SubDealerStatus.Active)
+                                    @if (item.Status == SubDealerStatus.Active)
                                     {
                                         <span class="sd-status active">
                                             <span class="sd-dot"></span>
@@ -797,7 +950,7 @@
                                         <button type="button"
                                                 class="sd-action-btn"
                                                 title="View"
-                                                @onclick="() => ViewSubDealer(entry.item.Id)">
+                                                @onclick="() => ViewSubDealer(item.Id)">
                                             <i class="bi bi-eye"></i>
                                         </button>
 
@@ -806,13 +959,15 @@
                                             <button type="button"
                                                     class="sd-action-btn"
                                                     title="Edit"
-                                                    @onclick="() => EditSubDealer(entry.item.Id)">
+                                                    @onclick="() => EditSubDealer(item.Id)">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>
                                         }
                                     </div>
                                 </td>
                             </tr>
+
+                            rowIndex++;
                         }
                     </tbody>
                 </table>
@@ -856,6 +1011,204 @@
                 </button>
             </div>
         </div>
+    </div>
+
+    <div class="sd-table-card sd-state-summary-card">
+        <div class="sd-table-head">
+            <div>
+                <div class="sd-state-summary-title">
+                    <i class="bi bi-bar-chart-line"></i>
+                    State-wise Sub Dealer Summary
+                </div>
+                <div class="sd-result-text">
+                    Total master records compared with saved Active and Inactive Sub Dealers.
+                </div>
+            </div>
+
+            @if (!_isStateSummaryLoading && string.IsNullOrWhiteSpace(_stateSummaryError))
+            {
+                <div class="sd-result-text">
+                    <strong>@_stateWiseSummary.Count</strong> state(s)
+                </div>
+            }
+        </div>
+
+        @if (!_isStateSummaryLoading &&
+                                     string.IsNullOrWhiteSpace(_stateSummaryError) &&
+                                     _stateWiseSummary.Count > 0)
+        {
+            <div class="sd-state-datatable-tools">
+                <div class="sd-search-wrap sd-state-search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input class="sd-input"
+                           value="@_stateSummarySearchText"
+                           @oninput="OnStateSummarySearchInput"
+                           placeholder="Search state or count" />
+                </div>
+
+                <div class="sd-state-page-size">
+                    <span>Show</span>
+                    <select value="@_stateSummaryPageSize"
+                            @onchange="OnStateSummaryPageSizeChanged"
+                            aria-label="State summary rows per page">
+                        <option value="5">5</option>
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                    <span>entries</span>
+                </div>
+            </div>
+        }
+
+        @if (_isStateSummaryLoading)
+        {
+            <div class="sd-loading">
+                <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+                <div>Loading state-wise summary...</div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_stateSummaryError))
+        {
+            <div class="alert alert-danger sd-state-summary-error" role="alert">
+                @_stateSummaryError
+            </div>
+        }
+        else if (_stateWiseSummary.Count == 0)
+        {
+            <div class="sd-empty">
+                <i class="bi bi-bar-chart"></i>
+                <div class="fw-semibold">No state-wise Sub Dealer data found</div>
+            </div>
+        }
+        else
+        {
+            <div class="sd-table-scroll">
+                <table class="sd-table sd-state-summary-table">
+                    <thead>
+                        <tr>
+                            <th style="width:55px;">#</th>
+                            <th aria-sort="@StateSummaryAriaSort("State")">
+                                <button type="button"
+                                        class="sd-state-sort-button"
+                                        @onclick='() => SortStateSummary("State")'>
+                                    State
+                                    <i class="bi @StateSummarySortIcon("State")"></i>
+                                </button>
+                            </th>
+                            <th aria-sort="@StateSummaryAriaSort("Total")">
+                                <button type="button"
+                                        class="sd-state-sort-button"
+                                        @onclick='() => SortStateSummary("Total")'>
+                                    Total Sub Dealers
+                                    <i class="bi @StateSummarySortIcon("Total")"></i>
+                                </button>
+                            </th>
+                            <th aria-sort="@StateSummaryAriaSort("Saved")">
+                                <button type="button"
+                                        class="sd-state-sort-button"
+                                        @onclick='() => SortStateSummary("Saved")'>
+                                    Total Saved Sub Dealers
+                                    <i class="bi @StateSummarySortIcon("Saved")"></i>
+                                </button>
+                            </th>
+                            <th aria-sort="@StateSummaryAriaSort("Active")">
+                                <button type="button"
+                                        class="sd-state-sort-button"
+                                        @onclick='() => SortStateSummary("Active")'>
+                                    Active
+                                    <i class="bi @StateSummarySortIcon("Active")"></i>
+                                </button>
+                            </th>
+                            <th aria-sort="@StateSummaryAriaSort("Inactive")">
+                                <button type="button"
+                                        class="sd-state-sort-button"
+                                        @onclick='() => SortStateSummary("Inactive")'>
+                                    Inactive
+                                    <i class="bi @StateSummarySortIcon("Inactive")"></i>
+                                </button>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_filteredStateWiseSummary.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="sd-state-datatable-empty">
+                                    No matching states found
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @for (var index = 0; index < _pagedStateWiseSummary.Count; index++)
+                            {
+                                var item = _pagedStateWiseSummary[index];
+
+                                <tr @key="item.StateId">
+                                    <td>@(((_stateSummaryPage - 1) * _stateSummaryPageSize) + index + 1)</td>
+                                    <td>
+                                        <div class="sd-name">@item.StateName</div>
+                                    </td>
+                                    <td><span class="sd-state-count">@item.TotalSubDealers</span></td>
+                                    <td><span class="sd-state-count">@item.SavedSubDealers</span></td>
+                                    <td><span class="sd-status active">@item.ActiveSubDealers</span></td>
+                                    <td><span class="sd-status inactive">@item.InactiveSubDealers</span></td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td></td>
+                            <td>
+                                @(string.IsNullOrWhiteSpace(_stateSummarySearchText)
+                                    ? "Grand Total"
+                                    : "Filtered Total")
+                            </td>
+                            <td>@_filteredStateWiseSummary.Sum(x => x.TotalSubDealers)</td>
+                            <td>@_filteredStateWiseSummary.Sum(x => x.SavedSubDealers)</td>
+                            <td>@_filteredStateWiseSummary.Sum(x => x.ActiveSubDealers)</td>
+                            <td>@_filteredStateWiseSummary.Sum(x => x.InactiveSubDealers)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="sd-pagination sd-state-summary-pagination">
+                <div class="sd-result-text">
+                    Showing <strong>@StateSummaryFirstVisibleRecord</strong>–<strong>@StateSummaryLastVisibleRecord</strong>
+                    of <strong>@_filteredStateWiseSummary.Count</strong> state(s)
+                </div>
+
+                <div class="sd-page-buttons">
+                    <button type="button"
+                            class="sd-page-button"
+                            disabled="@(_stateSummaryPage <= 1)"
+                            @onclick="PreviousStateSummaryPage"
+                            aria-label="Previous state summary page">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+
+                    @foreach (var pageNo in VisibleStateSummaryPageNumbers)
+                    {
+                        <button type="button"
+                                class="sd-page-button @(pageNo == _stateSummaryPage ? "active" : "")"
+                                @onclick="() => GoToStateSummaryPage(pageNo)">
+                            @pageNo
+                        </button>
+                    }
+
+                    <button type="button"
+                            class="sd-page-button"
+                            disabled="@(StateSummaryTotalPages == 0 || _stateSummaryPage >= StateSummaryTotalPages)"
+                            @onclick="NextStateSummaryPage"
+                            aria-label="Next state summary page">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        }
     </div>
 </div>
 
@@ -973,6 +1326,30 @@
 }
 
 @code {
+    private sealed class StateWiseSubDealerSummaryRow
+    {
+        public int StateId { get; init; }
+        public string StateName { get; init; } = string.Empty;
+        public int TotalSubDealers { get; init; }
+        public int SavedSubDealers { get; init; }
+        public int ActiveSubDealers { get; init; }
+        public int InactiveSubDealers { get; init; }
+    }
+
+    private sealed class SubDealerExportRow
+    {
+        public string SubDealerCode { get; init; } = string.Empty;
+        public string FirmName { get; init; } = string.Empty;
+        public string State { get; init; } = string.Empty;
+        public string Region { get; init; } = string.Empty;
+        public string Hq { get; init; } = string.Empty;
+        public string GstNumber { get; init; } = string.Empty;
+        public string PanNumber { get; init; } = string.Empty;
+        public string OfficialContactNumber { get; init; } = string.Empty;
+        public string WhatsAppNumber { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
+    }
+
     private SubDealerPagedListResponse _response = new()
     {
         Page = 1,
@@ -982,6 +1359,24 @@
     private List<LocationItemDto> _states = new();
     private List<LocationItemDto> _regions = new();
     private List<LocationItemDto> _hqs = new();
+    private readonly Dictionary<int, LocationItemDto> _statesById = new();
+    private readonly Dictionary<int, LocationItemDto> _regionsById = new();
+    private readonly Dictionary<int, LocationItemDto> _hqsById = new();
+    private readonly Dictionary<int, List<LocationItemDto>> _regionsByStateId = new();
+    private readonly Dictionary<int, List<LocationItemDto>> _hqsByRegionId = new();
+    private List<StateWiseSubDealerSummaryRow> _stateWiseSummary = new();
+    private List<StateWiseSubDealerSummaryRow> _filteredStateWiseSummary = new();
+    private List<StateWiseSubDealerSummaryRow> _pagedStateWiseSummary = new();
+
+    private bool _isStateSummaryLoading;
+    private string? _stateSummaryError;
+    private string _stateSummarySearchText = string.Empty;
+    private string _stateSummarySortColumn = "State";
+    private bool _stateSummarySortAscending = true;
+    private int _stateSummaryPage = 1;
+    private int _stateSummaryPageSize = 10;
+
+    private const int StateSummaryMaxConcurrentRequests = 4;
 
     private string _searchText = string.Empty;
     private string _statusFilter = string.Empty;
@@ -994,7 +1389,19 @@
     private int _pageSize = 20;
 
     private bool _isLoading;
+    private bool _isExporting;
     private CancellationTokenSource? _searchCts;
+    private CancellationTokenSource? _listLoadCts;
+    private CancellationTokenSource? _stateSummaryLoadCts;
+    private CancellationTokenSource? _exportCts;
+    private long _listLoadRequestId;
+    private bool _isDisposed;
+
+    private const int ExportPageSize = 100;
+    private const string ExcelContentType =
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    private const string ExcelSpreadsheetNamespace =
+        "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
     // Admin / MO Excel import state
     private bool _showImportModal;
@@ -1065,14 +1472,18 @@
     }
 
     private IEnumerable<LocationItemDto> FilteredRegions =>
-        _stateId > 0
-            ? _regions.Where(x => x.StateId == _stateId)
-            : _regions;
+        _stateId <= 0
+            ? _regions
+            : _regionsByStateId.TryGetValue(_stateId, out var regions)
+                ? regions
+                : Enumerable.Empty<LocationItemDto>();
 
     private IEnumerable<LocationItemDto> FilteredHqs =>
-        _regionId > 0
-            ? _hqs.Where(x => x.RegionId == _regionId)
-            : _hqs;
+        _regionId <= 0
+            ? _hqs
+            : _hqsByRegionId.TryGetValue(_regionId, out var hqs)
+                ? hqs
+                : Enumerable.Empty<LocationItemDto>();
 
     private int FirstVisibleRecord =>
         _response.TotalCount == 0
@@ -1095,6 +1506,41 @@
 
             var start = Math.Max(1, _response.Page - 2);
             var end = Math.Min(_response.TotalPages, start + 4);
+
+            if (end - start < 4)
+                start = Math.Max(1, end - 4);
+
+            return Enumerable.Range(start, end - start + 1);
+        }
+    }
+
+    private int StateSummaryTotalPages =>
+        _filteredStateWiseSummary.Count == 0
+            ? 0
+            : (int)Math.Ceiling(
+                _filteredStateWiseSummary.Count / (double)_stateSummaryPageSize);
+
+    private int StateSummaryFirstVisibleRecord =>
+        _filteredStateWiseSummary.Count == 0
+            ? 0
+            : ((_stateSummaryPage - 1) * _stateSummaryPageSize) + 1;
+
+    private int StateSummaryLastVisibleRecord =>
+        _filteredStateWiseSummary.Count == 0
+            ? 0
+            : Math.Min(
+                _stateSummaryPage * _stateSummaryPageSize,
+                _filteredStateWiseSummary.Count);
+
+    private IEnumerable<int> VisibleStateSummaryPageNumbers
+    {
+        get
+        {
+            if (StateSummaryTotalPages <= 0)
+                return Enumerable.Empty<int>();
+
+            var start = Math.Max(1, _stateSummaryPage - 2);
+            var end = Math.Min(StateSummaryTotalPages, start + 4);
 
             if (end - start < 4)
                 start = Math.Max(1, end - 4);
@@ -1128,9 +1574,50 @@
         _regions = LookupCache.Regions;
         _hqs = LookupCache.Headquarters;
 
+        BuildLocationIndexes();
         ApplyLoggedInRoleScope();
 
-        await LoadListAsync();
+        await Task.WhenAll(
+            LoadListAsync(),
+            LoadStateWiseSummaryAsync());
+    }
+
+    private void BuildLocationIndexes()
+    {
+        _statesById.Clear();
+        _regionsById.Clear();
+        _hqsById.Clear();
+        _regionsByStateId.Clear();
+        _hqsByRegionId.Clear();
+
+        foreach (var state in _states)
+            _statesById.TryAdd(state.Id, state);
+
+        foreach (var region in _regions)
+        {
+            _regionsById.TryAdd(region.Id, region);
+
+            if (!_regionsByStateId.TryGetValue(region.StateId, out var items))
+            {
+                items = new List<LocationItemDto>();
+                _regionsByStateId[region.StateId] = items;
+            }
+
+            items.Add(region);
+        }
+
+        foreach (var hq in _hqs)
+        {
+            _hqsById.TryAdd(hq.Id, hq);
+
+            if (!_hqsByRegionId.TryGetValue(hq.RegionId, out var items))
+            {
+                items = new List<LocationItemDto>();
+                _hqsByRegionId[hq.RegionId] = items;
+            }
+
+            items.Add(hq);
+        }
     }
 
     private void ApplyLoggedInRoleScope()
@@ -1142,10 +1629,10 @@
         {
             _hqId = LoginState.HQId;
 
-            var hq = _hqs.FirstOrDefault(x => x.Id == _hqId);
+            _hqsById.TryGetValue(_hqId, out var hq);
             _regionId = hq?.RegionId ?? LoginState.RegionId;
 
-            var region = _regions.FirstOrDefault(x => x.Id == _regionId);
+            _regionsById.TryGetValue(_regionId, out var region);
             _stateId = region?.StateId ?? LoginState.StateId;
 
             return;
@@ -1155,7 +1642,7 @@
         {
             _regionId = LoginState.RegionId;
 
-            var region = _regions.FirstOrDefault(x => x.Id == _regionId);
+            _regionsById.TryGetValue(_regionId, out var region);
             _stateId = region?.StateId ?? LoginState.StateId;
 
             _hqId = 0;
@@ -1178,9 +1665,14 @@
 
     private async Task LoadListAsync()
     {
-        if (_isLoading)
+        if (_isDisposed)
             return;
 
+        _listLoadCts?.Cancel();
+
+        var requestCts = new CancellationTokenSource();
+        _listLoadCts = requestCts;
+        var requestId = ++_listLoadRequestId;
         _isLoading = true;
 
         try
@@ -1211,7 +1703,12 @@
                 string.Join("&", query);
 
             var result =
-                await Http.GetFromJsonAsync<SubDealerPagedListResponse>(url);
+                await Http.GetFromJsonAsync<SubDealerPagedListResponse>(
+                    url,
+                    requestCts.Token);
+
+            if (requestId != _listLoadRequestId || requestCts.IsCancellationRequested)
+                return;
 
             _response = result ?? new SubDealerPagedListResponse
             {
@@ -1223,8 +1720,14 @@
                 ? 1
                 : _response.Page;
         }
+        catch (OperationCanceledException) when (requestCts.IsCancellationRequested)
+        {
+        }
         catch (Exception ex)
         {
+            if (requestId != _listLoadRequestId)
+                return;
+
             Console.WriteLine($"Sub Dealer list load failed: {ex.Message}");
 
             _response = new SubDealerPagedListResponse
@@ -1235,14 +1738,856 @@
         }
         finally
         {
-            _isLoading = false;
+            if (requestId == _listLoadRequestId)
+            {
+                _isLoading = false;
+
+                if (ReferenceEquals(_listLoadCts, requestCts))
+                    _listLoadCts = null;
+            }
+
+            requestCts.Dispose();
+        }
+    }
+
+    private async Task LoadStateWiseSummaryAsync()
+    {
+        if (_isStateSummaryLoading || _isDisposed)
+            return;
+
+        var requestCts = new CancellationTokenSource();
+        _stateSummaryLoadCts = requestCts;
+        _isStateSummaryLoading = true;
+        _stateSummaryError = null;
+
+        try
+        {
+            var masterRows =
+                await Http.GetFromJsonAsync<List<SubDealerLookupDto>>(
+                    BuildRoleScopedSubDealerLookupUrl(),
+                    requestCts.Token) ?? new();
+
+            var masterCountByState = new Dictionary<int, int>();
+            foreach (var row in masterRows)
+            {
+                masterCountByState.TryGetValue(row.StateId, out var count);
+                masterCountByState[row.StateId] = count + 1;
+            }
+
+            var summaryStates = AllowedStates
+                .Where(x => !IsUnrestricted || masterCountByState.ContainsKey(x.Id))
+                .OrderBy(x => x.StateName)
+                .ToList();
+
+            using var requestGate =
+                new SemaphoreSlim(StateSummaryMaxConcurrentRequests);
+
+            var stateTasks = summaryStates.Select(async state =>
+            {
+                await requestGate.WaitAsync(requestCts.Token);
+
+                try
+                {
+                    var savedResponse =
+                        await Http.GetFromJsonAsync<SubDealerPagedListResponse>(
+                            BuildStateSummaryListUrl(state.Id),
+                            requestCts.Token) ?? new();
+
+                    var activeCount = savedResponse.ActiveCount;
+                    var inactiveCount = savedResponse.InactiveCount;
+
+                    return new StateWiseSubDealerSummaryRow
+                    {
+                        StateId = state.Id,
+                        StateName = state.StateName,
+                        TotalSubDealers = masterCountByState.GetValueOrDefault(state.Id),
+                        SavedSubDealers = activeCount + inactiveCount,
+                        ActiveSubDealers = activeCount,
+                        InactiveSubDealers = inactiveCount
+                    };
+                }
+                finally
+                {
+                    requestGate.Release();
+                }
+            });
+
+            _stateWiseSummary = (await Task.WhenAll(stateTasks)).ToList();
+            _stateSummaryPage = 1;
+            UpdateStateSummaryView();
+        }
+        catch (OperationCanceledException) when (requestCts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"State-wise Sub Dealer summary load failed: {ex.Message}");
+            _stateWiseSummary.Clear();
+            _filteredStateWiseSummary.Clear();
+            _pagedStateWiseSummary.Clear();
+            _stateSummaryError =
+                "Could not load the state-wise Sub Dealer summary. Please refresh and try again.";
+        }
+        finally
+        {
+            _isStateSummaryLoading = false;
+
+            if (ReferenceEquals(_stateSummaryLoadCts, requestCts))
+                _stateSummaryLoadCts = null;
+
+            requestCts.Dispose();
+        }
+    }
+
+    private string BuildRoleScopedSubDealerLookupUrl()
+    {
+        const string baseUrl = "api/SubDealerRegistration/lookup";
+
+        if (IsUnrestricted)
+            return baseUrl;
+
+        if (IsMoRole && LoginState.HQId > 0)
+            return $"{baseUrl}?hqId={LoginState.HQId}";
+
+        if (IsRmRole && LoginState.RegionId > 0)
+            return $"{baseUrl}?regionId={LoginState.RegionId}";
+
+        if (IsSmmRole && LoginState.StateId > 0)
+            return $"{baseUrl}?stateId={LoginState.StateId}";
+
+        return baseUrl;
+    }
+
+    private string BuildStateSummaryListUrl(int stateId)
+    {
+        var query = new List<string>
+        {
+            "page=1",
+            "pageSize=1",
+            $"stateId={stateId}"
+        };
+
+        if (!IsUnrestricted)
+        {
+            if (IsMoRole && LoginState.HQId > 0)
+            {
+                query.Add($"hqId={LoginState.HQId}");
+            }
+            else if (IsRmRole && LoginState.RegionId > 0)
+            {
+                query.Add($"regionId={LoginState.RegionId}");
+            }
+            else if (!IsSmmRole)
+            {
+                if (LoginState.RegionId > 0)
+                    query.Add($"regionId={LoginState.RegionId}");
+
+                if (LoginState.HQId > 0)
+                    query.Add($"hqId={LoginState.HQId}");
+            }
+        }
+
+        return "api/SubDealerRegistration/list?" + string.Join("&", query);
+    }
+
+    private void UpdateStateSummaryView()
+    {
+        IEnumerable<StateWiseSubDealerSummaryRow> query = _stateWiseSummary;
+
+        if (!string.IsNullOrWhiteSpace(_stateSummarySearchText))
+        {
+            var search = _stateSummarySearchText.Trim();
+            query = query.Where(x =>
+                x.StateName.Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase) ||
+                x.TotalSubDealers.ToString().Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase) ||
+                x.SavedSubDealers.ToString().Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase) ||
+                x.ActiveSubDealers.ToString().Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase) ||
+                x.InactiveSubDealers.ToString().Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase));
+        }
+
+        query = _stateSummarySortColumn switch
+        {
+            "Total" => _stateSummarySortAscending
+                ? query.OrderBy(x => x.TotalSubDealers)
+                : query.OrderByDescending(x => x.TotalSubDealers),
+            "Saved" => _stateSummarySortAscending
+                ? query.OrderBy(x => x.SavedSubDealers)
+                : query.OrderByDescending(x => x.SavedSubDealers),
+            "Active" => _stateSummarySortAscending
+                ? query.OrderBy(x => x.ActiveSubDealers)
+                : query.OrderByDescending(x => x.ActiveSubDealers),
+            "Inactive" => _stateSummarySortAscending
+                ? query.OrderBy(x => x.InactiveSubDealers)
+                : query.OrderByDescending(x => x.InactiveSubDealers),
+            _ => _stateSummarySortAscending
+                ? query.OrderBy(
+                    x => x.StateName,
+                    StringComparer.OrdinalIgnoreCase)
+                : query.OrderByDescending(
+                    x => x.StateName,
+                    StringComparer.OrdinalIgnoreCase)
+        };
+
+        _filteredStateWiseSummary = query.ToList();
+
+        var totalPages = StateSummaryTotalPages;
+        if (totalPages == 0)
+        {
+            _stateSummaryPage = 1;
+        }
+        else if (_stateSummaryPage > totalPages)
+        {
+            _stateSummaryPage = totalPages;
+        }
+
+        UpdateStateSummaryPage();
+    }
+
+    private void UpdateStateSummaryPage()
+    {
+        _pagedStateWiseSummary = _filteredStateWiseSummary
+            .Skip((_stateSummaryPage - 1) * _stateSummaryPageSize)
+            .Take(_stateSummaryPageSize)
+            .ToList();
+    }
+
+    private void OnStateSummarySearchInput(ChangeEventArgs e)
+    {
+        _stateSummarySearchText = e.Value?.ToString() ?? string.Empty;
+        _stateSummaryPage = 1;
+        UpdateStateSummaryView();
+    }
+
+    private void OnStateSummaryPageSizeChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var value) || value <= 0)
+            value = 10;
+
+        _stateSummaryPageSize = value;
+        _stateSummaryPage = 1;
+        UpdateStateSummaryView();
+    }
+
+    private void SortStateSummary(string column)
+    {
+        if (string.Equals(
+            _stateSummarySortColumn,
+            column,
+            StringComparison.Ordinal))
+        {
+            _stateSummarySortAscending = !_stateSummarySortAscending;
+        }
+        else
+        {
+            _stateSummarySortColumn = column;
+            _stateSummarySortAscending = true;
+        }
+
+        _stateSummaryPage = 1;
+        UpdateStateSummaryView();
+    }
+
+    private string StateSummarySortIcon(string column)
+    {
+        if (!string.Equals(
+            _stateSummarySortColumn,
+            column,
+            StringComparison.Ordinal))
+        {
+            return "bi-arrow-down-up";
+        }
+
+        return _stateSummarySortAscending
+            ? "bi-chevron-up"
+            : "bi-chevron-down";
+    }
+
+    private string StateSummaryAriaSort(string column)
+    {
+        if (!string.Equals(
+            _stateSummarySortColumn,
+            column,
+            StringComparison.Ordinal))
+        {
+            return "none";
+        }
+
+        return _stateSummarySortAscending
+            ? "ascending"
+            : "descending";
+    }
+
+    private void PreviousStateSummaryPage()
+    {
+        if (_stateSummaryPage > 1)
+        {
+            _stateSummaryPage--;
+            UpdateStateSummaryPage();
+        }
+    }
+
+    private void NextStateSummaryPage()
+    {
+        if (_stateSummaryPage < StateSummaryTotalPages)
+        {
+            _stateSummaryPage++;
+            UpdateStateSummaryPage();
+        }
+    }
+
+    private void GoToStateSummaryPage(int pageNo)
+    {
+        if (pageNo >= 1 && pageNo <= StateSummaryTotalPages)
+        {
+            _stateSummaryPage = pageNo;
+            UpdateStateSummaryPage();
         }
     }
 
     private async Task RefreshAsync()
     {
         _page = 1;
-        await LoadListAsync();
+        await Task.WhenAll(
+            LoadListAsync(),
+            LoadStateWiseSummaryAsync());
+    }
+
+    private async Task ExportAllSavedSubDealersAsync()
+    {
+        if (_isExporting || _isDisposed)
+            return;
+
+        var requestCts = new CancellationTokenSource();
+        _exportCts = requestCts;
+        _isExporting = true;
+        _pageMessage = null;
+
+        try
+        {
+            var exportRows = new List<SubDealerExportRow>();
+            var exportPage = 1;
+
+            while (true)
+            {
+                var result =
+                    await Http.GetFromJsonAsync<SubDealerPagedListResponse>(
+                        BuildAllSavedSubDealerExportUrl(
+                            exportPage,
+                            ExportPageSize),
+                        requestCts.Token);
+
+                if (result == null || result.Items.Count == 0)
+                    break;
+
+                foreach (var item in result.Items)
+                {
+                    exportRows.Add(new SubDealerExportRow
+                    {
+                        SubDealerCode = item.SubDealerCode ?? string.Empty,
+                        FirmName = item.FirmName ?? string.Empty,
+                        State = StateName(item.StateId),
+                        Region = RegionName(item.RegionId),
+                        Hq = HqName(item.HQId),
+                        GstNumber = item.GSTNumber ?? string.Empty,
+                        PanNumber = item.PANNo ?? string.Empty,
+                        OfficialContactNumber = item.OfficialContactNumber ?? string.Empty,
+                        WhatsAppNumber = item.WhatsAppNumber ?? string.Empty,
+                        Status = item.Status == SubDealerStatus.Active
+                            ? "Active"
+                            : "Inactive"
+                    });
+                }
+
+                if (result.TotalPages <= exportPage)
+                    break;
+
+                exportPage++;
+            }
+
+            if (exportRows.Count == 0)
+            {
+                _pageMessageIsError = true;
+                _pageMessage = "No saved Sub Dealer records are available to export.";
+                return;
+            }
+
+            var workbookBytes = CreateSubDealerExcelWorkbook(exportRows);
+            var fileName =
+                $"Saved_Sub_Dealers_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+
+            await JS.InvokeVoidAsync(
+                "downloadFileFromBytes",
+                fileName,
+                ExcelContentType,
+                Convert.ToBase64String(workbookBytes));
+
+            _pageMessageIsError = false;
+            _pageMessage =
+                $"Export completed successfully. {exportRows.Count} saved Sub Dealer record(s) exported.";
+        }
+        catch (OperationCanceledException) when (requestCts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Sub Dealer Excel export failed: {ex.Message}");
+            _pageMessageIsError = true;
+            _pageMessage = "Could not export the saved Sub Dealer records. Please try again.";
+        }
+        finally
+        {
+            _isExporting = false;
+
+            if (ReferenceEquals(_exportCts, requestCts))
+                _exportCts = null;
+
+            requestCts.Dispose();
+        }
+    }
+
+    private string BuildAllSavedSubDealerExportUrl(
+        int page,
+        int pageSize)
+    {
+        var query = new List<string>
+        {
+            $"page={page}",
+            $"pageSize={pageSize}"
+        };
+
+        // Export every saved record available to the logged-in role. Current
+        // screen search/status/geography filters intentionally stay independent.
+        if (!IsUnrestricted)
+        {
+            if (IsMoRole && LoginState.HQId > 0)
+            {
+                query.Add($"hqId={LoginState.HQId}");
+            }
+            else if (IsRmRole && LoginState.RegionId > 0)
+            {
+                query.Add($"regionId={LoginState.RegionId}");
+            }
+            else if (IsSmmRole && LoginState.StateId > 0)
+            {
+                query.Add($"stateId={LoginState.StateId}");
+            }
+            else
+            {
+                if (LoginState.StateId > 0)
+                    query.Add($"stateId={LoginState.StateId}");
+
+                if (LoginState.RegionId > 0)
+                    query.Add($"regionId={LoginState.RegionId}");
+
+                if (LoginState.HQId > 0)
+                    query.Add($"hqId={LoginState.HQId}");
+            }
+        }
+
+        return "api/SubDealerRegistration/list?" + string.Join("&", query);
+    }
+
+    private static byte[] CreateSubDealerExcelWorkbook(
+        IReadOnlyList<SubDealerExportRow> rows)
+    {
+        const string contentTypesXml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
+            "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
+            "<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
+            "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>" +
+            "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>" +
+            "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>" +
+            "</Types>";
+
+        const string rootRelationshipsXml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+            "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/>" +
+            "</Relationships>";
+
+        const string workbookXml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" " +
+            "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">" +
+            "<sheets><sheet name=\"Saved Sub Dealers\" sheetId=\"1\" r:id=\"rId1\"/></sheets>" +
+            "</workbook>";
+
+        const string workbookRelationshipsXml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+            "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>" +
+            "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>" +
+            "</Relationships>";
+
+        const string stylesXml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">" +
+            "<fonts count=\"2\">" +
+            "<font><sz val=\"11\"/><name val=\"Calibri\"/><family val=\"2\"/><scheme val=\"minor\"/></font>" +
+            "<font><b/><color rgb=\"FFFFFFFF\"/><sz val=\"11\"/><name val=\"Calibri\"/></font>" +
+            "</fonts>" +
+            "<fills count=\"3\">" +
+            "<fill><patternFill patternType=\"none\"/></fill>" +
+            "<fill><patternFill patternType=\"gray125\"/></fill>" +
+            "<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF07864F\"/><bgColor indexed=\"64\"/></patternFill></fill>" +
+            "</fills>" +
+            "<borders count=\"2\">" +
+            "<border><left/><right/><top/><bottom/><diagonal/></border>" +
+            "<border><left style=\"thin\"><color rgb=\"FFD9E1E7\"/></left>" +
+            "<right style=\"thin\"><color rgb=\"FFD9E1E7\"/></right>" +
+            "<top style=\"thin\"><color rgb=\"FFD9E1E7\"/></top>" +
+            "<bottom style=\"thin\"><color rgb=\"FFD9E1E7\"/></bottom><diagonal/></border>" +
+            "</borders>" +
+            "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>" +
+            "<cellXfs count=\"2\">" +
+            "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>" +
+            "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"1\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\">" +
+            "<alignment horizontal=\"center\" vertical=\"center\"/></xf>" +
+            "</cellXfs>" +
+            "<cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles>" +
+            "</styleSheet>";
+
+        using var workbookStream = new MemoryStream();
+
+        using (var archive = new ZipArchive(
+            workbookStream,
+            ZipArchiveMode.Create,
+            leaveOpen: true))
+        {
+            WriteExcelTextEntry(
+                archive,
+                "[Content_Types].xml",
+                contentTypesXml);
+            WriteExcelTextEntry(
+                archive,
+                "_rels/.rels",
+                rootRelationshipsXml);
+            WriteExcelTextEntry(
+                archive,
+                "xl/workbook.xml",
+                workbookXml);
+            WriteExcelTextEntry(
+                archive,
+                "xl/_rels/workbook.xml.rels",
+                workbookRelationshipsXml);
+            WriteExcelTextEntry(
+                archive,
+                "xl/styles.xml",
+                stylesXml);
+            WriteSubDealerWorksheet(archive, rows);
+        }
+
+        return workbookStream.ToArray();
+    }
+
+    private static void WriteExcelTextEntry(
+        ZipArchive archive,
+        string entryName,
+        string content)
+    {
+        var entry = archive.CreateEntry(
+            entryName,
+            CompressionLevel.Fastest);
+
+        using var writer = new StreamWriter(
+            entry.Open(),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        writer.Write(content);
+    }
+
+    private static void WriteSubDealerWorksheet(
+        ZipArchive archive,
+        IReadOnlyList<SubDealerExportRow> rows)
+    {
+        var entry = archive.CreateEntry(
+            "xl/worksheets/sheet1.xml",
+            CompressionLevel.Fastest);
+
+        using var entryStream = entry.Open();
+        using var writer = XmlWriter.Create(
+            entryStream,
+            new XmlWriterSettings
+            {
+                Encoding = new UTF8Encoding(
+                    encoderShouldEmitUTF8Identifier: false),
+                Indent = false,
+                CloseOutput = false
+            });
+
+        var headers = new[]
+        {
+            "S.No",
+            "Sub Dealer Code",
+            "Firm Name",
+            "State",
+            "Region",
+            "HQ",
+            "GST Number",
+            "PAN Number",
+            "Official Contact Number",
+            "WhatsApp Number",
+            "Status"
+        };
+
+        var columnLetters = new[]
+        {
+            "A", "B", "C", "D", "E", "F",
+            "G", "H", "I", "J", "K"
+        };
+
+        var columnWidths = new[]
+        {
+            8d, 20d, 32d, 20d, 22d, 22d,
+            20d, 16d, 23d, 21d, 14d
+        };
+
+        writer.WriteStartDocument(standalone: true);
+        writer.WriteStartElement(
+            "worksheet",
+            ExcelSpreadsheetNamespace);
+
+        writer.WriteStartElement(
+            "dimension",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString(
+            "ref",
+            $"A1:K{Math.Max(1, rows.Count + 1)}");
+        writer.WriteEndElement();
+
+        writer.WriteStartElement(
+            "sheetViews",
+            ExcelSpreadsheetNamespace);
+        writer.WriteStartElement(
+            "sheetView",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("workbookViewId", "0");
+        writer.WriteStartElement(
+            "pane",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("ySplit", "1");
+        writer.WriteAttributeString("topLeftCell", "A2");
+        writer.WriteAttributeString("activePane", "bottomLeft");
+        writer.WriteAttributeString("state", "frozen");
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+
+        writer.WriteStartElement(
+            "sheetFormatPr",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("defaultRowHeight", "15");
+        writer.WriteEndElement();
+
+        writer.WriteStartElement(
+            "cols",
+            ExcelSpreadsheetNamespace);
+
+        for (var index = 0; index < columnWidths.Length; index++)
+        {
+            writer.WriteStartElement(
+                "col",
+                ExcelSpreadsheetNamespace);
+            writer.WriteAttributeString(
+                "min",
+                (index + 1).ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+            writer.WriteAttributeString(
+                "max",
+                (index + 1).ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+            writer.WriteAttributeString(
+                "width",
+                columnWidths[index].ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+            writer.WriteAttributeString("customWidth", "1");
+            writer.WriteEndElement();
+        }
+
+        writer.WriteEndElement();
+        writer.WriteStartElement(
+            "sheetData",
+            ExcelSpreadsheetNamespace);
+
+        writer.WriteStartElement(
+            "row",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("r", "1");
+        writer.WriteAttributeString("ht", "22");
+        writer.WriteAttributeString("customHeight", "1");
+
+        for (var index = 0; index < headers.Length; index++)
+        {
+            WriteExcelTextCell(
+                writer,
+                $"{columnLetters[index]}1",
+                headers[index],
+                styleIndex: 1);
+        }
+
+        writer.WriteEndElement();
+
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var excelRowNumber = index + 2;
+            var row = rows[index];
+            var values = new[]
+            {
+                row.SubDealerCode,
+                row.FirmName,
+                row.State,
+                row.Region,
+                row.Hq,
+                row.GstNumber,
+                row.PanNumber,
+                row.OfficialContactNumber,
+                row.WhatsAppNumber,
+                row.Status
+            };
+
+            writer.WriteStartElement(
+                "row",
+                ExcelSpreadsheetNamespace);
+            writer.WriteAttributeString(
+                "r",
+                excelRowNumber.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+
+            WriteExcelNumberCell(
+                writer,
+                $"A{excelRowNumber}",
+                index + 1);
+
+            for (var valueIndex = 0;
+                valueIndex < values.Length;
+                valueIndex++)
+            {
+                WriteExcelTextCell(
+                    writer,
+                    $"{columnLetters[valueIndex + 1]}{excelRowNumber}",
+                    values[valueIndex]);
+            }
+
+            writer.WriteEndElement();
+        }
+
+        writer.WriteEndElement();
+
+        writer.WriteStartElement(
+            "autoFilter",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString(
+            "ref",
+            $"A1:K{Math.Max(1, rows.Count + 1)}");
+        writer.WriteEndElement();
+
+        writer.WriteEndElement();
+        writer.WriteEndDocument();
+    }
+
+    private static void WriteExcelTextCell(
+        XmlWriter writer,
+        string cellReference,
+        string? value,
+        int styleIndex = 0)
+    {
+        var safeValue = NormalizeExcelCellText(value);
+
+        writer.WriteStartElement(
+            "c",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("r", cellReference);
+        writer.WriteAttributeString("t", "inlineStr");
+
+        if (styleIndex > 0)
+        {
+            writer.WriteAttributeString(
+                "s",
+                styleIndex.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        writer.WriteStartElement(
+            "is",
+            ExcelSpreadsheetNamespace);
+        writer.WriteStartElement(
+            "t",
+            ExcelSpreadsheetNamespace);
+
+        if (safeValue.Length > 0 &&
+            (char.IsWhiteSpace(safeValue[0]) ||
+             char.IsWhiteSpace(safeValue[safeValue.Length - 1])))
+        {
+            writer.WriteAttributeString(
+                "xml",
+                "space",
+                "http://www.w3.org/XML/1998/namespace",
+                "preserve");
+        }
+
+        writer.WriteString(safeValue);
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+    }
+
+    private static void WriteExcelNumberCell(
+        XmlWriter writer,
+        string cellReference,
+        int value)
+    {
+        writer.WriteStartElement(
+            "c",
+            ExcelSpreadsheetNamespace);
+        writer.WriteAttributeString("r", cellReference);
+        writer.WriteStartElement(
+            "v",
+            ExcelSpreadsheetNamespace);
+        writer.WriteString(
+            value.ToString(
+                System.Globalization.CultureInfo.InvariantCulture));
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+    }
+
+    private static string NormalizeExcelCellText(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        const int excelCellCharacterLimit = 32767;
+        var normalized = new StringBuilder(
+            Math.Min(value.Length, excelCellCharacterLimit));
+
+        foreach (var character in value)
+        {
+            var isValidXmlCharacter =
+                character == '\t' ||
+                character == '\n' ||
+                character == '\r' ||
+                (character >= '\u0020' && character <= '\uD7FF') ||
+                (character >= '\uE000' && character <= '\uFFFD');
+
+            if (!isValidXmlCharacter)
+                continue;
+
+            normalized.Append(character);
+
+            if (normalized.Length == excelCellCharacterLimit)
+                break;
+        }
+
+        return normalized.ToString();
     }
 
     private async Task OnSearchInput(ChangeEventArgs e)
@@ -1483,18 +2828,14 @@
                 .GroupBy(x => NormalizeMasterValue(x.StateName))
                 .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
 
-            var statesById = _states
-                .GroupBy(x => x.Id)
-                .ToDictionary(x => x.Key, x => x.First());
+            var statesById = _statesById;
 
             var regionsByStateAndName = _regions
                 .Where(x => !string.IsNullOrWhiteSpace(x.RegionName))
                 .GroupBy(x => $"{x.StateId}|{NormalizeMasterValue(x.RegionName)}")
                 .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
 
-            var regionsById = _regions
-                .GroupBy(x => x.Id)
-                .ToDictionary(x => x.Key, x => x.First());
+            var regionsById = _regionsById;
 
             var uniqueRegionsByName = _regions
                 .Where(x => !string.IsNullOrWhiteSpace(x.RegionName))
@@ -1658,7 +2999,9 @@
             // Refresh the maintained list. Untouched imported master rows remain
             // hidden by the existing list endpoint visibility rule.
             _page = 1;
-            await LoadListAsync();
+            await Task.WhenAll(
+                LoadListAsync(),
+                LoadStateWiseSummaryAsync());
             _importFile = null;
 
             if (skippedCount > 0)
@@ -1695,11 +3038,19 @@
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
 
-        var normalized = new string(value
-            .Trim()
-            .Where(char.IsLetterOrDigit)
-            .Select(char.ToUpperInvariant)
-            .ToArray());
+        var trimmed = value.Trim();
+        var buffer = new char[trimmed.Length];
+        var length = 0;
+
+        foreach (var character in trimmed)
+        {
+            if (!char.IsLetterOrDigit(character))
+                continue;
+
+            buffer[length++] = char.ToUpperInvariant(character);
+        }
+
+        var normalized = new string(buffer, 0, length);
 
         return normalized switch
         {
@@ -1727,13 +3078,19 @@
     }
 
     private string StateName(int id) =>
-        _states.FirstOrDefault(x => x.Id == id)?.StateName ?? "-";
+        _statesById.TryGetValue(id, out var state)
+            ? state.StateName
+            : "-";
 
     private string RegionName(int id) =>
-        _regions.FirstOrDefault(x => x.Id == id)?.RegionName ?? "-";
+        _regionsById.TryGetValue(id, out var region)
+            ? region.RegionName
+            : "-";
 
     private string HqName(int id) =>
-        _hqs.FirstOrDefault(x => x.Id == id)?.HeadquarterName ?? "-";
+        _hqsById.TryGetValue(id, out var hq)
+            ? hq.HeadquarterName
+            : "-";
 
     // Same download/view URL pattern used by Enclosures page.
     // The sample file must exist on the API side at:
@@ -1757,5 +3114,23 @@
         }
 
         return $"{baseUrl}/api/DealerFile/view/{urlPath}";
+    }
+
+    public void Dispose()
+    {
+        _isDisposed = true;
+
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = null;
+
+        _listLoadCts?.Cancel();
+        _listLoadCts = null;
+
+        _stateSummaryLoadCts?.Cancel();
+        _stateSummaryLoadCts = null;
+
+        _exportCts?.Cancel();
+        _exportCts = null;
     }
 }

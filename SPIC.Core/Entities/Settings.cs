@@ -183,6 +183,7 @@ namespace SPIC.Core.Entities
 		public int StateId { get; set; } = 0;
 		public int DistrictId { get; set; } = 0;
 		public string? ContactNumber { get; set; }
+		public string? AdditionalPhoneNo { get; set; }
 
 		// PVT WH content. Also used when category = Both.
 		public decimal? SpicApprovedReservationQuantityMT { get; set; }

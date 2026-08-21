@@ -200,19 +200,24 @@
                 <span>Add Dealer</span>
             </button>
 
-            <button type="button"
-                    class="header-action-btn action-blue"
-                    @onclick="ExportDealers">
-                <i class="bi bi-download"></i>
-                <span>Credit limit status</span>
-            </button>
-            <button type="button"
-                    class="header-action-btn action-green"
-                    @onclick="ExportDealerMaster">
-                <i class="bi bi-file-earmark-excel"></i>
-                <span>Dealer Master</span>
-            </button>
         }
+
+        @* Both read-only exports are available to every Dashboard role. Each uses
+           _filteredDealers, which has already been restricted by ApplyRoleFilter
+           to the logged-in user's State, Region, or HQ scope. *@
+        <button type="button"
+                class="header-action-btn action-green"
+                @onclick="ExportDealerMaster">
+            <i class="bi bi-file-earmark-excel"></i>
+            <span>Dealer Master</span>
+        </button>
+
+        <button type="button"
+                class="header-action-btn action-blue"
+                @onclick="ExportDealers">
+            <i class="bi bi-download"></i>
+            <span>Credit limit status</span>
+        </button>
 
         @* State-wise dealer summary moved to a separate page so Dashboard stays fast.
            Visibility remains exactly the same as the old inline table: Admin only. *@
@@ -797,6 +802,11 @@
             var data = _filteredDealers.ToList();
             if (!data.Any()) return;
 
+            // Dealer Master needs fields that are not guaranteed to be included in
+            // the lightweight submitted-list response. Load them only for export so
+            // normal Dashboard loading and role filtering stay unchanged.
+            var exportRows = await LoadDealerMasterExportRows(data);
+
             using var workbook = new XLWorkbook();
             var ws = workbook.Worksheets.Add("DealerMaster");
 
@@ -805,7 +815,9 @@
                 "Dealer Code", "Firm Name", "Company", "Region", "HQ", "Entity Type",
                 "Status", "Approval Status", "SPIC Code", "GreenStar Code",
                 "DoorNo", "Street", "SubVillage", "PinCode", "Village", "Block", "Taluk",
-                "Dealer Type", "Wholesaler ID", "Retailer ID", "GST No", "Aadhaar No", "PAN No", "SDWA Status", "Authorized Person Name"
+                "Dealer Type", "Wholesaler ID", "Retailer ID", "GST No", "Aadhaar No", "PAN No", "SDWA Status",
+                "Authorized Person Name", "Authorized Person Email", "Authorized Person Contact",
+                "Latitude", "Longitude"
             };
 
             for (int c = 0; c < headers.Length; c++)
@@ -817,42 +829,65 @@
 
             for (int r = 0; r < data.Count; r++)
             {
-                var d = data[r];
-                var company = d.InSpic && d.InGreenStar ? "Both" : d.InSpic ? "SPIC" : d.InGreenStar ? "GreenStar" : "-";
-                var regionName = _regionsAll.FirstOrDefault(x => x.Id == d.Region)?.RegionName ?? "-";
-                var hqName = _headquartersAll.FirstOrDefault(x => x.Id == d.HQ)?.HeadquarterName ?? "-";
+                var exportRow = exportRows[r];
+                var d = exportRow.Summary;
+                var detail = exportRow.Detail ?? d;
+                var authorizedPerson = exportRow.AuthorizedPerson;
+                var company = detail.InSpic && detail.InGreenStar ? "Both" : detail.InSpic ? "SPIC" : detail.InGreenStar ? "GreenStar" : "-";
+                var regionId = detail.Region != 0 ? detail.Region : d.Region;
+                var hqId = detail.HQ != 0 ? detail.HQ : d.HQ;
+                var regionName = _regionsAll.FirstOrDefault(x => x.Id == regionId)?.RegionName ?? "-";
+                var hqName = _headquartersAll.FirstOrDefault(x => x.Id == hqId)?.HeadquarterName ?? "-";
                 var status = GetStatusName(d.Status);
                 var approvalStatus = GetApprovalStatus(d);
 
-                ws.Cell(r + 2, 1).Value = d.DealerCode ?? $"DL-{d.Id}";
-                ws.Cell(r + 2, 2).Value = d.FirmName ?? "";
+                ws.Cell(r + 2, 1).Value = FirstNonEmpty(detail.DealerCode, d.DealerCode, $"DL-{d.Id}");
+                ws.Cell(r + 2, 2).Value = FirstNonEmpty(detail.FirmName, d.FirmName);
                 ws.Cell(r + 2, 3).Value = company;
                 ws.Cell(r + 2, 4).Value = regionName;
                 ws.Cell(r + 2, 5).Value = hqName;
-                ws.Cell(r + 2, 6).Value = GetEntityTypeName(d.EntityType);
+                ws.Cell(r + 2, 6).Value = GetEntityTypeName(
+                    detail.EntityType ?? d.EntityType,
+                    FirstNonEmpty(detail.BusinessEntityType, d.BusinessEntityType));
                 ws.Cell(r + 2, 7).Value = status;
                 ws.Cell(r + 2, 8).Value = approvalStatus;
-                ws.Cell(r + 2, 9).Value = d.SPICCode ?? "";
-                ws.Cell(r + 2, 10).Value = d.GreenStarCode ?? "";
+                ws.Cell(r + 2, 9).Value = FirstNonEmpty(detail.SPICCode, d.SPICCode);
+                ws.Cell(r + 2, 10).Value = FirstNonEmpty(detail.GreenStarCode, d.GreenStarCode);
 
                 // Address fields in separate columns
-                ws.Cell(r + 2, 11).Value = d.DoorNo ?? "";
-                ws.Cell(r + 2, 12).Value = d.Street ?? "";
-                ws.Cell(r + 2, 13).Value = d.SubVillage ?? "";
-                ws.Cell(r + 2, 14).Value = d.PinCode ?? "";
-                ws.Cell(r + 2, 15).Value = d.Village ?? "";
-                ws.Cell(r + 2, 16).Value = d.Block ?? "";
-                ws.Cell(r + 2, 17).Value = d.Taluk ?? "";
+                ws.Cell(r + 2, 11).Value = FirstNonEmpty(detail.ShopNoORRoomNoOrBlockNo, detail.DoorNo, d.ShopNoORRoomNoOrBlockNo, d.DoorNo);
+                ws.Cell(r + 2, 12).Value = FirstNonEmpty(detail.Street, d.Street);
+                ws.Cell(r + 2, 13).Value = FirstNonEmpty(detail.SubVillage, d.SubVillage);
+                ws.Cell(r + 2, 14).Value = FirstNonEmpty(detail.PinCode, d.PinCode);
+                ws.Cell(r + 2, 15).Value = FirstNonEmpty(detail.Village, d.Village);
+                ws.Cell(r + 2, 16).Value = FirstNonEmpty(detail.Block, d.Block);
+                ws.Cell(r + 2, 17).Value = FirstNonEmpty(detail.Taluk, d.Taluk);
 
-                // Dealer Type / IDs and various numbers - attempt to read from DTO if present
-                ws.Cell(r + 2, 18).Value = (!string.IsNullOrEmpty(d.WholeSaleFertilizerLicenseNumber) && !string.IsNullOrEmpty(d.RetailFertilizerLicenseNumber)) ? "Both" : (!string.IsNullOrEmpty(d.WholeSaleFertilizerLicenseNumber) ? "Wholesaler" : !string.IsNullOrEmpty(d.RetailFertilizerLicenseNumber) ? "Retailer" : "");
-                ws.Cell(r + 2, 19).Value = d.WholeSaleFertilizerLicenseNumber ?? ""; // Wholesaler ID
-                ws.Cell(r + 2, 20).Value = d.RetailFertilizerLicenseNumber ?? ""; // Retailer ID
-                ws.Cell(r + 2, 21).Value = d.GSTNumber ?? "";
-                ws.Cell(r + 2, 22).Value = d.AadhaarNumber ?? "";
-                ws.Cell(r + 2, 23).Value = d.PANNumber ?? "";
-                ws.Cell(r + 2, 24).Value = d.SDWAStatus ?? "";
-                ws.Cell(r + 2, 25).Value = d.AuthorizedPersonName ?? "";
+                var wholesaleId = FirstNonEmpty(detail.WholeSaleFertilizerLicenseNumber, d.WholeSaleFertilizerLicenseNumber);
+                var retailerId = FirstNonEmpty(detail.RetailFertilizerLicenseNumber, d.RetailFertilizerLicenseNumber);
+                ws.Cell(r + 2, 18).Value = !string.IsNullOrEmpty(wholesaleId) && !string.IsNullOrEmpty(retailerId)
+                    ? "Both"
+                    : !string.IsNullOrEmpty(wholesaleId) ? "Wholesaler" : !string.IsNullOrEmpty(retailerId) ? "Retailer" : "";
+                ws.Cell(r + 2, 19).Value = wholesaleId;
+                ws.Cell(r + 2, 20).Value = retailerId;
+                ws.Cell(r + 2, 21).Value = FirstNonEmpty(detail.GSTNumber, d.GSTNumber);
+                ws.Cell(r + 2, 22).Value = FirstNonEmpty(detail.AadhaarNumber, d.AadhaarNumber);
+                ws.Cell(r + 2, 23).Value = FirstNonEmpty(detail.PANNumber, d.PANNumber);
+                ws.Cell(r + 2, 24).Value = GetSdwaStatus(detail, d);
+
+                // Proprietor page data: use the first saved ownership record for this dealer.
+                ws.Cell(r + 2, 25).Value = FirstNonEmpty(authorizedPerson?.Name, d.AuthorizedPersonName);
+                ws.Cell(r + 2, 26).Value = authorizedPerson?.Email ?? "";
+                ws.Cell(r + 2, 27).Value = authorizedPerson?.PhoneNumber ?? "";
+
+                var latitude = detail.Latitude ?? d.Latitude;
+                var longitude = detail.Longitude ?? d.Longitude;
+
+                if (latitude.HasValue)
+                    ws.Cell(r + 2, 28).Value = latitude.Value;
+
+                if (longitude.HasValue)
+                    ws.Cell(r + 2, 29).Value = longitude.Value;
             }
 
             ws.Columns().AdjustToContents();
@@ -1070,6 +1105,61 @@
     {
         try { return await Http.GetFromJsonAsync<List<TItem>>(url) ?? new(); }
         catch { return new(); }
+    }
+
+    private async Task<TItem?> SafeGetSingle<TItem>(string url) where TItem : class
+    {
+        try { return await Http.GetFromJsonAsync<TItem>(url); }
+        catch { return null; }
+    }
+
+    private async Task<List<DealerMasterExportRow>> LoadDealerMasterExportRows(List<DealerDto> summaries)
+    {
+        const int batchSize = 10;
+        var rows = new List<DealerMasterExportRow>(summaries.Count);
+
+        // Keep export order unchanged while avoiding an unbounded burst of API calls
+        // when the filtered Dealer Master list contains many dealers.
+        for (var index = 0; index < summaries.Count; index += batchSize)
+        {
+            var batchTasks = summaries
+                .Skip(index)
+                .Take(batchSize)
+                .Select(LoadDealerMasterExportRow);
+
+            rows.AddRange(await Task.WhenAll(batchTasks));
+        }
+
+        return rows;
+    }
+
+    private async Task<DealerMasterExportRow> LoadDealerMasterExportRow(DealerDto summary)
+    {
+        var detailTask = SafeGetSingle<DealerDto>($"api/DealerRegistration/{summary.Id}");
+        var ownershipTask = SafeGet<DealerOwnershipInfo>($"api/DealerOwnershipInfo/byDealer/{summary.Id}");
+
+        await Task.WhenAll(detailTask, ownershipTask);
+
+        var ownershipRecords = await ownershipTask;
+        return new DealerMasterExportRow
+        {
+            Summary = summary,
+            Detail = await detailTask,
+            // Id is generated when a Proprietor/Authorized Person is first saved.
+            // Ordering by Id therefore gives the first saved record for this dealer.
+            AuthorizedPerson = ownershipRecords.OrderBy(x => x.Id).FirstOrDefault()
+        };
+    }
+
+    private static string FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? "";
+
+    private static string GetSdwaStatus(DealerDto detail, DealerDto summary)
+    {
+        var isSdwa = detail.IsSDWA ?? summary.IsSDWA;
+        return isSdwa.HasValue
+            ? (isSdwa.Value ? "Yes" : "No")
+            : FirstNonEmpty(detail.SDWAStatus, summary.SDWAStatus);
     }
 
     private async Task LoadData()
@@ -1299,19 +1389,24 @@
 
         _filteredDealers = query.ToList();
     }
-    private string GetEntityTypeName(int? entityType)
+    private string GetEntityTypeName(int? entityType, string? fallbackName = null)
     {
-        if (!entityType.HasValue) return "-";
-        return entityType.Value switch
+        if (!entityType.HasValue)
+            return string.IsNullOrWhiteSpace(fallbackName) ? "-" : fallbackName;
+
+        var entityTypeName = entityType.Value switch
         {
-            1 => "Sole Proprietor",
-            2 => "Partnership",
-            3 => "LLP",
-            4 => "PVT LTD",
-            5 => "PUB LTD",
-            6 => "Society",
-            _ => "-"
+            (int)EntityType.soleProprietor => "Sole Proprietor",
+            (int)EntityType.Partnership => "Partnership",
+            (int)EntityType.LLP => "LLP",
+            (int)EntityType.PvtLtd => "PVT LTD",
+            (int)EntityType.PubLtd => "PUB LTD",
+            (int)EntityType.Society => "Society",
+            _ => null
         };
+
+        return entityTypeName
+            ?? (string.IsNullOrWhiteSpace(fallbackName) ? "-" : fallbackName);
     }
 
     private bool IsFertilizerCategoryDash(int categoryId) =>
@@ -1684,6 +1779,13 @@ private string GetStatusName(int status) => status switch
         }
     }
 
+    private sealed class DealerMasterExportRow
+    {
+        public DealerDto Summary { get; set; } = new();
+        public DealerDto? Detail { get; set; }
+        public DealerOwnershipInfo? AuthorizedPerson { get; set; }
+    }
+
     public class DealerDto
     {
         public int Id { get; set; }
@@ -1711,6 +1813,9 @@ private string GetStatusName(int status) => status switch
         public string? PinCode { get; set; }
         // Address parts
         public string? DoorNo { get; set; }
+        public string? ShopNoORRoomNoOrBlockNo { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
         public string? Street { get; set; }
         public string? SubVillage { get; set; }
         public string? Village { get; set; }
@@ -1722,6 +1827,7 @@ private string GetStatusName(int status) => status switch
         public string? AadhaarNumber { get; set; }
         public string? PANNumber { get; set; }
         public string? SDWAStatus { get; set; }
+        public bool? IsSDWA { get; set; }
         public string? AuthorizedPersonName { get; set; }
         public bool? RMApproved { get; set; }
         public bool? SMApproved { get; set; }
