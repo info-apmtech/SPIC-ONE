@@ -122,9 +122,9 @@ namespace Spic.Infrastructure.Data
 		public DbSet<LogisticsApprovalHistory> LogisticsHistory { get; set; }
 
 		//// Welfare Scheme
-		//public DbSet<WelfareApplication> WelfareApplications { get; set; }
-		//public DbSet<WelfareApplicationDocument> WelfareApplicationDocuments { get; set; }
-		//public DbSet<WelfareApplicationApproval> WelfareApplicationApprovals { get; set; }
+		public DbSet<WelfareApplication> WelfareApplications { get; set; }
+		public DbSet<WelfareApplicationDocument> WelfareApplicationDocuments { get; set; }
+		public DbSet<WelfareApplicationApproval> WelfareApplicationApprovals { get; set; }
 
 		//// Guest House Booking
 		//public DbSet<GuestHouse> GuestHouses { get; set; }

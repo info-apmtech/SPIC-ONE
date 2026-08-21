@@ -69,10 +69,16 @@
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault() ?? "";
 
-        // Dealers can always access the SDWA Dashboard
-        if (LoginState.UserRole == AppRole.Dealer
-            && firstSegment.Equals("SDWADashboard", StringComparison.OrdinalIgnoreCase))
-            return;
+        // Dealers can always access the SDWA Dashboard and SDWA welfare pages
+        if (LoginState.UserRole == AppRole.Dealer)
+        {
+            if (firstSegment.Equals("SDWADashboard", StringComparison.OrdinalIgnoreCase)
+                || firstSegment.Equals("WelfareSchemes", StringComparison.OrdinalIgnoreCase)
+                || firstSegment.Equals("ApplyWelfareScheme", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
 
         // Users with NO designation assigned (no allowed pages) can ONLY see the
         // Welcome page. Infrastructure pages (login / AccountSelector / error /
@@ -82,7 +88,9 @@
         {
             bool isWelcome = firstSegment.Equals("Welcome", StringComparison.OrdinalIgnoreCase);
             bool isDealerDash = LoginState.UserRole == AppRole.Dealer
-                                && firstSegment.Equals("SDWADashboard", StringComparison.OrdinalIgnoreCase);
+                                && (firstSegment.Equals("SDWADashboard", StringComparison.OrdinalIgnoreCase)
+                                    || firstSegment.Equals("WelfareSchemes", StringComparison.OrdinalIgnoreCase)
+                                    || firstSegment.Equals("ApplyWelfareScheme", StringComparison.OrdinalIgnoreCase));
             bool isInfra = _alwaysOpen.Contains(firstSegment)
                            && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase);
 
