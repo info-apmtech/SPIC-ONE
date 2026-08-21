@@ -217,16 +217,31 @@
      
             
             <div class="aws-form-group">
-                <label class="aws-form-label">Quantity Lifted (cases)</label>
-                <select class="aws-form-select" @bind="QuantityLiftedValue">
-                    <option value="" disabled selected hidden>Select quantity range</option>
-                    <option value="500">500 – 1,000 cases</option>
-                    <option value="1000">1,001 – 2,000 cases</option>
-                    <option value="2000">2,001 – 3,000 cases</option>
-                    <option value="3000">3,001 – 5,000 cases</option>
-                    <option value="5000">5,001 – 10,000 cases</option>
-                    <option value="10000">Above 10,000 cases</option>
-                </select>
+                <label class="aws-form-label">Quantity Lifted during Last Year (MT) *</label>
+                @if (_isLoadingSalesHistory)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading sales data...</option>
+                    </select>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="QuantityLiftedValue" disabled>
+                        <option value="" disabled selected hidden>--Select--</option>
+                        <option value="lt1000">&lt;1,000 MT</option>
+                        <option value="gt1000">&gt;1,000 MT</option>
+                        <option value="5001-10000">5,001 to 10,000 MT</option>
+                        <option value="10001-25000">10,001 to 25,000 MT</option>
+                        <option value="25001-35000">25,001 to 35,000 MT</option>
+                        <option value="35001-50000">35,001 to 50,000 MT</option>
+                        <option value="gt50001">&gt;50,001 MT</option>
+                    </select>
+                }
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">3-Year Average Quantity (MT)</label>
+                <input type="text" class="aws-input-readonly" value="@(_salesHistory != null ? $"{_salesHistory.AverageQuantityLifted3Years:N2} MT" : "-")" readonly>
             </div>
 
         </div>
@@ -240,7 +255,7 @@
                 </svg>
             </div>
             <div>
-                Minimum 500 cases must be lifted in the current financial year to be eligible. Your current lifted quantity will be auto-verified on submission.
+                Quantity is automatically calculated from your CreditLimitSales history. Your current lifted quantity will be auto-verified on submission.
             </div>
         </div>
 
@@ -256,17 +271,49 @@
         <div class="aws-form-grid">
 
             <div class="aws-form-group">
-                <label class="aws-form-label">Nominee Name</label>
-                <input type="text" class="aws-form-control" placeholder="Nominee's Full Name">
+                <label class="aws-form-label">Select Beneficiary Group *</label>
+                <select class="aws-form-select" @bind="SelectedBeneficiaryGroup" @bind:after="OnBeneficiaryGroupChanged">
+                    <option value="" disabled selected hidden>--Select--</option>
+                    <option value="Direct Dealer">Direct Dealer</option>
+                    <option value="Sub Dealer">Sub Dealer</option>
+                    <option value="Approved Employee">Approved Employee</option>
+                </select>
+            </div>
+
+        </div>
+
+        @if (!string.IsNullOrEmpty(BeneficiaryGroupError))
+        {
+        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 16px;">
+            <div class="aws-alert-icon" style="color: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+            </div>
+            <div style="color: #c0392b;">
+                @BeneficiaryGroupError
+            </div>
+        </div>
+        }
+
+        @if (SelectedBeneficiaryGroup == "Direct Dealer")
+        {
+        <div class="aws-form-grid">
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Nominee Name *</label>
+                <input type="text" class="aws-form-control" placeholder="Nominee's Full Name" @bind="NomineeName">
             </div>
 
             <div class="aws-form-group">
-                <label class="aws-form-label">Nominee Relationship</label>
-                <select class="aws-form-select">
+                <label class="aws-form-label">Nominee Relationship *</label>
+                <select class="aws-form-select" @bind="NomineeRelationship">
                     <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="spouse">Spouse</option>
-                    <option value="child">Child</option>
-                    <option value="parent">Parent</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
                 </select>
             </div>
 
@@ -278,24 +325,24 @@
             </div>
             
             <div class="aws-form-group">
-                <label class="aws-form-label">Beneficiary Name</label>
-                <input type="text" class="aws-form-control" placeholder="Full Name">
+                <label class="aws-form-label">Beneficiary Name *</label>
+                <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
             </div>
             
             <div class="aws-form-group">
-                <label class="aws-form-label">Relationship</label>
-                <select class="aws-form-select">
+                <label class="aws-form-label">Relationship *</label>
+                <select class="aws-form-select" @bind="BeneficiaryRelationship">
                     <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="spouse">Spouse</option>
-                    <option value="child">Child</option>
-                    <option value="parent">Parent</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
                 </select>
             </div>
 
             <div class="aws-form-group">
                 <label class="aws-form-label">Date of Birth</label>
                 <div class="aws-input-with-icon">
-                    <input type="text" class="aws-form-control" placeholder="dd-mm-yyyy">
+                    <input type="text" class="aws-form-control" placeholder="dd-mm-yyyy" @bind="BeneficiaryDOB">
                     <svg class="aws-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                         <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -307,10 +354,103 @@
             
             <div class="aws-form-group">
                 <label class="aws-form-label">Age</label>
-                <input type="text" class="aws-form-control" placeholder="Age in years">
+                <input type="text" class="aws-form-control" placeholder="Age in years" @bind="BeneficiaryAge">
             </div>
 
         </div>
+        }
+        else if (SelectedBeneficiaryGroup == "Sub Dealer")
+        {
+        <div class="aws-form-grid">
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Sub Dealer Name *</label>
+                @if (_isLoadingSubDealers)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading sub-dealers...</option>
+                    </select>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="SelectedSubDealerId" @bind:after="OnSubDealerSelected">
+                        <option value="" disabled selected hidden>--Select Sub Dealer--</option>
+                        @foreach (var sd in _subDealers)
+                        {
+                            <option value="@sd.Id">@sd.FirmName (@sd.SubDealerCode)</option>
+                        }
+                    </select>
+                }
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Nominee Name *</label>
+                <input type="text" class="aws-form-control" placeholder="Nominee's Full Name" @bind="NomineeName">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Nominee Relationship *</label>
+                <select class="aws-form-select" @bind="NomineeRelationship">
+                    <option value="" disabled selected hidden>Select relationship</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
+                </select>
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Beneficiary Name *</label>
+                <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
+            </div>
+
+        </div>
+        }
+        else if (SelectedBeneficiaryGroup == "Approved Employee")
+        {
+        <div class="aws-form-grid">
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Employee Name *</label>
+                @if (_isLoadingEmployees)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading employees...</option>
+                    </select>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="SelectedEmployeeId" @bind:after="OnEmployeeSelected">
+                        <option value="" disabled selected hidden>--Select Employee--</option>
+                        @foreach (var emp in _employees)
+                        {
+                            <option value="@emp.Id">@emp.EmployeeName (@emp.EmployeeCode)</option>
+                        }
+                    </select>
+                }
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Nominee Name *</label>
+                <input type="text" class="aws-form-control" placeholder="Nominee's Full Name" @bind="NomineeName">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Nominee Relationship *</label>
+                <select class="aws-form-select" @bind="NomineeRelationship">
+                    <option value="" disabled selected hidden>Select relationship</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
+                </select>
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Beneficiary Name *</label>
+                <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
+            </div>
+
+        </div>
+        }
 
     </div>
     <div class="aws-section-card">
@@ -799,39 +939,58 @@
                 <div class="aws-modal-section">
                     <h3>Beneficiary Details</h3>
                     <div class="aws-modal-row">
-                        <span class="aws-modal-label">Beneficiary Name</span>
+                        <span class="aws-modal-label">Beneficiary Group</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">Rajesh Kumar</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(SelectedBeneficiaryGroup) ? "-" : SelectedBeneficiaryGroup)</span>
                     </div>
+                    @if (SelectedBeneficiaryGroup == "Sub Dealer" && !string.IsNullOrWhiteSpace(SelectedSubDealerName))
+                    {
                     <div class="aws-modal-row">
-                        <span class="aws-modal-label">Relationship</span>
+                        <span class="aws-modal-label">Sub Dealer</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">Self</span>
+                        <span class="aws-modal-value">@SelectedSubDealerName</span>
                     </div>
+                    }
+                    @if (SelectedBeneficiaryGroup == "Approved Employee" && !string.IsNullOrWhiteSpace(SelectedEmployeeName))
+                    {
                     <div class="aws-modal-row">
-                        <span class="aws-modal-label">Date of Birth</span>
+                        <span class="aws-modal-label">Employee</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">14-08-1985</span>
+                        <span class="aws-modal-value">@SelectedEmployeeName</span>
                     </div>
-                    <div class="aws-modal-row">
-                        <span class="aws-modal-label">Age</span>
-                        <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">39</span>
-                    </div>
+                    }
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">Nominee Name</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">Keerthana Rajesh</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(NomineeName) ? "-" : NomineeName)</span>
                     </div>
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">Nominee Relationship</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">Spouse</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(NomineeRelationship) ? "-" : NomineeRelationship)</span>
+                    </div>
+                    @if (SelectedBeneficiaryGroup == "Direct Dealer")
+                    {
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Beneficiary Name</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(BeneficiaryName) ? "-" : BeneficiaryName)</span>
                     </div>
                     <div class="aws-modal-row">
-                        <span class="aws-modal-label">Beneficiary Name as in Cheque Leaf / Bank Passbook</span>
+                        <span class="aws-modal-label">Relationship</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">RAJESH KUMAR</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(BeneficiaryRelationship) ? "-" : BeneficiaryRelationship)</span>
+                    </div>
+                    }
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Quantity Lifted (Last Year)</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(_salesHistory != null ? _salesHistory.QuantityRangeLabel : "-")</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">3-Year Average Quantity</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(_salesHistory != null ? $"{_salesHistory.AverageQuantityLifted3Years:N2} MT" : "-")</span>
                     </div>
                 </div>
 
@@ -1041,6 +1200,34 @@
 
     private string SelectedScheme => string.IsNullOrWhiteSpace(Scheme) ? "Grahapravesam" : Uri.UnescapeDataString(Scheme);
 
+    // Sales history
+    private DealerSalesHistoryDto? _salesHistory;
+    private bool _isLoadingSalesHistory = true;
+
+    // Beneficiary group
+    private string SelectedBeneficiaryGroup { get; set; } = string.Empty;
+    private string BeneficiaryGroupError { get; set; } = string.Empty;
+
+    // Sub Dealer
+    private List<SubDealerDto> _subDealers = new();
+    private bool _isLoadingSubDealers = false;
+    private string SelectedSubDealerId { get; set; } = string.Empty;
+    private string SelectedSubDealerName { get; set; } = string.Empty;
+
+    // Employee
+    private List<EmployeeDto> _employees = new();
+    private bool _isLoadingEmployees = false;
+    private string SelectedEmployeeId { get; set; } = string.Empty;
+    private string SelectedEmployeeName { get; set; } = string.Empty;
+
+    // Beneficiary fields (all groups)
+    private string NomineeName { get; set; } = string.Empty;
+    private string NomineeRelationship { get; set; } = string.Empty;
+    private string BeneficiaryName { get; set; } = string.Empty;
+    private string BeneficiaryRelationship { get; set; } = string.Empty;
+    private string BeneficiaryDOB { get; set; } = string.Empty;
+    private string BeneficiaryAge { get; set; } = string.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         _isLoadingDealer = true;
@@ -1058,6 +1245,104 @@
         {
             _isLoadingDealer = false;
         }
+
+        // Load sales history
+        _isLoadingSalesHistory = true;
+        try
+        {
+            var salesResult = await Http.GetFromJsonAsync<DealerSalesHistoryDto>("api/SDWADashboard/dealer-sales-history");
+            if (salesResult != null)
+            {
+                _salesHistory = salesResult;
+                QuantityLiftedValue = salesResult.QuantityRangeValue;
+            }
+        }
+        catch (Exception)
+        {
+            _salesHistory = null;
+        }
+        finally
+        {
+            _isLoadingSalesHistory = false;
+        }
+    }
+
+    private async Task OnBeneficiaryGroupChanged()
+    {
+        BeneficiaryGroupError = string.Empty;
+        SelectedSubDealerId = string.Empty;
+        SelectedSubDealerName = string.Empty;
+        SelectedEmployeeId = string.Empty;
+        SelectedEmployeeName = string.Empty;
+
+        if (SelectedBeneficiaryGroup == "Sub Dealer")
+        {
+            if (_salesHistory != null && !_salesHistory.IsSubDealerEligible)
+            {
+                BeneficiaryGroupError = "You do not have sufficient sales quantity to apply for a Sub Dealer. A minimum average annual sales of 50,000 MT over the last 3 years is required.";
+                return;
+            }
+            await LoadSubDealers();
+        }
+        else if (SelectedBeneficiaryGroup == "Approved Employee")
+        {
+            if (_salesHistory != null && !_salesHistory.IsEmployeeEligible)
+            {
+                BeneficiaryGroupError = "You do not have sufficient sales quantity to apply for an Approved Employee. A minimum average annual sales of 5,000 MT over the last 3 years is required.";
+                return;
+            }
+            await LoadEmployees();
+        }
+    }
+
+    private async Task LoadSubDealers()
+    {
+        _isLoadingSubDealers = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<SubDealerDto>>("api/SDWADashboard/sub-dealers");
+            if (result != null)
+                _subDealers = result;
+        }
+        catch (Exception)
+        {
+            _subDealers = new List<SubDealerDto>();
+        }
+        finally
+        {
+            _isLoadingSubDealers = false;
+        }
+    }
+
+    private async Task LoadEmployees()
+    {
+        _isLoadingEmployees = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<EmployeeDto>>("api/SDWADashboard/employees");
+            if (result != null)
+                _employees = result;
+        }
+        catch (Exception)
+        {
+            _employees = new List<EmployeeDto>();
+        }
+        finally
+        {
+            _isLoadingEmployees = false;
+        }
+    }
+
+    private void OnSubDealerSelected()
+    {
+        var selected = _subDealers.FirstOrDefault(sd => sd.Id.ToString() == SelectedSubDealerId);
+        SelectedSubDealerName = selected?.FirmName ?? string.Empty;
+    }
+
+    private void OnEmployeeSelected()
+    {
+        var selected = _employees.FirstOrDefault(e => e.Id.ToString() == SelectedEmployeeId);
+        SelectedEmployeeName = selected?.EmployeeName ?? string.Empty;
     }
 
     private static readonly Dictionary<string, List<string>> EligibilityConditionsMap = new(StringComparer.OrdinalIgnoreCase)
@@ -1337,6 +1622,61 @@
 
     private void ConfirmSubmission()
     {
+        // Validate Beneficiary Group
+        if (string.IsNullOrWhiteSpace(SelectedBeneficiaryGroup))
+        {
+            ValidationErrors = new List<string> { "Beneficiary Group is required." };
+            ShowValidation = true;
+            return;
+        }
+
+        if (SelectedBeneficiaryGroup == "Sub Dealer")
+        {
+            if (string.IsNullOrWhiteSpace(SelectedSubDealerId))
+            {
+                ValidationErrors = new List<string> { "Sub Dealer selection is required." };
+                ShowValidation = true;
+                return;
+            }
+            if (_salesHistory != null && !_salesHistory.IsSubDealerEligible)
+            {
+                ValidationErrors = new List<string> { "You do not have sufficient sales quantity to apply for a Sub Dealer. A minimum average annual sales of 50,000 MT over the last 3 years is required." };
+                ShowValidation = true;
+                return;
+            }
+        }
+
+        if (SelectedBeneficiaryGroup == "Approved Employee")
+        {
+            if (string.IsNullOrWhiteSpace(SelectedEmployeeId))
+            {
+                ValidationErrors = new List<string> { "Employee selection is required." };
+                ShowValidation = true;
+                return;
+            }
+            if (_salesHistory != null && !_salesHistory.IsEmployeeEligible)
+            {
+                ValidationErrors = new List<string> { "You do not have sufficient sales quantity to apply for an Approved Employee. A minimum average annual sales of 5,000 MT over the last 3 years is required." };
+                ShowValidation = true;
+                return;
+            }
+        }
+
+        // Validate Nominee
+        if (string.IsNullOrWhiteSpace(NomineeName))
+        {
+            ValidationErrors = new List<string> { "Nominee Name is required." };
+            ShowValidation = true;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(NomineeRelationship))
+        {
+            ValidationErrors = new List<string> { "Nominee Relationship is required." };
+            ShowValidation = true;
+            return;
+        }
+
         if (SelectedScheme == "Medical Assistance")
         {
             var errors = new List<string>();

@@ -70,6 +70,17 @@ public class WelfareApplication
 	public bool? HasArrears { get; set; }                                // Whether the candidate has any arrears (true = has arrears, false = no arrears)
 	public bool? IsWholesaleDealerEmployee { get; set; }                 // Whether the candidate is an approved employee of a wholesale dealer (TN only)
 
+	// Beneficiary Group (Direct Dealer / Sub Dealer / Approved Employee)
+	public string? BeneficiaryGroup { get; set; }                        // "Direct Dealer", "Sub Dealer", or "Approved Employee"
+	public int? SubDealerId { get; set; }                                 // FK to SubDealerRegistration (when BeneficiaryGroup = Sub Dealer)
+	public string? SubDealerName { get; set; }                            // Sub Dealer name snapshot at submission
+	public int? EmployeeId { get; set; }                                  // Employee ID reference (when BeneficiaryGroup = Approved Employee)
+	public string? EmployeeName { get; set; }                             // Employee name snapshot at submission
+
+	// Sales history (calculated from CreditLimitSales, stored at submission)
+	public decimal? AverageQuantityLifted3Years { get; set; }             // 3-year average quantity in MT
+	public decimal? LastYearQuantityLifted { get; set; }                  // Last financial year quantity in MT
+
 	// Declaration
 	public bool IsDeclarationConfirmed { get; set; }                     // Whether the dealer ticked the declaration checkbox before submitting
 

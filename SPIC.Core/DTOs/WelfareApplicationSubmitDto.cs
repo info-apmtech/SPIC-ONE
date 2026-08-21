@@ -16,6 +16,15 @@ public class WelfareApplicationSubmitDto
     // Quantity Lifted
     public int? QuantityLifted { get; set; }
 
+    // Beneficiary Group
+    public string? BeneficiaryGroup { get; set; }
+    public int? SubDealerId { get; set; }
+    public string? SubDealerName { get; set; }
+    public int? EmployeeId { get; set; }
+    public string? EmployeeName { get; set; }
+    public decimal? AverageQuantityLifted3Years { get; set; }
+    public decimal? LastYearQuantityLifted { get; set; }
+
     // Wedding / Sathabhishekam / Grahapravesam
     public DateTime? EventDate { get; set; }
     public string? EventVenue { get; set; }

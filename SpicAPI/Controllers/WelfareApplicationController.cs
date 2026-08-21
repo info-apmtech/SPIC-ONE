@@ -45,6 +45,32 @@ namespace SpicAPI.Controllers
             if (schemeEnum == null)
                 return BadRequest(new { Message = $"Invalid scheme name: {dto.SchemeName}" });
 
+            // Backend eligibility validation for Sub Dealer and Approved Employee
+            if (!string.IsNullOrEmpty(dto.BeneficiaryGroup))
+            {
+                var salesHistory = await CalculateDealerSalesAverage(dealer.Id);
+
+                if (dto.BeneficiaryGroup == "Sub Dealer" && salesHistory < 50000)
+                {
+                    return BadRequest(new
+                    {
+                        Message = "You do not have sufficient sales quantity to apply for a Sub Dealer. A minimum average annual sales of 50,000 MT over the last 3 years is required.",
+                        ActualAverage = salesHistory,
+                        RequiredAverage = 50000
+                    });
+                }
+
+                if (dto.BeneficiaryGroup == "Approved Employee" && salesHistory < 5000)
+                {
+                    return BadRequest(new
+                    {
+                        Message = "You do not have sufficient sales quantity to apply for an Approved Employee. A minimum average annual sales of 5,000 MT over the last 3 years is required.",
+                        ActualAverage = salesHistory,
+                        RequiredAverage = 5000
+                    });
+                }
+            }
+
             var applicationNumber = GenerateApplicationNumber(schemeEnum.Value);
 
             var app = new WelfareApplication
@@ -76,6 +102,15 @@ namespace SpicAPI.Controllers
                 NomineeRelationship = dto.NomineeRelationship,
                 BeneficiaryNameAsInCheque = dto.BeneficiaryNameAsInCheque,
                 LeafOrBankPassbook = dto.LeafOrBankPassbook,
+
+                // Beneficiary Group
+                BeneficiaryGroup = dto.BeneficiaryGroup,
+                SubDealerId = dto.SubDealerId,
+                SubDealerName = dto.SubDealerName,
+                EmployeeId = dto.EmployeeId,
+                EmployeeName = dto.EmployeeName,
+                AverageQuantityLifted3Years = dto.AverageQuantityLifted3Years,
+                LastYearQuantityLifted = dto.LastYearQuantityLifted,
 
                 // Scheme-specific: Wedding
                 MarriageDate = dto.EventDate,
@@ -212,6 +247,49 @@ namespace SpicAPI.Controllers
             var year = DateTime.Now.Year;
             var seq = DateTime.Now.Ticks % 10000;
             return $"SDWA-{prefix}-{year}-{seq:D5}";
+        }
+
+        private async Task<decimal> CalculateDealerSalesAverage(int dealerId)
+        {
+            var today = DateTime.Today;
+            int currentFyStartYear = today.Month >= 4 ? today.Year : today.Year - 1;
+
+            var wantedStartYears = new[]
+            {
+                currentFyStartYear - 3,
+                currentFyStartYear - 2,
+                currentFyStartYear - 1
+            };
+
+            var completedFYs = await _db.FinancialYears
+                .AsNoTracking()
+                .Where(fy => wantedStartYears.Contains(fy.StartDate.Year))
+                .OrderBy(fy => fy.StartDate)
+                .ToListAsync();
+
+            if (completedFYs.Count < 3)
+            {
+                var fallback = await _db.FinancialYears
+                    .AsNoTracking()
+                    .Where(fy => fy.EndDate < today)
+                    .OrderByDescending(fy => fy.EndDate)
+                    .Take(3)
+                    .OrderBy(fy => fy.StartDate)
+                    .ToListAsync();
+
+                if (fallback.Count >= 3)
+                    completedFYs = fallback;
+            }
+
+            var fyIds = completedFYs.Select(fy => fy.Id).ToList();
+
+            var totalQuantity = await _db.DealerCreditLimitSalesData
+                .AsNoTracking()
+                .Where(x => x.CustomerId == dealerId && fyIds.Contains(x.FinancialYearId))
+                .SumAsync(x => x.Quantity);
+
+            int yearCount = Math.Max(completedFYs.Count, 1);
+            return totalQuantity / yearCount;
         }
     }
 }

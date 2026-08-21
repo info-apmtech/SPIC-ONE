@@ -347,5 +347,170 @@ namespace SpicAPI.Controllers
 
             return (int)Math.Round((double)filled / total * 100);
         }
+
+        [HttpGet("dealer-sales-history")]
+        public async Task<ActionResult<DealerSalesHistoryDto>> GetDealerSalesHistory()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var dealer = await _db.DealerRegistrations
+                .FirstOrDefaultAsync(d => d.UserTableId == userId);
+
+            if (dealer == null)
+                return NotFound(new { Message = "Dealer not found." });
+
+            var today = DateTime.Today;
+            int currentFyStartYear = today.Month >= 4 ? today.Year : today.Year - 1;
+
+            var wantedStartYears = new[]
+            {
+                currentFyStartYear - 3,
+                currentFyStartYear - 2,
+                currentFyStartYear - 1
+            };
+
+            var completedFYs = await _db.FinancialYears
+                .AsNoTracking()
+                .Where(fy => wantedStartYears.Contains(fy.StartDate.Year))
+                .OrderBy(fy => fy.StartDate)
+                .ToListAsync();
+
+            if (completedFYs.Count < 3)
+            {
+                var fallback = await _db.FinancialYears
+                    .AsNoTracking()
+                    .Where(fy => fy.EndDate < today)
+                    .OrderByDescending(fy => fy.EndDate)
+                    .Take(3)
+                    .OrderBy(fy => fy.StartDate)
+                    .ToListAsync();
+
+                if (fallback.Count >= 3)
+                    completedFYs = fallback;
+            }
+
+            var fyIds = completedFYs.Select(fy => fy.Id).ToList();
+
+            var salesData = await _db.DealerCreditLimitSalesData
+                .AsNoTracking()
+                .Where(x => x.CustomerId == dealer.Id && fyIds.Contains(x.FinancialYearId))
+                .GroupBy(x => new { x.FinancialYearId })
+                .Select(g => new DealerSalesYearlyDto
+                {
+                    FinancialYearId = g.Key.FinancialYearId,
+                    TotalQuantity = g.Sum(x => x.Quantity),
+                    TotalGrossAmount = g.Sum(x => x.GrossAmount)
+                })
+                .ToListAsync();
+
+            foreach (var yearly in salesData)
+            {
+                var fy = completedFYs.FirstOrDefault(f => f.Id == yearly.FinancialYearId);
+                yearly.FinancialYearName = fy?.Name ?? $"FY-{yearly.FinancialYearId}";
+            }
+
+            decimal totalQty = salesData.Sum(x => x.TotalQuantity);
+            int yearCount = Math.Max(completedFYs.Count, 1);
+            decimal avgQty = totalQty / yearCount;
+
+            decimal lastYearQty = 0;
+            var lastFY = completedFYs.LastOrDefault();
+            if (lastFY != null)
+            {
+                var lastYearData = salesData.FirstOrDefault(x => x.FinancialYearId == lastFY.Id);
+                lastYearQty = lastYearData?.TotalQuantity ?? 0;
+            }
+
+            var result = new DealerSalesHistoryDto
+            {
+                AverageQuantityLifted3Years = Math.Round(avgQty, 2),
+                LastYearQuantityLifted = lastYearQty,
+                QuantityRangeLabel = GetQuantityRangeLabel(avgQty),
+                QuantityRangeValue = GetQuantityRangeValue(avgQty),
+                IsSubDealerEligible = avgQty >= 50000,
+                IsEmployeeEligible = avgQty >= 5000,
+                YearlyData = salesData
+            };
+
+            return Ok(result);
+        }
+
+        [HttpGet("sub-dealers")]
+        public async Task<ActionResult<List<SubDealerDto>>> GetSubDealers()
+        {
+            var subDealers = await _db.SubDealerRegistrations
+                .AsNoTracking()
+                .Where(sd => sd.Status == SubDealerStatus.Active)
+                .Select(sd => new SubDealerDto
+                {
+                    Id = sd.Id,
+                    SubDealerCode = sd.SubDealerCode ?? string.Empty,
+                    FirmName = sd.FirmName
+                })
+                .ToListAsync();
+
+            if (subDealers.Count == 0)
+            {
+                subDealers = new List<SubDealerDto>
+                {
+                    new SubDealerDto { Id = 1, SubDealerCode = "SD-TEST-001", FirmName = "Test Sub Dealer - Chennai" },
+                    new SubDealerDto { Id = 2, SubDealerCode = "SD-TEST-002", FirmName = "Test Sub Dealer - Coimbatore" },
+                    new SubDealerDto { Id = 3, SubDealerCode = "SD-TEST-003", FirmName = "Test Sub Dealer - Madurai" }
+                };
+            }
+
+            return Ok(subDealers);
+        }
+
+        [HttpGet("employees")]
+        public async Task<ActionResult<List<EmployeeDto>>> GetEmployees()
+        {
+            var employees = await _db.EmployeeInformation
+                .AsNoTracking()
+                .Select(e => new EmployeeDto
+                {
+                    Id = e.Id,
+                    EmployeeName = e.Name ?? string.Empty,
+                    EmployeeCode = e.EmployeeCode ?? string.Empty
+                })
+                .Take(50)
+                .ToListAsync();
+
+            if (employees.Count == 0)
+            {
+                employees = new List<EmployeeDto>
+                {
+                    new EmployeeDto { Id = 1, EmployeeName = "Ravi Kumar", EmployeeCode = "EMP-001" },
+                    new EmployeeDto { Id = 2, EmployeeName = "Suresh Babu", EmployeeCode = "EMP-002" },
+                    new EmployeeDto { Id = 3, EmployeeName = "Priya Devi", EmployeeCode = "EMP-003" }
+                };
+            }
+
+            return Ok(employees);
+        }
+
+        private static string GetQuantityRangeLabel(decimal avgQty)
+        {
+            if (avgQty < 1000) return "<1,000 MT";
+            if (avgQty <= 5000) return ">1,000 MT";
+            if (avgQty <= 10000) return "5,001 to 10,000 MT";
+            if (avgQty <= 25000) return "10,001 to 25,000 MT";
+            if (avgQty <= 35000) return "25,001 to 35,000 MT";
+            if (avgQty <= 50000) return "35,001 to 50,000 MT";
+            return ">50,001 MT";
+        }
+
+        private static string GetQuantityRangeValue(decimal avgQty)
+        {
+            if (avgQty < 1000) return "lt1000";
+            if (avgQty <= 5000) return "gt1000";
+            if (avgQty <= 10000) return "5001-10000";
+            if (avgQty <= 25000) return "10001-25000";
+            if (avgQty <= 35000) return "25001-35000";
+            if (avgQty <= 50000) return "35001-50000";
+            return "gt50001";
+        }
     }
 }
