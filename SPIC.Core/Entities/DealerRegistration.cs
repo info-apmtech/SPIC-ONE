@@ -352,7 +352,10 @@ namespace SPIC.Core.Entities
         public string FatherName { get; set; }
         public Gender Gender { get; set; }
         public MaritalStatus MaritalStatus { get; set; }
-        [Display(Name = "Date Of Birth")]
+
+		[Display(Name = "Educational Qualification")]
+		public string? EducationalQualification { get; set; }   
+		[Display(Name = "Date Of Birth")]
         public DateTime DOB { get; set; }
         public string PhoneNumber { get; set; }
         public string? Email { get; set; }
@@ -390,8 +393,12 @@ namespace SPIC.Core.Entities
         public int Age { get; set; }
         [Display(Name = "Relationship")]
         public int RelationshipId { get; set; }
-        public string? Occupation { get; set; }
-    }
+		[Display(Name = "Marital Status")]
+		public MaritalStatus? MaritalStatus { get; set; }
+		public string? Occupation { get; set; }
+		[Display(Name = "Educational Qualification")]
+		public string? EducationalQualification { get; set; }
+	}
     public class PartnerOccupation
     {
         public int Id { get; set; }
