@@ -104,9 +104,9 @@ namespace SpicAPI.Controllers
                 Tabs = BuildTabs(applications, role),
                 Applications = applications
                     .Where(a => MatchesTab(a, activeTab, role))
-                    .OrderByDescending(a => a.ApplicationDate)
-                    .Select(MapToListRow)
-                    .ToList()
+                .OrderByDescending(a => a.ApplicationDate)
+                .Select(a => MapToListRow(a, activeTab, role))
+                .ToList()
             };
 
             return Ok(page);
@@ -371,6 +371,7 @@ namespace SpicAPI.Controllers
             var value = (tab ?? "pending").Trim().ToLowerInvariant();
             return value switch
             {
+                "approvedbyme" => "approvedbyme",
                 "validatedmo" => "validatedmo",
                 "recommendedrm" => "recommendedrm",
                 "recommendedsm" => "recommendedsm",
@@ -390,6 +391,10 @@ namespace SpicAPI.Controllers
 
             return tab switch
             {
+                // Applications this approver has already cleared stay visible to them
+                // (labelled "Approved by <stage>"); apps back pending at their own stage
+                // after a reverse rejection are excluded so they remain actionable only.
+                "approvedbyme" => ClearedByApprover(app, role),
                 "validatedmo" => app.Status is WelfareApplicationStatus.RMReview or WelfareApplicationStatus.SMReview or WelfareApplicationStatus.AVPReview,
                 "recommendedrm" => app.Status is WelfareApplicationStatus.SMReview or WelfareApplicationStatus.AVPReview,
                 "recommendedsm" => app.Status == WelfareApplicationStatus.AVPReview,
@@ -398,6 +403,12 @@ namespace SpicAPI.Controllers
                 _ => false
             };
         }
+
+        private static bool ClearedByApprover(WelfareApplication app, AppRole? role) =>
+            role.HasValue &&
+            ApproverRoles.Contains(role.Value) &&
+            !StageStatuses[role.Value].Contains(app.Status) &&
+            app.Approvals.Any(ap => ap.ApprovalLevel == role.Value && ap.ApprovalStatus == WelfareApprovalStatus.Approved);
 
         private static WelfareApprovalStatsDto BuildStats(List<WelfareApplication> apps, AppRole? role)
         {
@@ -424,6 +435,15 @@ namespace SpicAPI.Controllers
                 : apps.Count(a => AllPendingStages.Contains(a.Status));
 
             tabs.Add(new WelfareApprovalTabDto { Key = "pending", Label = "Pending", Count = pendingCount });
+            if (role.HasValue && ApproverRoles.Contains(role.Value))
+            {
+                tabs.Add(new WelfareApprovalTabDto
+                {
+                    Key = "approvedbyme",
+                    Label = $"Approved by {GetStageDisplay(role.Value)}",
+                    Count = apps.Count(a => ClearedByApprover(a, role))
+                });
+            }
             tabs.Add(new WelfareApprovalTabDto
             {
                 Key = "validatedmo",
@@ -448,33 +468,38 @@ namespace SpicAPI.Controllers
             return tabs;
         }
 
-        private static WelfareApprovalApplicationDto MapToListRow(WelfareApplication a) => new()
+        private static WelfareApprovalApplicationDto MapToListRow(WelfareApplication a, string tab, AppRole? role)
         {
-            Id = a.Id,
-            ApplicationNumber = a.ApplicationNumber,
-            Status = (int)a.Status,
-            StatusDisplay = GetStatusDisplayName(a.Status),
-            DealerCode = a.DealerCode,
-            DealerName = a.DealerName,
-            Region = a.Region,
-            District = a.District,
-            SchemeType = (int)a.SchemeName,
-            SchemeName = SDWAWelfareApplicationController.GetSchemeDisplayName(a.SchemeName),
-            ApplicationDate = a.ApplicationDate,
-            BeneficiaryName = a.BeneficiaryName,
-            BeneficiaryGroup = a.BeneficiaryGroup,
-            Approvals = a.Approvals
-                .OrderBy(ap => ap.CreatedAt)
-                .Select(ap => new WelfareApprovalStepDto
-                {
-                    ApprovalLevel = GetStageDisplay(ap.ApprovalLevel),
-                    ApprovalStatus = ap.ApprovalStatus.ToString(),
-                    Remarks = ap.Remarks,
-                    ApprovedBy = ap.ApprovedBy,
-                    ApprovedAt = ap.ApprovedAt
-                })
-                .ToList()
-        };
+            var stageLabel = tab == "approvedbyme" && role.HasValue ? GetStageDisplay(role.Value) : null;
+
+            return new WelfareApprovalApplicationDto
+            {
+                Id = a.Id,
+                ApplicationNumber = a.ApplicationNumber,
+                Status = (int)a.Status,
+                StatusDisplay = stageLabel != null ? $"Approved by {stageLabel}" : GetStatusDisplayName(a.Status),
+                DealerCode = a.DealerCode,
+                DealerName = a.DealerName,
+                Region = a.Region,
+                District = a.District,
+                SchemeType = (int)a.SchemeName,
+                SchemeName = SDWAWelfareApplicationController.GetSchemeDisplayName(a.SchemeName),
+                ApplicationDate = a.ApplicationDate,
+                BeneficiaryName = a.BeneficiaryName,
+                BeneficiaryGroup = a.BeneficiaryGroup,
+                Approvals = a.Approvals
+                    .OrderBy(ap => ap.CreatedAt)
+                    .Select(ap => new WelfareApprovalStepDto
+                    {
+                        ApprovalLevel = GetStageDisplay(ap.ApprovalLevel),
+                        ApprovalStatus = ap.ApprovalStatus.ToString(),
+                        Remarks = ap.Remarks,
+                        ApprovedBy = ap.ApprovedBy,
+                        ApprovedAt = ap.ApprovedAt
+                    })
+                    .ToList()
+            };
+        }
 
         private static WelfareApplicationDetailDto MapToDetail(WelfareApplication application) => new()
         {

@@ -199,7 +199,7 @@
                             <td class="ap-td-teal">@app.SchemeName</td>
                             <td>@(app.BeneficiaryName ?? "-")</td>
                             <td>@app.ApplicationDate.ToString("yyyy-MM-dd")</td>
-                            <td><span class="@GetStatusClass(app.Status)">@app.StatusDisplay</span></td>
+                            <td><span class="@GetStatusClass(app)">@app.StatusDisplay</span></td>
                             <td>
                                 <div class="ap-row-actions">
                                     <button class="ap-icon-btn ap-icon-view" @onclick="() => OpenDrawer(app)" title="View">
@@ -371,11 +371,13 @@
         return $"{label ?? _activeTab} Applications List";
     }
 
-    private static string GetStatusClass(int status) => status switch
+    private static string GetStatusClass(WelfareApprovalApplicationDto app)
     {
-        5 => "ap-status ap-status-completed",
-        6 => "ap-status ap-status-rejected",
-        7 => "ap-status ap-status-rejected",
-        _ => "ap-status ap-status-pending"
-    };
+        if (app.Status == 5 || app.StatusDisplay.StartsWith("Approved by ", StringComparison.OrdinalIgnoreCase))
+            return "ap-status ap-status-completed";
+
+        return app.Status is 6 or 7
+            ? "ap-status ap-status-rejected"
+            : "ap-status ap-status-pending";
+    }
 }
