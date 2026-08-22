@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
+using System.Linq.Expressions;
 using System.Security.Claims;
 
 namespace SpicAPI.Controllers
@@ -90,10 +91,15 @@ namespace SpicAPI.Controllers
 
             var activeTab = NormalizeTab(tab);
 
+            // Geographic visibility: MO -> own HQ, RM -> own Region, SMM -> own State.
+            // AVP / Admin / CorporateAdmin / Director see every application.
+            var dealerScope = BuildDealerGeoScope(role);
+
             var applications = await _db.WelfareApplications
                 .AsNoTracking()
                 .Include(a => a.Approvals)
                 .Where(a => a.Status != WelfareApplicationStatus.Draft && a.Status != WelfareApplicationStatus.Cancelled)
+                .Where(a => _db.DealerRegistrations.Where(dealerScope).Any(d => d.Id == a.DealerId))
                 .OrderByDescending(a => a.ApplicationDate)
                 .ToListAsync();
 
@@ -134,6 +140,11 @@ namespace SpicAPI.Controllers
 
             if (application == null || application.Status == WelfareApplicationStatus.Draft)
                 return NotFound(new { Message = "Application not found." });
+
+            // Same territory rule as the queue: officers may only open applications
+            // belonging to dealers inside their own HQ / Region / State.
+            if (!await IsDealerWithinScopeAsync(application.DealerId, role))
+                return StatusCode(403, new { Message = "This application belongs to another territory." });
 
             return Ok(MapToDetail(application));
         }
@@ -219,6 +230,12 @@ namespace SpicAPI.Controllers
 
             if (application == null)
                 return NotFound(new { Message = "Application not found." });
+
+            // Territory guard first: an officer must never be able to approve or
+            // reject an application outside their own HQ / Region / State, even
+            // when calling the endpoint directly.
+            if (!await IsDealerWithinScopeAsync(application.DealerId, role))
+                return StatusCode(403, new { Message = "This application belongs to another territory." });
 
             // Strict stage check: the application must currently be pending at THIS role's stage.
             var stageStatuses = StageStatuses[role.Value];
@@ -328,6 +345,67 @@ namespace SpicAPI.Controllers
 
             var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
             return (role, user);
+        }
+
+        // -------------------------------------------------------------------
+        //  Geographic visibility — mirrors the dealer registration flow:
+        //    MO  -> only dealers of the officer's own HQ
+        //    RM  -> only dealers of the officer's own Region
+        //    SMM -> only dealers of the officer's own State
+        //    AVP / Admin / CorporateAdmin / Director -> everything
+        //  The approver's geography comes from the JWT claims minted at login
+        //  (spic:hq_id / spic:region_id / spic:state_id). A geo-scoped role
+        //  whose token carries no usable claim is restricted to NOTHING rather
+        //  than silently seeing every territory's applications.
+        // -------------------------------------------------------------------
+
+        private static readonly AppRole[] GeoScopedApproverRoles = { AppRole.MO, AppRole.RM, AppRole.SMM };
+
+        private static bool IsGeoScoped(AppRole? role) =>
+            role.HasValue && GeoScopedApproverRoles.Contains(role.Value);
+
+        private (int HqId, int RegionId, int StateId) GetActorGeoIds() =>
+        (
+            int.TryParse(User.FindFirst("spic:hq_id")?.Value, out var hqId) ? hqId : 0,
+            int.TryParse(User.FindFirst("spic:region_id")?.Value, out var regionId) ? regionId : 0,
+            int.TryParse(User.FindFirst("spic:state_id")?.Value, out var stateId) ? stateId : 0
+        );
+
+        // EF-translatable predicate over DealerRegistration used to scope the
+        // approval queue (composed as a correlated EXISTS on WelfareApplication.DealerId).
+        private Expression<Func<DealerRegistration, bool>> BuildDealerGeoScope(AppRole? role)
+        {
+            if (!IsGeoScoped(role))
+                return dealer => true;
+
+            var (hqId, regionId, stateId) = GetActorGeoIds();
+
+            if (role == AppRole.MO && hqId > 0)
+            {
+                var hq = hqId;
+                return dealer => dealer.HQ == hq;
+            }
+
+            if (role == AppRole.RM && regionId > 0)
+            {
+                var region = regionId;
+                return dealer => dealer.Region == region;
+            }
+
+            if (role == AppRole.SMM && stateId > 0)
+            {
+                var state = stateId;
+                return dealer => dealer.StateId == state;
+            }
+
+            return dealer => false;
+        }
+
+        // Single-application variant used by the detail and approve/reject endpoints.
+        private Task<bool> IsDealerWithinScopeAsync(int dealerId, AppRole? role)
+        {
+            var scope = BuildDealerGeoScope(role);
+            return _db.DealerRegistrations.AsNoTracking().Where(scope).AnyAsync(d => d.Id == dealerId);
         }
 
         private static string BuildActorName(UserInfo user, AppRole role)

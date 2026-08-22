@@ -4,6 +4,118 @@
 @using SPIC.Core.Entities
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
 
+<style>
+    /* Role-wise approval flow indicator (MO → RM → SM → AVP) — visual only */
+    .ap-flow {
+        display: inline-flex;
+        align-items: flex-start;
+        gap: 0;
+        white-space: nowrap;
+    }
+
+    .ap-flow-step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        min-width: 26px;
+    }
+
+    .ap-flow-node {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.6rem;
+        font-weight: 700;
+        line-height: 1;
+        box-sizing: border-box;
+        letter-spacing: 0.02em;
+    }
+
+    .ap-flow-done {
+        background: #16A34A;
+        border: 1px solid #15803D;
+    }
+
+    .ap-flow-check {
+        width: 9px;
+        height: 5px;
+        border-left: 2px solid #fff;
+        border-bottom: 2px solid #fff;
+        transform: rotate(-45deg) translateY(-1px);
+    }
+
+    .ap-flow-rejected {
+        background: #DC2626;
+        border: 1px solid #B91C1C;
+    }
+
+    .ap-flow-cross {
+        position: relative;
+        width: 10px;
+        height: 10px;
+    }
+
+        .ap-flow-cross::before,
+        .ap-flow-cross::after {
+            content: '';
+            position: absolute;
+            left: -1px;
+            top: 4px;
+            width: 12px;
+            height: 2px;
+            background: #fff;
+            border-radius: 1px;
+        }
+
+        .ap-flow-cross::before {
+            transform: rotate(45deg);
+        }
+
+        .ap-flow-cross::after {
+            transform: rotate(-45deg);
+        }
+
+    .ap-flow-active {
+        background: #EFF6FF;
+        border: 2px solid #2563EB;
+        color: #1D4ED8;
+    }
+
+    .ap-flow-pending {
+        background: #F9FAFB;
+        border: 1px dashed #CBD5E1;
+        color: #94A3B8;
+    }
+
+    .ap-flow-stopped {
+        background: #F3F4F6;
+        border: 1px solid #E5E7EB;
+        color: #B0B7C3;
+        text-decoration: line-through;
+    }
+
+    .ap-flow-label {
+        font-size: 0.58rem;
+        font-weight: 600;
+        color: #64748B;
+    }
+
+    .ap-flow-link {
+        width: 14px;
+        height: 2px;
+        margin-top: 10px;
+        background: #E2E8F0;
+    }
+
+    .ap-flow-link-done {
+        background: #16A34A;
+    }
+</style>
+
 <div class="container-fluid py-4 px-0">
 
     <!-- HEADER -->
@@ -181,6 +293,7 @@
                         <th>Beneficiary</th>
                         <th>Submitted Date</th>
                         <th>Status</th>
+                        <th>Approval Flow (MO → RM → SM → AVP)</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -201,6 +314,38 @@
                             <td>@app.ApplicationDate.ToString("yyyy-MM-dd")</td>
                             <td><span class="@GetStatusClass(app)">@app.StatusDisplay</span></td>
                             <td>
+                                @* Role-wise flow from data already in the list response
+                                   (Status + Approvals) — no extra request per row. *@
+                                @{ var flowSteps = BuildFlowSteps(app); }
+                                <div class="ap-flow" title="@GetFlowSummary(app)">
+                                    @for (var i = 0; i < flowSteps.Count; i++)
+                                    {
+                                        var step = flowSteps[i];
+                                        <div class="ap-flow-step">
+                                            <div class="@GetFlowNodeClass(step.State)">
+                                                @if (step.State == FlowState.Done)
+                                                {
+                                                    <span class="ap-flow-check"></span>
+                                                }
+                                                else if (step.State == FlowState.Rejected)
+                                                {
+                                                    <span class="ap-flow-cross"></span>
+                                                }
+                                                else
+                                                {
+                                                    @step.Code
+                                                }
+                                            </div>
+                                            <div class="ap-flow-label">@step.Code</div>
+                                        </div>
+                                        @if (i < flowSteps.Count - 1)
+                                        {
+                                            <div class="@(step.State == FlowState.Done ? "ap-flow-link ap-flow-link-done" : "ap-flow-link")"></div>
+                                        }
+                                    }
+                                </div>
+                            </td>
+                            <td>
                                 <div class="ap-row-actions">
                                     <button class="ap-icon-btn ap-icon-view" @onclick="() => OpenDrawer(app)" title="View">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
@@ -212,7 +357,7 @@
                     @if (FilteredApplications().Count == 0)
                     {
                         <tr>
-                            <td colspan="8" style="text-align:center; padding:28px; color:#94A3B8;">No applications found for this view.</td>
+                            <td colspan="9" style="text-align:center; padding:28px; color:#94A3B8;">No applications found for this view.</td>
                         </tr>
                     }
                 </tbody>
@@ -380,4 +525,88 @@
             ? "ap-status ap-status-rejected"
             : "ap-status ap-status-pending";
     }
+
+    // ------------------------------------------------------------------
+    // Role-wise approval flow (MO → RM → SM → AVP)
+    // Derived purely from the row's Status + Approvals that the list
+    // endpoint already returns — same rules as the drawer's BuildSteps,
+    // so recorded Approved/Rejected steps always win over what the status
+    // alone implies (keeps reverse-rejection cycles displayed correctly).
+    // ------------------------------------------------------------------
+
+    private enum FlowState { Pending, Active, Done, Rejected, Stopped }
+
+    private sealed record ApprovalFlowStep(string Code, FlowState State);
+
+    private static readonly (string Code, int Index)[] FlowStageOrder =
+        { ("MO", 0), ("RM", 1), ("SM", 2), ("AVP", 3) };
+
+    private List<ApprovalFlowStep> BuildFlowSteps(WelfareApprovalApplicationDto app)
+    {
+        var currentIndex = app.Status switch
+        {
+            1 or 2 => 0,   // Pending MO
+            3 => 1,        // Pending RM
+            4 => 2,        // Pending SM
+            8 => 3,        // Pending AVP
+            5 => 4,        // Fully approved
+            _ => -1        // Rejected / returned / cancelled
+        };
+
+        var steps = new List<ApprovalFlowStep>();
+
+        foreach (var (code, index) in FlowStageOrder)
+        {
+            var approval = app.Approvals?.FirstOrDefault(a =>
+                string.Equals(a.ApprovalLevel, code, StringComparison.OrdinalIgnoreCase));
+
+            var state =
+                approval != null && string.Equals(approval.ApprovalStatus, "Approved", StringComparison.OrdinalIgnoreCase) ? FlowState.Done :
+                approval != null && string.Equals(approval.ApprovalStatus, "Rejected", StringComparison.OrdinalIgnoreCase) ? FlowState.Rejected :
+                app.Status == 5 || currentIndex > index ? FlowState.Done :
+                currentIndex == index ? FlowState.Active :
+                (app.Status is 6 or 9 && currentIndex == -1) ? FlowState.Stopped :
+                FlowState.Pending;
+
+            steps.Add(new ApprovalFlowStep(code, state));
+        }
+
+        return steps;
+    }
+
+    private string GetFlowSummary(WelfareApprovalApplicationDto app)
+    {
+        if (app.Status == 5)
+            return "Approved by all levels (MO → RM → SM → AVP)";
+
+        var rejection = app.Approvals?
+            .Where(a => string.Equals(a.ApprovalStatus, "Rejected", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(a => a.ApprovedAt)
+            .FirstOrDefault();
+
+        if (rejection != null)
+        {
+            return app.Status == 9
+                ? $"Returned to dealer by {rejection.ApprovalLevel} for correction"
+                : $"Rejected by {rejection.ApprovalLevel}";
+        }
+
+        return app.Status switch
+        {
+            1 or 2 => "Pending at MO",
+            3 => "Pending at RM",
+            4 => "Pending at SM",
+            8 => "Pending at AVP",
+            _ => "Approval flow"
+        };
+    }
+
+    private static string GetFlowNodeClass(FlowState state) => state switch
+    {
+        FlowState.Done => "ap-flow-node ap-flow-done",
+        FlowState.Rejected => "ap-flow-node ap-flow-rejected",
+        FlowState.Active => "ap-flow-node ap-flow-active",
+        FlowState.Stopped => "ap-flow-node ap-flow-stopped",
+        _ => "ap-flow-node ap-flow-pending"
+    };
 }
