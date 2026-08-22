@@ -95,9 +95,15 @@ public class WelfareApplication
 	public string? UpdatedBy { get; set; }                               // User who last updated the application
 	public DateTime UpdatedAt { get; set; } = DateTime.Now;              // When the application record was last updated
 
+	// Resubmission tracking (reverse rejection flow - same application is corrected and resubmitted by the dealer)
+	public int ResubmissionCount { get; set; }                           // How many times the dealer corrected & resubmitted this application
+	public DateTime? LastResubmittedAt { get; set; }                     // When the dealer last resubmitted after a rejection
+	public string? LastResubmittedBy { get; set; }                       // Dealer user who last resubmitted
+
 	// Relationships
 	public ICollection<WelfareApplicationDocument> Documents { get; set; } = new List<WelfareApplicationDocument>(); // Uploaded documents for this application
 	public ICollection<WelfareApplicationApproval> Approvals { get; set; } = new List<WelfareApplicationApproval>(); // Approval history (MO / RM / SMM) for this application
+	public ICollection<WelfareApplicationActionLog> ActionLogs { get; set; } = new List<WelfareApplicationActionLog>(); // Complete submit/approve/reject/resubmit history
 }
 
 
@@ -141,13 +147,15 @@ public class WelfareApplicationApproval
 public enum WelfareApplicationStatus
 {
     Draft = 0,        // Started but not yet submitted by the dealer
-    Submitted = 1,    // Submitted by dealer, awaiting MO review
-    MOReview = 2,     // Under Marketing Officer review
-    RMReview = 3,     // Under Regional Manager review
-    SMReview = 4,     // Under Senior Manager (SMM) review
-    Approved = 5,     // Fully approved, benefit can be released
-    Rejected = 6,     // Rejected at any approval level, process stopped
-    Cancelled = 7     // Cancelled by dealer/office before approval
+    Submitted = 1,    // Submitted by dealer => PENDING MO (first approval stage)
+    MOReview = 2,     // Legacy alias of Pending MO (kept for existing data)
+    RMReview = 3,     // Pending RM (approved by MO)
+    SMReview = 4,     // Pending SM / SMM (approved by RM)
+    Approved = 5,     // Fully approved by AVP, benefit can be released
+    Rejected = 6,     // Rejected at any approval level, process stopped (legacy - kept for existing data)
+    Cancelled = 7,    // Cancelled by dealer/office before approval
+    AVPReview = 8,    // Pending AVP (approved by SM) - final approval stage
+    ReturnedToDealer = 9 // Rejected by MO and returned to the dealer for correction/resubmission (reverse rejection flow)
 }
 
 public enum WelfareApprovalStatus
@@ -155,6 +163,28 @@ public enum WelfareApprovalStatus
     Pending = 0,   // Approval step not yet acted upon
     Approved = 1,  // Level approved/recommended and forwarded
     Rejected = 2   // Level rejected the application
+}
+
+/// <summary>
+/// Immutable audit trail of every workflow action on a welfare application
+/// (submitted, approved, rejected/returned, resubmitted). Unlike
+/// WelfareApplicationApproval (one row per approval level, updated in place),
+/// this log preserves the complete multi-cycle approval/rejection history.
+/// </summary>
+public class WelfareApplicationActionLog
+{
+	public int Id { get; set; }                                          // Primary key
+	public int WelfareApplicationId { get; set; }                        // FK to the application this entry belongs to
+	public WelfareApplication? WelfareApplication { get; set; }          // Navigation to the parent application
+
+	public AppRole? ActorLevel { get; set; }                             // Role that performed the action (null = the dealer)
+	public string Action { get; set; } = string.Empty;                   // Submitted / Approved / Rejected / Resubmitted / DraftSaved / Cancelled
+	public string? Remarks { get; set; }                                 // Remarks captured with the action (e.g. rejection remarks)
+	public string? ActorName { get; set; }                               // Display name of the officer/dealer who acted
+
+	// Audit
+	public string? CreatedBy { get; set; }                               // User who created the log entry
+	public DateTime CreatedAt { get; set; } = DateTime.Now;              // When the action happened
 }
 
 public enum WelfareSchemeType

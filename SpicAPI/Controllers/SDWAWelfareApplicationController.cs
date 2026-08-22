@@ -55,6 +55,39 @@ namespace SpicAPI.Controllers
                 })
                 .ToListAsync();
 
+            // Attach rejection details (stage + officer + reason) for rejected / returned-for-correction applications.
+            var rejectedAppIds = applications
+                .Where(x => x.Status == (int)WelfareApplicationStatus.Rejected || x.Status == (int)WelfareApplicationStatus.ReturnedToDealer)
+                .Select(x => x.Id)
+                .ToList();
+            if (rejectedAppIds.Count > 0)
+            {
+                var rejections = await _db.WelfareApplicationApprovals
+                    .AsNoTracking()
+                    .Where(ap => rejectedAppIds.Contains(ap.WelfareApplicationId) && ap.ApprovalStatus == WelfareApprovalStatus.Rejected)
+                    .OrderByDescending(ap => ap.ApprovedAt)
+                    .ToListAsync();
+
+                foreach (var app in applications.Where(x => x.Status == (int)WelfareApplicationStatus.Rejected || x.Status == (int)WelfareApplicationStatus.ReturnedToDealer))
+                {
+                    var rejection = rejections.FirstOrDefault(r => r.WelfareApplicationId == app.Id);
+                    if (rejection == null) continue;
+
+                    var level = WelfareSchemeApprovalController.GetStageDisplay(rejection.ApprovalLevel);
+                    app.RejectedByLevel = level;
+                    app.RejectedByName = rejection.ApprovedBy;
+                    app.RejectedAt = rejection.ApprovedAt;
+                    app.RejectionReason = rejection.Remarks;
+
+                    // Reverse rejection flow: MO returned it to the dealer for correction/resubmission
+                    if (app.Status == (int)WelfareApplicationStatus.ReturnedToDealer)
+                    {
+                        app.CanResubmit = true;
+                        app.StatusDisplay = $"Rejected by {level} – Resubmission Required";
+                    }
+                }
+            }
+
             return Ok(applications);
         }
 
@@ -145,13 +178,19 @@ namespace SpicAPI.Controllers
                 IsWholesaleDealerEmployee = application.IsWholesaleDealerEmployee,
 
                 BeneficiaryGroup = application.BeneficiaryGroup,
+                SubDealerId = application.SubDealerId,
                 SubDealerName = application.SubDealerName,
+                EmployeeId = application.EmployeeId,
                 EmployeeName = application.EmployeeName,
 
                 AverageQuantityLifted3Years = application.AverageQuantityLifted3Years,
                 LastYearQuantityLifted = application.LastYearQuantityLifted,
 
                 IsDeclarationConfirmed = application.IsDeclarationConfirmed,
+
+                CanResubmit = application.Status == WelfareApplicationStatus.ReturnedToDealer,
+                ResubmissionCount = application.ResubmissionCount,
+                LastResubmittedAt = application.LastResubmittedAt,
 
                 Documents = application.Documents
                     .OrderBy(d => d.UploadedAt)
@@ -293,21 +332,24 @@ namespace SpicAPI.Controllers
         internal static string GetStatusDisplayName(WelfareApplicationStatus status) => status switch
         {
             WelfareApplicationStatus.Draft => "Draft",
-            WelfareApplicationStatus.Submitted => "Submitted",
-            WelfareApplicationStatus.MOReview => "Under MO Review",
-            WelfareApplicationStatus.RMReview => "Under RM Review",
-            WelfareApplicationStatus.SMReview => "Under SM Review",
+            WelfareApplicationStatus.Submitted => "Pending MO",
+            WelfareApplicationStatus.MOReview => "Pending MO",
+            WelfareApplicationStatus.RMReview => "Pending RM",
+            WelfareApplicationStatus.SMReview => "Pending SM",
+            WelfareApplicationStatus.AVPReview => "Pending AVP",
             WelfareApplicationStatus.Approved => "Approved",
             WelfareApplicationStatus.Rejected => "Rejected",
             WelfareApplicationStatus.Cancelled => "Cancelled",
+            WelfareApplicationStatus.ReturnedToDealer => "Rejected – Resubmission Required",
             _ => status.ToString()
         };
 
         private static string GetApprovalLevelDisplayName(AppRole role) => role switch
         {
-            AppRole.MO => "Marketing Officer",
-            AppRole.RM => "Regional Manager",
-            AppRole.SMM => "Senior Manager",
+            AppRole.MO => "Marketing Officer (MO)",
+            AppRole.RM => "Regional Manager (RM)",
+            AppRole.SMM => "Senior Manager (SM)",
+            AppRole.AVP => "AVP",
             _ => role.ToString()
         };
 

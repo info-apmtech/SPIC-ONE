@@ -69,9 +69,16 @@
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault() ?? "";
 
-        // Dealers can always access the SDWA Dashboard and SDWA welfare pages
+        // Dealers can always access the SDWA Dashboard and SDWA welfare pages,
+        // but must NEVER reach the SchemeApproval page.
         if (LoginState.UserRole == AppRole.Dealer)
         {
+            if (firstSegment.Equals("SchemeApproval", StringComparison.OrdinalIgnoreCase))
+            {
+                Nav.NavigateTo("/SDWADashboard", replace: true);
+                return;
+            }
+
             if (firstSegment.Equals("SDWADashboard", StringComparison.OrdinalIgnoreCase)
                 || firstSegment.Equals("WelfareSchemes", StringComparison.OrdinalIgnoreCase)
                 || firstSegment.Equals("ApplyWelfareScheme", StringComparison.OrdinalIgnoreCase)

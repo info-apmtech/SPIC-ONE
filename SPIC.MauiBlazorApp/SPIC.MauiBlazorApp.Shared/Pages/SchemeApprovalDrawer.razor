@@ -1,319 +1,354 @@
-﻿@if (IsOpen)
+﻿@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@if (IsOpen)
 {
     <div class="apd-overlay" @onclick="CloseDrawer">
         <div class="apd-drawer" @onclick:stopPropagation="true">
 
-            <div class="apd-header">
-                <div class="apd-header-titles">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <h2>Application Details</h2>
-                        @if (Status == "Validated by MO") { <span class="apd-badge apd-badge-purple">Validated by MO</span> }
-                        else if (Status == "Rejected") { <span class="apd-badge apd-badge-red">Rejected</span> }
-                        else if (Status == "Completed") { <span class="apd-badge apd-badge-green">Approved</span> }
-                    </div>
-                    <p>WF-2026-001</p>
+            @if (_loading)
+            {
+                <div class="apd-header">
+                    <div class="apd-header-titles"><h2>Application Details</h2><p>Loading…</p></div>
+                    <button class="apd-close-icon" @onclick="CloseDrawer" aria-label="Close">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                            <line x1="9" y1="9" x2="15" y2="15"></line>
+                        </svg>
+                    </button>
                 </div>
-                <button class="apd-close-icon" @onclick="CloseDrawer" aria-label="Close">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="15" y1="9" x2="9" y2="15"></line>
-                        <line x1="9" y1="9" x2="15" y2="15"></line>
-                    </svg>
-                </button>
-            </div>
-
-            <div class="apd-body">
-
-                <div class="apd-section">
-                    <h3>Approval Workflow</h3>
-                    <div class="apd-stepper">
-
-                        @if (Status == "Pending")
-                        {
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-active">MO</div>
-                                <div class="apd-step-info">
-                                    <div class="apd-step-name">MO</div>
-                                    <div class="apd-step-status apd-status-review">Under Review</div>
-                                </div>
-                            </div>
-                            <div class="apd-step-connector"><div class="apd-connector-fill"></div></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-pending">@HourglassIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">RM</div><div class="apd-step-status">Pending</div></div>
-                            </div>
-                            <div class="apd-step-connector"></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-pending">@HourglassIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">SMM</div><div class="apd-step-status">Pending</div></div>
-                            </div>
-                            <div class="apd-step-connector"></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-pending">@HourglassIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">SDWA</div><div class="apd-step-status">Pending</div></div>
-                            </div>
-                        }
-                        else if (Status == "Validated by MO")
-                        {
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-success">@CheckIcon()</div>
-                                <div class="apd-step-info">
-                                    <div class="apd-step-name">MO</div>
-                                    <div class="apd-step-status apd-status-success">Validated<br/>12 May 2026<br/>10:42 AM</div>
-                                </div>
-                            </div>
-                            <div class="apd-step-connector"><div class="apd-connector-fill" style="width:100%; background-color:#16A34A;"></div></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-pending">@HourglassIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">RM</div><div class="apd-step-status">Pending</div></div>
-                            </div>
-                            <div class="apd-step-connector"></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-pending">@HourglassIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">SMM</div><div class="apd-step-status">Pending</div></div>
-                            </div>
-                            <div class="apd-step-connector"></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-pending">@HourglassIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">SDWA</div><div class="apd-step-status">Pending</div></div>
-                            </div>
-                        }
-                        else if (Status == "Rejected")
-                        {
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-cyan">MO</div>
-                                <div class="apd-step-info">
-                                    <div class="apd-step-name">MO</div>
-                                    <div class="apd-step-status apd-status-danger">Rejected<br/>12 May 2026<br/>10:42 AM</div>
-                                </div>
-                            </div>
-                            <div class="apd-step-connector"><div class="apd-connector-fill" style="width:100%; background-color:#16A34A;"></div></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-pending">@HourglassIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">RM</div><div class="apd-step-status">Pending</div></div>
-                            </div>
-                            <div class="apd-step-connector"></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-pending">@HourglassIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">SMM</div><div class="apd-step-status">Pending</div></div>
-                            </div>
-                            <div class="apd-step-connector"></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-pending">@HourglassIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">SDWA</div><div class="apd-step-status">Pending</div></div>
-                            </div>
-                        }
-                        else if (Status == "Completed")
-                        {
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-success">@CheckIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">MO</div><div class="apd-step-status apd-status-success">Validated<br/>12 May 2026</div></div>
-                            </div>
-                            <div class="apd-step-connector"><div class="apd-connector-fill" style="width:100%; background-color:#16A34A;"></div></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-success">@CheckIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">RM</div><div class="apd-step-status apd-status-success">Recommended<br/>12 May 2026</div></div>
-                            </div>
-                            <div class="apd-step-connector"><div class="apd-connector-fill" style="width:100%; background-color:#16A34A;"></div></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-success">@CheckIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">SMM</div><div class="apd-step-status apd-status-success">Recommended<br/>12 May 2026</div></div>
-                            </div>
-                            <div class="apd-step-connector"><div class="apd-connector-fill" style="width:100%; background-color:#16A34A;"></div></div>
-                            <div class="apd-step">
-                                <div class="apd-step-circle apd-step-success">@CheckIcon()</div>
-                                <div class="apd-step-info"><div class="apd-step-name">SDWA</div><div class="apd-step-status apd-status-success">Approved<br/>12 May 2026</div></div>
-                            </div>
-                        }
+                <div class="apd-body">
+                    <div class="apd-section" style="display:flex; align-items:center; gap:12px;">
+                        <div class="spinner-border text-success" role="status"></div>
+                        <span>Loading application details…</span>
                     </div>
                 </div>
-
-                @if (Status == "Pending")
-                {
-                    <div class="apd-alert apd-alert-warning">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
+            }
+            else if (_error != null || _detail == null)
+            {
+                <div class="apd-header">
+                    <div class="apd-header-titles"><h2>Application Details</h2><p>-</p></div>
+                    <button class="apd-close-icon" @onclick="CloseDrawer" aria-label="Close">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                            <line x1="9" y1="9" x2="15" y2="15"></line>
                         </svg>
-                        <span><strong>Your Action Pending:</strong> Please validate this application</span>
-                    </div>
-                }
-                else if (Status == "Validated by MO")
-                {
-                    <div class="apd-alert apd-alert-success">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
-                        </svg>
-                        <span>This application has been validated by MO and is awaiting RM review.</span>
-                    </div>
-                }
-                else if (Status == "Rejected")
-                {
+                    </button>
+                </div>
+                <div class="apd-body">
                     <div class="apd-alert apd-alert-danger">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
                         </svg>
-                        <span>This application has been rejected by MO. The approval process has been stopped.</span>
+                        <span>@(_error ?? "Application details are unavailable.")</span>
                     </div>
-                }
-                else if (Status == "Completed")
-                {
-                    <div class="apd-alert apd-alert-success">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
-                        </svg>
-                        <span>This application has been approved by SDWA and benefit has been released.</span>
-                    </div>
-                }
+                </div>
+            }
+            else
+            {
+                var d = _detail;
 
-                <div class="apd-section">
-                    <div class="apd-section-head">
-                        <h3>Applicant Information</h3>
-                        @if (Status == "Pending")
+                <div class="apd-header">
+                    <div class="apd-header-titles">
+                        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <h2>Application Details</h2>
+                            <span class="@GetStatusBadgeClass(d.Status)">@d.StatusDisplay</span>
+                        </div>
+                        <p>@(d.ApplicationNumber ?? "-")</p>
+                    </div>
+                    <button class="apd-close-icon" @onclick="CloseDrawer" aria-label="Close">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                            <line x1="9" y1="9" x2="15" y2="15"></line>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="apd-body">
+
+                    <!-- ===================== WORKFLOW ===================== -->
+                    <div class="apd-section">
+                        <h3>Approval Workflow (MO → RM → SM → AVP)</h3>
+                        <div class="apd-stepper">
+                            @{ var steps = BuildSteps(); }
+                            @for (var i = 0; i < steps.Count; i++)
+                            {
+                                var step = steps[i];
+                                <div class="apd-step">
+                                    <div class="@GetStepCircleClass(step.State)">
+                                        @(step.State == "done" ? @CheckIcon() : step.State == "rejected" ? @CrossIcon() : step.State == "active" ? step.Code : @HourglassIcon())
+                                    </div>
+                                    <div class="apd-step-info">
+                                        <div class="apd-step-name">@step.Name</div>
+                                        <div class="@GetStepStatusClass(step.State)">
+                                            @switch (step.State)
+                                            {
+                                                case "done":
+                                                    @("Approved")<br />@(step.At.HasValue ? FormatDateTime(step.At.Value) : "")
+                                                    break;
+                                                case "rejected":
+                                                    @("Rejected")<br />@(step.At.HasValue ? FormatDateTime(step.At.Value) : "")
+                                                    break;
+                                                case "active":
+                                                    @("Under Review")
+                                                    break;
+                                                case "stopped":
+                                                    @("Stopped")
+                                                    break;
+                                                default:
+                                                    @("Pending")
+                                                    break;
+                                            }
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(step.By))
+                                        {
+                                            <div class="apd-step-status">@step.By</div>
+                                        }
+                                    </div>
+                                </div>
+                                @if (i < steps.Count - 1)
+                                {
+                                    <div class="apd-step-connector">
+                                        @if (steps[i].State == "done")
+                                        {
+                                            <div class="apd-connector-fill" style="width:100%; background-color:#16A34A;"></div>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+
+                    <!-- ===================== STATUS ALERT ===================== -->
+                    @{
+                        var currentStageName = GetPendingStageName(d.Status);
+                    }
+                    @if (CanProcessCurrentStage())
+                    {
+                        <div class="apd-alert apd-alert-warning">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                            <span><strong>Your Action Pending:</strong> Please review and approve or reject this application (@currentStageName stage).</span>
+                        </div>
+                    }
+                    else if (d.Status == 5)
+                    {
+                        <div class="apd-alert apd-alert-success">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            <span>This application has been fully approved by AVP. The approval workflow is completed.</span>
+                        </div>
+                    }
+                    else if (d.Status == 6)
+                    {
+                        var rejection = GetRejectionStep();
+                        <div class="apd-alert apd-alert-danger">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                            <span>
+                                This application has been rejected by @(rejection?.ApprovedBy ?? StageLevelName(rejection?.ApprovalLevel ?? "the approval officer")). The approval process has been stopped.
+                            </span>
+                        </div>
+                    }
+                    else if (d.Status == 9)
+                    {
+                        var rejection = GetLatestRejectionStep();
+                        <div class="apd-alert apd-alert-danger">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                            <span>
+                                This application was rejected by @(rejection?.ApprovedBy ?? StageLevelName(rejection?.ApprovalLevel ?? "MO")) and returned to the Dealer for correction. It will restart the approval flow at MO once resubmitted.
+                            </span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="apd-alert apd-alert-success">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            <span>This application has cleared your stage and is awaiting the next approval level (@(currentStageName)).</span>
+                        </div>
+                    }
+
+                    <!-- ===================== APPLICANT / DEALER INFO ===================== -->
+                    <div class="apd-section">
+                        <div class="apd-section-head">
+                            <h3>Applicant Information</h3>
+                        </div>
+                        <div class="apd-fields-grid">
+                            <div class="apd-field"><label>Dealer Code</label><div class="apd-field-value">@(d.DealerCode ?? "-")</div></div>
+                            <div class="apd-field"><label>Dealer Name</label><div class="apd-field-value">@(d.DealerName ?? "-")</div></div>
+                            <div class="apd-field"><label>Welfare Scheme</label><div class="apd-field-value">@d.SchemeName</div></div>
+                            <div class="apd-field"><label>Submitted Date</label><div class="apd-field-value">@FormatDate(d.ApplicationDate)</div></div>
+                            <div class="apd-field"><label>Mobile Number</label><div class="apd-field-value">@(d.MobileNumber ?? "-")</div></div>
+                            <div class="apd-field"><label>Dealership Nature</label><div class="apd-field-value">@(d.DealershipNature ?? "-")</div></div>
+                            <div class="apd-field"><label>Region</label><div class="apd-field-value">@(d.Region ?? "-")</div></div>
+                            <div class="apd-field"><label>District</label><div class="apd-field-value">@(d.District ?? "-")</div></div>
+                        </div>
+                    </div>
+
+                    <!-- ===================== BENEFICIARY / NOMINEE ===================== -->
+                    <div class="apd-section">
+                        <div class="apd-section-head">
+                            <h3>Nominee &amp; Beneficiary Information</h3>
+                        </div>
+                        <div class="apd-fields-grid apd-fields-3">
+                            <div class="apd-field"><label>Nominee Name</label><div class="apd-field-value">@(d.NomineeName ?? "-")</div></div>
+                            <div class="apd-field"><label>Relationship</label><div class="apd-field-value">@(d.NomineeRelationship ?? "-")</div></div>
+                            <div class="apd-field"><label>Name as in Cheque / Passbook</label><div class="apd-field-value">@(d.BeneficiaryNameAsInCheque ?? "-")</div></div>
+                            <div class="apd-field"><label>Name Taken From</label><div class="apd-field-value">@(d.LeafOrBankPassbook ?? "-")</div></div>
+                            <div class="apd-field"><label>Beneficiary Name</label><div class="apd-field-value">@(d.BeneficiaryName ?? "-")</div></div>
+                            <div class="apd-field"><label>Beneficiary Relationship</label><div class="apd-field-value">@(d.Relationship ?? "-")</div></div>
+                        </div>
+                    </div>
+
+                    <!-- ===================== ELIGIBILITY ===================== -->
+                    <div class="apd-section">
+                        <h3>Eligibility Information</h3>
+                        <div class="apd-fields-grid apd-fields-3">
+                            <div class="apd-field"><label>Beneficiary Group</label><div class="apd-field-value">@(d.BeneficiaryGroup ?? "-")</div></div>
+                            <div class="apd-field"><label>Sub Dealer</label><div class="apd-field-value">@(d.SubDealerName ?? "-")</div></div>
+                            <div class="apd-field"><label>Approved Employee</label><div class="apd-field-value">@(d.EmployeeName ?? "-")</div></div>
+                            <div class="apd-field"><label>Avg Quantity Lifted (3 Years)</label><div class="apd-field-value">@(d.AverageQuantityLifted3Years?.ToString("0.##") ?? "-") MT</div></div>
+                            <div class="apd-field"><label>Last Year Quantity Lifted</label><div class="apd-field-value">@(d.LastYearQuantityLifted?.ToString("0.##") ?? "-") MT</div></div>
+                            <div class="apd-field"><label>Declaration Confirmed</label><div class="apd-field-value">@(d.IsDeclarationConfirmed ? "Yes" : "No")</div></div>
+                        </div>
+                    </div>
+
+                    <!-- ===================== SCHEME SPECIFIC ===================== -->
+                    <div class="apd-section">
+                        <h3>Scheme Specific Details</h3>
+                        <div class="apd-fields-grid apd-fields-3">
+                            @foreach (var field in GetSchemeSpecificFields(d))
+                            {
+                                <div class="apd-field"><label>@field.Label</label><div class="apd-field-value">@field.Value</div></div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- ===================== DOCUMENTS ===================== -->
+                    <div class="apd-section">
+                        <h3>Uploaded Documents</h3>
+                        @if (d.Documents.Count == 0)
                         {
-                            <button class="apd-btn-edit">Edit <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></button>
+                            <p style="color:#94A3B8;">No documents were uploaded with this application.</p>
+                        }
+                        else
+                        {
+                            <div class="apd-doc-list">
+                                @foreach (var doc in d.Documents)
+                                {
+                                    <div class="apd-doc-item">
+                                        <div class="apd-doc-icon"><img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/PdfIcon.png" /></div>
+                                        <div class="apd-doc-info">
+                                            <div class="apd-doc-name">@(string.IsNullOrWhiteSpace(doc.DocumentName) ? doc.FileName : doc.DocumentName)</div>
+                                            <div class="apd-doc-status">@(doc.IsVerified ? "Verified" : "Uploaded " + FormatDate(doc.UploadedAt))</div>
+                                        </div>
+                                        <button class="apd-btn-download" @onclick="() => OpenDocument(doc.Id, true)">Download</button>
+                                    </div>
+                                }
+                            </div>
                         }
                     </div>
-                    <div class="apd-fields-grid">
-                        <div class="apd-field"><label>Dealer code</label><div class="apd-field-value">DLR-CHN-0042</div></div>
-                        <div class="apd-field"><label>Dealer name</label><div class="apd-field-value">R. Krishnamurthy</div></div>
-                        <div class="apd-field"><label>Welfare Scheme</label><div class="apd-field-value">Medical Assistance</div></div>
-                        <div class="apd-field"><label>Submitted Date</label><div class="apd-field-value">2026-05-08</div></div>
-                        <div class="apd-field"><label>Mobile Number</label><div class="apd-field-value">98765 43210</div></div>
-                        <div class="apd-field"><label>Email Address</label><div class="apd-field-value">hello@gmail.com</div></div>
-                    </div>
+
+                    <!-- ===================== PREVIOUS REMARKS ===================== -->
+                    @{
+                        var previousRemarks = d.Approvals
+                            .Where(ap => !string.IsNullOrWhiteSpace(ap.Remarks))
+                            .ToList();
+                    }
+                    @if (previousRemarks.Count > 0)
+                    {
+                        <div class="apd-remarks-container">
+                            <h4 class="apd-box-title" style="color: #64748B;">Previous Remarks</h4>
+                            @foreach (var ap in previousRemarks)
+                            {
+                                <div class="apd-remark-block">
+                                    <h5 style="color: #3B82F6;">@(StageLevelName(ap.ApprovalLevel)) Remarks</h5>
+                                    <p>@ap.Remarks</p>
+                                    <small>
+                                        @(ap.ApprovalStatus == "Rejected" ? "Rejected" : "Approved")
+                                        by @(ap.ApprovedBy ?? "-")
+                                        @(ap.ApprovedAt.HasValue ? " on " + FormatDateTime(ap.ApprovedAt.Value) : "")
+                                    </small>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <!-- ===================== FINAL APPROVAL SUMMARY ===================== -->
+                    @if (d.Status == 5)
+                    {
+                        var avp = d.Approvals.FirstOrDefault(ap => ap.ApprovalStatus == "Approved" && ap.ApprovalLevel == "AVP");
+                        <div class="apd-summary-box apd-box-green">
+                            <h4 class="apd-box-title">Approval Details</h4>
+                            <div class="apd-summary-grid">
+                                <div class="apd-summary-item"><label>Approved By</label><span>@(avp?.ApprovedBy ?? "AVP")</span></div>
+                                <div class="apd-summary-item"><label>Approved On</label><span>@(avp?.ApprovedAt.HasValue == true ? FormatDateTime(avp.ApprovedAt.Value) : "-")</span></div>
+                                <div class="apd-summary-item"><label>Final Remarks</label><span>@(avp?.Remarks ?? "-")</span></div>
+                            </div>
+                        </div>
+                    }
+
                 </div>
 
-                <div class="apd-section">
-                    <div class="apd-section-head">
-                        <h3>Nominee Information</h3>
-                    </div>
-                    <div class="apd-fields-grid apd-fields-3">
-                        <div class="apd-field"><label>Nominee Name</label><div class="apd-field-value">Keerthana</div></div>
-                        <div class="apd-field"><label>Relationship</label><div class="apd-field-value">Spouse</div></div>
-                        <div class="apd-field"><label>Nominee Address</label><div class="apd-field-value">123 Main Street, City, State - 123456</div></div>
-                    </div>
+                <div class="apd-footer">
+                    @if (CanProcessCurrentStage())
+                    {
+                        <button class="apd-btn-action apd-btn-reject" @onclick="HandleRejectClick">Reject</button>
+                        <button class="apd-btn-action apd-btn-validate" disabled="@_busy" @onclick="HandleApproveClick">Approve &amp; Forward</button>
+                    }
+                    else
+                    {
+                        <button class="apd-btn-outline" @onclick="CloseDrawer">Close</button>
+                    }
                 </div>
-
-                <div class="apd-section">
-                    <h3>Uploaded documents</h3>
-                    <div class="apd-doc-list">
-                        <div class="apd-doc-item">
-                            <div class="apd-doc-icon"><img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/PdfIcon.png" /></div>
-                            <div class="apd-doc-info"><div class="apd-doc-name">Bonafide</div><div class="apd-doc-status">Verified</div></div>
-                            <button class="apd-btn-download">Download</button>
-                        </div>
-                        <div class="apd-doc-item">
-                            <div class="apd-doc-icon"><img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/PdfIcon.png" /></div>
-                            <div class="apd-doc-info"><div class="apd-doc-name">Aadhaar Card</div><div class="apd-doc-status">Verified</div></div>
-                            <button class="apd-btn-download">Download</button>
-                        </div>
-                    </div>
-                </div>
-
-                @if (Status == "Pending")
-                {
-                    <div class="apd-section">
-                        <h3>Your Remarks</h3>
-                        <textarea class="apd-textarea" placeholder="Add your validation remarks here..."></textarea>
-                    </div>
-                }
-                else if (Status == "Validated by MO")
-                {
-                    <div class="apd-summary-box apd-box-purple">
-                        <h4 class="apd-box-title">MO Validation Summary</h4>
-                        <div class="apd-summary-grid">
-                            <div class="apd-summary-item"><label>Validated By</label><span>Rajesh Kumar (Marketing Officer (MO))</span></div>
-                            <div class="apd-summary-item"><label>Validated On</label><span>12 May 2026, 10:42 AM</span></div>
-                        </div>
-                        <div class="apd-summary-full">
-                            <label>Validation Remarks</label>
-                            <p>All required documents verified and application is completed as per guidelines.</p>
-                        </div>
-                    </div>
-                }
-                else if (Status == "Rejected")
-                {
-                    <div class="apd-summary-box apd-box-red">
-                        <h4 class="apd-box-title">Rejection Details</h4>
-                        <div class="apd-summary-grid">
-                            <div class="apd-summary-item"><label>Rejected By</label><span>Rajesh Kumar (Marketing Officer (MO))</span></div>
-                            <div class="apd-summary-item"><label>Rejected On</label><span>12 May 2026, 10:42 AM</span></div>
-                            <div class="apd-summary-item"><label>Rejection Reason</label><span>Invalid documents</span></div>
-                            <div class="apd-summary-item"><label>Rejection Remarks</label><span>Bonafide certificate unclear and not attested.</span></div>
-                        </div>
-                    </div>
-                }
-                else if (Status == "Completed")
-                {
-                    <div class="apd-summary-box apd-box-green">
-                        <h4 class="apd-box-title">Approval Details</h4>
-                        <div class="apd-summary-grid">
-                            <div class="apd-summary-item"><label>Approved By</label><span>Rajesh Kumar (SDWA)</span></div>
-                            <div class="apd-summary-item"><label>Approved On</label><span>12 May 2026, 10:42 AM</span></div>
-                            <div class="apd-summary-item"><label>Benefit Status</label><span class="apd-status-success">Released Successfully</span></div>
-                            <div class="apd-summary-item"><label>Remarks</label><span>Application approved and benefit released.</span></div>
-                        </div>
-                    </div>
-
-                    <div class="apd-remarks-container">
-                        <h4 class="apd-box-title" style="color: #64748B;">Previous Remarks</h4>
-                        
-                        <div class="apd-remark-block">
-                            <h5 style="color: #3B82F6;">Marketing Officer</h5>
-                            <p>All documents verified. Application is valid and complete.</p>
-                            <small>Validated on 2026-05-10</small>
-                        </div>
-                        
-                        <div class="apd-remark-block">
-                            <h5 style="color: #EC4899;">RM Remarks</h5>
-                            <p>Application reviewed thoroughly. Applicant's profile is consistent with scheme guidelines. Recommending for SMM approval without objections.</p>
-                            <small>Validated on 2026-05-10</small>
-                        </div>
-                        
-                        <div class="apd-remark-block">
-                            <h5 style="color: #EAB308;">SMM Remarks</h5>
-                            <p>Application reviewed thoroughly. Applicant's profile is consistent with scheme guidelines. Recommending for SDWA approval.</p>
-                            <small>Validated on 2026-05-10</small>
-                        </div>
-                    </div>
-
-                    <div class="apd-section">
-                        <h3>Payment Details</h3>
-                        <div class="apd-payment-list">
-                            <div class="apd-payment-row"><span>Approved Amount</span><strong>₹50000.00</strong></div>
-                            <div class="apd-payment-row"><span>Payment Status</span><span class="apd-badge apd-badge-green">Paid</span></div>
-                            <div class="apd-payment-row"><span>Transaction ID</span><strong>TXN-2026-000345</strong></div>
-                            <div class="apd-payment-row"><span>Released Date</span><strong>16 May 2026</strong></div>
-                            <div class="apd-payment-row" style="border:none;"><span>Payment Mode</span><strong>NEFT</strong></div>
-                        </div>
-                    </div>
-                }
-
-            </div>
-
-            <div class="apd-footer">
-                @if (Status == "Pending")
-                {
-                    <button class="apd-btn-action apd-btn-reject" @onclick="HandleRejectClick">Reject</button>
-                    <button class="apd-btn-action apd-btn-validate">Validate &amp; Forward</button>
-                }
-                else if (Status == "Completed")
-                {
-                    <button class="apd-btn-outline" @onclick="CloseDrawer">Close</button>
-                    <button class="apd-btn-outline">Download Payment Receipt</button>
-                    <button class="apd-btn-action apd-btn-validate">Download PDF</button>
-                }
-                else 
-                {
-                    <button class="apd-btn-outline" @onclick="CloseDrawer">Close</button>
-                    <button class="apd-btn-action apd-btn-validate">Download PDF</button>
-                }
-            </div>
+            }
 
         </div>
     </div>
 }
 
+<!-- ===================== APPROVE CONFIRM MODAL ===================== -->
+@if (IsApproveModalOpen)
+{
+    <div class="rm-overlay" @onclick="CloseApproveModal">
+        <div class="rm-container" @onclick:stopPropagation="true">
+            <div class="rm-icon-wrapper" style="background-color:#DCFCE7; color:#16A34A;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <h2 class="rm-title">Approve Application?</h2>
+            <p class="rm-subtitle">Are you sure you want to approve this welfare application and forward it to the next level (@NextStageName)?</p>
+            <div class="rm-form">
+                <div class="rm-form-group">
+                    <label class="rm-label">Approval Remarks (Optional)</label>
+                    <textarea class="rm-textarea" placeholder="Add your approval remarks..." @bind="_approveRemarks"></textarea>
+                </div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_actionError))
+            {
+                <p class="rm-warning" style="margin-top:8px;">@_actionError</p>
+            }
+            <div class="rm-actions">
+                <button class="rm-btn rm-btn-cancel" disabled="@_busy" @onclick="CloseApproveModal">Cancel</button>
+                <button class="rm-btn rm-btn-reject" style="background-color:#16A34A;" disabled="@_busy" @onclick="ConfirmApprove">
+                    @(_busy ? "Processing…" : "Approve Application")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ===================== REJECT MODAL ===================== -->
 @if (IsRejectModalOpen)
 {
     <div class="rm-overlay" @onclick="CloseRejectModal">
@@ -326,54 +361,465 @@
             </div>
             <h2 class="rm-title">Reject Application?</h2>
             <p class="rm-subtitle">Are you sure you want to reject this welfare application?</p>
-            <p class="rm-warning">This action will stop the approval process and cannot be undone.</p>
+            <p class="rm-warning">On rejection this application will be @RejectDestinationText.</p>
             <div class="rm-form">
                 <div class="rm-form-group">
                     <label class="rm-label">Rejection Reason</label>
-                    <select class="rm-select">
-                        <option value="" disabled selected hidden>Invalid Documents</option>
-                        <option value="incomplete">Incomplete Application</option>
-                        <option value="invalid">Invalid Documents</option>
-                        <option value="not_eligible">Not Eligible</option>
-                        <option value="other">Other</option>
+                    <select class="rm-select" @bind="_rejectReason">
+                        <option value="">Select a reason</option>
+                        <option value="Incomplete Application">Incomplete Application</option>
+                        <option value="Invalid Documents">Invalid Documents</option>
+                        <option value="Not Eligible">Not Eligible</option>
+                        <option value="Other">Other</option>
                     </select>
                 </div>
                 <div class="rm-form-group">
-                    <label class="rm-label">Detailed Remarks</label>
-                    <textarea class="rm-textarea" placeholder="Add your detailed remarks..."></textarea>
+                    <label class="rm-label">Detailed Remarks *</label>
+                    <textarea class="rm-textarea" placeholder="Add your detailed remarks..." @bind="_rejectRemarks"></textarea>
                 </div>
             </div>
+            @if (!string.IsNullOrWhiteSpace(_actionError))
+            {
+                <p class="rm-warning" style="margin-top:8px;">@_actionError</p>
+            }
             <div class="rm-actions">
-                <button class="rm-btn rm-btn-cancel" @onclick="CloseRejectModal">Cancel</button>
-                <button class="rm-btn rm-btn-reject">Reject Application</button>
+                <button class="rm-btn rm-btn-cancel" disabled="@_busy" @onclick="CloseRejectModal">Cancel</button>
+                <button class="rm-btn rm-btn-reject" disabled="@_busy" @onclick="ConfirmReject">
+                    @(_busy ? "Processing…" : "Reject Application")
+                </button>
             </div>
         </div>
     </div>
 }
 
-
 @code {
     [Parameter] public bool IsOpen { get; set; }
-    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
-    
-    // Pass this down from SchemeApproval.razor (e.g., Status="@ActiveTab")
-    [Parameter] public string Status { get; set; } = "Pending"; 
+    [Parameter] public int ApplicationId { get; set; }
+    [Parameter] public string ContextTab { get; set; } = "pending";
+    [Parameter] public EventCallback<bool> OnClose { get; set; }
+    [Parameter] public EventCallback OnActionCompleted { get; set; }
 
-    private bool IsRejectModalOpen { get; set; } = false;
+    [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState { get; set; } = default!;
+
+    private SPIC.Core.DTOs.WelfareApplicationDetailDto? _detail;
+    private bool _loading;
+    private string? _error;
+    private int _loadedForId;
+
+    private bool IsApproveModalOpen { get; set; }
+    private bool IsRejectModalOpen { get; set; }
+
+    private string? _approveRemarks;
+    private string? _rejectReason;
+    private string? _rejectRemarks;
+    private string? _actionError;
+    private bool _busy;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reset when closed so reopening always fetches fresh data
+        // (e.g. after an approve/reject action changed the application state).
+        if (!IsOpen)
+        {
+            if (_loadedForId != 0) _loadedForId = 0;
+            return;
+        }
+
+        if (ApplicationId > 0 && _loadedForId != ApplicationId)
+        {
+            await LoadDetail(ApplicationId);
+        }
+    }
+
+    private async Task LoadDetail(int id)
+    {
+        _loading = true;
+        _error = null;
+        _detail = null;
+        ResetActionState();
+        try
+        {
+            _detail = await Http.GetFromJsonAsync<SPIC.Core.DTOs.WelfareApplicationDetailDto>(
+                $"api/WelfareSchemeApproval/applications/{id}");
+            _loadedForId = id;
+        }
+        catch
+        {
+            _error = "Unable to load application details. Please try again.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Stage authorization (mirrors backend enforcement; UI convenience only)
+    // ------------------------------------------------------------------
+
+    // Statuses pending at each stage
+    private static readonly Dictionary<AppRole, int[]> StageMap = new()
+    {
+        [AppRole.MO] = new[] { 1, 2 },
+        [AppRole.RM] = new[] { 3 },
+        [AppRole.SMM] = new[] { 4 },
+        [AppRole.AVP] = new[] { 8 }
+    };
+
+    private bool CanProcessCurrentStage() =>
+        LoginState.UserRole != null &&
+        StageMap.TryGetValue(LoginState.UserRole.Value, out var statuses) &&
+        _detail != null &&
+        statuses.Contains(_detail.Status);
+
+    private string NextStageName => LoginState.UserRole switch
+    {
+        AppRole.MO => "RM",
+        AppRole.RM => "SM",
+        AppRole.SMM => "AVP",
+        _ => "completion"
+    };
+
+    // Reverse rejection flow: where the application goes when this role rejects it
+    private string RejectDestinationText => LoginState.UserRole switch
+    {
+        AppRole.MO => "returned to the Dealer for correction and resubmission (the application will NOT be closed)",
+        AppRole.RM => "returned to the MO for review",
+        AppRole.SMM => "returned to the RM for review",
+        AppRole.AVP => "returned to the SM for review",
+        _ => "returned to the previous stage for review"
+    };
+
+    private static string GetPendingStageName(int status) => status switch
+    {
+        1 or 2 => "MO",
+        3 => "RM",
+        4 => "SM",
+        8 => "AVP",
+        _ => "-"
+    };
+
+    private static string StageLevelName(string level) => level switch
+    {
+        "MO" => "Marketing Officer (MO)",
+        "RM" => "Regional Manager (RM)",
+        "SM" => "Senior Manager (SM)",
+        "AVP" => "AVP",
+        _ => level
+    };
+
+    // ------------------------------------------------------------------
+    // Stepper
+    // ------------------------------------------------------------------
+
+    private sealed record DrawerStep(string Code, string Name, string State, string? By, DateTime? At);
+
+    private List<DrawerStep> BuildSteps()
+    {
+        var steps = new List<DrawerStep>();
+        if (_detail == null) return steps;
+
+        var stages = new (string Code, string Name)[]
+        {
+            ("MO", "MO"), ("RM", "RM"), ("SM", "SM"), ("AVP", "AVP")
+        };
+
+        var status = _detail.Status;
+        int currentIndex = status switch
+        {
+            1 or 2 => 0,
+            3 => 1,
+            4 => 2,
+            8 => 3,
+            5 => 4,
+            _ => -1 // rejected / cancelled handled via approvals below
+        };
+
+        for (int i = 0; i < stages.Length; i++)
+        {
+            var (code, name) = stages[i];
+            var approval = _detail.Approvals.FirstOrDefault(ap =>
+                string.Equals(ap.ApprovalLevel, code, StringComparison.OrdinalIgnoreCase));
+
+            string state;
+            if (approval != null && approval.ApprovalStatus == "Approved")
+                state = "done";
+            else if (approval != null && approval.ApprovalStatus == "Rejected")
+                state = "rejected";
+            else if (status == 6)
+                state = currentIndex >= 0 && i <= currentIndex ? "pending" : "stopped";
+            else if (currentIndex >= 0 && i < currentIndex)
+                state = "done";
+            else if (currentIndex >= 0 && i == currentIndex)
+                state = "active";
+            else
+                state = "pending";
+
+            steps.Add(new DrawerStep(code, name, state, approval?.ApprovedBy, approval?.ApprovedAt));
+        }
+
+        return steps;
+    }
+
+    private WelfareApprovalStepDto? GetRejectionStep() =>
+        _detail?.Approvals.FirstOrDefault(ap => ap.ApprovalStatus == "Rejected");
+
+    private WelfareApprovalStepDto? GetLatestRejectionStep() =>
+        _detail?.Approvals
+            .Where(ap => ap.ApprovalStatus == "Rejected")
+            .OrderByDescending(ap => ap.ApprovedAt)
+            .FirstOrDefault();
+
+    private static string GetStepCircleClass(string state) => state switch
+    {
+        "done" => "apd-step-circle apd-step-success",
+        "rejected" => "apd-step-circle apd-step-cyan",
+        "active" => "apd-step-circle apd-step-active",
+        _ => "apd-step-circle apd-step-pending"
+    };
+
+    private static string GetStepStatusClass(string state) => state switch
+    {
+        "done" => "apd-step-status apd-status-success",
+        "rejected" => "apd-step-status apd-status-danger",
+        "active" => "apd-step-status apd-status-review",
+        _ => "apd-step-status"
+    };
+
+    private static string GetStatusBadgeClass(int status) => status switch
+    {
+        5 => "apd-badge apd-badge-green",
+        6 => "apd-badge apd-badge-red",
+        _ => "apd-badge apd-badge-purple"
+    };
+
+    // ------------------------------------------------------------------
+    // Scheme-specific fields
+    // ------------------------------------------------------------------
+
+    private sealed record FieldData(string Label, string Value);
+
+    private static List<FieldData> GetSchemeSpecificFields(SPIC.Core.DTOs.WelfareApplicationDetailDto d)
+    {
+        var fields = new List<FieldData>();
+        switch (d.SchemeType)
+        {
+            case 0: // Medical Assistance
+                fields.Add(new FieldData("Treatment Type", d.MedicalTreatmentType ?? "-"));
+                break;
+            case 1: // Wedding
+                fields.Add(new FieldData("Marriage Date", FormatDateNullable(d.MarriageDate)));
+                break;
+            case 2: // Grahapravesam
+                fields.Add(new FieldData("Event Date", FormatDateNullable(d.EventDate)));
+                fields.Add(new FieldData("Ownership Type", d.OwnershipType ?? "-"));
+                fields.Add(new FieldData("Event Venue", d.EventVenue ?? "-"));
+                break;
+            case 3: // Educational Assistance
+                fields.Add(new FieldData("Course", d.Course ?? "-"));
+                fields.Add(new FieldData("Year of Study", d.EduYear?.ToString() ?? "-"));
+                fields.Add(new FieldData("College Name", d.CollegeName ?? "-"));
+                fields.Add(new FieldData("Total Duration (Years)", d.TotalNumberOfCourses?.ToString() ?? "-"));
+                fields.Add(new FieldData("First Application", d.IsFirstApplication == null ? "-" : (d.IsFirstApplication.Value ? "Yes" : "No")));
+                break;
+            case 4: // Sathabhishekam
+                fields.Add(new FieldData("Event Date", FormatDateNullable(d.EventDate)));
+                fields.Add(new FieldData("Ownership Type", d.OwnershipType ?? "-"));
+                fields.Add(new FieldData("Event Venue", d.EventVenue ?? "-"));
+                break;
+            case 5: // Death Relief
+                fields.Add(new FieldData("Date of Death", FormatDateNullable(d.DateOfDeath)));
+                fields.Add(new FieldData("Legal Heir Name", d.LegalHeirName ?? "-"));
+                fields.Add(new FieldData("Cause of Death", d.DeathCause ?? "-"));
+                break;
+            case 6: // Merit Award
+                fields.Add(new FieldData("Candidate Name", d.MeritCandidateName ?? "-"));
+                fields.Add(new FieldData("Father's Name", d.MeritFatherName ?? "-"));
+                fields.Add(new FieldData("Examination Appeared", d.ExaminationAppeared ?? "-"));
+                fields.Add(new FieldData("Board", d.BoardName ?? "-"));
+                fields.Add(new FieldData("Maximum Marks", d.MaximumMarks?.ToString() ?? "-"));
+                fields.Add(new FieldData("Marks Obtained", d.MarksObtained?.ToString() ?? "-"));
+                fields.Add(new FieldData("Percentage", d.MeritPercentage?.ToString("0.##") ?? "-"));
+                break;
+            case 7: // Distinction Award
+                fields.Add(new FieldData("Candidate Name", d.DistinctionCandidateName ?? "-"));
+                fields.Add(new FieldData("Father's Name", d.DistinctionFatherName ?? "-"));
+                fields.Add(new FieldData("Professional Course", d.ProfessionalCourseName ?? "-"));
+                fields.Add(new FieldData("Course Completion Year", d.CourseCompletionYear?.ToString() ?? "-"));
+                fields.Add(new FieldData("University", d.UniversityName ?? "-"));
+                fields.Add(new FieldData("Maximum Marks", d.DistinctionMaximumMarks?.ToString() ?? "-"));
+                fields.Add(new FieldData("Marks Obtained", d.DistinctionMarksObtained?.ToString() ?? "-"));
+                fields.Add(new FieldData("Aggregate Percentage", d.DistinctionAggregatePercentage?.ToString("0.##") ?? "-"));
+                fields.Add(new FieldData("Arrears", d.HasArrears == null ? "-" : (d.HasArrears.Value ? "Yes" : "No")));
+                fields.Add(new FieldData("Wholesale Dealer Employee", d.IsWholesaleDealerEmployee == null ? "-" : (d.IsWholesaleDealerEmployee.Value ? "Yes" : "No")));
+                break;
+        }
+        return fields;
+    }
+
+    // ------------------------------------------------------------------
+    // Approve / Reject actions
+    // ------------------------------------------------------------------
+
+    private void HandleApproveClick()
+    {
+        _actionError = null;
+        _approveRemarks = null;
+        IsApproveModalOpen = true;
+    }
+
+    private void HandleRejectClick()
+    {
+        _actionError = null;
+        _rejectReason = "";
+        _rejectRemarks = null;
+        IsRejectModalOpen = true;
+    }
+
+    private void CloseApproveModal() { if (!_busy) IsApproveModalOpen = false; }
+    private void CloseRejectModal() { if (!_busy) IsRejectModalOpen = false; }
+
+    private async Task ConfirmApprove()
+    {
+        if (_detail == null || _busy) return;
+        _busy = true;
+        _actionError = null;
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"api/WelfareSchemeApproval/applications/{_detail.Id}/approve",
+                new WelfareApprovalActionRequest { Remarks = _approveRemarks });
+
+            if (response.IsSuccessStatusCode)
+            {
+                IsApproveModalOpen = false;
+                await OnActionCompleted.InvokeAsync();
+            }
+            else
+            {
+                _actionError = await ReadErrorMessageAsync(response);
+            }
+        }
+        catch
+        {
+            _actionError = "Unable to reach the server. Please try again.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmReject()
+    {
+        if (_detail == null || _busy) return;
+
+        if (string.IsNullOrWhiteSpace(_rejectRemarks))
+        {
+            _actionError = "Remarks are mandatory when rejecting an application.";
+            return;
+        }
+
+        _busy = true;
+        _actionError = null;
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"api/WelfareSchemeApproval/applications/{_detail.Id}/reject",
+                new WelfareApprovalActionRequest { Reason = _rejectReason, Remarks = _rejectRemarks });
+
+            if (response.IsSuccessStatusCode)
+            {
+                IsRejectModalOpen = false;
+                await OnActionCompleted.InvokeAsync();
+            }
+            else
+            {
+                _actionError = await ReadErrorMessageAsync(response);
+            }
+        }
+        catch
+        {
+            _actionError = "Unable to reach the server. Please try again.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static async Task<string> ReadErrorMessageAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            if (body.TryGetProperty("Message", out var msg))
+                return msg.GetString() ?? "Action failed. Please try again.";
+        }
+        catch { }
+        return response.StatusCode == System.Net.HttpStatusCode.Conflict
+            ? "This application is no longer pending at your approval stage."
+            : "Action failed. Please try again.";
+    }
+
+    private void ResetActionState()
+    {
+        IsApproveModalOpen = false;
+        IsRejectModalOpen = false;
+        _approveRemarks = null;
+        _rejectReason = null;
+        _rejectRemarks = null;
+        _actionError = null;
+        _busy = false;
+    }
+
+    // ------------------------------------------------------------------
+    // Close + document download
+    // ------------------------------------------------------------------
 
     private async Task CloseDrawer()
     {
-        IsOpen = false;
-        await IsOpenChanged.InvokeAsync(IsOpen);
+        await OnClose.InvokeAsync(false);
     }
 
-    private void CloseRejectModal() { IsRejectModalOpen = false; }
-    
-    private async Task HandleRejectClick()
+    private async Task OpenDocument(int documentId, bool download)
     {
-        await CloseDrawer();
-        IsRejectModalOpen = true;
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        var token = GetRawToken();
+        var url = $"{baseUrl}/api/WelfareSchemeApproval/document/{documentId}";
+        if (download) url += "?disposition=attachment";
+        if (!string.IsNullOrWhiteSpace(token))
+            url += (url.Contains('?') ? "&" : "?") + "access_token=" + Uri.EscapeDataString(token);
+        await JS.InvokeVoidAsync("open", url, "_blank");
     }
+
+    private string? GetRawToken()
+    {
+        try
+        {
+            var token = LoginState.Token;
+            if (string.IsNullOrWhiteSpace(token)) return null;
+            return token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                ? token["Bearer ".Length..]
+                : token;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Formatting helpers
+    // ------------------------------------------------------------------
+
+    private static string FormatDate(DateTime date) => date.ToString("dd MMM yyyy");
+
+    private static string FormatDateNullable(DateTime? date) => date.HasValue ? date.Value.ToString("dd MMM yyyy") : "-";
+
+    private static string FormatDateTime(DateTime dateTime) => dateTime.ToString("dd MMM yyyy, hh:mm tt");
 
     // Helper snippets for SVG icons inside the stepper
     private RenderFragment HourglassIcon() => __builder =>
@@ -387,6 +833,14 @@
     {
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+    };
+
+    private RenderFragment CrossIcon() => __builder =>
+    {
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
         </svg>
     };
 }

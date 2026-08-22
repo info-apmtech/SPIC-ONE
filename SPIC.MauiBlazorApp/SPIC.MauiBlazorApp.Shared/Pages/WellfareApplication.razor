@@ -60,7 +60,7 @@ else
   <div class="summ-tile" style="background-color:#FFEEEE">
     <div class="summ-tile-left">
       <div class="summ-tile-caption">Rejected</div>
-      <div class="summ-tile-count">@CountByStatus(6)</div>
+      <div class="summ-tile-count">@CountRejected()</div>
     </div>
     <div class="summ-tile-emblem scarlet">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
@@ -143,6 +143,30 @@ else
     <span class="@GetCardBadgeClass(app.Status)">@app.StatusDisplay</span>
   </div>
 
+  @if (app.Status == 6 || app.Status == 9)
+  {
+      <!-- Rejection details: stage, officer and reason -->
+      <div class="apln-reject-box">
+        <strong>Rejected by @(string.IsNullOrWhiteSpace(app.RejectedByLevel) ? "the approval officer" : app.RejectedByLevel)</strong>
+        @if (!string.IsNullOrWhiteSpace(app.RejectedByName))
+        {
+            <span> — @app.RejectedByName</span>
+        }
+        @if (app.RejectedAt.HasValue)
+        {
+            <span> on @FormatDate(app.RejectedAt.Value)</span>
+        }
+        @if (!string.IsNullOrWhiteSpace(app.RejectionReason))
+        {
+            <div class="apln-reject-reason"><em>Reason:</em> @app.RejectionReason</div>
+        }
+        @if (app.CanResubmit)
+        {
+            <div class="apln-reject-reason">Please review the reason above, correct the details/documents and resubmit. The application will be sent back to MO for approval.</div>
+        }
+      </div>
+  }
+
   <div class="apln-meta-row">
     <div class="apln-meta-box">
       <div class="apln-meta-caption">Scheme Name</div>
@@ -193,6 +217,10 @@ else
       @(_busyPdfId == app.Id ? "Downloading…" : _pdfErrorId == app.Id ? "Failed – Tap to Retry" : "Download PDF")
     </button>
     <button class="apln-view-btn" @onclick="() => OpenDetails(app.Id)">View Details</button>
+    @if (app.CanResubmit)
+    {
+        <button class="apln-view-btn" style="background-color:#B91C1C; border-color:#B91C1C;" @onclick="() => OpenResubmission(app)">Correct &amp; Resubmit</button>
+    }
   </div>
 
 </div>
@@ -249,6 +277,14 @@ else
         _showDetails = true;
     }
 
+    private void OpenResubmission(WelfareApplicationSummaryDto app)
+    {
+        // Opens the existing application form pre-filled with the SAME application
+        // (no new application is created on resubmission).
+        var schemeKey = GetSchemePageName(app.SchemeType);
+        NavigationManager.NavigateTo($"/ApplyWelfareScheme?scheme={Uri.EscapeDataString(schemeKey)}&resubmitId={app.Id}");
+    }
+
     private async Task DownloadPdf(WelfareApplicationSummaryDto app)
     {
         _busyPdfId = app.Id;
@@ -275,7 +311,11 @@ else
         _applications.Count(a => a.Status == status);
 
     private int CountPending() =>
-        _applications.Count(a => a.Status >= 1 && a.Status <= 4);
+        _applications.Count(a => a.Status is >= 1 and <= 4 || a.Status == 8);
+
+    // Rejected includes applications returned to the dealer for resubmission (status 9)
+    private int CountRejected() =>
+        _applications.Count(a => a.Status == 6 || a.Status == 9);
 
     private bool HasActiveFilters() =>
         _statusFilter != "All Statuses" || !string.IsNullOrWhiteSpace(_search);
@@ -286,9 +326,9 @@ else
 
         query = _statusFilter switch
         {
-            "Pending" => query.Where(a => a.Status >= 1 && a.Status <= 4),
+            "Pending" => query.Where(a => a.Status is >= 1 and <= 4 || a.Status == 8),
             "Approved" => query.Where(a => a.Status == 5),
-            "Rejected" => query.Where(a => a.Status == 6),
+            "Rejected" => query.Where(a => a.Status == 6 || a.Status == 9),
             "Drafts" => query.Where(a => a.Status == 0),
             "Cancelled" => query.Where(a => a.Status == 7),
             _ => query
@@ -356,9 +396,23 @@ else
         0 => "apln-status-badge draft",
         1 or 2 or 3 or 4 => "apln-status-badge review",
         5 => "apln-status-badge approved",
-        6 => "apln-status-badge rejected",
+        6 or 9 => "apln-status-badge rejected",
         7 => "apln-status-badge cancelled",
         _ => "apln-status-badge draft"
+    };
+
+    // Maps the scheme type to the page key used by the ApplyWelfareScheme form (for resubmission)
+    private static string GetSchemePageName(int schemeType) => schemeType switch
+    {
+        0 => "Medical Assistance",
+        1 => "Wedding",
+        2 => "Grahapravesam",
+        3 => "Educational Assistance",
+        4 => "Sathabhishekam",
+        5 => "Death Relief",
+        6 => "Merit Award",
+        7 => "Distinction Award",
+        _ => "Grahapravesam"
     };
 
     private sealed record TrailStep(string BubbleClass, string NameClass, string StatusClass, string Short, string Name, string Status, string BubbleFontStyle);
@@ -366,14 +420,18 @@ else
     private static List<TrailStep> BuildTrail(int status)
     {
         // States: done (green), active (orange), idle (grey)
-        var dealerDone = status != 0;
+        // Workflow: Dealer -> MO -> RM -> SM -> AVP
+        var returnedToDealer = status == 9;   // Rejected by MO - back with the dealer for correction/resubmission
+        var dealerActive = returnedToDealer;
+        var dealerDone = status != 0 && !returnedToDealer;
         var moActive = status == 1 || status == 2;
-        var moDone = status == 3 || status == 4 || status == 5;
+        var moDone = status is 3 or 4 or 8 or 5;
         var rmActive = status == 3;
-        var rmDone = status == 4 || status == 5;
-        var smmActive = status == 4;
-        var smmDone = status == 5;
-        var sdwaDone = status == 5;
+        var rmDone = status is 4 or 8 or 5;
+        var smActive = status == 4;
+        var smDone = status is 8 or 5;
+        var avpActive = status == 8;
+        var avpDone = status == 5;
 
         string B(bool done, bool active) => done ? "state-done" : active ? "state-orange" : "state-idle";
         string N(bool done, bool active) => done ? "done" : active ? "orange" : "idle";
@@ -382,25 +440,23 @@ else
         return new List<TrailStep>
         {
             new TrailStep(
-                dealerDone ? "state-done" : "state-idle",
-                dealerDone ? "done" : "idle",
-                dealerDone ? "done" : "idle",
+                B(dealerDone, dealerActive),
+                N(dealerDone, dealerActive),
+                S(dealerDone, dealerActive, "done", "orange"),
                 "", "Dealer",
-                status == 0 ? "Draft" : "Submitted", ""),
+                returnedToDealer ? "Revise & Resubmit" : status == 0 ? "Draft" : "Submitted", ""),
             new TrailStep(
                 B(moDone, moActive), N(moDone, moActive), S(moDone, moActive, "Approved", "Review"),
-                "MO", "MO", moDone ? "Approved" : moActive ? "Review" : "Pending", ""),
+                "MO", "MO", moDone ? "Approved" : moActive ? "Review" : returnedToDealer ? "Rejected" : "Pending", ""),
             new TrailStep(
                 B(rmDone, rmActive), N(rmDone, rmActive), S(rmDone, rmActive, "Approved", "Review"),
                 "RM", "RM", rmDone ? "Approved" : rmActive ? "Review" : "Pending", ""),
             new TrailStep(
-                B(smmDone, smmActive), N(smmDone, smmActive), S(smmDone, smmActive, "Approved", "Review"),
-                "SMM", "SMM", smmDone ? "Approved" : smmActive ? "Review" : "Pending", "font-size:10px"),
+                B(smDone, smActive), N(smDone, smActive), S(smDone, smActive, "Approved", "Review"),
+                "SM", "SM", smDone ? "Approved" : smActive ? "Review" : "Pending", "font-size:10px"),
             new TrailStep(
-                sdwaDone ? "state-done" : "state-idle",
-                sdwaDone ? "done" : "idle",
-                sdwaDone ? "done" : "idle",
-                "SDWA", "SDWA", sdwaDone ? "Approved" : "Approval", "font-size:9px")
+                B(avpDone, avpActive), N(avpDone, avpActive), S(avpDone, avpActive, "Approved", "Review"),
+                "AVP", "AVP", avpDone ? "Approved" : avpActive ? "Review" : "Approval", "")
         };
     }
 

@@ -1,4 +1,8 @@
 ﻿@page "/SchemeApproval"
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
 
 <div class="container-fluid py-4 px-0">
 
@@ -36,6 +40,23 @@
         </div>
     </div>
 
+    @if (_loading)
+    {
+        <div class="ap-loading-state">
+            <div class="spinner-border text-success" role="status"></div>
+            <span>Loading approval queue…</span>
+        </div>
+    }
+    else if (_error != null)
+    {
+        <div class="ap-loading-state ap-error-state">
+            <div>@_error</div>
+            <button class="ap-btn-outline" @onclick='() => LoadPageAsync(_activeTab)'>Retry</button>
+        </div>
+    }
+    else if (_page != null)
+    {
+
     <!-- STATS -->
     <div class="ap-stats-grid">
 
@@ -43,7 +64,7 @@
         <div class="ap-stat-card ap-stat-purple">
             <div class="ap-stat-left">
                 <div class="ap-stat-title">Total Applications</div>
-                <div class="ap-stat-value">1536</div>
+                <div class="ap-stat-value">@_page.Stats.TotalApplications</div>
             </div>
             <div class="ap-stat-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -56,11 +77,11 @@
             </div>
         </div>
 
-        <!-- Orange — Pending Validation -->
+        <!-- Orange — Pending My Stage -->
         <div class="ap-stat-card ap-stat-orange">
             <div class="ap-stat-left">
-                <div class="ap-stat-title">Pending Validation</div>
-                <div class="ap-stat-value">42</div>
+                <div class="ap-stat-title">Pending @(StageLabel)</div>
+                <div class="ap-stat-value">@_page.Stats.PendingMyStage</div>
             </div>
             <div class="ap-stat-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -74,7 +95,7 @@
         <div class="ap-stat-card ap-stat-cyan">
             <div class="ap-stat-left">
                 <div class="ap-stat-title">Validated by MO</div>
-                <div class="ap-stat-value">28</div>
+                <div class="ap-stat-value">@_page.Stats.ValidatedByMO</div>
             </div>
             <div class="ap-stat-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -90,7 +111,7 @@
         <div class="ap-stat-card ap-stat-red">
             <div class="ap-stat-left">
                 <div class="ap-stat-title">Rejected</div>
-                <div class="ap-stat-value">2</div>
+                <div class="ap-stat-value">@_page.Stats.Rejected</div>
             </div>
             <div class="ap-stat-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -106,7 +127,7 @@
         <div class="ap-stat-card ap-stat-green">
             <div class="ap-stat-left">
                 <div class="ap-stat-title">Completed</div>
-                <div class="ap-stat-value">8</div>
+                <div class="ap-stat-value">@_page.Stats.Completed</div>
             </div>
             <div class="ap-stat-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -120,12 +141,11 @@
     </div>
 
     <div class="ap-tabs-row">
-        <button class="ap-tab @(ActiveTab == "Pending" ? "active" : "")" @onclick="@(() => SetActiveTab("Pending"))">Pending</button>
-        <button class="ap-tab @(ActiveTab == "Validated by MO" ? "active" : "")" @onclick="@(() => SetActiveTab("Validated by MO"))">Validated by MO</button>
-        <button class="ap-tab @(ActiveTab == "Recommended by RM" ? "active" : "")" @onclick="@(() => SetActiveTab("Recommended by RM"))">Recommended by RM</button>
-        <button class="ap-tab @(ActiveTab == "Recommended by SMM" ? "active" : "")" @onclick="@(() => SetActiveTab("Recommended by SMM"))">Recommended by SMM</button>
-        <button class="ap-tab @(ActiveTab == "Rejected" ? "active" : "")" @onclick="@(() => SetActiveTab("Rejected"))">Rejected</button>
-        <button class="ap-tab @(ActiveTab == "Completed" ? "active" : "")" @onclick="@(() => SetActiveTab("Completed"))">Completed</button>
+        @foreach (var t in _page.Tabs)
+        {
+            var key = t.Key;
+            <button class="ap-tab @(_activeTab == key ? "active" : "")" @onclick="@(() => SetActiveTab(key))">@t.Label (@t.Count)</button>
+        }
     </div>
 
     <div class="ap-table-card">
@@ -138,374 +158,83 @@
                         <circle cx="11" cy="11" r="8" />
                         <line x1="21" y1="21" x2="16.65" y2="16.65" />
                     </svg>
-                    <input type="text" placeholder="Search zones..." />
+                    <input type="text" placeholder="Search dealer / application..." @bind="_search" />
                 </div>
-                <select class="ap-select">
+                <select class="ap-select" @bind="_schemeFilter">
                     <option>All Schemes</option>
-                    <option>Medical Assistance</option>
-                    <option>Education Assistance</option>
+                    @foreach (var scheme in _schemes)
+                    {
+                        <option>@scheme</option>
+                    }
                 </select>
             </div>
         </div>
 
         <div class="ap-table-wrap">
             <table class="ap-table">
-                
-                @if (ActiveTab == "Pending")
-                {
-                    <thead>
+                <thead>
+                    <tr>
+                        <th>Application ID</th>
+                        <th>Dealer Code</th>
+                        <th>Dealer Name</th>
+                        <th>Welfare Scheme</th>
+                        <th>Beneficiary</th>
+                        <th>Submitted Date</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var app in PagedApplications())
+                    {
                         <tr>
-                            <th>Application ID</th>
-                            <th>Dealer Code</th>
-                            <th>Dealer Name</th>
-                            <th>Welfare Scheme</th>
-                            <th>Submitted Date</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @for (int i = 0; i < 3; i++)
-                        {
-                            <tr>
-                                <td>WF-2026-001</td>
-                                <td>DLR-12345</td>
-                                <td>
-                                    <div class="ap-dealer-cell">
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                        Rajesh Kumar
-                                    </div>
-                                </td>
-                                <td class="ap-td-teal">Medical Assistance</td>
-                                <td>2026-05-08</td>
-                                <td><span class="ap-status ap-status-pending">Pending Validation</span></td>
-                                <td>
-                                    <div class="ap-row-actions">
-                                        <button class="ap-icon-btn ap-icon-view" @onclick="OpenDrawer" title="View">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                                        </button>
-                                        <button class="ap-icon-btn ap-icon-edit" title="Edit">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                }
-                else if (ActiveTab == "Validated by MO")
-                {
-                    <thead>
-                        <tr>
-                            <th>Application ID</th>
-                            <th>Dealer Code</th>
-                            <th>Dealer Name</th>
-                            <th>Welfare Scheme</th>
-                            <th>Submitted Date</th>
-                            <th>Validated Date</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @for (int i = 0; i < 3; i++)
-                        {
-                            <tr>
-                                <td>WF-2026-001</td>
-                                <td>DLR-12345</td>
-                                <td>
-                                    <div class="ap-dealer-cell">
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                        Rajesh Kumar
-                                    </div>
-                                </td>
-                                <td class="ap-td-teal">Medical Assistance</td>
-                                <td>2026-05-08</td>
-                                <td>2026-05-08</td>
-                                <td><span class="ap-status ap-status-validated">Validation by MO</span></td>
-                                <td>
-                                    <div class="ap-row-actions">
-                                        <button class="ap-icon-btn ap-icon-view" @onclick="OpenDrawer" title="View">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                }
-                else if (ActiveTab == "Recommended by RM")
-                {
-                    <thead>
-                        <tr>
-                            <th>Application ID</th>
-                            <th>Dealer Code</th>
-                            <th>Dealer Name</th>
-                            <th>Welfare Scheme</th>
-                            <th>Recommended By</th>
-                            <th>Rec. Date</th>
-                            <th>MO Status</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @for (int i = 0; i < 3; i++)
-                        {
-                            <tr>
-                                <td>WF-2026-001</td>
-                                <td>DLR-12345</td>
-                                <td>
-                                    <div class="ap-dealer-cell">
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                        Rajesh Kumar
-                                    </div>
-                                </td>
-                                <td class="ap-td-teal">Medical Assistance</td>
-                                <td>
-                                    <div class="ap-dealer-cell">
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                        Rajesh (RM)
-                                    </div>
-                                </td>
-                                <td>2026-05-08</td>
-                                <td><span class="ap-status ap-status-validated">Approved</span></td>
-                                <td><span class="ap-status ap-status-validated">Recommended by RM</span></td>
-                                <td>
-                                    <div class="ap-row-actions">
-                                        <button class="ap-icon-btn ap-icon-view" @onclick="OpenDrawer" title="View">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                }
-                else if (ActiveTab == "Recommended by SMM")
-                {
-                    <thead>
-                        <tr>
-                            <th>Application ID</th>
-                            <th>Dealer Code</th>
-                            <th>Dealer Name</th>
-                            <th>Welfare Scheme</th>
-                            <th>Rec. By</th>
-                            <th>Rec. On</th>
-                            <th>MO Status</th>
-                            <th>RM Status</th>
-                            <th>SMM Status</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @for (int i = 0; i < 3; i++)
-                        {
-                            <tr>
-                                <td>WF-2026-001</td>
-                                <td>DLR-12345</td>
-                                <td>
-                                    <div class="ap-dealer-cell">
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                        Rajesh Kumar
-                                    </div>
-                                </td>
-                                <td class="ap-td-teal">Medical Assistance</td>
-                                <td>
-                                    <div class="ap-dealer-cell">
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                        Rajesh (SMM)
-                                    </div>
-                                </td>
-                                <td>2026-05-08</td>
-                                <td><span class="ap-status ap-status-validated">Validated</span></td>
-                                <td><span class="ap-status ap-status-validated">Recommended</span></td>
-                                <td><span class="ap-status ap-status-validated">Recommended</span></td>
-                                <td><span class="ap-status ap-status-pending">Pending Approval</span></td>
-                                <td>
-                                    <div class="ap-row-actions">
-                                        <button class="ap-icon-btn ap-icon-view" @onclick="OpenDrawer" title="View">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                }
-                else if (ActiveTab == "Rejected")
-                {
-                    <thead>
-                        <tr>
-                            <th>Application ID</th>
-                            <th>Dealer Code</th>
-                            <th>Dealer Name</th>
-                            <th>Welfare Scheme</th>
-                            <th>Rejected By</th>
-                            <th>Rejected Date</th>
-                            <th>Rejection Reason</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @for (int i = 0; i < 3; i++)
-                        {
-                            <tr>
-                                <td>WF-2026-001</td>
-                                <td>DLR-12345</td>
-                                <td>
-                                    <div class="ap-dealer-cell">
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                        Rajesh Kumar
-                                    </div>
-                                </td>
-                                <td class="ap-td-teal">Medical Assistance</td>
-                                <td>
-                                    <div class="ap-dealer-cell">
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                        Rajesh Kumar
-                                    </div>
-                                </td>
-                                <td>2026-05-08</td>
-                                <td>Invalid Documents</td>
-                                <td><span class="ap-status ap-status-rejected">Rejected</span></td>
-                                <td>
-                                    <div class="ap-row-actions">
-                                        <button class="ap-icon-btn ap-icon-view" @onclick="OpenDrawer" title="View">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                }
-                else if (ActiveTab == "Completed")
-                {
-                    <thead>
-                        <tr>
-                            <th>Application ID</th>
-                            <th>Dealer Code</th>
-                            <th>Dealer Name</th>
-                            <th>Welfare Scheme</th>
-                            <th>Approved By</th>
-                            <th>Approval Date</th>
-                            <th>Benefit Status</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>WF-2026-001</td>
-                            <td>DLR-12345</td>
+                            <td>@(app.ApplicationNumber ?? "-")</td>
+                            <td>@(app.DealerCode ?? "-")</td>
                             <td>
                                 <div class="ap-dealer-cell">
                                     <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                    Rajesh Kumar
+                                    @(app.DealerName ?? "-")
                                 </div>
                             </td>
-                            <td class="ap-td-teal">Medical Assistance</td>
-                            <td>
-                                <div class="ap-dealer-cell">
-                                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                    Suresh (SDWA)
-                                </div>
-                            </td>
-                            <td>2026-05-08</td>
-                            <td><span class="ap-benefit-pill ap-benefit-purple">Benefit Released</span></td>
-                            <td><span class="ap-status ap-status-completed">Approved</span></td>
+                            <td class="ap-td-teal">@app.SchemeName</td>
+                            <td>@(app.BeneficiaryName ?? "-")</td>
+                            <td>@app.ApplicationDate.ToString("yyyy-MM-dd")</td>
+                            <td><span class="@GetStatusClass(app.Status)">@app.StatusDisplay</span></td>
                             <td>
                                 <div class="ap-row-actions">
-                                    <button class="ap-icon-btn ap-icon-view" @onclick="OpenDrawer" title="View">
+                                    <button class="ap-icon-btn ap-icon-view" @onclick="() => OpenDrawer(app)" title="View">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                                     </button>
                                 </div>
                             </td>
                         </tr>
+                    }
+                    @if (FilteredApplications().Count == 0)
+                    {
                         <tr>
-                            <td>WF-2026-001</td>
-                            <td>DLR-12345</td>
-                            <td>
-                                <div class="ap-dealer-cell">
-                                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                    Rajesh Kumar
-                                </div>
-                            </td>
-                            <td class="ap-td-teal">Medical Assistance</td>
-                            <td>
-                                <div class="ap-dealer-cell">
-                                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                    Suresh (SDWA)
-                                </div>
-                            </td>
-                            <td>2026-05-08</td>
-                            <td><span class="ap-benefit-pill ap-benefit-blue">Payment Processed</span></td>
-                            <td><span class="ap-status ap-status-completed">Approved</span></td>
-                            <td>
-                                <div class="ap-row-actions">
-                                    <button class="ap-icon-btn ap-icon-view" @onclick="OpenDrawer" title="View">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                                    </button>
-                                </div>
-                            </td>
+                            <td colspan="8" style="text-align:center; padding:28px; color:#94A3B8;">No applications found for this view.</td>
                         </tr>
-                        <tr>
-                            <td>WF-2026-001</td>
-                            <td>DLR-12345</td>
-                            <td>
-                                <div class="ap-dealer-cell">
-                                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                    Rajesh Kumar
-                                </div>
-                            </td>
-                            <td class="ap-td-teal">Medical Assistance</td>
-                            <td>
-                                <div class="ap-dealer-cell">
-                                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
-                                    Suresh (SDWA)
-                                </div>
-                            </td>
-                            <td>2026-05-08</td>
-                            <td><span class="ap-benefit-pill ap-benefit-green">Claim Settled</span></td>
-                            <td><span class="ap-status ap-status-completed">Approved</span></td>
-                            <td>
-                                <div class="ap-row-actions">
-                                    <button class="ap-icon-btn ap-icon-view" @onclick="OpenDrawer" title="View">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                }
+                    }
+                </tbody>
             </table>
         </div>
         <div class="ap-pagination">
             <div class="ap-page-size">
                 <span>Items Per Page</span>
-                <select class="ap-select-sm">
+                <select class="ap-select-sm" @bind="_pageSize">
                     <option>16</option>
                     <option>32</option>
                     <option>64</option>
                 </select>
             </div>
             <div class="ap-page-nav">
-                <button class="ap-page-btn ap-page-arrow">
+                <button class="ap-page-btn ap-page-arrow" disabled="@(_pageIndex <= 1)" @onclick="GoToPrevPage">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="15 18 9 12 15 6" />
                     </svg>
                 </button>
-                <button class="ap-page-btn active">1</button>
-                <button class="ap-page-btn">2</button>
-                <button class="ap-page-btn">3</button>
-                <span class="ap-page-dots">...</span>
-                <button class="ap-page-btn">8</button>
-                <button class="ap-page-btn">9</button>
-                <button class="ap-page-btn">10</button>
-                <button class="ap-page-btn ap-page-arrow">
+                <span class="ap-page-dots">Page @_pageIndex of @Math.Max(TotalPages(), 1)</span>
+                <button class="ap-page-btn ap-page-arrow" disabled="@(_pageIndex >= TotalPages())" @onclick="GoToNextPage">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="9 18 15 12 9 6" />
                     </svg>
@@ -514,30 +243,139 @@
         </div>
 
     </div>
+    }
 </div>
-<SchemeApprovalDrawer @bind-IsOpen="isDrawerOpen" Status="@ActiveTab" />
+<SchemeApprovalDrawer IsOpen="@isDrawerOpen" ApplicationId="@_selectedId" ContextTab="@_activeTab" OnClose="CloseDrawerCallback" OnActionCompleted="OnDrawerActionCompleted" />
 @code {
     private bool isDrawerOpen = false;
-    
-    // Track the active tab
-    private string ActiveTab { get; set; } = "Pending";
+    private bool _loading = true;
+    private string? _error;
+    private WelfareApprovalPageDto? _page;
+    private string _activeTab = "pending";
+    private int _selectedId;
 
-    private void OpenDrawer()
+    private string _search = "";
+    private string _schemeFilter = "All Schemes";
+    private List<string> _schemes = new();
+    private int _pageSize = 16;
+    private int _pageIndex = 1;
+
+    [Inject] private HttpClient Http { get; set; } = default!;
+
+    // Stage label for the stat card, e.g. MO / RM / SM / AVP
+    private string StageLabel => loginState.UserRole switch
     {
+        AppRole.MO => "MO",
+        AppRole.RM => "RM",
+        AppRole.SMM => "SM",
+        AppRole.AVP => "AVP",
+        _ => ""
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPageAsync("pending");
+    }
+
+    private async Task LoadPageAsync(string tab)
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _page = await Http.GetFromJsonAsync<WelfareApprovalPageDto>(
+                $"api/WelfareSchemeApproval/applications?tab={Uri.EscapeDataString(tab)}");
+
+            _activeTab = _page?.ActiveTab ?? "pending";
+            _schemes = (_page?.Applications ?? new())
+                .Select(a => a.SchemeName)
+                .Distinct()
+                .OrderBy(s => s)
+                .ToList();
+            _pageIndex = 1;
+        }
+        catch
+        {
+            _error = "Unable to load the approval queue. Please try again.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SetActiveTab(string key)
+    {
+        if (key == _activeTab && _page != null) return;
+        await LoadPageAsync(key);
+    }
+
+    private void OpenDrawer(WelfareApprovalApplicationDto app)
+    {
+        _selectedId = app.Id;
         isDrawerOpen = true;
     }
 
-    private void SetActiveTab(string tabName)
+    private async Task CloseDrawerCallback(bool isOpen)
     {
-        ActiveTab = tabName;
+        isDrawerOpen = isOpen;
     }
+
+    private async Task OnDrawerActionCompleted()
+    {
+        isDrawerOpen = false;
+        await LoadPageAsync(_activeTab);
+    }
+
+    // ------------------------------------------------------------------
+    // Filtering / paging (client side within the active tab's rows)
+    // ------------------------------------------------------------------
+
+    private List<WelfareApprovalApplicationDto> FilteredApplications()
+    {
+        IEnumerable<WelfareApprovalApplicationDto> query = _page?.Applications ?? new();
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var q = _search.Trim().ToLowerInvariant();
+            query = query.Where(a =>
+                (a.ApplicationNumber ?? "").ToLowerInvariant().Contains(q) ||
+                (a.DealerCode ?? "").ToLowerInvariant().Contains(q) ||
+                (a.DealerName ?? "").ToLowerInvariant().Contains(q));
+        }
+
+        if (_schemeFilter != "All Schemes")
+            query = query.Where(a => a.SchemeName == _schemeFilter);
+
+        return query.ToList();
+    }
+
+    private List<WelfareApprovalApplicationDto> PagedApplications() =>
+        FilteredApplications()
+            .Skip((_pageIndex - 1) * _pageSize)
+            .Take(_pageSize)
+            .ToList();
+
+    private int TotalPages()
+    {
+        var count = FilteredApplications().Count;
+        return (int)Math.Ceiling(count / (double)_pageSize);
+    }
+
+    private void GoToPrevPage() { if (_pageIndex > 1) { _pageIndex--; } }
+    private void GoToNextPage() { if (_pageIndex < TotalPages()) { _pageIndex++; } }
 
     private string GetTableTitle()
     {
-        if (ActiveTab == "Validated by MO") return "Validated By MO List";
-        if (ActiveTab == "Recommended by RM") return "Recommended by RM List";
-        if (ActiveTab == "Recommended by SMM") return "Recommended by SMM Applications List";
-        
-        return $"{ActiveTab} Applications List";
+        var label = _page?.Tabs.FirstOrDefault(t => t.Key == _activeTab)?.Label;
+        return $"{label ?? _activeTab} Applications List";
     }
+
+    private static string GetStatusClass(int status) => status switch
+    {
+        5 => "ap-status ap-status-completed",
+        6 => "ap-status ap-status-rejected",
+        7 => "ap-status ap-status-rejected",
+        _ => "ap-status ap-status-pending"
+    };
 }
