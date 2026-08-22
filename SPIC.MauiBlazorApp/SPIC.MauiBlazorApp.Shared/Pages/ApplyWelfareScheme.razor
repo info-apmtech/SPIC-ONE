@@ -1,14 +1,63 @@
 ﻿@page "/ApplyWelfareScheme"
 @inject NavigationManager NavigationManager
 @inject HttpClient Http
+@inject IJSRuntime JS
 @using SPIC.Core.DTOs
 
 <div class="container-fluid py-4 px-0">
     
     <div class="aws-header-container">
-        <h1>Apply for @SelectedScheme</h1>
-        <p>Complete the form and upload required documents. Your progress is auto-saved.</p>
+        <h1>@(IsResubmissionMode ? $"Correct & Resubmit {SelectedScheme} Application" : $"Apply for {SelectedScheme}")</h1>
+        <p>@(IsResubmissionMode
+            ? "Your application was returned for correction. Update the details/documents below and resubmit - no new application will be created."
+            : "Complete the form and upload required documents. Your progress is auto-saved.")</p>
     </div>
+    @if (ResubmitId.HasValue)
+    {
+        var rejection = GetLatestRejection();
+        if (!string.IsNullOrEmpty(_resubmitError))
+        {
+        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 12px;">
+            <div class="aws-alert-icon" style="color: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+            </div>
+            <div style="color: #c0392b;">
+                <div><strong>@_resubmitError</strong></div>
+                <div style="margin-top: 4px;">Submission has been disabled so that a duplicate application is not created.</div>
+            </div>
+        </div>
+        }
+        else if (_resubmitDetail != null)
+        {
+        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 12px;">
+            <div class="aws-alert-icon" style="color: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+            </div>
+            <div style="color: #c0392b;">
+                @if (rejection != null)
+                {
+                    <div>
+                        <strong>Rejected by @StageLevelName(rejection.ApprovalLevel)@(string.IsNullOrWhiteSpace(rejection.ApprovedBy) ? "" : $" ({rejection.ApprovedBy})")</strong>
+                        @(rejection.ApprovedAt.HasValue ? $" on {rejection.ApprovedAt.Value:dd MMM yyyy}" : "")
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(rejection.Remarks))
+                    {
+                        <div style="margin-top: 4px;"><em>Reason:</em> @rejection.Remarks</div>
+                    }
+                    <div style="margin-top: 4px;">Please correct the issues below and click Resubmit. The application keeps its original ID and will restart approval from MO.</div>
+                }
+            </div>
+        </div>
+        }
+    }
     @if (CurrentEligibilityConditions.Any())
     {
     <div class="aws-eligibility-box">
@@ -726,6 +775,7 @@
             @foreach (var doc in CurrentDocuments)
             {
                 var uploadedFile = UploadedFiles.TryGetValue(doc.Name, out var f) ? f : null;
+                var existingFile = GetExistingDocument(doc.Name);
             <div class="aws-doc-upload-item">
                 <div class="aws-doc-upload-info">
                     <svg class="aws-doc-icon @doc.IconClass" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
@@ -749,8 +799,30 @@
                         </svg>
                         <span class="aws-doc-upload-filename">@uploadedFile.Name</span>
                         <span class="aws-doc-upload-size">(@FormatFileSize(uploadedFile.Size))</span>
+                        @if (existingFile != null)
+                        {
+                            <span class="aws-doc-upload-size" style="color:#B45309;">(replaces previously uploaded document)</span>
+                        }
                     </div>
                     <button class="aws-btn-upload-action aws-btn-upload-remove" @onclick="() => RemoveUploadedFile(doc.Name)">Remove</button>
+                </div>
+                }
+                else if (existingFile != null)
+                {
+                <div class="aws-doc-upload-done">
+                    <div class="aws-doc-upload-file-info">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <span class="aws-doc-upload-filename">@existingFile.FileName</span>
+                        <span class="aws-doc-upload-size">(@FormatFileSize(existingFile.FileSize ?? 0))</span>
+                        <span class="aws-doc-upload-size" style="color:#2563eb;">Previously uploaded</span>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="aws-btn-upload-action aws-btn-upload-remove" style="color:#2563eb;" @onclick="() => ViewExistingDocument(existingFile)">View</button>
+                        <button class="aws-btn-upload-action aws-btn-upload-remove" @onclick="() => RemoveExistingDocument(doc.Name)">Remove</button>
+                    </div>
                 </div>
                 }
                 else if (SelectedScheme == "Educational Assistance" && doc.Name == "Admission Certificate (First Year only)" && !IsEduFirstApplication)
@@ -851,8 +923,11 @@
                 @DraftMessage
             </div>
         }
-        <button class="aws-btn-action aws-btn-draft" @onclick="SaveAsDraft" disabled="@(_isSavingDraft || _isSubmitting)">@( _isSavingDraft ? "Saving..." : "Save as Draft")</button>
-        <button @onclick="OpenPreviewModal" class="aws-btn-action aws-btn-primary">Preview Application</button>
+        @if (!IsResubmissionMode)
+        {
+            <button class="aws-btn-action aws-btn-draft" @onclick="SaveAsDraft" disabled="@(_isSavingDraft || _isSubmitting || ResubmitId.HasValue)">@( _isSavingDraft ? "Saving..." : "Save as Draft")</button>
+        }
+        <button @onclick="OpenPreviewModal" class="aws-btn-action aws-btn-primary" disabled="@(ResubmitId.HasValue && !IsResubmissionMode)">@(IsResubmissionMode ? "Resubmit Application" : "Preview Application")</button>
     </div>
 
 </div> 
@@ -863,8 +938,8 @@
             
             <div class="aws-modal-header">
                 <div class="aws-modal-title">
-                    <h2>Preview Application</h2>
-                    <p>Review your details before submitting the application.</p>
+                    <h2>@(IsResubmissionMode ? "Preview Resubmission" : "Preview Application")</h2>
+                    <p>@(IsResubmissionMode ? "Review your corrections before resubmitting the application." : "Review your details before submitting the application.")</p>
                 </div>
                 <button class="aws-modal-close" @onclick="ClosePreviewModal" aria-label="Close">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1041,7 +1116,7 @@
                     <h3>Documents Uploaded</h3>
                     @foreach (var doc in CurrentDocuments)
                     {
-                        var uploaded = UploadedFiles.ContainsKey(doc.Name);
+                        var uploaded = HasDocument(doc.Name);
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">@doc.Name</span>
                         <span class="aws-modal-colon">:</span>
@@ -1063,7 +1138,7 @@
 
             <div class="aws-modal-footer">
                 <button class="aws-btn-modal aws-btn-modal-outline" @onclick="ClosePreviewModal">Edit</button>
-                <button class="aws-btn-modal aws-btn-modal-solid" @onclick="OpenSubmitModal">Submit Application</button>
+                <button class="aws-btn-modal aws-btn-modal-solid" @onclick="OpenSubmitModal">@(IsResubmissionMode ? "Confirm Resubmission" : "Submit Application")</button>
             </div>
 
         </div>
@@ -1078,8 +1153,10 @@
                 <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/SubmitIcon.png" alt="Medical Assistance" />
             </div>
 
-            <h2 class="aws-submit-title">Submit Application</h2>
-            <p class="aws-submit-subtitle">Once submitted, your application will be sent to the MO for review. This action cannot be undone.</p>
+            <h2 class="aws-submit-title">@(IsResubmissionMode ? "Confirm Resubmission" : "Submit Application")</h2>
+            <p class="aws-submit-subtitle">@(IsResubmissionMode
+                ? "Your corrected application will be sent back to the MO for review. The original Application ID is kept."
+                : "Once submitted, your application will be sent to the MO for review. This action cannot be undone.")</p>
 
             <div class="aws-submit-info-box">
                 <div class="aws-submit-info-row">
@@ -1095,7 +1172,7 @@
 
             <div class="aws-submit-actions">
                 <button class="aws-submit-btn aws-submit-btn-cancel" @onclick="CloseSubmitModal" disabled="@_isSubmitting">Cancel</button>
-                <button class="aws-submit-btn aws-submit-btn-confirm" @onclick="ConfirmSubmission" disabled="@_isSubmitting">@( _isSubmitting ? "Submitting..." : "Confirm")</button>
+                <button class="aws-submit-btn aws-submit-btn-confirm" @onclick="ConfirmSubmission" disabled="@_isSubmitting">@( _isSubmitting ? "Submitting..." : IsResubmissionMode ? "Confirm Resubmission" : "Confirm")</button>
             </div>
 
         </div>
@@ -1110,8 +1187,10 @@
                 <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/GreenTick.png" alt="Submit Icon" />
             </div>
 
-            <h2 class="aws-success-title">Application Submitted!</h2>
-            <p class="aws-success-subtitle">Your @SelectedScheme welfare application has been submitted successfully. You will receive updates via SMS and email.</p>
+            <h2 class="aws-success-title">@(IsResubmissionMode ? "Application Resubmitted!" : "Application Submitted!")</h2>
+            <p class="aws-success-subtitle">@(IsResubmissionMode
+                ? $"Your corrected {SelectedScheme} welfare application has been resubmitted with the same Application ID and is back with the MO for approval."
+                : $"Your {SelectedScheme} welfare application has been submitted successfully. You will receive updates via SMS and email.")</p>
 
             <div class="aws-success-id-box">
                 <span class="aws-success-id-label">Application ID</span>
@@ -1169,10 +1248,26 @@
     [SupplyParameterFromQuery(Name = "scheme")]
     private string? Scheme { get; set; }
 
+    // Set when the dealer opens a REJECTED application for correction/resubmission
+    // (from My Applications). The SAME application is loaded, updated and resubmitted.
+    [SupplyParameterFromQuery(Name = "resubmitId")]
+    private int? ResubmitId { get; set; }
+
+    private WelfareApplicationDetailDto? _resubmitDetail;
+    private string? _resubmitError;
+
+    // Documents already stored on the server for this application (keyed by document type)
+    private Dictionary<string, WelfareApplicationDocumentDto> ExistingDocs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    // Document types the dealer explicitly removed (ids are sent to the server on resubmit)
+    private HashSet<string> RemovedExistingDocNames { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     private SDWADashboardDealerDto _dealer = new();
     private bool _isLoadingDealer = true;
 
-    private string SelectedScheme => string.IsNullOrWhiteSpace(Scheme) ? "Grahapravesam" : Uri.UnescapeDataString(Scheme);
+    private string? _schemeOverride;
+    private string SelectedScheme => _schemeOverride ?? (string.IsNullOrWhiteSpace(Scheme) ? "Grahapravesam" : Uri.UnescapeDataString(Scheme));
+
+    private bool IsResubmissionMode => ResubmitId.HasValue && _resubmitDetail != null;
 
     // Sales history
     private DealerSalesHistoryDto? _salesHistory;
@@ -1272,6 +1367,201 @@
         {
             _isLoadingSalesHistory = false;
         }
+
+        // Resubmission mode: load the SAME rejected application and pre-fill everything
+        if (ResubmitId.HasValue)
+        {
+            await LoadResubmissionAsync(ResubmitId.Value);
+        }
+    }
+
+    private async Task LoadResubmissionAsync(int applicationId)
+    {
+        _resubmitError = null;
+        try
+        {
+            var detail = await Http.GetFromJsonAsync<WelfareApplicationDetailDto>(
+                $"api/SDWAWelfareApplication/my-application/{applicationId}");
+
+            if (detail == null)
+            {
+                _resubmitError = "Application not found.";
+                return;
+            }
+
+            if (detail.Status != 9) // WelfareApplicationStatus.ReturnedToDealer
+            {
+                _resubmitError = "This application is not waiting for your resubmission. Only applications returned by MO for correction can be edited here.";
+                return;
+            }
+
+            _resubmitDetail = detail;
+            _schemeOverride = MapSchemeTypeToPageName(detail.SchemeType);
+
+            // ---- Pre-fill all previously saved details (no new application is created) ----
+            SelectedBeneficiaryGroup = detail.BeneficiaryGroup ?? string.Empty;
+            NomineeName = detail.NomineeName ?? string.Empty;
+            NomineeRelationship = detail.NomineeRelationship ?? string.Empty;
+            BeneficiaryName = detail.BeneficiaryName ?? string.Empty;
+            BeneficiaryRelationship = detail.Relationship ?? string.Empty;
+            BeneficiaryDateOfBirth = detail.BeneficiaryDateOfBirth;
+            OnDateChanged();
+
+            EventDate = detail.EventDate;
+            EventVenue = detail.EventVenue ?? string.Empty;
+            OwnershipType = detail.OwnershipType ?? string.Empty;
+
+            DeathDateOfDeath = detail.DateOfDeath;
+            LegalHeirName = detail.LegalHeirName ?? string.Empty;
+            DeathCause = detail.DeathCause ?? string.Empty;
+
+            EduCourse = detail.Course ?? string.Empty;
+            EduYear = detail.EduYear?.ToString() ?? string.Empty;
+            EduCollegeName = detail.CollegeName ?? string.Empty;
+            EduTotalCourses = detail.TotalNumberOfCourses;
+            IsEduFirstApplication = detail.IsFirstApplication != false;
+
+            MedicalTreatmentType = detail.MedicalTreatmentType ?? string.Empty;
+
+            MeritCandidateName = detail.MeritCandidateName ?? string.Empty;
+            MeritFatherName = detail.MeritFatherName ?? string.Empty;
+            MeritExamination = detail.ExaminationAppeared ?? string.Empty;
+            MeritBoardName = detail.BoardName ?? string.Empty;
+            MeritMaximumMarks = detail.MaximumMarks ?? 0;
+            MeritMarksObtained = detail.MarksObtained ?? 0;
+            CalculatePercentage();
+
+            DistinctionCandidateName = detail.DistinctionCandidateName ?? string.Empty;
+            DistinctionFatherName = detail.DistinctionFatherName ?? string.Empty;
+            DistinctionProfessionalCourse = detail.ProfessionalCourseName ?? string.Empty;
+            DistinctionCourseYear = detail.CourseCompletionYear ?? string.Empty;
+            DistinctionUniversityName = detail.UniversityName ?? string.Empty;
+            DistinctionMaximumMarks = detail.DistinctionMaximumMarks ?? 0;
+            DistinctionMarksObtained = detail.DistinctionMarksObtained ?? 0;
+            CalculateDistinctionPercentage();
+            DistinctionHasArrears = detail.HasArrears;
+            DistinctionIsWholesaleEmployee = detail.IsWholesaleDealerEmployee;
+
+            QuantityLiftedValue = ReverseQuantityRange(detail.QuantityLifted);
+            IsDeclarationConfirmed = detail.IsDeclarationConfirmed;
+
+            if (SelectedBeneficiaryGroup == "Direct Dealer")
+            {
+                var match = _existingBeneficiaries.FirstOrDefault(b =>
+                    string.Equals(b.Name, BeneficiaryName, StringComparison.OrdinalIgnoreCase));
+                SelectedExistingBeneficiary = match?.Name ?? "new";
+            }
+            else if (SelectedBeneficiaryGroup == "Sub Dealer")
+            {
+                await LoadSubDealers();
+                SelectedSubDealerId = detail.SubDealerId?.ToString() ?? string.Empty;
+                SelectedSubDealerName = detail.SubDealerName ?? string.Empty;
+            }
+            else if (SelectedBeneficiaryGroup == "Approved Employee")
+            {
+                await LoadEmployees();
+                SelectedEmployeeId = detail.EmployeeId?.ToString() ?? string.Empty;
+                SelectedEmployeeName = detail.EmployeeName ?? string.Empty;
+            }
+
+            // ---- Pre-fill previously uploaded documents so they can be kept, replaced or removed ----
+            ExistingDocs = new Dictionary<string, WelfareApplicationDocumentDto>(StringComparer.OrdinalIgnoreCase);
+            foreach (var doc in detail.Documents.OrderByDescending(d => d.UploadedAt))
+            {
+                var key = doc.DocumentType?.Trim() ?? string.Empty;
+                if (!string.IsNullOrEmpty(key))
+                    ExistingDocs.TryAdd(key, doc);
+            }
+        }
+        catch (Exception)
+        {
+            _resubmitError = "Unable to load the application for correction. Please try again.";
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Resubmission helpers
+    // ------------------------------------------------------------------
+
+    private WelfareApprovalStepDto? GetLatestRejection() =>
+        _resubmitDetail?.Approvals
+            .Where(ap => string.Equals(ap.ApprovalStatus, "Rejected", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(ap => ap.ApprovedAt)
+            .FirstOrDefault();
+
+    private static string StageLevelName(string level) => level switch
+    {
+        "MO" => "MO",
+        "RM" => "RM",
+        "SM" => "SM",
+        "AVP" => "AVP",
+        _ => "the approval officer"
+    };
+
+    private static string MapSchemeTypeToPageName(int schemeType) => schemeType switch
+    {
+        0 => "Medical Assistance",
+        1 => "Wedding",
+        2 => "Grahapravesam",
+        3 => "Educational Assistance",
+        4 => "Sathabhishekam",
+        5 => "Death Relief",
+        6 => "Merit Award",
+        7 => "Distinction Award",
+        _ => "Grahapravesam"
+    };
+
+    private static string ReverseQuantityRange(int? quantity) => quantity switch
+    {
+        null => "",
+        <= 0 => "lt1000",
+        1001 => "gt1000",
+        >= 5001 and <= 10000 => "5001-10000",
+        >= 10001 and <= 25000 => "10001-25000",
+        >= 25001 and <= 35000 => "25001-35000",
+        >= 35001 and <= 50000 => "35001-50000",
+        >= 50001 => "gt50001",
+        _ => ""
+    };
+
+    private WelfareApplicationDocumentDto? GetExistingDocument(string docName) =>
+        IsResubmissionMode &&
+        !RemovedExistingDocNames.Contains(docName) &&
+        ExistingDocs.TryGetValue(docName, out var existing)
+            ? existing
+            : null;
+
+    /// <summary>Doc counts as present when newly uploaded OR still present from the previous submission.</summary>
+    private bool HasDocument(string docName) =>
+        UploadedFiles.ContainsKey(docName) || GetExistingDocument(docName) != null;
+
+    private void RemoveExistingDocument(string docName)
+    {
+        RemovedExistingDocNames.Add(docName);
+        StateHasChanged();
+    }
+
+    private async Task ViewExistingDocument(WelfareApplicationDocumentDto doc)
+    {
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        var url = $"{baseUrl}/api/SDWAWelfareApplication/document/{doc.Id}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    /// <summary>
+    /// Comma-separated ids of previously stored documents to delete server-side:
+    /// explicitly removed ones plus any that are being replaced by a new upload.
+    /// </summary>
+    private string BuildRemovedDocumentIds()
+    {
+        var ids = ExistingDocs.Values
+            .Where(d =>
+                RemovedExistingDocNames.Contains(d.DocumentType ?? string.Empty) ||
+                UploadedFiles.ContainsKey(d.DocumentType ?? string.Empty))
+            .Select(d => d.Id)
+            .Distinct();
+
+        return string.Join(",", ids);
     }
 
     private async Task OnBeneficiaryGroupChanged()
@@ -1652,6 +1942,10 @@
 
     private void OpenPreviewModal()
     {
+        // While correcting an existing application, never allow a fresh submission
+        // (a new application must NOT be created during resubmission).
+        if (ResubmitId.HasValue && !IsResubmissionMode) return;
+
         ShowValidation = false;
         ValidationErrors.Clear();
         IsPreviewModalOpen = true;
@@ -1693,7 +1987,13 @@
 
         try
         {
-            var response = await PostApplicationAsync("api/WelfareApplication/submit");
+            // Resubmission updates the SAME application (same id) and restarts approval at MO;
+            // a normal submission creates a new application.
+            var url = IsResubmissionMode
+                ? $"api/WelfareApplication/resubmit/{ResubmitId.Value}"
+                : "api/WelfareApplication/submit";
+
+            var response = await PostApplicationAsync(url, IsResubmissionMode);
             var body = await response.Content.ReadAsStringAsync();
 
             if (response.IsSuccessStatusCode)
@@ -1727,7 +2027,8 @@
 
     private async Task SaveAsDraft()
     {
-        if (_isSavingDraft || _isSubmitting) return;
+        // Drafts always create a NEW application - not allowed while correcting an existing one
+        if (_isSavingDraft || _isSubmitting || ResubmitId.HasValue) return;
 
         _isSavingDraft = true;
         DraftMessage = string.Empty;
@@ -1901,10 +2202,10 @@
                 break;
         }
 
-        // Document validation based on scheme requirements
+        // Document validation based on scheme requirements (kept + newly uploaded count)
         foreach (var doc in CurrentDocuments)
         {
-            if (IsDocumentRequired(doc.Name) && !UploadedFiles.ContainsKey(doc.Name))
+            if (IsDocumentRequired(doc.Name) && !HasDocument(doc.Name))
                 errors.Add($"{doc.Name} is required.");
         }
 
@@ -1959,8 +2260,11 @@
         SubDealerName = SelectedSubDealerName,
         EmployeeId = int.TryParse(SelectedEmployeeId, out var employeeId) ? employeeId : null,
         EmployeeName = SelectedEmployeeName,
-        AverageQuantityLifted3Years = _salesHistory?.AverageQuantityLifted3Years,
-        LastYearQuantityLifted = _salesHistory?.LastYearQuantityLifted,
+        // Fall back to the values stored on the application when the sales dashboard is unavailable
+        AverageQuantityLifted3Years = _salesHistory?.AverageQuantityLifted3Years
+            ?? (IsResubmissionMode ? _resubmitDetail!.AverageQuantityLifted3Years : null),
+        LastYearQuantityLifted = _salesHistory?.LastYearQuantityLifted
+            ?? (IsResubmissionMode ? _resubmitDetail!.LastYearQuantityLifted : null),
         EventDate = EventDate,
         EventVenue = EventVenue,
         OwnershipType = OwnershipType,
@@ -1993,7 +2297,7 @@
         IsDeclarationConfirmed = IsDeclarationConfirmed
     };
 
-    private async Task<HttpResponseMessage> PostApplicationAsync(string url)
+    private async Task<HttpResponseMessage> PostApplicationAsync(string url, bool isResubmission = false)
     {
         var dto = BuildSubmitDto();
 
@@ -2046,6 +2350,12 @@
         AddField("HasArrears", dto.HasArrears?.ToString());
         AddField("IsWholesaleDealerEmployee", dto.IsWholesaleDealerEmployee?.ToString());
         AddField("IsDeclarationConfirmed", dto.IsDeclarationConfirmed.ToString());
+
+        if (isResubmission)
+        {
+            // Documents the dealer removed / replaced must be deleted from the existing application
+            AddField("removedDocumentIds", BuildRemovedDocumentIds());
+        }
 
         foreach (var entry in UploadedFiles)
         {

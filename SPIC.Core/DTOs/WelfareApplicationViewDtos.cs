@@ -13,6 +13,84 @@ namespace SPIC.Core.DTOs
         public string StatusDisplay { get; set; } = string.Empty;
         public DateTime LastUpdatedAt { get; set; }
         public int DocumentCount { get; set; }
+
+        // Rejection details (populated when Status is Rejected or ReturnedToDealer)
+        public string? RejectedByLevel { get; set; }      // e.g. "RM"
+        public string? RejectedByName { get; set; }       // officer name who rejected
+        public DateTime? RejectedAt { get; set; }
+        public string? RejectionReason { get; set; }      // rejection reason/remarks
+
+        // True when the application was returned to the dealer for correction (Status == ReturnedToDealer)
+        public bool CanResubmit { get; set; }
+    }
+
+    // =====================================================================
+    //  SDWA Welfare Scheme Approval workflow (MO -> RM -> SM -> AVP)
+    // =====================================================================
+
+    public class WelfareApprovalApplicationDto
+    {
+        public int Id { get; set; }
+        public string? ApplicationNumber { get; set; }
+        public int Status { get; set; }
+        public string StatusDisplay { get; set; } = string.Empty;
+
+        // Dealer snapshot
+        public string? DealerCode { get; set; }
+        public string? DealerName { get; set; }
+        public string? Region { get; set; }
+        public string? District { get; set; }
+
+        // Welfare scheme
+        public int SchemeType { get; set; }
+        public string SchemeName { get; set; } = string.Empty;
+        public DateTime ApplicationDate { get; set; }
+
+        // Beneficiary / eligibility snapshot
+        public string? BeneficiaryName { get; set; }
+        public string? BeneficiaryGroup { get; set; }
+
+        // Approval history summary (per level, in workflow order MO -> RM -> SM -> AVP)
+        public List<WelfareApprovalStepDto> Approvals { get; set; } = new();
+    }
+
+    public class WelfareApprovalStatsDto
+    {
+        public int TotalApplications { get; set; }
+        public int PendingMyStage { get; set; }       // applications currently waiting on the logged-in approver
+        public int ValidatedByMO { get; set; }        // approved by MO and still moving through the flow
+        public int Rejected { get; set; }
+        public int Completed { get; set; }            // finally approved by AVP
+    }
+
+    public class WelfareApprovalTabDto
+    {
+        public string Key { get; set; } = string.Empty;       // pending | validatedmo | recommendedrm | recommendedsm | rejected | completed
+        public string Label { get; set; } = string.Empty;
+        public int Count { get; set; }
+    }
+
+    public class WelfareApprovalPageDto
+    {
+        public WelfareApprovalStatsDto Stats { get; set; } = new();
+        public List<WelfareApprovalTabDto> Tabs { get; set; } = new();
+        public string ActiveTab { get; set; } = "pending";
+        public List<WelfareApprovalApplicationDto> Applications { get; set; } = new();
+    }
+
+    public class WelfareApprovalActionRequest
+    {
+        public string? Reason { get; set; }     // structured reason (reject modal dropdown)
+        public string? Remarks { get; set; }    // free text - mandatory for reject
+    }
+
+    public class WelfareApprovalActionResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int ApplicationId { get; set; }
+        public int Status { get; set; }
+        public string StatusDisplay { get; set; } = string.Empty;
     }
 
     public class WelfareApplicationDocumentDto
@@ -110,7 +188,9 @@ namespace SPIC.Core.DTOs
 
         // Beneficiary group
         public string? BeneficiaryGroup { get; set; }
+        public int? SubDealerId { get; set; }
         public string? SubDealerName { get; set; }
+        public int? EmployeeId { get; set; }
         public string? EmployeeName { get; set; }
 
         // Sales history
@@ -118,6 +198,11 @@ namespace SPIC.Core.DTOs
         public decimal? LastYearQuantityLifted { get; set; }
 
         public bool IsDeclarationConfirmed { get; set; }
+
+        // Resubmission (reverse rejection flow)
+        public bool CanResubmit { get; set; }                 // True when Status == ReturnedToDealer and the dealer may correct & resubmit
+        public int ResubmissionCount { get; set; }            // Number of dealer resubmissions so far
+        public DateTime? LastResubmittedAt { get; set; }      // When the dealer last resubmitted
 
         public List<WelfareApplicationDocumentDto> Documents { get; set; } = new();
         public List<WelfareApprovalStepDto> Approvals { get; set; } = new();

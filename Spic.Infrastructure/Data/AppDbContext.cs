@@ -125,6 +125,7 @@ namespace Spic.Infrastructure.Data
 		public DbSet<WelfareApplication> WelfareApplications { get; set; }
 		public DbSet<WelfareApplicationDocument> WelfareApplicationDocuments { get; set; }
 		public DbSet<WelfareApplicationApproval> WelfareApplicationApprovals { get; set; }
+		public DbSet<WelfareApplicationActionLog> WelfareApplicationActionLogs { get; set; }
 
 		//// Guest House Booking
 		//public DbSet<GuestHouse> GuestHouses { get; set; }
