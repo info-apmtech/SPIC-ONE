@@ -2572,6 +2572,35 @@
         if (IsViewOnly || _isSaving)
             return;
 
+        // The searchable text box is only a filter/display field. Typing an
+        // existing code or firm name does not select that database record.
+        // Without this guard the form falls through to POST and creates a new
+        // SDxxxxxx record instead of updating the imported Sub Dealer.
+        if (!_isEditMode &&
+            _subDealerId == 0 &&
+            !string.IsNullOrWhiteSpace(_subDealerSearchText))
+        {
+            ShowMessage(
+                "Please select the exact Sub Dealer Code from the dropdown. " +
+                "Typing the code or firm name alone does not load the imported record.",
+                true);
+            return;
+        }
+
+        // Do not submit an edit when the selected lookup record and loaded
+        // form record are different.
+        if (_isEditMode &&
+            (_model.Id <= 0 ||
+             _subDealerId <= 0 ||
+             _subDealerId != _model.Id))
+        {
+            ShowMessage(
+                "Selected Sub Dealer does not match the loaded record. " +
+                "Please reload and select the exact Sub Dealer Code.",
+                true);
+            return;
+        }
+
         if (!Validate())
         {
             ShowMessage(

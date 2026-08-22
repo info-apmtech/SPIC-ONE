@@ -355,6 +355,19 @@ public class SubDealerRegistrationController : ControllerBase
 
 				WholesaleMFMSId = x.WholesaleMFMSId,
 				RetailMFMSId = x.RetailMFMSId,
+				// -------------------------------------------------
+				// Location details required for Excel export
+				// -------------------------------------------------
+				Latitude = x.Latitude,
+				Longitude = x.Longitude,
+
+				ShopNoORRoomNoOrBlockNo = x.ShopNoORRoomNoOrBlockNo,
+				Street = x.Street,
+				SubVillage = x.SubVillage,
+				Village = x.Village,
+				Block = x.Block,
+				Taluk = x.Taluk,
+				PinCode = x.PinCode,
 
 				UpdatedAt = x.UpdatedAt
 			})
@@ -437,21 +450,40 @@ public class SubDealerRegistrationController : ControllerBase
 		[FromBody] SubDealerFormModel model,
 		CancellationToken cancellationToken)
 	{
-		if (id != model.Id)
+		if (id <= 0 || id != model.Id)
 			return BadRequest("Route Id and model Id do not match.");
+
+		var entity = await _db.SubDealerRegistrations
+			.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+		if (entity == null)
+			return NotFound($"Sub Dealer with Id {id} was not found.");
+
+		// Sub Dealer Code and master hierarchy are immutable from the normal
+		// edit screen. Use the database values even if the client sends stale,
+		// default or mismatched State/Region/HQ values.
+		var originalSubDealerCode = entity.SubDealerCode;
+		var originalStateId = entity.StateId;
+		var originalRegionId = entity.Region;
+		var originalHqId = entity.HQ;
+
+		model.SubDealerCode = originalSubDealerCode;
+		model.StateId = originalStateId;
+		model.Region = originalRegionId;
+		model.HQ = originalHqId;
 
 		var validationError = ValidateModel(model);
 		if (validationError != null)
 			return BadRequest(validationError);
 
-		var entity = await _db.SubDealerRegistrations
-			.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+		ApplyModel(entity, model, applyMasterHierarchy: false);
 
-		if (entity == null)
-			return NotFound($"Sub Dealer with Id {id} was not found.");
-
-		// Code is immutable from normal edit screen.
-		ApplyModel(entity, model);
+		// Explicitly restore the immutable fields so a future mapping change
+		// cannot accidentally replace an imported code or hierarchy.
+		entity.SubDealerCode = originalSubDealerCode;
+		entity.StateId = originalStateId;
+		entity.Region = originalRegionId;
+		entity.HQ = originalHqId;
 		entity.UpdatedAt = DateTime.Now;
 
 		await _db.SaveChangesAsync(cancellationToken);
@@ -842,11 +874,16 @@ public class SubDealerRegistrationController : ControllerBase
 
 	private static void ApplyModel(
 		SubDealerRegistration entity,
-		SubDealerFormModel model)
+		SubDealerFormModel model,
+		bool applyMasterHierarchy = true)
 	{
-		entity.StateId = model.StateId;
-		entity.Region = model.Region;
-		entity.HQ = model.HQ;
+		if (applyMasterHierarchy)
+		{
+			entity.StateId = model.StateId;
+			entity.Region = model.Region;
+			entity.HQ = model.HQ;
+		}
+
 		entity.Status = model.Status;
 
 		entity.FirmName = model.FirmName.Trim().ToUpperInvariant();

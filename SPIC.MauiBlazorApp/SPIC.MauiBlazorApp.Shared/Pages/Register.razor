@@ -358,24 +358,49 @@
                                 <div class="field-error">@_errors["FirmName"]</div>
                             }
                         </div>
-                        @if (isSpic && !IsNewDealerFlow)
-                        {
-                            <div class="col-12 col-md-3">
-                                <label class="form-label-custom">Date of Appointment for SPIC</label>
-                                <input type="date" class="form-control-custom w-100"
-                                       value="@_dateOfAppointmentText"
-                                       @onchange="OnDateOfAppointmentChanged">
-                            </div>
-                        }
-                        @if (isGreenStar && !IsNewDealerFlow)
-                        {
-                            <div class="col-12 col-md-3">
-                                <label class="form-label-custom">Date of Appointment for Greenstar</label>
-                                <input type="date" class="form-control-custom w-100"
-                                       value="@_greenstarDateOfAppointmentText"
-                                       @onchange="OnGreenstarDateOfAppointmentChanged">
-                            </div>
-                        }
+                       @if (isSpic && !IsNewDealerFlow)
+{
+    <div class="col-12 col-md-3">
+        <label class="form-label-custom">
+            Date of Appointment for SPIC
+            <span class="text-danger">*</span>
+        </label>
+
+        <input type="date"
+               class="form-control-custom w-100 @(_errors.ContainsKey("DateOfAppointment") ? "is-invalid" : "")"
+               value="@_dateOfAppointmentText"
+               @onchange="OnDateOfAppointmentChanged">
+
+        @if (_errors.ContainsKey("DateOfAppointment"))
+        {
+            <div class="field-error">
+                @_errors["DateOfAppointment"]
+            </div>
+        }
+    </div>
+}
+
+@if (isGreenStar && !IsNewDealerFlow)
+{
+    <div class="col-12 col-md-3">
+        <label class="form-label-custom">
+            Date of Appointment for Greenstar
+            <span class="text-danger">*</span>
+        </label>
+
+        <input type="date"
+               class="form-control-custom w-100 @(_errors.ContainsKey("GreenstarDateOfAppointment") ? "is-invalid" : "")"
+               value="@_greenstarDateOfAppointmentText"
+               @onchange="OnGreenstarDateOfAppointmentChanged">
+
+        @if (_errors.ContainsKey("GreenstarDateOfAppointment"))
+        {
+            <div class="field-error">
+                @_errors["GreenstarDateOfAppointment"]
+            </div>
+        }
+    </div>
+}
                     </div>
                 </div>
             </div>
@@ -1401,18 +1426,19 @@
     private bool IsInactiveNotTraceable =>
         status == "Inactive" && _inactiveProposal == FutureBusinessProposal.NotTraceable;
 
-    private DealerFormModel _model = new()
-    {
-        DateOfAppointment = DateTime.Today,
-        GreenstarDateOfAppointment = DateTime.Today,
-        LastTransactionDate = DateTime.Today,
-        FinalApprovalDate = DateTime.Today,
-        SettlementDate = DateTime.Today,
-        TradeDepositDate = DateTime.Today,
-        GreenstarTradeDepositDateReg = DateTime.Today,
-        WholesaleLicenseExpiryDate = DateTime.Today,
-        RetailLicenseExpiryDate = DateTime.Today
-    };
+   private DealerFormModel _model = new()
+{
+    // DateOfAppointment intentionally blank - user must select it
+    // GreenstarDateOfAppointment intentionally blank - user must select it
+
+    LastTransactionDate = DateTime.Today,
+    FinalApprovalDate = DateTime.Today,
+    SettlementDate = DateTime.Today,
+    TradeDepositDate = DateTime.Today,
+    GreenstarTradeDepositDateReg = DateTime.Today,
+    WholesaleLicenseExpiryDate = DateTime.Today,
+    RetailLicenseExpiryDate = DateTime.Today
+};
     private bool _isEditMode;
     private bool _isSaving;
     private Dictionary<string, string> _errors = new();
@@ -1615,10 +1641,10 @@
             _model.AVPApproved == true &&
             !string.IsNullOrWhiteSpace(_model.DealerCode);
 
-        if (!_model.DateOfAppointment.HasValue || _model.DateOfAppointment.Value == DateTime.MinValue)
-            _model.DateOfAppointment = DateTime.Today;
-        if (!_model.GreenstarDateOfAppointment.HasValue || _model.GreenstarDateOfAppointment.Value == DateTime.MinValue)
-            _model.GreenstarDateOfAppointment = DateTime.Today;
+        // if (!_model.DateOfAppointment.HasValue || _model.DateOfAppointment.Value == DateTime.MinValue)
+        //     _model.DateOfAppointment = DateTime.Today;
+        // if (!_model.GreenstarDateOfAppointment.HasValue || _model.GreenstarDateOfAppointment.Value == DateTime.MinValue)
+        //     _model.GreenstarDateOfAppointment = DateTime.Today;
         if (!_model.LastTransactionDate.HasValue || _model.LastTransactionDate.Value == DateTime.MinValue)
             _model.LastTransactionDate = DateTime.Today;
         if (!_model.FinalApprovalDate.HasValue || _model.FinalApprovalDate.Value == DateTime.MinValue)
@@ -1752,8 +1778,29 @@
         ApplyLockedEmployeeLocation();
     }
 
-    void ToggleSpic() => isSpic = !isSpic;
-    void ToggleGreenStar() => isGreenStar = !isGreenStar;
+  void ToggleSpic()
+{
+    isSpic = !isSpic;
+
+    // SPIC is no longer selected, so its appointment date
+    // must not block saving.
+    if (!isSpic)
+    {
+        _errors.Remove("DateOfAppointment");
+    }
+}
+
+void ToggleGreenStar()
+{
+    isGreenStar = !isGreenStar;
+
+    // Greenstar is no longer selected, so its appointment date
+    // must not block saving.
+    if (!isGreenStar)
+    {
+        _errors.Remove("GreenstarDateOfAppointment");
+    }
+}
 
     private void OnBasicInfoStateChanged()
     {
@@ -2007,18 +2054,16 @@
         }
         else
         {
-            _model = new()
-            {
-                DateOfAppointment = DateTime.Today,
-                GreenstarDateOfAppointment = DateTime.Today,
-                LastTransactionDate = DateTime.Today,
-                FinalApprovalDate = DateTime.Today,
-                SettlementDate = DateTime.Today,
-                TradeDepositDate = DateTime.Today,
-                GreenstarTradeDepositDateReg = DateTime.Today,
-                WholesaleLicenseExpiryDate = DateTime.Today,
-                RetailLicenseExpiryDate = DateTime.Today
-            };
+          _model = new()
+{
+    LastTransactionDate = DateTime.Today,
+    FinalApprovalDate = DateTime.Today,
+    SettlementDate = DateTime.Today,
+    TradeDepositDate = DateTime.Today,
+    GreenstarTradeDepositDateReg = DateTime.Today,
+    WholesaleLicenseExpiryDate = DateTime.Today,
+    RetailLicenseExpiryDate = DateTime.Today
+};
             SyncDateBuffersFromModel();
             SyncLatitudeLongitudeText();
 
@@ -2140,18 +2185,16 @@
 
     private void ResetForm()
     {
-        _model = new()
-        {
-            DateOfAppointment = DateTime.Today,
-            GreenstarDateOfAppointment = DateTime.Today,
-            LastTransactionDate = DateTime.Today,
-            FinalApprovalDate = DateTime.Today,
-            SettlementDate = DateTime.Today,
-            TradeDepositDate = DateTime.Today,
-            GreenstarTradeDepositDateReg = DateTime.Today,
-            WholesaleLicenseExpiryDate = DateTime.Today,
-            RetailLicenseExpiryDate = DateTime.Today
-        }; 
+       _model = new()
+{
+    LastTransactionDate = DateTime.Today,
+    FinalApprovalDate = DateTime.Today,
+    SettlementDate = DateTime.Today,
+    TradeDepositDate = DateTime.Today,
+    GreenstarTradeDepositDateReg = DateTime.Today,
+    WholesaleLicenseExpiryDate = DateTime.Today,
+    RetailLicenseExpiryDate = DateTime.Today
+};
         _isEditMode = false;
         _dealerCodeId = 0;
         _parentDealerId = 0;
@@ -2213,6 +2256,26 @@
             _errors["ParentDealer"] = "Parent Dealer Code & Name is required";
 
         if (string.IsNullOrWhiteSpace(_model.FirmName)) _errors["FirmName"] = "Firm Name is required";
+        // Date of Appointment is mandatory based on selected company.
+// These fields are currently available only in Existing Dealer flow.
+if (!IsNewDealerFlow)
+{
+    if (isSpic &&
+        (!_model.DateOfAppointment.HasValue ||
+         _model.DateOfAppointment.Value == DateTime.MinValue))
+    {
+        _errors["DateOfAppointment"] =
+            "Date of Appointment for SPIC is required";
+    }
+
+    if (isGreenStar &&
+        (!_model.GreenstarDateOfAppointment.HasValue ||
+         _model.GreenstarDateOfAppointment.Value == DateTime.MinValue))
+    {
+        _errors["GreenstarDateOfAppointment"] =
+            "Date of Appointment for Greenstar is required";
+    }
+}
 
        if (status == "Inactive" && !IsRestrictedNavFlow)
         {
@@ -3289,24 +3352,53 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         _wholesaleLicenseExpiryDateText = Fmt(_model.WholesaleLicenseExpiryDate);
         _retailLicenseExpiryDateText = Fmt(_model.RetailLicenseExpiryDate);
     }
-    private void OnDateOfAppointmentChanged(ChangeEventArgs e)
-    {
-        var newVal = e.Value?.ToString();
-        if (string.IsNullOrEmpty(newVal)) return;
+  private void OnDateOfAppointmentChanged(ChangeEventArgs e)
+{
+    var newVal = e.Value?.ToString();
 
-        _dateOfAppointmentText = newVal;
-        if (DateTime.TryParse(newVal, out var dt))
-            _model.DateOfAppointment = dt;
-    }
-    private void OnGreenstarDateOfAppointmentChanged(ChangeEventArgs e)
+    if (string.IsNullOrWhiteSpace(newVal))
     {
-        var newVal = e.Value?.ToString();
-        if (string.IsNullOrEmpty(newVal)) return;
-
-        _greenstarDateOfAppointmentText = newVal;
-        if (DateTime.TryParse(newVal, out var dt))
-            _model.GreenstarDateOfAppointment = dt;
+        _dateOfAppointmentText = "";
+        _model.DateOfAppointment = null;
+        return;
     }
+
+    _dateOfAppointmentText = newVal;
+
+    if (DateTime.TryParse(newVal, out var dt))
+    {
+        _model.DateOfAppointment = dt;
+        _errors.Remove("DateOfAppointment");
+    }
+    else
+    {
+        _model.DateOfAppointment = null;
+    }
+}
+
+private void OnGreenstarDateOfAppointmentChanged(ChangeEventArgs e)
+{
+    var newVal = e.Value?.ToString();
+
+    if (string.IsNullOrWhiteSpace(newVal))
+    {
+        _greenstarDateOfAppointmentText = "";
+        _model.GreenstarDateOfAppointment = null;
+        return;
+    }
+
+    _greenstarDateOfAppointmentText = newVal;
+
+    if (DateTime.TryParse(newVal, out var dt))
+    {
+        _model.GreenstarDateOfAppointment = dt;
+        _errors.Remove("GreenstarDateOfAppointment");
+    }
+    else
+    {
+        _model.GreenstarDateOfAppointment = null;
+    }
+}
 
     private void OnLastTransactionDateChanged(ChangeEventArgs e)
     {
