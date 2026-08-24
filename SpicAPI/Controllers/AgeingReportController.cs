@@ -100,11 +100,14 @@ namespace SpicAPI.Controllers
 			worksheet.RangeUsed()?.SetAutoFilter();
 			worksheet.Columns().AdjustToContents();
 
-			using var stream = new MemoryStream();
+			// Do not call ToArray() here: returning the stream avoids creating a second
+			// full copy of the workbook in memory for large filtered exports.
+			var stream = new MemoryStream();
 			workbook.SaveAs(stream);
+			stream.Position = 0;
 
 			return File(
-				stream.ToArray(),
+				stream,
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 				$"AgeingReport_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
 		}

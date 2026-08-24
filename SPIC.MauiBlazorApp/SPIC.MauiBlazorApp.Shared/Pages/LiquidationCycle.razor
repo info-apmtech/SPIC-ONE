@@ -22,7 +22,7 @@
         <div class="lc-action-buttons">
             <button class="lc-btn lc-btn-outline" disabled="@(_isLoading)" @onclick="RefreshData"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg> Refresh Data</button>
             <button class="lc-btn lc-btn-outline" disabled="@(_dashboard is null || _isLoading)" @onclick="ExportExcel"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg> Excel</button>
-            <button class="lc-btn lc-btn-solid" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
+            <button class="lc-btn lc-btn-solid" disabled title="Send Mail is not implemented for Liquidation Cycle yet"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
         </div>
     </div>
 
@@ -110,7 +110,7 @@
                     <select id="lc-product-select" class="lc-form-select" multiple="multiple">
                         @foreach (var p in _products)
                         {
-                            <option value="@p.Id" selected="@(_selProducts.Contains(p.Id))">@p.Name</option>
+                            <option value="@p.Id" selected="@(_selProductKeys.Contains(p.Id))">@(p.Source == "IFMS" ? $"{p.Name} (IFMS)" : p.Name)</option>
                         }
                     </select>
                 </div>
@@ -453,7 +453,14 @@
     private List<LocationDto> _hq = new();
     private List<LocationDto> _districts = new();
     private List<LocationDto> _subDistricts = new();
-    private List<LocationDto> _products = new();
+
+    private List<LocationDto> _allStates = new();
+    private List<LocationDto> _allRegions = new();
+    private List<LocationDto> _allHqs = new();
+    private List<LocationDto> _allDistricts = new();
+    private List<LocationDto> _allSubDistricts = new();
+
+    private List<LiqCycleProductDto> _products = new();
     private List<AckLookupItemDto> _dealers = new();
     private List<FinancialYearDto> _financialYears = new();
 
@@ -462,7 +469,7 @@
     private List<int> _selHqs = new();
     private List<int> _selDistricts = new();
     private List<int> _selSubDistricts = new();
-    private List<int> _selProducts = new();
+    private List<string> _selProductKeys = new();
     private List<string> _selDealerKeys = new();
     private List<int> _selFinancialYears = new();
 
@@ -472,6 +479,9 @@
     {
         public int Id { get; set; }
         public string Name { get; set; } = "";
+        public int? StateId { get; set; }
+        public int? RegionId { get; set; }
+        public int? DistrictId { get; set; }
     }
 
     private class FinancialYearDto
@@ -484,33 +494,18 @@
 
     private record ChartBar(string Label, double Rate);
 
-    // Replace these placeholders when the API exposes state-wise fast/slow collections.
-    private static readonly List<ChartBar> _stateFastPlaceholder = new()
-    {
-        new("Gujarat", 89),
-        new("Maharashtra", 78),
-        new("Karnataka", 70),
-        new("Punjab", 65)
-    };
-
-    private static readonly List<ChartBar> _stateSlowPlaceholder = new()
-    {
-        new("Gujarat", 89),
-        new("Maharashtra", 78),
-        new("Karnataka", 70),
-        new("Punjab", 65)
-    };
-
     private List<ChartBar> GetFastChartData()
     {
         if (_dashboard is null)
             return new();
 
-        return chartView == "Top5"
+        var source = chartView == "Top5"
             ? _dashboard.TopFastDealers
-                .Select(d => new ChartBar(d.DealerName, d.Rate))
-                .ToList()
-            : _stateFastPlaceholder;
+            : _dashboard.TopFastStates;
+
+        return source
+            .Select(d => new ChartBar(d.DealerName, d.Rate))
+            .ToList();
     }
 
     private List<ChartBar> GetSlowChartData()
@@ -518,11 +513,13 @@
         if (_dashboard is null)
             return new();
 
-        return chartView == "Top5"
+        var source = chartView == "Top5"
             ? _dashboard.TopSlowDealers
-                .Select(d => new ChartBar(d.DealerName, d.Rate))
-                .ToList()
-            : _stateSlowPlaceholder;
+            : _dashboard.TopSlowStates;
+
+        return source
+            .Select(d => new ChartBar(d.DealerName, d.Rate))
+            .ToList();
     }
 
     private int TotalPages =>
@@ -562,6 +559,11 @@
 
     private async Task InitializePageAsync()
     {
+        // Apply the mandatory login scope before the very first dashboard request.
+        // This preserves the fast parallel first-load while preventing an empty-scope request.
+        ApplyMandatoryRoleScopeToSelections();
+        SyncSelections();
+
         // Start dashboard immediately instead of waiting for every lookup request.
         var dashboardTask = LoadDashboard(renderLoadingState: false);
 
@@ -598,7 +600,7 @@
         var hqTask = FetchLocations("api/Headquarter/all");
         var districtsTask = FetchLocations("api/District/all");
         var subDistrictsTask = FetchLocations("api/SubDistrict/all");
-        var productsTask = FetchLocations("api/Product/all");
+        var productsTask = FetchProducts();
         var dealersTask = FetchDealers();
         var fyTask = FetchFinancialYears();
 
@@ -612,14 +614,166 @@
             dealersTask,
             fyTask);
 
-        _states = await statesTask;
-        _regions = await regionsTask;
-        _hq = await hqTask;
-        _districts = await districtsTask;
-        _subDistricts = await subDistrictsTask;
+        _allStates = await statesTask;
+        _allRegions = await regionsTask;
+        _allHqs = await hqTask;
+        _allDistricts = await districtsTask;
+        _allSubDistricts = await subDistrictsTask;
+
+        // Headquarter and SubDistrict APIs do not always expose StateId directly.
+        // Resolve it through their existing parent master so cascade/role filtering stays exact.
+        foreach (var hq in _allHqs)
+        {
+            var region = _allRegions.FirstOrDefault(r => r.Id == hq.RegionId);
+            if (region is not null)
+                hq.StateId = region.StateId;
+        }
+
+        foreach (var subDistrict in _allSubDistricts)
+        {
+            var district = _allDistricts.FirstOrDefault(d => d.Id == subDistrict.DistrictId);
+            if (district is not null)
+                subDistrict.StateId = district.StateId;
+        }
+
+        ApplyMandatoryRoleScopeToSelections();
+        ApplyRoleVisibility();
+
         _products = await productsTask;
         _dealers = await dealersTask;
         _financialYears = await fyTask;
+
+        // Re-sync because master data can resolve parent State/Region values more precisely.
+        SyncSelections();
+    }
+
+    private bool IsUnrestrictedRole =>
+        LoginState is null || LoginState.IsAdmin || LoginState.IsDirectorOrAVP;
+
+    private void ApplyMandatoryRoleScopeToSelections()
+    {
+        if (IsUnrestrictedRole || LoginState is null)
+            return;
+
+        if (LoginState.IsHQRole && LoginState.HQId > 0)
+        {
+            _selHqs = new List<int> { LoginState.HQId };
+
+            var regionId = _allHqs.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionId
+                ?? (LoginState.RegionId > 0 ? (int?)LoginState.RegionId : null);
+            if (regionId.HasValue && regionId.Value > 0)
+                _selRegions = new List<int> { regionId.Value };
+
+            var stateId = regionId.HasValue
+                ? _allRegions.FirstOrDefault(r => r.Id == regionId.Value)?.StateId
+                : null;
+            stateId ??= LoginState.StateId > 0 ? (int?)LoginState.StateId : null;
+            if (stateId.HasValue && stateId.Value > 0)
+                _selStates = new List<int> { stateId.Value };
+
+            return;
+        }
+
+        if (LoginState.IsRegionRole && LoginState.RegionId > 0)
+        {
+            _selRegions = new List<int> { LoginState.RegionId };
+
+            var stateId = _allRegions.FirstOrDefault(r => r.Id == LoginState.RegionId)?.StateId
+                ?? (LoginState.StateId > 0 ? (int?)LoginState.StateId : null);
+            if (stateId.HasValue && stateId.Value > 0)
+                _selStates = new List<int> { stateId.Value };
+
+            _selHqs.RemoveAll(id =>
+            {
+                var hq = _allHqs.FirstOrDefault(x => x.Id == id);
+                return hq is null || hq.RegionId != LoginState.RegionId;
+            });
+
+            return;
+        }
+
+        if (LoginState.IsStateRole && LoginState.StateId > 0)
+        {
+            _selStates = new List<int> { LoginState.StateId };
+
+            _selRegions.RemoveAll(id =>
+            {
+                var region = _allRegions.FirstOrDefault(x => x.Id == id);
+                return region is null || region.StateId != LoginState.StateId;
+            });
+
+            _selHqs.RemoveAll(id =>
+            {
+                var hq = _allHqs.FirstOrDefault(x => x.Id == id);
+                return hq is null || hq.StateId != LoginState.StateId;
+            });
+        }
+    }
+
+    private void ApplyRoleVisibility()
+    {
+        if (IsUnrestrictedRole || LoginState is null)
+        {
+            _states = _allStates;
+            _regions = _selStates.Any()
+                ? _allRegions.Where(r => _selStates.Contains(r.StateId ?? 0)).ToList()
+                : _allRegions;
+            _hq = _selRegions.Any()
+                ? _allHqs.Where(h => _selRegions.Contains(h.RegionId ?? 0)).ToList()
+                : (_selStates.Any()
+                    ? _allHqs.Where(h => _selStates.Contains(h.StateId ?? 0)).ToList()
+                    : _allHqs);
+        }
+        else if (LoginState.IsHQRole && LoginState.HQId > 0)
+        {
+            _hq = _allHqs.Where(h => h.Id == LoginState.HQId).ToList();
+            var regionId = _allHqs.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionId ?? LoginState.RegionId;
+            _regions = regionId > 0
+                ? _allRegions.Where(r => r.Id == regionId).ToList()
+                : new List<LocationDto>();
+            var stateId = _regions.FirstOrDefault()?.StateId ?? LoginState.StateId;
+            _states = stateId > 0
+                ? _allStates.Where(s => s.Id == stateId).ToList()
+                : new List<LocationDto>();
+        }
+        else if (LoginState.IsRegionRole && LoginState.RegionId > 0)
+        {
+            _regions = _allRegions.Where(r => r.Id == LoginState.RegionId).ToList();
+            var stateId = _regions.FirstOrDefault()?.StateId ?? LoginState.StateId;
+            _states = stateId > 0
+                ? _allStates.Where(s => s.Id == stateId).ToList()
+                : new List<LocationDto>();
+            _hq = _allHqs.Where(h => h.RegionId == LoginState.RegionId).ToList();
+        }
+        else if (LoginState.IsStateRole && LoginState.StateId > 0)
+        {
+            _states = _allStates.Where(s => s.Id == LoginState.StateId).ToList();
+            _regions = _allRegions.Where(r => r.StateId == LoginState.StateId).ToList();
+            _hq = _selRegions.Any()
+                ? _allHqs.Where(h => _selRegions.Contains(h.RegionId ?? 0)).ToList()
+                : _allHqs.Where(h => h.StateId == LoginState.StateId).ToList();
+        }
+        else
+        {
+            _states = _allStates;
+            _regions = _allRegions;
+            _hq = _allHqs;
+        }
+
+        var allowedStateIds = _states.Select(x => x.Id).ToHashSet();
+        _districts = _selStates.Any()
+            ? _allDistricts.Where(d => _selStates.Contains(d.StateId ?? 0)).ToList()
+            : (allowedStateIds.Count > 0
+                ? _allDistricts.Where(d => allowedStateIds.Contains(d.StateId ?? 0)).ToList()
+                : _allDistricts);
+
+        _subDistricts = _selDistricts.Any()
+            ? _allSubDistricts.Where(sd => _selDistricts.Contains(sd.DistrictId ?? 0)).ToList()
+            : (_selStates.Any()
+                ? _allSubDistricts.Where(sd => _selStates.Contains(sd.StateId ?? 0)).ToList()
+                : (allowedStateIds.Count > 0
+                    ? _allSubDistricts.Where(sd => allowedStateIds.Contains(sd.StateId ?? 0)).ToList()
+                    : _allSubDistricts));
     }
 
     private async Task<List<LocationDto>> FetchLocations(string url)
@@ -647,7 +801,10 @@
                 list.Add(new LocationDto
                 {
                     Id = id,
-                    Name = name
+                    Name = name,
+                    StateId = ReadNullableInt(item, "stateId"),
+                    RegionId = ReadNullableInt(item, "regionId"),
+                    DistrictId = ReadNullableInt(item, "districtId")
                 });
             }
 
@@ -660,13 +817,41 @@
         }
     }
 
+    private static int? ReadNullableInt(JsonElement item, string propertyName)
+    {
+        if (!item.TryGetProperty(propertyName, out var value) ||
+            value.ValueKind != JsonValueKind.Number)
+        {
+            return null;
+        }
+
+        return value.TryGetInt32(out var result) ? result : null;
+    }
+
+    private async Task<List<LiqCycleProductDto>> FetchProducts()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            return await Http.GetFromJsonAsync<List<LiqCycleProductDto>>(
+                       "api/LiquidationCycle/products",
+                       cts.Token)
+                   ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Liquidation] Product lookup error: {ex.Message}");
+            return new();
+        }
+    }
+
     private async Task<List<AckLookupItemDto>> FetchDealers()
     {
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             return await Http.GetFromJsonAsync<List<AckLookupItemDto>>(
-                       "api/AckCycle/dealers",
+                       "api/LiquidationCycle/dealers",
                        cts.Token)
                    ?? new();
         }
@@ -722,9 +907,23 @@
     // ---- Dashboard ----
     private void SyncSelections()
     {
+        ApplyMandatoryRoleScopeToSelections();
+
         _filter.StateIds = _selStates.ToList();
+        _filter.RegionIds = _selRegions.ToList();
+        _filter.HeadQuarterIds = _selHqs.ToList();
         _filter.DistrictIds = _selDistricts.ToList();
-        _filter.ProductIds = _selProducts.ToList();
+        _filter.SubDistrictIds = _selSubDistricts.ToList();
+
+        _filter.ProductKeys = _selProductKeys.ToList();
+        _filter.ProductIds = _selProductKeys
+            .Select(key => key?.Trim())
+            .Where(key => !string.IsNullOrWhiteSpace(key) && key.StartsWith("P:", StringComparison.OrdinalIgnoreCase))
+            .Select(key => int.TryParse(key!.Substring(2), out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
         _filter.DealerKeys = _selDealerKeys.ToList();
         _filter.DateFrom = _dateFrom;
         _filter.DateTo = _dateTo;
@@ -808,7 +1007,7 @@
         _selHqs.Clear();
         _selDistricts.Clear();
         _selSubDistricts.Clear();
-        _selProducts.Clear();
+        _selProductKeys.Clear();
         _selDealerKeys.Clear();
         _selFinancialYears.Clear();
 
@@ -820,6 +1019,8 @@
         _activeFilter = "Top5";
         chartView = "Top5";
 
+        ApplyMandatoryRoleScopeToSelections();
+        ApplyRoleVisibility();
         SyncSelections();
         await InvokeAsync(StateHasChanged);
         await RefreshAllSelect2();
@@ -877,28 +1078,50 @@
             .ToList();
 
     [JSInvokable]
-    public void OnStateChanged(List<string>? values) =>
+    public async Task OnStateChanged(List<string>? values)
+    {
         _selStates = ParseIds(values);
+        ApplyMandatoryRoleScopeToSelections();
+        await Cascade("State");
+    }
 
     [JSInvokable]
-    public void OnRegionChanged(List<string>? values) =>
+    public async Task OnRegionChanged(List<string>? values)
+    {
         _selRegions = ParseIds(values);
+        ApplyMandatoryRoleScopeToSelections();
+        await Cascade("Region");
+    }
 
     [JSInvokable]
-    public void OnHqChanged(List<string>? values) =>
+    public async Task OnHqChanged(List<string>? values)
+    {
         _selHqs = ParseIds(values);
+        ApplyMandatoryRoleScopeToSelections();
+        await Cascade("HQ");
+    }
 
     [JSInvokable]
-    public void OnDistrictChanged(List<string>? values) =>
+    public async Task OnDistrictChanged(List<string>? values)
+    {
         _selDistricts = ParseIds(values);
+        await Cascade("District");
+    }
 
     [JSInvokable]
-    public void OnSubDistrictChanged(List<string>? values) =>
+    public async Task OnSubDistrictChanged(List<string>? values)
+    {
         _selSubDistricts = ParseIds(values);
+        await Cascade("SubDistrict");
+    }
 
     [JSInvokable]
     public void OnProductChanged(List<string>? values) =>
-        _selProducts = ParseIds(values);
+        _selProductKeys = (values ?? new())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     [JSInvokable]
     public void OnDealerChanged(List<string>? values) =>
@@ -936,6 +1159,132 @@
             await InvokeAsync(StateHasChanged);
     }
 
+    private async Task Cascade(string filterType)
+    {
+        if (filterType == "State" && _selStates.Any())
+        {
+            _selRegions.RemoveAll(id =>
+            {
+                var region = _allRegions.FirstOrDefault(x => x.Id == id);
+                return region is null || !_selStates.Contains(region.StateId ?? 0);
+            });
+            _selHqs.RemoveAll(id =>
+            {
+                var hq = _allHqs.FirstOrDefault(x => x.Id == id);
+                return hq is null || !_selStates.Contains(hq.StateId ?? 0);
+            });
+            _selDistricts.RemoveAll(id =>
+            {
+                var district = _allDistricts.FirstOrDefault(x => x.Id == id);
+                return district is null || !_selStates.Contains(district.StateId ?? 0);
+            });
+            _selSubDistricts.RemoveAll(id =>
+            {
+                var subDistrict = _allSubDistricts.FirstOrDefault(x => x.Id == id);
+                return subDistrict is null || !_selStates.Contains(subDistrict.StateId ?? 0);
+            });
+        }
+        else if (filterType == "Region" && _selRegions.Any())
+        {
+            _selStates = _selStates
+                .Union(_allRegions
+                    .Where(r => _selRegions.Contains(r.Id) && r.StateId.HasValue)
+                    .Select(r => r.StateId!.Value))
+                .Distinct()
+                .ToList();
+
+            _selHqs.RemoveAll(id =>
+            {
+                var hq = _allHqs.FirstOrDefault(x => x.Id == id);
+                return hq is null || !_selRegions.Contains(hq.RegionId ?? 0);
+            });
+        }
+        else if (filterType == "HQ" && _selHqs.Any())
+        {
+            _selRegions = _selRegions
+                .Union(_allHqs
+                    .Where(h => _selHqs.Contains(h.Id) && h.RegionId.HasValue)
+                    .Select(h => h.RegionId!.Value))
+                .Distinct()
+                .ToList();
+
+            _selStates = _selStates
+                .Union(_allHqs
+                    .Where(h => _selHqs.Contains(h.Id) && h.StateId.HasValue)
+                    .Select(h => h.StateId!.Value))
+                .Distinct()
+                .ToList();
+        }
+        else if (filterType == "District" && _selDistricts.Any())
+        {
+            _selStates = _selStates
+                .Union(_allDistricts
+                    .Where(d => _selDistricts.Contains(d.Id) && d.StateId.HasValue)
+                    .Select(d => d.StateId!.Value))
+                .Distinct()
+                .ToList();
+
+            _selSubDistricts.RemoveAll(id =>
+            {
+                var subDistrict = _allSubDistricts.FirstOrDefault(x => x.Id == id);
+                return subDistrict is null || !_selDistricts.Contains(subDistrict.DistrictId ?? 0);
+            });
+        }
+        else if (filterType == "SubDistrict" && _selSubDistricts.Any())
+        {
+            _selDistricts = _selDistricts
+                .Union(_allSubDistricts
+                    .Where(sd => _selSubDistricts.Contains(sd.Id) && sd.DistrictId.HasValue)
+                    .Select(sd => sd.DistrictId!.Value))
+                .Distinct()
+                .ToList();
+
+            _selStates = _selStates
+                .Union(_allSubDistricts
+                    .Where(sd => _selSubDistricts.Contains(sd.Id) && sd.StateId.HasValue)
+                    .Select(sd => sd.StateId!.Value))
+                .Distinct()
+                .ToList();
+        }
+
+        ApplyMandatoryRoleScopeToSelections();
+        ApplyRoleVisibility();
+
+        if (!_disposed)
+            await InvokeAsync(StateHasChanged);
+
+        await RefreshGeoSelect2();
+    }
+
+    private async Task RefreshGeoSelect2()
+    {
+        if (!_select2Initialized || _objRef is null)
+            return;
+
+        var ids = new[]
+        {
+            "lc-state-select",
+            "lc-region-select",
+            "lc-hq-select",
+            "lc-district-select",
+            "lc-subdistrict-select"
+        };
+
+        await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", ids);
+        await Task.Delay(50);
+
+        var configs = new[]
+        {
+            new { id = "lc-state-select",       method = nameof(OnStateChanged) },
+            new { id = "lc-region-select",      method = nameof(OnRegionChanged) },
+            new { id = "lc-hq-select",          method = nameof(OnHqChanged) },
+            new { id = "lc-district-select",    method = nameof(OnDistrictChanged) },
+            new { id = "lc-subdistrict-select", method = nameof(OnSubDistrictChanged) }
+        };
+
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
     // ---- Charts / grid ----
     private async Task SelectFilter(string key)
     {
@@ -954,10 +1303,12 @@
                 break;
 
             case "All":
+                chartView = "Top5";
                 _filter.Source = null;
                 break;
 
             default:
+                chartView = "Top5";
                 _filter.Source = key;
                 break;
         }

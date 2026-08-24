@@ -24,6 +24,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
@@ -33,17 +34,22 @@ namespace Spic.Infrastructure.Services
 {
 	public class ProductStockAvailabilityService : IProductStockAvailabilityService
 	{
-		private const decimal LowStockThresholdMt = 1000m;
 		private const int DefaultPageSize = 16;
 		private const int MaxInteractivePageSize = 500;
 		private const string DefaultColumnGroup = "Products";
 		private const string IfmsColumnGroup = "IFMS Products";
 
 		private readonly AppDbContext _db;
+		private readonly decimal _lowStockThresholdMt;
 
-		public ProductStockAvailabilityService(AppDbContext db)
+		public ProductStockAvailabilityService(
+			AppDbContext db,
+			IConfiguration configuration)
 		{
 			_db = db;
+			_lowStockThresholdMt = configuration
+				.GetValue<decimal?>("Reports:ProductStockAvailability:LowStockThresholdMt")
+				?? 1000m; // backward-compatible default when config has not been added yet
 		}
 
 		public async Task<ProductStockAvailabilityDto> GetDashboardAsync(
@@ -202,7 +208,8 @@ namespace Spic.Infrastructure.Services
 				rows,
 				columns.Count,
 				grandTotal.Total,
-				grandTotal.TotalSales);
+				grandTotal.TotalSales,
+				_lowStockThresholdMt);
 
 			var sortedRows = ApplySorting(rows, filter);
 			var totalCount = sortedRows.Count;
@@ -260,6 +267,19 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(row => filter.StateIds.Contains(row.StateId!.Value));
 			}
 
+			// Exact Region/HQ scope is available only for registered dealers.
+			// IFMS-only dealer rows have State/District but no Region/HQ mapping, so
+			// they are intentionally excluded when an exact Region/HQ filter is active.
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				query = query.Where(row =>
+					row.DealerRegistrationId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == row.DealerRegistrationId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
+			}
+
 			if (dateFrom.HasValue)
 			{
 				query = query.Where(row => row.StockDate >= dateFrom.Value);
@@ -270,24 +290,22 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(row => row.StockDate < dateToExclusive.Value);
 			}
 
-			var latestDate = await query
-				.OrderByDescending(row => row.StockDate)
-				.Select(row => (DateTime?)row.StockDate)
-				.FirstOrDefaultAsync(cancellationToken);
+			// Latest snapshot is resolved per State inside the already-filtered scope.
+			// A newer upload in one State no longer hides another State's latest data.
+			var scopedQuery = query;
+			var snapshotRows = await scopedQuery
+				.Where(row => !scopedQuery.Any(candidate =>
+					candidate.StateId == row.StateId &&
+					candidate.StockDate.Date > row.StockDate.Date))
+				.ToListAsync(cancellationToken);
 
-			if (!latestDate.HasValue)
+			if (snapshotRows.Count == 0)
 			{
 				return new List<SourceAggregate>();
 			}
 
-			var start = ToUtcDate(latestDate.Value);
-			var end = start.AddDays(1);
-
 			// Same-day file re-uploads can create more than one row for the same
 			// dealer/product/location business key. Keep only the latest revision.
-			var snapshotRows = await query
-				.Where(row => row.StockDate >= start && row.StockDate < end)
-				.ToListAsync(cancellationToken);
 
 			var latestRows = snapshotRows
 				.GroupBy(WholesalerBusinessKey)
@@ -332,6 +350,16 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(row => filter.StateIds.Contains(row.StateId!.Value));
 			}
 
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				query = query.Where(row =>
+					row.DealerRegistrationId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == row.DealerRegistrationId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
+			}
+
 			if (dateFrom.HasValue)
 			{
 				query = query.Where(row => row.CreatedAt >= dateFrom.Value);
@@ -342,22 +370,17 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(row => row.CreatedAt < dateToExclusive.Value);
 			}
 
-			var latestDate = await query
-				.OrderByDescending(row => row.CreatedAt)
-				.Select(row => (DateTime?)row.CreatedAt)
-				.FirstOrDefaultAsync(cancellationToken);
+			var scopedQuery = query;
+			var snapshotRows = await scopedQuery
+				.Where(row => !scopedQuery.Any(candidate =>
+					candidate.StateId == row.StateId &&
+					candidate.CreatedAt.Date > row.CreatedAt.Date))
+				.ToListAsync(cancellationToken);
 
-			if (!latestDate.HasValue)
+			if (snapshotRows.Count == 0)
 			{
 				return new List<SourceAggregate>();
 			}
-
-			var start = ToUtcDate(latestDate.Value);
-			var end = start.AddDays(1);
-
-			var snapshotRows = await query
-				.Where(row => row.CreatedAt >= start && row.CreatedAt < end)
-				.ToListAsync(cancellationToken);
 
 			var latestRows = snapshotRows
 				.GroupBy(DptBusinessKey)
@@ -402,6 +425,18 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(row => filter.StateIds.Contains(row.StateId!.Value));
 			}
 
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				query = query.Where(row =>
+					row.WarehouseId.HasValue &&
+					_db.Set<Warehouse>().Any(warehouse =>
+						warehouse.Id == row.WarehouseId.Value &&
+						(filter.RegionIds.Count == 0 ||
+						 (warehouse.RegionId.HasValue && filter.RegionIds.Contains(warehouse.RegionId.Value))) &&
+						(filter.HeadQuarterIds.Count == 0 ||
+						 (warehouse.HeadquarterId.HasValue && filter.HeadQuarterIds.Contains(warehouse.HeadquarterId.Value)))));
+			}
+
 			if (dateFrom.HasValue)
 			{
 				query = query.Where(row => row.CreatedAt >= dateFrom.Value);
@@ -412,22 +447,17 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(row => row.CreatedAt < dateToExclusive.Value);
 			}
 
-			var latestDate = await query
-				.OrderByDescending(row => row.CreatedAt)
-				.Select(row => (DateTime?)row.CreatedAt)
-				.FirstOrDefaultAsync(cancellationToken);
+			var scopedQuery = query;
+			var snapshotRows = await scopedQuery
+				.Where(row => !scopedQuery.Any(candidate =>
+					candidate.StateId == row.StateId &&
+					candidate.CreatedAt.Date > row.CreatedAt.Date))
+				.ToListAsync(cancellationToken);
 
-			if (!latestDate.HasValue)
+			if (snapshotRows.Count == 0)
 			{
 				return new List<SourceAggregate>();
 			}
-
-			var start = ToUtcDate(latestDate.Value);
-			var end = start.AddDays(1);
-
-			var snapshotRows = await query
-				.Where(row => row.CreatedAt >= start && row.CreatedAt < end)
-				.ToListAsync(cancellationToken);
 
 			var latestRows = snapshotRows
 				.GroupBy(WarehouseBusinessKey)
@@ -477,6 +507,16 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(row => filter.StateIds.Contains(row.StateId!.Value));
 			}
 
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				query = query.Where(row =>
+					row.DealerRegistrationId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == row.DealerRegistrationId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
+			}
+
 			if (dateFrom.HasValue)
 			{
 				query = query.Where(row => row.InvoiceDate!.Value >= dateFrom.Value);
@@ -521,6 +561,16 @@ namespace Spic.Infrastructure.Services
 			if (filter.StateIds.Count > 0)
 			{
 				query = query.Where(row => filter.StateIds.Contains(row.StateId!.Value));
+			}
+
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				query = query.Where(row =>
+					row.WholesalerId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == row.WholesalerId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
 			}
 
 			if (dateFrom.HasValue)
@@ -675,14 +725,15 @@ namespace Spic.Infrastructure.Services
 			IReadOnlyCollection<ProdStockStateRowDto> rows,
 			int productCount,
 			decimal totalStock,
-			decimal totalSales)
+			decimal totalSales,
+			decimal lowStockThresholdMt)
 		{
 			ProdStockStateRowDto? highest = null;
 			var lowStockAlerts = 0;
 
 			foreach (var row in rows)
 			{
-				if (row.Total < LowStockThresholdMt)
+				if (row.Total < lowStockThresholdMt)
 				{
 					lowStockAlerts++;
 				}

@@ -90,13 +90,17 @@ namespace SpicAPI.Controllers
 			}
 
 			worksheet.SheetView.FreezeRows(1);
+			worksheet.Column(4).Style.NumberFormat.Format = "#,##0.###";
 			worksheet.Columns().AdjustToContents();
 
-			using var stream = new MemoryStream();
+			// Return the stream directly instead of calling ToArray(), avoiding a second
+			// full in-memory copy for large exports.
+			var stream = new MemoryStream();
 			workbook.SaveAs(stream);
+			stream.Position = 0;
 
 			return File(
-				stream.ToArray(),
+				stream,
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 				$"StockReport_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
 		}
@@ -106,10 +110,11 @@ namespace SpicAPI.Controllers
 			return status?.Trim() switch
 			{
 				"Fresh" => "Fresh (0-30)",
-				"Medium" => "Medium (30-90)",
-				"Slow Moving" => "Slow Moving (90-180)",
-				"Long Aged" => "Long Aged (180-365)",
+				"Medium" => "Medium (31-90)",
+				"Slow Moving" => "Slow Moving (91-180)",
+				"Long Aged" => "Long Aged (181-364)",
 				"Critical" => "Critical (365+)",
+				"Pending ACK" => "Pending ACK",
 				_ => status ?? string.Empty
 			};
 		}

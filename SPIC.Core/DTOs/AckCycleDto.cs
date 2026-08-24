@@ -9,6 +9,8 @@ namespace SPIC.Core.DTOs
 		public DateTime? DateTo { get; set; }
 
 		public List<int> StateIds { get; set; } = new();
+		public List<int> RegionIds { get; set; } = new();
+		public List<int> HeadQuarterIds { get; set; } = new();
 		public List<int> DistrictIds { get; set; } = new();
 
 		// Backward-compatible approved Product IDs used by older clients.

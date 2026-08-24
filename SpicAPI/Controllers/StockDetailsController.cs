@@ -45,9 +45,7 @@ namespace SpicAPI.Controllers
 			[FromBody] StockDetailsFilter? filter,
 			CancellationToken cancellationToken)
 		{
-			var exportFilter = filter ?? new StockDetailsFilter();
-			exportFilter.Page = 1;
-			exportFilter.PageSize = int.MaxValue;
+			var exportFilter = CloneForExport(filter ?? new StockDetailsFilter());
 
 			var data = await _service.GetDashboardAsync(
 				exportFilter,
@@ -94,11 +92,12 @@ namespace SpicAPI.Controllers
 			worksheet.Columns(2, 8).Style.NumberFormat.Format = "#,##0.###";
 			worksheet.Column(9).Style.NumberFormat.Format = "0.0%";
 
-			using var stream = new MemoryStream();
+			var stream = new MemoryStream();
 			workbook.SaveAs(stream);
+			stream.Position = 0;
 
 			return File(
-				stream.ToArray(),
+				stream,
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 				$"StockDetails_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
 		}
@@ -119,6 +118,26 @@ namespace SpicAPI.Controllers
 			return StatusCode(
 				501,
 				"Send mail not implemented yet.");
+		}
+
+		private static StockDetailsFilter CloneForExport(StockDetailsFilter source)
+		{
+			return new StockDetailsFilter
+			{
+				DateFrom = source.DateFrom,
+				DateTo = source.DateTo,
+				FinancialYearIds = source.FinancialYearIds is null ? new() : new(source.FinancialYearIds),
+				StateIds = source.StateIds is null ? new() : new(source.StateIds),
+				RegionIds = source.RegionIds is null ? new() : new(source.RegionIds),
+				HeadQuarterIds = source.HeadQuarterIds is null ? new() : new(source.HeadQuarterIds),
+				ProductIds = source.ProductIds is null ? new() : new(source.ProductIds),
+				ProductKeys = source.ProductKeys is null ? new() : new(source.ProductKeys),
+				Search = source.Search,
+				SortColumn = source.SortColumn,
+				SortDir = source.SortDir,
+				Page = 1,
+				PageSize = int.MaxValue
+			};
 		}
 
 		private static void WriteHeader(

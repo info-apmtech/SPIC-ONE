@@ -19,8 +19,8 @@
         <div class="pw-actions">
             <button class="pw-btn pw-btn-outline" @onclick="RefreshData" disabled="@(_isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg> Refresh Data</button>
             <button class="pw-btn pw-btn-outline" @onclick="ExportExcel" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg> Excel</button>
-            <button class="pw-btn pw-btn-outline" @onclick="ExportPdf" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg> PDF</button>
-            <button class="pw-btn pw-btn-solid" @onclick="SendMail" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
+            <button class="pw-btn pw-btn-outline" disabled title="PDF export is not implemented yet."><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg> PDF</button>
+            <button class="pw-btn pw-btn-solid" disabled title="Send mail is not implemented yet."><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
         </div>
     </div>
 
@@ -355,7 +355,10 @@
         {
             _objRef = DotNetObjectReference.Create(this);
 
-            // Start the dashboard request immediately. Master-data loading runs in parallel.
+            // Apply mandatory role scope before the first dashboard request.
+            // Master-data loading still runs in parallel, but the initial API call is scoped.
+            ApplyMandatoryRoleScopeSelections();
+            SyncSelectionsToFilter();
             _initialDashboardTask = LoadDashboard();
 
             try
@@ -408,43 +411,146 @@
                 hq.StateId = region.StateId;
         }
 
-        // Role based visibility
-        if (LoginState != null && !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP))
+        ApplyMandatoryRoleScopeSelections();
+        RebuildVisibleLocationOptions();
+        SyncSelectionsToFilter();
+    }
+
+    private bool HasGlobalLocationAccess =>
+        LoginState == null || LoginState.IsAdmin || LoginState.IsDirectorOrAVP;
+
+    private int ResolveRoleRegionId()
+    {
+        if (LoginState == null)
+            return 0;
+
+        if (LoginState.RegionId > 0)
+            return LoginState.RegionId;
+
+        return LoginState.HQId > 0
+            ? _allHqs.FirstOrDefault(hq => hq.Id == LoginState.HQId)?.RegionId ?? 0
+            : 0;
+    }
+
+    private int ResolveRoleStateId()
+    {
+        if (LoginState == null)
+            return 0;
+
+        if (LoginState.StateId > 0)
+            return LoginState.StateId;
+
+        var regionId = ResolveRoleRegionId();
+        return regionId > 0
+            ? _allRegions.FirstOrDefault(region => region.Id == regionId)?.StateId ?? 0
+            : 0;
+    }
+
+    private void ApplyMandatoryRoleScopeSelections()
+    {
+        if (HasGlobalLocationAccess || LoginState == null)
+            return;
+
+        if (LoginState.IsHQRole && LoginState.HQId > 0)
+        {
+            var regionId = ResolveRoleRegionId();
+            var stateId = ResolveRoleStateId();
+
+            _selHqs = new List<int> { LoginState.HQId };
+            _selRegions = regionId > 0 ? new List<int> { regionId } : new List<int>();
+            _selStates = stateId > 0 ? new List<int> { stateId } : new List<int>();
+            return;
+        }
+
+        if (LoginState.IsRegionRole && LoginState.RegionId > 0)
+        {
+            var stateId = ResolveRoleStateId();
+            _selRegions = new List<int> { LoginState.RegionId };
+            _selStates = stateId > 0 ? new List<int> { stateId } : new List<int>();
+
+            if (_allHqs.Count > 0)
+            {
+                _selHqs = _selHqs
+                    .Where(id => _allHqs.Any(hq => hq.Id == id && hq.RegionId == LoginState.RegionId))
+                    .Distinct()
+                    .ToList();
+            }
+
+            return;
+        }
+
+        if (LoginState.IsStateRole && LoginState.StateId > 0)
+        {
+            _selStates = new List<int> { LoginState.StateId };
+
+            if (_allRegions.Count > 0)
+            {
+                _selRegions = _selRegions
+                    .Where(id => _allRegions.Any(region =>
+                        region.Id == id && region.StateId == LoginState.StateId))
+                    .Distinct()
+                    .ToList();
+            }
+
+            if (_allHqs.Count > 0)
+            {
+                _selHqs = _selHqs
+                    .Where(id => _allHqs.Any(hq =>
+                        hq.Id == id && hq.StateId == LoginState.StateId))
+                    .Distinct()
+                    .ToList();
+            }
+        }
+    }
+
+    private void RebuildVisibleLocationOptions()
+    {
+        IEnumerable<LocationDto> allowedStates = _allStates;
+        IEnumerable<LocationDto> allowedRegions = _allRegions;
+        IEnumerable<LocationDto> allowedHqs = _allHqs;
+
+        if (!HasGlobalLocationAccess && LoginState != null)
         {
             if (LoginState.IsHQRole && LoginState.HQId > 0)
             {
-                _hq = _allHqs.Where(h => h.Id == LoginState.HQId).ToList();
-                var regionId = _allHqs.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionId ?? LoginState.RegionId;
-                if (regionId > 0) _regions = _allRegions.Where(r => r.Id == regionId).ToList();
-                var stateId = _allRegions.FirstOrDefault(r => r.Id == regionId)?.StateId ?? LoginState.StateId;
-                if (stateId > 0) _states = _allStates.Where(s => s.Id == stateId).ToList();
+                var regionId = ResolveRoleRegionId();
+                var stateId = ResolveRoleStateId();
+
+                allowedHqs = _allHqs.Where(hq => hq.Id == LoginState.HQId);
+                allowedRegions = regionId > 0
+                    ? _allRegions.Where(region => region.Id == regionId)
+                    : Enumerable.Empty<LocationDto>();
+                allowedStates = stateId > 0
+                    ? _allStates.Where(state => state.Id == stateId)
+                    : Enumerable.Empty<LocationDto>();
             }
             else if (LoginState.IsRegionRole && LoginState.RegionId > 0)
             {
-                _regions = _allRegions.Where(r => r.Id == LoginState.RegionId).ToList();
-                var stateId = _allRegions.FirstOrDefault(r => r.Id == LoginState.RegionId)?.StateId ?? LoginState.StateId;
-                if (stateId > 0) _states = _allStates.Where(s => s.Id == stateId).ToList();
-                _hq = _allHqs.Where(h => h.RegionId == LoginState.RegionId).ToList();
+                var stateId = ResolveRoleStateId();
+                allowedRegions = _allRegions.Where(region => region.Id == LoginState.RegionId);
+                allowedHqs = _allHqs.Where(hq => hq.RegionId == LoginState.RegionId);
+                allowedStates = stateId > 0
+                    ? _allStates.Where(state => state.Id == stateId)
+                    : Enumerable.Empty<LocationDto>();
             }
             else if (LoginState.IsStateRole && LoginState.StateId > 0)
             {
-                _states = _allStates.Where(s => s.Id == LoginState.StateId).ToList();
-                _regions = _allRegions.Where(r => r.StateId == LoginState.StateId).ToList();
-                _hq = _allHqs.Where(h => h.StateId == LoginState.StateId).ToList();
-            }
-            else
-            {
-                _states = _allStates.ToList();
-                _regions = _allRegions.ToList();
-                _hq = _allHqs.ToList();
+                allowedStates = _allStates.Where(state => state.Id == LoginState.StateId);
+                allowedRegions = _allRegions.Where(region => region.StateId == LoginState.StateId);
+                allowedHqs = _allHqs.Where(hq => hq.StateId == LoginState.StateId);
             }
         }
-        else
-        {
-            _states = _allStates.ToList();
-            _regions = _allRegions.ToList();
-            _hq = _allHqs.ToList();
-        }
+
+        _states = allowedStates.ToList();
+        _regions = _selStates.Any()
+            ? allowedRegions.Where(region => _selStates.Contains(region.StateId ?? 0)).ToList()
+            : allowedRegions.ToList();
+
+        _hq = _selRegions.Any()
+            ? allowedHqs.Where(hq => _selRegions.Contains(hq.RegionId ?? 0)).ToList()
+            : _selStates.Any()
+                ? allowedHqs.Where(hq => _selStates.Contains(hq.StateId ?? 0)).ToList()
+                : allowedHqs.ToList();
     }
 
     // ---------- Dashboard ----------
@@ -460,6 +566,7 @@
 
         _isLoading = true;
         _loadError = null;
+        SyncSelectionsToFilter();
         await InvokeAsync(StateHasChanged);
 
         try
@@ -553,9 +660,8 @@
         _dateFrom = null;
         _dateTo = null;
 
-        _states = _allStates.ToList();
-        _regions = _allRegions.ToList();
-        _hq = _allHqs.ToList();
+        ApplyMandatoryRoleScopeSelections();
+        RebuildVisibleLocationOptions();
 
         SyncSelectionsToFilter();
         _filter.Search = null;
@@ -794,16 +900,8 @@
                 .ToList();
         }
 
-        _states = _allStates.ToList();
-        _regions = _selStates.Any()
-            ? _allRegions.Where(region => _selStates.Contains(region.StateId ?? 0)).ToList()
-            : _allRegions.ToList();
-
-        _hq = _selRegions.Any()
-            ? _allHqs.Where(hq => _selRegions.Contains(hq.RegionId ?? 0)).ToList()
-            : _selStates.Any()
-                ? _allHqs.Where(hq => _selStates.Contains(hq.StateId ?? 0)).ToList()
-                : _allHqs.ToList();
+        ApplyMandatoryRoleScopeSelections();
+        RebuildVisibleLocationOptions();
 
         await InvokeAsync(StateHasChanged);
         await RefreshSelect2();

@@ -9,10 +9,17 @@ namespace SPIC.Core.DTOs
 		public DateTime? DateTo { get; set; }
 
 		public List<int> StateIds { get; set; } = new();
+
+		// Additive geography filters. Existing State/District clients remain compatible.
+		// Registered dealers are matched through DealerRegistration.Region / HQ.
+		// Warehouse rows are matched through Warehouse.RegionId / HeadquarterId.
+		public List<int> RegionIds { get; set; } = new();
+		public List<int> HeadQuarterIds { get; set; } = new();
+
 		public List<int> DistrictIds { get; set; } = new();
 
-		// Additive: DPT/Retailer rows have SubDistrictId. Other sources continue to
-		// use the effective parent DistrictIds so the previous flow remains compatible.
+		// DPT/Retailer rows have SubDistrictId. Other sources continue to use the
+		// effective parent DistrictIds so the previous flow remains compatible.
 		public List<int> SubDistrictIds { get; set; } = new();
 
 		// Backward-compatible approved Product IDs used by existing clients.
@@ -40,8 +47,7 @@ namespace SPIC.Core.DTOs
 		public List<LiqCycleStatDto> TopFastDealers { get; set; } = new();
 		public List<LiqCycleStatDto> TopSlowDealers { get; set; } = new();
 
-		// Additive fields used by the existing State-wise chart toggle.
-		// Existing API consumers remain compatible because no old field changed.
+		// Existing State-wise chart contract.
 		public List<LiqCycleStatDto> TopFastStates { get; set; } = new();
 		public List<LiqCycleStatDto> TopSlowStates { get; set; } = new();
 

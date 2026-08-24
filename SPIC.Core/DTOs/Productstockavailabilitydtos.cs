@@ -1,8 +1,4 @@
-﻿// ============================================================================
-//  SPIC.Core / DTOs / ProductStockAvailabilityDtos.cs
-// ============================================================================
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace SPIC.Core.DTOs

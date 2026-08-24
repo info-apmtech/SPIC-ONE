@@ -654,7 +654,7 @@ namespace Spic.Infrastructure.Services
 			return query;
 		}
 
-		private static IQueryable<DptReport> ApplyDptFilters(
+		private IQueryable<DptReport> ApplyDptFilters(
 			IQueryable<DptReport> query,
 			PendingAckFilter filter,
 			List<int> registrationIds,
@@ -706,12 +706,21 @@ namespace Spic.Infrastructure.Services
 					 ifmsIds.Contains(x.IfmsDealerId.Value)));
 			}
 
-			// DptReport has DealershipNatureId but no DealerTypeId. Applying a
-			// DealerType filter to it would compare unrelated master IDs, so DPT is
-			// safely excluded only while that specific filter is active.
+			// DptReport has no DealerTypeId, but this source represents Retailer Sales.
+			// When Dealer Type is filtered, keep DPT only if one of the selected
+			// DealerType master rows is retailer-like. The EXISTS stays database-side
+			// and avoids loading the dealer-type master into memory.
 			if (filter.DealerTypeIds.Count > 0)
 			{
-				query = query.Where(x => false);
+				var selectedDealerTypeIds = filter.DealerTypeIds;
+				var selectedRetailerTypes = _db.Set<DealerType>()
+					.AsNoTracking()
+					.Where(x =>
+						selectedDealerTypeIds.Contains(x.Id) &&
+						x.Name != null &&
+						EF.Functions.ILike(x.Name, "%retail%"));
+
+				query = query.Where(_ => selectedRetailerTypes.Any());
 			}
 
 			ApplyDptSearch(ref query, filter.Search);
@@ -1144,7 +1153,7 @@ namespace Spic.Infrastructure.Services
 				InvoiceNo = row.InvoiceNo,
 				InvoiceDate = row.InvoiceDate,
 				EntryDate = row.EntryDate,
-				AgencyName = row.AgencyName,
+				AgencyName = displayDealerName,
 				DealerCode = dealerCode,
 				DealerType = row.SourceCode == SourceDpt
 					? "Retailer"
@@ -1428,7 +1437,9 @@ namespace Spic.Infrastructure.Services
 			filter.AgeStatuses ??= new List<string>();
 
 			filter.Page = Math.Max(1, filter.Page);
-			filter.PageSize = filter.PageSize <= 0 ? 16 : filter.PageSize;
+			filter.PageSize = filter.PageSize <= 0
+				? 16
+				: Math.Min(filter.PageSize, 500);
 		}
 
 		// =====================================================================

@@ -104,14 +104,14 @@ namespace Spic.Infrastructure.Services
 
 			// Opening stock is the latest available snapshot on or before DateFrom.
 			var openingStockByState = await LoadCombinedStockByStateAsync(
-				filter.StateIds,
+				filter,
 				productIds,
 				period.PeriodStart,
 				cancellationToken);
 
 			// Closing stock is the latest available snapshot on or before DateTo.
 			var closingStockByState = await LoadCombinedStockByStateAsync(
-				filter.StateIds,
+				filter,
 				productIds,
 				period.AsOnDate,
 				cancellationToken);
@@ -119,7 +119,7 @@ namespace Spic.Infrastructure.Services
 			// Company and wholesaler sales are transactions. DPT SoldQuantity is
 			// treated as the movement reported for that DPT report date.
 			var salesByState = await LoadSalesByStateAsync(
-				filter.StateIds,
+				filter,
 				productIds,
 				period.PeriodStart,
 				period.AsOnDate,
@@ -199,7 +199,7 @@ namespace Spic.Infrastructure.Services
 		// =====================================================================
 
 		private async Task<Dictionary<int, decimal>> LoadCombinedStockByStateAsync(
-			IReadOnlyCollection<int> stateIds,
+			StockDetailsFilter filter,
 			ProductIdSelection productIds,
 			DateTime asOnDate,
 			CancellationToken cancellationToken)
@@ -209,7 +209,7 @@ namespace Spic.Infrastructure.Services
 			// Run sequentially because the same scoped DbContext cannot execute
 			// multiple database operations concurrently.
 			var wholesaler = await LoadLatestWholesalerStockByStateAsync(
-				stateIds,
+				filter,
 				productIds,
 				asOnDate,
 				cancellationToken);
@@ -217,7 +217,7 @@ namespace Spic.Infrastructure.Services
 			MergeQuantities(result, wholesaler);
 
 			var retailer = await LoadLatestDptClosingStockByStateAsync(
-				stateIds,
+				filter,
 				productIds,
 				asOnDate,
 				cancellationToken);
@@ -225,7 +225,7 @@ namespace Spic.Infrastructure.Services
 			MergeQuantities(result, retailer);
 
 			var warehouse = await LoadLatestWarehouseStockByStateAsync(
-				stateIds,
+				filter,
 				productIds,
 				asOnDate,
 				cancellationToken);
@@ -240,7 +240,7 @@ namespace Spic.Infrastructure.Services
 		/// before the requested date. Old snapshot dates are never added together.
 		/// </summary>
 		private async Task<Dictionary<int, decimal>> LoadLatestWholesalerStockByStateAsync(
-			IReadOnlyCollection<int> stateIds,
+			StockDetailsFilter filter,
 			ProductIdSelection productIds,
 			DateTime asOnDate,
 			CancellationToken cancellationToken)
@@ -253,11 +253,23 @@ namespace Spic.Infrastructure.Services
 					x.StateId.HasValue &&
 					x.StockDate < asOnExclusive);
 
-			if (stateIds.Count > 0)
+			if (filter.StateIds.Count > 0)
 			{
 				baseQuery = baseQuery.Where(x =>
 					x.StateId.HasValue &&
-					stateIds.Contains(x.StateId.Value));
+					filter.StateIds.Contains(x.StateId.Value));
+			}
+
+			// Exact Region/HQ is available for registered dealers. IFMS-only rows
+			// have no Region/HQ mapping, so they are excluded only when exact scope is active.
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				baseQuery = baseQuery.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == x.DealerRegistrationId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
 			}
 
 			if (productIds.HasAny)
@@ -318,7 +330,7 @@ namespace Spic.Infrastructure.Services
 		/// the requested date. ClosingBalance is the current retailer stock.
 		/// </summary>
 		private async Task<Dictionary<int, decimal>> LoadLatestDptClosingStockByStateAsync(
-			IReadOnlyCollection<int> stateIds,
+			StockDetailsFilter filter,
 			ProductIdSelection productIds,
 			DateTime asOnDate,
 			CancellationToken cancellationToken)
@@ -331,11 +343,23 @@ namespace Spic.Infrastructure.Services
 					x.StateId.HasValue &&
 					x.CreatedAt < asOnExclusive);
 
-			if (stateIds.Count > 0)
+			if (filter.StateIds.Count > 0)
 			{
 				baseQuery = baseQuery.Where(x =>
 					x.StateId.HasValue &&
-					stateIds.Contains(x.StateId.Value));
+					filter.StateIds.Contains(x.StateId.Value));
+			}
+
+			// Exact Region/HQ is available for registered dealers. IFMS-only rows
+			// have no Region/HQ mapping, so they are excluded only when exact scope is active.
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				baseQuery = baseQuery.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == x.DealerRegistrationId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
 			}
 
 			if (productIds.HasAny)
@@ -396,7 +420,7 @@ namespace Spic.Infrastructure.Services
 		/// on or before the requested date.
 		/// </summary>
 		private async Task<Dictionary<int, decimal>> LoadLatestWarehouseStockByStateAsync(
-			IReadOnlyCollection<int> stateIds,
+			StockDetailsFilter filter,
 			ProductIdSelection productIds,
 			DateTime asOnDate,
 			CancellationToken cancellationToken)
@@ -409,11 +433,23 @@ namespace Spic.Infrastructure.Services
 					x.StateId.HasValue &&
 					x.CreatedAt < asOnExclusive);
 
-			if (stateIds.Count > 0)
+			if (filter.StateIds.Count > 0)
 			{
 				baseQuery = baseQuery.Where(x =>
 					x.StateId.HasValue &&
-					stateIds.Contains(x.StateId.Value));
+					filter.StateIds.Contains(x.StateId.Value));
+			}
+
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				baseQuery = baseQuery.Where(x =>
+					x.WarehouseId.HasValue &&
+					_db.Set<Warehouse>().Any(warehouse =>
+						warehouse.Id == x.WarehouseId.Value &&
+						(filter.RegionIds.Count == 0 ||
+						 (warehouse.RegionId.HasValue && filter.RegionIds.Contains(warehouse.RegionId.Value))) &&
+						(filter.HeadQuarterIds.Count == 0 ||
+						 (warehouse.HeadquarterId.HasValue && filter.HeadQuarterIds.Contains(warehouse.HeadquarterId.Value)))));
 			}
 
 			if (productIds.HasAny)
@@ -468,7 +504,7 @@ namespace Spic.Infrastructure.Services
 		/// which is the selected report date saved by the upload service.
 		/// </summary>
 		private async Task<Dictionary<int, SalesAggregate>> LoadSalesByStateAsync(
-			IReadOnlyCollection<int> stateIds,
+			StockDetailsFilter filter,
 			ProductIdSelection productIds,
 			DateTime periodStart,
 			DateTime asOnDate,
@@ -499,19 +535,44 @@ namespace Spic.Infrastructure.Services
 					x.CreatedAt < asOnNextDay &&
 					x.SoldQuantity != 0m);
 
-			if (stateIds.Count > 0)
+			if (filter.StateIds.Count > 0)
 			{
 				wholesalerQuery = wholesalerQuery.Where(x =>
 					x.StateId.HasValue &&
-					stateIds.Contains(x.StateId.Value));
+					filter.StateIds.Contains(x.StateId.Value));
 
 				companyQuery = companyQuery.Where(x =>
 					x.StateId.HasValue &&
-					stateIds.Contains(x.StateId.Value));
+					filter.StateIds.Contains(x.StateId.Value));
 
 				dptQuery = dptQuery.Where(x =>
 					x.StateId.HasValue &&
-					stateIds.Contains(x.StateId.Value));
+					filter.StateIds.Contains(x.StateId.Value));
+			}
+
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				// SalesWholesaler is scoped by the registered wholesaler (seller).
+				wholesalerQuery = wholesalerQuery.Where(x =>
+					x.WholesalerId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == x.WholesalerId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
+
+				companyQuery = companyQuery.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == x.DealerRegistrationId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
+
+				dptQuery = dptQuery.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == x.DealerRegistrationId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
 			}
 
 			if (productIds.HasAny)
@@ -957,11 +1018,23 @@ namespace Spic.Infrastructure.Services
 		private static void NormalizeFilter(StockDetailsFilter filter)
 		{
 			filter.StateIds ??= new List<int>();
+			filter.RegionIds ??= new List<int>();
+			filter.HeadQuarterIds ??= new List<int>();
 			filter.FinancialYearIds ??= new List<int>();
 			filter.ProductIds ??= new List<int>();
 			filter.ProductKeys ??= new List<string>();
 
 			filter.StateIds = filter.StateIds
+				.Where(x => x > 0)
+				.Distinct()
+				.ToList();
+
+			filter.RegionIds = filter.RegionIds
+				.Where(x => x > 0)
+				.Distinct()
+				.ToList();
+
+			filter.HeadQuarterIds = filter.HeadQuarterIds
 				.Where(x => x > 0)
 				.Distinct()
 				.ToList();

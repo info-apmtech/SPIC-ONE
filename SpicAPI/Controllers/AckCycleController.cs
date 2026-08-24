@@ -135,11 +135,12 @@ namespace SpicAPI.Controllers
 			worksheet.Column(13).Width = 14;
 			worksheet.SheetView.FreezeRows(1);
 
-			using var stream = new MemoryStream();
+			var stream = new MemoryStream();
 			workbook.SaveAs(stream);
+			stream.Position = 0;
 
 			return File(
-				stream.ToArray(),
+				stream,
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 				$"AcknowledgementCycle_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
 		}

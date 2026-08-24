@@ -77,6 +77,7 @@ namespace SPIC.Core.DTOs
 		public string LyingWith { get; set; } = string.Empty;
 		public int AgeingDays { get; set; }
 
+		// True only when a genuine ACK + RetailerReceiptDate ageing anchor exists.
 		public bool HasAckAgeing { get; set; }
 
 		public string AgeingDisplay => HasAckAgeing

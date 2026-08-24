@@ -14,6 +14,10 @@ namespace SPIC.Core.DTOs
 		public List<int> FinancialYearIds { get; set; } = new();
 		public List<int> StateIds { get; set; } = new();
 
+		// Additive hierarchy filters. Existing clients that do not send them remain compatible.
+		public List<int> RegionIds { get; set; } = new();
+		public List<int> HeadQuarterIds { get; set; } = new();
+
 		// Backward-compatible approved Product IDs used by existing clients.
 		public List<int> ProductIds { get; set; } = new();
 
