@@ -24,7 +24,6 @@ public class WelfareApplication
 
 	// Beneficiary Information
 	public string? BeneficiaryName { get; set; }                         // Name of the person receiving the benefit
-	public string? Relationship { get; set; }                            // Beneficiary's relationship to the dealer (e.g. Spouse, Child, Parent)
 	public DateTime? BeneficiaryDateOfBirth { get; set; }                // Beneficiary's date of birth (for schemes like Sathabhishekam)
 	public string? NomineeName { get; set; }                             // Name of the nominee for the benefit
 	public string? NomineeRelationship { get; set; }                     // Nominee's relationship to the dealer
@@ -134,6 +133,8 @@ public class WelfareApplicationApproval
 	public AppRole ApprovalLevel { get; set; }                           // Which role performed/owns this step (MO, RM or SMM)
 	public WelfareApprovalStatus ApprovalStatus { get; set; } = WelfareApprovalStatus.Pending; // Outcome of this step (Pending/Approved/Rejected)
 	public string? Remarks { get; set; }                                 // Validation/rejection remarks entered by the officer
+	public string? Recommendation { get; set; }                          // MO's recommendation chosen at approval ("Recommended"/"Not Recommended")
+	public string? Comment { get; set; }                                 // Comment entered by the officer when approving
 	public string? ApprovedBy { get; set; }                              // Name/Id of the officer who acted on this step
 	public DateTime? ApprovedAt { get; set; }                            // When the officer approved/rejected this step
 

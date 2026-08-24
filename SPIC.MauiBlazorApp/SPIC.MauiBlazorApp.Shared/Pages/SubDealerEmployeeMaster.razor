@@ -1,0 +1,1067 @@
+@page "/SubDealerEmployeeMaster"
+@using System.Net.Http.Json
+@using System.Text.Json
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject NavigationManager Navigation
+
+<div class="container-fluid">
+
+	<h2 class="page-title">Sub Dealer &amp; Employee</h2>
+
+	@if (!string.IsNullOrEmpty(_message))
+	{
+		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+			@_message
+			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
+		</div>
+	}
+
+	<div class="tabs-wrapper">
+		<div class="tabs-container">
+			@foreach (var tab in TabOptions)
+			{
+				<div class="tab-item @(ActiveTab == tab ? "active" : "")" @onclick="() => SetActiveTab(tab)">
+					@tab
+				</div>
+			}
+		</div>
+	</div>
+
+	<div class="main-card">
+		<div class="section-header">
+			<h3 class="section-title">@(_isEditing ? $"Edit {(ActiveTab == TabSubDealer ? "Sub Dealer" : "Employee")}" : $"Add New {(ActiveTab == TabSubDealer ? "Sub Dealer" : "Employee")}")</h3>
+			<div class="d-flex gap-2">
+				<button class="btn-outline-green" @onclick="DownloadSampleTemplate">
+					<i class="bi bi-file-earmark-excel"></i> Download Template
+				</button>
+				<button class="btn-outline-green" @onclick="() => _showUploadModal = true">
+					<i class="bi bi-cloud-arrow-up"></i> Upload File
+				</button>
+			</div>
+		</div>
+
+		<div class="row g-3 mb-4">
+			@if (ActiveTab == TabSubDealer)
+			{
+				<div class="col-md-6 col-lg-2">
+					<label class="form-label-custom">Beneficiary ID</label>
+					<input type="number" class="form-control-custom w-100" placeholder="Beneficiary ID"
+						   @bind="_subDealerForm.BeneficiaryId" />
+				</div>
+				<div class="col-md-6 col-lg-3">
+					<label class="form-label-custom">Main Dealer Code *</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Dealer Code"
+						   @bind="_subDealerForm.DealerCode" @ref="_firstInputRef" />
+				</div>
+				<div class="col-md-6 col-lg-3">
+					<label class="form-label-custom">Main Dealer / Firm Name *</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Firm Name"
+						   @bind="_subDealerForm.MainDealerFirmName" />
+				</div>
+				<div class="col-md-6 col-lg-2">
+					<label class="form-label-custom">HQ</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter HQ"
+						   @bind="_subDealerForm.HQ" />
+				</div>
+				<div class="col-md-6 col-lg-2">
+					<label class="form-label-custom">Branch / District</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Branch &amp; District"
+						   @bind="_subDealerForm.BranchDistrict" />
+				</div>
+
+				<div class="col-md-6 col-lg-2">
+					<label class="form-label-custom">Sub Dealer Code *</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Sub Dealer Code"
+						   @bind="_subDealerForm.SubDealerCode" />
+				</div>
+				<div class="col-md-6 col-lg-3">
+					<label class="form-label-custom">Sub Dealer Name *</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Sub Dealer Name"
+						   @bind="_subDealerForm.SubDealerName" />
+				</div>
+				<div class="col-md-6 col-lg-2">
+					<label class="form-label-custom">Sub Dealer District</label>
+					<input type="text" class="form-control-custom w-100" placeholder="District"
+						   @bind="_subDealerForm.SubDealerDistrict" />
+				</div>
+				<div class="col-md-6 col-lg-2">
+					<label class="form-label-custom">Nominee Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Nominee's Full Name"
+						   @bind="_subDealerForm.NomineeName" />
+				</div>
+				<div class="col-md-6 col-lg-2">
+					<label class="form-label-custom">Beneficiary Name *</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Full Name"
+						   @bind="_subDealerForm.BeneficiaryName" />
+				</div>
+
+				<div class="col-md-4 col-lg-2">
+					<label class="form-label-custom">Date of Birth</label>
+					<input type="date" class="form-control-custom w-100"
+						   @bind="_subDealerForm.DOB" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+				</div>
+				<div class="col-md-4 col-lg-1">
+					<label class="form-label-custom">Relationship</label>
+					<select class="form-control-custom w-100" @bind="_subDealerForm.Relationship">
+						<option value="">--</option>
+						<option value="Spouse">Spouse</option>
+						<option value="Child">Child</option>
+						<option value="Parent">Parent</option>
+						<option value="Other">Other</option>
+					</select>
+				</div>
+			}
+			else
+			{
+				<div class="col-md-6 col-lg-2">
+					<label class="form-label-custom">Beneficiary ID</label>
+					<input type="number" class="form-control-custom w-100" placeholder="Beneficiary ID"
+						   @bind="_employeeForm.BeneficiaryId" @ref="_firstInputRef" />
+				</div>
+				<div class="col-md-6 col-lg-3">
+					<label class="form-label-custom">Dealer Code *</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Dealer Code"
+						   @bind="_employeeForm.DealerCode" />
+				</div>
+				<div class="col-md-6 col-lg-3">
+					<label class="form-label-custom">Employee Name *</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Employee Name"
+						   @bind="_employeeForm.EmployeeName" />
+				</div>
+				<div class="col-md-6 col-lg-2">
+					<label class="form-label-custom">Beneficiary Name *</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Full Name"
+						   @bind="_employeeForm.BeneficiaryName" />
+				</div>
+				<div class="col-md-4 col-lg-2">
+					<label class="form-label-custom">Date of Birth</label>
+					<input type="date" class="form-control-custom w-100"
+						   @bind="_employeeForm.DOB" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+				</div>
+
+				<div class="col-md-4 col-lg-2">
+					<label class="form-label-custom">Relationship</label>
+					<select class="form-control-custom w-100" @bind="_employeeForm.Relationship">
+						<option value="">--</option>
+						<option value="Spouse">Spouse</option>
+						<option value="Child">Child</option>
+						<option value="Parent">Parent</option>
+						<option value="Other">Other</option>
+					</select>
+				</div>
+				<div class="col-md-4 col-lg-2">
+					<label class="form-label-custom">Marital Status</label>
+					<select class="form-control-custom w-100" @bind="_employeeForm.MaritalStatus">
+						<option value="">--</option>
+						<option value="Single">Single</option>
+						<option value="Married">Married</option>
+						<option value="Other">Other</option>
+					</select>
+				</div>
+				<div class="col-md-6 col-lg-3">
+					<label class="form-label-custom">Educational Qualification</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Educational Qualification"
+						   @bind="_employeeForm.EducationalQualification" />
+				</div>
+			}
+
+			<div class="col-md-6 col-lg-1">
+				<label class="form-label-custom d-block">&nbsp;</label>
+				<div class="status-toggle-box @(CurrentFormIsActive ? "" : "status-toggle-inactive")">
+					<span>@(CurrentFormIsActive ? "Active" : "Inactive")</span>
+					<label class="switch">
+						@if (ActiveTab == TabSubDealer)
+						{
+							<input type="checkbox" @bind="_subDealerForm.IsActive">
+						}
+						else
+						{
+							<input type="checkbox" @bind="_employeeForm.IsActive">
+						}
+						<span class="slider"></span>
+					</label>
+				</div>
+			</div>
+		</div>
+
+		<div class="d-flex justify-content-end pt-2 mt-4">
+			<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
+			<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+				<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+			</button>
+		</div>
+	</div>
+
+	<div class="row g-3 mb-4">
+		<div class="col-md-4">
+			<div class="metric-card bg-blue-light">
+				<div class="metric-header">
+					<h4 class="metric-title">Total @ActiveTab</h4>
+				</div>
+				<div class="metric-val">@CurrentAllItems.Count</div>
+			</div>
+		</div>
+		<div class="col-md-4">
+			<div class="metric-card bg-mint-light">
+				<div class="metric-header">
+					<h4 class="metric-title">Active</h4>
+				</div>
+				<div class="metric-val">@CurrentAllItems.Count(x => x.IsActive)</div>
+			</div>
+		</div>
+		<div class="col-md-4">
+			<div class="metric-card bg-gray-light">
+				<div class="metric-header">
+					<h4 class="metric-title">Inactive</h4>
+				</div>
+				<div class="metric-val">@CurrentAllItems.Count(x => !x.IsActive)</div>
+			</div>
+		</div>
+	</div>
+
+	<SpicDataTable Items="_filteredItems"
+				   IsLoading="_isLoading"
+				   Title="@($"Existing {ActiveTab}")"
+				   FileName="@($"SubDealerEmployee_{ActiveTab}")"
+				   ExportColumns="GetExportColumns()"
+				   SearchText="@_searchText">
+
+		<FilterControls>
+			<div class="search-box">
+				<i class="bi bi-search"></i>
+				<input type="text" placeholder="Search @ActiveTab.ToLower()..."
+					   @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter" />
+			</div>
+			<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+				<option value="All">All Status</option>
+				<option value="Active">Active</option>
+				<option value="Inactive">Inactive</option>
+			</select>
+		</FilterControls>
+
+		<TableHeader>
+			@if (ActiveTab == TabSubDealer)
+			{
+				<th>Dealer Code</th>
+				<th>Main Dealer Name</th>
+				<th>HQ</th>
+				<th>Sub Dealer Code</th>
+				<th>Sub Dealer Name</th>
+				<th>Sub Dealer District</th>
+				<th>Nominee</th>
+				<th>Beneficiary</th>
+				<th>DOB</th>
+				<th>Relationship</th>
+			}
+			else
+			{
+				<th>Dealer Code</th>
+				<th>Employee Name</th>
+				<th>Beneficiary Name</th>
+				<th>DOB</th>
+				<th>Relationship</th>
+				<th>Marital Status</th>
+				<th>Educational Qualification</th>
+			}
+
+			<th>Status</th>
+			<th>Action</th>
+		</TableHeader>
+
+		<TableRow Context="item">
+			@if (ActiveTab == TabSubDealer)
+			{
+				<td>@item.DealerCode</td>
+				<td>@item.MainDealerFirmName</td>
+				<td>@item.HQ</td>
+				<td>@item.SubDealerCode</td>
+				<td>@item.SubDealerName</td>
+				<td>@item.SubDealerDistrict</td>
+				<td>@item.NomineeName</td>
+				<td>@item.BeneficiaryName</td>
+				<td>@(item.DOB?.ToString("yyyy-MM-dd") ?? "-")</td>
+				<td>@item.Relationship</td>
+			}
+			else
+			{
+				<td>@item.DealerCode</td>
+				<td>@item.EmployeeName</td>
+				<td>@item.BeneficiaryName</td>
+				<td>@(item.DOB?.ToString("yyyy-MM-dd") ?? "-")</td>
+				<td>@item.Relationship</td>
+				<td>@item.MaritalStatus</td>
+				<td>@item.EducationalQualification</td>
+			}
+
+			<td>
+				<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+					  style="cursor:pointer"
+					  @onclick="() => ToggleStatus(item)">
+					@(item.IsActive ? "Active" : "Inactive")
+				</span>
+			</td>
+			<td>
+				<div class="action-icons">
+					<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+					<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+				</div>
+			</td>
+		</TableRow>
+	</SpicDataTable>
+
+</div>
+
+@if (_showDeleteConfirm)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Confirm Delete</h5>
+					<button type="button" class="btn-close" @onclick="CancelDelete"></button>
+				</div>
+				<div class="modal-body">
+					<p>Are you sure you want to delete <strong>@(_deleteTarget?.DisplayName)</strong>?</p>
+					<p class="text-muted mb-0">This action cannot be undone.</p>
+				</div>
+				<div class="modal-footer">
+					<button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+					<button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+						@(_isDeleting ? "Deleting..." : "Delete")
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+@if (_showUploadModal)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Bulk Upload - @ActiveTab</h5>
+					<button type="button" class="btn-close" @onclick="CloseUploadModal"></button>
+				</div>
+				<div class="modal-body">
+					<InputFile OnChange="OnBulkFileSelected" accept=".xlsx,.xls" />
+					<div class="upload-result" style="margin-top: 12px;">
+						@if (_isUploading)
+						{
+							<div class="d-flex align-items-center gap-2 text-muted">
+								<span class="spinner-border spinner-border-sm"></span>
+								<span>Uploading, please wait...</span>
+							</div>
+						}
+						else if (!string.IsNullOrEmpty(_uploadResult))
+						{
+							<div class="alert @(_uploadSuccess ? (_groupedErrors.Count > 0 ? "alert-warning" : "alert-success") : "alert-danger") mb-2 py-2">
+								@_uploadResult
+							</div>
+							@if (_groupedErrors.Count > 0)
+							{
+								<div style="border: 1px solid #dee2e6; border-radius: 4px; padding: 8px;">
+									<div class="d-flex justify-content-between align-items-center mb-2">
+										<small class="text-muted fw-semibold">@(_uploadSuccess ? "Skipped Groups:" : "Issues:")</small>
+										<button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.75rem;"
+												@onclick="CopyUploadErrors" title="Copy all errors to clipboard">
+											@if (_errorsCopied)
+											{
+												<i class="bi bi-check2"></i> <span>Copied!</span>
+											}
+											else
+											{
+												<i class="bi bi-clipboard"></i> <span>Copy</span>
+											}
+										</button>
+									</div>
+									<div style="max-height: 280px; overflow-y: auto;">
+										@foreach (var group in _groupedErrors)
+										{
+											<div class="mb-2">
+												<div style="font-size: 0.82rem;">
+													<span class="badge bg-secondary me-1">@group.Value.Count</span>
+													<strong>@group.Key</strong>
+												</div>
+												<ul class="mb-0 ps-3 mt-1" style="font-size: 0.8rem; color: #555;">
+													@foreach (var item in group.Value)
+													{
+														<li>@item</li>
+													}
+												</ul>
+											</div>
+										}
+									</div>
+								</div>
+							}
+						}
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+@code {
+	private const string TabSubDealer = "Sub Dealer";
+	private const string TabEmployee = "Employee";
+
+	private readonly List<string> TabOptions = [TabSubDealer, TabEmployee];
+
+	// Element reference for focusing
+	private ElementReference _firstInputRef;
+
+	// Tab state
+	private string ActiveTab { get; set; } = TabSubDealer;
+
+	private string CurrentApiBase => ActiveTab == TabSubDealer ? "api/SubDealerBeneficiary" : "api/EmployeeBeneficiary";
+
+	private string CurrentUploadType => ActiveTab == TabSubDealer ? "subdealer" : "employee";
+
+	// Only Admin users may manage these masters (menu, page guard and API roles enforce this too)
+	private bool IsAdmin => LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
+
+	// Upload modal state
+	private bool _showUploadModal = false;
+	private bool _isUploading = false;
+	private string _uploadResult = string.Empty;
+	private bool _uploadSuccess = false;
+	private Dictionary<string, List<string>> _groupedErrors = new();
+	private bool _errorsCopied = false;
+
+	// Data
+	private List<SubDealerEmployeeItemDto> _subDealersAll = new();
+	private List<SubDealerEmployeeItemDto> _employeesAll = new();
+	private List<SubDealerEmployeeItemDto> _filteredItems = new();
+
+	private List<SubDealerEmployeeItemDto> CurrentAllItems => ActiveTab == TabSubDealer ? _subDealersAll : _employeesAll;
+
+	// Forms
+	private SubDealerFormModel _subDealerForm = new();
+	private EmployeeFormModel _employeeForm = new();
+
+	private bool _isEditing;
+	private int? _editingId;
+
+	private bool CurrentFormIsActive => ActiveTab == TabSubDealer ? _subDealerForm.IsActive : _employeeForm.IsActive;
+
+	// UI state
+	private bool _isLoading = true;
+	private bool _isSaving;
+	private string? _message;
+	private bool _isError;
+
+	// Delete confirmation
+	private bool _showDeleteConfirm;
+	private bool _isDeleting;
+	private SubDealerEmployeeItemDto? _deleteTarget;
+
+	// Search & filter
+	private string _searchText = "";
+	private string _statusFilter = "All";
+
+	protected override async Task OnInitializedAsync()
+	{
+		// Direct URL access by non-admin users is blocked here as well as by PageGuard/API roles
+		if (!IsAdmin)
+		{
+			Navigation.NavigateTo(LoginState.UserRole == AppRole.Dealer ? "/SDWADashboard" : "/Dashboard", replace: true);
+			return;
+		}
+
+		try
+		{
+			var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+			if (!string.IsNullOrEmpty(token))
+			{
+				var uid = GetUserIdFromToken(token);
+				if (!string.IsNullOrEmpty(uid)) _currentUserId = uid;
+			}
+		}
+		catch { }
+
+		await LoadTabData();
+		_isLoading = false;
+	}
+
+	private async Task LoadTabData()
+	{
+		try
+		{
+			_isLoading = true;
+
+			if (ActiveTab == TabSubDealer)
+			{
+				_subDealersAll = await Http.GetFromJsonAsync<List<SubDealerEmployeeItemDto>>($"{CurrentApiBase}/all") ?? new();
+			}
+			else
+			{
+				_employeesAll = await Http.GetFromJsonAsync<List<SubDealerEmployeeItemDto>>($"{CurrentApiBase}/all") ?? new();
+			}
+
+			ApplyFilter();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load: {ex.Message}", true);
+		}
+		finally
+		{
+			_isLoading = false;
+		}
+	}
+
+	private async Task SetActiveTab(string tabName)
+	{
+		if (ActiveTab == tabName) return;
+		ActiveTab = tabName;
+		_searchText = "";
+		_statusFilter = "All";
+		ResetForm();
+		await LoadTabData();
+	}
+
+	private List<ExportColumn<SubDealerEmployeeItemDto>> GetExportColumns()
+	{
+		var cols = new List<ExportColumn<SubDealerEmployeeItemDto>>();
+
+		if (ActiveTab == TabSubDealer)
+		{
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Dealer Code", ValueSelector = item => item.DealerCode });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Main Dealer Name", ValueSelector = item => item.MainDealerFirmName });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "HQ", ValueSelector = item => item.HQ ?? "" });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Sub Dealer Code", ValueSelector = item => item.SubDealerCode });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Sub Dealer Name", ValueSelector = item => item.SubDealerName });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Sub Dealer District", ValueSelector = item => item.SubDealerDistrict ?? "" });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Nominee", ValueSelector = item => item.NomineeName ?? "" });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Beneficiary", ValueSelector = item => item.BeneficiaryName });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "DOB", ValueSelector = item => item.DOB?.ToString("yyyy-MM-dd") ?? "" });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Relationship", ValueSelector = item => item.Relationship ?? "" });
+		}
+		else
+		{
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Dealer Code", ValueSelector = item => item.DealerCode });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Employee Name", ValueSelector = item => item.EmployeeName });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Beneficiary Name", ValueSelector = item => item.BeneficiaryName });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "DOB", ValueSelector = item => item.DOB?.ToString("yyyy-MM-dd") ?? "" });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Relationship", ValueSelector = item => item.Relationship ?? "" });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Marital Status", ValueSelector = item => item.MaritalStatus ?? "" });
+			cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Educational Qualification", ValueSelector = item => item.EducationalQualification ?? "" });
+		}
+
+		cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Status", ValueSelector = item => item.IsActive ? "Active" : "Inactive" });
+
+		return cols;
+	}
+
+	private async Task DownloadSampleTemplate()
+	{
+		try
+		{
+			var bytes = await Http.GetByteArrayAsync($"api/subdealeremployee/sample-template?type={CurrentUploadType}");
+			var base64 = Convert.ToBase64String(bytes);
+			await JS.InvokeVoidAsync("downloadFileFromBytes",
+				$"{ActiveTab.Replace(" ", "")}_Sample_Template.xlsx",
+				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				base64);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to download template: {ex.Message}", true);
+		}
+	}
+
+	private void ApplyFilter()
+	{
+		IEnumerable<SubDealerEmployeeItemDto> source = CurrentAllItems;
+
+		source = _statusFilter switch
+		{
+			"Active" => source.Where(x => x.IsActive),
+			"Inactive" => source.Where(x => !x.IsActive),
+			_ => source
+		};
+
+		if (!string.IsNullOrWhiteSpace(_searchText))
+		{
+			var term = _searchText.Trim();
+			source = source.Where(x =>
+				(x.DealerCode?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+				(x.SubDealerCode?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+				(x.SubDealerName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+				(x.EmployeeName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+				(x.MainDealerFirmName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+				(x.NomineeName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+				(x.BeneficiaryName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false));
+		}
+
+		_filteredItems = source.OrderByDescending(x => x.CreatedAt).ToList();
+	}
+
+	private async Task HandleSave()
+	{
+		object payload;
+		string emptyFieldError;
+
+		if (ActiveTab == TabSubDealer)
+		{
+			emptyFieldError =
+				string.IsNullOrWhiteSpace(_subDealerForm.DealerCode) ? "Main Dealer Code is required." :
+				string.IsNullOrWhiteSpace(_subDealerForm.MainDealerFirmName) ? "Main Dealer / Firm Name is required." :
+				string.IsNullOrWhiteSpace(_subDealerForm.SubDealerCode) ? "Sub Dealer Code is required." :
+				string.IsNullOrWhiteSpace(_subDealerForm.SubDealerName) ? "Sub Dealer Name is required." :
+				string.IsNullOrWhiteSpace(_subDealerForm.BeneficiaryName) ? "Beneficiary Name is required." :
+				string.Empty;
+
+			payload = _isEditing
+				? new
+				{
+					Id = _editingId!.Value,
+					_subDealerForm.BeneficiaryId,
+					_subDealerForm.DealerCode,
+					_subDealerForm.MainDealerFirmName,
+					_subDealerForm.HQ,
+					_subDealerForm.BranchDistrict,
+					_subDealerForm.SubDealerCode,
+					_subDealerForm.SubDealerName,
+					_subDealerForm.SubDealerDistrict,
+					_subDealerForm.NomineeName,
+					_subDealerForm.BeneficiaryName,
+					_subDealerForm.DOB,
+					_subDealerForm.Relationship,
+					_subDealerForm.IsActive,
+					UpdatedBy = (_currentUserId ?? "current-user")
+				}
+				: new
+				{
+					_subDealerForm.BeneficiaryId,
+					_subDealerForm.DealerCode,
+					_subDealerForm.MainDealerFirmName,
+					_subDealerForm.HQ,
+					_subDealerForm.BranchDistrict,
+					_subDealerForm.SubDealerCode,
+					_subDealerForm.SubDealerName,
+					_subDealerForm.SubDealerDistrict,
+					_subDealerForm.NomineeName,
+					_subDealerForm.BeneficiaryName,
+					_subDealerForm.DOB,
+					_subDealerForm.Relationship,
+					_subDealerForm.IsActive,
+					CreatedAt = DateTime.Now,
+					UpdatedAt = DateTime.Now,
+					CreatedBy = (_currentUserId ?? "current-user"),
+					UpdatedBy = (_currentUserId ?? "current-user")
+				};
+		}
+		else
+		{
+			emptyFieldError =
+				string.IsNullOrWhiteSpace(_employeeForm.DealerCode) ? "Dealer Code is required." :
+				string.IsNullOrWhiteSpace(_employeeForm.EmployeeName) ? "Employee Name is required." :
+				string.IsNullOrWhiteSpace(_employeeForm.BeneficiaryName) ? "Beneficiary Name is required." :
+				string.Empty;
+
+			payload = _isEditing
+				? new
+				{
+					Id = _editingId!.Value,
+					_employeeForm.BeneficiaryId,
+					_employeeForm.DealerCode,
+					_employeeForm.EmployeeName,
+					_employeeForm.BeneficiaryName,
+					_employeeForm.DOB,
+					_employeeForm.Relationship,
+					_employeeForm.MaritalStatus,
+					_employeeForm.EducationalQualification,
+					_employeeForm.IsActive,
+					UpdatedBy = (_currentUserId ?? "current-user")
+				}
+				: new
+				{
+					_employeeForm.BeneficiaryId,
+					_employeeForm.DealerCode,
+					_employeeForm.EmployeeName,
+					_employeeForm.BeneficiaryName,
+					_employeeForm.DOB,
+					_employeeForm.Relationship,
+					_employeeForm.MaritalStatus,
+					_employeeForm.EducationalQualification,
+					_employeeForm.IsActive,
+					CreatedAt = DateTime.Now,
+					UpdatedAt = DateTime.Now,
+					CreatedBy = (_currentUserId ?? "current-user"),
+					UpdatedBy = (_currentUserId ?? "current-user")
+				};
+		}
+
+		if (!string.IsNullOrEmpty(emptyFieldError))
+		{
+			ShowMessage(emptyFieldError, true);
+			return;
+		}
+
+		var singularName = ActiveTab == TabSubDealer ? "Sub Dealer" : "Employee";
+
+		try
+		{
+			_isSaving = true;
+
+			HttpResponseMessage response;
+			if (_isEditing && _editingId.HasValue)
+			{
+				response = await Http.PutAsJsonAsync($"{CurrentApiBase}/{_editingId.Value}", payload);
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Update failed: {error}", true);
+					return;
+				}
+				ShowMessage($"{singularName} updated successfully.", false);
+			}
+			else
+			{
+				response = await Http.PostAsJsonAsync(CurrentApiBase, payload);
+				if (!response.IsSuccessStatusCode)
+				{
+					var error = await response.Content.ReadAsStringAsync();
+					ShowMessage($"Create failed: {error}", true);
+					return;
+				}
+				ShowMessage($"{singularName} created successfully.", false);
+			}
+
+			ResetForm();
+			await LoadTabData();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private void EditItem(SubDealerEmployeeItemDto item)
+	{
+		_isEditing = true;
+		_editingId = item.Id;
+
+		if (ActiveTab == TabSubDealer)
+		{
+			_subDealerForm = new SubDealerFormModel
+			{
+				BeneficiaryId = item.BeneficiaryId,
+				DealerCode = item.DealerCode,
+				MainDealerFirmName = item.MainDealerFirmName,
+				HQ = item.HQ,
+				BranchDistrict = item.BranchDistrict,
+				SubDealerCode = item.SubDealerCode,
+				SubDealerName = item.SubDealerName,
+				SubDealerDistrict = item.SubDealerDistrict,
+				NomineeName = item.NomineeName,
+				BeneficiaryName = item.BeneficiaryName,
+				DOB = item.DOB,
+				Relationship = item.Relationship,
+				IsActive = item.IsActive
+			};
+		}
+		else
+		{
+			_employeeForm = new EmployeeFormModel
+			{
+				BeneficiaryId = item.BeneficiaryId,
+				DealerCode = item.DealerCode,
+				EmployeeName = item.EmployeeName,
+				BeneficiaryName = item.BeneficiaryName,
+				DOB = item.DOB,
+				Relationship = item.Relationship,
+				MaritalStatus = item.MaritalStatus,
+				EducationalQualification = item.EducationalQualification,
+				IsActive = item.IsActive
+			};
+		}
+
+		try
+		{
+			_firstInputRef.FocusAsync();
+		}
+		catch { }
+	}
+
+	private void DeleteItem(SubDealerEmployeeItemDto item)
+	{
+		_deleteTarget = item;
+		_showDeleteConfirm = true;
+	}
+
+	private async Task ConfirmDelete()
+	{
+		if (_deleteTarget is null) return;
+
+		try
+		{
+			_isDeleting = true;
+			var response = await Http.DeleteAsync($"{CurrentApiBase}/{_deleteTarget.Id}");
+			if (response.IsSuccessStatusCode)
+			{
+				ShowMessage($"'{_deleteTarget.DisplayName}' deleted successfully.", false);
+				await LoadTabData();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Delete failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isDeleting = false;
+			CancelDelete();
+		}
+	}
+
+	private void CancelDelete()
+	{
+		_showDeleteConfirm = false;
+		_deleteTarget = null;
+	}
+
+	private async Task ToggleStatus(SubDealerEmployeeItemDto item)
+	{
+		try
+		{
+			var newStatus = !item.IsActive;
+			var response = await Http.PatchAsync($"{CurrentApiBase}/{item.Id}/status?isActive={newStatus}", null);
+
+			if (response.IsSuccessStatusCode)
+			{
+				item.IsActive = newStatus;
+				ApplyFilter();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Status change failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+	}
+
+	private void ResetForm()
+	{
+		_subDealerForm = new SubDealerFormModel();
+		_employeeForm = new EmployeeFormModel();
+		_isEditing = false;
+		_editingId = null;
+	}
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	private async Task OnBulkFileSelected(InputFileChangeEventArgs e)
+	{
+		var file = e.File;
+		if (file == null) return;
+
+		using var content = new MultipartFormDataContent();
+		var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+		var streamContent = new StreamContent(stream);
+		streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+		content.Add(streamContent, "file", file.Name);
+
+		_isUploading = true;
+		_uploadResult = string.Empty;
+		_groupedErrors = new();
+		_uploadSuccess = false;
+		try
+		{
+			var response = await Http.PostAsync($"api/subdealeremployee/bulk-upload?type={CurrentUploadType}", content);
+			var bodyText = await response.Content.ReadAsStringAsync();
+
+			if (response.IsSuccessStatusCode)
+			{
+				_uploadSuccess = true;
+				try
+				{
+					var json = JsonSerializer.Deserialize<JsonElement>(bodyText);
+					JsonElement groupedProp = default;
+					if (json.TryGetProperty("groupedErrors", out groupedProp) || json.TryGetProperty("GroupedErrors", out groupedProp))
+						foreach (var g in groupedProp.EnumerateObject())
+						{
+							var items = g.Value.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList();
+							if (items.Count > 0) _groupedErrors[g.Name] = items;
+						}
+				}
+				catch { }
+				var totalSkipped = _groupedErrors.Values.Sum(v => v.Count);
+				_uploadResult = totalSkipped > 0
+					? $"Upload completed with {totalSkipped} skipped row(s) across {_groupedErrors.Count} group(s). See details below."
+					: "Upload completed successfully. All rows inserted.";
+				await LoadTabData();
+			}
+			else
+			{
+				_uploadSuccess = false;
+				try
+				{
+					var json = JsonSerializer.Deserialize<JsonElement>(bodyText);
+					var msg = json.TryGetProperty("message", out var m) ? m.GetString()
+						: json.TryGetProperty("Message", out var m2) ? m2.GetString() : null;
+					_uploadResult = msg ?? "Upload failed.";
+
+					if (json.TryGetProperty("missing", out var miss) || json.TryGetProperty("Missing", out miss))
+						if (miss.ValueKind == JsonValueKind.Array)
+						{
+							var missingItems = miss.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList();
+							if (missingItems.Count > 0) _groupedErrors["Missing columns"] = missingItems;
+						}
+				}
+				catch
+				{
+					_uploadResult = $"Upload failed: {bodyText}";
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_uploadSuccess = false;
+			_uploadResult = $"Upload error: {ex.Message}";
+		}
+		finally
+		{
+			_isUploading = false;
+		}
+	}
+
+	private void CloseUploadModal()
+	{
+		_showUploadModal = false;
+		_uploadResult = string.Empty;
+		_groupedErrors = new();
+		_errorsCopied = false;
+	}
+
+	private async Task CopyUploadErrors()
+	{
+		if (_groupedErrors.Count == 0) return;
+		var sb = new System.Text.StringBuilder();
+		foreach (var group in _groupedErrors)
+		{
+			sb.AppendLine($"[{group.Key}] ({group.Value.Count})");
+			foreach (var item in group.Value) sb.AppendLine($"  - {item}");
+			sb.AppendLine();
+		}
+		await JS.InvokeVoidAsync("navigator.clipboard.writeText", sb.ToString().TrimEnd());
+		_errorsCopied = true;
+		StateHasChanged();
+		await Task.Delay(2000);
+		_errorsCopied = false;
+		StateHasChanged();
+	}
+
+	private string? _currentUserId;
+
+	private string? GetUserIdFromToken(string token)
+	{
+		try
+		{
+			if (string.IsNullOrWhiteSpace(token)) return null;
+			var raw = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+			var parts = raw.Split('.');
+			if (parts.Length < 2) return null;
+			var payload = parts[1];
+			switch (payload.Length % 4)
+			{
+				case 2: payload += "=="; break;
+				case 3: payload += "="; break;
+			}
+			payload = payload.Replace('-', '+').Replace('_', '/');
+			var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+			using var doc = System.Text.Json.JsonDocument.Parse(json);
+			var root = doc.RootElement;
+			if (root.TryGetProperty("sub", out var sub)) return sub.GetString();
+			if (root.TryGetProperty("nameid", out var nid)) return nid.GetString();
+			if (root.TryGetProperty("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", out var id2)) return id2.GetString();
+			if (root.TryGetProperty("spic:user_id", out var sup)) return sup.GetString();
+		}
+		catch { }
+		return null;
+	}
+
+	public class SubDealerEmployeeItemDto
+	{
+		public int Id { get; set; }
+		public long? BeneficiaryId { get; set; }
+		public string DealerCode { get; set; } = "";
+		public string MainDealerFirmName { get; set; } = "";
+		public string? HQ { get; set; }
+		public string? BranchDistrict { get; set; }
+		public string SubDealerCode { get; set; } = "";
+		public string SubDealerName { get; set; } = "";
+		public string? SubDealerDistrict { get; set; }
+		public string? NomineeName { get; set; }
+		public string BeneficiaryName { get; set; } = "";
+		public string EmployeeName { get; set; } = "";
+		public DateTime? DOB { get; set; }
+		public string? Relationship { get; set; }
+		public string? MaritalStatus { get; set; }
+		public string? EducationalQualification { get; set; }
+		public bool IsActive { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public string UpdatedBy { get; set; } = "";
+
+		public string DisplayName =>
+			!string.IsNullOrEmpty(SubDealerName) ? $"{SubDealerName} ({SubDealerCode})" :
+			$"{EmployeeName} - {BeneficiaryName}";
+	}
+
+	public class SubDealerFormModel
+	{
+		public long? BeneficiaryId { get; set; }
+		public string DealerCode { get; set; } = "";
+		public string MainDealerFirmName { get; set; } = "";
+		public string? HQ { get; set; }
+		public string? BranchDistrict { get; set; }
+		public string SubDealerCode { get; set; } = "";
+		public string SubDealerName { get; set; } = "";
+		public string? SubDealerDistrict { get; set; }
+		public string? NomineeName { get; set; }
+		public string BeneficiaryName { get; set; } = "";
+		public DateTime? DOB { get; set; }
+		public string? Relationship { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+
+	public class EmployeeFormModel
+	{
+		public long? BeneficiaryId { get; set; }
+		public string DealerCode { get; set; } = "";
+		public string EmployeeName { get; set; } = "";
+		public string BeneficiaryName { get; set; } = "";
+		public DateTime? DOB { get; set; }
+		public string? Relationship { get; set; }
+		public string? MaritalStatus { get; set; }
+		public string? EducationalQualification { get; set; }
+		public bool IsActive { get; set; } = true;
+	}
+}

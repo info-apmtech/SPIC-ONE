@@ -6,7 +6,6 @@ public class WelfareApplicationSubmitDto
 
     // Beneficiary
     public string? BeneficiaryName { get; set; }
-    public string? Relationship { get; set; }
     public DateTime? BeneficiaryDateOfBirth { get; set; }
     public string? NomineeName { get; set; }
     public string? NomineeRelationship { get; set; }

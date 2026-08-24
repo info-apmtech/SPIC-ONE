@@ -302,7 +302,6 @@ namespace SpicAPI.Controllers
 
             // Beneficiary
             app.BeneficiaryName = dto.BeneficiaryName;
-            app.Relationship = dto.Relationship;
             app.BeneficiaryDateOfBirth = dto.BeneficiaryDateOfBirth;
             app.NomineeName = dto.NomineeName;
             app.NomineeRelationship = dto.NomineeRelationship;

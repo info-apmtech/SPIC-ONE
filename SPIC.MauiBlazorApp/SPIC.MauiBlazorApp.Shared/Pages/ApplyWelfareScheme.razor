@@ -443,6 +443,26 @@
                 <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
             </div>
 
+            <div class="aws-form-group">
+                <label class="aws-form-label">Relationship *</label>
+                <select class="aws-form-select" @bind="BeneficiaryRelationship">
+                    <option value="" disabled selected hidden>Select relationship</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
+                </select>
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Date of Birth</label>
+                <input type="date" class="aws-form-control" @bind="BeneficiaryDateOfBirth" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Age</label>
+                <input type="text" class="aws-form-control" placeholder="Age in years" @bind="BeneficiaryAge">
+            </div>
+
         </div>
         }
         else if (SelectedBeneficiaryGroup == "Approved Employee")
@@ -487,6 +507,26 @@
             <div class="aws-form-group">
                 <label class="aws-form-label">Beneficiary Name *</label>
                 <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Relationship *</label>
+                <select class="aws-form-select" @bind="BeneficiaryRelationship">
+                    <option value="" disabled selected hidden>Select relationship</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
+                </select>
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Date of Birth</label>
+                <input type="date" class="aws-form-control" @bind="BeneficiaryDateOfBirth" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Age</label>
+                <input type="text" class="aws-form-control" placeholder="Age in years" @bind="BeneficiaryAge">
             </div>
 
         </div>
@@ -1410,7 +1450,7 @@
             NomineeName = detail.NomineeName ?? string.Empty;
             NomineeRelationship = detail.NomineeRelationship ?? string.Empty;
             BeneficiaryName = detail.BeneficiaryName ?? string.Empty;
-            BeneficiaryRelationship = detail.Relationship ?? string.Empty;
+            BeneficiaryRelationship = string.Empty;
             BeneficiaryDateOfBirth = detail.BeneficiaryDateOfBirth;
             OnDateChanged();
 
@@ -1608,7 +1648,7 @@
         _isLoadingSubDealers = true;
         try
         {
-            var result = await Http.GetFromJsonAsync<List<SubDealerDto>>("api/SDWADashboard/sub-dealers");
+            var result = await Http.GetFromJsonAsync<List<SubDealerDto>>("api/SubDealerEmployee/my-sub-dealers");
             if (result != null)
                 _subDealers = result;
         }
@@ -1627,7 +1667,7 @@
         _isLoadingEmployees = true;
         try
         {
-            var result = await Http.GetFromJsonAsync<List<EmployeeDto>>("api/SDWADashboard/employees");
+            var result = await Http.GetFromJsonAsync<List<EmployeeDto>>("api/SubDealerEmployee/my-employees");
             if (result != null)
                 _employees = result;
         }
@@ -1645,12 +1685,47 @@
     {
         var selected = _subDealers.FirstOrDefault(sd => sd.Id.ToString() == SelectedSubDealerId);
         SelectedSubDealerName = selected?.FirmName ?? string.Empty;
+
+        if (selected != null)
+        {
+            // Load nominee / beneficiary information dynamically from the Sub Dealer master
+            if (!string.IsNullOrWhiteSpace(selected.NomineeName))
+                NomineeName = selected.NomineeName;
+
+            if (!string.IsNullOrWhiteSpace(selected.BeneficiaryName))
+                BeneficiaryName = selected.BeneficiaryName;
+
+            if (!string.IsNullOrWhiteSpace(selected.Relationship))
+                BeneficiaryRelationship = selected.Relationship;
+
+            if (selected.DOB.HasValue)
+            {
+                BeneficiaryDateOfBirth = selected.DOB.Value;
+                OnDateChanged();
+            }
+        }
     }
 
     private void OnEmployeeSelected()
     {
         var selected = _employees.FirstOrDefault(e => e.Id.ToString() == SelectedEmployeeId);
         SelectedEmployeeName = selected?.EmployeeName ?? string.Empty;
+
+        if (selected != null)
+        {
+            // Load nominee / beneficiary information dynamically from the Employee master
+            if (!string.IsNullOrWhiteSpace(selected.BeneficiaryName))
+                BeneficiaryName = selected.BeneficiaryName;
+
+            if (!string.IsNullOrWhiteSpace(selected.Relationship))
+                BeneficiaryRelationship = selected.Relationship;
+
+            if (selected.DOB.HasValue)
+            {
+                BeneficiaryDateOfBirth = selected.DOB.Value;
+                OnDateChanged();
+            }
+        }
     }
 
     // Existing beneficiaries (static sample data until the beneficiary master API is available)
@@ -2325,7 +2400,6 @@
     {
         SchemeName = SelectedScheme,
         BeneficiaryName = BeneficiaryName,
-        Relationship = string.IsNullOrWhiteSpace(BeneficiaryRelationship) ? NomineeRelationship : BeneficiaryRelationship,
         BeneficiaryDateOfBirth = BeneficiaryDateOfBirth,
         NomineeName = NomineeName,
         NomineeRelationship = NomineeRelationship,
@@ -2383,7 +2457,6 @@
 
         AddField("SchemeName", dto.SchemeName);
         AddField("BeneficiaryName", dto.BeneficiaryName);
-        AddField("Relationship", dto.Relationship);
         AddField("BeneficiaryDateOfBirth", dto.BeneficiaryDateOfBirth?.ToString("yyyy-MM-dd"));
         AddField("NomineeName", dto.NomineeName);
         AddField("NomineeRelationship", dto.NomineeRelationship);

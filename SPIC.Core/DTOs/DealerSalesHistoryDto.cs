@@ -24,6 +24,12 @@ public class SubDealerDto
     public int Id { get; set; }
     public string SubDealerCode { get; set; } = string.Empty;
     public string FirmName { get; set; } = string.Empty;
+
+    // Nominee / beneficiary details loaded from the Sub Dealer master
+    public string? NomineeName { get; set; }
+    public string? BeneficiaryName { get; set; }
+    public DateTime? DOB { get; set; }
+    public string? Relationship { get; set; }
 }
 
 public class EmployeeDto
@@ -31,4 +37,9 @@ public class EmployeeDto
     public int Id { get; set; }
     public string EmployeeName { get; set; } = string.Empty;
     public string EmployeeCode { get; set; } = string.Empty;
+
+    // Nominee / beneficiary details loaded from the Employee master
+    public string? BeneficiaryName { get; set; }
+    public DateTime? DOB { get; set; }
+    public string? Relationship { get; set; }
 }

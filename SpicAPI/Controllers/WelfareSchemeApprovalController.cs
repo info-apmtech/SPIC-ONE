@@ -224,6 +224,19 @@ namespace SpicAPI.Controllers
             if (!isApproval && string.IsNullOrWhiteSpace(remarks))
                 return BadRequest(new { Message = "Remarks are mandatory when rejecting an application." });
 
+            // MO approval must carry an explicit recommendation and a comment.
+            var recommendation = request?.Recommendation?.Trim();
+            var comment = request?.Comment?.Trim();
+            if (isApproval && role.Value == AppRole.MO)
+            {
+                if (!string.Equals(recommendation, "Recommended", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(recommendation, "Not Recommended", StringComparison.OrdinalIgnoreCase))
+                    return BadRequest(new { Message = "A valid recommendation (Recommended / Not Recommended) is mandatory when approving at the MO stage." });
+
+                if (string.IsNullOrWhiteSpace(comment))
+                    return BadRequest(new { Message = "Comment is mandatory when approving at the MO stage." });
+            }
+
             var application = await _db.WelfareApplications
                 .Include(a => a.Approvals)
                 .FirstOrDefaultAsync(a => a.Id == id);
@@ -277,6 +290,10 @@ namespace SpicAPI.Controllers
                 : string.IsNullOrWhiteSpace(request?.Reason)
                     ? remarks
                     : $"{request!.Reason!.Trim()}: {remarks}";
+            // Recommendation/Comment captured at MO approval; cleared on reject so a
+            // stale value from an earlier approve cycle never lingers.
+            step.Recommendation = isApproval ? recommendation : null;
+            step.Comment = isApproval ? comment : null;
             step.UpdatedBy = actorName;
             step.UpdatedAt = now;
 
@@ -572,6 +589,8 @@ namespace SpicAPI.Controllers
                         ApprovalLevel = GetStageDisplay(ap.ApprovalLevel),
                         ApprovalStatus = ap.ApprovalStatus.ToString(),
                         Remarks = ap.Remarks,
+                        Recommendation = ap.Recommendation,
+                        Comment = ap.Comment,
                         ApprovedBy = ap.ApprovedBy,
                         ApprovedAt = ap.ApprovedAt
                     })
@@ -598,7 +617,6 @@ namespace SpicAPI.Controllers
             QuantityLifted = application.QuantityLifted,
 
             BeneficiaryName = application.BeneficiaryName,
-            Relationship = application.Relationship,
             BeneficiaryDateOfBirth = application.BeneficiaryDateOfBirth,
             NomineeName = application.NomineeName,
             NomineeRelationship = application.NomineeRelationship,
@@ -672,6 +690,8 @@ namespace SpicAPI.Controllers
                     ApprovalLevel = GetStageDisplay(ap.ApprovalLevel),
                     ApprovalStatus = ap.ApprovalStatus.ToString(),
                     Remarks = ap.Remarks,
+                    Recommendation = ap.Recommendation,
+                    Comment = ap.Comment,
                     ApprovedBy = ap.ApprovedBy,
                     ApprovedAt = ap.ApprovedAt
                 })

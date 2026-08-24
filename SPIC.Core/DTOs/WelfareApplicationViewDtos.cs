@@ -82,6 +82,8 @@ namespace SPIC.Core.DTOs
     {
         public string? Reason { get; set; }     // structured reason (reject modal dropdown)
         public string? Remarks { get; set; }    // free text - mandatory for reject
+        public string? Recommendation { get; set; }  // MO approval dropdown: "Recommended" / "Not Recommended"
+        public string? Comment { get; set; }         // MO approval comment - mandatory for MO approve
     }
 
     public class WelfareApprovalActionResponse
@@ -110,6 +112,8 @@ namespace SPIC.Core.DTOs
         public string ApprovalLevel { get; set; } = string.Empty;
         public string ApprovalStatus { get; set; } = string.Empty;
         public string? Remarks { get; set; }
+        public string? Recommendation { get; set; }   // MO's recommendation recorded at approval
+        public string? Comment { get; set; }          // MO's comment recorded at approval
         public string? ApprovedBy { get; set; }
         public DateTime? ApprovedAt { get; set; }
     }
@@ -135,7 +139,6 @@ namespace SPIC.Core.DTOs
 
         // Beneficiary information
         public string? BeneficiaryName { get; set; }
-        public string? Relationship { get; set; }
         public DateTime? BeneficiaryDateOfBirth { get; set; }
         public string? NomineeName { get; set; }
         public string? NomineeRelationship { get; set; }
