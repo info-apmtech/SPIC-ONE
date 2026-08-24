@@ -1348,6 +1348,10 @@
         public string OfficialContactNumber { get; init; } = string.Empty;
         public string WhatsAppNumber { get; init; } = string.Empty;
         public string Status { get; init; } = string.Empty;
+        // New export fields
+        public string Latitude { get; init; } = string.Empty;
+        public string Longitude { get; init; } = string.Empty;
+        public string Address { get; init; } = string.Empty;
     }
 
     private SubDealerPagedListResponse _response = new()
@@ -2095,16 +2099,38 @@
                     {
                         SubDealerCode = item.SubDealerCode ?? string.Empty,
                         FirmName = item.FirmName ?? string.Empty,
+
                         State = StateName(item.StateId),
                         Region = RegionName(item.RegionId),
                         Hq = HqName(item.HQId),
+
                         GstNumber = item.GSTNumber ?? string.Empty,
                         PanNumber = item.PANNo ?? string.Empty,
-                        OfficialContactNumber = item.OfficialContactNumber ?? string.Empty,
-                        WhatsAppNumber = item.WhatsAppNumber ?? string.Empty,
+
+                        OfficialContactNumber =
+         item.OfficialContactNumber ?? string.Empty,
+
+                        WhatsAppNumber =
+         item.WhatsAppNumber ?? string.Empty,
+
                         Status = item.Status == SubDealerStatus.Active
-                            ? "Active"
-                            : "Inactive"
+         ? "Active"
+         : "Inactive",
+
+                        // New location columns
+                        Latitude = item.Latitude.HasValue
+         ? item.Latitude.Value.ToString(
+             "0.000000",
+             System.Globalization.CultureInfo.InvariantCulture)
+         : string.Empty,
+
+                        Longitude = item.Longitude.HasValue
+         ? item.Longitude.Value.ToString(
+             "0.000000",
+             System.Globalization.CultureInfo.InvariantCulture)
+         : string.Empty,
+
+                        Address = BuildSubDealerExportAddress(item)
                     });
                 }
 
@@ -2337,20 +2363,37 @@
             "PAN Number",
             "Official Contact Number",
             "WhatsApp Number",
-            "Status"
+            "Status",
+            "Latitude",
+            "Longitude",
+            "Address"
         };
 
         var columnLetters = new[]
-        {
-            "A", "B", "C", "D", "E", "F",
-            "G", "H", "I", "J", "K"
-        };
+ {
+    "A", "B", "C", "D", "E", "F",
+    "G", "H", "I", "J", "K", "L",
+    "M", "N"
+};
 
         var columnWidths = new[]
-        {
-            8d, 20d, 32d, 20d, 22d, 22d,
-            20d, 16d, 23d, 21d, 14d
-        };
+ {
+    8d,     // S.No
+    20d,    // Sub Dealer Code
+    32d,    // Firm Name
+    20d,    // State
+    22d,    // Region
+    22d,    // HQ
+    20d,    // GST
+    16d,    // PAN
+    23d,    // Official Contact
+    21d,    // WhatsApp
+    14d,    // Status
+
+    16d,    // Latitude
+    16d,    // Longitude
+    55d     // Address
+};
 
         writer.WriteStartDocument(standalone: true);
         writer.WriteStartElement(
@@ -2362,7 +2405,7 @@
             ExcelSpreadsheetNamespace);
         writer.WriteAttributeString(
             "ref",
-            $"A1:K{Math.Max(1, rows.Count + 1)}");
+           $"A1:N{Math.Max(1, rows.Count + 1)}");
         writer.WriteEndElement();
 
         writer.WriteStartElement(
@@ -2442,18 +2485,23 @@
             var excelRowNumber = index + 2;
             var row = rows[index];
             var values = new[]
-            {
-                row.SubDealerCode,
-                row.FirmName,
-                row.State,
-                row.Region,
-                row.Hq,
-                row.GstNumber,
-                row.PanNumber,
-                row.OfficialContactNumber,
-                row.WhatsAppNumber,
-                row.Status
-            };
+ {
+    row.SubDealerCode,
+    row.FirmName,
+    row.State,
+    row.Region,
+    row.Hq,
+    row.GstNumber,
+    row.PanNumber,
+    row.OfficialContactNumber,
+    row.WhatsAppNumber,
+    row.Status,
+
+    // New values
+    row.Latitude,
+    row.Longitude,
+    row.Address
+};
 
             writer.WriteStartElement(
                 "row",
@@ -2488,7 +2536,7 @@
             ExcelSpreadsheetNamespace);
         writer.WriteAttributeString(
             "ref",
-            $"A1:K{Math.Max(1, rows.Count + 1)}");
+           $"A1:N{Math.Max(1, rows.Count + 1)}");
         writer.WriteEndElement();
 
         writer.WriteEndElement();
@@ -3132,5 +3180,27 @@
 
         _exportCts?.Cancel();
         _exportCts = null;
+    }
+    private static string BuildSubDealerExportAddress(
+    SubDealerListItemDto item)
+    {
+        var addressParts = new[]
+        {
+        item.ShopNoORRoomNoOrBlockNo,
+        item.Street,
+        item.SubVillage,
+        item.Village,
+        item.Block,
+        item.Taluk,
+        !string.IsNullOrWhiteSpace(item.PinCode)
+            ? $"Pincode - {item.PinCode}"
+            : null
+    };
+
+        return string.Join(
+            ", ",
+            addressParts
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x!.Trim()));
     }
 }

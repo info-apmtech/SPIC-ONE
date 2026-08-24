@@ -144,6 +144,19 @@ public class SubDealerListItemDto
 	public string? PANNo { get; set; }
 
 	public string? WholesaleMFMSId { get; set; }
+	// -------------------------------------------------
+	// Export Location Details
+	// -------------------------------------------------
+	public double? Latitude { get; set; }
+	public double? Longitude { get; set; }
+
+	public string? ShopNoORRoomNoOrBlockNo { get; set; }
+	public string? Street { get; set; }
+	public string? SubVillage { get; set; }
+	public string? Village { get; set; }
+	public string? Block { get; set; }
+	public string? Taluk { get; set; }
+	public string? PinCode { get; set; }
 	public string? RetailMFMSId { get; set; }
 
 	public DateTime UpdatedAt { get; set; }
