@@ -25,11 +25,11 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg>
                 Excel
             </button>
-            <button class="cs-btn cs-btn-outline" @onclick="ExportPdf" disabled="@(_dashboard is null || _isLoading)">
+            <button class="cs-btn cs-btn-outline" disabled title="PDF export is not implemented yet">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg>
                 PDF
             </button>
-            <button class="cs-btn cs-btn-solid" @onclick="SendMail" disabled="@(_dashboard is null || _isLoading)">
+            <button class="cs-btn cs-btn-solid" disabled title="Send Mail is not implemented yet">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
                 Send Mail
             </button>
@@ -439,8 +439,9 @@
                         <button class="cs-tab @(_filter.Source == "All" ? "active" : "")" @onclick='() => SetActiveTab("All")'>All</button>
                         <button class="cs-tab @(_filter.Source == "Company Sales" ? "active" : "")" @onclick='() => SetActiveTab("Company Sales")'>Company Sales</button>
                         <button class="cs-tab @(_filter.Source == "Wholesaler Sales" ? "active" : "")" @onclick='() => SetActiveTab("Wholesaler Sales")'>Wholesaler Sales</button>
+                        <button class="cs-tab @(_filter.Source == "Retailer Sales" ? "active" : "")" @onclick='() => SetActiveTab("Retailer Sales")'>Retailer Sales</button>
                     </div>
-                    <input type="text" class="cs-search-input" placeholder="Search zones…"
+                    <input type="text" class="cs-search-input" placeholder="Search invoice / transaction / dealer…"
                            @bind="_filter.Search" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
                 </div>
 
@@ -456,9 +457,9 @@
                                 <th>Dealer Type</th>
                                 <th>State / District</th>
                                 <th class="cs-sortable" @onclick='() => Sort("quantity")'>Quantity (MT)</th>
-                                <th>Status</th>
+                                <th>Age Status</th>
                                 <th class="cs-sortable" @onclick='() => Sort("age")'>Pending Ack Age (Days)</th>
-                                <th>Status</th>
+                                <th>Workflow Status</th>
                                 <th>Entry Date</th>
                                 <th>Action</th>
                             </tr>
@@ -615,6 +616,12 @@
         _isLoading = true;
         _loadError = null;
 
+        // Apply the logged-in user's mandatory state scope before the very first
+        // dashboard request. This preserves the parallel startup behavior while
+        // preventing the initial request from being sent with an empty StateIds list.
+        ApplyRoleScopeSelection();
+        SyncSelectionsToFilter();
+
         var dashboardTask = LoadDashboard(renderLoadingState: false);
 
         try
@@ -669,20 +676,50 @@
         _allStates    = statesTask.Result;
         _allDistricts = districtsTask.Result;
 
-        // Role-based visibility: if user has an associated StateId, restrict to it for non-admins
-        if (LoginState != null && !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP) && LoginState.StateId > 0)
-        {
-            _states = _allStates.Where(s => s.Id == LoginState.StateId).ToList();
-            _districts = _allDistricts.Where(d => d.StateId == LoginState.StateId).ToList();
-        }
-        else
-        {
-            _states      = _allStates;
-            _districts   = _allDistricts;
-        }
+        // Apply the same role scope to the visible master lists.
+        ApplyRoleRestrictionsToMasterLists();
         _dealerTypes = dealerTypesTask.Result;
         _products    = productsTask.Result;
         _dealers     = dealersTask.Result;
+    }
+
+    private bool HasRestrictedStateScope =>
+        LoginState != null &&
+        !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP) &&
+        LoginState.StateId > 0;
+
+    private void ApplyRoleScopeSelection()
+    {
+        if (!HasRestrictedStateScope)
+            return;
+
+        var stateId = LoginState.StateId;
+        _selectedStates = new List<int> { stateId };
+
+        // A stale district selection from another state must never survive a
+        // role-scope refresh or Clear All operation.
+        if (_allDistricts.Count > 0)
+        {
+            _selectedDistricts.RemoveAll(districtId =>
+            {
+                var district = _allDistricts.FirstOrDefault(x => x.Id == districtId);
+                return district == null || district.StateId != stateId;
+            });
+        }
+    }
+
+    private void ApplyRoleRestrictionsToMasterLists()
+    {
+        if (HasRestrictedStateScope)
+        {
+            var stateId = LoginState.StateId;
+            _states = _allStates.Where(x => x.Id == stateId).ToList();
+            _districts = _allDistricts.Where(x => x.StateId == stateId).ToList();
+            return;
+        }
+
+        _states = _allStates;
+        _districts = _allDistricts;
     }
 
     // ---------- Dashboard load ----------
@@ -758,6 +795,7 @@
 
     private void SyncSelectionsToFilter()
     {
+        ApplyRoleScopeSelection();
         _filter.StateIds      = _selectedStates.ToList();
         _filter.DistrictIds   = _selectedDistricts.ToList();
         _filter.DealerTypeIds = _selectedDealerTypes.ToList();
@@ -783,7 +821,8 @@
         _selectedStates.Clear(); _selectedDistricts.Clear(); _selectedDealerTypes.Clear();
         _selectedProducts.Clear(); _selectedDealers.Clear(); _selectedAgeStatuses.Clear();
 
-        _states = _allStates; _districts = _allDistricts;
+        ApplyRoleScopeSelection();
+        ApplyRoleRestrictionsToMasterLists();
 
         SyncSelectionsToFilter();
         _filter.Search = null;
@@ -878,9 +917,12 @@
     {
         "Overdue" => ("cs-badge-red", "Overdue"),
         "Critical" => ("cs-badge-orange", "Critical"),
+        "Consent of Buyer" => ("cs-badge-yellow", "Consent of Buyer"),
+        "Latest" => ("cs-badge-green", "Latest"),
+        "Completed" => ("cs-badge-green", "Completed"),
+        // Backward-compatible aliases retained for older API values.
         "Pending" => ("cs-badge-yellow", "Pending"),
         "Fresh" => ("cs-badge-green", "Fresh"),
-        "Completed" => ("cs-badge-green", "Completed"),
         _ => ("cs-badge-green", s)
     };
 
@@ -888,6 +930,9 @@
     {
         "Overdue" => "cs-age-text-red",
         "Critical" => "cs-age-text-orange",
+        "Consent of Buyer" => "cs-age-text-yellow",
+        "Latest" => "cs-age-text-green",
+        // Backward-compatible aliases retained for older API values.
         "Pending" => "cs-age-text-yellow",
         "Fresh" => "cs-age-text-green",
         _ => "cs-age-text-gray"
@@ -903,7 +948,8 @@
     private string WorkflowPillClass(string status)
     {
         var s = status ?? "";
-        if (s.IndexOf("Acknowledg", StringComparison.OrdinalIgnoreCase) >= 0) return "cs-pill-green";
+        if (string.Equals(s.Trim(), "Ack", StringComparison.OrdinalIgnoreCase) ||
+            s.IndexOf("Acknowledg", StringComparison.OrdinalIgnoreCase) >= 0) return "cs-pill-green";
         if (s.IndexOf("Consent", StringComparison.OrdinalIgnoreCase) >= 0) return "cs-pill-purple";
         return "cs-pill-blue";
     }
@@ -981,6 +1027,7 @@
         var newSelected = ParseIntValues(values);
         if (_selectedStates.SequenceEqual(newSelected)) return;
         _selectedStates = newSelected;
+        ApplyRoleScopeSelection();
 
         // Drop districts no longer under a selected state.
         if (_selectedStates.Any())

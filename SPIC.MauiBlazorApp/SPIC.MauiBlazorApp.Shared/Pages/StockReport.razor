@@ -24,11 +24,11 @@
 				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg>
 				Excel
 			</button>
-			<button class="sr-btn sr-btn-outline" @onclick="ExportPdf" disabled="@(_dashboard is null || _isLoading)">
+			<button class="sr-btn sr-btn-outline" disabled title="PDF export is not implemented yet">
 				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg>
 				PDF
 			</button>
-			<button class="sr-btn sr-btn-solid" @onclick="SendMail" disabled="@(_dashboard is null || _isLoading)">
+			<button class="sr-btn sr-btn-solid" disabled title="Send Mail is not implemented yet">
 				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
 				Send Mail
 			</button>
@@ -114,9 +114,9 @@
 					<label class="sr-form-label">Ageing Range (Days)</label>
 					<select id="ageing-select" class="sr-form-select" multiple="multiple">
 						<option value="0-30" selected="@(_selectedAgeings.Contains("0-30"))">Fresh (0-30)</option>
-						<option value="31-90" selected="@(_selectedAgeings.Contains("31-90"))">Medium (30-90)</option>
-						<option value="91-180" selected="@(_selectedAgeings.Contains("91-180"))">Slow Moving (90-180)</option>
-						<option value="181-364" selected="@(_selectedAgeings.Contains("181-364"))">Long Aged (180-365)</option>
+						<option value="31-90" selected="@(_selectedAgeings.Contains("31-90"))">Medium (31-90)</option>
+						<option value="91-180" selected="@(_selectedAgeings.Contains("91-180"))">Slow Moving (91-180)</option>
+						<option value="181-364" selected="@(_selectedAgeings.Contains("181-364"))">Long Aged (181-364)</option>
 						<option value="365+" selected="@(_selectedAgeings.Contains("365+"))">Critical (365+)</option>
 					</select>
 				</div>
@@ -269,7 +269,7 @@
 								<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
 								<polyline points="16 7 22 7 22 13"></polyline>
 							</svg>
-							<span>@Sign(dealerDiff)@dealerDiff new dealers from yesterday</span>
+							<span>@Sign(dealerDiff)@dealerDiff vs yesterday</span>
 						</div>
 					</div>
 					<div class="sr-stat-icon-box sr-icon-blue"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></div>
@@ -292,10 +292,10 @@
 				<div class="sr-stat-card sr-card-red">
 					<div class="sr-stat-content">
 						<span class="sr-stat-title">High Ageing Stock</span>
-						<span class="sr-stat-value">@_dashboard.Summary.HighAgeingCount</span>
+						<span class="sr-stat-value">@Fmt(_dashboard.Summary.HighAgeingStock) <span style="font-size: 16px;">MT</span></span>
 						<div class="sr-stat-trend @TrendClass(_dashboard.Summary.HighAgeingChange)">
 							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-							<span>@Sign(_dashboard.Summary.HighAgeingChange)@_dashboard.Summary.HighAgeingChange from last week</span>
+							<span>@_dashboard.Summary.HighAgeingCount critical stock rows (365+ days)</span>
 						</div>
 					</div>
 					<div class="sr-stat-icon-box sr-icon-red"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg></div>
@@ -460,7 +460,7 @@
 										<td>@row.ProductName</td>
 										<td>@row.Quantity</td>
 										<td>@row.LyingWith</td>
-										<td class="@AgeingClass(row.AgeingDays)">@row.AgeingDays</td>
+										<td class="@AgeingClass(row)">@row.AgeingDisplay</td>
 										<td><div class="sr-status @StatusClass(row.Status)"><div class="dot"></div>@StatusName(row.Status)</div></td>
 										<td style="white-space:nowrap;">
 											<button class="sr-action-btn" title="View" @onclick="() => OpenSalesDetails(row)">
@@ -595,6 +595,11 @@
 		_isLoading = true;
 		_loadError = null;
 
+		// Apply the logged-in user's scope before the first dashboard API call.
+		// This keeps the fast parallel startup while preventing an initial unscoped load.
+		ApplyRoleSelections();
+		SyncSelectionsToFilter();
+
 		var dashboardTask = LoadDashboard(renderLoadingState: false);
 
 		try
@@ -679,14 +684,37 @@
 		// other roles should be restricted to their assigned State/Region/HQ.
 		ApplyRoleRestrictions();
 
-		// If ApplyRoleRestrictions didn't set lists (e.g. for admins), fall back to full lists.
-		_states ??= _allStates;
-		_regions ??= _allRegions;
-		_hq ??= _allHqs;
-		_districts = _allDistricts;
-		_subDistricts = _allSubDistricts;
+		// Admin/Director/AVP explicitly receive all lists. Restricted roles keep the
+		// lists produced by ApplyRoleRestrictions; never widen an empty restricted list.
+		if (LoginState is null || LoginState.IsAdmin || LoginState.IsDirectorOrAVP)
+		{
+			_states = _allStates;
+			_regions = _allRegions;
+			_hq = _allHqs;
+			_districts = _allDistricts;
+			_subDistricts = _allSubDistricts;
+		}
 		_products = productsTask.Result;
 		_lyingWith = lyingWithTask.Result;
+	}
+
+	private void ApplyRoleSelections()
+	{
+		if (LoginState is null || LoginState.IsAdmin || LoginState.IsDirectorOrAVP)
+			return;
+
+		if (LoginState.StateId > 0 && !_selectedStates.Contains(LoginState.StateId))
+			_selectedStates.Add(LoginState.StateId);
+
+		if ((LoginState.IsRegionRole || LoginState.IsHQRole) &&
+			LoginState.RegionId > 0 &&
+			!_selectedRegions.Contains(LoginState.RegionId))
+		{
+			_selectedRegions.Add(LoginState.RegionId);
+		}
+
+		if (LoginState.IsHQRole && LoginState.HQId > 0 && !_selectedHqs.Contains(LoginState.HQId))
+			_selectedHqs.Add(LoginState.HQId);
 	}
 
 	private void ApplyRoleRestrictions()
@@ -710,7 +738,12 @@
 				var regionId = _allHqs.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionId ?? LoginState.RegionId;
 				if (regionId > 0) _regions = _allRegions.Where(r => r.Id == regionId).ToList();
 				var stateId = _allRegions.FirstOrDefault(r => r.Id == regionId)?.StateId ?? LoginState.StateId;
-				if (stateId > 0) _states = _allStates.Where(s => s.Id == stateId).ToList();
+				if (stateId > 0)
+				{
+					_states = _allStates.Where(s => s.Id == stateId).ToList();
+					_districts = _allDistricts.Where(d => d.StateId == stateId).ToList();
+					_subDistricts = _allSubDistricts.Where(sd => sd.StateId == stateId).ToList();
+				}
 				return;
 			}
 
@@ -718,8 +751,11 @@
 			if (LoginState.IsRegionRole && LoginState.RegionId > 0)
 			{
 				_regions = _allRegions.Where(r => r.Id == LoginState.RegionId).ToList();
-				_states = _allStates.Where(s => s.Id == (_allRegions.FirstOrDefault(r => r.Id == LoginState.RegionId)?.StateId ?? LoginState.StateId)).ToList();
+				var stateId = _allRegions.FirstOrDefault(r => r.Id == LoginState.RegionId)?.StateId ?? LoginState.StateId;
+				_states = _allStates.Where(s => s.Id == stateId).ToList();
 				_hq = _allHqs.Where(h => h.RegionId == LoginState.RegionId).ToList();
+				_districts = _allDistricts.Where(d => d.StateId == stateId).ToList();
+				_subDistricts = _allSubDistricts.Where(sd => sd.StateId == stateId).ToList();
 				return;
 			}
 
@@ -729,6 +765,8 @@
 				_states = _allStates.Where(s => s.Id == LoginState.StateId).ToList();
 				_regions = _allRegions.Where(r => r.StateId == LoginState.StateId).ToList();
 				_hq = _allHqs.Where(h => h.StateId == LoginState.StateId).ToList();
+				_districts = _allDistricts.Where(d => d.StateId == LoginState.StateId).ToList();
+				_subDistricts = _allSubDistricts.Where(sd => sd.StateId == LoginState.StateId).ToList();
 				return;
 			}
 		}
@@ -832,6 +870,8 @@
 		_states = _allStates; _regions = _allRegions; _hq = _allHqs;
 		_districts = _allDistricts; _subDistricts = _allSubDistricts;
 
+		ApplyRoleSelections();
+		ApplyRoleRestrictions();
 		SyncSelectionsToFilter();
 		_filter.Search = null;
 		_filter.Page = 1;
@@ -969,7 +1009,11 @@
 		return "st-neutral";
 	}
 
-	private string AgeingClass(int days) => days <= 30 ? "txt-green" : days <= 60 ? "txt-orange" : "txt-red";
+	private string AgeingClass(StockRowDto row)
+	{
+		if (!row.HasAckAgeing) return string.Empty;
+		return row.AgeingDays <= 30 ? "txt-green" : row.AgeingDays <= 90 ? "txt-orange" : "txt-red";
+	}
 
 	// ---------- Row actions ----------
 	private void OpenSalesDetails(StockRowDto row)
@@ -1225,6 +1269,10 @@
 		_subDistricts = _selectedDistricts.Any()
 			? _allSubDistricts.Where(sd => _selectedDistricts.Contains(sd.DistrictId ?? 0)).ToList()
 			: (_selectedStates.Any() ? _allSubDistricts.Where(sd => _selectedStates.Contains(sd.StateId ?? 0)).ToList() : _allSubDistricts);
+
+		// The cascade can rebuild from the full master lists, so re-apply the
+		// logged-in user's maximum visibility boundary before rendering.
+		ApplyRoleRestrictions();
 
 		StateHasChanged();
 		await RefreshSelect2Hierarchy();

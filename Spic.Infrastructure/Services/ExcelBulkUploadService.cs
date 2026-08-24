@@ -18,6 +18,11 @@ namespace Spic.Infrastructure.Services
 {
 	public class ExcelBulkUploadService : IExcelBulkUploadService
 	{
+		private const int MaxDataRows = 100_000;
+		private const int MaxColumns = 100;
+		private const int MaxCellCharacters = 4_000;
+		private const decimal QuantityTolerance = 0.001m;
+
 		private readonly AppDbContext _db;
 		private readonly ILogger<ExcelBulkUploadService> _logger;
 
@@ -78,24 +83,58 @@ namespace Spic.Infrastructure.Services
 			var records = new List<Dictionary<string, string>>();
 
 			var requiredCols = categoryId == "One"
-				? new[] { "statename", "districtname", "retailerid", "retailername" }
+				? new[]
+				{
+					"statename", "districtname", "retailerid", "retailername",
+					"product", "openingbalance", "receivedquantity", "soldquantity",
+					"availabilty", "closingbalance"
+				}
 				: categoryId == "Two"
-				? new[] { "transactionid", "invoiceno", "dealername" }
+				? new[]
+				{
+					"transactionid", "invoiceno", "invoicedate", "dealername", "state",
+					"district", "companyproduct", "unit", "quantity", "quantity(mt)",
+					"receivedquantity", "status", "entrydate"
+				}
 				: categoryId == "Three"
-				? new[] { "company", "plant", "product", "state", "district", "agencyname" }
+				? new[]
+				{
+					"company", "plant", "product", "state", "district", "agencyname",
+					"wholesalerob", "comp-wssale", "comp-wssalercpt", "receivedfromws",
+					"receivedfromwsack", "ws-rtsale", "ws-rtsalercpt", "ws-wssale",
+					"ws-wssalercpt", "totalsalesbyws", "stocktransferfromwstoretailer",
+					"stocktransferfromwstoretailerack", "balancewithws", "totalacktows"
+				}
 				: categoryId == "Four"
-				? new[] { "transactionid", "marketer", "wholesalerid", "wholesaleragencyname" }
+				? new[]
+				{
+					"transactionid", "invoiceno", "invoicedate", "marketer", "wholesalerid",
+					"wholesaleragencyname", "state", "sellerdistrict", "buyerdistrict",
+					"dealerid", "dealertype", "agencyname", "companyproduct", "unit",
+					"quantity", "quantity(mt)", "receivedquantity(mt)", "status", "txntype",
+					"entrydate"
+				}
 				: categoryId == "Six"
 				? new[] { "state", "openingstock", "openinggit", "production/imports", "receipt", "dispatches", "sales", "salesreturn", "stockadjustment", "closinggit", "closingstock" }
 				: categoryId == "Seven"
 				? new[] { "state", "district", "warehouse/location", "openingstock(atlocation)", "openingstock(git)", "imports/production", "receipt", "dispatches", "sales", "salesreturn", "stockadjustment", "closinggit", "closingstock" }
-				: new[] { "state", "district", "dealerid", "agencyname", "dealertype", "dealershipnature", "company", "plant", "product", "stock", "stockdate" };
+				: new[]
+				{
+					"state", "district", "dealerid", "agencyname", "dealertype",
+					"dealershipnature", "company", "plant", "product", "stock", "stockdate"
+				};
 
 			bool IsHeaderRow(List<string> rowValues)
 			{
 				if (categoryId == "One") return rowValues.Contains("statename") && rowValues.Contains("retailerid");
 				if (categoryId == "Two") return rowValues.Contains("transactionid") && rowValues.Contains("dealername");
-				if (categoryId == "Three") return rowValues.Contains("serialnumber") && rowValues.Contains("agencyname");
+				if (categoryId == "Three")
+				{
+					return rowValues.Contains("company") &&
+						rowValues.Contains("plant") &&
+						rowValues.Contains("product") &&
+						rowValues.Contains("agencyname");
+				}
 				if (categoryId == "Four") return rowValues.Contains("transactionid") && rowValues.Contains("marketer");
 				if (categoryId == "Six") return rowValues.Contains("state") && rowValues.Contains("openingstock");
 				if (categoryId == "Seven") return rowValues.Contains("state") && rowValues.Contains("district") && rowValues.Contains("warehouse/location");
@@ -125,6 +164,27 @@ namespace Spic.Infrastructure.Services
 				}
 			}
 
+			void EnsureCellWithinLimits(string value, int rowNumber, string columnName)
+			{
+				if (value.Length <= MaxCellCharacters)
+					return;
+
+				throw new UploadValidationException(
+					$"Row {rowNumber}: Column '{columnName}' exceeds the {MaxCellCharacters}-character limit.");
+			}
+
+			void AddRecord(Dictionary<string, string> record, int rowNumber)
+			{
+				if (records.Count >= MaxDataRows)
+				{
+					throw new UploadValidationException(
+						$"Row {rowNumber}: The file exceeds the maximum of {MaxDataRows:N0} data rows. " +
+						"Split it into smaller files.");
+				}
+
+				records.Add(record);
+			}
+
 			try
 			{
 				if (fileExtension == ".csv")
@@ -145,7 +205,14 @@ namespace Spic.Infrastructure.Services
 							var rowValues = new List<string>();
 							for (int i = 0; csv.TryGetField<string>(i, out var field); i++)
 							{
+								if (i >= MaxColumns)
+								{
+									throw new UploadValidationException(
+										$"Row {sourceRowNumber}: The file exceeds the maximum of {MaxColumns} columns.");
+								}
+
 								var text = field?.Trim() ?? "";
+								EnsureCellWithinLimits(text, sourceRowNumber, $"Column {i + 1}");
 								ExtractCategoryTitle(text);
 								rowValues.Add(text.Trim('\uFEFF', '\u200B', ' ', '"').Replace(" ", "").ToLowerInvariant());
 							}
@@ -170,16 +237,18 @@ namespace Spic.Infrastructure.Services
 						};
 						foreach (var kvp in headerMap)
 						{
-							dict[kvp.Key] = csv.TryGetField<string>(kvp.Value, out var fieldValue)
+							var value = csv.TryGetField<string>(kvp.Value, out var fieldValue)
 								? fieldValue?.Trim() ?? string.Empty
 								: string.Empty;
+							EnsureCellWithinLimits(value, sourceRowNumber, kvp.Key);
+							dict[kvp.Key] = value;
 						}
 
 						if (dict.Any(x =>
 							!x.Key.StartsWith("__", StringComparison.Ordinal) &&
 							!string.IsNullOrWhiteSpace(x.Value)))
 						{
-							records.Add(dict);
+							AddRecord(dict, sourceRowNumber);
 						}
 					}
 				}
@@ -187,11 +256,17 @@ namespace Spic.Infrastructure.Services
 				{
 					using var workbook = new XLWorkbook(fileStream);
 					var ws = workbook.Worksheets.First();
+					var lastUsedColumn = ws.LastColumnUsed()?.ColumnNumber() ?? 0;
+					if (lastUsedColumn > MaxColumns)
+					{
+						throw new UploadValidationException(
+							$"The worksheet exceeds the maximum of {MaxColumns} columns.");
+					}
 
 					var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 					int headerRowIndex = -1;
 
-					var rows = ws.RowsUsed().Take(10).ToList();
+					var rows = ws.RowsUsed().Take(50).ToList();
 					foreach (var row in rows)
 					{
 						var rowValues = new List<string>();
@@ -199,6 +274,7 @@ namespace Spic.Infrastructure.Services
 						for (int c = 1; c <= lastCol; c++)
 						{
 							var text = row.Cell(c).GetString().Trim();
+							EnsureCellWithinLimits(text, row.RowNumber(), $"Column {c}");
 							ExtractCategoryTitle(text);
 							rowValues.Add(text.Trim('\uFEFF', '\u200B', ' ', '"').Replace(" ", "").ToLowerInvariant());
 						}
@@ -219,7 +295,7 @@ namespace Spic.Infrastructure.Services
 
 					if (headerRowIndex != -1)
 					{
-						var dataRows = ws.RowsUsed().Where(r => r.RowNumber() > headerRowIndex).ToList();
+						var dataRows = ws.RowsUsed().Where(r => r.RowNumber() > headerRowIndex);
 						foreach (var row in dataRows)
 						{
 							cancellationToken.ThrowIfCancellationRequested();
@@ -229,14 +305,16 @@ namespace Spic.Infrastructure.Services
 							};
 							foreach (var kvp in headerMap)
 							{
-								dict[kvp.Key] = row.Cell(kvp.Value).GetString().Trim();
+								var value = row.Cell(kvp.Value).GetString().Trim();
+								EnsureCellWithinLimits(value, row.RowNumber(), kvp.Key);
+								dict[kvp.Key] = value;
 							}
 
 							if (dict.Any(x =>
 								!x.Key.StartsWith("__", StringComparison.Ordinal) &&
 								!string.IsNullOrWhiteSpace(x.Value)))
 							{
-								records.Add(dict);
+								AddRecord(dict, row.RowNumber());
 							}
 						}
 					}
@@ -248,7 +326,20 @@ namespace Spic.Infrastructure.Services
 			}
 			catch (Exception ex)
 			{
-				return Failed("Failed to parse file format: " + ex.Message);
+				if (ex is UploadValidationException)
+					return Failed(ex.Message);
+
+				var errorReference = CreateErrorReference();
+				_logger.LogError(
+					ex,
+					"Failed to parse bulk upload category {CategoryId} file {FileName}. Reference {ErrorReference}",
+					categoryId,
+					fileName,
+					errorReference);
+
+				return Failed(
+					$"The file could not be read. Verify that it is a valid {fileExtension} file and try again. " +
+					$"Reference: {errorReference}.");
 			}
 
 			if (records.Count == 0)
@@ -350,7 +441,7 @@ namespace Spic.Infrastructure.Services
 
 				if (digits.Length is < 10 or > 15)
 				{
-					throw new InvalidDataException(
+					throw new UploadValidationException(
 						$"Row {rowNumber}: Invalid mobile number '{raw}'. Expected 10 to 15 digits.");
 				}
 
@@ -366,7 +457,84 @@ namespace Spic.Infrastructure.Services
 				if (decimal.TryParse(normalized, NumberStyles.Number | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out var value))
 					return value;
 
-				throw new InvalidDataException($"Row {rowNumber}: Invalid numeric value '{raw}' in column '{key}'.");
+				throw new UploadValidationException($"Row {rowNumber}: Invalid numeric value '{raw}' in column '{key}'.");
+			}
+
+			void EnsureNonNegative(decimal value, int rowNumber, string columnName)
+			{
+				if (value >= 0m)
+					return;
+
+				throw new UploadValidationException(
+					$"Row {rowNumber}: Column '{columnName}' cannot contain a negative value ({value}).");
+			}
+
+			void EnsureAlmostEqual(
+				decimal actual,
+				decimal expected,
+				int rowNumber,
+				string rule)
+			{
+				if (Math.Abs(actual - expected) <= QuantityTolerance)
+					return;
+
+				throw new UploadValidationException(
+					$"Row {rowNumber}: {rule}. Expected {expected:0.###}, found {actual:0.###}.");
+			}
+
+			void ValidateUnitConversion(
+				string unit,
+				decimal quantity,
+				decimal quantityMt,
+				int rowNumber)
+			{
+				var normalizedUnit = NormalizeKey(unit).Replace(" ", string.Empty);
+				if (normalizedUnit is "mt" or "metricton" or "metrictonne")
+				{
+					EnsureAlmostEqual(
+						quantityMt,
+						quantity,
+						rowNumber,
+						"Quantity (MT) must equal Quantity when Unit is MT");
+				}
+				else if (normalizedUnit.Contains("50kg", StringComparison.Ordinal))
+				{
+					EnsureAlmostEqual(
+						quantityMt,
+						quantity * 0.05m,
+						rowNumber,
+						"Quantity (MT) must equal Quantity × 0.05 for a 50 Kg unit");
+				}
+			}
+
+			void ValidateReceiptDate(
+				DateTime? invoiceDate,
+				DateTime? receiptDate,
+				int rowNumber)
+			{
+				if (invoiceDate.HasValue && receiptDate.HasValue &&
+					receiptDate.Value.Date < invoiceDate.Value.Date)
+				{
+					throw new UploadValidationException(
+						$"Row {rowNumber}: Retailer Receipt Date cannot be before Invoice Date.");
+				}
+			}
+
+			int? GetPreloadedMasterId(
+				IReadOnlyDictionary<string, int> lookup,
+				string? value,
+				int rowNumber,
+				string masterName)
+			{
+				if (string.IsNullOrWhiteSpace(value))
+					return null;
+
+				var key = NormalizeKey(value);
+				if (lookup.TryGetValue(key, out var id))
+					return id;
+
+				throw new InvalidOperationException(
+					$"Row {rowNumber}: {masterName} '{value}' was not resolved during master preload.");
 			}
 
 			DateTime? ParseOptionalDate(Dictionary<string, string> rowDict, string key, int rowNumber)
@@ -380,7 +548,7 @@ namespace Spic.Infrastructure.Services
 			{
 				var raw = GetCell(rowDict, key);
 				if (IsNullToken(raw))
-					throw new InvalidDataException($"Row {rowNumber}: Column '{key}' is required.");
+					throw new UploadValidationException($"Row {rowNumber}: Column '{key}' is required.");
 				return ParseDate(raw, rowNumber, key);
 			}
 
@@ -516,6 +684,7 @@ namespace Spic.Infrastructure.Services
 						d.SPICCode,
 						d.GreenStarCode,
 						d.TnCode,
+						d.NCode,
 						d.WholesalemFMSCode,
 						d.RetailmFMSCode
 					})
@@ -549,6 +718,7 @@ namespace Spic.Infrastructure.Services
 					AddRegistrationExternalId(registeredDealer.SPICCode, registeredDealer.Id);
 					AddRegistrationExternalId(registeredDealer.GreenStarCode, registeredDealer.Id);
 					AddRegistrationExternalId(registeredDealer.TnCode, registeredDealer.Id);
+					AddRegistrationExternalId(registeredDealer.NCode, registeredDealer.Id);
 					AddRegistrationExternalId(registeredDealer.WholesalemFMSCode, registeredDealer.Id);
 					AddRegistrationExternalId(registeredDealer.RetailmFMSCode, registeredDealer.Id);
 				}
@@ -704,13 +874,43 @@ namespace Spic.Infrastructure.Services
 
 						if (registrationIds.Count > 1)
 						{
-							throw new InvalidDataException(
+							throw new UploadValidationException(
 								$"Row {rowNumber}: Excel {roleName} ID '{externalDealerId}' " +
 								"matches more than one DealerRegistration row.");
 						}
 
 						if (registrationIds.Count == 1)
-							return (registrationIds[0], null);
+						{
+							var registeredDealer = rawRegDealers.First(x => x.Id == registrationIds[0]);
+
+							// Dealer ID is authoritative, but the Excel location must agree with
+							// the DealerRegistration row. Otherwise the report could save one
+							// DealerRegistrationId together with another dealer's State/District.
+							if (dealerStateId.HasValue && registeredDealer.StateId != dealerStateId.Value)
+							{
+								throw new UploadValidationException(
+									$"Row {rowNumber}: Excel {roleName} ID '{externalDealerId}' matched DealerRegistration Id {registeredDealer.Id}, " +
+									$"but StateId does not match. Excel StateId={dealerStateId.Value}, registered StateId={registeredDealer.StateId}.");
+							}
+
+							if (dealerDistrictId.HasValue && registeredDealer.DistrictId != dealerDistrictId.Value)
+							{
+								throw new UploadValidationException(
+									$"Row {rowNumber}: Excel {roleName} ID '{externalDealerId}' matched DealerRegistration Id {registeredDealer.Id}, " +
+									$"but DistrictId does not match. Excel DistrictId={dealerDistrictId.Value}, registered DistrictId={registeredDealer.DistrictId?.ToString() ?? "null"}.");
+							}
+
+							if (!string.IsNullOrWhiteSpace(cleanedDealerName) &&
+								NormalizeDealerNameKey(registeredDealer.FirmName) != NormalizeDealerNameKey(cleanedDealerName))
+							{
+								AddWarningOnce(
+									$"dealer:name-mismatch:{registeredDealer.Id}:{NormalizeDealerNameKey(cleanedDealerName)}",
+									$"Row {rowNumber}: Excel {roleName} ID '{externalDealerId}' matched DealerRegistration Id {registeredDealer.Id}, " +
+									$"but Excel name '{cleanedDealerName}' differs from registered firm name '{registeredDealer.FirmName}'. Dealer ID match was used.");
+							}
+
+							return (registeredDealer.Id, null);
+						}
 
 						var mappedIfmsDealers = externalKeys
 							.Where(ifmsDealerByUploadedExternalKey.ContainsKey)
@@ -720,7 +920,7 @@ namespace Spic.Infrastructure.Services
 
 						if (mappedIfmsDealers.Count > 1)
 						{
-							throw new InvalidDataException(
+							throw new UploadValidationException(
 								$"Row {rowNumber}: Excel {roleName} ID '{externalDealerId}' " +
 								"was mapped to multiple IFMS dealer rows during this upload.");
 						}
@@ -738,7 +938,7 @@ namespace Spic.Infrastructure.Services
 							// A valid textual dealer name is required before an IFMS master can be created.
 							if (!IsValidDealerName(cleanedDealerName))
 							{
-								throw new InvalidDataException(
+								throw new UploadValidationException(
 									$"Row {rowNumber}: Invalid {roleName} name '{dealerName}'. " +
 									$"Excel ID '{externalDealerId}' did not match DealerRegistration, so a valid name containing letters is required.");
 							}
@@ -832,7 +1032,7 @@ namespace Spic.Infrastructure.Services
 
 					if (!IsValidDealerName(cleanedDealerName))
 					{
-						throw new InvalidDataException(
+						throw new UploadValidationException(
 							$"Row {rowNumber}: Invalid {roleName} name '{dealerName}'. " +
 							"Use a real dealer/agency name containing letters.");
 					}
@@ -846,7 +1046,7 @@ namespace Spic.Infrastructure.Services
 					{
 						if (registeredMatches.Count > 1)
 						{
-							throw new InvalidDataException(
+							throw new UploadValidationException(
 								$"Row {rowNumber}: Multiple DealerRegistration rows match {roleName} '{cleanedDealerName}' " +
 								$"for StateId={dealerStateId?.ToString() ?? "null"}, DistrictId={dealerDistrictId?.ToString() ?? "null"}.");
 						}
@@ -855,13 +1055,28 @@ namespace Spic.Infrastructure.Services
 					}
 
 					var dealerNameStateKey = DealerNameStateKey(cleanedDealerName, dealerStateId);
-					if (dealerRegByNameState.TryGetValue(dealerNameStateKey, out var nameStateMatches) &&
-						nameStateMatches.Count == 1)
+
+					// Keep the old name+state fallback only when the upload genuinely has no
+					// district. If Excel has a district, never attach a DealerRegistration
+					// from another district just because name+state happens to match.
+					if (!dealerDistrictId.HasValue &&
+						dealerRegByNameState.TryGetValue(dealerNameStateKey, out var nameStateMatchesWithoutDistrict) &&
+						nameStateMatchesWithoutDistrict.Count == 1)
 					{
 						AddWarningOnce(
-							"dealer:fallback:" + dealerLookupKey,
-							$"Row {rowNumber}: {roleName} '{cleanedDealerName}' matched DealerRegistration by name and state because the district did not match exactly.");
-						return (nameStateMatches[0].Id, null);
+							"dealer:fallback-no-district:" + dealerNameStateKey,
+							$"Row {rowNumber}: {roleName} '{cleanedDealerName}' matched DealerRegistration by name and state because no district was available in the upload.");
+						return (nameStateMatchesWithoutDistrict[0].Id, null);
+					}
+
+					if (dealerDistrictId.HasValue &&
+						dealerRegByNameState.TryGetValue(dealerNameStateKey, out var sameNameStateRegistrations) &&
+						sameNameStateRegistrations.Count > 0)
+					{
+						AddWarningOnce(
+							"dealer:district-mismatch-not-linked:" + dealerLookupKey,
+							$"Row {rowNumber}: {roleName} '{cleanedDealerName}' exists in DealerRegistration for the same state, " +
+							$"but not for DistrictId={dealerDistrictId.Value}. It was not linked to a DealerRegistration from another district.");
 					}
 
 					TrackUploadedMobile(
@@ -1077,7 +1292,7 @@ namespace Spic.Infrastructure.Services
 						if (!string.IsNullOrWhiteSpace(preloadDealerName) &&
 							!IsValidDealerName(preloadDealerName))
 						{
-							throw new InvalidDataException(
+							throw new UploadValidationException(
 								$"Row {preloadRowNumber}: Invalid buyer dealer name '{preloadDealerName}'.");
 						}
 					}
@@ -1684,8 +1899,6 @@ namespace Spic.Infrastructure.Services
 
 				try
 				{
-					string lastStateStr = string.Empty;
-
 					for (int i = 0; i < records.Count; i++)
 					{
 						cancellationToken.ThrowIfCancellationRequested();
@@ -1698,31 +1911,18 @@ namespace Spic.Infrastructure.Services
 							? parsedRowNumber
 							: i + 2;
 
-						var stateStr = categoryId == "One" ? GetCell(row, "statename") : GetCell(row, "state");
-						var districtStr = categoryId == "One" ? GetCell(row, "districtname") : GetCell(row, "district");
-						var dealerIdStr = categoryId == "One" ? GetCell(row, "retailerid") : GetCell(row, "dealerid");
-						var agencyNameStr = CleanDealerName(
-							categoryId == "One"
-								? GetCell(row, "retailername")
-								: categoryId == "Two"
-									? GetCell(row, "dealername")
-									: GetCell(row, "agencyname"));
-						var dealerTypeStr = categoryId == "One" ? "" : GetCell(row, "dealertype");
-						var natureStr = categoryId == "Three" ? OptionalText(row, "dealernature") : GetCell(row, "dealershipnature");
-						var companyStr = (categoryId == "Four" || categoryId == "Two") ? GetCell(row, "manufacturer") : GetCell(row, "company");
-						var plantStr = GetCell(row, "plant");
-						var productStr = (categoryId == "Four" || categoryId == "Two") ? GetCell(row, "companyproduct") : GetCell(row, "product");
-						var dealerMobileNo = ParseOptionalMobile(
-							row,
-							rowNumber,
-							"mobileno",
-							"mobileno.",
-							"mobilenumber",
-							"mobile",
-							"contactno",
-							"contactnumber",
-							"phoneno",
-							"phonenumber");
+						var preparedMaster = preparedMasterRows[i];
+						if (preparedMaster.Skip)
+						{
+							result.RowsSkipped++;
+							continue;
+						}
+
+						var stateStr = preparedMaster.StateName;
+						var districtStr = preparedMaster.DistrictName;
+						var agencyNameStr = preparedMaster.DealerName;
+						var productStr = preparedMaster.ProductName;
+						var dealerMobileNo = preparedMaster.DealerMobileNo;
 
 						if (categoryId is "One" or "Two" or "Three" or "Five")
 						{
@@ -1732,7 +1932,7 @@ namespace Spic.Infrastructure.Services
 						if (categoryId == "Four")
 						{
 							EnsureValidDealerName(
-								CleanDealerName(GetCell(row, "wholesaleragencyname")),
+								preparedMaster.WholesalerName,
 								rowNumber,
 								"Wholesaler agency");
 						}
@@ -1740,127 +1940,16 @@ namespace Spic.Infrastructure.Services
 						if (categoryId is "One" or "Two" or "Three" or "Four" or "Five")
 						{
 							if (string.IsNullOrWhiteSpace(stateStr))
-								throw new InvalidDataException($"Row {rowNumber}: State is required.");
+								throw new UploadValidationException($"Row {rowNumber}: State is required.");
 							if (string.IsNullOrWhiteSpace(productStr))
-								throw new InvalidDataException($"Row {rowNumber}: Product is required.");
+								throw new UploadValidationException($"Row {rowNumber}: Product is required.");
 						}
 
-						if (categoryId == "Seven")
-						{
-							if (IsWarehouseTotalLabel(stateStr))
-							{
-								result.RowsSkipped++;
-								continue;
-							}
-
-							if (string.IsNullOrWhiteSpace(stateStr) && !string.IsNullOrWhiteSpace(districtStr))
-							{
-								stateStr = lastStateStr;
-							}
-							else if (!string.IsNullOrWhiteSpace(stateStr) &&
-								!stateStr.Equals("plant", StringComparison.OrdinalIgnoreCase))
-							{
-								lastStateStr = stateStr;
-							}
-						}
-
-						if (string.IsNullOrEmpty(stateStr) && string.IsNullOrEmpty(districtStr) && string.IsNullOrEmpty(dealerIdStr) && string.IsNullOrEmpty(agencyNameStr) && string.IsNullOrEmpty(GetCell(row, "warehouse/location")))
-						{
-							result.RowsSkipped++;
-							continue;
-						}
-						if (categoryId == "Six" && string.Equals(stateStr, "total", StringComparison.OrdinalIgnoreCase))
-						{
-							result.RowsSkipped++;
-							continue;
-						}
-
-						int? stateId = null;
-						if ((categoryId != "Six" && categoryId != "Seven") || !stateStr.Trim().Equals("plant", StringComparison.OrdinalIgnoreCase))
-						{
-							if (!string.IsNullOrEmpty(stateStr))
-							{
-								var key = stateStr.ToLowerInvariant();
-								if (!stateDict.TryGetValue(key, out var id))
-								{
-									var newState = new State { StateName = stateStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId, ZoneId = 1 };
-									_db.States.Add(newState);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newState.Id;
-									stateDict[key] = id;
-									result.NewMastersCreated.States++;
-								}
-								stateId = id;
-							}
-						}
-
-						int? districtId = null;
-						if (!string.IsNullOrEmpty(districtStr) && stateId.HasValue)
-						{
-							var key = $"{districtStr.ToLowerInvariant()}_{stateId.Value}";
-							if (!districtDict.TryGetValue(key, out var id))
-							{
-								var newDistrict = new District { DistrictName = districtStr, StateId = stateId.Value, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-								_db.Districts.Add(newDistrict);
-								await _db.SaveChangesAsync(cancellationToken);
-								id = newDistrict.Id;
-								districtDict[key] = id;
-								result.NewMastersCreated.Districts++;
-							}
-							districtId = id;
-						}
-
-						int? subDistrictId = null;
-						if (categoryId == "One")
-						{
-							var subDistrictStr = GetCell(row, "subdistrict");
-							if (!string.IsNullOrEmpty(subDistrictStr) && districtId.HasValue)
-							{
-								var key = $"{subDistrictStr.ToLowerInvariant()}_{districtId.Value}";
-								if (!subDistrictDict.TryGetValue(key, out var id))
-								{
-									var newSubDistrict = new SubDistrict { SubDistrictName = subDistrictStr, DistrictId = districtId.Value, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.SubDistricts.Add(newSubDistrict);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newSubDistrict.Id;
-									subDistrictDict[key] = id;
-									result.NewMastersCreated.SubDistricts++;
-								}
-								subDistrictId = id;
-							}
-						}
-
-						int? dealerTypeId = null;
-						if (!string.IsNullOrEmpty(dealerTypeStr))
-						{
-							var key = dealerTypeStr.ToLowerInvariant();
-							if (!dealerTypeDict.TryGetValue(key, out var id))
-							{
-								var newType = new DealerType { Name = dealerTypeStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-								_db.DealerTypes.Add(newType);
-								await _db.SaveChangesAsync(cancellationToken);
-								id = newType.Id;
-								dealerTypeDict[key] = id;
-								result.NewMastersCreated.DealerTypes++;
-							}
-							dealerTypeId = id;
-						}
-
-						int? natureId = null;
-						if (!string.IsNullOrEmpty(natureStr))
-						{
-							var key = natureStr.ToLowerInvariant();
-							if (!natureDict.TryGetValue(key, out var id))
-							{
-								var newNat = new DealershipNature { Name = natureStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-								_db.DealershipNatures.Add(newNat);
-								await _db.SaveChangesAsync(cancellationToken);
-								id = newNat.Id;
-								natureDict[key] = id;
-								result.NewMastersCreated.DealershipNatures++;
-							}
-							natureId = id;
-						}
+						var stateId = preparedMaster.StateId;
+						var districtId = preparedMaster.DistrictId;
+						var subDistrictId = preparedMaster.SubDistrictId;
+						var dealerTypeId = preparedMaster.DealerTypeId;
+						var natureId = preparedMaster.NatureId;
 
 						int? dealerRegistrationId = null;
 						int? ifmsDealerId = null;
@@ -1873,41 +1962,18 @@ namespace Spic.Infrastructure.Services
 							ifmsDealerId = dealerResolution.IfmsDealer?.Id;
 						}
 
-						int? companyId = null;
-						if (!string.IsNullOrEmpty(companyStr))
-						{
-							var key = companyStr.ToLowerInvariant();
-							if (!companyDict.TryGetValue(key, out var id))
-							{
-								var newComp = new Company { Name = companyStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-								_db.Companies.Add(newComp);
-								await _db.SaveChangesAsync(cancellationToken);
-								id = newComp.Id;
-								companyDict[key] = id;
-								result.NewMastersCreated.Companies++;
-							}
-							companyId = id;
-						}
-
-						int? plantId = null;
-						if (!string.IsNullOrEmpty(plantStr))
-						{
-							var key = plantStr.ToLowerInvariant();
-							if (!plantDict.TryGetValue(key, out var id))
-							{
-								var newPlant = new Plant { Name = plantStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-								_db.Plants.Add(newPlant);
-								await _db.SaveChangesAsync(cancellationToken);
-								id = newPlant.Id;
-								plantDict[key] = id;
-								result.NewMastersCreated.Plants++;
-							}
-							plantId = id;
-						}
-
-						var preparedProduct = preparedMasterRows[i];
-						int? productId = preparedProduct.ProductId;
-						int? ifmsProductId = preparedProduct.IfmsProductId;
+						var companyId = GetPreloadedMasterId(
+							companyDict,
+							preparedMaster.CompanyName,
+							rowNumber,
+							"Company");
+						var plantId = GetPreloadedMasterId(
+							plantDict,
+							preparedMaster.PlantName,
+							rowNumber,
+							"Plant");
+						int? productId = preparedMaster.ProductId;
+						int? ifmsProductId = preparedMaster.IfmsProductId;
 
 						if (!productId.HasValue && !ifmsProductId.HasValue)
 							throw new InvalidOperationException(
@@ -1921,6 +1987,22 @@ namespace Spic.Infrastructure.Services
 							var soldQty = ParseDecimal(row, "soldquantity", rowNumber);
 							var avail = ParseDecimal(row, "availabilty", rowNumber);
 							var closeBal = ParseDecimal(row, "closingbalance", rowNumber);
+
+							EnsureNonNegative(openBal, rowNumber, "openingbalance");
+							EnsureNonNegative(recvQty, rowNumber, "receivedquantity");
+							EnsureNonNegative(soldQty, rowNumber, "soldquantity");
+							EnsureNonNegative(avail, rowNumber, "availabilty");
+							EnsureNonNegative(closeBal, rowNumber, "closingbalance");
+							EnsureAlmostEqual(
+								avail,
+								openBal + recvQty - soldQty,
+								rowNumber,
+								"Availability must equal Opening Balance + Received Quantity - Sold Quantity");
+							EnsureAlmostEqual(
+								closeBal,
+								avail,
+								rowNumber,
+								"Closing Balance must equal Availability");
 
 							var dptBusinessKey = DptKey(
 								dealerRegistrationId, ifmsDealerId, agencyNameStr,
@@ -1969,6 +2051,7 @@ namespace Spic.Infrastructure.Services
 						{
 							var stockValue = ParseDecimal(row, "stock", rowNumber);
 							var stockDate = ToUtcDate(ParseRequiredDate(row, "stockdate", rowNumber));
+							EnsureNonNegative(stockValue, rowNumber, "stock");
 							var stockBusinessKey = WholesalerStockKey(
 								dealerRegistrationId, ifmsDealerId, agencyNameStr,
 								productId, ifmsProductId, productStr, stateId, districtId, companyId, plantId, stockDate);
@@ -2023,6 +2106,21 @@ namespace Spic.Infrastructure.Services
 							var balanceWithWs = ParseDecimal(row, "balancewithws", rowNumber);
 							var totalAckToWs = ParseDecimal(row, "totalacktows", rowNumber);
 
+							EnsureNonNegative(openingBalance, rowNumber, "wholesalerob");
+							EnsureNonNegative(compWsSale, rowNumber, "comp-wssale");
+							EnsureNonNegative(compWsSaleRcpt, rowNumber, "comp-wssalercpt");
+							EnsureNonNegative(receivedFromWs, rowNumber, "receivedfromws");
+							EnsureNonNegative(receivedFromWsAck, rowNumber, "receivedfromwsack");
+							EnsureNonNegative(wsRtSale, rowNumber, "ws-rtsale");
+							EnsureNonNegative(wsRtSaleRcpt, rowNumber, "ws-rtsalercpt");
+							EnsureNonNegative(wsWsSale, rowNumber, "ws-wssale");
+							EnsureNonNegative(wsWsSaleRcpt, rowNumber, "ws-wssalercpt");
+							EnsureNonNegative(totalSalesByWs, rowNumber, "totalsalesbyws");
+							EnsureNonNegative(stockTransferWsToRetailer, rowNumber, "stocktransferfromwstoretailer");
+							EnsureNonNegative(stockTransferWsToRetailerAck, rowNumber, "stocktransferfromwstoretailerack");
+							EnsureNonNegative(balanceWithWs, rowNumber, "balancewithws");
+							EnsureNonNegative(totalAckToWs, rowNumber, "totalacktows");
+
 							var salesReceiptBusinessKey = SalesReceiptKey(
 								dealerRegistrationId, ifmsDealerId, agencyNameStr,
 								productId, ifmsProductId, productStr, stateId, districtId, companyId, plantId,
@@ -2071,177 +2169,25 @@ namespace Spic.Infrastructure.Services
 						}
 						else if (categoryId == "Four")
 						{
-							var marketerStr = OptionalText(row, "marketer");
-							var ackThroughStr = OptionalText(row, "ackthrough");
-							var wholesalerNatureStr = OptionalText(row, "wholesalernature");
-							var dealerNatureStr = OptionalText(row, "dealernature");
-							var unitStr = OptionalText(row, "unit");
-							var statusStr = OptionalText(row, "status");
-							var txnTypeStr = OptionalText(row, "txntype");
+							var marketerStr = preparedMaster.MarketerName;
+							var ackThroughStr = preparedMaster.AckThroughName;
+							var unitStr = preparedMaster.UnitName;
+							var wholesalerAgencyStr = preparedMaster.WholesalerName;
 
-							var wholesalerExternalId = GetCell(row, "wholesalerid");
-							var wholesalerAgencyStr = CleanDealerName(GetCell(row, "wholesaleragencyname"));
-							var sellerDistrictStr = GetCell(row, "sellerdistrict");
-							var buyerDistrictStr = GetCell(row, "buyerdistrict");
-							var wholesalerMobileNo = ParseOptionalMobile(
-								row,
-								rowNumber,
-								"wholesalermobileno",
-								"wholesalermobileno.",
-								"wholesalermobilenumber",
-								"wholesalercontactno",
-								"wholesalercontactnumber",
-								"wholesalerphoneno");
-
-							if (string.IsNullOrWhiteSpace(wholesalerMobileNo) &&
-								string.Equals(wholesalerAgencyStr, agencyNameStr, StringComparison.OrdinalIgnoreCase))
-							{
-								wholesalerMobileNo = dealerMobileNo;
-							}
-
-							int? marketerId = null;
-							if (!string.IsNullOrEmpty(marketerStr))
-							{
-								var key = marketerStr.ToLowerInvariant();
-								if (!companyDict.TryGetValue(key, out var id))
-								{
-									var newComp = new Company { Name = marketerStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Companies.Add(newComp);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newComp.Id;
-									companyDict[key] = id;
-									result.NewMastersCreated.Companies++;
-								}
-								marketerId = id;
-							}
-
-							int? ackThroughId = null;
-							if (!string.IsNullOrEmpty(ackThroughStr))
-							{
-								var key = ackThroughStr.ToLowerInvariant();
-								if (!ackThroughDict.TryGetValue(key, out var id))
-								{
-									var newAck = new AckThrough { Name = ackThroughStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.AckThroughs.Add(newAck);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newAck.Id;
-									ackThroughDict[key] = id;
-									result.NewMastersCreated.AckThroughs++;
-								}
-								ackThroughId = id;
-							}
-
-							int? txnTypeId = null;
-							if (!string.IsNullOrEmpty(txnTypeStr))
-							{
-								var key = txnTypeStr.ToLowerInvariant();
-								if (!txnTypeDict.TryGetValue(key, out var id))
-								{
-									var newT = new TxnType { Name = txnTypeStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.TxnTypes.Add(newT);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newT.Id;
-									txnTypeDict[key] = id;
-									result.NewMastersCreated.TxnTypes++;
-								}
-								txnTypeId = id;
-							}
-
-							int? unitId = null;
-							if (!string.IsNullOrEmpty(unitStr))
-							{
-								var key = unitStr.ToLowerInvariant();
-								if (!unitDict.TryGetValue(key, out var id))
-								{
-									var newU = new Unit { Name = unitStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Units.Add(newU);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newU.Id;
-									unitDict[key] = id;
-									result.NewMastersCreated.Units++;
-								}
-								unitId = id;
-							}
-
-							int? statusId = null;
-							if (!string.IsNullOrEmpty(statusStr))
-							{
-								var key = statusStr.ToLowerInvariant();
-								if (!statusDict.TryGetValue(key, out var id))
-								{
-									var newS = new Status { Name = statusStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Statuses.Add(newS);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newS.Id;
-									statusDict[key] = id;
-									result.NewMastersCreated.Statuses++;
-								}
-								statusId = id;
-							}
-
-							int? wholesalerNatureId = null;
-							if (!string.IsNullOrEmpty(wholesalerNatureStr))
-							{
-								var key = wholesalerNatureStr.ToLowerInvariant();
-								if (!natureDict.TryGetValue(key, out var id))
-								{
-									var newN = new DealershipNature { Name = wholesalerNatureStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.DealershipNatures.Add(newN);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newN.Id;
-									natureDict[key] = id;
-									result.NewMastersCreated.DealershipNatures++;
-								}
-								wholesalerNatureId = id;
-							}
-
-							int? dealerNatureId = null;
-							if (!string.IsNullOrEmpty(dealerNatureStr))
-							{
-								var key = dealerNatureStr.ToLowerInvariant();
-								if (!natureDict.TryGetValue(key, out var id))
-								{
-									var newN = new DealershipNature { Name = dealerNatureStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.DealershipNatures.Add(newN);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newN.Id;
-									natureDict[key] = id;
-									result.NewMastersCreated.DealershipNatures++;
-								}
-								dealerNatureId = id;
-							}
-
-							int? sellerDistrictId = null;
-							if (!string.IsNullOrEmpty(sellerDistrictStr) && stateId.HasValue)
-							{
-								var key = $"{sellerDistrictStr.ToLowerInvariant()}_{stateId.Value}";
-								if (!districtDict.TryGetValue(key, out var id))
-								{
-									var newDistrict = new District { DistrictName = sellerDistrictStr, StateId = stateId.Value, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Districts.Add(newDistrict);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newDistrict.Id;
-									districtDict[key] = id;
-									result.NewMastersCreated.Districts++;
-								}
-								sellerDistrictId = id;
-							}
-
-							int? buyerDistrictId = null;
-							if (!string.IsNullOrEmpty(buyerDistrictStr) && stateId.HasValue)
-							{
-								var key = $"{buyerDistrictStr.ToLowerInvariant()}_{stateId.Value}";
-								if (!districtDict.TryGetValue(key, out var id))
-								{
-									var newDistrict = new District { DistrictName = buyerDistrictStr, StateId = stateId.Value, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Districts.Add(newDistrict);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newDistrict.Id;
-									districtDict[key] = id;
-									result.NewMastersCreated.Districts++;
-								}
-								buyerDistrictId = id;
-							}
+							var marketerId = GetPreloadedMasterId(
+								companyDict, marketerStr, rowNumber, "Marketer");
+							var ackThroughId = GetPreloadedMasterId(
+								ackThroughDict, ackThroughStr, rowNumber, "ACK Through");
+							var txnTypeId = GetPreloadedMasterId(
+								txnTypeDict, preparedMaster.TxnTypeName, rowNumber, "Transaction Type");
+							var unitId = GetPreloadedMasterId(
+								unitDict, unitStr, rowNumber, "Unit");
+							var statusId = GetPreloadedMasterId(
+								statusDict, preparedMaster.StatusName, rowNumber, "Status");
+							var wholesalerNatureId = preparedMaster.WholesalerNatureId;
+							var dealerNatureId = preparedMaster.DealerNatureId;
+							var sellerDistrictId = preparedMaster.SellerDistrictId;
+							var buyerDistrictId = preparedMaster.BuyerDistrictId;
 
 							if (!buyerResolutionByRow.TryGetValue(i, out var buyerResolution))
 								throw new InvalidOperationException($"Row {rowNumber}: Buyer dealer was not pre-resolved.");
@@ -2256,9 +2202,9 @@ namespace Spic.Infrastructure.Services
 							var transactionId = GetCell(row, "transactionid");
 							var invoiceNo = GetCell(row, "invoiceno");
 							if (string.IsNullOrWhiteSpace(transactionId))
-								throw new InvalidDataException($"Row {rowNumber}: transactionid is required.");
+								throw new UploadValidationException($"Row {rowNumber}: transactionid is required.");
 							if (string.IsNullOrWhiteSpace(invoiceNo))
-								throw new InvalidDataException($"Row {rowNumber}: invoiceno is required.");
+								throw new UploadValidationException($"Row {rowNumber}: invoiceno is required.");
 
 							var invDate = ParseOptionalDate(row, "invoicedate", rowNumber);
 							var entDate = ParseOptionalDate(row, "entrydate", rowNumber);
@@ -2270,6 +2216,15 @@ namespace Spic.Infrastructure.Services
 							var m1qty = ParseDecimal(row, "month1qty", rowNumber);
 							var m2qty = ParseDecimal(row, "month2qty", rowNumber);
 							var lorryCap = ParseDecimal(row, "lorrycapacity", rowNumber);
+
+							EnsureNonNegative(qty, rowNumber, "quantity");
+							EnsureNonNegative(qtymt, rowNumber, "quantity(mt)");
+							EnsureNonNegative(recvQtymt, rowNumber, "receivedquantity(mt)");
+							EnsureNonNegative(m1qty, rowNumber, "month1qty");
+							EnsureNonNegative(m2qty, rowNumber, "month2qty");
+							EnsureNonNegative(lorryCap, rowNumber, "lorrycapacity");
+							ValidateUnitConversion(unitStr, qty, qtymt, rowNumber);
+							ValidateReceiptDate(invDate, rrDate, rowNumber);
 
 							var wholesalerSaleBusinessKey = WholesalerSaleKey(
 								transactionId,
@@ -2338,82 +2293,25 @@ namespace Spic.Infrastructure.Services
 						}
 						else if (categoryId == "Two")
 						{
-							var marketerStr = OptionalText(row, "marketer");
-							var ackThroughStr = OptionalText(row, "ackthrough");
-							var unitStr = OptionalText(row, "unit");
-							var statusStr = OptionalText(row, "status");
-							var txnTypeStr = OptionalText(row, "txntype");
+							var marketerStr = preparedMaster.MarketerName;
+							var ackThroughStr = preparedMaster.AckThroughName;
+							var unitStr = preparedMaster.UnitName;
 
-							int? marketerId = null;
-							if (!string.IsNullOrEmpty(marketerStr))
-							{
-								var key = marketerStr.ToLowerInvariant();
-								if (!companyDict.TryGetValue(key, out var id))
-								{
-									var newComp = new Company { Name = marketerStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Companies.Add(newComp);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newComp.Id;
-									companyDict[key] = id;
-									result.NewMastersCreated.Companies++;
-								}
-								marketerId = id;
-							}
-
-							int? ackThroughId = null;
-							if (!string.IsNullOrEmpty(ackThroughStr))
-							{
-								var key = ackThroughStr.ToLowerInvariant();
-								if (!ackThroughDict.TryGetValue(key, out var id))
-								{
-									var newAck = new AckThrough { Name = ackThroughStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.AckThroughs.Add(newAck);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newAck.Id;
-									ackThroughDict[key] = id;
-									result.NewMastersCreated.AckThroughs++;
-								}
-								ackThroughId = id;
-							}
-
-							int? unitId = null;
-							if (!string.IsNullOrEmpty(unitStr))
-							{
-								var key = unitStr.ToLowerInvariant();
-								if (!unitDict.TryGetValue(key, out var id))
-								{
-									var newU = new Unit { Name = unitStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Units.Add(newU);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newU.Id;
-									unitDict[key] = id;
-									result.NewMastersCreated.Units++;
-								}
-								unitId = id;
-							}
-
-							int? statusId = null;
-							if (!string.IsNullOrEmpty(statusStr))
-							{
-								var key = statusStr.ToLowerInvariant();
-								if (!statusDict.TryGetValue(key, out var id))
-								{
-									var newS = new Status { Name = statusStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Statuses.Add(newS);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newS.Id;
-									statusDict[key] = id;
-									result.NewMastersCreated.Statuses++;
-								}
-								statusId = id;
-							}
+							var marketerId = GetPreloadedMasterId(
+								companyDict, marketerStr, rowNumber, "Marketer");
+							var ackThroughId = GetPreloadedMasterId(
+								ackThroughDict, ackThroughStr, rowNumber, "ACK Through");
+							var unitId = GetPreloadedMasterId(
+								unitDict, unitStr, rowNumber, "Unit");
+							var statusId = GetPreloadedMasterId(
+								statusDict, preparedMaster.StatusName, rowNumber, "Status");
 
 							var transactionId = GetCell(row, "transactionid");
 							var invoiceNo = GetCell(row, "invoiceno");
 							if (string.IsNullOrWhiteSpace(transactionId))
-								throw new InvalidDataException($"Row {rowNumber}: transactionid is required.");
+								throw new UploadValidationException($"Row {rowNumber}: transactionid is required.");
 							if (string.IsNullOrWhiteSpace(invoiceNo))
-								throw new InvalidDataException($"Row {rowNumber}: invoiceno is required.");
+								throw new UploadValidationException($"Row {rowNumber}: invoiceno is required.");
 
 							var invDate = ParseOptionalDate(row, "invoicedate", rowNumber);
 							var entDate = ParseOptionalDate(row, "entrydate", rowNumber);
@@ -2425,6 +2323,15 @@ namespace Spic.Infrastructure.Services
 							var m1qty = ParseDecimal(row, "month1qty", rowNumber);
 							var m2qty = ParseDecimal(row, "month2qty", rowNumber);
 							var lorryCap = ParseDecimal(row, "lorrycapacity", rowNumber);
+
+							EnsureNonNegative(qty, rowNumber, "quantity");
+							EnsureNonNegative(qtymt, rowNumber, "quantity(mt)");
+							EnsureNonNegative(recvQty, rowNumber, "receivedquantity");
+							EnsureNonNegative(m1qty, rowNumber, "month1qty");
+							EnsureNonNegative(m2qty, rowNumber, "month2qty");
+							EnsureNonNegative(lorryCap, rowNumber, "lorrycapacity");
+							ValidateUnitConversion(unitStr, qty, qtymt, rowNumber);
+							ValidateReceiptDate(invDate, rrDate, rowNumber);
 
 							var companySaleBusinessKey = CompanySaleKey(
 								transactionId,
@@ -2487,41 +2394,6 @@ namespace Spic.Infrastructure.Services
 						}
 						else if (categoryId == "Six")
 						{
-							if (!string.IsNullOrEmpty(globalPlantStr))
-							{
-								var key = globalPlantStr.ToLowerInvariant();
-								if (!plantDict.TryGetValue(key, out var id))
-								{
-									var newPlant = new Plant { Name = globalPlantStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Plants.Add(newPlant);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newPlant.Id;
-									plantDict[key] = id;
-									result.NewMastersCreated.Plants++;
-								}
-								plantId = id;
-							}
-
-
-							if (string.Equals(stateStr, "plant", StringComparison.OrdinalIgnoreCase))
-							{
-								// Keep stateId as null for "PLANT" row
-							}
-							else if (!string.IsNullOrEmpty(stateStr))
-							{
-								var stateKey = stateStr.ToLowerInvariant();
-								if (!stateDict.TryGetValue(stateKey, out var id))
-								{
-									var newState = new State { StateName = stateStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.States.Add(newState);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newState.Id;
-									stateDict[stateKey] = id;
-									result.NewMastersCreated.States++;
-								}
-								stateId = id;
-							}
-
 							var openingStock = ParseDecimal(row, "openingstock", rowNumber);
 							var openingGit = ParseDecimal(row, "openinggit", rowNumber);
 							var production = ParseDecimal(row, "production/imports", rowNumber);
@@ -2532,6 +2404,16 @@ namespace Spic.Infrastructure.Services
 							var stockAdj = ParseDecimal(row, "stockadjustment", rowNumber);
 							var closingGit = ParseDecimal(row, "closinggit", rowNumber);
 							var closingStock = ParseDecimal(row, "closingstock", rowNumber);
+
+							EnsureNonNegative(openingStock, rowNumber, "openingstock");
+							EnsureNonNegative(openingGit, rowNumber, "openinggit");
+							EnsureNonNegative(production, rowNumber, "production/imports");
+							EnsureNonNegative(receipt, rowNumber, "receipt");
+							EnsureNonNegative(dispatches, rowNumber, "dispatches");
+							EnsureNonNegative(sales, rowNumber, "sales");
+							EnsureNonNegative(salesReturn, rowNumber, "salesreturn");
+							EnsureNonNegative(closingGit, rowNumber, "closinggit");
+							EnsureNonNegative(closingStock, rowNumber, "closingstock");
 
 							var stateReconciliationBusinessKey = StateReconciliationKey(stateId, plantId, productId, ifmsProductId, productStr, reportDateUtc!.Value);
 							if (!ShouldProcessUploadedKey(uploadedBusinessKeys, stateReconciliationBusinessKey, RowFingerprint(row), rowNumber, result))
@@ -2567,77 +2449,18 @@ namespace Spic.Infrastructure.Services
 						}
 						else if (categoryId == "Seven")
 						{
-							if (!string.IsNullOrEmpty(globalPlantStr))
+							if (!string.IsNullOrEmpty(districtStr) && !stateId.HasValue)
 							{
-								var key = globalPlantStr.ToLowerInvariant();
-								if (!plantDict.TryGetValue(key, out var id))
-								{
-									var newPlant = new Plant { Name = globalPlantStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Plants.Add(newPlant);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newPlant.Id;
-									plantDict[key] = id;
-									result.NewMastersCreated.Plants++;
-								}
-								plantId = id;
+								throw new UploadValidationException(
+									$"Row {rowNumber}: District '{districtStr}' cannot be saved without a State.");
 							}
 
-
-							if (stateStr.Trim().Equals("plant", StringComparison.OrdinalIgnoreCase))
-							{
-								stateId = null;
-							}
-							else if (!string.IsNullOrEmpty(stateStr))
-							{
-								var stateKey = stateStr.ToLowerInvariant();
-								if (!stateDict.TryGetValue(stateKey, out var id))
-								{
-									var newState = new State { StateName = stateStr, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.States.Add(newState);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newState.Id;
-									stateDict[stateKey] = id;
-									result.NewMastersCreated.States++;
-								}
-								stateId = id;
-							}
-
-							int? distId = null;
-							if (!string.IsNullOrEmpty(districtStr))
-							{
-								if (!stateId.HasValue)
-									throw new InvalidDataException(
-										$"Row {rowNumber}: District '{districtStr}' cannot be saved without a State.");
-
-								var distKey = $"{districtStr.ToLowerInvariant()}_{stateId.Value}";
-								if (!districtDict.TryGetValue(distKey, out var id))
-								{
-									var newDist = new District { DistrictName = districtStr, StateId = stateId.Value, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Districts.Add(newDist);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newDist.Id;
-									districtDict[distKey] = id;
-									result.NewMastersCreated.Districts++;
-								}
-								distId = id;
-							}
-
-							var warehouseStr = GetCell(row, "warehouse/location");
-							int? whseId = null;
-							if (!string.IsNullOrEmpty(warehouseStr))
-							{
-								var whKey = warehouseStr.ToLowerInvariant();
-								if (!warehouseDict.TryGetValue(whKey, out var id))
-								{
-									var newWhse = new Warehouse { Name = warehouseStr, WarehouseCode = string.Empty, IsActive = true, CreatedAt = now, UpdatedAt = now, UpdatedBy = currentUserId };
-									_db.Warehouses.Add(newWhse);
-									await _db.SaveChangesAsync(cancellationToken);
-									id = newWhse.Id;
-									warehouseDict[whKey] = id;
-									result.NewMastersCreated.Warehouses++;
-								}
-								whseId = id;
-							}
+							var distId = preparedMaster.DistrictId;
+							var whseId = GetPreloadedMasterId(
+								warehouseDict,
+								preparedMaster.WarehouseName,
+								rowNumber,
+								"Warehouse");
 
 							var openingStockLoc = ParseDecimal(row, "openingstock(atlocation)", rowNumber);
 							var openingGit = ParseDecimal(row, "openingstock(git)", rowNumber);
@@ -2649,6 +2472,16 @@ namespace Spic.Infrastructure.Services
 							var stockAdj = ParseDecimal(row, "stockadjustment", rowNumber);
 							var closingGit = ParseDecimal(row, "closinggit", rowNumber);
 							var closingStock = ParseDecimal(row, "closingstock", rowNumber);
+
+							EnsureNonNegative(openingStockLoc, rowNumber, "openingstock(atlocation)");
+							EnsureNonNegative(openingGit, rowNumber, "openingstock(git)");
+							EnsureNonNegative(production, rowNumber, "imports/production");
+							EnsureNonNegative(receipt, rowNumber, "receipt");
+							EnsureNonNegative(dispatches, rowNumber, "dispatches");
+							EnsureNonNegative(sales, rowNumber, "sales");
+							EnsureNonNegative(salesReturn, rowNumber, "salesreturn");
+							EnsureNonNegative(closingGit, rowNumber, "closinggit");
+							EnsureNonNegative(closingStock, rowNumber, "closingstock");
 
 							var warehouseReconciliationBusinessKey = WarehouseReconciliationKey(
 								whseId, stateId, distId, plantId, productId, ifmsProductId, productStr, reportDateUtc!.Value);
@@ -2709,9 +2542,35 @@ namespace Spic.Infrastructure.Services
 			catch (Exception ex)
 			{
 				await transaction.RollbackAsync(CancellationToken.None);
-				_logger.LogError(ex, "Error processing bulk upload category {CategoryId} file {FileName}", categoryId, fileName);
-				var errorMsg = ex.InnerException?.Message ?? ex.Message;
-				return Failed($"Upload failed: {errorMsg}");
+
+				if (ex is UploadValidationException)
+				{
+					_logger.LogWarning(
+						ex,
+						"Bulk upload validation failed for category {CategoryId} file {FileName}",
+						categoryId,
+						fileName);
+					return Failed(ex.Message);
+				}
+
+				var errorReference = CreateErrorReference();
+				_logger.LogError(
+					ex,
+					"Error processing bulk upload category {CategoryId} file {FileName}. Reference {ErrorReference}",
+					categoryId,
+					fileName,
+					errorReference);
+
+				return Failed(
+					$"Upload failed because of an internal processing error. Reference: {errorReference}.");
+			}
+		}
+
+		private sealed class UploadValidationException : Exception
+		{
+			public UploadValidationException(string message)
+				: base(message)
+			{
 			}
 		}
 
@@ -2782,6 +2641,9 @@ namespace Spic.Infrastructure.Services
 			Message = message
 		};
 
+		private static string CreateErrorReference() =>
+			Guid.NewGuid().ToString("N")[..10].ToUpperInvariant();
+
 		private static string NormalizeKey(string? value) =>
 			(value ?? string.Empty).Trim().ToLowerInvariant();
 
@@ -2830,7 +2692,7 @@ namespace Spic.Infrastructure.Services
 			if (IsValidDealerName(dealerName))
 				return;
 
-			throw new InvalidDataException(
+			throw new UploadValidationException(
 				$"Row {rowNumber}: {fieldLabel} name '{dealerName}' is invalid. " +
 				"Use a real name containing letters; values such as 0, 00, 000, NA, NULL or punctuation-only text are not allowed.");
 		}
@@ -2867,7 +2729,7 @@ namespace Spic.Infrastructure.Services
 			if (IsValidProductName(productName))
 				return;
 
-			throw new InvalidDataException(
+			throw new UploadValidationException(
 				$"Row {rowNumber}: Product name '{productName}' is invalid.");
 		}
 
@@ -2918,22 +2780,23 @@ namespace Spic.Infrastructure.Services
 			if (normalized.Length == 0)
 				return Array.Empty<string>();
 
-			var keys = new HashSet<string>(StringComparer.Ordinal)
-			{
-				normalized
-			};
+			// Alphanumeric dealer codes are exact identifiers. Never reduce TN123,
+			// KA123, ABC001 etc. to their numeric portion because unrelated dealer
+			// codes would then collide on 123 / 001.
+			if (!normalized.All(char.IsDigit))
+				return new[] { normalized };
 
-			var digitsOnly = new string(normalized.Where(char.IsDigit).ToArray());
-			if (digitsOnly.Length > 0)
-			{
-				keys.Add(digitsOnly);
+			// Purely numeric IDs may arrive from Excel with leading zeroes removed.
+			var keys = new List<string> { normalized };
+			var withoutLeadingZeroes = normalized.TrimStart('0');
 
-				var withoutLeadingZeroes = digitsOnly.TrimStart('0');
-				if (withoutLeadingZeroes.Length > 0)
-					keys.Add(withoutLeadingZeroes);
+			if (withoutLeadingZeroes.Length > 0 &&
+				!string.Equals(withoutLeadingZeroes, normalized, StringComparison.Ordinal))
+			{
+				keys.Add(withoutLeadingZeroes);
 			}
 
-			return keys.OrderBy(x => x, StringComparer.Ordinal).ToList();
+			return keys;
 		}
 
 		private static string IfmsDealerCompositeKey(
@@ -3001,7 +2864,7 @@ namespace Spic.Infrastructure.Services
 				return DateTime.SpecifyKind(DateTime.FromOADate(oaDate), DateTimeKind.Utc);
 			}
 
-			throw new InvalidDataException(
+			throw new UploadValidationException(
 				$"Row {rowNumber}: Invalid date '{raw}' in column '{column}'.");
 		}
 
@@ -3167,7 +3030,7 @@ namespace Spic.Infrastructure.Services
 				return false;
 			}
 
-			throw new InvalidDataException(
+			throw new UploadValidationException(
 				$"Row {rowNumber}: The file contains conflicting values for the same business record. " +
 				"Correct the duplicate rows and upload again.");
 		}

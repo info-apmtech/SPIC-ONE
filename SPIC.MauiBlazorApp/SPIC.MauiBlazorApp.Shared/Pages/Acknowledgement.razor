@@ -21,8 +21,8 @@
         <div class="ac-action-buttons">
             <button class="ac-btn ac-btn-outline" @onclick="RefreshData" disabled="@(!_masterDataLoaded || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.88L2 9"></path></svg> Refresh Data</button>
             <button class="ac-btn ac-btn-outline" @onclick="ExportExcel" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2"></path><path d="M8 17h2"></path><path d="M14 13h2"></path><path d="M14 17h2"></path></svg> Excel</button>
-            <button class="ac-btn ac-btn-outline" @onclick="ExportPdf" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg> PDF</button>
-            <button class="ac-btn ac-btn-solid" @onclick="SendMail" disabled="@(_dashboard is null || _isLoading)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
+            <button class="ac-btn ac-btn-outline" disabled title="PDF export is not implemented yet"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-4"></path><path d="M12 15v-4c1 0 2 1 2 2s-1 2-2 2"></path><path d="M16 11v4"></path><path d="M16 13h2"></path></svg> PDF</button>
+            <button class="ac-btn ac-btn-solid" disabled title="Send Mail is not implemented yet"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg> Send Mail</button>
         </div>
     </div>
 
@@ -88,7 +88,7 @@
                     <select id="ac-product-select" class="ac-form-select" multiple="multiple">
                         @foreach (var p in _products)
                         {
-                            <option value="@p.Id" selected="@(_selProducts.Contains(p.Id))">@p.Name</option>
+                            <option value="@p.Id" selected="@(_selProductKeys.Contains(p.Id))">@p.Name</option>
                         }
                     </select>
                 </div>
@@ -512,11 +512,12 @@
     // ---- Master data ----
     private List<LocationDto> _allStates = new(), _allRegions = new(), _allHqs = new(), _allDistricts = new(), _allSubDistricts = new();
     private List<LocationDto> _states = new(), _regions = new(), _hq = new(), _districts = new(), _subDistricts = new();
-    private List<LocationDto> _products = new();
+    private List<AckLookupItemDto> _products = new();
     private List<AckLookupItemDto> _dealers = new();
     private List<AckLookupItemDto> _statuses = new();
 
-    private List<int> _selStates = new(), _selRegions = new(), _selHqs = new(), _selDistricts = new(), _selSubDistricts = new(), _selProducts = new();
+    private List<int> _selStates = new(), _selRegions = new(), _selHqs = new(), _selDistricts = new(), _selSubDistricts = new();
+    private List<string> _selProductKeys = new();   // P:<id> / I:<id>
     private List<string> _selDealerKeys = new();   // "R{id}" / "I{id}"
     private List<string> _selStatuses = new();      // status id as string
     private List<string> _selBuckets = new();       // Fast/Normal/Delayed/Critical
@@ -542,6 +543,11 @@
         // lower-page skeleton render immediately instead of showing a blank gap.
         _isLoading = true;
         _loadError = null;
+
+        // Apply the mandatory login scope before the first API request.
+        // HQ users are filtered by HQ, Region users by Region, State users by State.
+        ApplyMandatoryRoleScopeToSelections();
+        SyncSelectionsToFilter();
 
         var dashboardTask = LoadDashboard(renderLoadingState: false);
 
@@ -590,7 +596,7 @@
         var hqTask = FetchData("api/Headquarter/all");
         var districtsTask = FetchData("api/District/all");
         var subDistrictsTask = FetchData("api/SubDistrict/all");
-        var productsTask = FetchData("api/Product/all");
+        var productsTask = FetchLookup("api/AckCycle/products");
         var dealersTask = FetchLookup("api/AckCycle/dealers");
         var statusesTask = FetchLookup("api/AckCycle/statuses");
 
@@ -603,44 +609,133 @@
         foreach (var hq in _allHqs) { var p = _allRegions.FirstOrDefault(r => r.Id == hq.RegionId); if (p != null) hq.StateId = p.StateId; }
         foreach (var sd in _allSubDistricts) { var p = _allDistricts.FirstOrDefault(d => d.Id == sd.DistrictId); if (p != null) sd.StateId = p.StateId; }
 
-        // Apply role-based visibility same as DealerRegistration
-        if (LoginState != null && !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP))
-        {
-            if (LoginState.IsHQRole && LoginState.HQId > 0)
-            {
-                _hq = _allHqs.Where(h => h.Id == LoginState.HQId).ToList();
-                var regionId = _allHqs.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionId ?? LoginState.RegionId;
-                if (regionId > 0) _regions = _allRegions.Where(r => r.Id == regionId).ToList();
-                var stateId = _allRegions.FirstOrDefault(r => r.Id == regionId)?.StateId ?? LoginState.StateId;
-                if (stateId > 0) _states = _allStates.Where(s => s.Id == stateId).ToList();
-            }
-            else if (LoginState.IsRegionRole && LoginState.RegionId > 0)
-            {
-                _regions = _allRegions.Where(r => r.Id == LoginState.RegionId).ToList();
-                var stateId = _allRegions.FirstOrDefault(r => r.Id == LoginState.RegionId)?.StateId ?? LoginState.StateId;
-                if (stateId > 0) _states = _allStates.Where(s => s.Id == stateId).ToList();
-                _hq = _allHqs.Where(h => h.RegionId == LoginState.RegionId).ToList();
-            }
-            else if (LoginState.IsStateRole && LoginState.StateId > 0)
-            {
-                _states = _allStates.Where(s => s.Id == LoginState.StateId).ToList();
-                _regions = _allRegions.Where(r => r.StateId == LoginState.StateId).ToList();
-                _hq = _allHqs.Where(h => h.StateId == LoginState.StateId).ToList();
-                _districts = _allDistricts.Where(d => d.StateId == LoginState.StateId).ToList();
-                _subDistricts = _allSubDistricts.Where(sd => sd.StateId == LoginState.StateId).ToList();
-            }
-            else
-            {
-                _states = _allStates; _regions = _allRegions; _hq = _allHqs; _districts = _allDistricts; _subDistricts = _allSubDistricts;
-            }
-        }
-        else
-        {
-            _states = _allStates; _regions = _allRegions; _hq = _allHqs; _districts = _allDistricts; _subDistricts = _allSubDistricts;
-        }
+        ApplyRoleVisibility();
+        ApplyMandatoryRoleScopeToSelections();
+
         _products = productsTask.Result;
         _dealers = dealersTask.Result;
         _statuses = statusesTask.Result;
+    }
+
+    private bool IsUnrestrictedRole =>
+        LoginState is null || LoginState.IsAdmin || LoginState.IsDirectorOrAVP;
+
+    private void ApplyMandatoryRoleScopeToSelections()
+    {
+        if (IsUnrestrictedRole || LoginState is null)
+            return;
+
+        if (LoginState.IsHQRole && LoginState.HQId > 0)
+        {
+            _selHqs = new List<int> { LoginState.HQId };
+
+            var regionId = _allHqs.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionId
+                ?? (LoginState.RegionId > 0 ? (int?)LoginState.RegionId : null);
+            if (regionId.HasValue && regionId.Value > 0)
+                _selRegions = new List<int> { regionId.Value };
+
+            var stateId = regionId.HasValue
+                ? _allRegions.FirstOrDefault(r => r.Id == regionId.Value)?.StateId
+                : null;
+            stateId ??= LoginState.StateId > 0 ? (int?)LoginState.StateId : null;
+            if (stateId.HasValue && stateId.Value > 0)
+                _selStates = new List<int> { stateId.Value };
+
+            return;
+        }
+
+        if (LoginState.IsRegionRole && LoginState.RegionId > 0)
+        {
+            _selRegions = new List<int> { LoginState.RegionId };
+
+            var stateId = _allRegions.FirstOrDefault(r => r.Id == LoginState.RegionId)?.StateId
+                ?? (LoginState.StateId > 0 ? (int?)LoginState.StateId : null);
+            if (stateId.HasValue && stateId.Value > 0)
+                _selStates = new List<int> { stateId.Value };
+
+            _selHqs.RemoveAll(id =>
+            {
+                var hq = _allHqs.FirstOrDefault(x => x.Id == id);
+                return hq is null || hq.RegionId != LoginState.RegionId;
+            });
+
+            return;
+        }
+
+        if (LoginState.IsStateRole && LoginState.StateId > 0)
+        {
+            _selStates = new List<int> { LoginState.StateId };
+
+            _selRegions.RemoveAll(id =>
+            {
+                var region = _allRegions.FirstOrDefault(x => x.Id == id);
+                return region is null || region.StateId != LoginState.StateId;
+            });
+
+            _selHqs.RemoveAll(id =>
+            {
+                var hq = _allHqs.FirstOrDefault(x => x.Id == id);
+                return hq is null || hq.StateId != LoginState.StateId;
+            });
+        }
+    }
+
+    private void ApplyRoleVisibility()
+    {
+        if (IsUnrestrictedRole || LoginState is null)
+        {
+            _states = _allStates;
+            _regions = _selStates.Any()
+                ? _allRegions.Where(r => _selStates.Contains(r.StateId ?? 0)).ToList()
+                : _allRegions;
+            _hq = _selRegions.Any()
+                ? _allHqs.Where(h => _selRegions.Contains(h.RegionId ?? 0)).ToList()
+                : (_selStates.Any()
+                    ? _allHqs.Where(h => _selStates.Contains(h.StateId ?? 0)).ToList()
+                    : _allHqs);
+        }
+        else if (LoginState.IsHQRole && LoginState.HQId > 0)
+        {
+            _hq = _allHqs.Where(h => h.Id == LoginState.HQId).ToList();
+            var regionId = _allHqs.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionId ?? LoginState.RegionId;
+            _regions = regionId > 0 ? _allRegions.Where(r => r.Id == regionId).ToList() : new List<LocationDto>();
+            var stateId = _regions.FirstOrDefault()?.StateId ?? LoginState.StateId;
+            _states = stateId > 0 ? _allStates.Where(s => s.Id == stateId).ToList() : new List<LocationDto>();
+        }
+        else if (LoginState.IsRegionRole && LoginState.RegionId > 0)
+        {
+            _regions = _allRegions.Where(r => r.Id == LoginState.RegionId).ToList();
+            var stateId = _regions.FirstOrDefault()?.StateId ?? LoginState.StateId;
+            _states = stateId > 0 ? _allStates.Where(s => s.Id == stateId).ToList() : new List<LocationDto>();
+            _hq = _allHqs.Where(h => h.RegionId == LoginState.RegionId).ToList();
+        }
+        else if (LoginState.IsStateRole && LoginState.StateId > 0)
+        {
+            _states = _allStates.Where(s => s.Id == LoginState.StateId).ToList();
+            _regions = _selRegions.Any()
+                ? _allRegions.Where(r => r.StateId == LoginState.StateId && _selRegions.Contains(r.Id)).ToList()
+                : _allRegions.Where(r => r.StateId == LoginState.StateId).ToList();
+            _hq = _selRegions.Any()
+                ? _allHqs.Where(h => _selRegions.Contains(h.RegionId ?? 0)).ToList()
+                : _allHqs.Where(h => h.StateId == LoginState.StateId).ToList();
+        }
+        else
+        {
+            _states = _allStates;
+            _regions = _allRegions;
+            _hq = _allHqs;
+        }
+
+        var allowedStateIds = _states.Select(x => x.Id).ToHashSet();
+        _districts = allowedStateIds.Count > 0
+            ? _allDistricts.Where(d => allowedStateIds.Contains(d.StateId ?? 0)).ToList()
+            : _allDistricts;
+
+        _subDistricts = _selDistricts.Any()
+            ? _allSubDistricts.Where(sd => _selDistricts.Contains(sd.DistrictId ?? 0)).ToList()
+            : (allowedStateIds.Count > 0
+                ? _allSubDistricts.Where(sd => allowedStateIds.Contains(sd.StateId ?? 0)).ToList()
+                : _allSubDistricts);
     }
 
     // ---- Dashboard ----
@@ -712,11 +807,19 @@
 
     private void SyncSelectionsToFilter()
     {
-        // The geography cascade resolves region/HQ/subdistrict picks down into
-        // _selStates / _selDistricts, which is all the sales tables can filter on.
-        _filter.StateIds    = _selStates.ToList();
-        _filter.DistrictIds = _selDistricts.ToList();
-        _filter.ProductIds  = _selProducts.ToList();
+        ApplyMandatoryRoleScopeToSelections();
+
+        _filter.StateIds       = _selStates.ToList();
+        _filter.RegionIds      = _selRegions.ToList();
+        _filter.HeadQuarterIds = _selHqs.ToList();
+        _filter.DistrictIds    = _selDistricts.ToList();
+        _filter.ProductKeys    = _selProductKeys.ToList();
+        _filter.ProductIds     = _selProductKeys
+            .Where(key => key.StartsWith("P:", StringComparison.OrdinalIgnoreCase))
+            .Select(key => int.TryParse(key[2..], out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
         _filter.StatusIds   = _selStatuses.Select(s => int.TryParse(s, out var n) ? n : 0).Where(n => n > 0).ToList();
         _filter.DealerKeys  = _selDealerKeys.ToList();
         _filter.Buckets     = _selBuckets.ToList();
@@ -770,12 +873,16 @@
     private async Task ClearAll()
     {
         _selStates.Clear(); _selRegions.Clear(); _selHqs.Clear(); _selDistricts.Clear(); _selSubDistricts.Clear();
-        _selProducts.Clear(); _selDealerKeys.Clear(); _selStatuses.Clear(); _selBuckets.Clear();
+        _selProductKeys.Clear(); _selDealerKeys.Clear(); _selStatuses.Clear(); _selBuckets.Clear();
         _dateFrom = _dateTo = null;
         _filter.Source = null;
         _filter.GroupBy = "State";
-        _states = _allStates; _regions = _allRegions; _hq = _allHqs; _districts = _allDistricts; _subDistricts = _allSubDistricts;
-        SyncSelectionsToFilter(); _filter.Search = null; _filter.Page = 1;
+
+        ApplyMandatoryRoleScopeToSelections();
+        ApplyRoleVisibility();
+        SyncSelectionsToFilter();
+        _filter.Search = null;
+        _filter.Page = 1;
         await InvokeAsync(StateHasChanged);
         await RefreshAllSelect2();
         await LoadDashboard();
@@ -892,27 +999,30 @@
     [JSInvokable]
     public async Task OnStateChanged(List<string>? values)
     {
-        var selected = ParseIntValues(values);
-        if (_selStates.SequenceEqual(selected)) return;
-        _selStates = selected;
+        var previous = _selStates.ToList();
+        _selStates = ParseIntValues(values);
+        ApplyMandatoryRoleScopeToSelections();
+        if (previous.SequenceEqual(_selStates)) return;
         await Cascade("State");
     }
 
     [JSInvokable]
     public async Task OnRegionChanged(List<string>? values)
     {
-        var selected = ParseIntValues(values);
-        if (_selRegions.SequenceEqual(selected)) return;
-        _selRegions = selected;
+        var previous = _selRegions.ToList();
+        _selRegions = ParseIntValues(values);
+        ApplyMandatoryRoleScopeToSelections();
+        if (previous.SequenceEqual(_selRegions)) return;
         await Cascade("Region");
     }
 
     [JSInvokable]
     public async Task OnHqChanged(List<string>? values)
     {
-        var selected = ParseIntValues(values);
-        if (_selHqs.SequenceEqual(selected)) return;
-        _selHqs = selected;
+        var previous = _selHqs.ToList();
+        _selHqs = ParseIntValues(values);
+        ApplyMandatoryRoleScopeToSelections();
+        if (previous.SequenceEqual(_selHqs)) return;
         await Cascade("HQ");
     }
 
@@ -937,7 +1047,7 @@
     [JSInvokable]
     public void OnProductChanged(List<string>? values)
     {
-        _selProducts = ParseIntValues(values);
+        _selProductKeys = NormalizeStringValues(values);
         StateHasChanged();
     }
 
@@ -994,13 +1104,8 @@
             _selStates = _selStates.Union(_allSubDistricts.Where(sd => _selSubDistricts.Contains(sd.Id) && sd.StateId.HasValue).Select(sd => sd.StateId!.Value)).Distinct().ToList();
         }
 
-        _states = _allStates;
-        _regions = _selStates.Any() ? _allRegions.Where(r => _selStates.Contains(r.StateId ?? 0)).ToList() : _allRegions;
-        _hq = _selRegions.Any() ? _allHqs.Where(h => _selRegions.Contains(h.RegionId ?? 0)).ToList()
-              : (_selStates.Any() ? _allHqs.Where(h => _selStates.Contains(h.StateId ?? 0)).ToList() : _allHqs);
-        _districts = _selStates.Any() ? _allDistricts.Where(d => _selStates.Contains(d.StateId ?? 0)).ToList() : _allDistricts;
-        _subDistricts = _selDistricts.Any() ? _allSubDistricts.Where(sd => _selDistricts.Contains(sd.DistrictId ?? 0)).ToList()
-                        : (_selStates.Any() ? _allSubDistricts.Where(sd => _selStates.Contains(sd.StateId ?? 0)).ToList() : _allSubDistricts);
+        ApplyMandatoryRoleScopeToSelections();
+        ApplyRoleVisibility();
 
         StateHasChanged();
         await RefreshGeoSelect2();

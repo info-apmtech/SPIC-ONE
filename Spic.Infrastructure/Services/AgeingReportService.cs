@@ -108,6 +108,49 @@ namespace Spic.Infrastructure.Services
 				.Where(x => x.AgeingDays >= 61)
 				.Sum(x => x.Quantity);
 
+			// Previous-period KPIs are calculated from real historical snapshots.
+			// This replaces the old hardcoded 0 change values while preserving the
+			// current ageing, search and geography filter behaviour.
+			var previousFilter = BuildPreviousPeriodFilter(f, reportDate);
+			var previousReportDate = ResolveReportDate(previousFilter);
+			var previousSnapshots = await LoadCurrentSnapshotsAsync(
+				previousFilter,
+				cancellationToken);
+
+			var previousAcknowledgementLookup = await BuildAcknowledgementLookupAsync(
+				previousSnapshots.WholesalerRows,
+				previousSnapshots.DptRows,
+				previousReportDate,
+				cancellationToken);
+
+			var previousAgeableRows = await BuildAgeableStockRowsAsync(
+				previousSnapshots.WholesalerRows,
+				previousSnapshots.DptRows,
+				previousAcknowledgementLookup,
+				previousReportDate,
+				cancellationToken);
+
+			var previousFilteredAgeingRows = ApplyAgeingRowFilters(
+				previousAgeableRows,
+				previousFilter);
+
+			var previousTotalStock =
+				previousSnapshots.WholesalerRows.Sum(x => x.Stock) +
+				previousSnapshots.DptRows.Sum(x => x.ClosingBalance) +
+				previousSnapshots.WarehouseRows.Sum(x => x.ClosingStock);
+
+			var previousAverageAgeing = previousFilteredAgeingRows.Count == 0
+				? 0d
+				: Math.Round(previousFilteredAgeingRows.Average(x => x.AgeingDays), 1);
+
+			var previousStock30To60 = previousFilteredAgeingRows
+				.Where(x => x.AgeingDays >= 31 && x.AgeingDays <= 60)
+				.Sum(x => x.Quantity);
+
+			var previousStock60Plus = previousFilteredAgeingRows
+				.Where(x => x.AgeingDays >= 61)
+				.Sum(x => x.Quantity);
+
 			var currentStockByState = BuildCurrentStockByState(snapshots);
 			var salesByState = await LoadSalesByStateAsync(
 				f,
@@ -135,13 +178,13 @@ namespace Spic.Infrastructure.Services
 				Summary = new AgeingSummaryDto
 				{
 					TotalStock = totalStock,
-					TotalStockChangePct = 0m,
+					TotalStockChangePct = PercentageChange(totalStock, previousTotalStock),
 					AverageAgeing = averageAgeing,
-					AverageAgeingChange = 0d,
+					AverageAgeingChange = Math.Round(averageAgeing - previousAverageAgeing, 1),
 					Stock30To60 = stock30To60,
-					Stock30To60ChangePct = 0m,
+					Stock30To60ChangePct = PercentageChange(stock30To60, previousStock30To60),
 					Stock60Plus = stock60Plus,
-					Stock60PlusChangePct = 0m
+					Stock60PlusChangePct = PercentageChange(stock60Plus, previousStock60Plus)
 				},
 				StateWise = BuildStockVsSalesStateWise(
 					currentStockByState,
@@ -242,9 +285,12 @@ namespace Spic.Infrastructure.Services
 		{
 			var result = new CurrentSnapshotBundle();
 
-			var wholesalerCandidates = _db
-				.Set<WholesalerStockAsOnToday>()
-				.AsNoTracking();
+			// Dimension filters are applied before selecting the latest day so a newer
+			// snapshot from another scope cannot hide the selected State/Region/HQ data.
+			var wholesalerCandidates = ApplyWholesalerStockFilters(
+				_db.Set<WholesalerStockAsOnToday>().AsNoTracking(),
+				f)
+				.Where(x => x.Stock > 0m);
 
 			if (f.DateFrom.HasValue)
 			{
@@ -258,28 +304,25 @@ namespace Spic.Infrastructure.Services
 				wholesalerCandidates = wholesalerCandidates.Where(x => x.StockDate < toExclusive);
 			}
 
-			var latestWholesalerTimestamp = await wholesalerCandidates
-				.MaxAsync(x => (DateTime?)x.StockDate, cancellationToken);
+			var scopedWholesalerCandidates = wholesalerCandidates;
+			var wholesalerSnapshotRows = await scopedWholesalerCandidates
+				.Where(row => !scopedWholesalerCandidates.Any(candidate =>
+					candidate.StateId == row.StateId &&
+					candidate.StockDate.Date > row.StockDate.Date))
+				.ToListAsync(cancellationToken);
 
-			if (latestWholesalerTimestamp.HasValue)
-			{
-				var start = latestWholesalerTimestamp.Value.Date;
-				var end = start.AddDays(1);
+			result.WholesalerRows = wholesalerSnapshotRows
+				.GroupBy(WholesalerBusinessKey)
+				.Select(group => group
+					.OrderByDescending(row => row.UpdatedAt)
+					.ThenByDescending(row => row.Id)
+					.First())
+				.ToList();
 
-				var query = _db.Set<WholesalerStockAsOnToday>()
-					.AsNoTracking()
-					.Where(x =>
-						x.StockDate >= start &&
-						x.StockDate < end &&
-						x.Stock > 0m);
-
-				query = ApplyWholesalerStockFilters(query, f);
-				result.WholesalerRows = await query.ToListAsync(cancellationToken);
-			}
-
-			var dptCandidates = _db
-				.Set<DptReport>()
-				.AsNoTracking();
+			var dptCandidates = ApplyDptStockFilters(
+				_db.Set<DptReport>().AsNoTracking(),
+				f)
+				.Where(x => x.ClosingBalance > 0m);
 
 			if (f.DateFrom.HasValue)
 			{
@@ -293,28 +336,25 @@ namespace Spic.Infrastructure.Services
 				dptCandidates = dptCandidates.Where(x => x.CreatedAt < toExclusive);
 			}
 
-			var latestDptTimestamp = await dptCandidates
-				.MaxAsync(x => (DateTime?)x.CreatedAt, cancellationToken);
+			var scopedDptCandidates = dptCandidates;
+			var dptSnapshotRows = await scopedDptCandidates
+				.Where(row => !scopedDptCandidates.Any(candidate =>
+					candidate.StateId == row.StateId &&
+					candidate.CreatedAt.Date > row.CreatedAt.Date))
+				.ToListAsync(cancellationToken);
 
-			if (latestDptTimestamp.HasValue)
-			{
-				var start = latestDptTimestamp.Value.Date;
-				var end = start.AddDays(1);
+			result.DptRows = dptSnapshotRows
+				.GroupBy(DptBusinessKey)
+				.Select(group => group
+					.OrderByDescending(row => row.UpdatedAt)
+					.ThenByDescending(row => row.Id)
+					.First())
+				.ToList();
 
-				var query = _db.Set<DptReport>()
-					.AsNoTracking()
-					.Where(x =>
-						x.CreatedAt >= start &&
-						x.CreatedAt < end &&
-						x.ClosingBalance > 0m);
-
-				query = ApplyDptStockFilters(query, f);
-				result.DptRows = await query.ToListAsync(cancellationToken);
-			}
-
-			var warehouseCandidates = _db
-				.Set<WarehouseDistrictGlobalStockReconciliation>()
-				.AsNoTracking();
+			var warehouseCandidates = ApplyWarehouseStockFilters(
+				_db.Set<WarehouseDistrictGlobalStockReconciliation>().AsNoTracking(),
+				f)
+				.Where(x => x.ClosingStock > 0m);
 
 			if (f.DateFrom.HasValue)
 			{
@@ -328,30 +368,25 @@ namespace Spic.Infrastructure.Services
 				warehouseCandidates = warehouseCandidates.Where(x => x.CreatedAt < toExclusive);
 			}
 
-			var latestWarehouseTimestamp = await warehouseCandidates
-				.MaxAsync(x => (DateTime?)x.CreatedAt, cancellationToken);
+			var scopedWarehouseCandidates = warehouseCandidates;
+			var warehouseSnapshotRows = await scopedWarehouseCandidates
+				.Where(row => !scopedWarehouseCandidates.Any(candidate =>
+					candidate.StateId == row.StateId &&
+					candidate.CreatedAt.Date > row.CreatedAt.Date))
+				.ToListAsync(cancellationToken);
 
-			if (latestWarehouseTimestamp.HasValue)
-			{
-				var start = latestWarehouseTimestamp.Value.Date;
-				var end = start.AddDays(1);
-
-				var query = _db
-					.Set<WarehouseDistrictGlobalStockReconciliation>()
-					.AsNoTracking()
-					.Where(x =>
-						x.CreatedAt >= start &&
-						x.CreatedAt < end &&
-						x.ClosingStock > 0m);
-
-				query = ApplyWarehouseStockFilters(query, f);
-				result.WarehouseRows = await query.ToListAsync(cancellationToken);
-			}
+			result.WarehouseRows = warehouseSnapshotRows
+				.GroupBy(WarehouseBusinessKey)
+				.Select(group => group
+					.OrderByDescending(row => row.UpdatedAt)
+					.ThenByDescending(row => row.Id)
+					.First())
+				.ToList();
 
 			return result;
 		}
 
-		private static IQueryable<WholesalerStockAsOnToday> ApplyWholesalerStockFilters(
+		private IQueryable<WholesalerStockAsOnToday> ApplyWholesalerStockFilters(
 			IQueryable<WholesalerStockAsOnToday> query,
 			AgeingReportFilter f)
 		{
@@ -382,6 +417,14 @@ namespace Spic.Infrastructure.Services
 					f.LyingWithIds.Contains(x.DealershipNatureId.Value));
 			}
 
+			if (f.RegionIds.Count > 0 || f.HeadQuarterIds.Count > 0)
+			{
+				var dealerIds = BuildScopedDealerRegistrationIds(f);
+				query = query.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					dealerIds.Contains(x.DealerRegistrationId.Value));
+			}
+
 			var (productIds, ifmsProductIds) = SplitProductKeys(f);
 			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
@@ -390,12 +433,11 @@ namespace Spic.Infrastructure.Services
 					(x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
-			// Region/HQ selections are resolved to StateIds by the existing Razor
-			// cascade, so no entity-model change is required here.
+			// Region/HQ scope is applied through DealerRegistrationId above.
 			return query;
 		}
 
-		private static IQueryable<DptReport> ApplyDptStockFilters(
+		private IQueryable<DptReport> ApplyDptStockFilters(
 			IQueryable<DptReport> query,
 			AgeingReportFilter f)
 		{
@@ -427,6 +469,14 @@ namespace Spic.Infrastructure.Services
 					f.LyingWithIds.Contains(x.DealershipNatureId.Value));
 			}
 
+			if (f.RegionIds.Count > 0 || f.HeadQuarterIds.Count > 0)
+			{
+				var dealerIds = BuildScopedDealerRegistrationIds(f);
+				query = query.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					dealerIds.Contains(x.DealerRegistrationId.Value));
+			}
+
 			var (productIds, ifmsProductIds) = SplitProductKeys(f);
 			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
@@ -438,7 +488,7 @@ namespace Spic.Infrastructure.Services
 			return query;
 		}
 
-		private static IQueryable<WarehouseDistrictGlobalStockReconciliation>
+		private IQueryable<WarehouseDistrictGlobalStockReconciliation>
 			ApplyWarehouseStockFilters(
 				IQueryable<WarehouseDistrictGlobalStockReconciliation> query,
 				AgeingReportFilter f)
@@ -465,13 +515,32 @@ namespace Spic.Infrastructure.Services
 					(x.IfmsProductId.HasValue && ifmsProductIds.Contains(x.IfmsProductId.Value)));
 			}
 
-			// Warehouse rows do not have SubDistrictId or DealershipNatureId.
-			if (f.SubDistrictIds.Count > 0 || f.LyingWithIds.Count > 0)
+			// Warehouse rows have no dealer/Region/HQ relationship. For an exact
+			// Region/HQ scope, exclude them instead of mixing broader state stock.
+			if (f.RegionIds.Count > 0 ||
+				f.HeadQuarterIds.Count > 0 ||
+				f.SubDistrictIds.Count > 0 ||
+				f.LyingWithIds.Count > 0)
 			{
 				query = query.Where(_ => false);
 			}
 
 			return query;
+		}
+
+		private IQueryable<int> BuildScopedDealerRegistrationIds(AgeingReportFilter f)
+		{
+			var dealers = _db.Set<DealerRegistration>()
+				.AsNoTracking()
+				.AsQueryable();
+
+			if (f.RegionIds.Count > 0)
+				dealers = dealers.Where(x => f.RegionIds.Contains(x.Region));
+
+			if (f.HeadQuarterIds.Count > 0)
+				dealers = dealers.Where(x => f.HeadQuarterIds.Contains(x.HQ));
+
+			return dealers.Select(x => x.Id);
 		}
 
 		// ====================================================================
@@ -1134,7 +1203,7 @@ namespace Spic.Infrastructure.Services
 				.ToList();
 		}
 
-		private static IQueryable<SalesCompanySale> ApplyCompanySalesFilters(
+		private IQueryable<SalesCompanySale> ApplyCompanySalesFilters(
 			IQueryable<SalesCompanySale> query,
 			AgeingReportFilter f,
 			DateTime today)
@@ -1145,6 +1214,14 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(x => x.DistrictId.HasValue && f.DistrictIds.Contains(x.DistrictId.Value));
 			if (f.SubDistrictIds.Count > 0)
 				query = query.Where(_ => false);
+			if (f.RegionIds.Count > 0 || f.HeadQuarterIds.Count > 0)
+			{
+				var dealerIds = BuildScopedDealerRegistrationIds(f);
+				query = query.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					dealerIds.Contains(x.DealerRegistrationId.Value));
+			}
+
 			var (productIds, ifmsProductIds) = SplitProductKeys(f);
 			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
@@ -1159,7 +1236,7 @@ namespace Spic.Infrastructure.Services
 			return ApplyCompanySaleAgeRange(query, f.AgeingRanges, today);
 		}
 
-		private static IQueryable<SalesWholesaler> ApplyWholesalerSalesFilters(
+		private IQueryable<SalesWholesaler> ApplyWholesalerSalesFilters(
 			IQueryable<SalesWholesaler> query,
 			AgeingReportFilter f,
 			DateTime today)
@@ -1170,6 +1247,14 @@ namespace Spic.Infrastructure.Services
 				query = query.Where(x => x.BuyerDistrictId.HasValue && f.DistrictIds.Contains(x.BuyerDistrictId.Value));
 			if (f.SubDistrictIds.Count > 0)
 				query = query.Where(_ => false);
+			if (f.RegionIds.Count > 0 || f.HeadQuarterIds.Count > 0)
+			{
+				var dealerIds = BuildScopedDealerRegistrationIds(f);
+				query = query.Where(x =>
+					x.DealerId.HasValue &&
+					dealerIds.Contains(x.DealerId.Value));
+			}
+
 			var (productIds, ifmsProductIds) = SplitProductKeys(f);
 			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
@@ -1184,7 +1269,7 @@ namespace Spic.Infrastructure.Services
 			return ApplyWholesalerSaleAgeRange(query, f.AgeingRanges, today);
 		}
 
-		private static IQueryable<DptReport> ApplyDptSalesFilters(
+		private IQueryable<DptReport> ApplyDptSalesFilters(
 			IQueryable<DptReport> query,
 			AgeingReportFilter f,
 			DateTime today)
@@ -1638,6 +1723,106 @@ namespace Spic.Infrastructure.Services
 				_ => "Critical"
 			};
 		}
+
+		private static decimal PercentageChange(decimal current, decimal previous)
+		{
+			if (previous == 0m)
+			{
+				return current == 0m ? 0m : 100m;
+			}
+
+			return Math.Round(((current - previous) / previous) * 100m, 1);
+		}
+
+		private static AgeingReportFilter BuildPreviousPeriodFilter(
+			AgeingReportFilter current,
+			DateTime currentReportDate)
+		{
+			var previous = new AgeingReportFilter
+			{
+				StateIds = current.StateIds.ToList(),
+				RegionIds = current.RegionIds.ToList(),
+				HeadQuarterIds = current.HeadQuarterIds.ToList(),
+				DistrictIds = current.DistrictIds.ToList(),
+				SubDistrictIds = current.SubDistrictIds.ToList(),
+				LyingWithIds = current.LyingWithIds.ToList(),
+				ProductIds = current.ProductIds.ToList(),
+				ProductKeys = current.ProductKeys.ToList(),
+				AgeingRanges = current.AgeingRanges.ToList(),
+				Search = current.Search,
+				Page = 1,
+				PageSize = current.PageSize,
+				SortColumn = current.SortColumn,
+				SortDir = current.SortDir
+			};
+
+			if (current.DateFrom.HasValue)
+			{
+				var currentStart = current.DateFrom.Value.Date;
+				var currentEnd = current.DateTo?.Date ?? currentReportDate.Date;
+				var periodDays = Math.Max(1, (currentEnd - currentStart).Days + 1);
+				var previousEnd = currentStart.AddDays(-1);
+
+				previous.DateTo = previousEnd;
+				previous.DateFrom = previousEnd.AddDays(-(periodDays - 1));
+			}
+			else
+			{
+				previous.DateFrom = null;
+				previous.DateTo = currentReportDate.Date.AddMonths(-1);
+			}
+
+			return NormalizeFilter(previous);
+		}
+
+		// Business keys are used only to collapse same-day file re-upload revisions.
+		private static string WholesalerBusinessKey(WholesalerStockAsOnToday row) =>
+			string.Join("|",
+				DealerBusinessKey(row.DealerRegistrationId, row.IfmsDealerId, row.AgencyName),
+				ProductIdentity(row.ProductId, row.IfmsProductId),
+				IdPart(row.StateId),
+				IdPart(row.DistrictId),
+				IdPart(row.CompanyId),
+				IdPart(row.PlantId));
+
+		private static string DptBusinessKey(DptReport row) =>
+			string.Join("|",
+				DealerBusinessKey(row.DealerRegistrationId, row.IfmsDealerId, row.RetailerName),
+				ProductIdentity(row.ProductId, row.IfmsProductId),
+				IdPart(row.StateId),
+				IdPart(row.DistrictId),
+				IdPart(row.SubDistrictId),
+				IdPart(row.CompanyId),
+				IdPart(row.PlantId));
+
+		private static string WarehouseBusinessKey(
+			WarehouseDistrictGlobalStockReconciliation row) =>
+			string.Join("|",
+				IdPart(row.WarehouseId),
+				IdPart(row.StateId),
+				IdPart(row.DistrictId),
+				IdPart(row.PlantId),
+				ProductIdentity(row.ProductId, row.IfmsProductId));
+
+		private static string DealerBusinessKey(
+			int? dealerRegistrationId,
+			int? ifmsDealerId,
+			string? dealerName)
+		{
+			if (dealerRegistrationId.HasValue) return "R:" + dealerRegistrationId.Value;
+			if (ifmsDealerId.HasValue) return "I:" + ifmsDealerId.Value;
+			return "N:" + NormalizeBusinessText(dealerName);
+		}
+
+		private static string IdPart(int? value) =>
+			value.HasValue ? value.Value.ToString() : "0";
+
+		private static string NormalizeBusinessText(string? value) =>
+			string.IsNullOrWhiteSpace(value)
+				? string.Empty
+				: string.Join(" ", value.Trim().ToLowerInvariant().Split(
+					new[] { ' ', '\t', '\r', '\n' },
+					StringSplitOptions.RemoveEmptyEntries));
 
 		private static AgeingReportFilter NormalizeFilter(AgeingReportFilter? filter)
 		{

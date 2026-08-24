@@ -316,6 +316,13 @@ namespace Spic.Infrastructure.Services
 					x.DistrictId.HasValue && filter.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				var scopedWarehouseIds = BuildScopedWarehouseIds(filter);
+				warehouseBase = warehouseBase.Where(x =>
+					x.WarehouseId.HasValue && scopedWarehouseIds.Contains(x.WarehouseId.Value));
+			}
+
 			if (productIds.HasAny)
 			{
 				warehouseBase = warehouseBase.Where(x =>
@@ -405,6 +412,14 @@ namespace Spic.Infrastructure.Services
 			{
 				companySalesQuery = companySalesQuery.Where(x =>
 					x.DistrictId.HasValue && filter.DistrictIds.Contains(x.DistrictId.Value));
+			}
+
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				var scopedDealerIds = BuildScopedDealerRegistrationIds(filter);
+				companySalesQuery = companySalesQuery.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					scopedDealerIds.Contains(x.DealerRegistrationId.Value));
 			}
 
 			if (productIds.HasAny)
@@ -518,6 +533,14 @@ namespace Spic.Infrastructure.Services
 			{
 				stockBase = stockBase.Where(x =>
 					x.DistrictId.HasValue && filter.DistrictIds.Contains(x.DistrictId.Value));
+			}
+
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				var scopedDealerIds = BuildScopedDealerRegistrationIds(filter);
+				stockBase = stockBase.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					scopedDealerIds.Contains(x.DealerRegistrationId.Value));
 			}
 
 			if (productIds.HasAny)
@@ -637,6 +660,14 @@ namespace Spic.Infrastructure.Services
 				salesBase = salesBase.Where(x =>
 					x.SellerDistrictId.HasValue &&
 					filter.DistrictIds.Contains(x.SellerDistrictId.Value));
+			}
+
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				var scopedDealerIds = BuildScopedDealerRegistrationIds(filter);
+				salesBase = salesBase.Where(x =>
+					x.WholesalerId.HasValue &&
+					scopedDealerIds.Contains(x.WholesalerId.Value));
 			}
 
 			if (productIds.HasAny)
@@ -817,6 +848,14 @@ namespace Spic.Infrastructure.Services
 			{
 				filteredBase = filteredBase.Where(x =>
 					x.SubDistrictId.HasValue && filter.SubDistrictIds.Contains(x.SubDistrictId.Value));
+			}
+
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				var scopedDealerIds = BuildScopedDealerRegistrationIds(filter);
+				filteredBase = filteredBase.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					scopedDealerIds.Contains(x.DealerRegistrationId.Value));
 			}
 
 			if (productIds.HasAny)
@@ -1324,6 +1363,38 @@ namespace Spic.Infrastructure.Services
 		// Helpers
 		// =====================================================================
 
+		private IQueryable<int> BuildScopedDealerRegistrationIds(LiqCycleFilter filter)
+		{
+			var dealers = _db.Set<DealerRegistration>()
+				.AsNoTracking()
+				.AsQueryable();
+
+			if (filter.RegionIds.Count > 0)
+				dealers = dealers.Where(x => filter.RegionIds.Contains(x.Region));
+
+			if (filter.HeadQuarterIds.Count > 0)
+				dealers = dealers.Where(x => filter.HeadQuarterIds.Contains(x.HQ));
+
+			return dealers.Select(x => x.Id);
+		}
+
+		private IQueryable<int> BuildScopedWarehouseIds(LiqCycleFilter filter)
+		{
+			var warehouses = _db.Set<Warehouse>()
+				.AsNoTracking()
+				.AsQueryable();
+
+			if (filter.RegionIds.Count > 0)
+				warehouses = warehouses.Where(x =>
+					x.RegionId.HasValue && filter.RegionIds.Contains(x.RegionId.Value));
+
+			if (filter.HeadQuarterIds.Count > 0)
+				warehouses = warehouses.Where(x =>
+					x.HeadquarterId.HasValue && filter.HeadQuarterIds.Contains(x.HeadquarterId.Value));
+
+			return warehouses.Select(x => x.Id);
+		}
+
 		private static bool SourceMatches(string? selectedSource, string source)
 		{
 			return string.IsNullOrWhiteSpace(selectedSource) ||
@@ -1334,6 +1405,8 @@ namespace Spic.Infrastructure.Services
 		private static void NormalizeFilter(LiqCycleFilter filter)
 		{
 			filter.StateIds ??= new List<int>();
+			filter.RegionIds ??= new List<int>();
+			filter.HeadQuarterIds ??= new List<int>();
 			filter.DistrictIds ??= new List<int>();
 			filter.SubDistrictIds ??= new List<int>();
 			filter.ProductIds ??= new List<int>();
@@ -1342,6 +1415,8 @@ namespace Spic.Infrastructure.Services
 			filter.DealerKeys ??= new List<string>();
 
 			filter.StateIds = filter.StateIds.Where(x => x > 0).Distinct().ToList();
+			filter.RegionIds = filter.RegionIds.Where(x => x > 0).Distinct().ToList();
+			filter.HeadQuarterIds = filter.HeadQuarterIds.Where(x => x > 0).Distinct().ToList();
 			filter.DistrictIds = filter.DistrictIds.Where(x => x > 0).Distinct().ToList();
 			filter.SubDistrictIds = filter.SubDistrictIds.Where(x => x > 0).Distinct().ToList();
 			filter.ProductIds = filter.ProductIds.Where(x => x > 0).Distinct().ToList();

@@ -25,12 +25,10 @@ namespace Spic.Infrastructure.Services
 	/// Example for the same dealer/product:
 	/// 01-Aug = 10, 02-Aug = 15, 03-Aug = 12 -> current stock is 12, not 37.
 	///
-	/// AGEING SOURCES:
-	/// 1. Company Sales: Status.Name = Ack + RetailerReceiptDate.
-	/// 2. Wholesaler Sales: Status.Name = Ack + RetailerReceiptDate.
-	/// 3. Retailer Sales: DptReport.SoldQuantity > 0, using DPT CreatedAt report date
-	///    only as an ACK-equivalent fallback for DPT/retailer stock because the
-	///    supplied DPT model has no StatusId or RetailerReceiptDate.
+	/// AGEING RULE:
+	/// Ageing starts only from a genuine ACK transaction: Status.Name = "Ack"
+	/// and RetailerReceiptDate must be present in Company/Wholesaler Sales.
+	/// DPT CreatedAt/SoldQuantity and warehouse snapshot dates are not ACK events.
 	/// </summary>
 	public sealed class StockReportService : IStockReportService
 	{
@@ -127,13 +125,13 @@ namespace Spic.Infrastructure.Services
 			// 1. Locate the available snapshot days once for each source.
 			// -----------------------------------------------------------------
 			var wholesalerAvailableDates = await GetWholesalerAvailableDatesAsync(
-				currentAsOfExclusive);
+				filter, currentAsOfExclusive);
 
 			var dptAvailableDates = await GetDptAvailableDatesAsync(
-				currentAsOfExclusive);
+				filter, currentAsOfExclusive);
 
 			var warehouseAvailableDates = await GetWarehouseAvailableDatesAsync(
-				currentAsOfExclusive);
+				filter, currentAsOfExclusive);
 
 			var currentWholesalerDate = LatestDateBefore(
 				wholesalerAvailableDates,
@@ -258,10 +256,14 @@ namespace Spic.Infrastructure.Services
 				warehouseSnapshotMap,
 				previousYearWarehouseDate);
 
+			// Preserve the unfiltered last-month snapshot for real KPI comparison.
+			var lastMonthWholesalerComparisonRows = lastMonthWholesalerRows.ToList();
+			var lastMonthDptComparisonRows = lastMonthDptRows.ToList();
+			var lastMonthWarehouseComparisonRows = lastMonthWarehouseRows.ToList();
+
 			// -----------------------------------------------------------------
-			// 3. Ageing lookup for dealer-held stock. Strict sources require
-			// Status.Name = "Ack" and RetailerReceiptDate. DPT SoldQuantity is
-			// included as the retailer-sales fallback described in BuildAckLookupAsync.
+			// 3. Ageing lookup for dealer-held stock. Ageing is strict ACK-only:
+			// Status.Name = "Ack" and RetailerReceiptDate are required.
 			// -----------------------------------------------------------------
 			var acknowledgementLookup = await BuildAckLookupAsync(
 				currentWholesalerRows
@@ -271,12 +273,11 @@ namespace Spic.Infrastructure.Services
 				currentDptRows
 					.Concat(yesterdayDptRows)
 					.Concat(lastMonthDptRows)
-					.Concat(previousYearDptRows));
+					.Concat(previousYearDptRows),
+				today);
 
-			// Ageing keeps the existing ACK/receipt date as first priority.
-			// When an ACK ageing anchor is not available, use the source snapshot/report
-			// date only for Stock Report ageing classification. This keeps every current
-			// stock row in one of the five business ageing buckets.
+			// Rows without a genuine ACK remain Pending ACK and are excluded from
+			// ageing-range filters and ageing summary calculations.
 			currentWholesalerRows = ApplyWholesalerAgeingFilter(
 				currentWholesalerRows, filter, today, acknowledgementLookup);
 			yesterdayWholesalerRows = ApplyWholesalerAgeingFilter(
@@ -327,10 +328,9 @@ namespace Spic.Infrastructure.Services
 					((totalStock - lastMonthStock) / lastMonthStock) * 100m,
 					1);
 
-			// Count every unique stock holder from the three current snapshot sources.
-			// The same DealerRegistrationId / IfmsDealerId appearing in wholesaler stock
-			// and DPT is counted once. Warehouse reconciliation has no dealer column,
-			// so each distinct WarehouseId is counted as one additional stock holder.
+			// Count unique dealers only. The same DealerRegistrationId / IfmsDealerId
+			// appearing in wholesaler stock and DPT is counted once. Warehouses are not
+			// dealers and are intentionally excluded from this KPI.
 			var dealerCount = CountUniqueDealers(
 				currentWholesalerRows,
 				currentDptRows,
@@ -350,13 +350,10 @@ namespace Spic.Infrastructure.Services
 
 			foreach (var row in currentWholesalerRows)
 			{
-				var ageingDays = AckAgeForWholesalerRow(
+				var ageingDays = ResolveWholesalerAgeingDays(
 					acknowledgementLookup,
 					today,
-					row.DealerRegistrationId,
-					row.IfmsDealerId,
-					row.ProductId,
-					row.IfmsProductId);
+					row);
 
 				AddAgeingSummary(
 					ageingDays,
@@ -369,13 +366,10 @@ namespace Spic.Infrastructure.Services
 
 			foreach (var row in currentDptRows)
 			{
-				var ageingDays = AckAgeForDptRow(
+				var ageingDays = ResolveDptAgeingDays(
 					acknowledgementLookup,
 					today,
-					row.DealerRegistrationId,
-					row.IfmsDealerId,
-					row.ProductId,
-					row.IfmsProductId);
+					row);
 
 				AddAgeingSummary(
 					ageingDays,
@@ -390,6 +384,73 @@ namespace Spic.Infrastructure.Services
 				? 0d
 				: Math.Round(ageingTotal / ageingRowCount, 0);
 
+			// Dynamic last-month ageing comparison. The ACK lookup is constrained to
+			// the historical as-of date so a later ACK cannot rewrite history.
+			var lastMonthAsOfDate = today.AddMonths(-1);
+			var lastMonthAckLookup = await BuildAckLookupAsync(
+				lastMonthWholesalerComparisonRows,
+				lastMonthDptComparisonRows,
+				lastMonthAsOfDate);
+
+			lastMonthWholesalerComparisonRows = ApplyWholesalerAgeingFilter(
+				lastMonthWholesalerComparisonRows,
+				filter,
+				lastMonthAsOfDate,
+				lastMonthAckLookup);
+
+			lastMonthDptComparisonRows = ApplyDptAgeingFilter(
+				lastMonthDptComparisonRows,
+				filter,
+				lastMonthAsOfDate,
+				lastMonthAckLookup);
+
+			lastMonthWarehouseComparisonRows = ApplyWarehouseAgeingFilter(
+				lastMonthWarehouseComparisonRows,
+				filter,
+				lastMonthAsOfDate);
+
+			var correctedLastMonthStock =
+				lastMonthWholesalerComparisonRows.Sum(x => x.Stock) +
+				lastMonthDptComparisonRows.Sum(x => x.ClosingBalance) +
+				lastMonthWarehouseComparisonRows.Sum(x => x.ClosingStock);
+
+			totalStockChangePct = correctedLastMonthStock == 0m
+				? 0m
+				: Math.Round(
+					((totalStock - correctedLastMonthStock) / correctedLastMonthStock) * 100m,
+					1);
+
+			double lastMonthAgeingTotal = 0d;
+			var lastMonthAgeingRowCount = 0;
+			var lastMonthHighAgeingCount = 0;
+			decimal lastMonthHighAgeingStock = 0m;
+
+			foreach (var row in lastMonthWholesalerComparisonRows)
+			{
+				AddAgeingSummary(
+					ResolveWholesalerAgeingDays(lastMonthAckLookup, lastMonthAsOfDate, row),
+					row.Stock,
+					ref lastMonthAgeingTotal,
+					ref lastMonthAgeingRowCount,
+					ref lastMonthHighAgeingCount,
+					ref lastMonthHighAgeingStock);
+			}
+
+			foreach (var row in lastMonthDptComparisonRows)
+			{
+				AddAgeingSummary(
+					ResolveDptAgeingDays(lastMonthAckLookup, lastMonthAsOfDate, row),
+					row.ClosingBalance,
+					ref lastMonthAgeingTotal,
+					ref lastMonthAgeingRowCount,
+					ref lastMonthHighAgeingCount,
+					ref lastMonthHighAgeingStock);
+			}
+
+			var lastMonthAverageAgeing = lastMonthAgeingRowCount == 0
+				? 0d
+				: Math.Round(lastMonthAgeingTotal / lastMonthAgeingRowCount, 0);
+
 			var summary = new SummaryDto
 			{
 				TotalStock = totalStock,
@@ -398,9 +459,9 @@ namespace Spic.Infrastructure.Services
 				TodayDealerCount = todayDealerCount,
 				YesterdayDealerCount = yesterdayDealerCount,
 				AverageAgeing = averageAgeing,
-				AverageAgeingChange = 0d,
+				AverageAgeingChange = Math.Round(averageAgeing - lastMonthAverageAgeing, 0),
 				HighAgeingCount = highAgeingCount,
-				HighAgeingChange = 0,
+				HighAgeingChange = highAgeingCount - lastMonthHighAgeingCount,
 				HighAgeingStock = highAgeingStock
 			};
 
@@ -553,13 +614,13 @@ namespace Spic.Infrastructure.Services
 			var currentAsOfExclusive = today.AddDays(1);
 
 			var wholesalerAvailableDates = await GetWholesalerAvailableDatesAsync(
-				currentAsOfExclusive);
+				filter, currentAsOfExclusive);
 
 			var dptAvailableDates = await GetDptAvailableDatesAsync(
-				currentAsOfExclusive);
+				filter, currentAsOfExclusive);
 
 			var warehouseAvailableDates = await GetWarehouseAvailableDatesAsync(
-				currentAsOfExclusive);
+				filter, currentAsOfExclusive);
 
 			var currentWholesalerDate = LatestDateBefore(
 				wholesalerAvailableDates,
@@ -599,7 +660,8 @@ namespace Spic.Infrastructure.Services
 
 			var acknowledgementLookup = await BuildAckLookupAsync(
 				currentWholesalerRows,
-				currentDptRows);
+				currentDptRows,
+				today);
 
 			currentWholesalerRows = ApplyWholesalerAgeingFilter(
 				currentWholesalerRows, filter, today, acknowledgementLookup);
@@ -626,10 +688,14 @@ namespace Spic.Infrastructure.Services
 		// =====================================================================
 
 		private async Task<List<DateTime>> GetWholesalerAvailableDatesAsync(
+			StockReportFilter filter,
 			DateTime asOfExclusive)
 		{
-			return await _db.Set<WholesalerStockAsOnToday>()
-				.AsNoTracking()
+			var query = ApplyWholesalerDimensionFilters(
+				_db.Set<WholesalerStockAsOnToday>().AsNoTracking(),
+				filter);
+
+			return await query
 				.Where(x => x.StockDate < asOfExclusive)
 				.Select(x => x.StockDate.Date)
 				.Distinct()
@@ -637,10 +703,14 @@ namespace Spic.Infrastructure.Services
 		}
 
 		private async Task<List<DateTime>> GetDptAvailableDatesAsync(
+			StockReportFilter filter,
 			DateTime asOfExclusive)
 		{
-			return await _db.Set<DptReport>()
-				.AsNoTracking()
+			var query = ApplyDptDimensionFilters(
+				_db.Set<DptReport>().AsNoTracking(),
+				filter);
+
+			return await query
 				.Where(x => x.CreatedAt < asOfExclusive)
 				.Select(x => x.CreatedAt.Date)
 				.Distinct()
@@ -648,10 +718,14 @@ namespace Spic.Infrastructure.Services
 		}
 
 		private async Task<List<DateTime>> GetWarehouseAvailableDatesAsync(
+			StockReportFilter filter,
 			DateTime asOfExclusive)
 		{
-			return await _db.Set<WarehouseDistrictGlobalStockReconciliation>()
-				.AsNoTracking()
+			var query = ApplyWarehouseDimensionFilters(
+				_db.Set<WarehouseDistrictGlobalStockReconciliation>().AsNoTracking(),
+				filter);
+
+			return await query
 				.Where(x => x.CreatedAt < asOfExclusive)
 				.Select(x => x.CreatedAt.Date)
 				.Distinct()
@@ -825,11 +899,28 @@ namespace Spic.Infrastructure.Services
 		// Dimension filters
 		// =====================================================================
 
-		private static IQueryable<WholesalerStockAsOnToday>
+		private IQueryable<WholesalerStockAsOnToday>
 			ApplyWholesalerDimensionFilters(
 				IQueryable<WholesalerStockAsOnToday> query,
 				StockReportFilter filter)
 		{
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				query = query.Where(row =>
+					row.DealerRegistrationId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == row.DealerRegistrationId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
+			}
+
+			// Wholesaler snapshot rows have no SubDistrictId. When a subdistrict is
+			// explicitly selected, do not mix broader district-level wholesaler stock.
+			if (filter.SubDistrictIds.Count > 0)
+			{
+				return query.Where(x => false);
+			}
+
 			if (filter.StateIds.Count > 0)
 			{
 				query = query.Where(x =>
@@ -875,10 +966,20 @@ namespace Spic.Infrastructure.Services
 			return query;
 		}
 
-		private static IQueryable<DptReport> ApplyDptDimensionFilters(
+		private IQueryable<DptReport> ApplyDptDimensionFilters(
 			IQueryable<DptReport> query,
 			StockReportFilter filter)
 		{
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				query = query.Where(row =>
+					row.DealerRegistrationId.HasValue &&
+					_db.Set<DealerRegistration>().Any(dealer =>
+						dealer.Id == row.DealerRegistrationId.Value &&
+						(filter.RegionIds.Count == 0 || filter.RegionIds.Contains(dealer.Region)) &&
+						(filter.HeadQuarterIds.Count == 0 || filter.HeadQuarterIds.Contains(dealer.HQ))));
+			}
+
 			if (filter.StateIds.Count > 0)
 			{
 				query = query.Where(x =>
@@ -936,6 +1037,16 @@ namespace Spic.Infrastructure.Services
 				IQueryable<WarehouseDistrictGlobalStockReconciliation> query,
 				StockReportFilter filter)
 		{
+			// Warehouse snapshots do not carry DealerRegistration/Region/HQ.
+			// Do not mix broader warehouse rows into filters that cannot be mapped exactly.
+			if (filter.RegionIds.Count > 0 ||
+				filter.HeadQuarterIds.Count > 0 ||
+				filter.SubDistrictIds.Count > 0 ||
+				filter.LyingWithIds.Count > 0)
+			{
+				return query.Where(x => false);
+			}
+
 			if (filter.StateIds.Count > 0)
 			{
 				query = query.Where(x =>
@@ -1063,8 +1174,10 @@ namespace Spic.Infrastructure.Services
 
 		private async Task<StockAgeingLookup> BuildAckLookupAsync(
 			IEnumerable<WholesalerStockAsOnToday> wholesalerRows,
-			IEnumerable<DptReport> dptRows)
+			IEnumerable<DptReport> dptRows,
+			DateTime? asOfDate = null)
 		{
+			var ackExclusive = asOfDate?.Date.AddDays(1);
 			var keyRows = wholesalerRows
 				.Select(x => new AckStockKey
 				{
@@ -1146,6 +1259,7 @@ namespace Spic.Infrastructure.Services
 						x.StatusId.HasValue &&
 						ackStatusIds.Contains(x.StatusId.Value) &&
 						x.RetailerReceiptDate.HasValue &&
+						(!ackExclusive.HasValue || x.RetailerReceiptDate.Value < ackExclusive.Value) &&
 						((hasApprovedProducts &&
 						  x.ProductId.HasValue &&
 						  productIds.Contains(x.ProductId.Value)) ||
@@ -1200,6 +1314,7 @@ namespace Spic.Infrastructure.Services
 						x.StatusId.HasValue &&
 						ackStatusIds.Contains(x.StatusId.Value) &&
 						x.RetailerReceiptDate.HasValue &&
+						(!ackExclusive.HasValue || x.RetailerReceiptDate.Value < ackExclusive.Value) &&
 						((hasApprovedProducts &&
 						  x.ProductId.HasValue &&
 						  productIds.Contains(x.ProductId.Value)) ||
@@ -1249,64 +1364,9 @@ namespace Spic.Infrastructure.Services
 				}
 			}
 
-			// -------------------------------------------------------------
-			// 2. Retailer sales source from DPT Report.SoldQuantity
-			// -------------------------------------------------------------
-			// DPT has no StatusId/RetailerReceiptDate, so SoldQuantity > 0 and
-			// CreatedAt remain the existing ACK-equivalent fallback.
-			var dptSalesQuery = _db.Set<DptReport>()
-				.AsNoTracking()
-				.Where(x =>
-					x.SoldQuantity > 0m &&
-					((hasApprovedProducts &&
-					  x.ProductId.HasValue &&
-					  productIds.Contains(x.ProductId.Value)) ||
-					 (hasIfmsProducts &&
-					  x.IfmsProductId.HasValue &&
-					  ifmsProductIds.Contains(x.IfmsProductId.Value))) &&
-					x.CreatedAt < DateTime.UtcNow.Date.AddDays(1));
 
-			dptSalesQuery = ApplyDptDealerFilter(
-				dptSalesQuery,
-				registrationIds,
-				ifmsIds);
-
-			var dptSalesRows = await dptSalesQuery
-				.GroupBy(x => new
-				{
-					x.DealerRegistrationId,
-					x.IfmsDealerId,
-					x.ProductId,
-					x.IfmsProductId
-				})
-				.Select(group => new AckAggregateRow
-				{
-					RegistrationId = group.Key.DealerRegistrationId,
-					IfmsId = group.Key.IfmsDealerId,
-					ProductId = group.Key.ProductId,
-					IfmsProductId = group.Key.IfmsProductId,
-					AckDate = group.Max(x => (DateTime?)x.CreatedAt)
-				})
-				.ToListAsync();
-
-			foreach (var row in dptSalesRows)
-			{
-				AddAcknowledgement(
-					result.DptRetailerSaleDates,
-					"R",
-					row.RegistrationId,
-					row.ProductId,
-					row.IfmsProductId,
-					row.AckDate);
-				AddAcknowledgement(
-					result.DptRetailerSaleDates,
-					"I",
-					row.IfmsId,
-					row.ProductId,
-					row.IfmsProductId,
-					row.AckDate);
-			}
-
+			// Ageing is strictly ACK-based. DPT SoldQuantity/CreatedAt is not an
+			// ACK event and is intentionally not used as an ageing anchor.
 			return result;
 		}
 
@@ -1451,17 +1511,8 @@ namespace Spic.Infrastructure.Services
 			int? productId,
 			int? ifmsProductId)
 		{
-			// A genuine workflow ACK is always the first choice.
 			var acknowledgementDate = FindAgeingAnchor(
 				ageingLookup.StrictAckDates,
-				dealerRegistrationId,
-				ifmsDealerId,
-				productId,
-				ifmsProductId);
-
-			// Preserve the existing DPT fallback when no strict ACK exists.
-			acknowledgementDate ??= FindAgeingAnchor(
-				ageingLookup.DptRetailerSaleDates,
 				dealerRegistrationId,
 				ifmsDealerId,
 				productId,
@@ -1516,53 +1567,40 @@ namespace Spic.Infrastructure.Services
 			return ageingDays < 0 ? 0 : ageingDays;
 		}
 
-		private static int ResolveWholesalerAgeingDays(
+		private static int? ResolveWholesalerAgeingDays(
 			StockAgeingLookup acknowledgementLookup,
 			DateTime today,
 			WholesalerStockAsOnToday row)
 		{
-			var ackAgeingDays = AckAgeForWholesalerRow(
+			return AckAgeForWholesalerRow(
 				acknowledgementLookup,
 				today,
 				row.DealerRegistrationId,
 				row.IfmsDealerId,
 				row.ProductId,
 				row.IfmsProductId);
-
-			// Preserve the existing ACK-based ageing whenever it exists.
-			// Only missing ACK rows fall back to the stock snapshot date.
-			return ackAgeingDays
-				?? CalculateAgeingDays(today, row.StockDate)
-				?? 0;
 		}
 
-		private static int ResolveDptAgeingDays(
+		private static int? ResolveDptAgeingDays(
 			StockAgeingLookup acknowledgementLookup,
 			DateTime today,
 			DptReport row)
 		{
-			var ackAgeingDays = AckAgeForDptRow(
+			return AckAgeForDptRow(
 				acknowledgementLookup,
 				today,
 				row.DealerRegistrationId,
 				row.IfmsDealerId,
 				row.ProductId,
 				row.IfmsProductId);
-
-			// DPT strict/fallback ACK logic stays first. If no ageing anchor is
-			// available, use the DPT report snapshot date.
-			return ackAgeingDays
-				?? CalculateAgeingDays(today, row.CreatedAt)
-				?? 0;
 		}
 
-		private static int ResolveWarehouseAgeingDays(
+		private static int? ResolveWarehouseAgeingDays(
 			DateTime today,
 			WarehouseDistrictGlobalStockReconciliation row)
 		{
-			// Warehouse rows do not contain dealer/status/receipt linkage. Use the
-			// warehouse report snapshot date for Stock Report ageing classification.
-			return CalculateAgeingDays(today, row.CreatedAt) ?? 0;
+			// Warehouse stock has no dealer ACK linkage in the supplied model.
+			return null;
 		}
 
 		private static List<WholesalerStockAsOnToday> ApplyWholesalerAgeingFilter(
@@ -1618,34 +1656,34 @@ namespace Spic.Infrastructure.Services
 				return rows;
 			}
 
-			return rows
-				.Where(row => MatchesAgeingRange(
-					ResolveWarehouseAgeingDays(today, row),
-					filter.AgeingRanges))
-				.ToList();
+			// Warehouse rows have no ACK anchor, therefore they cannot belong to
+			// an ACK-ageing bucket.
+			return new List<WarehouseDistrictGlobalStockReconciliation>();
 		}
 
 		private static bool MatchesAgeingRange(
-			int ageingDays,
+			int? ageingDays,
 			IReadOnlyCollection<string> selectedRanges)
 		{
-			if (ageingDays < 0)
+			if (!ageingDays.HasValue || ageingDays.Value < 0)
 			{
 				return false;
 			}
 
+			var days = ageingDays.Value;
+
 			return
-				(selectedRanges.Contains("0-30") && ageingDays <= 30) ||
-				(selectedRanges.Contains("31-90") && ageingDays >= 31 && ageingDays <= 90) ||
-				(selectedRanges.Contains("91-180") && ageingDays >= 91 && ageingDays <= 180) ||
-				(selectedRanges.Contains("181-364") && ageingDays >= 181 && ageingDays <= 364) ||
-				(selectedRanges.Contains("365+") && ageingDays >= 365) ||
+				(selectedRanges.Contains("0-30") && days <= 30) ||
+				(selectedRanges.Contains("31-90") && days >= 31 && days <= 90) ||
+				(selectedRanges.Contains("91-180") && days >= 91 && days <= 180) ||
+				(selectedRanges.Contains("181-364") && days >= 181 && days <= 364) ||
+				(selectedRanges.Contains("365+") && days >= 365) ||
 
 				// Backward-compatible aliases for older clients/bookmarks.
-				(selectedRanges.Contains("31-60") && ageingDays >= 31 && ageingDays <= 60) ||
-				(selectedRanges.Contains("61-90") && ageingDays >= 61 && ageingDays <= 90) ||
-				(selectedRanges.Contains("91-120") && ageingDays >= 91 && ageingDays <= 120) ||
-				(selectedRanges.Contains("Above 120") && ageingDays > 120);
+				(selectedRanges.Contains("31-60") && days >= 31 && days <= 60) ||
+				(selectedRanges.Contains("61-90") && days >= 61 && days <= 90) ||
+				(selectedRanges.Contains("91-120") && days >= 91 && days <= 120) ||
+				(selectedRanges.Contains("Above 120") && days > 120);
 		}
 
 		// =====================================================================
@@ -1814,11 +1852,11 @@ namespace Spic.Infrastructure.Services
 					LyingWith = FirstNonBlank(
 						GetLookupName(natureNames, row.DealershipNatureId),
 						"Wholesaler") ?? "Wholesaler",
-					AgeingDays = ageingDays,
-					// Kept for DTO/export compatibility. It now means that a usable
-					// ageing value was resolved (ACK first, snapshot fallback second).
-					HasAckAgeing = true,
-					Status = MapStatus(ageingDays),
+					AgeingDays = ageingDays ?? 0,
+					HasAckAgeing = ageingDays.HasValue,
+					Status = ageingDays.HasValue
+						? MapStatus(ageingDays.Value)
+						: "Pending ACK",
 					WhatsAppNumber = whatsapp,
 					OfficialContactNumber = official,
 					AlternativeNumber = alternative,
@@ -1867,11 +1905,11 @@ namespace Spic.Infrastructure.Services
 					LyingWith = FirstNonBlank(
 						GetLookupName(natureNames, row.DealershipNatureId),
 						"Retailer") ?? "Retailer",
-					AgeingDays = ageingDays,
-					// Kept for DTO/export compatibility. It now means that a usable
-					// ageing value was resolved (ACK first, snapshot fallback second).
-					HasAckAgeing = true,
-					Status = MapStatus(ageingDays),
+					AgeingDays = ageingDays ?? 0,
+					HasAckAgeing = ageingDays.HasValue,
+					Status = ageingDays.HasValue
+						? MapStatus(ageingDays.Value)
+						: "Pending ACK",
 					WhatsAppNumber = whatsapp,
 					OfficialContactNumber = official,
 					AlternativeNumber = alternative,
@@ -1910,16 +1948,16 @@ namespace Spic.Infrastructure.Services
 						row.IfmsProductId),
 					Quantity = row.ClosingStock,
 					LyingWith = "Warehouse",
-					AgeingDays = ageingDays,
-					HasAckAgeing = true,
-					Status = MapStatus(ageingDays)
+					AgeingDays = 0,
+					HasAckAgeing = false,
+					Status = "Pending ACK"
 				});
 			}
 
 			if (filter.AgeingRanges.Count > 0)
 			{
 				projections = projections
-					.Where(x => MatchesAgeingRange(
+					.Where(x => x.HasAckAgeing && MatchesAgeingRange(
 						x.AgeingDays,
 						filter.AgeingRanges))
 					.ToList();
@@ -2063,30 +2101,8 @@ namespace Spic.Infrastructure.Services
 					row.RetailerName);
 			}
 
-			foreach (var row in warehouseRows)
-			{
-				if (row.WarehouseId.HasValue)
-				{
-					uniqueKeys.Add("W:" + row.WarehouseId.Value);
-					continue;
-				}
-
-				// Legacy/fallback rows without WarehouseId are still de-duplicated
-				// by their physical warehouse location. Product is intentionally
-				// excluded so the same warehouse is not counted once per product.
-				if (row.StateId.HasValue ||
-					row.DistrictId.HasValue ||
-					row.PlantId.HasValue)
-				{
-					uniqueKeys.Add(string.Join(
-						"|",
-						"WLOC",
-						IdPart(row.StateId),
-						IdPart(row.DistrictId),
-						IdPart(row.PlantId)));
-				}
-			}
-
+			// Warehouse is a stock holder, not a dealer. It is intentionally excluded
+			// from the Dealer Count KPI.
 			return uniqueKeys.Count;
 		}
 
@@ -2404,6 +2420,7 @@ namespace Spic.Infrastructure.Services
 		// Internal DTOs
 		// =====================================================================
 
+
 		private sealed class StateAccumulator
 		{
 			public decimal Current { get; set; }
@@ -2415,8 +2432,6 @@ namespace Spic.Infrastructure.Services
 			public Dictionary<string, DateTime> StrictAckDates { get; } =
 				new(StringComparer.Ordinal);
 
-			public Dictionary<string, DateTime> DptRetailerSaleDates { get; } =
-				new(StringComparer.Ordinal);
 		}
 
 		private sealed class AckStockKey

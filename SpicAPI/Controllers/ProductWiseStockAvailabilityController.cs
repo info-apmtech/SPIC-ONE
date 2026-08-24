@@ -160,11 +160,14 @@ namespace SpicAPI.Controllers
 			worksheet.RangeUsed()?.Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin);
 			worksheet.RangeUsed()?.Style.Border.SetInsideBorder(XLBorderStyleValues.Hair);
 
-			using var stream = new MemoryStream();
+			// Do not create a second full byte[] copy of the workbook.
+			// FileStreamResult owns/disposes the stream after the response completes.
+			var stream = new MemoryStream();
 			workbook.SaveAs(stream);
+			stream.Position = 0;
 
 			return File(
-				stream.ToArray(),
+				stream,
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 				$"ProductWiseStock_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
 		}

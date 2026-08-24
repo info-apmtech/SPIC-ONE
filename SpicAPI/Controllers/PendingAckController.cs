@@ -119,11 +119,13 @@ namespace SpicAPI.Controllers
 			worksheet.RangeUsed()?.SetAutoFilter();
 			worksheet.Columns().AdjustToContents();
 
-			using var stream = new MemoryStream();
+			// Return the stream directly so a second full byte-array copy is not created.
+			var stream = new MemoryStream();
 			workbook.SaveAs(stream);
+			stream.Position = 0;
 
 			return File(
-				stream.ToArray(),
+				stream,
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 				$"PendingAcknowledgement_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
 		}

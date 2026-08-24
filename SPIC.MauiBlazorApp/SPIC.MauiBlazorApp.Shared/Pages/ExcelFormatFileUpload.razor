@@ -213,6 +213,8 @@
 </div>
 
 @code {
+    private const long MaxUploadBytes = 100L * 1024L * 1024L;
+
     public sealed class UploadCategory
     {
         public string Id { get; set; } = string.Empty;
@@ -235,9 +237,31 @@
     private readonly Dictionary<string, IBrowserFile> selectedFiles = new();
     private string? uploadingCategoryId;
 
-    private void HandleFileSelected(InputFileChangeEventArgs e, string categoryId)
+    private async Task HandleFileSelected(InputFileChangeEventArgs e, string categoryId)
     {
-        selectedFiles[categoryId] = e.File;
+        var file = e.File;
+        var extension = System.IO.Path.GetExtension(file.Name);
+
+        if (!string.Equals(extension, ".xlsx", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(extension, ".csv", StringComparison.OrdinalIgnoreCase))
+        {
+            selectedFiles.Remove(categoryId);
+            await JS.InvokeVoidAsync("alert", "Only .xlsx and .csv files are supported.");
+            return;
+        }
+
+        if (file.Size == 0 || file.Size > MaxUploadBytes)
+        {
+            selectedFiles.Remove(categoryId);
+            await JS.InvokeVoidAsync(
+                "alert",
+                file.Size == 0
+                    ? "The selected file is empty."
+                    : "The selected file exceeds the 100 MB upload limit.");
+            return;
+        }
+
+        selectedFiles[categoryId] = file;
     }
 
     private async Task UploadFile(string categoryId)
@@ -261,13 +285,26 @@
             return;
         }
 
+        var extension = System.IO.Path.GetExtension(file.Name);
+        if ((!string.Equals(extension, ".xlsx", StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(extension, ".csv", StringComparison.OrdinalIgnoreCase)) ||
+            file.Size == 0 ||
+            file.Size > MaxUploadBytes)
+        {
+            selectedFiles.Remove(categoryId);
+            await JS.InvokeVoidAsync(
+                "alert",
+                "The selected file is invalid. Choose a non-empty .xlsx or .csv file up to 100 MB.");
+            return;
+        }
+
         try
         {
             uploadingCategoryId = categoryId;
             StateHasChanged();
 
             using var content = new MultipartFormDataContent();
-            await using var uploadStream = file.OpenReadStream(maxAllowedSize: 100L * 1024L * 1024L);
+            await using var uploadStream = file.OpenReadStream(maxAllowedSize: MaxUploadBytes);
             using var fileContent = new StreamContent(uploadStream);
 
             if (!string.IsNullOrWhiteSpace(file.ContentType))
@@ -307,14 +344,14 @@
             }
             catch (System.Text.Json.JsonException)
             {
-                // The raw API response is shown below when JSON cannot be parsed.
+                // A stable message is shown below when JSON cannot be parsed.
             }
 
             if (!response.IsSuccessStatusCode || parsed?.Success != true)
             {
                 await JS.InvokeVoidAsync(
                     "alert",
-                    $"Upload Failed:\n{parsed?.Message ?? responseBody}");
+                    $"Upload Failed:\n{parsed?.Message ?? "The server rejected the upload. Please try again or contact support."}");
                 return;
             }
 
@@ -340,7 +377,7 @@
                 $" • Dealership Natures: {parsed.NewMastersCreated?.DealershipNatures ?? 0}\n" +
                 $" • Companies: {parsed.NewMastersCreated?.Companies ?? 0}\n" +
                 $" • Plants: {parsed.NewMastersCreated?.Plants ?? 0}\n" +
-                $" • Products: {parsed.NewMastersCreated?.Products ?? 0}\n" +
+                $" • Products: {parsed.NewMastersCreated?.ProductCount ?? 0}\n" +
                 $" • Units: {parsed.NewMastersCreated?.Units ?? 0}\n" +
                 $" • Statuses: {parsed.NewMastersCreated?.Statuses ?? 0}\n" +
                 $" • Transaction Types: {parsed.NewMastersCreated?.TxnTypes ?? 0}\n" +
@@ -357,9 +394,11 @@
                 "alert",
                 "Upload was cancelled or timed out. Please check the network and try again.");
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            await JS.InvokeVoidAsync("alert", "Error during upload: " + ex.Message);
+            await JS.InvokeVoidAsync(
+                "alert",
+                "The upload could not be completed. Please verify the file and try again.");
         }
         finally
         {
@@ -396,6 +435,8 @@
         public int Companies { get; set; }
         public int Plants { get; set; }
         public int Products { get; set; }
+        public int IfmsProducts { get; set; }
+        public int ProductCount => IfmsProducts > 0 ? IfmsProducts : Products;
         public int Units { get; set; }
         public int Statuses { get; set; }
         public int TxnTypes { get; set; }

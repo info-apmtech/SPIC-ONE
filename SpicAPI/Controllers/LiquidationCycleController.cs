@@ -100,11 +100,13 @@ namespace SpicAPI.Controllers
 			worksheet.SheetView.FreezeRows(1);
 			worksheet.RangeUsed()?.SetAutoFilter();
 
-			using var stream = new System.IO.MemoryStream();
+			// Return the stream directly to avoid a second full workbook byte[] allocation.
+			var stream = new System.IO.MemoryStream();
 			workbook.SaveAs(stream);
+			stream.Position = 0;
 
 			return File(
-				stream.ToArray(),
+				stream,
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 				"LiquidationCycle.xlsx");
 		}

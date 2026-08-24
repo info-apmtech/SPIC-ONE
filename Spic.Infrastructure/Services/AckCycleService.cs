@@ -142,6 +142,14 @@ namespace Spic.Infrastructure.Services
 					x.DistrictId.HasValue && filter.DistrictIds.Contains(x.DistrictId.Value));
 			}
 
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				var scopedDealerIds = BuildScopedDealerRegistrationIds(filter);
+				companySales = companySales.Where(x =>
+					x.DealerRegistrationId.HasValue &&
+					scopedDealerIds.Contains(x.DealerRegistrationId.Value));
+			}
+
 			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
 			{
 				companySales = companySales.Where(x =>
@@ -187,6 +195,14 @@ namespace Spic.Infrastructure.Services
 				join dealer in _db.Set<DealerRegistration>().AsNoTracking()
 					on sale.DealerRegistrationId equals (int?)dealer.Id into dealerJoin
 				from dealer in dealerJoin.DefaultIfEmpty()
+				let dealerRegionId = dealer != null ? (int?)dealer.Region : null
+				let dealerHeadQuarterId = dealer != null ? (int?)dealer.HQ : null
+				join region in _db.Set<Region>().AsNoTracking()
+					on dealerRegionId equals (int?)region.Id into regionJoin
+				from region in regionJoin.DefaultIfEmpty()
+				join headQuarter in _db.Set<Headquarter>().AsNoTracking()
+					on dealerHeadQuarterId equals (int?)headQuarter.Id into headQuarterJoin
+				from headQuarter in headQuarterJoin.DefaultIfEmpty()
 				join ifms in _db.Set<IfmsDealer>().AsNoTracking()
 					on sale.IfmsDealerId equals (int?)ifms.Id into ifmsJoin
 				from ifms in ifmsJoin.DefaultIfEmpty()
@@ -206,6 +222,8 @@ namespace Spic.Infrastructure.Services
 					RegistrationId = sale.DealerRegistrationId,
 					IfmsId = sale.IfmsDealerId,
 					StateName = state != null ? state.StateName : "-",
+					RegionName = region != null ? region.RegionName : "-",
+					HeadQuarterName = headQuarter != null ? headQuarter.HeadquarterName : "-",
 					DistrictName = district != null ? district.DistrictName : "-",
 					ProductName = product != null
 						? product.Name
@@ -237,6 +255,14 @@ namespace Spic.Infrastructure.Services
 				wholesalerSales = wholesalerSales.Where(x =>
 					filter.DistrictIds.Contains(
 						x.BuyerDistrictId ?? x.SellerDistrictId ?? 0));
+			}
+
+			if (filter.RegionIds.Count > 0 || filter.HeadQuarterIds.Count > 0)
+			{
+				var scopedDealerIds = BuildScopedDealerRegistrationIds(filter);
+				wholesalerSales = wholesalerSales.Where(x =>
+					x.DealerId.HasValue &&
+					scopedDealerIds.Contains(x.DealerId.Value));
 			}
 
 			if (productIds.Count > 0 || ifmsProductIds.Count > 0)
@@ -283,6 +309,14 @@ namespace Spic.Infrastructure.Services
 				join dealer in _db.Set<DealerRegistration>().AsNoTracking()
 					on sale.DealerId equals (int?)dealer.Id into dealerJoin
 				from dealer in dealerJoin.DefaultIfEmpty()
+				let dealerRegionId = dealer != null ? (int?)dealer.Region : null
+				let dealerHeadQuarterId = dealer != null ? (int?)dealer.HQ : null
+				join region in _db.Set<Region>().AsNoTracking()
+					on dealerRegionId equals (int?)region.Id into regionJoin
+				from region in regionJoin.DefaultIfEmpty()
+				join headQuarter in _db.Set<Headquarter>().AsNoTracking()
+					on dealerHeadQuarterId equals (int?)headQuarter.Id into headQuarterJoin
+				from headQuarter in headQuarterJoin.DefaultIfEmpty()
 				join ifms in _db.Set<IfmsDealer>().AsNoTracking()
 					on sale.IfmsDealerId equals (int?)ifms.Id into ifmsJoin
 				from ifms in ifmsJoin.DefaultIfEmpty()
@@ -303,6 +337,8 @@ namespace Spic.Infrastructure.Services
 					RegistrationId = sale.DealerId,
 					IfmsId = sale.IfmsDealerId,
 					StateName = state != null ? state.StateName : "-",
+					RegionName = region != null ? region.RegionName : "-",
+					HeadQuarterName = headQuarter != null ? headQuarter.HeadquarterName : "-",
 					DistrictName = district != null ? district.DistrictName : "-",
 					ProductName = product != null
 						? product.Name
@@ -315,6 +351,21 @@ namespace Spic.Infrastructure.Services
 				};
 
 			return companyQuery.Concat(wholesalerQuery);
+		}
+
+		private IQueryable<int> BuildScopedDealerRegistrationIds(AckCycleFilter filter)
+		{
+			var dealers = _db.Set<DealerRegistration>()
+				.AsNoTracking()
+				.AsQueryable();
+
+			if (filter.RegionIds.Count > 0)
+				dealers = dealers.Where(x => filter.RegionIds.Contains(x.Region));
+
+			if (filter.HeadQuarterIds.Count > 0)
+				dealers = dealers.Where(x => filter.HeadQuarterIds.Contains(x.HQ));
+
+			return dealers.Select(x => x.Id);
 		}
 
 		private async Task<List<int>> GetAckStatusIdsAsync(
@@ -415,12 +466,16 @@ namespace Spic.Infrastructure.Services
 
 			return normalized switch
 			{
+				"region" => AggregateByRegionAsync(query, cancellationToken),
+				"headquarter" => AggregateByHeadQuarterAsync(query, cancellationToken),
 				"product" => AggregateByProductAsync(query, cancellationToken),
 				"dealer" => AggregateByDealerAsync(query, cancellationToken),
 				"district" => AggregateByDistrictAsync(query, cancellationToken),
 
-				// Region / HeadQuarter / SubDistrict are not present on the two sales
-				// rows in the supplied schema. Preserve the previous fallback to State.
+				// The two ACK sales sources do not carry an exact SubDistrictId.
+				// Returning no grouping is safer than incorrectly presenting State data
+				// under a Sub District heading. The existing grid district cascade remains.
+				"subdistrict" => Task.FromResult(new List<GroupAggregate>()),
 				_ => AggregateByStateAsync(query, cancellationToken)
 			};
 		}
@@ -431,6 +486,22 @@ namespace Spic.Infrastructure.Services
 			=> AggregateGroupsAsync(
 				query,
 				x => x.StateName,
+				cancellationToken);
+
+		private static Task<List<GroupAggregate>> AggregateByRegionAsync(
+			IQueryable<AckCycleQueryRow> query,
+			CancellationToken cancellationToken)
+			=> AggregateGroupsAsync(
+				query,
+				x => x.RegionName,
+				cancellationToken);
+
+		private static Task<List<GroupAggregate>> AggregateByHeadQuarterAsync(
+			IQueryable<AckCycleQueryRow> query,
+			CancellationToken cancellationToken)
+			=> AggregateGroupsAsync(
+				query,
+				x => x.HeadQuarterName,
 				cancellationToken);
 
 		private static Task<List<GroupAggregate>> AggregateByDistrictAsync(
@@ -573,7 +644,10 @@ namespace Spic.Infrastructure.Services
 					EF.Functions.ILike(x.ProductName, pattern) ||
 					EF.Functions.ILike(x.InvoiceNo, pattern) ||
 					EF.Functions.ILike(x.TransactionId, pattern) ||
-					EF.Functions.ILike(x.StateName, pattern));
+					EF.Functions.ILike(x.StateName, pattern) ||
+					EF.Functions.ILike(x.RegionName, pattern) ||
+					EF.Functions.ILike(x.HeadQuarterName, pattern) ||
+					EF.Functions.ILike(x.DistrictName, pattern));
 			}
 
 			return query;
@@ -977,6 +1051,8 @@ namespace Spic.Infrastructure.Services
 		private static void NormalizeFilter(AckCycleFilter filter)
 		{
 			filter.StateIds ??= new List<int>();
+			filter.RegionIds ??= new List<int>();
+			filter.HeadQuarterIds ??= new List<int>();
 			filter.DistrictIds ??= new List<int>();
 			filter.ProductIds ??= new List<int>();
 			filter.ProductKeys ??= new List<string>();
@@ -985,6 +1061,8 @@ namespace Spic.Infrastructure.Services
 			filter.Buckets ??= new List<string>();
 
 			filter.StateIds = filter.StateIds.Where(x => x > 0).Distinct().ToList();
+			filter.RegionIds = filter.RegionIds.Where(x => x > 0).Distinct().ToList();
+			filter.HeadQuarterIds = filter.HeadQuarterIds.Where(x => x > 0).Distinct().ToList();
 			filter.DistrictIds = filter.DistrictIds.Where(x => x > 0).Distinct().ToList();
 			filter.ProductIds = filter.ProductIds.Where(x => x > 0).Distinct().ToList();
 			filter.ProductKeys = filter.ProductKeys
@@ -1133,6 +1211,8 @@ namespace Spic.Infrastructure.Services
 			public int? RegistrationId { get; set; }
 			public int? IfmsId { get; set; }
 			public string StateName { get; set; } = "";
+			public string RegionName { get; set; } = "";
+			public string HeadQuarterName { get; set; } = "";
 			public string DistrictName { get; set; } = "";
 			public string ProductName { get; set; } = "";
 			public decimal QuantityMT { get; set; }
