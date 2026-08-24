@@ -133,7 +133,6 @@ namespace SpicAPI.Controllers
                 QuantityLifted = application.QuantityLifted,
 
                 BeneficiaryName = application.BeneficiaryName,
-                Relationship = application.Relationship,
                 BeneficiaryDateOfBirth = application.BeneficiaryDateOfBirth,
                 NomineeName = application.NomineeName,
                 NomineeRelationship = application.NomineeRelationship,
@@ -214,6 +213,8 @@ namespace SpicAPI.Controllers
                         ApprovalLevel = GetApprovalLevelDisplayName(ap.ApprovalLevel),
                         ApprovalStatus = ap.ApprovalStatus.ToString(),
                         Remarks = ap.Remarks,
+                        Recommendation = ap.Recommendation,
+                        Comment = ap.Comment,
                         ApprovedBy = ap.ApprovedBy,
                         ApprovedAt = ap.ApprovedAt
                     })

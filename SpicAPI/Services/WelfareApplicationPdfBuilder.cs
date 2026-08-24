@@ -113,7 +113,6 @@ namespace SpicAPI.Services
                 col.Item().Element(e => InfoColumns(e, new List<(string, string)>
                 {
                     ("Beneficiary Name", app.BeneficiaryName),
-                    ("Relationship", app.Relationship),
                     ("Date of Birth", FmtDate(app.BeneficiaryDateOfBirth)),
                     ("Nominee Name", app.NomineeName),
                     ("Nominee Relationship", app.NomineeRelationship),

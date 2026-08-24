@@ -227,7 +227,6 @@
                             <div class="apd-field"><label>Name as in Cheque / Passbook</label><div class="apd-field-value">@(d.BeneficiaryNameAsInCheque ?? "-")</div></div>
                             <div class="apd-field"><label>Name Taken From</label><div class="apd-field-value">@(d.LeafOrBankPassbook ?? "-")</div></div>
                             <div class="apd-field"><label>Beneficiary Name</label><div class="apd-field-value">@(d.BeneficiaryName ?? "-")</div></div>
-                            <div class="apd-field"><label>Beneficiary Relationship</label><div class="apd-field-value">@(d.Relationship ?? "-")</div></div>
                         </div>
                     </div>
 
@@ -283,7 +282,9 @@
                     <!-- ===================== PREVIOUS REMARKS ===================== -->
                     @{
                         var previousRemarks = d.Approvals
-                            .Where(ap => !string.IsNullOrWhiteSpace(ap.Remarks))
+                            .Where(ap => !string.IsNullOrWhiteSpace(ap.Remarks)
+                                || !string.IsNullOrWhiteSpace(ap.Recommendation)
+                                || !string.IsNullOrWhiteSpace(ap.Comment))
                             .ToList();
                     }
                     @if (previousRemarks.Count > 0)
@@ -294,7 +295,18 @@
                             {
                                 <div class="apd-remark-block">
                                     <h5 style="color: #3B82F6;">@(StageLevelName(ap.ApprovalLevel)) Remarks</h5>
-                                    <p>@ap.Remarks</p>
+                                    @if (!string.IsNullOrWhiteSpace(ap.Remarks))
+                                    {
+                                        <p>@ap.Remarks</p>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(ap.Recommendation))
+                                    {
+                                        <p style="margin-bottom:2px;"><strong>Recommendation:</strong> @ap.Recommendation</p>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(ap.Comment))
+                                    {
+                                        <p style="margin-top:2px;"><strong>Comment:</strong> @ap.Comment</p>
+                                    }
                                     <small>
                                         @(ap.ApprovalStatus == "Rejected" ? "Rejected" : "Approved")
                                         by @(ap.ApprovedBy ?? "-")
@@ -351,10 +363,28 @@
             <h2 class="rm-title">Approve Application?</h2>
             <p class="rm-subtitle">Are you sure you want to approve this welfare application and forward it to the next level (@NextStageName)?</p>
             <div class="rm-form">
-                <div class="rm-form-group">
-                    <label class="rm-label">Approval Remarks (Optional)</label>
-                    <textarea class="rm-textarea" placeholder="Add your approval remarks..." @bind="_approveRemarks"></textarea>
-                </div>
+                @if (IsMoStage)
+                {
+                    <div class="rm-form-group">
+                        <label class="rm-label">Recommendation *</label>
+                        <select class="rm-select" @bind="_approveRecommendation">
+                            <option value="">Select your recommendation</option>
+                            <option value="Recommended">Recommended</option>
+                            <option value="Not Recommended">Not Recommended</option>
+                        </select>
+                    </div>
+                    <div class="rm-form-group">
+                        <label class="rm-label">Comment *</label>
+                        <textarea class="rm-textarea" placeholder="Add your comment..." @bind="_approveComment"></textarea>
+                    </div>
+                }
+                else
+                {
+                    <div class="rm-form-group">
+                        <label class="rm-label">Approval Remarks (Optional)</label>
+                        <textarea class="rm-textarea" placeholder="Add your approval remarks..." @bind="_approveRemarks"></textarea>
+                    </div>
+                }
             </div>
             @if (!string.IsNullOrWhiteSpace(_actionError))
             {
@@ -434,10 +464,15 @@
     private bool IsRejectModalOpen { get; set; }
 
     private string? _approveRemarks;
+    private string _approveRecommendation = "";
+    private string? _approveComment;
     private string? _rejectReason;
     private string? _rejectRemarks;
     private string? _actionError;
     private bool _busy;
+
+    // MO approvals require a Recommendation + Comment; other stages keep the optional remarks flow
+    private bool IsMoStage => LoginState.UserRole == AppRole.MO;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -689,6 +724,8 @@
     {
         _actionError = null;
         _approveRemarks = null;
+        _approveRecommendation = "";
+        _approveComment = null;
         IsApproveModalOpen = true;
     }
 
@@ -706,13 +743,31 @@
     private async Task ConfirmApprove()
     {
         if (_detail == null || _busy) return;
+
+        if (IsMoStage && string.IsNullOrWhiteSpace(_approveRecommendation))
+        {
+            _actionError = "Please select your recommendation before approving.";
+            return;
+        }
+
+        if (IsMoStage && string.IsNullOrWhiteSpace(_approveComment))
+        {
+            _actionError = "Comment is mandatory when approving an application.";
+            return;
+        }
+
         _busy = true;
         _actionError = null;
         try
         {
             var response = await Http.PostAsJsonAsync(
                 $"api/WelfareSchemeApproval/applications/{_detail.Id}/approve",
-                new WelfareApprovalActionRequest { Remarks = _approveRemarks });
+                new WelfareApprovalActionRequest
+                {
+                    Remarks = _approveRemarks,
+                    Recommendation = IsMoStage ? _approveRecommendation : null,
+                    Comment = IsMoStage ? _approveComment : null
+                });
 
             if (response.IsSuccessStatusCode)
             {
@@ -791,6 +846,8 @@
         IsApproveModalOpen = false;
         IsRejectModalOpen = false;
         _approveRemarks = null;
+        _approveRecommendation = "";
+        _approveComment = null;
         _rejectReason = null;
         _rejectRemarks = null;
         _actionError = null;

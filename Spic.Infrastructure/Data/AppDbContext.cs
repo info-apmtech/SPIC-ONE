@@ -121,6 +121,10 @@ namespace Spic.Infrastructure.Data
         public DbSet<SubDealerRegistration> SubDealerRegistrations { get; set; }
 		public DbSet<LogisticsApprovalHistory> LogisticsHistory { get; set; }
 
+		//// Sub Dealer & Employee Beneficiary Master
+		public DbSet<SubDealerBeneficiary> SubDealerBeneficiaries { get; set; }
+		public DbSet<EmployeeBeneficiary> EmployeeBeneficiaries { get; set; }
+
 		//// Welfare Scheme
 		public DbSet<WelfareApplication> WelfareApplications { get; set; }
 		public DbSet<WelfareApplicationDocument> WelfareApplicationDocuments { get; set; }

@@ -275,15 +275,17 @@
                 }
                 else
                 {
-                    <select class="aws-form-select" @bind="QuantityLiftedValue" disabled>
+                    <select class="aws-form-select" @bind="QuantityLiftedInput">
                         <option value="" disabled selected hidden>--Select--</option>
-                        <option value="lt1000">&lt;1,000 MT</option>
-                        <option value="gt1000">&gt;1,000 MT</option>
-                        <option value="5001-10000">5,001 to 10,000 MT</option>
-                        <option value="10001-25000">10,001 to 25,000 MT</option>
-                        <option value="25001-35000">25,001 to 35,000 MT</option>
-                        <option value="35001-50000">35,001 to 50,000 MT</option>
-                        <option value="gt50001">&gt;50,001 MT</option>
+                        @if (!string.IsNullOrWhiteSpace(QuantityLiftedInput) &&
+                             !QuantityOptions.Any(o => string.Equals(o.Key, QuantityLiftedInput.Trim(), StringComparison.OrdinalIgnoreCase)))
+                        {
+                            <option value="@QuantityLiftedInput">@QuantityLiftedInput MT</option>
+                        }
+                        @foreach (var opt in QuantityOptions)
+                        {
+                            <option value="@opt.Key">@opt.Label</option>
+                        }
                     </select>
                 }
             </div>
@@ -310,6 +312,8 @@
 
     </div>
 
+    @if (ShowBeneficiaryDetails)
+    {
     <div class="aws-section-card">
         
         <div class="aws-section-header">
@@ -354,16 +358,6 @@
             <div class="aws-form-group">
                 <label class="aws-form-label">Nominee Name *</label>
                 <input type="text" class="aws-form-control" placeholder="Nominee's Full Name" @bind="NomineeName">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Nominee Relationship *</label>
-                <select class="aws-form-select" @bind="NomineeRelationship">
-                    <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="Spouse">Spouse</option>
-                    <option value="Child">Child</option>
-                    <option value="Parent">Parent</option>
-                </select>
             </div>
 
             <div class="aws-form-group">
@@ -449,6 +443,26 @@
                 <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
             </div>
 
+            <div class="aws-form-group">
+                <label class="aws-form-label">Relationship *</label>
+                <select class="aws-form-select" @bind="BeneficiaryRelationship">
+                    <option value="" disabled selected hidden>Select relationship</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
+                </select>
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Date of Birth</label>
+                <input type="date" class="aws-form-control" @bind="BeneficiaryDateOfBirth" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Age</label>
+                <input type="text" class="aws-form-control" placeholder="Age in years" @bind="BeneficiaryAge">
+            </div>
+
         </div>
         }
         else if (SelectedBeneficiaryGroup == "Approved Employee")
@@ -495,10 +509,31 @@
                 <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
             </div>
 
+            <div class="aws-form-group">
+                <label class="aws-form-label">Relationship *</label>
+                <select class="aws-form-select" @bind="BeneficiaryRelationship">
+                    <option value="" disabled selected hidden>Select relationship</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
+                </select>
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Date of Birth</label>
+                <input type="date" class="aws-form-control" @bind="BeneficiaryDateOfBirth" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Age</label>
+                <input type="text" class="aws-form-control" placeholder="Age in years" @bind="BeneficiaryAge">
+            </div>
+
         </div>
         }
 
     </div>
+    }
     <div class="aws-section-card">
         
         <div class="aws-section-header">
@@ -771,6 +806,19 @@
             <h2>Document Upload</h2>
         </div>
 
+        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5;">
+            <div class="aws-alert-icon" style="color: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </div>
+            <div style="color: #c0392b;">
+                <strong>Mandatory Beneficiary Document:</strong> The beneficiary must upload either a <strong>Cancelled Cheque</strong> or <strong>Bank Passbook</strong>. At least one of these two documents is required for the application to be processed.
+            </div>
+        </div>
+
         <div class="aws-doc-upload-list">
             @foreach (var doc in CurrentDocuments)
             {
@@ -1028,13 +1076,13 @@
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">Relationship</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(BeneficiaryRelationship) ? "-" : BeneficiaryRelationship)</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(BeneficiaryRelationship) ? (string.IsNullOrWhiteSpace(NomineeRelationship) ? "-" : NomineeRelationship) : BeneficiaryRelationship)</span>
                     </div>
                     }
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">Quantity Lifted (Last Year)</span>
                         <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">@(_salesHistory != null ? _salesHistory.QuantityRangeLabel : "-")</span>
+                        <span class="aws-modal-value">@QuantityLiftedDisplay</span>
                     </div>
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">3-Year Average Quantity</span>
@@ -1356,7 +1404,6 @@
             if (salesResult != null)
             {
                 _salesHistory = salesResult;
-                QuantityLiftedValue = salesResult.QuantityRangeValue;
             }
         }
         catch (Exception)
@@ -1403,7 +1450,7 @@
             NomineeName = detail.NomineeName ?? string.Empty;
             NomineeRelationship = detail.NomineeRelationship ?? string.Empty;
             BeneficiaryName = detail.BeneficiaryName ?? string.Empty;
-            BeneficiaryRelationship = detail.Relationship ?? string.Empty;
+            BeneficiaryRelationship = string.Empty;
             BeneficiaryDateOfBirth = detail.BeneficiaryDateOfBirth;
             OnDateChanged();
 
@@ -1442,7 +1489,10 @@
             DistinctionHasArrears = detail.HasArrears;
             DistinctionIsWholesaleEmployee = detail.IsWholesaleDealerEmployee;
 
-            QuantityLiftedValue = ReverseQuantityRange(detail.QuantityLifted);
+            var qtyRangeKey = ReverseQuantityRange(detail.QuantityLifted);
+            QuantityLiftedInput = !string.IsNullOrEmpty(qtyRangeKey)
+                ? qtyRangeKey
+                : detail.QuantityLifted?.ToString("0") ?? string.Empty;
             IsDeclarationConfirmed = detail.IsDeclarationConfirmed;
 
             if (SelectedBeneficiaryGroup == "Direct Dealer")
@@ -1598,7 +1648,7 @@
         _isLoadingSubDealers = true;
         try
         {
-            var result = await Http.GetFromJsonAsync<List<SubDealerDto>>("api/SDWADashboard/sub-dealers");
+            var result = await Http.GetFromJsonAsync<List<SubDealerDto>>("api/SubDealerEmployee/my-sub-dealers");
             if (result != null)
                 _subDealers = result;
         }
@@ -1617,7 +1667,7 @@
         _isLoadingEmployees = true;
         try
         {
-            var result = await Http.GetFromJsonAsync<List<EmployeeDto>>("api/SDWADashboard/employees");
+            var result = await Http.GetFromJsonAsync<List<EmployeeDto>>("api/SubDealerEmployee/my-employees");
             if (result != null)
                 _employees = result;
         }
@@ -1635,12 +1685,47 @@
     {
         var selected = _subDealers.FirstOrDefault(sd => sd.Id.ToString() == SelectedSubDealerId);
         SelectedSubDealerName = selected?.FirmName ?? string.Empty;
+
+        if (selected != null)
+        {
+            // Load nominee / beneficiary information dynamically from the Sub Dealer master
+            if (!string.IsNullOrWhiteSpace(selected.NomineeName))
+                NomineeName = selected.NomineeName;
+
+            if (!string.IsNullOrWhiteSpace(selected.BeneficiaryName))
+                BeneficiaryName = selected.BeneficiaryName;
+
+            if (!string.IsNullOrWhiteSpace(selected.Relationship))
+                BeneficiaryRelationship = selected.Relationship;
+
+            if (selected.DOB.HasValue)
+            {
+                BeneficiaryDateOfBirth = selected.DOB.Value;
+                OnDateChanged();
+            }
+        }
     }
 
     private void OnEmployeeSelected()
     {
         var selected = _employees.FirstOrDefault(e => e.Id.ToString() == SelectedEmployeeId);
         SelectedEmployeeName = selected?.EmployeeName ?? string.Empty;
+
+        if (selected != null)
+        {
+            // Load nominee / beneficiary information dynamically from the Employee master
+            if (!string.IsNullOrWhiteSpace(selected.BeneficiaryName))
+                BeneficiaryName = selected.BeneficiaryName;
+
+            if (!string.IsNullOrWhiteSpace(selected.Relationship))
+                BeneficiaryRelationship = selected.Relationship;
+
+            if (selected.DOB.HasValue)
+            {
+                BeneficiaryDateOfBirth = selected.DOB.Value;
+                OnDateChanged();
+            }
+        }
     }
 
     // Existing beneficiaries (static sample data until the beneficiary master API is available)
@@ -1831,8 +1916,17 @@
         }
     };
 
-    private List<DocumentInfo> CurrentDocuments =>
-        DocumentsMap.TryGetValue(SelectedScheme, out var docs) ? docs : new List<DocumentInfo>();
+    private List<DocumentInfo> CurrentDocuments
+    {
+        get
+        {
+            var docs = DocumentsMap.TryGetValue(SelectedScheme, out var schemeDocs)
+                ? new List<DocumentInfo>(schemeDocs)
+                : new List<DocumentInfo>();
+            docs.Add(new DocumentInfo("Cancelled Cheque / Bank Passbook", "aws-icon-blue"));
+            return docs;
+        }
+    }
 
     private string EduCourse { get; set; } = string.Empty;
     private string EduYear { get; set; } = string.Empty;
@@ -1841,7 +1935,57 @@
     private bool IsEduFirstApplication { get; set; } = true;
 
     private string MedicalTreatmentType { get; set; } = string.Empty;
-    private string QuantityLiftedValue { get; set; } = string.Empty;
+
+    private string QuantityLiftedInput { get; set; } = string.Empty;
+
+    private static readonly (string Key, string Label)[] QuantityOptions = new (string Key, string Label)[]
+    {
+        ("lt1000", "<1,000 MT"),
+        ("gt1000", ">1,000 MT"),
+        ("5001-10000", "5,001 to 10,000 MT"),
+        ("10001-25000", "10,001 to 25,000 MT"),
+        ("25001-35000", "25,001 to 35,000 MT"),
+        ("35001-50000", "35,001 to 50,000 MT"),
+        ("gt50001", ">50,001 MT")
+    };
+
+    private bool ShowBeneficiaryDetails => TryGetQuantityLifted(out _);
+
+    private string QuantityLiftedDisplay
+    {
+        get
+        {
+            var input = QuantityLiftedInput?.Trim();
+            if (string.IsNullOrEmpty(input)) return "-";
+            var opt = QuantityOptions.FirstOrDefault(o => string.Equals(o.Key, input, StringComparison.OrdinalIgnoreCase));
+            return opt.Key != null ? opt.Label : $"{input} MT";
+        }
+    }
+
+    private bool TryGetQuantityLifted(out int? quantity)
+    {
+        quantity = null;
+        var input = QuantityLiftedInput?.Trim();
+        if (string.IsNullOrEmpty(input)) return false;
+
+        var match = QuantityOptions.FirstOrDefault(o =>
+            string.Equals(o.Key, input, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(o.Label, input, StringComparison.OrdinalIgnoreCase));
+        if (match.Key != null)
+        {
+            quantity = MapQuantityRange(match.Key);
+            return quantity.HasValue;
+        }
+
+        var cleaned = input.Replace(",", string.Empty);
+        if (decimal.TryParse(cleaned, out var parsed) && parsed > 0)
+        {
+            quantity = (int)Math.Round(parsed);
+            return true;
+        }
+
+        return false;
+    }
 
     private void OnEduAppTypeChanged(ChangeEventArgs e)
     {
@@ -2069,6 +2213,11 @@
     {
         var errors = new List<string>();
 
+        if (string.IsNullOrWhiteSpace(QuantityLiftedInput))
+            errors.Add("Quantity Lifted during Last Year (MT) is required.");
+        else if (!TryGetQuantityLifted(out _))
+            errors.Add("Please enter or select a valid Quantity Lifted during Last Year (MT).");
+
         // Beneficiary Group
         if (string.IsNullOrWhiteSpace(SelectedBeneficiaryGroup))
             errors.Add("Beneficiary Group is required.");
@@ -2103,7 +2252,8 @@
         if (string.IsNullOrWhiteSpace(BeneficiaryName))
             errors.Add("Beneficiary Name is required.");
 
-        if (string.IsNullOrWhiteSpace(BeneficiaryRelationship))
+        var effectiveBeneficiaryRelationship = string.IsNullOrWhiteSpace(BeneficiaryRelationship) ? NomineeRelationship : BeneficiaryRelationship;
+        if (string.IsNullOrWhiteSpace(effectiveBeneficiaryRelationship))
             errors.Add("Beneficiary Relationship is required.");
 
         // Scheme-specific fields
@@ -2250,11 +2400,10 @@
     {
         SchemeName = SelectedScheme,
         BeneficiaryName = BeneficiaryName,
-        Relationship = BeneficiaryRelationship,
         BeneficiaryDateOfBirth = BeneficiaryDateOfBirth,
         NomineeName = NomineeName,
         NomineeRelationship = NomineeRelationship,
-        QuantityLifted = MapQuantityRange(QuantityLiftedValue),
+        QuantityLifted = TryGetQuantityLifted(out var resolvedQuantity) ? resolvedQuantity : null,
         BeneficiaryGroup = SelectedBeneficiaryGroup,
         SubDealerId = int.TryParse(SelectedSubDealerId, out var subDealerId) ? subDealerId : null,
         SubDealerName = SelectedSubDealerName,
@@ -2308,7 +2457,6 @@
 
         AddField("SchemeName", dto.SchemeName);
         AddField("BeneficiaryName", dto.BeneficiaryName);
-        AddField("Relationship", dto.Relationship);
         AddField("BeneficiaryDateOfBirth", dto.BeneficiaryDateOfBirth?.ToString("yyyy-MM-dd"));
         AddField("NomineeName", dto.NomineeName);
         AddField("NomineeRelationship", dto.NomineeRelationship);
