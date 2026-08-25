@@ -349,6 +349,32 @@
 					<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
 				</div>
 				}
+				else if (IsSMRole && item.SMApproved == null)
+				{
+				<div class="action-icons">
+					<button class="btn btn-sm btn-success" title="Approve"
+							@onclick="() => ShowApprovalModal(item, true, true)">
+						<i class="bi bi-check-lg"></i>
+					</button>
+					<button class="btn btn-sm btn-danger" title="Reject"
+							@onclick="() => ShowApprovalModal(item, false, true)">
+						<i class="bi bi-x-lg"></i>
+					</button>
+				</div>
+				}
+				else if (IsAVPRole && item.SMApproved == true && item.AVPApproved == null)
+				{
+				<div class="action-icons">
+					<button class="btn btn-sm btn-success" title="Approve"
+							@onclick="() => ShowApprovalModal(item, true, false)">
+						<i class="bi bi-check-lg"></i>
+					</button>
+					<button class="btn btn-sm btn-danger" title="Reject"
+							@onclick="() => ShowApprovalModal(item, false, false)">
+						<i class="bi bi-x-lg"></i>
+					</button>
+				</div>
+				}
 			</td>
 		</TableRow>
 	</SpicDataTable>
@@ -449,6 +475,33 @@
 	</div>
 }
 
+@if (_showApprovalModal)
+{
+	<div class="modal-backdrop fade show"></div>
+	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">@(_approvalIsApprove ? "Approve" : "Reject") @(_approvalIsSM ? "SM" : "AVP") - @(_approvalTarget?.DisplayName)</h5>
+					<button type="button" class="btn-close" @onclick="CancelApproval"></button>
+				</div>
+				<div class="modal-body">
+					<label class="form-label-custom">Remarks (optional)</label>
+					<textarea class="form-control-custom w-100" rows="3" placeholder="Enter remarks..."
+							  @bind="_approvalRemarks"></textarea>
+				</div>
+				<div class="modal-footer">
+					<button class="btn btn-secondary" @onclick="CancelApproval">Cancel</button>
+					<button class="btn @(_approvalIsApprove ? "btn-success" : "btn-danger")"
+							@onclick="SubmitApproval" disabled="@_isApproving">
+						@(_isApproving ? "Processing..." : (_approvalIsApprove ? "Approve" : "Reject"))
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
 @code {
 	private const string TabSubDealer = "Sub Dealer";
 	private const string TabEmployee = "Employee";
@@ -510,6 +563,14 @@
 	private string _searchText = "";
 	private string _statusFilter = "All";
 	private string _approvalFilter = "All";
+
+	// Approval modal state
+	private bool _showApprovalModal;
+	private bool _isApproving;
+	private SubDealerEmployeeItemDto? _approvalTarget;
+	private bool _approvalIsApprove;
+	private bool _approvalIsSM;
+	private string _approvalRemarks = "";
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -957,6 +1018,64 @@
 		catch (Exception ex)
 		{
 			ShowMessage($"Error: {ex.Message}", true);
+		}
+	}
+
+	private void ShowApprovalModal(SubDealerEmployeeItemDto item, bool isApprove, bool isSM)
+	{
+		_approvalTarget = item;
+		_approvalIsApprove = isApprove;
+		_approvalIsSM = isSM;
+		_approvalRemarks = "";
+		_showApprovalModal = true;
+	}
+
+	private void CancelApproval()
+	{
+		_showApprovalModal = false;
+		_approvalTarget = null;
+		_approvalRemarks = "";
+	}
+
+	private async Task SubmitApproval()
+	{
+		if (_approvalTarget is null) return;
+
+		try
+		{
+			_isApproving = true;
+
+			var t = ActiveTab == TabSubDealer ? "subdealer" : "employee";
+			var action = _approvalIsApprove ? "approve" : "reject";
+			var level = _approvalIsSM ? "sm" : "avp";
+			var url = $"api/subdealeremployee/{level}-{action}/{_approvalTarget.Id}?type={t}";
+
+			var payload = new { Remarks = (string?)null };
+			if (!string.IsNullOrWhiteSpace(_approvalRemarks))
+				payload = new { Remarks = _approvalRemarks };
+
+			var response = await Http.PostAsJsonAsync(url, payload);
+
+			if (response.IsSuccessStatusCode)
+			{
+				var verb = _approvalIsApprove ? "approved" : "rejected";
+				ShowMessage($"{_approvalTarget.DisplayName} {verb} successfully.", false);
+				CancelApproval();
+				await LoadTabData();
+			}
+			else
+			{
+				var error = await response.Content.ReadAsStringAsync();
+				ShowMessage($"Approval failed: {error}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isApproving = false;
 		}
 	}
 

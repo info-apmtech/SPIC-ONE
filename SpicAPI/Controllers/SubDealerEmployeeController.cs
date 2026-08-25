@@ -396,30 +396,25 @@ namespace SpicAPI.Controllers
 				var stateId = int.TryParse(User.FindFirst("spic:state_id")?.Value, out var s) ? s : 0;
 				if (stateId <= 0) return Ok(new List<SubDealerEmployeeItemDto>());
 
-				var dealerCodes = await _db.DealerRegistrations
+				var dealers = await _db.DealerRegistrations
 					.AsNoTracking()
-					.Where(d => d.StateId == stateId && d.DealerCode != null)
-					.Select(d => d.DealerCode!)
-					.Distinct()
+					.Where(d => d.StateId == stateId)
+					.Select(d => new { d.DealerCode, d.SPICCode })
 					.ToListAsync();
 
-				query = query.Where(sd => dealerCodes.Contains(sd.DealerCode));
+				var dealerCodes = dealers
+					.SelectMany(d => new[] { d.DealerCode, d.SPICCode })
+					.Where(c => c != null)
+					.Select(c => c!.Trim())
+					.Distinct()
+					.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+				query = query.Where(sd => dealerCodes.Contains(sd.DealerCode.Trim()));
 			}
 			else if (role == "AVP")
 			{
-				var regionId = int.TryParse(User.FindFirst("spic:region_id")?.Value, out var r) ? r : 0;
-				if (regionId <= 0) return Ok(new List<SubDealerEmployeeItemDto>());
-
-				var dealerCodes = await _db.DealerRegistrations
-					.AsNoTracking()
-					.Where(d => d.Region == regionId && d.DealerCode != null)
-					.Select(d => d.DealerCode!)
-					.Distinct()
-					.ToListAsync();
-
-				query = query.Where(sd => dealerCodes.Contains(sd.DealerCode));
+				// AVP sees all sub dealers/employees (no zone assignment in this app)
 			}
-			// Admin/CorporateAdmin: no geographic filter
 
 			var items = await query
 				.OrderByDescending(sd => sd.CreatedAt)
@@ -465,28 +460,24 @@ namespace SpicAPI.Controllers
 				var stateId = int.TryParse(User.FindFirst("spic:state_id")?.Value, out var s) ? s : 0;
 				if (stateId <= 0) return Ok(new List<SubDealerEmployeeItemDto>());
 
-				var dealerCodes = await _db.DealerRegistrations
+				var dealers = await _db.DealerRegistrations
 					.AsNoTracking()
-					.Where(d => d.StateId == stateId && d.DealerCode != null)
-					.Select(d => d.DealerCode!)
-					.Distinct()
+					.Where(d => d.StateId == stateId)
+					.Select(d => new { d.DealerCode, d.SPICCode })
 					.ToListAsync();
 
-				query = query.Where(e => dealerCodes.Contains(e.DealerCode));
+				var dealerCodes = dealers
+					.SelectMany(d => new[] { d.DealerCode, d.SPICCode })
+					.Where(c => c != null)
+					.Select(c => c!.Trim())
+					.Distinct()
+					.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+				query = query.Where(e => dealerCodes.Contains(e.DealerCode.Trim()));
 			}
 			else if (role == "AVP")
 			{
-				var regionId = int.TryParse(User.FindFirst("spic:region_id")?.Value, out var r) ? r : 0;
-				if (regionId <= 0) return Ok(new List<SubDealerEmployeeItemDto>());
-
-				var dealerCodes = await _db.DealerRegistrations
-					.AsNoTracking()
-					.Where(d => d.Region == regionId && d.DealerCode != null)
-					.Select(d => d.DealerCode!)
-					.Distinct()
-					.ToListAsync();
-
-				query = query.Where(e => dealerCodes.Contains(e.DealerCode));
+				// AVP sees all employees (no zone assignment in this app)
 			}
 			// Admin/CorporateAdmin: no geographic filter
 
