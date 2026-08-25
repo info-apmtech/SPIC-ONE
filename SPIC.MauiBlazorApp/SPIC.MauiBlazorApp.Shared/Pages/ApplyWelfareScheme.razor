@@ -3,6 +3,10 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 @using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using RelationshipEntity = SPIC.Core.Entities.Relationship
+@using OwnershipInfo = SPIC.Core.Entities.DealerOwnershipInfo
+@using FamilyDetails = SPIC.Core.Entities.PartnerFamilyDetails
 
 <div class="container-fluid py-4 px-0">
     
@@ -357,34 +361,75 @@
 
             <div class="aws-form-group">
                 <label class="aws-form-label">Nominee Name *</label>
-                <input type="text" class="aws-form-control" placeholder="Nominee's Full Name" @bind="NomineeName">
+                @if (_isLoadingOwnership)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading nominees...</option>
+                    </select>
+                }
+                else if (_ownershipPartners.Count == 0)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>No nominee information available</option>
+                    </select>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="NomineeName" @bind:after="OnDirectDealerNomineeSelected">
+                        <option value="" disabled selected hidden>--Select Nominee--</option>
+                        @foreach (var p in _ownershipPartners)
+                        {
+                            <option value="@p.Name">@p.Name</option>
+                        }
+                    </select>
+                }
             </div>
 
             <div class="aws-form-group">
                 <label class="aws-form-label">Select Beneficiary *</label>
-                <select class="aws-form-select" @bind="SelectedExistingBeneficiary" @bind:after="OnExistingBeneficiarySelected">
-                    <option value="" disabled selected hidden>--Select--</option>
-                    <option value="new">Add new beneficiary</option>
-                    @foreach (var b in _existingBeneficiaries)
-                    {
-                        <option value="@b.Name">@b.Name (@b.Relationship)</option>
-                    }
+                @if (_isLoadingOwnership)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading family members...</option>
+                    </select>
+                }
+                else if (_dynamicFamilyMembers.Count == 0)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>No family members available</option>
+                    </select>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="SelectedExistingBeneficiary" @bind:after="OnExistingBeneficiarySelected">
+                        <option value="" disabled selected hidden>--Select--</option>
+                        <option value="new">Add new beneficiary</option>
+                        @foreach (var fm in _dynamicFamilyMembers)
+                        {
+                            <option value="@fm.FamilyMemberName">@fm.FamilyMemberName (@GetWelfareRelationshipName(fm.RelationshipId))</option>
+                        }
+                    </select>
+                }
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Nominee Relationship *</label>
+                <select class="aws-form-select" @bind="NomineeRelationship">
+                    <option value="" disabled selected hidden>Select relationship</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Son">Son</option>
+                    <option value="Father">Father</option>
+                     <option value="Daughter">Daughter</option>
+                      <option value="Self">Self</option>
+                        <option value="Sister">Sister</option>
+                            <option value="brother">brother</option>
+                                <option value="Mother">Mother</option>
                 </select>
             </div>
             
             <div class="aws-form-group">
                 <label class="aws-form-label">Beneficiary Name *</label>
                 <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
-            </div>
-            
-            <div class="aws-form-group">
-                <label class="aws-form-label">Relationship *</label>
-                <select class="aws-form-select" @bind="BeneficiaryRelationship">
-                    <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="Spouse">Spouse</option>
-                    <option value="Child">Child</option>
-                    <option value="Parent">Parent</option>
-                </select>
             </div>
 
             <div class="aws-form-group">
@@ -429,28 +474,8 @@
             </div>
 
             <div class="aws-form-group">
-                <label class="aws-form-label">Nominee Relationship *</label>
-                <select class="aws-form-select" @bind="NomineeRelationship">
-                    <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="Spouse">Spouse</option>
-                    <option value="Child">Child</option>
-                    <option value="Parent">Parent</option>
-                </select>
-            </div>
-
-            <div class="aws-form-group">
                 <label class="aws-form-label">Beneficiary Name *</label>
                 <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Relationship *</label>
-                <select class="aws-form-select" @bind="BeneficiaryRelationship">
-                    <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="Spouse">Spouse</option>
-                    <option value="Child">Child</option>
-                    <option value="Parent">Parent</option>
-                </select>
             </div>
 
             <div class="aws-form-group">
@@ -495,28 +520,8 @@
             </div>
 
             <div class="aws-form-group">
-                <label class="aws-form-label">Nominee Relationship *</label>
-                <select class="aws-form-select" @bind="NomineeRelationship">
-                    <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="Spouse">Spouse</option>
-                    <option value="Child">Child</option>
-                    <option value="Parent">Parent</option>
-                </select>
-            </div>
-
-            <div class="aws-form-group">
                 <label class="aws-form-label">Beneficiary Name *</label>
                 <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Relationship *</label>
-                <select class="aws-form-select" @bind="BeneficiaryRelationship">
-                    <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="Spouse">Spouse</option>
-                    <option value="Child">Child</option>
-                    <option value="Parent">Parent</option>
-                </select>
             </div>
 
             <div class="aws-form-group">
@@ -1073,11 +1078,6 @@
                         <span class="aws-modal-colon">:</span>
                         <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(BeneficiaryName) ? "-" : BeneficiaryName)</span>
                     </div>
-                    <div class="aws-modal-row">
-                        <span class="aws-modal-label">Relationship</span>
-                        <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(BeneficiaryRelationship) ? (string.IsNullOrWhiteSpace(NomineeRelationship) ? "-" : NomineeRelationship) : BeneficiaryRelationship)</span>
-                    </div>
                     }
                     <div class="aws-modal-row">
                         <span class="aws-modal-label">Quantity Lifted (Last Year)</span>
@@ -1337,6 +1337,12 @@
     private string SelectedEmployeeId { get; set; } = string.Empty;
     private string SelectedEmployeeName { get; set; } = string.Empty;
 
+    // Ownership partners & family members (for Direct Dealer nominee/beneficiary)
+    private List<OwnershipInfo> _ownershipPartners = new();
+    private List<FamilyDetails> _dynamicFamilyMembers = new();
+    private List<RelationshipEntity> _welfareRelationships = new();
+    private bool _isLoadingOwnership = false;
+
     // Beneficiary fields (all groups)
     private string NomineeName { get; set; } = string.Empty;
     private string NomineeRelationship { get; set; } = string.Empty;
@@ -1395,6 +1401,9 @@
         {
             _isLoadingDealer = false;
         }
+
+        // Load ownership partners and family members for Direct Dealer nominee/beneficiary
+        await LoadOwnershipAndFamilyData();
 
         // Load sales history
         _isLoadingSalesHistory = true;
@@ -1497,9 +1506,9 @@
 
             if (SelectedBeneficiaryGroup == "Direct Dealer")
             {
-                var match = _existingBeneficiaries.FirstOrDefault(b =>
-                    string.Equals(b.Name, BeneficiaryName, StringComparison.OrdinalIgnoreCase));
-                SelectedExistingBeneficiary = match?.Name ?? "new";
+                var match = _dynamicFamilyMembers.FirstOrDefault(b =>
+                    string.Equals(b.FamilyMemberName, BeneficiaryName, StringComparison.OrdinalIgnoreCase));
+                SelectedExistingBeneficiary = match?.FamilyMemberName ?? "new";
             }
             else if (SelectedBeneficiaryGroup == "Sub Dealer")
             {
@@ -1622,24 +1631,35 @@
         SelectedEmployeeId = string.Empty;
         SelectedEmployeeName = string.Empty;
         SelectedExistingBeneficiary = string.Empty;
+        NomineeName = string.Empty;
+        NomineeRelationship = string.Empty;
+        BeneficiaryName = string.Empty;
+        BeneficiaryDateOfBirth = null;
+        BeneficiaryAge = string.Empty;
 
         if (SelectedBeneficiaryGroup == "Sub Dealer")
         {
+            await LoadSubDealers();
             if (_salesHistory != null && !_salesHistory.IsSubDealerEligible)
             {
                 BeneficiaryGroupError = "You do not have sufficient sales quantity to apply for a Sub Dealer. A minimum average annual sales of 50,000 MT over the last 3 years is required.";
-                return;
             }
-            await LoadSubDealers();
         }
         else if (SelectedBeneficiaryGroup == "Approved Employee")
         {
+            await LoadEmployees();
             if (_salesHistory != null && !_salesHistory.IsEmployeeEligible)
             {
                 BeneficiaryGroupError = "You do not have sufficient sales quantity to apply for an Approved Employee. A minimum average annual sales of 5,000 MT over the last 3 years is required.";
-                return;
             }
-            await LoadEmployees();
+        }
+        else if (SelectedBeneficiaryGroup == "Direct Dealer")
+        {
+            if (_ownershipPartners.Count == 1)
+            {
+                NomineeName = _ownershipPartners[0].Name;
+                OnDirectDealerNomineeSelected();
+            }
         }
     }
 
@@ -1681,6 +1701,34 @@
         }
     }
 
+    private async Task LoadOwnershipAndFamilyData()
+    {
+        if (_dealer.DealerId <= 0) return;
+        _isLoadingOwnership = true;
+        StateHasChanged();
+        try
+        {
+            var partnersTask = Http.GetFromJsonAsync<List<OwnershipInfo>>($"api/DealerOwnershipInfo/byDealer/{_dealer.DealerId}");
+            var familyTask = Http.GetFromJsonAsync<List<FamilyDetails>>("api/PartnerFamilyDetails/all");
+            var relTask = Http.GetFromJsonAsync<List<RelationshipEntity>>("api/Relationship/all");
+            await Task.WhenAll(partnersTask, familyTask, relTask);
+
+            _ownershipPartners = partnersTask.Result ?? new();
+            var allFamily = familyTask.Result ?? new();
+            _welfareRelationships = relTask.Result ?? new();
+            _dynamicFamilyMembers = allFamily.Where(f => _ownershipPartners.Any(p => p.Id == f.OwnershipPartnerId)).ToList();
+        }
+        catch (Exception)
+        {
+            _ownershipPartners = new();
+            _dynamicFamilyMembers = new();
+        }
+        finally
+        {
+            _isLoadingOwnership = false;
+        }
+    }
+
     private void OnSubDealerSelected()
     {
         var selected = _subDealers.FirstOrDefault(sd => sd.Id.ToString() == SelectedSubDealerId);
@@ -1696,7 +1744,7 @@
                 BeneficiaryName = selected.BeneficiaryName;
 
             if (!string.IsNullOrWhiteSpace(selected.Relationship))
-                BeneficiaryRelationship = selected.Relationship;
+                NomineeRelationship = selected.Relationship;
 
             if (selected.DOB.HasValue)
             {
@@ -1704,6 +1752,11 @@
                 OnDateChanged();
             }
         }
+    }
+
+    private void OnDirectDealerNomineeSelected()
+    {
+        NomineeRelationship = string.Empty;
     }
 
     private void OnEmployeeSelected()
@@ -1718,7 +1771,7 @@
                 BeneficiaryName = selected.BeneficiaryName;
 
             if (!string.IsNullOrWhiteSpace(selected.Relationship))
-                BeneficiaryRelationship = selected.Relationship;
+                NomineeRelationship = selected.Relationship;
 
             if (selected.DOB.HasValue)
             {
@@ -1728,25 +1781,18 @@
         }
     }
 
-    // Existing beneficiaries (static sample data until the beneficiary master API is available)
-    private record ExistingBeneficiary(string Name, string Relationship, DateTime? DateOfBirth);
-
-    private static readonly List<ExistingBeneficiary> _existingBeneficiaries = new()
-    {
-        new("Lakshmi Devi", "Spouse", new DateTime(1985, 3, 12)),
-        new("Arun Kumar", "Child", new DateTime(2008, 7, 25)),
-        new("Divya Rani", "Child", new DateTime(2012, 11, 8)),
-        new("Muthuvel Samy", "Parent", new DateTime(1958, 1, 30))
-    };
-
+    // Existing beneficiaries (loaded dynamically from dealer's family members)
     private string SelectedExistingBeneficiary { get; set; } = string.Empty;
+
+    private string GetWelfareRelationshipName(int id) =>
+        _welfareRelationships.FirstOrDefault(r => r.Id == id)?.Name ?? string.Empty;
 
     private void OnExistingBeneficiarySelected()
     {
         if (SelectedExistingBeneficiary == "new")
         {
             BeneficiaryName = string.Empty;
-            BeneficiaryRelationship = string.Empty;
+            NomineeRelationship = string.Empty;
             BeneficiaryDateOfBirth = null;
             OnDateChanged();
             return;
@@ -1755,11 +1801,11 @@
         if (string.IsNullOrWhiteSpace(SelectedExistingBeneficiary))
             return;
 
-        var match = _existingBeneficiaries.FirstOrDefault(b => b.Name == SelectedExistingBeneficiary);
+        var match = _dynamicFamilyMembers.FirstOrDefault(b => b.FamilyMemberName == SelectedExistingBeneficiary);
         if (match != null)
         {
-            BeneficiaryName = match.Name;
-            BeneficiaryRelationship = match.Relationship;
+            BeneficiaryName = match.FamilyMemberName;
+            NomineeRelationship = GetWelfareRelationshipName(match.RelationshipId);
             BeneficiaryDateOfBirth = match.DateOfBirth;
             OnDateChanged();
         }
@@ -2242,7 +2288,7 @@
         if (string.IsNullOrWhiteSpace(NomineeName))
             errors.Add("Nominee Name is required.");
 
-        if (string.IsNullOrWhiteSpace(NomineeRelationship))
+        if (SelectedBeneficiaryGroup == "Direct Dealer" && string.IsNullOrWhiteSpace(NomineeRelationship))
             errors.Add("Nominee Relationship is required.");
 
         // Beneficiary
@@ -2251,10 +2297,6 @@
 
         if (string.IsNullOrWhiteSpace(BeneficiaryName))
             errors.Add("Beneficiary Name is required.");
-
-        var effectiveBeneficiaryRelationship = string.IsNullOrWhiteSpace(BeneficiaryRelationship) ? NomineeRelationship : BeneficiaryRelationship;
-        if (string.IsNullOrWhiteSpace(effectiveBeneficiaryRelationship))
-            errors.Add("Beneficiary Relationship is required.");
 
         // Scheme-specific fields
         switch (SelectedScheme)

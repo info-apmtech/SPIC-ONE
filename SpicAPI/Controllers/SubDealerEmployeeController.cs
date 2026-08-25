@@ -454,7 +454,7 @@ namespace SpicAPI.Controllers
 				.AsNoTracking()
 				.FirstOrDefaultAsync(d => d.UserTableId == user.Id);
 
-			var code = dealer?.SPICCode ?? dealer?.DealerCode;
+			var code = dealer?.DealerCode;
 			return string.IsNullOrWhiteSpace(code) ? null : code.Trim();
 		}
 
