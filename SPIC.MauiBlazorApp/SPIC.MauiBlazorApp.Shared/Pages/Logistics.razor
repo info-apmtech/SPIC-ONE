@@ -2746,7 +2746,7 @@ else
                 <th class="lm-col-district">District</th>
                 <th class="lm-col-status">Status</th>
                 <th class="lm-col-createdat">Created At</th>
-                <th class="text-center lm-col-pdf">PDF</th>
+                @* <th class="text-center lm-col-pdf">PDF</th> *@
                 @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") || CanDeleteLogistics)
                 {
                     <th class="lm-col-action">Action</th>
@@ -2800,11 +2800,11 @@ else
                     </span>
                 </td>
                 <td class="lm-col-createdat">@item.CreatedAt.ToString("yyyy-MM-dd")</td>
-                <td class="text-center lm-col-pdf">
+               @*  <td class="text-center lm-col-pdf">
                     <i class="bi bi-file-earmark-pdf-fill lm-pdf-view-icon"
                        title="View @ActiveTabDisplayName PDF"
                        @onclick="() => OpenLogisticsPdf(item, null)"></i>
-                </td>
+                </td> *@
                 @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") || CanDeleteLogistics)
                 {
                     <td class="lm-col-action">
@@ -3509,16 +3509,12 @@ else
     private List<LogisticsItemDto> _filteredItems = new();
 
     private List<LogisticsItemDto> CurrentAllItems => ActiveTab switch
-    {
-        "Warehouse" => LoginState.IsAdmin
-            ? _warehouseAll
-            : _warehouseAll
-                .Where(x => GetWarehouseCategory(x) == CurrentWarehouseCategory)
-                .ToList(),
-        "Port" => _rakePointAll,
-        "PortMaster" => _portAll,
-        _ => new()
-    };
+{
+    "Warehouse" => _warehouseAll,
+    "Port" => _rakePointAll,
+    "PortMaster" => _portAll,
+    _ => new()
+};
 
     private ElementReference _firstInputRef;
     private bool _isEditing;
@@ -4956,18 +4952,18 @@ else
             columns.Add(new ExportColumn<LogisticsItemDto> { Header = "C&F Reservation Qty (Litres)", ValueSelector = item => FormatExportNumber(item.GflAdditionalReservationQuantityLitres) });
         }
 
-        // Documents are represented by their saved file names. The actual files are not embedded in Excel.
-        columns.Add(new ExportColumn<LogisticsItemDto>
-        {
-            Header = "Documents",
-            ValueSelector = GetDocumentSummaryForExport
-        });
+        // // Documents are represented by their saved file names. The actual files are not embedded in Excel.
+        // columns.Add(new ExportColumn<LogisticsItemDto>
+        // {
+        //     Header = "Documents",
+        //     ValueSelector = GetDocumentSummaryForExport
+        // });
 
-        columns.Add(new ExportColumn<LogisticsItemDto>
-        {
-            Header = "Submitted For Review",
-            ValueSelector = item => item.IsSubmittedForReview ? "Yes" : "No"
-        });
+        // columns.Add(new ExportColumn<LogisticsItemDto>
+        // {
+        //     Header = "Submitted For Review",
+        //     ValueSelector = item => item.IsSubmittedForReview ? "Yes" : "No"
+        // });
         columns.Add(new ExportColumn<LogisticsItemDto>
         {
             Header = "RM Status",
@@ -4990,8 +4986,8 @@ else
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "AVP Approved By", ValueSelector = item => GetUserNameForExport(item.AVPApprovedBy) });
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "AVP Approved At", ValueSelector = item => FormatExportDate(item.AVPApprovedAt) });
         columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Approval Remarks", ValueSelector = item => item.ApprovalRemarks ?? "" });
-        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Updated At", ValueSelector = item => item.UpdatedAt == default ? "" : item.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss") });
-        columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Updated By", ValueSelector = item => GetUserNameForExport(item.UpdatedBy) });
+        // columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Updated At", ValueSelector = item => item.UpdatedAt == default ? "" : item.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss") });
+        // columns.Add(new ExportColumn<LogisticsItemDto> { Header = "Updated By", ValueSelector = item => GetUserNameForExport(item.UpdatedBy) });
 
         return columns;
     }
