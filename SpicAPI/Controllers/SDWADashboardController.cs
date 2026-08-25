@@ -80,6 +80,7 @@ namespace SpicAPI.Controllers
 
             var dto = new SDWADashboardDealerDto
             {
+                DealerId = dealer?.Id ?? 0,
                 DealerName = user.Name ?? string.Empty,
                 DealerCode = dealer?.SPICCode ?? dealer?.DealerCode ?? string.Empty,
                 Region = regionName,
@@ -89,7 +90,8 @@ namespace SpicAPI.Controllers
                 Email = user.Email ?? string.Empty,
                 Phone = phone,
                 Address = address,
-                ProfileCompletion = CalculateProfileCompletion(dealer)
+                ProfileCompletion = CalculateProfileCompletion(dealer),
+                EntityType = dealer?.EntityType?.ToString()
             };
 
             return Ok(dto);
