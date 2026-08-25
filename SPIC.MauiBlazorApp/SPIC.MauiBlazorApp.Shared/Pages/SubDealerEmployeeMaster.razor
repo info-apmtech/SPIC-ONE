@@ -32,6 +32,8 @@
 	</div>
 
 	<div class="main-card">
+		@if (IsAdmin)
+		{
 		<div class="section-header">
 			<h3 class="section-title">@(_isEditing ? $"Edit {(ActiveTab == TabSubDealer ? "Sub Dealer" : "Employee")}" : $"Add New {(ActiveTab == TabSubDealer ? "Sub Dealer" : "Employee")}")</h3>
 			<div class="d-flex gap-2">
@@ -194,6 +196,7 @@
 				<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
 			</button>
 		</div>
+		}
 	</div>
 
 	<div class="row g-3 mb-4">
@@ -241,6 +244,13 @@
 				<option value="Active">Active</option>
 				<option value="Inactive">Inactive</option>
 			</select>
+			<select class="filter-select" @bind="_approvalFilter" @bind:after="ApplyFilter">
+				<option value="All">All Approval</option>
+				<option value="Pending SM">Pending SM</option>
+				<option value="Pending AVP">Pending AVP</option>
+				<option value="Approved">Approved</option>
+				<option value="Rejected">Rejected</option>
+			</select>
 		</FilterControls>
 
 		<TableHeader>
@@ -268,6 +278,9 @@
 				<th>Educational Qualification</th>
 			}
 
+			<th>SM Status</th>
+			<th>AVP Status</th>
+			<th>Overall</th>
 			<th>Status</th>
 			<th>Action</th>
 		</TableHeader>
@@ -298,17 +311,44 @@
 			}
 
 			<td>
+				<span class="status-pill @(item.SMApproved == true ? "status-active" : item.SMApproved == false ? "status-inactive" : "status-pending")">
+					@(item.SMApproved == true ? "Approved" : item.SMApproved == false ? "Rejected" : "Pending")
+				</span>
+			</td>
+			<td>
+				<span class="status-pill @(item.AVPApproved == true ? "status-active" : item.AVPApproved == false ? "status-inactive" : "status-pending")">
+					@(item.AVPApproved == true ? "Approved" : item.AVPApproved == false ? "Rejected" : "Pending")
+				</span>
+			</td>
+			<td>
+				<span class="status-pill @(GetOverallApprovalClass(item))">
+					@GetOverallApprovalStatus(item)
+				</span>
+			</td>
+			<td>
+				@if (IsAdmin)
+				{
 				<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
 					  style="cursor:pointer"
 					  @onclick="() => ToggleStatus(item)">
 					@(item.IsActive ? "Active" : "Inactive")
 				</span>
+				}
+				else
+				{
+				<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+					@(item.IsActive ? "Active" : "Inactive")
+				</span>
+				}
 			</td>
 			<td>
+				@if (IsAdmin)
+				{
 				<div class="action-icons">
 					<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
 					<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
 				</div>
+				}
 			</td>
 		</TableRow>
 	</SpicDataTable>
@@ -425,8 +465,11 @@
 
 	private string CurrentUploadType => ActiveTab == TabSubDealer ? "subdealer" : "employee";
 
-	// Only Admin users may manage these masters (menu, page guard and API roles enforce this too)
 	private bool IsAdmin => LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
+	private bool CanViewPage => LoginState.CanAccess(PagePermission.SubDealerEmployeeMaster);
+	private bool IsSMRole => LoginState.UserRole is AppRole.SMD or AppRole.SMM;
+	private bool IsAVPRole => LoginState.UserRole is AppRole.AVP;
+	private bool IsApproverRole => IsSMRole || IsAVPRole;
 
 	// Upload modal state
 	private bool _showUploadModal = false;
@@ -466,11 +509,11 @@
 	// Search & filter
 	private string _searchText = "";
 	private string _statusFilter = "All";
+	private string _approvalFilter = "All";
 
 	protected override async Task OnInitializedAsync()
 	{
-		// Direct URL access by non-admin users is blocked here as well as by PageGuard/API roles
-		if (!IsAdmin)
+		if (!CanViewPage)
 		{
 			Navigation.NavigateTo(LoginState.UserRole == AppRole.Dealer ? "/SDWADashboard" : "/Dashboard", replace: true);
 			return;
@@ -497,16 +540,40 @@
 		{
 			_isLoading = true;
 
+			var url = ActiveTab == TabSubDealer
+				? "api/subdealeremployee/all-subdealers"
+				: "api/subdealeremployee/all-employees";
+
+			var response = await Http.GetAsync(url);
+
+			if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+			{
+				ShowMessage("Session expired. Please log in again.", true);
+				Navigation.NavigateTo("/login", replace: true);
+				return;
+			}
+			if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+			{
+				ShowMessage("You do not have permission to view this data.", true);
+				return;
+			}
+
+			response.EnsureSuccessStatusCode();
+
 			if (ActiveTab == TabSubDealer)
 			{
-				_subDealersAll = await Http.GetFromJsonAsync<List<SubDealerEmployeeItemDto>>($"{CurrentApiBase}/all") ?? new();
+				_subDealersAll = await response.Content.ReadFromJsonAsync<List<SubDealerEmployeeItemDto>>() ?? new();
 			}
 			else
 			{
-				_employeesAll = await Http.GetFromJsonAsync<List<SubDealerEmployeeItemDto>>($"{CurrentApiBase}/all") ?? new();
+				_employeesAll = await response.Content.ReadFromJsonAsync<List<SubDealerEmployeeItemDto>>() ?? new();
 			}
 
 			ApplyFilter();
+		}
+		catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+		{
+			ShowMessage("Access denied (403 Forbidden). You do not have permission for this page.", true);
 		}
 		catch (Exception ex)
 		{
@@ -557,6 +624,9 @@
 		}
 
 		cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Status", ValueSelector = item => item.IsActive ? "Active" : "Inactive" });
+		cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "SM Status", ValueSelector = item => item.SMApproved == true ? "Approved" : item.SMApproved == false ? "Rejected" : "Pending" });
+		cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "AVP Status", ValueSelector = item => item.AVPApproved == true ? "Approved" : item.AVPApproved == false ? "Rejected" : "Pending" });
+		cols.Add(new ExportColumn<SubDealerEmployeeItemDto> { Header = "Overall Approval", ValueSelector = item => GetOverallApprovalStatus(item) });
 
 		return cols;
 	}
@@ -589,6 +659,15 @@
 			_ => source
 		};
 
+		source = _approvalFilter switch
+		{
+			"Pending SM" => source.Where(x => x.SMApproved == null),
+			"Pending AVP" => source.Where(x => x.SMApproved == true && x.AVPApproved == null),
+			"Approved" => source.Where(x => x.AVPApproved == true),
+			"Rejected" => source.Where(x => x.SMApproved == false || x.AVPApproved == false),
+			_ => source
+		};
+
 		if (!string.IsNullOrWhiteSpace(_searchText))
 		{
 			var term = _searchText.Trim();
@@ -604,6 +683,24 @@
 
 		_filteredItems = source.OrderByDescending(x => x.CreatedAt).ToList();
 	}
+
+	private static string GetOverallApprovalStatus(SubDealerEmployeeItemDto item) =>
+		(item.SMApproved, item.AVPApproved) switch
+		{
+			(true, true) => "Approved",
+			(false, _) => "SM Rejected",
+			(true, false) => "AVP Rejected",
+			_ => "Pending"
+		};
+
+	private static string GetOverallApprovalClass(SubDealerEmployeeItemDto item) =>
+		(item.SMApproved, item.AVPApproved) switch
+		{
+			(true, true) => "status-active",
+			(false, _) => "status-inactive",
+			(true, false) => "status-inactive",
+			_ => "status-pending"
+		};
 
 	private async Task HandleSave()
 	{
@@ -1026,6 +1123,8 @@
 		public string? MaritalStatus { get; set; }
 		public string? EducationalQualification { get; set; }
 		public bool IsActive { get; set; }
+		public bool? SMApproved { get; set; }
+		public bool? AVPApproved { get; set; }
 		public DateTime CreatedAt { get; set; }
 		public DateTime UpdatedAt { get; set; }
 		public string UpdatedBy { get; set; } = "";

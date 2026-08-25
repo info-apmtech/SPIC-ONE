@@ -35,6 +35,19 @@ namespace SPIC.Core.Entities
 		public string? Relationship { get; set; }
 
 		public bool IsActive { get; set; }
+
+		// SM (SMD/SMM) approval – State level
+		public bool? SMApproved { get; set; }
+		public string? SMApprovedBy { get; set; }
+		public DateTime? SMApprovedAt { get; set; }
+		public string? SMApprovalRemarks { get; set; }
+
+		// AVP approval – Zone level
+		public bool? AVPApproved { get; set; }
+		public string? AVPApprovedBy { get; set; }
+		public DateTime? AVPApprovedAt { get; set; }
+		public string? AVPApprovalRemarks { get; set; }
+
 		public DateTime CreatedAt { get; set; }
 		public DateTime UpdatedAt { get; set; }
 		public required string UpdatedBy { get; set; }
@@ -64,6 +77,19 @@ namespace SPIC.Core.Entities
 		public string? EducationalQualification { get; set; }
 
 		public bool IsActive { get; set; }
+
+		// SM (SMD/SMM) approval – State level
+		public bool? SMApproved { get; set; }
+		public string? SMApprovedBy { get; set; }
+		public DateTime? SMApprovedAt { get; set; }
+		public string? SMApprovalRemarks { get; set; }
+
+		// AVP approval – Zone level
+		public bool? AVPApproved { get; set; }
+		public string? AVPApprovedBy { get; set; }
+		public DateTime? AVPApprovedAt { get; set; }
+		public string? AVPApprovalRemarks { get; set; }
+
 		public DateTime CreatedAt { get; set; }
 		public DateTime UpdatedAt { get; set; }
 		public required string UpdatedBy { get; set; }
