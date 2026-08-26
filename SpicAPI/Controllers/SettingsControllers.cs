@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SPIC.Core.Entities;
@@ -144,6 +145,9 @@ namespace SpicAPI.Controllers
 			entity.UpdatedAt = now;
 			entity.UpdatedBy = userId;
 
+			var locError = ValidatePrimaryLocation(entity);
+			if (locError != null) return locError;
+
 			var created = await _repo.CreateAsync(entity);
 			return Ok(new
 			{
@@ -210,6 +214,12 @@ namespace SpicAPI.Controllers
 			entity.UpdatedBy = string.IsNullOrWhiteSpace(userId)
 				? existing.UpdatedBy
 				: userId;
+
+			var docError = ValidateRequiredDocuments(entity);
+			if (docError != null) return docError;
+
+			var locError = ValidatePrimaryLocation(entity);
+			if (locError != null) return locError;
 
 			var updated = await _repo.PatchAsync(id, entity);
 			if (updated == null) return NotFound();
@@ -517,6 +527,149 @@ namespace SpicAPI.Controllers
 			role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
 			role.Equals("CorporateAdmin", StringComparison.OrdinalIgnoreCase) ||
 			role.Equals("Director", StringComparison.OrdinalIgnoreCase);
+
+		/// <summary>
+		/// When a warehouse is Active the document matrix mandates specific documents
+		/// based on the category (PVT / C&F / Both) and company flags (InSpic / InGreenStar).
+		/// Returns null when validation passes or the entity is not Active;
+		/// otherwise returns a BadRequest with the list of missing documents.
+		/// </summary>
+		private IActionResult? ValidateRequiredDocuments(Warehouse entity)
+		{
+			if (entity.IsActive != true)
+				return null;
+
+			var missing = new List<string>();
+			var inSpic = entity.InSpic == true;
+			var inGfl = entity.InGreenStar == true;
+			var cat = entity.WarehouseCategory;
+
+			var otherPaths = DeserializeOtherDocumentPaths(entity.OtherDocumentPathsJson);
+
+			bool isPvtOrBoth = cat is LogisticsWarehouseCategory.PvtWH or LogisticsWarehouseCategory.Both;
+			bool isCf = cat is LogisticsWarehouseCategory.CandFWH;
+
+			if (isPvtOrBoth)
+			{
+				if (inSpic)
+				{
+					if (string.IsNullOrWhiteSpace(entity.GstDocumentPath))
+						missing.Add("SPIC GST Document");
+					if (string.IsNullOrWhiteSpace(entity.FertilizerLicenseDocumentPath))
+						missing.Add("SPIC Fertilizer License Document");
+					if (!HasDocumentPath(otherPaths, "insurance_spic"))
+						missing.Add("SPIC Insurance Document");
+				}
+
+				if (inGfl)
+				{
+					if (!HasDocumentPath(otherPaths, "gst_gfl"))
+						missing.Add("GREEN STAR GST Document");
+					if (!HasDocumentPath(otherPaths, "fertilizerlicense_gfl"))
+						missing.Add("GREEN STAR Fertilizer License Document");
+					if (!HasDocumentPath(otherPaths, "insurance_gfl"))
+						missing.Add("GREEN STAR Insurance Document");
+				}
+			}
+			else if (isCf)
+			{
+				if (string.IsNullOrWhiteSpace(entity.GstDocumentPath))
+					missing.Add("GST Document");
+				if (string.IsNullOrWhiteSpace(entity.FertilizerLicenseDocumentPath))
+					missing.Add("Fertilizer License Document");
+				if (string.IsNullOrWhiteSpace(entity.InsuranceDocumentPath))
+					missing.Add("Insurance Document");
+			}
+
+			if (missing.Count > 0)
+				return BadRequest(new
+				{
+					message = $"Cannot save Active warehouse: missing required documents — {string.Join(", ", missing)}."
+				});
+
+			return null;
+		}
+
+		/// <summary>
+		/// When a warehouse is Active the Primary Location fields are mandatory.
+		/// Returns null when validation passes or the entity is not Active;
+		/// otherwise returns a BadRequest with the list of missing fields.
+		/// </summary>
+		private IActionResult? ValidatePrimaryLocation(Warehouse entity)
+		{
+			if (entity.IsActive != true)
+				return null;
+
+			var missing = new List<string>();
+
+			if (string.IsNullOrWhiteSpace(entity.GoogleURL) && !entity.Latitude.HasValue && !entity.Longitude.HasValue)
+				missing.Add("Google Map URL or Latitude/Longitude");
+
+			if (string.IsNullOrWhiteSpace(entity.DoorNo))
+				missing.Add("Door No / Shop No / Room No / Block No");
+
+			if (string.IsNullOrWhiteSpace(entity.Street))
+				missing.Add("Street / Area / Locality");
+
+			if (string.IsNullOrWhiteSpace(entity.SubVillage))
+				missing.Add("Sub Village");
+
+			if (string.IsNullOrWhiteSpace(entity.PinCode))
+				missing.Add("Pincode");
+
+			if (string.IsNullOrWhiteSpace(entity.Village))
+				missing.Add("Village");
+
+			if (string.IsNullOrWhiteSpace(entity.Block))
+				missing.Add("Block");
+
+			if (string.IsNullOrWhiteSpace(entity.Taluk))
+				missing.Add("Taluk");
+
+			if (entity.StateId <= 0)
+				missing.Add("State");
+
+			if (entity.DistrictId <= 0)
+				missing.Add("District");
+
+			if (string.IsNullOrWhiteSpace(entity.ContactNumber))
+				missing.Add("Contact Number");
+
+			if (missing.Count > 0)
+				return BadRequest(new
+				{
+					message = $"Cannot save Active warehouse: missing required Primary Location fields — {string.Join(", ", missing)}."
+				});
+
+			return null;
+		}
+
+		private static List<string> DeserializeOtherDocumentPaths(string? json)
+		{
+			if (string.IsNullOrWhiteSpace(json))
+				return new();
+
+			try
+			{
+				return JsonSerializer.Deserialize<List<string>>(json)
+					?.Where(x => !string.IsNullOrWhiteSpace(x))
+					.ToList() ?? new();
+			}
+			catch
+			{
+				return new();
+			}
+		}
+
+		private static bool HasDocumentPath(List<string> paths, string documentType)
+		{
+			var token = $"/{documentType.Trim().ToLowerInvariant()}/";
+			return paths.Any(p =>
+				(p ?? string.Empty)
+					.Replace('\\', '/')
+					.ToLowerInvariant()
+					.Contains(token));
+		}
 	}
 
 	// ---------------------------------------------------------------------
@@ -618,6 +771,9 @@ namespace SpicAPI.Controllers
 			entity.UpdatedAt = now;
 			entity.UpdatedBy = userId;
 
+			var locError = ValidatePrimaryLocation(entity);
+			if (locError != null) return locError;
+
 			var created = await _repo.CreateAsync(entity);
 			return Ok(new
 			{
@@ -684,6 +840,9 @@ namespace SpicAPI.Controllers
 			entity.UpdatedBy = string.IsNullOrWhiteSpace(userId)
 				? existing.UpdatedBy
 				: userId;
+
+			var locError = ValidatePrimaryLocation(entity);
+			if (locError != null) return locError;
 
 			var updated = await _repo.PatchAsync(id, entity);
 			if (updated == null) return NotFound();
@@ -902,6 +1061,55 @@ namespace SpicAPI.Controllers
 						? "Rake Point sent back to RM."
 						: "Rake Point sent back to SMM."
 			});
+		}
+
+		/// <summary>
+		/// When a Rake Point is Active the Primary Location fields are mandatory.
+		/// Rake Point does not have DoorNo/Street fields.
+		/// Returns null when validation passes or the entity is not Active;
+		/// otherwise returns a BadRequest with the list of missing fields.
+		/// </summary>
+		private IActionResult? ValidatePrimaryLocation(RackPoint entity)
+		{
+			if (entity.IsActive != true)
+				return null;
+
+			var missing = new List<string>();
+
+			if (string.IsNullOrWhiteSpace(entity.GoogleURL) && !entity.Latitude.HasValue && !entity.Longitude.HasValue)
+				missing.Add("Google Map URL or Latitude/Longitude");
+
+			if (string.IsNullOrWhiteSpace(entity.SubVillage))
+				missing.Add("Sub Village");
+
+			if (string.IsNullOrWhiteSpace(entity.PinCode))
+				missing.Add("Pincode");
+
+			if (string.IsNullOrWhiteSpace(entity.Village))
+				missing.Add("Village");
+
+			if (string.IsNullOrWhiteSpace(entity.Block))
+				missing.Add("Block");
+
+			if (string.IsNullOrWhiteSpace(entity.Taluk))
+				missing.Add("Taluk");
+
+			if (entity.StateId <= 0)
+				missing.Add("State");
+
+			if (entity.DistrictId <= 0)
+				missing.Add("District");
+
+			if (string.IsNullOrWhiteSpace(entity.ContactNumber))
+				missing.Add("Contact Number");
+
+			if (missing.Count > 0)
+				return BadRequest(new
+				{
+					message = $"Cannot save Active Rake Point: missing required Primary Location fields — {string.Join(", ", missing)}."
+				});
+
+			return null;
 		}
 
 		private async Task SaveApprovalHistoryAsync(
