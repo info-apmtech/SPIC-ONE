@@ -1,0 +1,495 @@
+@page "/LogisticsReport"
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@using System.Net.Http.Json
+@using System.Text.Json
+
+
+<style>
+    .lr-container { padding: 0 0 2rem; }
+
+    .lr-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 1.5rem;
+    }
+
+    .lr-header h5 {
+        margin: 0;
+        font-weight: 800;
+        color: #1f2937;
+    }
+
+    .lr-header-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .lr-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 38px;
+        padding: 0 14px;
+        border-radius: 8px;
+        font-size: .8rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all .15s ease;
+        white-space: nowrap;
+    }
+
+    .lr-btn:disabled {
+        opacity: .55;
+        cursor: not-allowed;
+    }
+
+    .lr-btn-outline {
+        border: 1px solid #059669;
+        background: #fff;
+        color: #047857;
+    }
+
+    .lr-btn-outline:hover:not(:disabled) {
+        background: #ecfdf5;
+        border-color: #047857;
+        transform: translateY(-1px);
+    }
+
+    /* Tab navigation */
+    .lr-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid #e5e7eb;
+    }
+
+    .lr-tab {
+        padding: 10px 20px;
+        border: 0;
+        background: transparent;
+        color: #6b7280;
+        font-size: .88rem;
+        font-weight: 700;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+        transition: all .2s ease;
+    }
+
+    .lr-tab:hover {
+        color: #059669;
+    }
+
+    .lr-tab.active {
+        color: #059669;
+        border-bottom-color: #059669;
+    }
+
+    /* Search */
+    .lr-search-wrap {
+        margin-bottom: 1rem;
+    }
+
+    .lr-search-input {
+        width: 280px;
+        max-width: 100%;
+        padding: 9px 12px 9px 36px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: .82rem;
+        color: #374151;
+        background: #fff;
+        outline: none;
+        transition: border-color .15s ease;
+    }
+
+    .lr-search-input:focus {
+        border-color: #059669;
+        box-shadow: 0 0 0 2px rgba(5, 150, 105, .08);
+    }
+
+    .lr-search-wrap {
+        position: relative;
+    }
+
+    .lr-search-icon {
+        position: absolute;
+        left: 11px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #94a3b8;
+        font-size: .85rem;
+        pointer-events: none;
+    }
+
+    /* Table */
+    .lr-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        background: #fff;
+    }
+
+    .lr-table {
+        width: 100%;
+        min-width: 780px;
+        margin: 0;
+        border-collapse: collapse;
+    }
+
+    .lr-table thead th {
+        padding: 14px 16px;
+        background: #f8fafc;
+        color: #475569;
+        font-size: .72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        border-bottom: 2px solid #e5e7eb;
+        white-space: nowrap;
+        text-align: center;
+    }
+
+    .lr-table thead th:first-child {
+        text-align: left;
+    }
+
+    .lr-table tbody td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #f1f5f9;
+        color: #374151;
+        font-size: .84rem;
+        font-weight: 500;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .lr-table tbody td:first-child {
+        text-align: left;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .lr-table tbody tr:hover td {
+        background: #f8fcfa;
+    }
+
+    .lr-table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    /* Total row */
+    .lr-total-row td {
+        background: #f0fdf4 !important;
+        font-weight: 800 !important;
+        color: #065f46 !important;
+        border-top: 2px solid #059669 !important;
+        font-size: .86rem !important;
+    }
+
+    /* Empty state */
+    .lr-empty {
+        padding: 48px 24px;
+        text-align: center;
+        color: #64748b;
+    }
+
+    .lr-empty i {
+        font-size: 2.5rem;
+        color: #cbd5e1;
+        display: block;
+        margin-bottom: 12px;
+    }
+
+    .lr-empty p {
+        margin: 0;
+        font-size: .88rem;
+    }
+
+    /* Loading */
+    .lr-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 48px;
+        color: #64748b;
+        font-size: .88rem;
+    }
+
+    .lr-spinner {
+        width: 22px;
+        height: 22px;
+        border: 3px solid #e5e7eb;
+        border-top-color: #059669;
+        border-radius: 50%;
+        animation: lr-spin .7s linear infinite;
+    }
+
+    @@keyframes lr-spin { to { transform: rotate(360deg); } }
+
+    /* Alert */
+    .lr-alert {
+        padding: 10px 14px;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-size: .82rem;
+        font-weight: 600;
+    }
+
+    .lr-alert-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .lr-alert-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+
+    /* Back button */
+    .lr-back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 6px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 7px;
+        background: #fff;
+        color: #475569;
+        font-size: .78rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all .15s ease;
+        margin-bottom: 1rem;
+    }
+
+    .lr-back-btn:hover {
+        background: #f3f4f6;
+        border-color: #9ca3af;
+    }
+
+    @@media (max-width: 767.98px) {
+        .lr-header { flex-direction: column; align-items: flex-start; }
+        .lr-search-input { width: 100%; }
+        .lr-table { min-width: 700px; }
+    }
+</style>
+
+<div class="container-fluid py-4 px-0 lr-container">
+    <button class="lr-back-btn" @onclick="GoBack">
+        <i class="bi bi-arrow-left"></i> Back to Logistics
+    </button>
+
+    <div class="lr-header">
+        <h5>Logistics Reports</h5>
+        <div class="lr-header-actions">
+            <button class="lr-btn lr-btn-outline" @onclick="LoadData" disabled="@_isLoading">
+                <i class="bi bi-arrow-clockwise"></i>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <div class="lr-tabs">
+        <button class="lr-tab @(_activeTab == "warehouse" ? "active" : "")"
+                @onclick="SelectWarehouseTab">
+            Warehouse Report
+        </button>
+        <button class="lr-tab @(_activeTab == "rakepoint" ? "active" : "")"
+                @onclick="SelectRakepointTab">
+            Rakepoint Report
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="lr-alert lr-alert-danger">@_error</div>
+    }
+
+    <!-- Search -->
+    <div class="lr-search-wrap">
+        <i class="bi bi-search lr-search-icon"></i>
+        <input type="text"
+               class="lr-search-input"
+               placeholder="Search by state..."
+               @bind="_searchTerm"
+               @bind:after="FilterRows" />
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="lr-loading">
+            <div class="lr-spinner"></div>
+            Loading report data...
+        </div>
+    }
+    else if (_filteredRows.Count == 0)
+    {
+        <div class="lr-table-wrap">
+            <div class="lr-empty">
+                <i class="bi bi-bar-chart-line"></i>
+                <p>No data available for the current filter.</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="lr-table-wrap">
+            <table class="lr-table">
+                <thead>
+                    <tr>
+                        <th>State</th>
+                        <th>As per SAP</th>
+                        <th>Pending with MO</th>
+                        <th>Pending RM</th>
+                        <th>Pending SMM</th>
+                        <th>Pending with AVP</th>
+                        <th>Completed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _filteredRows)
+                    {
+                        <tr>
+                            <td>@row.State</td>
+                            <td></td>
+                            <td>@row.PendingWithMo</td>
+                            <td>@row.PendingRm</td>
+                            <td>@row.PendingSmm</td>
+                            <td>@row.PendingWithAvp</td>
+                            <td>@row.Completed</td>
+                        </tr>
+                    }
+                    @if (_filteredRows.Count > 0)
+                    {
+                        var sapTotal = _activeTab == "warehouse"
+                            ? _warehouseData?.Total.AsPerSap ?? 0
+                            : _rakepointData?.Total.AsPerSap ?? 0;
+                        <tr class="lr-total-row">
+                            <td>TOTAL</td>
+                            <td>@sapTotal</td>
+                            <td>@_filteredRows.Sum(r => r.PendingWithMo)</td>
+                            <td>@_filteredRows.Sum(r => r.PendingRm)</td>
+                            <td>@_filteredRows.Sum(r => r.PendingSmm)</td>
+                            <td>@_filteredRows.Sum(r => r.PendingWithAvp)</td>
+                            <td>@_filteredRows.Sum(r => r.Completed)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private string _activeTab = "warehouse";
+    private bool _isLoading;
+    private string? _error;
+    private string _searchTerm = string.Empty;
+
+    private LogisticsReportResponseDto? _warehouseData;
+    private LogisticsReportResponseDto? _rakepointData;
+    private List<LogisticsReportRowDto> _filteredRows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            _warehouseData = await Http.GetFromJsonAsync<LogisticsReportResponseDto>("api/LogisticsReport/warehouse");
+            _rakepointData = await Http.GetFromJsonAsync<LogisticsReportResponseDto>("api/LogisticsReport/rakepoint");
+            FilterRows();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load report data: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SwitchTab(string tab)
+    {
+        _activeTab = tab;
+        FilterRows();
+    }
+
+    private void SelectWarehouseTab() => SwitchTab("warehouse");
+    private void SelectRakepointTab() => SwitchTab("rakepoint");
+
+    private void FilterRows()
+    {
+        var source = _activeTab == "warehouse"
+            ? _warehouseData?.Rows
+            : _rakepointData?.Rows;
+
+        if (source == null)
+        {
+            _filteredRows = new List<LogisticsReportRowDto>();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            _filteredRows = source.ToList();
+        }
+        else
+        {
+            _filteredRows = source
+                .Where(r => r.State.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+
+    private void GoBack()
+    {
+        Nav.NavigateTo("/Logistics");
+    }
+
+    // --- DTO classes matching the API response ---
+
+    public sealed class LogisticsReportRowDto
+    {
+        public int StateId { get; set; }
+        public string State { get; set; } = string.Empty;
+        public int TotalCount { get; set; }
+        public int AsPerSap { get; set; }
+        public int PendingWithMo { get; set; }
+        public int PendingRm { get; set; }
+        public int PendingSmm { get; set; }
+        public int PendingWithAvp { get; set; }
+        public int Completed { get; set; }
+    }
+
+    public sealed class LogisticsReportTotalDto
+    {
+        public int TotalCount { get; set; }
+        public int AsPerSap { get; set; }
+        public int PendingWithMo { get; set; }
+        public int PendingRm { get; set; }
+        public int PendingSmm { get; set; }
+        public int PendingWithAvp { get; set; }
+        public int Completed { get; set; }
+    }
+
+    public sealed class LogisticsReportResponseDto
+    {
+        public List<LogisticsReportRowDto> Rows { get; set; } = new();
+        public LogisticsReportTotalDto Total { get; set; } = new();
+    }
+}
