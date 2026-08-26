@@ -2835,6 +2835,15 @@ else
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
             </select>
+
+            <select class="filter-select" @bind="_approvalStatusFilter" @bind:after="ApplyFilter">
+                <option value="All">All Approval Status</option>
+                <option value="Pending MO">Pending MO</option>
+                <option value="Pending RM">Pending RM</option>
+                <option value="Pending SMM">Pending SMM</option>
+                <option value="Pending AVP">Pending AVP</option>
+                <option value="Completed">Completed</option>
+            </select>
         </FilterControls>
 
         <TableHeader>
@@ -3694,6 +3703,7 @@ else
     private bool _isError;
     private string _searchText = "";
     private string _statusFilter = "All";
+    private string _approvalStatusFilter = "All";
     private string? _currentUserId;
 
     private bool _isGettingLocation;
@@ -3930,6 +3940,7 @@ else
         ActiveTab = tabName;
         _searchText = "";
         _statusFilter = "All";
+        _approvalStatusFilter = "All";
         ResetForm();
         await LoadData();
     }
@@ -5117,8 +5128,23 @@ private bool HasLogisticsRowAction(LogisticsItemDto item) =>
                 "Inactive" => !x.IsActive,
                 _ => true
             })
+            .Where(x => _approvalStatusFilter == "All" || MatchesApprovalFilter(x, _approvalStatusFilter))
             .OrderByDescending(x => x.CreatedAt)
             .ToList();
+    }
+
+    private static bool MatchesApprovalFilter(LogisticsItemDto item, string filter)
+    {
+        var status = GetApprovalStatus(item);
+        return filter switch
+        {
+            "Pending MO" => status is "Draft" or "Submitted" or "Sent Back to MO",
+            "Pending RM" => status == "Pending RM",
+            "Pending SMM" => status == "Pending SMM",
+            "Pending AVP" => status == "Pending AVP",
+            "Completed" => status == "Approved",
+            _ => true
+        };
     }
 
     // Export is intentionally richer than the on-screen table.
