@@ -2747,10 +2747,10 @@ else
                 <th class="lm-col-status">Status</th>
                 <th class="lm-col-createdat">Created At</th>
                 @* <th class="text-center lm-col-pdf">PDF</th> *@
-                @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") || CanDeleteLogistics)
-                {
-                    <th class="lm-col-action">Action</th>
-                }
+               @if (CanShowLogisticsActionColumn)
+{
+    <th class="lm-col-action">Action</th>
+}
             }
             else
             {
@@ -2805,14 +2805,17 @@ else
                        title="View @ActiveTabDisplayName PDF"
                        @onclick="() => OpenLogisticsPdf(item, null)"></i>
                 </td> *@
-                @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update") || CanDeleteLogistics)
-                {
-                    <td class="lm-col-action">
+              @if (CanShowLogisticsActionColumn)
+{
+    <td class="lm-col-action">
                         <div class="action-icons">
-                            @if (CanDeleteLogistics)
-                            {
-                                <i class="bi bi-trash icon-del lm-row-icon-action lm-delete-action" title="Delete" @onclick="() => DeleteItem(item)"></i>
-                            }
+                          @if (CanDeleteLogisticsItem(item))
+{
+    <i class="bi bi-trash icon-del lm-row-icon-action lm-delete-action"
+       title="Delete"
+       @onclick="() => DeleteItem(item)">
+    </i>
+}
                             @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update"))
                             {
                                 <i class="bi bi-pencil-square icon-edit lm-row-icon-action lm-edit-action" title="Edit" @onclick="() => EditItem(item)"></i>
@@ -4391,18 +4394,29 @@ else
             forceLoad: false);
     }
 
-    private void DeleteItem(LogisticsItemDto item)
+ private void DeleteItem(LogisticsItemDto item)
+{
+    if (!CanDeleteLogisticsItem(item))
+        return;
+
+    _deleteTarget = item;
+    _showDeleteConfirm = true;
+}
+
+  private async Task ConfirmDelete()
+{
+    if (_deleteTarget is null)
+        return;
+
+    if (!CanDeleteLogisticsItem(_deleteTarget))
     {
-        _deleteTarget = item;
-        _showDeleteConfirm = true;
+        ShowMessage("You are not allowed to delete this record.", true);
+        CancelDelete();
+        return;
     }
 
-    private async Task ConfirmDelete()
+    try
     {
-        if (_deleteTarget is null) return;
-
-        try
-        {
             _isDeleting = true;
             var response = await Http.DeleteAsync($"{CurrentApiBase}/{_deleteTarget.Id}");
 
@@ -4493,17 +4507,52 @@ else
         LoginState.UserRole == AppRole.Director;
 
     // Delete remains restricted to the same existing admin-level roles.
-    private bool CanDeleteLogistics =>
-        LoginState.UserRole == AppRole.Admin ||
-        LoginState.UserRole == AppRole.CorporateAdmin ||
-        LoginState.UserRole == AppRole.AVP ||
-        LoginState.UserRole == AppRole.Director;
+    private bool CanDeleteLogistics => LoginState.UserRole == AppRole.Admin || LoginState.UserRole == AppRole.CorporateAdmin || LoginState.UserRole == AppRole.AVP ||  LoginState.UserRole == AppRole.Director;
+ private bool CanDeleteLogisticsItem(LogisticsItemDto item)
+{
+    if (item == null)
+        return false;
 
-    private bool HasLogisticsRowAction(LogisticsItemDto item) =>
-        CanApprove(item) ||
-        CanDeleteLogistics ||
-        CanEditLogisticsItem(item);
+    // Existing admin delete
+    if (CanDeleteLogistics)
+        return true;
 
+
+    // MO / MDO / JMDO delete only Warehouse
+    if (!IsWarehouseTab)
+        return false;
+
+
+    var role = LoginState.UserRole.ToString();
+
+    if (role.Equals("MO", StringComparison.OrdinalIgnoreCase) ||
+        role.Equals("MDO", StringComparison.OrdinalIgnoreCase) ||
+        role.Equals("JMDO", StringComparison.OrdinalIgnoreCase))
+    {
+
+        // Cannot delete after final approval
+        if (item.AVPApproved == true)
+            return false;
+
+
+        // Cannot delete after RM approved
+        if (item.RMApproved == true)
+            return false;
+
+
+        // Draft
+        // Pending RM
+        // Sent Back to MO
+        return true;
+    }
+
+
+    return false;
+}
+private bool HasLogisticsRowAction(LogisticsItemDto item) =>
+    CanApprove(item) ||
+    CanDeleteLogisticsItem(item) ||
+    CanEditLogisticsItem(item);
     // Do not reserve an empty last column. It is rendered only when at least
     // one currently displayed record has an action for the logged-in role.
     private bool CanShowLogisticsActionColumn =>
