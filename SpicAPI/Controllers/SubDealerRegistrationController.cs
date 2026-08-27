@@ -429,17 +429,25 @@ public class SubDealerRegistrationController : ControllerBase
 		var entity = new SubDealerRegistration();
 		ApplyModel(entity, model);
 
-		// Manual creation: generate a Sub Dealer code after insert.
-		// Excel import uses the code provided in the master file instead.
-		entity.SubDealerCode = null;
+		// Preserve any supplied/persisted Sub Dealer Code (e.g. imported master
+		// record being maintained). Only generate a code after insert when no
+		// valid code was supplied, so an existing persisted code is never
+		// overwritten with SD{Id}.
+		var suppliedCode = model.SubDealerCode?.Trim();
+		entity.SubDealerCode = string.IsNullOrWhiteSpace(suppliedCode)
+			? null
+			: suppliedCode;
 		entity.CreatedAt = DateTime.Now;
 		entity.UpdatedAt = DateTime.Now;
 
 		_db.SubDealerRegistrations.Add(entity);
 		await _db.SaveChangesAsync(cancellationToken);
 
-		entity.SubDealerCode = $"SD{entity.Id:D6}";
-		await _db.SaveChangesAsync(cancellationToken);
+		if (string.IsNullOrWhiteSpace(entity.SubDealerCode))
+		{
+			entity.SubDealerCode = $"SD{entity.Id:D6}";
+			await _db.SaveChangesAsync(cancellationToken);
+		}
 
 		return Ok(ToModel(entity));
 	}

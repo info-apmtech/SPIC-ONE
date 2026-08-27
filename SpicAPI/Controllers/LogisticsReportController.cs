@@ -44,11 +44,7 @@ namespace SpicAPI.Controllers
                     StateId = g.Key,
                     TotalCount = g.Count(),
                     AsPerSap = 0,
-                    PendingWithMo = g.Count(w =>
-                        !w.IsSubmittedForReview ||
-                        (w.IsSubmittedForReview && w.RMApproved == false) ||
-                        (w.IsSubmittedForReview && w.RMApproved == true && w.SMApproved == false) ||
-                        (w.IsSubmittedForReview && w.RMApproved == true && w.SMApproved == true && w.AVPApproved == false)),
+                    PendingWithMo = 0,
                     PendingRm = g.Count(w =>
                         w.IsSubmittedForReview &&
                         w.RMApproved == null &&
@@ -108,11 +104,7 @@ namespace SpicAPI.Controllers
                     StateId = g.Key,
                     TotalCount = g.Count(),
                     AsPerSap = 0,
-                    PendingWithMo = g.Count(r =>
-                        !r.IsSubmittedForReview ||
-                        (r.IsSubmittedForReview && r.RMApproved == false) ||
-                        (r.IsSubmittedForReview && r.RMApproved == true && r.SMApproved == false) ||
-                        (r.IsSubmittedForReview && r.RMApproved == true && r.SMApproved == true && r.AVPApproved == false)),
+                    PendingWithMo = 0,
                     PendingRm = g.Count(r =>
                         r.IsSubmittedForReview &&
                         r.RMApproved == null &&
@@ -164,17 +156,24 @@ namespace SpicAPI.Controllers
             }
         }
 
-        private static LogisticsReportTotalDto BuildTotal(List<LogisticsReportRowDto> rows, int sapTotal) =>
-            new()
+        private static LogisticsReportTotalDto BuildTotal(List<LogisticsReportRowDto> rows, int sapTotal)
+        {
+            var totalRm = rows.Sum(r => r.PendingRm);
+            var totalSmm = rows.Sum(r => r.PendingSmm);
+            var totalAvp = rows.Sum(r => r.PendingWithAvp);
+            var totalCompleted = rows.Sum(r => r.Completed);
+
+            return new LogisticsReportTotalDto
             {
                 TotalCount = rows.Sum(r => r.TotalCount),
                 AsPerSap = sapTotal,
-                PendingWithMo = rows.Sum(r => r.PendingWithMo),
-                PendingRm = rows.Sum(r => r.PendingRm),
-                PendingSmm = rows.Sum(r => r.PendingSmm),
-                PendingWithAvp = rows.Sum(r => r.PendingWithAvp),
-                Completed = rows.Sum(r => r.Completed)
+                PendingWithMo = Math.Max(0, sapTotal - (totalRm + totalSmm + totalAvp + totalCompleted)),
+                PendingRm = totalRm,
+                PendingSmm = totalSmm,
+                PendingWithAvp = totalAvp,
+                Completed = totalCompleted
             };
+        }
 
         private IQueryable<SPIC.Core.Entities.Warehouse> ApplyWarehouseRoleFilter(
             IQueryable<SPIC.Core.Entities.Warehouse> query, string role)

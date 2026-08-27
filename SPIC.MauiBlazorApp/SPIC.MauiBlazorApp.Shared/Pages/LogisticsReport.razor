@@ -186,6 +186,12 @@
         border-bottom: 0;
     }
 
+    .lr-common-value {
+        vertical-align: middle;
+        font-weight: 700;
+        color: #374151;
+    }
+
     /* Total row */
     .lr-total-row td {
         background: #f0fdf4 !important;
@@ -352,10 +358,14 @@
                 <tbody>
                     @foreach (var row in _filteredRows)
                     {
+                        var isFirstRow = row == _filteredRows[0];
                         <tr>
                             <td>@row.State</td>
-                            <td></td>
-                            <td>@row.PendingWithMo</td>
+                            @if (isFirstRow)
+                            {
+                                <td class="lr-common-value" rowspan="@_filteredRows.Count">@_reportSapTotal</td>
+                                <td class="lr-common-value" rowspan="@_filteredRows.Count">@_reportPendingWithMo</td>
+                            }
                             <td>@row.PendingRm</td>
                             <td>@row.PendingSmm</td>
                             <td>@row.PendingWithAvp</td>
@@ -364,13 +374,10 @@
                     }
                     @if (_filteredRows.Count > 0)
                     {
-                        var sapTotal = _activeTab == "warehouse"
-                            ? _warehouseData?.Total.AsPerSap ?? 0
-                            : _rakepointData?.Total.AsPerSap ?? 0;
                         <tr class="lr-total-row">
                             <td>TOTAL</td>
-                            <td>@sapTotal</td>
-                            <td>@_filteredRows.Sum(r => r.PendingWithMo)</td>
+                            <td>@_reportSapTotal</td>
+                            <td>@_reportPendingWithMo</td>
                             <td>@_filteredRows.Sum(r => r.PendingRm)</td>
                             <td>@_filteredRows.Sum(r => r.PendingSmm)</td>
                             <td>@_filteredRows.Sum(r => r.PendingWithAvp)</td>
@@ -394,6 +401,8 @@
     private LogisticsReportResponseDto? _warehouseData;
     private LogisticsReportResponseDto? _rakepointData;
     private List<LogisticsReportRowDto> _filteredRows = new();
+    private int _reportPendingWithMo;
+    private int _reportSapTotal;
 
     protected override async Task OnInitializedAsync()
     {
@@ -438,11 +447,25 @@
             ? _warehouseData?.Rows
             : _rakepointData?.Rows;
 
+        var totalData = _activeTab == "warehouse"
+            ? _warehouseData?.Total
+            : _rakepointData?.Total;
+
         if (source == null)
         {
             _filteredRows = new List<LogisticsReportRowDto>();
+            _reportPendingWithMo = 0;
+            _reportSapTotal = 0;
             return;
         }
+
+        var sapTotal = totalData?.AsPerSap ?? 0;
+        _reportSapTotal = sapTotal;
+        var totalRm = totalData?.PendingRm ?? 0;
+        var totalSmm = totalData?.PendingSmm ?? 0;
+        var totalAvp = totalData?.PendingWithAvp ?? 0;
+        var totalCompleted = totalData?.Completed ?? 0;
+        _reportPendingWithMo = Math.Max(0, sapTotal - (totalRm + totalSmm + totalAvp + totalCompleted));
 
         if (string.IsNullOrWhiteSpace(_searchTerm))
         {
