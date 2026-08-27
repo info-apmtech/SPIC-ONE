@@ -187,6 +187,144 @@ namespace SpicAPI.Controllers
         }
 
         // =====================================================================
+        //  MO document management - delete an incorrect uploaded document
+        //  (removes the DB row and the physical file). MO role only.
+        // =====================================================================
+
+        [HttpDelete("document/{documentId:int}")]
+        public async Task<IActionResult> DeleteDocument(int documentId)
+        {
+            var (role, user) = await GetActorAsync();
+            if (user == null)
+                return Unauthorized();
+
+            if (!role.HasValue || role.Value != AppRole.MO)
+                return StatusCode(403, new { Message = "Only the MO can delete documents." });
+
+            var document = await _db.WelfareApplicationDocuments
+                .FirstOrDefaultAsync(d => d.Id == documentId);
+
+            if (document == null)
+                return NotFound(new { Message = "Document not found." });
+
+            // Only allow deletion of documents belonging to an application the MO
+            // is allowed to access (territory rule).
+            var application = await _db.WelfareApplications
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == document.WelfareApplicationId);
+
+            if (application == null || !await IsDealerWithinScopeAsync(application.DealerId, role))
+                return StatusCode(403, new { Message = "This document belongs to an application outside your territory." });
+
+            DeleteDocumentFile(document.FilePath);
+            _db.WelfareApplicationDocuments.Remove(document);
+
+            _db.WelfareApplicationActionLogs.Add(new WelfareApplicationActionLog
+            {
+                WelfareApplicationId = application.Id,
+                ActorLevel = role.Value,
+                Action = "DocumentDeleted",
+                Remarks = $"MO deleted document '{document.DocumentName ?? document.FileName}'.",
+                ActorName = BuildActorName(user, role.Value),
+                CreatedBy = user.Id,
+                CreatedAt = DateTime.Now
+            });
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { Success = true, Message = "Document deleted successfully." });
+        }
+
+        // =====================================================================
+        //  MO document upload - add a corrected/replacement document.
+        //  MO role only. Reuses the same storage pattern as the dealer flow.
+        // =====================================================================
+
+        [HttpPost("applications/{id:int}/documents")]
+        public async Task<IActionResult> UploadDocument(int id, [FromForm] List<IFormFile> files, [FromForm] List<string> documentTypes)
+        {
+            var (role, user) = await GetActorAsync();
+            if (user == null)
+                return Unauthorized();
+
+            if (!role.HasValue || role.Value != AppRole.MO)
+                return StatusCode(403, new { Message = "Only the MO can upload documents." });
+
+            if (files == null || files.Count == 0 || documentTypes == null || documentTypes.Count != files.Count)
+                return BadRequest(new { Message = "A file and a document type are required." });
+
+            var application = await _db.WelfareApplications
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null)
+                return NotFound(new { Message = "Application not found." });
+
+            if (!await IsDealerWithinScopeAsync(application.DealerId, role))
+                return StatusCode(403, new { Message = "This application is outside your territory." });
+
+            var uploadDir = Path.Combine(_env.ContentRootPath, "Uploads", "Welfare", id.ToString());
+            System.IO.Directory.CreateDirectory(uploadDir);
+
+            var actorName = BuildActorName(user, role.Value);
+            var uploadedCount = 0;
+
+            for (int i = 0; i < files.Count; i++)
+            {
+                var file = files[i];
+                var docType = documentTypes[i];
+                if (file.Length == 0) continue;
+
+                var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                var safeFileName = $"{Guid.NewGuid():N}{ext}";
+                var filePath = Path.Combine(uploadDir, safeFileName);
+                if (Path.GetFullPath(filePath).StartsWith(Path.GetFullPath(uploadDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    using (var stream = new System.IO.FileStream(filePath, System.IO.FileMode.Create))
+                    {
+                        await file.CopyToAsync(stream);
+                    }
+                }
+                else
+                {
+                    continue;
+                }
+
+                _db.WelfareApplicationDocuments.Add(new WelfareApplicationDocument
+                {
+                    WelfareApplicationId = application.Id,
+                    DocumentType = docType,
+                    DocumentName = docType,
+                    FileName = file.FileName,
+                    FilePath = Path.Combine("Welfare", id.ToString(), safeFileName),
+                    ContentType = file.ContentType,
+                    FileSize = file.Length,
+                    UploadedBy = user.Id,
+                    UploadedAt = DateTime.Now
+                });
+
+                uploadedCount++;
+            }
+
+            if (uploadedCount == 0)
+                return BadRequest(new { Message = "No files were uploaded." });
+
+            _db.WelfareApplicationActionLogs.Add(new WelfareApplicationActionLog
+            {
+                WelfareApplicationId = application.Id,
+                ActorLevel = role.Value,
+                Action = "DocumentUploaded",
+                Remarks = $"MO uploaded {uploadedCount} document(s).",
+                ActorName = actorName,
+                CreatedBy = user.Id,
+                CreatedAt = DateTime.Now
+            });
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { Success = true, Message = $"{uploadedCount} document(s) uploaded successfully." });
+        }
+
+        // =====================================================================
         //  APPROVE - only the role owning the current stage may approve
         // =====================================================================
 
@@ -229,12 +367,12 @@ namespace SpicAPI.Controllers
             var comment = request?.Comment?.Trim();
             if (isApproval && role.Value == AppRole.MO)
             {
-                if (!string.Equals(recommendation, "Recommended", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(recommendation, "Not Recommended", StringComparison.OrdinalIgnoreCase))
-                    return BadRequest(new { Message = "A valid recommendation (Recommended / Not Recommended) is mandatory when approving at the MO stage." });
+                if (!string.Equals(recommendation, "Verified", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(recommendation, "Rejected", StringComparison.OrdinalIgnoreCase))
+                    return BadRequest(new { Message = "A valid recommendation (Verified / Rejected) is mandatory when approving at the MO stage." });
 
-                if (string.IsNullOrWhiteSpace(comment))
-                    return BadRequest(new { Message = "Comment is mandatory when approving at the MO stage." });
+                if (!IsValidMoComment(comment))
+                    return BadRequest(new { Message = "A valid comment is mandatory when approving at the MO stage." });
             }
 
             var application = await _db.WelfareApplications
@@ -425,6 +563,20 @@ namespace SpicAPI.Controllers
             return _db.DealerRegistrations.AsNoTracking().Where(scope).AnyAsync(d => d.Id == dealerId);
         }
 
+        // The MO comment must be one of the fixed verification verdicts defined
+        // in the MO approval UI. Single source for the allowed set.
+        private static readonly string[] MoCommentOptions =
+        {
+            "Information verified and eligible for approval",
+            "Documents incomplete or not valid",
+            "Information mismatch found",
+            "Eligibility criteria not met at verification stage"
+        };
+
+        private static bool IsValidMoComment(string? comment) =>
+            !string.IsNullOrWhiteSpace(comment) &&
+            MoCommentOptions.Contains(comment, StringComparer.OrdinalIgnoreCase);
+
         private static string BuildActorName(UserInfo user, AppRole role)
             => $"{(string.IsNullOrWhiteSpace(user.Name) ? user.UserName : user.Name)} ({GetStageDisplay(role)})";
 
@@ -608,6 +760,7 @@ namespace SpicAPI.Controllers
             Status = (int)application.Status,
             StatusDisplay = GetStatusDisplayName(application.Status),
 
+            DealerId = application.DealerId,
             DealerCode = application.DealerCode,
             DealerName = application.DealerName,
             DealershipNature = application.DealershipNature,
@@ -713,6 +866,28 @@ namespace SpicAPI.Controllers
                 ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 _ => "application/octet-stream"
             };
+        }
+
+        private void DeleteDocumentFile(string? filePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(filePath))
+                    return;
+
+                var uploadsRoot = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "Uploads"));
+                var fullPath = Path.GetFullPath(Path.Combine(uploadsRoot, filePath.Replace('\\', '/')));
+
+                if (fullPath.StartsWith(uploadsRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+                    System.IO.File.Exists(fullPath))
+                {
+                    System.IO.File.Delete(fullPath);
+                }
+            }
+            catch
+            {
+                // Physical cleanup is best-effort; the DB row is removed regardless.
+            }
         }
     }
 }
