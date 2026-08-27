@@ -155,20 +155,21 @@
     }
 
     .state-summary-table-wrap {
-        overflow-x: auto;
+        width: 100%;
+        overflow-x: hidden;
     }
 
     .state-summary-table {
-        min-width: 1450px;
         width: 100%;
         margin: 0;
+        table-layout: fixed;
         border-collapse: separate;
         border-spacing: 0;
     }
 
         .state-summary-table th,
         .state-summary-table td {
-            padding: 6px 8px;
+            padding: 6px 6px;
             border-bottom: 1px solid #F1F5F9;
             vertical-align: middle;
         }
@@ -176,13 +177,28 @@
         .state-summary-table thead th {
             background: #F8FAFC;
             color: #374151;
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             font-weight: 700;
         }
 
         .state-summary-table tbody td {
             color: #374151;
-            font-size: 0.82rem;
+            font-size: 0.8rem;
+        }
+
+        .state-summary-table th:first-child,
+        .state-summary-table td:first-child {
+            width: 48px;
+        }
+
+        .state-summary-table th:nth-child(2),
+        .state-summary-table td:nth-child(2) {
+            width: 170px;
+        }
+
+        .state-summary-table th:not(:first-child):not(:nth-child(2)),
+        .state-summary-table td:not(:first-child):not(:nth-child(2)) {
+            width: auto;
         }
 
     .state-summary-sort {
@@ -413,9 +429,9 @@
                 <div class="state-summary-card">
                     <div class="state-summary-card-head">
                         <h2 class="state-summary-card-title">Dealer Summary</h2>
-                        <div class="state-summary-card-note">
+                       @*  <div class="state-summary-card-note">
                             Click any column heading to sort. Scroll horizontally to view all SPIC / GFL columns.
-                        </div>
+                        </div> *@
                     </div>
 
                     <div class="state-summary-table-wrap">
@@ -467,7 +483,7 @@
                                 @foreach (var (row, idx) in StateTablePagedRows.Select((value, index) => (value, index)))
                                 {
                                     <tr>
-                                        <td style="color:#6B7280;">@((_stateTableCurrentPage - 1) * _stateTablePageSize + idx + 1)</td>
+                                        <td style="color:#6B7280;">@(idx + 1)</td>
                                         <td style="font-weight:600; color:#1F2937;">@row.StateName</td>
                                         <td class="text-center">@Dash(row.AsPerSapSpic)</td>
                                         <td class="text-center">@Dash(row.AsPerSapGfl)</td>
@@ -510,48 +526,6 @@
                                 </tr>
                             </tfoot>
                         </table>
-                    </div>
-
-                    <div class="state-summary-footer">
-                        <div class="state-summary-page-size">
-                            <span>Items Per Page</span>
-                            <select @bind="_stateTablePageSize" @bind:after="StateTableOnPageSizeChanged">
-                                <option value="10">10</option>
-                                <option value="25">25</option>
-                                <option value="50">50</option>
-                                <option value="100">100</option>
-                            </select>
-                            <span class="text-muted">@GetCachedStateWiseSummary().Count states</span>
-                        </div>
-
-                        <div class="state-summary-pagination">
-                            <button class="state-summary-page-btn"
-                                    disabled="@(_stateTableCurrentPage <= 1)"
-                                    @onclick="StateTablePreviousPage">
-                                <i class="bi bi-chevron-left"></i>
-                            </button>
-
-                            @foreach (var pageNum in StateTablePageNumbers)
-                            {
-                                @if (pageNum == -1)
-                                {
-                                    <span class="px-1 text-muted">...</span>
-                                }
-                                else
-                                {
-                                    <button class="state-summary-page-btn @(pageNum == _stateTableCurrentPage ? "active" : "")"
-                                            @onclick="() => StateTableGoToPage(pageNum)">
-                                        @pageNum
-                                    </button>
-                                }
-                            }
-
-                            <button class="state-summary-page-btn"
-                                    disabled="@(_stateTableCurrentPage >= StateTableTotalPages)"
-                                    @onclick="StateTableNextPage">
-                                <i class="bi bi-chevron-right"></i>
-                            </button>
-                        </div>
                     </div>
                 </div>
             }
@@ -772,9 +746,7 @@
                 _ => data.OrderBy(x => x.StateName)
             };
 
-            return data
-                .Skip((_stateTableCurrentPage - 1) * _stateTablePageSize)
-                .Take(_stateTablePageSize);
+            return data;
         }
     }
 
