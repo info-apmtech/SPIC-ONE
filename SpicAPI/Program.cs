@@ -90,7 +90,8 @@ builder.Services.AddAuthentication(options =>
                 (path.StartsWithSegments("/api/DealerFile/view") ||
                  path.StartsWithSegments("/api/LogisticsFile/view") ||
                  path.StartsWithSegments("/api/LogisticsFile/download") ||
-                 path.StartsWithSegments("/api/SDWAWelfareApplication/document")))
+                 path.StartsWithSegments("/api/SDWAWelfareApplication/document") ||
+                 path.StartsWithSegments("/api/WelfareSchemeApproval/document")))
             {
                 context.Token = accessToken;
             }

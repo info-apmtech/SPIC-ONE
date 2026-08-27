@@ -248,6 +248,82 @@ else
             </div>
         </div>
 
+        <!-- ===================== DEALER SALES / LIFTING (MO ONLY) ===================== -->
+        @if (IsMoStage && d.DealerId > 0)
+        {
+            <div class="apd-section">
+                <div class="apd-section-head">
+                    <h3>Dealer Sales / Lifting Details (Last 3 Years)</h3>
+                </div>
+
+                @if (_dealerSalesLoading)
+                {
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+                        <span style="color:#64748B;">Loading dealer sales data…</span>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_dealerSalesError))
+                {
+                    <div class="apd-alert apd-alert-danger">@_dealerSalesError</div>
+                }
+                else
+                {
+                    <div class="mo-sales-wrap">
+                        <table class="mo-sales-table">
+                            <thead>
+                                <tr>
+                                    <th>Year</th>
+                                    <th>Urea</th>
+                                    <th>DAP</th>
+                                    <th>20:20</th>
+                                    <th>SSP</th>
+                                    <th>Total</th>
+                                    <th>SP Turnover<br />Rs. Lakhs</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (int i = 0; i < 3; i++)
+                                {
+                                    var fyId = _selectedSalesYears[i];
+                                    var usedIds = _selectedSalesYears.Where(y => y.HasValue).Select(y => y!.Value).ToHashSet();
+                                    var options = _dealerAvailableYears.Where(y => !usedIds.Contains(y.Id) || y.Id == fyId).ToList();
+                                    <tr>
+                                        <td>
+                                            @if (i == 0 && !fyId.HasValue)
+                                            {
+                                                <span class="mo-sales-placeholder">Year 1</span>
+                                            }
+                                            <select class="mo-sales-year-select" value="@fyId" @onchange="(e) => OnSalesYearChanged(i, e)">
+                                                <option value="">Select Year</option>
+                                                @foreach (var y in options)
+                                                {
+                                                    <option value="@y.Id">@y.Name</option>
+                                                }
+                                            </select>
+                                        </td>
+                                        <td>@FormatQty(GetYearQty(fyId, SalesKind.Urea))</td>
+                                        <td>@FormatQty(GetYearQty(fyId, SalesKind.DAP))</td>
+                                        <td>@FormatQty(GetYearQty(fyId, SalesKind.Npk2020))</td>
+                                        <td>@FormatQty(GetYearQty(fyId, SalesKind.SSP))</td>
+                                        <td>@FormatQty(GetYearTotal(fyId))</td>
+                                        <td>@FormatLakhs(GetYearTurnover(fyId))</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (_selectedSalesYears.All(y => y.HasValue))
+                    {
+                        <div class="mo-sales-note">
+                            <strong>3-Year Average Total:</strong> @FormatQty(GetThreeYearAverageTotal()) MT
+                            &nbsp;|&nbsp; <strong>3-Year Average SP Turnover:</strong> Rs. @FormatLakhs(GetThreeYearAverageTurnover()) Lakhs
+                        </div>
+                    }
+                }
+            </div>
+        }
+
         <!-- ===================== SCHEME SPECIFIC ===================== -->
         <div class="apd-section">
             <h3>Scheme Specific Details</h3>
@@ -261,7 +337,9 @@ else
 
         <!-- ===================== DOCUMENTS ===================== -->
         <div class="apd-section">
-            <h3>Uploaded Documents</h3>
+            <div class="apd-section-head">
+                <h3>Uploaded Documents</h3>
+            </div>
             @if (d.Documents.Count == 0)
             {
                 <p style="color:#94A3B8;">No documents were uploaded with this application.</p>
@@ -277,7 +355,17 @@ else
                                 <div class="apd-doc-name">@(string.IsNullOrWhiteSpace(doc.DocumentName) ? doc.FileName : doc.DocumentName)</div>
                                 <div class="apd-doc-status">@(doc.IsVerified ? "Verified" : "Uploaded " + FormatDate(doc.UploadedAt))</div>
                             </div>
-                            <button class="apd-btn-download" @onclick="() => OpenDocument(doc.Id, true)">Download</button>
+                            <div class="apd-doc-actions">
+                                @if (IsMoStage)
+                                {
+                                    <button class="apd-btn-download" @onclick="() => ViewDocument(doc.Id)">View</button>
+                                }
+                                <button class="apd-btn-download" @onclick="() => OpenDocument(doc.Id, true)">Download</button>
+                                @if (IsMoStage)
+                                {
+                                    <button class="apd-btn-replace" @onclick="() => OpenReplaceModal(doc)">Replace</button>
+                                }
+                            </div>
                         </div>
                     }
                 </div>
@@ -367,16 +455,22 @@ else
                 @if (IsMoStage)
                 {
                     <div class="rm-form-group">
-                        <label class="rm-label">Recommendation *</label>
-                        <select class="rm-select" @bind="_approveRecommendation">
-                            <option value="">Select your recommendation</option>
-                            <option value="Recommended">Recommended</option>
-                            <option value="Not Recommended">Not Recommended</option>
+                        <label class="rm-label">Comments *</label>
+                        <select class="rm-select" @bind="_approveComment">
+                            <option value="">--Select--</option>
+                            <option value="Information verified and eligible for approval">Information verified and eligible for approval</option>
+                            <option value="Documents incomplete or not valid">Documents incomplete or not valid</option>
+                            <option value="Information mismatch found">Information mismatch found</option>
+                            <option value="Eligibility criteria not met at verification stage">Eligibility criteria not met at verification stage</option>
                         </select>
                     </div>
                     <div class="rm-form-group">
-                        <label class="rm-label">Comment *</label>
-                        <textarea class="rm-textarea" placeholder="Add your comment..." @bind="_approveComment"></textarea>
+                        <label class="rm-label">Recommendation *</label>
+                        <select class="rm-select" @bind="_approveRecommendation">
+                            <option value="">--Select--</option>
+                            <option value="Verified">Verified</option>
+                            <option value="Rejected">Rejected</option>
+                        </select>
                     </div>
                 }
                 else
@@ -445,6 +539,43 @@ else
     </div>
 }
 
+<!-- ================= MO: REPLACE DOCUMENT ================= -->
+@if (_showReplaceModal && _docToReplace != null)
+{
+    <div class="rm-overlay" @onclick="CloseReplaceModal">
+        <div class="rm-container" @onclick:stopPropagation="true">
+            <div class="rm-icon-wrapper">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+            </div>
+            <h2 class="rm-title">Replace Document</h2>
+            <p class="rm-subtitle">Select the corrected file to replace the wrong document. The existing file will be removed and the new file added in its place.</p>
+            <p class="rm-warning" style="word-break:break-word;">@(string.IsNullOrWhiteSpace(_docToReplace.DocumentName) ? _docToReplace.FileName : _docToReplace.DocumentName)</p>
+            <div class="rm-form">
+                <div class="rm-form-group">
+                    <label class="rm-label">Select New File *</label>
+                    <InputFile OnChange="@OnReplaceFileSelected" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" class="rm-file-input" />
+                    @if (_replaceFile != null)
+                    {
+                        <div class="apd-file-chosen">@_replaceFile.Name (@(_replaceFile.Size > 0 ? $"{(_replaceFile.Size / 1024.0):F1} KB" : "0 KB"))</div>
+                    }
+                </div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_docActionError))
+            {
+                <p class="rm-warning" style="margin-top:8px;">@_docActionError</p>
+            }
+            <div class="rm-actions">
+                <button class="rm-btn rm-btn-cancel" disabled="@_busy" @onclick="CloseReplaceModal">Cancel</button>
+                <button class="rm-btn rm-btn-reject" disabled="@_busy || _replaceFile == null" @onclick="ConfirmReplaceDocument">
+                    @(_busy ? "Replacing…" : "Replace Document")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public int ApplicationId { get; set; }
     [Parameter] public EventCallback OnActionCompleted { get; set; }
@@ -459,6 +590,13 @@ else
     private string? _error;
     private int _loadedForId;
 
+    private bool _dealerSalesLoading;
+    private string? _dealerSalesError;
+    private List<SPIC.Core.DTOs.DealerSalesYearOptionDto> _dealerAvailableYears = new();
+    private List<SPIC.Core.DTOs.DealerSalesProductDto> _dealerProductSales = new();
+    private int?[] _selectedSalesYears = new int?[3];
+    private int _dealerSalesLoadedForId;
+
     private bool IsApproveModalOpen { get; set; }
     private bool IsRejectModalOpen { get; set; }
 
@@ -469,6 +607,12 @@ else
     private string? _rejectRemarks;
     private string? _actionError;
     private bool _busy;
+
+    private bool _showReplaceModal;
+    private SPIC.Core.DTOs.WelfareApplicationDocumentDto? _docToReplace;
+    private Microsoft.AspNetCore.Components.Forms.IBrowserFile? _replaceFile;
+    private string? _docActionError;
+    private string? _docActionMessage;
 
     private bool IsMoStage => LoginState.UserRole == AppRole.MO;
 
@@ -497,6 +641,7 @@ else
             _detail = await Http.GetFromJsonAsync<SPIC.Core.DTOs.WelfareApplicationDetailDto>(
                 $"api/WelfareSchemeApproval/applications/{id}");
             _loadedForId = id;
+            await LoadDealerSalesIfNeeded();
         }
         catch
         {
@@ -507,6 +652,95 @@ else
             _loading = false;
         }
     }
+
+    private enum SalesKind { Urea, DAP, Npk2020, SSP }
+
+    private async Task LoadDealerSalesIfNeeded()
+    {
+        if (!IsMoStage || _detail == null || _detail.DealerId <= 0) return;
+        if (_dealerSalesLoadedForId == _detail.DealerId) return;
+
+        _dealerSalesLoading = true;
+        _dealerSalesError = null;
+        try
+        {
+            var summary = await Http.GetFromJsonAsync<SPIC.Core.DTOs.DealerSalesSummaryDto>(
+                $"api/CreditLimitSales/dealer-sales-summary/{_detail.DealerId}");
+            _dealerAvailableYears = summary?.AvailableYears ?? new();
+            _dealerProductSales = summary?.ProductSales ?? new();
+            _selectedSalesYears = new int?[3];
+            _dealerSalesLoadedForId = _detail.DealerId;
+        }
+        catch
+        {
+            _dealerSalesError = "Unable to load dealer sales data.";
+        }
+        finally
+        {
+            _dealerSalesLoading = false;
+        }
+    }
+
+    private void OnSalesYearChanged(int index, ChangeEventArgs e)
+    {
+        if (index < 0 || index >= _selectedSalesYears.Length) return;
+        int? value = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : null;
+        _selectedSalesYears[index] = value;
+    }
+
+    private bool IsProductMatch(SalesKind kind, string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        return kind switch
+        {
+            SalesKind.Urea => name.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase),
+            SalesKind.DAP => name.Contains("DAP", StringComparison.OrdinalIgnoreCase),
+            SalesKind.Npk2020 => name.Contains("20:20", StringComparison.OrdinalIgnoreCase) || name.Contains("NPK", StringComparison.OrdinalIgnoreCase),
+            SalesKind.SSP => name.Contains("SSP", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
+    private IEnumerable<SPIC.Core.DTOs.DealerSalesProductDto> GetYearProducts(int? fyId)
+    {
+        if (!fyId.HasValue) return Enumerable.Empty<SPIC.Core.DTOs.DealerSalesProductDto>();
+        return _dealerProductSales.Where(p => p.FinancialYearId == fyId.Value);
+    }
+
+    private decimal GetYearQty(int? fyId, SalesKind kind)
+    {
+        if (!fyId.HasValue) return 0;
+        return GetYearProducts(fyId)
+            .Where(p => IsProductMatch(kind, p.ProductName))
+            .Sum(p => p.Quantity);
+    }
+
+    private decimal GetYearTotal(int? fyId) => GetYearQty(fyId, SalesKind.Urea)
+        + GetYearQty(fyId, SalesKind.DAP)
+        + GetYearQty(fyId, SalesKind.Npk2020)
+        + GetYearQty(fyId, SalesKind.SSP);
+
+    private decimal GetYearTurnover(int? fyId)
+    {
+        if (!fyId.HasValue) return 0;
+        return GetYearProducts(fyId).Sum(p => p.GrossAmount) / 100000m;
+    }
+
+    private decimal GetThreeYearAverageTotal()
+    {
+        var totals = _selectedSalesYears.Where(y => y.HasValue).Select(y => GetYearTotal(y)).ToList();
+        return totals.Count == 0 ? 0 : totals.Sum() / totals.Count;
+    }
+
+    private decimal GetThreeYearAverageTurnover()
+    {
+        var turnovers = _selectedSalesYears.Where(y => y.HasValue).Select(y => GetYearTurnover(y)).ToList();
+        return turnovers.Count == 0 ? 0 : turnovers.Sum() / turnovers.Count;
+    }
+
+    private static string FormatQty(decimal value) => value == 0 ? "-" : value.ToString("0.##");
+
+    private static string FormatLakhs(decimal value) => value == 0 ? "-" : value.ToString("0.##");
 
     private static readonly Dictionary<AppRole, int[]> StageMap = new()
     {
@@ -722,15 +956,21 @@ else
     {
         if (_detail == null || _busy) return;
 
-        if (IsMoStage && string.IsNullOrWhiteSpace(_approveRecommendation))
+        if (IsMoStage && string.IsNullOrWhiteSpace(_approveComment))
         {
-            _actionError = "Please select your recommendation before approving.";
+            _actionError = "Please select a comment before approving.";
             return;
         }
 
-        if (IsMoStage && string.IsNullOrWhiteSpace(_approveComment))
+        if (IsMoStage && !IsValidMoComment(_approveComment))
         {
-            _actionError = "Comment is mandatory when approving an application.";
+            _actionError = "Please select a valid comment.";
+            return;
+        }
+
+        if (IsMoStage && string.IsNullOrWhiteSpace(_approveRecommendation))
+        {
+            _actionError = "Please select a recommendation before approving.";
             return;
         }
 
@@ -805,6 +1045,18 @@ else
         }
     }
 
+    private static readonly string[] MoCommentOptions =
+    {
+        "Information verified and eligible for approval",
+        "Documents incomplete or not valid",
+        "Information mismatch found",
+        "Eligibility criteria not met at verification stage"
+    };
+
+    private static bool IsValidMoComment(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        MoCommentOptions.Contains(value, StringComparer.Ordinal);
+
     private static async Task<string> ReadErrorMessageAsync(HttpResponseMessage response)
     {
         try
@@ -841,6 +1093,106 @@ else
         if (!string.IsNullOrWhiteSpace(token))
             url += (url.Contains('?') ? "&" : "?") + "access_token=" + Uri.EscapeDataString(token);
         await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private Task ViewDocument(int documentId) => OpenDocument(documentId, false);
+
+    private void OpenReplaceModal(SPIC.Core.DTOs.WelfareApplicationDocumentDto doc)
+    {
+        _docToReplace = doc;
+        _replaceFile = null;
+        _docActionError = null;
+        _docActionMessage = null;
+        _showReplaceModal = true;
+    }
+
+    private void CloseReplaceModal()
+    {
+        _showReplaceModal = false;
+        _docToReplace = null;
+        _replaceFile = null;
+        _docActionError = null;
+    }
+
+    private async Task OnReplaceFileSelected(Microsoft.AspNetCore.Components.Forms.InputFileChangeEventArgs e)
+    {
+        _docActionError = null;
+        _docActionMessage = null;
+        if (e.File != null)
+        {
+            _replaceFile = e.File;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ConfirmReplaceDocument()
+    {
+        if (_docToReplace == null || _replaceFile == null) return;
+        _busy = true;
+        _docActionError = null;
+        _docActionMessage = null;
+        try
+        {
+            var delUrl = $"/api/WelfareSchemeApproval/document/{_docToReplace.Id}";
+            var delResponse = await Http.DeleteAsync(delUrl);
+            if (!delResponse.IsSuccessStatusCode)
+            {
+                var delBody = await delResponse.Content.ReadAsStringAsync();
+                var delMsg = ExtractErrorMessage(delBody) ?? "Failed to remove the wrong document.";
+                _docActionError = delMsg;
+                return;
+            }
+
+            using var content = new MultipartFormDataContent();
+            using (var stream = _replaceFile.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024))
+            {
+                var buffer = new byte[stream.Length];
+                await stream.ReadAsync(buffer, 0, (int)stream.Length);
+                var fileContent = new ByteArrayContent(buffer);
+                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
+                    _replaceFile.ContentType ?? "application/octet-stream");
+                content.Add(fileContent, "files", _replaceFile.Name);
+                content.Add(new StringContent(_docToReplace.DocumentType ?? ""), "documentTypes");
+            }
+
+            var url = $"/api/WelfareSchemeApproval/applications/{_detail?.Id ?? ApplicationId}/documents";
+            var response = await Http.PostAsync(url, content);
+            if (response.IsSuccessStatusCode)
+            {
+                _showReplaceModal = false;
+                _docToReplace = null;
+                _replaceFile = null;
+                await LoadDetail(_detail?.Id ?? ApplicationId);
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                var msg = ExtractErrorMessage(body) ?? "Failed to upload the replacement document.";
+                _docActionError = msg;
+            }
+        }
+        catch (Exception ex)
+        {
+            _docActionError = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string? ExtractErrorMessage(string body)
+    {
+        try
+        {
+            var json = System.Text.Json.JsonDocument.Parse(body);
+            if (json.RootElement.TryGetProperty("message", out var m) && m.ValueKind == System.Text.Json.JsonValueKind.String)
+                return m.GetString();
+        }
+        catch
+        {
+        }
+        return null;
     }
 
     private string? GetRawToken()

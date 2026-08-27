@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using SPIC.Core.DTOs;
 using Spic.Infrastructure.Data;
 using System;
 using System.Collections.Generic;
@@ -751,6 +752,69 @@ namespace SpicAPI.Controllers
                 .ToListAsync();
 
             return Ok(data);
+        }
+
+        // Dealer sales summary for the MO approval page.
+        // Returns the financial years that hold CreditLimitSales data for the
+        // given dealer, plus per-(financial-year, product) quantities and
+        // gross amounts so the frontend can roll these up into the
+        // Urea / DAP / 20:20 / SSP / Total / Turnover columns.
+        [HttpGet("dealer-sales-summary/{dealerId:int}")]
+        public async Task<IActionResult> GetDealerSalesSummary(int dealerId)
+        {
+            if (dealerId <= 0)
+                return BadRequest("DealerId is required.");
+
+            var products = await _db.Products.AsNoTracking().ToListAsync();
+            var financialYears = await _db.FinancialYears.AsNoTracking().ToListAsync();
+
+            var grouped = await _db.DealerCreditLimitSalesData
+                .AsNoTracking()
+                .Where(x => x.CustomerId == dealerId)
+                .GroupBy(x => new { x.FinancialYearId, x.ProductId })
+                .Select(g => new
+                {
+                    g.Key.FinancialYearId,
+                    g.Key.ProductId,
+                    Quantity = g.Sum(x => x.Quantity),
+                    GrossAmount = g.Sum(x => x.GrossAmount)
+                })
+                .ToListAsync();
+
+            // Always offer the 3 most recent active financial years in the
+            // dropdowns, regardless of whether the dealer has sales data for
+            // them. Per-year sales figures are populated when data exists and
+            // shown as "-" otherwise (mirroring the CreditLimit page behaviour).
+            var availableYears = financialYears
+                .Where(f => f.IsActive)
+                .OrderByDescending(f => f.StartDate)
+                .Take(3)
+                .Select(f => new DealerSalesYearOptionDto { Id = f.Id, Name = f.Name })
+                .ToList();
+
+            var productSales = new List<DealerSalesProductDto>();
+
+            foreach (var g in grouped)
+            {
+                var product = products.FirstOrDefault(p => p.Id == g.ProductId);
+                if (product == null || string.IsNullOrWhiteSpace(product.Name))
+                    continue;
+
+                productSales.Add(new DealerSalesProductDto
+                {
+                    FinancialYearId = g.FinancialYearId,
+                    ProductId = g.ProductId,
+                    ProductName = product.Name,
+                    Quantity = g.Quantity,
+                    GrossAmount = g.GrossAmount
+                });
+            }
+
+            return Ok(new DealerSalesSummaryDto
+            {
+                AvailableYears = availableYears,
+                ProductSales = productSales
+            });
         }
     }
 }

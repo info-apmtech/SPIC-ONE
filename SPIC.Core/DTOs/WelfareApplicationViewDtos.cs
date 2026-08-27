@@ -129,6 +129,7 @@ namespace SPIC.Core.DTOs
         public string StatusDisplay { get; set; } = string.Empty;
 
         // Dealer snapshot
+        public int DealerId { get; set; }
         public string? DealerCode { get; set; }
         public string? DealerName { get; set; }
         public string? DealershipNature { get; set; }
