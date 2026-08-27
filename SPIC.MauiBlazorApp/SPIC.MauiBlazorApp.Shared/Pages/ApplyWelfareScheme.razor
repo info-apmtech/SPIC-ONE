@@ -279,7 +279,7 @@
                 }
                 else
                 {
-                    <select class="aws-form-select" @bind="QuantityLiftedInput">
+                    <select class="aws-form-select" @bind="QuantityLiftedInput" @bind:after="OnQuantityLiftedChanged">
                         <option value="" disabled selected hidden>--Select--</option>
                         @if (!string.IsNullOrWhiteSpace(QuantityLiftedInput) &&
                              !QuantityOptions.Any(o => string.Equals(o.Key, QuantityLiftedInput.Trim(), StringComparison.OrdinalIgnoreCase)))
@@ -332,8 +332,14 @@
                 <select class="aws-form-select" @bind="SelectedBeneficiaryGroup" @bind:after="OnBeneficiaryGroupChanged">
                     <option value="" disabled selected hidden>--Select--</option>
                     <option value="Direct Dealer">Direct Dealer</option>
-                    <option value="Sub Dealer">Sub Dealer</option>
-                    <option value="Approved Employee">Approved Employee</option>
+                    @if (IsSubDealerOptionVisible)
+                    {
+                        <option value="Sub Dealer">Sub Dealer</option>
+                    }
+                    @if (IsEmployeeOptionVisible)
+                    {
+                        <option value="Approved Employee">Approved Employee</option>
+                    }
                 </select>
             </div>
 
@@ -1996,6 +2002,38 @@
     };
 
     private bool ShowBeneficiaryDetails => TryGetQuantityLifted(out _);
+
+    private bool IsSubDealerOptionVisible
+    {
+        get
+        {
+            if (!TryGetQuantityLifted(out var qty) || !qty.HasValue) return false;
+            return qty.Value >= 50000;
+        }
+    }
+
+    private bool IsEmployeeOptionVisible
+    {
+        get
+        {
+            if (!TryGetQuantityLifted(out var qty) || !qty.HasValue) return false;
+            return qty.Value >= 5000;
+        }
+    }
+
+    private void OnQuantityLiftedChanged()
+    {
+        if (SelectedBeneficiaryGroup == "Sub Dealer" && !IsSubDealerOptionVisible)
+        {
+            SelectedBeneficiaryGroup = string.Empty;
+            OnBeneficiaryGroupChanged();
+        }
+        else if (SelectedBeneficiaryGroup == "Approved Employee" && !IsEmployeeOptionVisible)
+        {
+            SelectedBeneficiaryGroup = string.Empty;
+            OnBeneficiaryGroupChanged();
+        }
+    }
 
     private string QuantityLiftedDisplay
     {
