@@ -651,7 +651,7 @@
             }
             <div class="aws-form-group">
                 <label class="aws-form-label">Total Number of Courses (Duration in Years)</label>
-                <input type="number" class="aws-form-control" placeholder="e.g. 4" @bind="EduTotalCourses" min="1" max="10">
+                <input type="number" class="aws-form-control" placeholder="e.g. 4" @bind="EduTotalCourses" @bind:event="oninput" @bind:after="OnEduTotalCoursesChanged" min="1" max="10">
             </div>
             <div class="aws-form-group">
                 <label class="aws-form-label">Course</label>
@@ -661,12 +661,10 @@
                 <label class="aws-form-label">Year</label>
                 <select class="aws-form-select" @bind="EduYear">
                     <option value="" disabled selected hidden>Select year</option>
-                    <option value="1">1st Year</option>
-                    <option value="2">2nd Year</option>
-                    <option value="3">3rd Year</option>
-                    <option value="4">4th Year</option>
-                    <option value="5">5th Year</option>
-                    <option value="6">6th Year</option>
+                    @foreach (var eduYearOption in GetEduYearOptions())
+                    {
+                        <option value="@eduYearOption">@GetEduYearLabel(eduYearOption)</option>
+                    }
                 </select>
             </div>
             <div class="aws-form-group">
@@ -2035,6 +2033,28 @@
     private string EduCollegeName { get; set; } = string.Empty;
     private int? EduTotalCourses { get; set; }
     private bool IsEduFirstApplication { get; set; } = true;
+
+    // Year dropdown is generated from EduTotalCourses (1st Year .. Nth Year) instead of a fixed list.
+    private IEnumerable<int> GetEduYearOptions()
+    {
+        var totalCourses = EduTotalCourses.GetValueOrDefault();
+        return totalCourses > 0 ? Enumerable.Range(1, totalCourses) : Enumerable.Empty<int>();
+    }
+
+    private static string GetEduYearLabel(int year) => year switch
+    {
+        1 => "1st Year",
+        2 => "2nd Year",
+        3 => "3rd Year",
+        _ => $"{year}th Year"
+    };
+
+    private void OnEduTotalCoursesChanged()
+    {
+        var totalCourses = EduTotalCourses.GetValueOrDefault();
+        if (int.TryParse(EduYear, out var selectedYear) && (totalCourses <= 0 || selectedYear > totalCourses))
+            EduYear = string.Empty;
+    }
 
     // Educational Assistance renewal: previously submitted applications of the logged-in user
     private List<EducationalApplicationSummaryDto> _previousEduApplications = new();
