@@ -34,6 +34,7 @@ public class WelfareApplicationSubmitDto
     // Death Relief
     public DateTime? DateOfDeath { get; set; }
     public string? LegalHeirName { get; set; }
+    public string? LegalHeirRelation { get; set; }  // Wife / Others
     public string? DeathCause { get; set; }
 
     // Educational Assistance

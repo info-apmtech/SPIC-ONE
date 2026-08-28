@@ -67,6 +67,18 @@ namespace SpicAPI.Controllers
                     return BadRequest(eligibilityError);
             }
 
+            // Backend mandatory-document checks (final submit only; drafts skip these checks)
+            if (!isDraft)
+            {
+                var meritError = ValidateRequiredMeritDocuments(dto, documentTypes);
+                if (meritError != null)
+                    return meritError;
+
+                var deathReliefError = ValidateRequiredDeathReliefAffidavit(dto, documentTypes);
+                if (deathReliefError != null)
+                    return deathReliefError;
+            }
+
             var applicationNumber = GenerateApplicationNumber(schemeEnum.Value);
 
             var app = new WelfareApplication
@@ -188,6 +200,16 @@ namespace SpicAPI.Controllers
                     return BadRequest(eligibilityError);
             }
 
+            // Backend mandatory-document checks. Previously stored documents that the dealer keeps count, documents being removed/replaced do not.
+            var removedIds = ParseRemovedDocumentIds(removedDocumentIds);
+            var meritError = ValidateRequiredMeritDocuments(dto, documentTypes, app.Documents, removedIds);
+            if (meritError != null)
+                return meritError;
+
+            var deathReliefError = ValidateRequiredDeathReliefAffidavit(dto, documentTypes, app.Documents, removedIds);
+            if (deathReliefError != null)
+                return deathReliefError;
+
             // Update the corrected details on the SAME application record
             ApplyFormFields(app, dto);
             app.UpdatedBy = userId;
@@ -200,7 +222,6 @@ namespace SpicAPI.Controllers
             app.LastResubmittedBy = userId;
 
             // Remove documents the dealer replaced / deleted (ids sent comma-separated)
-            var removedIds = ParseRemovedDocumentIds(removedDocumentIds);
             if (removedIds.Count > 0)
             {
                 foreach (var doc in app.Documents.Where(d => removedIds.Contains(d.Id)).ToList())
@@ -286,6 +307,76 @@ namespace SpicAPI.Controllers
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Merit Award requires the marks list of the selected examination only:
+        /// "10th" -> "Marks list of 10th standard", "12th" -> "Marks list of +2 examinations".
+        /// The document for the other examination is optional. Mirrors the frontend
+        /// conditional requirement.
+        /// </summary>
+        private static IActionResult? ValidateRequiredMeritDocuments(
+            WelfareApplicationSubmitDto dto,
+            List<string>? documentTypes,
+            IEnumerable<WelfareApplicationDocument>? existingDocuments = null,
+            IEnumerable<int>? removedIds = null)
+        {
+            if (!string.Equals(dto.SchemeName, "Merit Award", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            string? requiredDocument = null;
+            if (string.Equals(dto.ExaminationAppeared, "10th", StringComparison.OrdinalIgnoreCase))
+                requiredDocument = "Marks list of 10th standard";
+            else if (string.Equals(dto.ExaminationAppeared, "12th", StringComparison.OrdinalIgnoreCase))
+                requiredDocument = "Marks list of +2 examinations";
+
+            if (requiredDocument == null)
+                return null;
+
+            var uploaded = documentTypes?.Any(t => string.Equals(t, requiredDocument, StringComparison.OrdinalIgnoreCase)) ?? false;
+            var kept = existingDocuments?.Any(d =>
+                (removedIds == null || !removedIds.Contains(d.Id)) &&
+                string.Equals(d.DocumentType, requiredDocument, StringComparison.OrdinalIgnoreCase)) ?? false;
+
+            if (uploaded || kept)
+                return null;
+
+            return new BadRequestObjectResult(new
+            {
+                Message = $"{requiredDocument} is required when {dto.ExaminationAppeared} examination is selected."
+            });
+        }
+
+        /// <summary>
+        /// Death Relief requires the "Affidavit from other legal heirs" document only when
+        /// the Legal Heir Relation is "Others". Mirrors the frontend conditional requirement.
+        /// </summary>
+        private static IActionResult? ValidateRequiredDeathReliefAffidavit(
+            WelfareApplicationSubmitDto dto,
+            List<string>? documentTypes,
+            IEnumerable<WelfareApplicationDocument>? existingDocuments = null,
+            IEnumerable<int>? removedIds = null)
+        {
+            if (!string.Equals(dto.SchemeName, "Death Relief", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            if (!string.Equals(dto.LegalHeirRelation, "Others", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            const string affidavit = "Affidavit from other legal heirs";
+
+            var uploaded = documentTypes?.Any(t => string.Equals(t, affidavit, StringComparison.OrdinalIgnoreCase)) ?? false;
+            var kept = existingDocuments?.Any(d =>
+                (removedIds == null || !removedIds.Contains(d.Id)) &&
+                string.Equals(d.DocumentType, affidavit, StringComparison.OrdinalIgnoreCase)) ?? false;
+
+            if (uploaded || kept)
+                return null;
+
+            return new BadRequestObjectResult(new
+            {
+                Message = "Please upload the affidavit for Others selected."
+            });
         }
 
         /// <summary>

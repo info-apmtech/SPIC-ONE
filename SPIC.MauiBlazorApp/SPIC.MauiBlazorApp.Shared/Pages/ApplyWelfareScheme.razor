@@ -587,8 +587,12 @@
                 <input type="date" class="aws-form-control" @bind="DeathDateOfDeath" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
             </div>
             <div class="aws-form-group">
-                <label class="aws-form-label">Legal Heir Name</label>
-                <input type="text" class="aws-form-control" placeholder="Full Name of Legal Heir" @bind="LegalHeirName">
+                <label class="aws-form-label">Legal Heir Relation</label>
+                <select class="aws-form-select" @bind="LegalHeirRelation">
+                    <option value="" disabled selected hidden>Select relation</option>
+                    <option value="Wife">Wife</option>
+                    <option value="Others">Others</option>
+                </select>
             </div>
         </div>
         }
@@ -799,6 +803,22 @@
                     {
                         <span class="aws-doc-skip-badge">First year – not required</span>
                     }
+                    @if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of 10th standard" && string.Equals(MeritExamination, "12th", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="aws-doc-skip-badge">Not required for 12th</span>
+                    }
+                    @if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of +2 examinations" && string.Equals(MeritExamination, "10th", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="aws-doc-skip-badge">Not required for 10th</span>
+                    }
+                    @if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs" && IsDeathReliefAffidavitRequired)
+                    {
+                        <span class="aws-doc-skip-badge" style="color:#b91c1c;background:#fee2e2;border-color:#fecaca;">Required</span>
+                    }
+                    @if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs" && !string.IsNullOrWhiteSpace(LegalHeirRelation) && !IsDeathReliefAffidavitRequired)
+                    {
+                        <span class="aws-doc-skip-badge">Not required for @LegalHeirRelation</span>
+                    }
                 </div>
                 @if (uploadedFile != null)
                 {
@@ -846,6 +866,24 @@
                 {
                 <div class="aws-doc-upload-skipped">
                     <span>Skipped – only required for renewal applications</span>
+                </div>
+                }
+                else if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of 10th standard" && string.Equals(MeritExamination, "12th", StringComparison.OrdinalIgnoreCase))
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required when 10th examination is selected</span>
+                </div>
+                }
+                else if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of +2 examinations" && string.Equals(MeritExamination, "10th", StringComparison.OrdinalIgnoreCase))
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required when 12th examination is selected</span>
+                </div>
+                }
+                else if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs" && !IsDeathReliefAffidavitRequired)
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required when the Legal Heir Relation is Others</span>
                 </div>
                 }
                 else
@@ -1331,7 +1369,11 @@
     // Scheme-specific: Death Relief
     private DateTime? DeathDateOfDeath { get; set; }
     private string LegalHeirName { get; set; } = string.Empty;
+    private string LegalHeirRelation { get; set; } = string.Empty;
     private string DeathCause { get; set; } = string.Empty;
+
+    private bool IsDeathReliefAffidavitRequired =>
+        string.Equals(LegalHeirRelation, "Others", StringComparison.OrdinalIgnoreCase);
 
     // Declaration & submission state
     private bool IsDeclarationConfirmed { get; set; }
@@ -2322,8 +2364,8 @@
                 else if (DeathDateOfDeath.Value.Date > DateTime.Today)
                     errors.Add("Date of Death cannot be in the future.");
 
-                if (string.IsNullOrWhiteSpace(LegalHeirName))
-                    errors.Add("Legal Heir Name is required.");
+                if (string.IsNullOrWhiteSpace(LegalHeirRelation))
+                    errors.Add("Please select the Legal Heir Relation.");
                 break;
 
             case "Medical Assistance":
@@ -2399,7 +2441,12 @@
         foreach (var doc in CurrentDocuments)
         {
             if (IsDocumentRequired(doc.Name) && !HasDocument(doc.Name))
-                errors.Add($"{doc.Name} is required.");
+            {
+                if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs")
+                    errors.Add("Please upload the affidavit for Others selected.");
+                else
+                    errors.Add($"{doc.Name} is required.");
+            }
         }
 
         // Declaration
@@ -2432,9 +2479,23 @@
             return true;
         }
 
-        if (SelectedScheme == "Death Relief" &&
-            (docName.StartsWith("Legal Heir Certificate") || docName == "Affidavit from other legal heirs"))
-            return false;
+if (SelectedScheme == "Death Relief")
+        {
+            if (docName.StartsWith("Legal Heir Certificate"))
+                return false;
+            if (docName == "Affidavit from other legal heirs")
+                return IsDeathReliefAffidavitRequired;
+            return true;
+        }
+
+        if (SelectedScheme == "Merit Award")
+        {
+            if (docName == "Marks list of 10th standard")
+                return string.Equals(MeritExamination, "10th", StringComparison.OrdinalIgnoreCase);
+            if (docName == "Marks list of +2 examinations")
+                return string.Equals(MeritExamination, "12th", StringComparison.OrdinalIgnoreCase);
+            return true;
+        }
 
         return true;
     }
@@ -2462,6 +2523,7 @@
         OwnershipType = OwnershipType,
         DateOfDeath = DeathDateOfDeath,
         LegalHeirName = LegalHeirName,
+        LegalHeirRelation = LegalHeirRelation,
         DeathCause = DeathCause,
         Course = EduCourse,
         EduYear = int.TryParse(EduYear, out var eduYear) ? eduYear : null,
@@ -2516,6 +2578,7 @@
         AddField("OwnershipType", dto.OwnershipType);
         AddField("DateOfDeath", dto.DateOfDeath?.ToString("yyyy-MM-dd"));
         AddField("LegalHeirName", dto.LegalHeirName);
+        AddField("LegalHeirRelation", dto.LegalHeirRelation);
         AddField("DeathCause", dto.DeathCause);
         AddField("Course", dto.Course);
         AddField("EduYear", dto.EduYear?.ToString());
