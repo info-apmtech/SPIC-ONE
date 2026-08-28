@@ -612,6 +612,43 @@
                     </label>
                 </div>
             </div>
+            @if (!IsEduFirstApplication && !IsResubmissionMode)
+            {
+            <div class="aws-form-group">
+                <label class="aws-form-label">Previously Applied Educational Assistance</label>
+                @if (_isLoadingPreviousEduApps)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading previous applications...</option>
+                    </select>
+                }
+                else if (_previousEduApplications.Count == 0)
+                {
+                    <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 4px;">
+                        <div class="aws-alert-icon" style="color: #e74c3c;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                        </div>
+                        <div style="color: #c0392b;">
+                            @_noPreviousEduAppsMessage
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="SelectedPreviousEduAppId" @bind:after="OnPreviousEduAppSelected">
+                        <option value="" disabled selected hidden>Select previous application</option>
+                        @foreach (var app in _previousEduApplications)
+                        {
+                            <option value="@app.Id">@CreateEduPreviousAppLabel(app)</option>
+                        }
+                    </select>
+                }
+            </div>
+            }
             <div class="aws-form-group">
                 <label class="aws-form-label">Total Number of Courses (Duration in Years)</label>
                 <input type="number" class="aws-form-control" placeholder="e.g. 4" @bind="EduTotalCourses" min="1" max="10">
@@ -1999,6 +2036,82 @@
     private int? EduTotalCourses { get; set; }
     private bool IsEduFirstApplication { get; set; } = true;
 
+    // Educational Assistance renewal: previously submitted applications of the logged-in user
+    private List<EducationalApplicationSummaryDto> _previousEduApplications = new();
+    private bool _isLoadingPreviousEduApps = false;
+    private string SelectedPreviousEduAppId { get; set; } = string.Empty;
+    private string _noPreviousEduAppsMessage = string.Empty;
+
+    private async Task LoadPreviousEducationalApplications()
+    {
+        _isLoadingPreviousEduApps = true;
+        _noPreviousEduAppsMessage = string.Empty;
+        _previousEduApplications = new List<EducationalApplicationSummaryDto>();
+        SelectedPreviousEduAppId = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<EducationalApplicationSummaryDto>>(
+                "api/SDWAWelfareApplication/my-educational-applications");
+            if (result != null)
+                _previousEduApplications = result;
+        }
+        catch (Exception)
+        {
+            _previousEduApplications = new List<EducationalApplicationSummaryDto>();
+        }
+        finally
+        {
+            _isLoadingPreviousEduApps = false;
+            if (_previousEduApplications.Count == 0)
+                _noPreviousEduAppsMessage = "No previous Educational Assistance application found for renewal.";
+            StateHasChanged();
+        }
+    }
+
+    private static string CreateEduPreviousAppLabel(EducationalApplicationSummaryDto app)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(app.Course))
+            parts.Add(app.Course);
+        if (app.EduYear.HasValue)
+            parts.Add($"{app.EduYear} year");
+        if (!string.IsNullOrWhiteSpace(app.CollegeName))
+            parts.Add(app.CollegeName);
+
+        var baseText = string.Join(" - ", parts);
+        return string.IsNullOrWhiteSpace(baseText)
+            ? app.ApplicationNumber ?? $"Application #{app.Id}"
+            : $"{baseText} ({app.ApplicationNumber})";
+    }
+
+    private async Task OnPreviousEduAppSelected()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedPreviousEduAppId) ||
+            !int.TryParse(SelectedPreviousEduAppId, out var appId))
+            return;
+
+        try
+        {
+            var detail = await Http.GetFromJsonAsync<WelfareApplicationDetailDto>(
+                $"api/SDWAWelfareApplication/my-application/{appId}");
+
+            if (detail != null && detail.SchemeType == (int)WelfareSchemeType.EducationalAssistance)
+            {
+                EduTotalCourses = detail.TotalNumberOfCourses;
+                EduCourse = detail.Course ?? string.Empty;
+                EduYear = detail.EduYear?.ToString() ?? string.Empty;
+                EduCollegeName = detail.CollegeName ?? string.Empty;
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        StateHasChanged();
+    }
+
     private string MedicalTreatmentType { get; set; } = string.Empty;
 
     private string QuantityLiftedInput { get; set; } = string.Empty;
@@ -2084,9 +2197,19 @@
         return false;
     }
 
-    private void OnEduAppTypeChanged(ChangeEventArgs e)
+    private async Task OnEduAppTypeChanged(ChangeEventArgs e)
     {
         IsEduFirstApplication = e.Value?.ToString() == "first";
+
+        if (IsEduFirstApplication)
+        {
+            SelectedPreviousEduAppId = string.Empty;
+            _noPreviousEduAppsMessage = string.Empty;
+        }
+        else
+        {
+            await LoadPreviousEducationalApplications();
+        }
     }
 
     private string MeritCandidateName { get; set; } = string.Empty;
@@ -2374,6 +2497,12 @@
                 break;
 
             case "Educational Assistance":
+                if (!IsEduFirstApplication && !IsResubmissionMode)
+                {
+                    if (string.IsNullOrWhiteSpace(SelectedPreviousEduAppId))
+                        errors.Add("Please select a previously applied Educational Assistance application for renewal.");
+                }
+
                 if (!EduTotalCourses.HasValue || EduTotalCourses.Value <= 0)
                     errors.Add("Total Number of Courses is required.");
 

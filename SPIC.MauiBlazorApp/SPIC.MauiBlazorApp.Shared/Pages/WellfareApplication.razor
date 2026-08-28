@@ -140,7 +140,13 @@ else
       <div class="apln-scheme-name">@app.SchemeName</div>
       <div class="apln-scheme-ref">@(app.ApplicationNumber ?? "-")</div>
     </div>
-    <span class="@GetCardBadgeClass(app.Status)">@app.StatusDisplay</span>
+    <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+        @if (app.SchemeType == 3)
+        {
+            <span class="apln-status-badge @GetApplicationTypeBadgeModifier(app.IsFirstApplication)">@(app.IsFirstApplication == false ? "Renewal" : "First Application")</span>
+        }
+        <span class="@GetCardBadgeClass(app.Status)">@app.StatusDisplay</span>
+    </div>
   </div>
 
   @if (app.Status == 6 || app.Status == 9)
@@ -390,6 +396,9 @@ else
         3 => "clr-green",
         _ => ""
     };
+
+    private static string GetApplicationTypeBadgeModifier(bool? isFirstApplication) =>
+        isFirstApplication == false ? "renewal" : "first";
 
     private static string GetCardBadgeClass(int status) => status switch
     {

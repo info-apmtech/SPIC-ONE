@@ -13,6 +13,7 @@ namespace SPIC.Core.DTOs
         public string StatusDisplay { get; set; } = string.Empty;
         public DateTime LastUpdatedAt { get; set; }
         public int DocumentCount { get; set; }
+        public bool? IsFirstApplication { get; set; }   // Educational Assistance: true = First Application, false = Renewal
 
         // Rejection details (populated when Status is Rejected or ReturnedToDealer)
         public string? RejectedByLevel { get; set; }      // e.g. "RM"
@@ -22,6 +23,20 @@ namespace SPIC.Core.DTOs
 
         // True when the application was returned to the dealer for correction (Status == ReturnedToDealer)
         public bool CanResubmit { get; set; }
+    }
+
+    public class EducationalApplicationSummaryDto
+    {
+        public int Id { get; set; }
+        public string? ApplicationNumber { get; set; }
+        public string? Course { get; set; }
+        public int? EduYear { get; set; }
+        public string? CollegeName { get; set; }
+        public int? TotalNumberOfCourses { get; set; }
+        public bool? IsFirstApplication { get; set; }
+        public int Status { get; set; }
+        public DateTime ApplicationDate { get; set; }
+        public string? BeneficiaryName { get; set; }
     }
 
     // =====================================================================
