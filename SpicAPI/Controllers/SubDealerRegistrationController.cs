@@ -819,6 +819,78 @@ public class SubDealerRegistrationController : ControllerBase
 		return NoContent();
 	}
 
+	/// <summary>
+	/// Deletes only the saved/maintained Sub Dealer details for the given Id.
+	/// Unlike the physical Delete, this keeps the same record Id, SubDealerCode,
+	/// StateId, Region and HQ so the row returns to an untouched master Sub Dealer
+	/// that is again hidden from the maintained list by the existing list rule.
+	/// </summary>
+	[HttpDelete("{id:int}/details")]
+	public async Task<IActionResult> DeleteSavedDetails(
+		int id,
+		CancellationToken cancellationToken)
+	{
+		var entity = await _db.SubDealerRegistrations
+			.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+		if (entity == null)
+			return NotFound($"Sub Dealer with Id {id} was not found.");
+
+		// Preserve the master-row identity and location hierarchy.
+		var preservedCode = entity.SubDealerCode;
+		var preservedStateId = entity.StateId;
+		var preservedRegionId = entity.Region;
+		var preservedHqId = entity.HQ;
+		var preservedFirmName = entity.FirmName;
+
+		ClearMaintainedDetails(entity);
+
+		// Restore the preserved master/location fields.
+		entity.SubDealerCode = preservedCode;
+		entity.StateId = preservedStateId;
+		entity.Region = preservedRegionId;
+		entity.HQ = preservedHqId;
+		entity.UpdatedBy = CurrentUserId();
+		entity.UpdatedAt = DateTime.Now;
+		entity.FirmName = preservedFirmName;
+
+		await _db.SaveChangesAsync(cancellationToken);
+		return NoContent();
+	}
+
+	private static void ClearMaintainedDetails(SubDealerRegistration entity)
+	{
+		// Reset every form-maintained detail back to the untouched master state.
+		entity.Status = SubDealerStatus.Active;
+		//entity.FirmName = string.Empty;
+
+		entity.GoogleMapURL = null;
+		entity.Latitude = null;
+		entity.Longitude = null;
+		entity.ShopNoORRoomNoOrBlockNo = string.Empty;
+		entity.Street = null;
+		entity.SubVillage = null;
+		entity.Village = string.Empty;
+		entity.PinCode = string.Empty;
+		entity.Block = null;
+		entity.Taluk = null;
+		entity.DistrictId = null;
+		entity.DealerStateId = null;
+		entity.OfficialContactNumber = string.Empty;
+		entity.WhatsAppNumber = string.Empty;
+		entity.AlternativeNumber = null;
+
+		entity.WholesaleMFMSId = null;
+		entity.RetailMFMSId = null;
+		entity.PANNo = null;
+
+		entity.GSTNumber = null;
+		entity.GSTLegalName = null;
+		entity.GSTTradeName = null;
+		entity.GSTConstitutionofBusiness = null;
+		entity.GSTFilePath = null;
+	}
+
 	private static string NormalizeHeader(string? header)
 	{
 		if (string.IsNullOrWhiteSpace(header))

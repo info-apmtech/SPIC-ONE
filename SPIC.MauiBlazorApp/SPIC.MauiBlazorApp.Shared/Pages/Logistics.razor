@@ -2770,7 +2770,7 @@ else
                 </button>
 
                 @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) ||
-                                                             (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update")))
+                                                             _isEditing)
                 {
                     <button type="button"
                             class="btn-save"
@@ -2887,10 +2887,7 @@ else
                     <th class="text-center lm-col-docs">Docs</th>
                 }
                 <th class="text-center lm-col-pdf">PDF</th>
-                @if (CanShowLogisticsActionColumn)
-                {
-                    <th class="lm-col-action">Action</th>
-                }
+                <th class="lm-col-action">Action</th>
             }
         </TableHeader>
 
@@ -3048,39 +3045,30 @@ else
 
                     </div>
                 </td>
-                @if (CanShowLogisticsActionColumn)
-                {
-                    <td class="lm-col-action">
-                        <div class="action-icons">
-                            @if (CanApprove(item))
-                            {
-                                <button type="button"
-                                        class="lm-approve-btn"
-                                        @onclick="() => OpenApproveModal(item)"
-                                        disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
-                                    <i class="bi bi-check-circle"></i>
-                                    @(_approvingId == item.Id ? "Approving..." : GetApproveButtonText(item))
-                                </button>
+                <td class="lm-col-action">
+                    <div class="action-icons">
+                        @if (CanApprove(item))
+                        {
+                            <button type="button"
+                                    class="lm-approve-btn"
+                                    @onclick="() => OpenApproveModal(item)"
+                                    disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
+                                <i class="bi bi-check-circle"></i>
+                                @(_approvingId == item.Id ? "Approving..." : GetApproveButtonText(item))
+                            </button>
 
-                                <button type="button"
-                                        class="lm-reject-btn"
-                                        @onclick="() => OpenRejectModal(item)"
-                                        disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
-                                    <i class="bi bi-arrow-counterclockwise"></i>
-                                    Send Back
-                                </button>
-                            }
-                            @if (CanDeleteLogistics)
-                            {
-                                <i class="bi bi-trash icon-del lm-row-icon-action lm-delete-action" title="Delete" @onclick="() => DeleteItem(item)"></i>
-                            }
-                            @if (CanEditLogisticsItem(item))
-                            {
-                                <i class="bi bi-pencil-square icon-edit lm-row-icon-action lm-edit-action" title="Edit" @onclick="() => EditItem(item)"></i>
-                            }
-                        </div>
-                    </td>
-                }
+                            <button type="button"
+                                    class="lm-reject-btn"
+                                    @onclick="() => OpenRejectModal(item)"
+                                    disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                                Send Back
+                            </button>
+                        }
+                        <i class="bi bi-trash icon-del lm-row-icon-action lm-delete-action" title="Delete" @onclick="() => DeleteItem(item)"></i>
+                        <i class="bi bi-pencil-square icon-edit lm-row-icon-action lm-edit-action" title="Edit" @onclick="() => EditItem(item)"></i>
+                    </div>
+                </td>
             }
         </TableRow>
     </SpicDataTable>
@@ -4658,7 +4646,7 @@ else
 
  private void DeleteItem(LogisticsItemDto item)
 {
-    if (!CanDeleteLogisticsItem(item))
+    if (IsPortTab && !CanDeleteLogisticsItem(item))
         return;
 
     _deleteTarget = item;
@@ -4670,7 +4658,7 @@ else
     if (_deleteTarget is null)
         return;
 
-    if (!CanDeleteLogisticsItem(_deleteTarget))
+    if (IsPortTab && !CanDeleteLogisticsItem(_deleteTarget))
     {
         ShowMessage("You are not allowed to delete this record.", true);
         CancelDelete();
@@ -4735,23 +4723,15 @@ else
         LoginState.UserRole == AppRole.MDO ||
         LoginState.UserRole == AppRole.JMDO;
 
-    private bool CanEditLogisticsItem(LogisticsItemDto item)
-    {
-        if (item == null || IsPortTab)
-            return false;
+   private bool CanEditLogisticsItem(LogisticsItemDto item)
+{
+    if (item == null || IsPortTab)
+        return false;
 
-        if (!LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update"))
-            return false;
-
-        if (IsAdminLogisticsEditRole)
-            return true;
-
-        if (!IsMoCreatorRole)
-            return false;
-
-        // After final AVP approval, even the maker no longer receives Edit.
-        return item.AVPApproved != true;
-    }
+    return LoginState.Can(
+        SPIC.Core.Entities.PagePermission.Logistics,
+        "Update");
+}
 
     private void OpenPvtMaster()
     {

@@ -954,15 +954,19 @@
                                             <i class="bi bi-eye"></i>
                                         </button>
 
-                                        @if (CanEditSubDealer)
-                                        {
-                                            <button type="button"
-                                                    class="sd-action-btn"
-                                                    title="Edit"
-                                                    @onclick="() => EditSubDealer(item.Id)">
-                                                <i class="bi bi-pencil-square"></i>
-                                            </button>
-                                        }
+                                        <button type="button"
+                                                class="sd-action-btn"
+                                                title="Edit"
+                                                @onclick="() => EditSubDealer(item.Id)">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+
+                                        <button type="button"
+                                                class="sd-action-btn"
+                                                title="Delete"
+                                                @onclick="() => RequestDelete(item)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -1325,6 +1329,38 @@
     </div>
 }
 
+@if (_showDeleteConfirm)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                    <button type="button" class="btn-close" @onclick="CancelDelete"></button>
+                </div>
+                <div class="modal-body">
+                    <p>
+                        Are you sure you want to delete the saved details of
+                        <strong>@(_deleteTarget?.SubDealerCode)</strong>?
+                    </p>
+                    <p class="text-muted mb-0">
+                        This clears the maintained Sub Dealer details for this record and returns
+                        it to an untouched master Sub Dealer. The Sub Dealer Code, State, Region and
+                        HQ for this identity are preserved. This action cannot be undone.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting">
+                        @(_isDeleting ? "Deleting..." : "Delete")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private sealed class StateWiseSubDealerSummaryRow
     {
@@ -1418,6 +1454,10 @@
 
     private string? _pageMessage;
     private bool _pageMessageIsError;
+
+    private SubDealerListItemDto? _deleteTarget;
+    private bool _showDeleteConfirm;
+    private bool _isDeleting;
 
     private string CurrentRole =>
         LoginState?.UserRole?.ToString() ?? string.Empty;
@@ -3123,6 +3163,61 @@
     {
         Nav.NavigateTo(
             $"/SubDealerRegistration?subDealerId={id}");
+    }
+
+    private void RequestDelete(SubDealerListItemDto item)
+    {
+        _deleteTarget = item;
+        _showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        _showDeleteConfirm = false;
+        _deleteTarget = null;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (_deleteTarget is null || _isDeleting)
+            return;
+
+        var id = _deleteTarget.Id;
+        var code = _deleteTarget.SubDealerCode;
+        _isDeleting = true;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/SubDealerRegistration/{id}/details");
+
+            CancelDelete();
+
+            if (response.IsSuccessStatusCode)
+            {
+                _pageMessageIsError = false;
+                _pageMessage = $"Saved details for Sub Dealer '{code}' deleted. " +
+                    "The record now behaves like an untouched master Sub Dealer.";
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _pageMessageIsError = true;
+                _pageMessage = $"Could not delete the saved Sub Dealer details. {body}";
+            }
+
+            await Task.WhenAll(
+                LoadListAsync(),
+                LoadStateWiseSummaryAsync());
+        }
+        catch (Exception ex)
+        {
+            _pageMessageIsError = true;
+            _pageMessage = $"Delete failed: {ex.Message}";
+        }
+        finally
+        {
+            _isDeleting = false;
+        }
     }
 
     private string StateName(int id) =>
