@@ -766,16 +766,18 @@ namespace SpicAPI.Controllers
                 return BadRequest("DealerId is required.");
 
             var products = await _db.Products.AsNoTracking().ToListAsync();
+            var categories = await _db.Categories.AsNoTracking().ToListAsync();
             var financialYears = await _db.FinancialYears.AsNoTracking().ToListAsync();
 
             var grouped = await _db.DealerCreditLimitSalesData
                 .AsNoTracking()
                 .Where(x => x.CustomerId == dealerId)
-                .GroupBy(x => new { x.FinancialYearId, x.ProductId })
+                .GroupBy(x => new { x.FinancialYearId, x.ProductId, x.CategoryId })
                 .Select(g => new
                 {
                     g.Key.FinancialYearId,
                     g.Key.ProductId,
+                    g.Key.CategoryId,
                     Quantity = g.Sum(x => x.Quantity),
                     GrossAmount = g.Sum(x => x.GrossAmount)
                 })
@@ -805,6 +807,8 @@ namespace SpicAPI.Controllers
                     FinancialYearId = g.FinancialYearId,
                     ProductId = g.ProductId,
                     ProductName = product.Name,
+                    CategoryId = g.CategoryId,
+                    CategoryName = categories.FirstOrDefault(c => c.Id == g.CategoryId)?.Name ?? string.Empty,
                     Quantity = g.Quantity,
                     GrossAmount = g.GrossAmount
                 });

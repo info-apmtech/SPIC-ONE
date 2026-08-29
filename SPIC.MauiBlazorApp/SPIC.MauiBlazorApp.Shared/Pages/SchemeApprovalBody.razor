@@ -283,43 +283,25 @@ else
                                 </tr>
                             </thead>
                             <tbody>
-                                @for (int i = 0; i < 3; i++)
+                                @foreach (var y in _dealerAvailableYears)
                                 {
-                                    var fyId = _selectedSalesYears[i];
-                                    var usedIds = _selectedSalesYears.Where(y => y.HasValue).Select(y => y!.Value).ToHashSet();
-                                    var options = _dealerAvailableYears.Where(y => !usedIds.Contains(y.Id) || y.Id == fyId).ToList();
                                     <tr>
-                                        <td>
-                                            @if (i == 0 && !fyId.HasValue)
-                                            {
-                                                <span class="mo-sales-placeholder">Year 1</span>
-                                            }
-                                            <select class="mo-sales-year-select" value="@fyId" @onchange="(e) => OnSalesYearChanged(i, e)">
-                                                <option value="">Select Year</option>
-                                                @foreach (var y in options)
-                                                {
-                                                    <option value="@y.Id">@y.Name</option>
-                                                }
-                                            </select>
-                                        </td>
-                                        <td>@FormatQty(GetYearQty(fyId, SalesKind.Urea))</td>
-                                        <td>@FormatQty(GetYearQty(fyId, SalesKind.DAP))</td>
-                                        <td>@FormatQty(GetYearQty(fyId, SalesKind.Npk2020))</td>
-                                        <td>@FormatQty(GetYearQty(fyId, SalesKind.SSP))</td>
-                                        <td>@FormatQty(GetYearTotal(fyId))</td>
-                                        <td>@FormatLakhs(GetYearTurnover(fyId))</td>
+                                        <td>@y.Name</td>
+                                        <td>@FormatQty(GetYearQty(y.Id, SalesKind.Urea))</td>
+                                        <td>@FormatQty(GetYearQty(y.Id, SalesKind.DAP))</td>
+                                        <td>@FormatQty(GetYearQty(y.Id, SalesKind.Npk2020))</td>
+                                        <td>@FormatQty(GetYearQty(y.Id, SalesKind.SSP))</td>
+                                        <td>@FormatQty(GetYearTotal(y.Id))</td>
+                                        <td>@FormatLakhs(GetYearTurnover(y.Id))</td>
                                     </tr>
                                 }
                             </tbody>
                         </table>
                     </div>
-                    @if (_selectedSalesYears.All(y => y.HasValue))
-                    {
-                        <div class="mo-sales-note">
-                            <strong>3-Year Average Total:</strong> @FormatQty(GetThreeYearAverageTotal()) MT
-                            &nbsp;|&nbsp; <strong>3-Year Average SP Turnover:</strong> Rs. @FormatLakhs(GetThreeYearAverageTurnover()) Lakhs
-                        </div>
-                    }
+                    <div class="mo-sales-note">
+                        <strong>3-Year Average Total:</strong> @FormatQty(GetThreeYearAverageTotal()) MT
+                        &nbsp;|&nbsp; <strong>3-Year Average SP Turnover:</strong> Rs. @FormatLakhs(GetThreeYearAverageTurnover()) Lakhs
+                    </div>
                 }
             </div>
         }
@@ -594,7 +576,6 @@ else
     private string? _dealerSalesError;
     private List<SPIC.Core.DTOs.DealerSalesYearOptionDto> _dealerAvailableYears = new();
     private List<SPIC.Core.DTOs.DealerSalesProductDto> _dealerProductSales = new();
-    private int?[] _selectedSalesYears = new int?[3];
     private int _dealerSalesLoadedForId;
 
     private bool IsApproveModalOpen { get; set; }
@@ -668,7 +649,6 @@ else
                 $"api/CreditLimitSales/dealer-sales-summary/{_detail.DealerId}");
             _dealerAvailableYears = summary?.AvailableYears ?? new();
             _dealerProductSales = summary?.ProductSales ?? new();
-            _selectedSalesYears = new int?[3];
             _dealerSalesLoadedForId = _detail.DealerId;
         }
         catch
@@ -681,25 +661,42 @@ else
         }
     }
 
-    private void OnSalesYearChanged(int index, ChangeEventArgs e)
-    {
-        if (index < 0 || index >= _selectedSalesYears.Length) return;
-        int? value = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : null;
-        _selectedSalesYears[index] = value;
-    }
-
-    private bool IsProductMatch(SalesKind kind, string name)
+    private static bool IsProductMatch(SalesKind kind, string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return false;
         return kind switch
         {
             SalesKind.Urea => name.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase),
             SalesKind.DAP => name.Contains("DAP", StringComparison.OrdinalIgnoreCase),
-            SalesKind.Npk2020 => name.Contains("20:20", StringComparison.OrdinalIgnoreCase) || name.Contains("NPK", StringComparison.OrdinalIgnoreCase),
+            SalesKind.Npk2020 => name.Contains("20:20", StringComparison.OrdinalIgnoreCase) ||
+                                 name.Contains("20-20", StringComparison.OrdinalIgnoreCase) ||
+                                 name.Contains("NPK", StringComparison.OrdinalIgnoreCase),
             SalesKind.SSP => name.Contains("SSP", StringComparison.OrdinalIgnoreCase),
             _ => false
         };
     }
+
+    private static bool IsFertilizerCategory(string? categoryName) =>
+        !string.IsNullOrWhiteSpace(categoryName) &&
+        categoryName.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSpecialityCategory(string? categoryName) =>
+        !string.IsNullOrWhiteSpace(categoryName) &&
+        (categoryName.Contains("Speciality", StringComparison.OrdinalIgnoreCase) ||
+         categoryName.Contains("Specialty", StringComparison.OrdinalIgnoreCase));
+
+    // Urea comes from the CreditLimit (SPIC) data source.
+    private static bool IsCreditLimitUrea(SPIC.Core.DTOs.DealerSalesProductDto p) =>
+        IsFertilizerCategory(p.CategoryName) && IsProductMatch(SalesKind.Urea, p.ProductName);
+
+    // DAP / 20:20 / SSP come from the CreditLimitForGreenStar data source
+    // (its "Other Fertilizer" rows = Fertilizer-category products excluding Urea).
+    private static bool IsGreenStarOtherFertilizer(SPIC.Core.DTOs.DealerSalesProductDto p) =>
+        IsFertilizerCategory(p.CategoryName) && !IsCreditLimitUrea(p);
+
+    // SP Turnover uses the CreditLimitForGreenStar logic: specialty-product amounts only.
+    private static bool IsSpecialityProduct(SPIC.Core.DTOs.DealerSalesProductDto p) =>
+        IsSpecialityCategory(p.CategoryName);
 
     private IEnumerable<SPIC.Core.DTOs.DealerSalesProductDto> GetYearProducts(int? fyId)
     {
@@ -710,9 +707,12 @@ else
     private decimal GetYearQty(int? fyId, SalesKind kind)
     {
         if (!fyId.HasValue) return 0;
-        return GetYearProducts(fyId)
-            .Where(p => IsProductMatch(kind, p.ProductName))
-            .Sum(p => p.Quantity);
+        var rows = GetYearProducts(fyId);
+        return kind switch
+        {
+            SalesKind.Urea => rows.Where(IsCreditLimitUrea).Sum(p => p.Quantity),
+            _ => rows.Where(p => IsGreenStarOtherFertilizer(p) && IsProductMatch(kind, p.ProductName)).Sum(p => p.Quantity)
+        };
     }
 
     private decimal GetYearTotal(int? fyId) => GetYearQty(fyId, SalesKind.Urea)
@@ -723,18 +723,18 @@ else
     private decimal GetYearTurnover(int? fyId)
     {
         if (!fyId.HasValue) return 0;
-        return GetYearProducts(fyId).Sum(p => p.GrossAmount) / 100000m;
+        return GetYearProducts(fyId).Where(IsSpecialityProduct).Sum(p => p.GrossAmount) / 100000m;
     }
 
     private decimal GetThreeYearAverageTotal()
     {
-        var totals = _selectedSalesYears.Where(y => y.HasValue).Select(y => GetYearTotal(y)).ToList();
+        var totals = _dealerAvailableYears.Select(y => GetYearTotal(y.Id)).ToList();
         return totals.Count == 0 ? 0 : totals.Sum() / totals.Count;
     }
 
     private decimal GetThreeYearAverageTurnover()
     {
-        var turnovers = _selectedSalesYears.Where(y => y.HasValue).Select(y => GetYearTurnover(y)).ToList();
+        var turnovers = _dealerAvailableYears.Select(y => GetYearTurnover(y.Id)).ToList();
         return turnovers.Count == 0 ? 0 : turnovers.Sum() / turnovers.Count;
     }
 
