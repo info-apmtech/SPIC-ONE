@@ -771,7 +771,7 @@
                         </div>
                         <div class="row g-3">
                             <div class="col-12 col-sm-6 col-md-4">
-                                <label class="form-label-custom">Security Deposit Amount</label>
+                                <label class="form-label-custom">Security Deposit Amount<span class="text-danger">*</span></label>
                                 <div class="input-icon-left-wrapper">
                                     <span class="input-icon-left">₹</span>
                                     <input type="number" class="form-control-custom w-100 input-with-left-icon @(_errors.ContainsKey("SpicSecurityDepositAmount") ? "is-invalid" : "")" placeholder="0.00" step="0.01" @bind="_model.SpicSecurityDepositAmount" @bind:after='() => ValidateFieldOnChange("SpicSecurityDepositAmount", (_model.SpicSecurityDepositAmount ?? 0) > 0)'>
@@ -782,7 +782,7 @@
                                 }
                             </div>
                             <div class="col-12 col-sm-6 col-md-4">
-                                <label class="form-label-custom">Security Deposit Receipt No</label>
+                                <label class="form-label-custom">Security Deposit Receipt No<span class="text-danger">*</span></label>
                                 <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("SpicSecurityDepositReceiptNo") ? "is-invalid" : "")" @bind="_model.SpicSecurityDepositReceiptNo" @bind:after='() => ValidateFieldOnChange("SpicSecurityDepositReceiptNo", !string.IsNullOrWhiteSpace(_model.SpicSecurityDepositReceiptNo))' placeholder="Enter Security Deposit Receipt Number">
                                 @if (_errors.ContainsKey("SpicSecurityDepositReceiptNo"))
                                 {
@@ -790,7 +790,7 @@
                                 }
                             </div>
                             <div class="col-12 col-sm-6 col-md-4">
-                                <label class="form-label-custom">Security Deposit Date</label>
+                                <label class="form-label-custom">Security Deposit Date<span class="text-danger">*</span></label>
                                 <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SpicSecurityDepositDate") ? "is-invalid" : "")"
                                        value="@_securityDepositDateText"
                                        @onchange="OnSecurityDepositDateChanged">
@@ -2299,6 +2299,18 @@ void ToggleGreenStar()
             _errors["ParentDealer"] = "Parent Dealer Code & Name is required";
 
         if (string.IsNullOrWhiteSpace(_model.FirmName)) _errors["FirmName"] = "Firm Name is required";
+        // Security Deposit Details (SPIC) are MANDATORY when SPIC is selected (both New and Existing Dealer flows)
+if (isSpic)
+{
+    if (!_model.SpicSecurityDepositAmount.HasValue || _model.SpicSecurityDepositAmount <= 0)
+        _errors["SpicSecurityDepositAmount"] = "Security Deposit Amount is required";
+    
+    if (string.IsNullOrWhiteSpace(_model.SpicSecurityDepositReceiptNo))
+        _errors["SpicSecurityDepositReceiptNo"] = "Security Deposit Receipt No is required";
+    
+    if (!_model.SpicSecurityDepositDate.HasValue || _model.SpicSecurityDepositDate.Value == DateTime.MinValue)
+        _errors["SpicSecurityDepositDate"] = "Security Deposit Date is required";
+}
         // Date of Appointment is mandatory based on selected company.
 // These fields are currently available only in Existing Dealer flow.
 if (!IsNewDealerFlow)
