@@ -242,7 +242,7 @@ else
                 <div class="apd-field"><label>Beneficiary Group</label><div class="apd-field-value">@(d.BeneficiaryGroup ?? "-")</div></div>
                 <div class="apd-field"><label>Sub Dealer</label><div class="apd-field-value">@(d.SubDealerName ?? "-")</div></div>
                 <div class="apd-field"><label>Approved Employee</label><div class="apd-field-value">@(d.EmployeeName ?? "-")</div></div>
-                <div class="apd-field"><label>Avg Quantity Lifted (3 Years)</label><div class="apd-field-value">@(d.AverageQuantityLifted3Years?.ToString("0.##") ?? "-") MT</div></div>
+                <div class="apd-field"><label>Total Quantity Lifted (3 Years)</label><div class="apd-field-value">@(d.AverageQuantityLifted3Years?.ToString("0.##") ?? "-") MT</div></div>
                 <div class="apd-field"><label>Last Year Quantity Lifted</label><div class="apd-field-value">@(d.LastYearQuantityLifted?.ToString("0.##") ?? "-") MT</div></div>
                 <div class="apd-field"><label>Declaration Confirmed</label><div class="apd-field-value">@(d.IsDeclarationConfirmed ? "Yes" : "No")</div></div>
             </div>
@@ -287,10 +287,10 @@ else
                                 {
                                     <tr>
                                         <td>@y.Name</td>
-                                        <td>@FormatQty(GetYearQty(y.Id, SalesKind.Urea))</td>
-                                        <td>@FormatQty(GetYearQty(y.Id, SalesKind.DAP))</td>
-                                        <td>@FormatQty(GetYearQty(y.Id, SalesKind.Npk2020))</td>
-                                        <td>@FormatQty(GetYearQty(y.Id, SalesKind.SSP))</td>
+                                        <td>@FormatQty(GetYearQty(y.Id, DealerSalesCalculator.SalesKind.Urea))</td>
+                                        <td>@FormatQty(GetYearQty(y.Id, DealerSalesCalculator.SalesKind.DAP))</td>
+                                        <td>@FormatQty(GetYearQty(y.Id, DealerSalesCalculator.SalesKind.Npk2020))</td>
+                                        <td>@FormatQty(GetYearQty(y.Id, DealerSalesCalculator.SalesKind.SSP))</td>
                                         <td>@FormatQty(GetYearTotal(y.Id))</td>
                                         <td>@FormatLakhs(GetYearTurnover(y.Id))</td>
                                     </tr>
@@ -299,8 +299,8 @@ else
                         </table>
                     </div>
                     <div class="mo-sales-note">
-                        <strong>3-Year Average Total:</strong> @FormatQty(GetThreeYearAverageTotal()) MT
-                        &nbsp;|&nbsp; <strong>3-Year Average SP Turnover:</strong> Rs. @FormatLakhs(GetThreeYearAverageTurnover()) Lakhs
+                        <strong>3-Year Total:</strong> @FormatQty(GetThreeYearTotal()) MT
+                        &nbsp;|&nbsp; <strong>SP Product Turnover:</strong> Rs. @FormatLakhs(GetThreeYearTurnover()) Lakhs
                     </div>
                 }
             </div>
@@ -634,8 +634,6 @@ else
         }
     }
 
-    private enum SalesKind { Urea, DAP, Npk2020, SSP }
-
     private async Task LoadDealerSalesIfNeeded()
     {
         if (!IsMoStage || _detail == null || _detail.DealerId <= 0) return;
@@ -661,82 +659,22 @@ else
         }
     }
 
-    private static bool IsProductMatch(SalesKind kind, string name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return false;
-        return kind switch
-        {
-            SalesKind.Urea => name.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase),
-            SalesKind.DAP => name.Contains("DAP", StringComparison.OrdinalIgnoreCase),
-            SalesKind.Npk2020 => name.Contains("20:20", StringComparison.OrdinalIgnoreCase) ||
-                                 name.Contains("20-20", StringComparison.OrdinalIgnoreCase) ||
-                                 name.Contains("NPK", StringComparison.OrdinalIgnoreCase),
-            SalesKind.SSP => name.Contains("SSP", StringComparison.OrdinalIgnoreCase),
-            _ => false
-        };
-    }
+    // Roll-up logic is shared with the ApplyWelfareScheme page (DealerSalesCalculator)
+    // so both pages always present the same figures for the same dealer.
+    private decimal GetYearQty(int? fyId, DealerSalesCalculator.SalesKind kind) =>
+        DealerSalesCalculator.GetYearQty(_dealerProductSales, fyId, kind);
 
-    private static bool IsFertilizerCategory(string? categoryName) =>
-        !string.IsNullOrWhiteSpace(categoryName) &&
-        categoryName.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase);
+    private decimal GetYearTotal(int? fyId) =>
+        DealerSalesCalculator.GetYearTotal(_dealerProductSales, fyId);
 
-    private static bool IsSpecialityCategory(string? categoryName) =>
-        !string.IsNullOrWhiteSpace(categoryName) &&
-        (categoryName.Contains("Speciality", StringComparison.OrdinalIgnoreCase) ||
-         categoryName.Contains("Specialty", StringComparison.OrdinalIgnoreCase));
+    private decimal GetYearTurnover(int? fyId) =>
+        DealerSalesCalculator.GetYearTurnover(_dealerProductSales, fyId);
 
-    // Urea comes from the CreditLimit (SPIC) data source.
-    private static bool IsCreditLimitUrea(SPIC.Core.DTOs.DealerSalesProductDto p) =>
-        IsFertilizerCategory(p.CategoryName) && IsProductMatch(SalesKind.Urea, p.ProductName);
+    private decimal GetThreeYearTotal() =>
+        DealerSalesCalculator.GetThreeYearTotal(_dealerProductSales, _dealerAvailableYears);
 
-    // DAP / 20:20 / SSP come from the CreditLimitForGreenStar data source
-    // (its "Other Fertilizer" rows = Fertilizer-category products excluding Urea).
-    private static bool IsGreenStarOtherFertilizer(SPIC.Core.DTOs.DealerSalesProductDto p) =>
-        IsFertilizerCategory(p.CategoryName) && !IsCreditLimitUrea(p);
-
-    // SP Turnover uses the CreditLimitForGreenStar logic: specialty-product amounts only.
-    private static bool IsSpecialityProduct(SPIC.Core.DTOs.DealerSalesProductDto p) =>
-        IsSpecialityCategory(p.CategoryName);
-
-    private IEnumerable<SPIC.Core.DTOs.DealerSalesProductDto> GetYearProducts(int? fyId)
-    {
-        if (!fyId.HasValue) return Enumerable.Empty<SPIC.Core.DTOs.DealerSalesProductDto>();
-        return _dealerProductSales.Where(p => p.FinancialYearId == fyId.Value);
-    }
-
-    private decimal GetYearQty(int? fyId, SalesKind kind)
-    {
-        if (!fyId.HasValue) return 0;
-        var rows = GetYearProducts(fyId);
-        return kind switch
-        {
-            SalesKind.Urea => rows.Where(IsCreditLimitUrea).Sum(p => p.Quantity),
-            _ => rows.Where(p => IsGreenStarOtherFertilizer(p) && IsProductMatch(kind, p.ProductName)).Sum(p => p.Quantity)
-        };
-    }
-
-    private decimal GetYearTotal(int? fyId) => GetYearQty(fyId, SalesKind.Urea)
-        + GetYearQty(fyId, SalesKind.DAP)
-        + GetYearQty(fyId, SalesKind.Npk2020)
-        + GetYearQty(fyId, SalesKind.SSP);
-
-    private decimal GetYearTurnover(int? fyId)
-    {
-        if (!fyId.HasValue) return 0;
-        return GetYearProducts(fyId).Where(IsSpecialityProduct).Sum(p => p.GrossAmount) / 100000m;
-    }
-
-    private decimal GetThreeYearAverageTotal()
-    {
-        var totals = _dealerAvailableYears.Select(y => GetYearTotal(y.Id)).ToList();
-        return totals.Count == 0 ? 0 : totals.Sum() / totals.Count;
-    }
-
-    private decimal GetThreeYearAverageTurnover()
-    {
-        var turnovers = _dealerAvailableYears.Select(y => GetYearTurnover(y.Id)).ToList();
-        return turnovers.Count == 0 ? 0 : turnovers.Sum() / turnovers.Count;
-    }
+    private decimal GetThreeYearTurnover() =>
+        DealerSalesCalculator.GetThreeYearTurnover(_dealerProductSales, _dealerAvailableYears);
 
     private static string FormatQty(decimal value) => value == 0 ? "-" : value.ToString("0.##");
 

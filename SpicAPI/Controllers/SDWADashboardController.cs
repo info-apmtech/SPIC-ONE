@@ -455,9 +455,32 @@ namespace SpicAPI.Controllers
                 lastYearQty = lastYearData?.TotalQuantity ?? 0;
             }
 
+            // The displayed 3-Year Total Quantity must use the SAME lifting
+            // values as the MO Approval detail page (Urea + DAP + 20:20 + SSP in
+            // the Fertilizer category), so the ApplyWelfareScheme page and the
+            // ApprovalDetail page always agree. Eligibility conditions and the
+            // "Quantity Lifted during Last Year" figure stay on the existing logic.
+            var products = await _db.Products.AsNoTracking().ToListAsync();
+            var categories = await _db.Categories.AsNoTracking().ToListAsync();
+            var fertilizerByFy = await _db.DealerCreditLimitSalesData
+                .AsNoTracking()
+                .Where(x => x.CustomerId == dealer.Id && fyIds.Contains(x.FinancialYearId))
+                .GroupBy(x => new { x.FinancialYearId, x.ProductId, x.CategoryId })
+                .Select(g => new { g.Key.FinancialYearId, g.Key.ProductId, g.Key.CategoryId, Quantity = g.Sum(x => x.Quantity) })
+                .ToListAsync();
+
+            decimal fertilizerQty = 0;
+            foreach (var row in fertilizerByFy)
+            {
+                var productName = products.FirstOrDefault(p => p.Id == row.ProductId)?.Name;
+                var categoryName = categories.FirstOrDefault(c => c.Id == row.CategoryId)?.Name;
+                if (IsFertilizerLiftingMatch(productName, categoryName))
+                    fertilizerQty += row.Quantity;
+            }
+
             var result = new DealerSalesHistoryDto
             {
-                AverageQuantityLifted3Years = Math.Round(avgQty, 2),
+                AverageQuantityLifted3Years = Math.Round(fertilizerQty, 2),
                 LastYearQuantityLifted = lastYearQty,
                 QuantityRangeLabel = GetQuantityRangeLabel(avgQty),
                 QuantityRangeValue = GetQuantityRangeValue(avgQty),
@@ -521,6 +544,22 @@ namespace SpicAPI.Controllers
             }
 
             return Ok(employees);
+        }
+
+        private static bool IsFertilizerLiftingMatch(string? productName, string? categoryName)
+        {
+            if (string.IsNullOrWhiteSpace(productName) || string.IsNullOrWhiteSpace(categoryName) ||
+                !categoryName.Contains("Fertilizer", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            // Mirrors the MO Approval detail page (SchemeApprovalBody) lifting
+            // columns: Urea + DAP + 20:20 + SSP in the Fertilizer category.
+            return productName.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase)
+                || productName.Contains("DAP", StringComparison.OrdinalIgnoreCase)
+                || productName.Contains("20:20", StringComparison.OrdinalIgnoreCase)
+                || productName.Contains("20-20", StringComparison.OrdinalIgnoreCase)
+                || productName.Contains("NPK", StringComparison.OrdinalIgnoreCase)
+                || productName.Contains("SSP", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string GetQuantityRangeLabel(decimal avgQty)
