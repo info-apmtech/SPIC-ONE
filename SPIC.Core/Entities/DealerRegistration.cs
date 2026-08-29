@@ -105,6 +105,11 @@ namespace SPIC.Core.Entities
         public string? GreenstarTradeDepositReceiptNoReg { get; set; }
         public DateTime? GreenstarTradeDepositDateReg { get; set; }
 
+        //Security Deposit Details - SPIC
+        public decimal? SpicSecurityDepositAmount { get; set; }
+        public string? SpicSecurityDepositReceiptNo { get; set; }
+        public DateTime? SpicSecurityDepositDate { get; set; }
+
         //Wholesale Fertilizer
         [Display(Name = "WholeSale Fertilizer License")]
         public string? WholeSaleFertilizerLicenseNumber { get; set; }

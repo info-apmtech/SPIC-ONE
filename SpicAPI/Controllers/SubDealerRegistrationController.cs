@@ -422,6 +422,12 @@ public class SubDealerRegistrationController : ControllerBase
 		[FromBody] SubDealerFormModel model,
 		CancellationToken cancellationToken)
 	{
+		if (!ModelState.IsValid)
+		{
+			var msErrors = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+			if (!string.IsNullOrWhiteSpace(msErrors))
+				return BadRequest(msErrors);
+		}
 		var validationError = ValidateModel(model);
 		if (validationError != null)
 			return BadRequest(validationError);
@@ -819,6 +825,78 @@ public class SubDealerRegistrationController : ControllerBase
 		return NoContent();
 	}
 
+	/// <summary>
+	/// Deletes only the saved/maintained Sub Dealer details for the given Id.
+	/// Unlike the physical Delete, this keeps the same record Id, SubDealerCode,
+	/// StateId, Region and HQ so the row returns to an untouched master Sub Dealer
+	/// that is again hidden from the maintained list by the existing list rule.
+	/// </summary>
+	[HttpDelete("{id:int}/details")]
+	public async Task<IActionResult> DeleteSavedDetails(
+		int id,
+		CancellationToken cancellationToken)
+	{
+		var entity = await _db.SubDealerRegistrations
+			.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+		if (entity == null)
+			return NotFound($"Sub Dealer with Id {id} was not found.");
+
+		// Preserve the master-row identity and location hierarchy.
+		var preservedCode = entity.SubDealerCode;
+		var preservedStateId = entity.StateId;
+		var preservedRegionId = entity.Region;
+		var preservedHqId = entity.HQ;
+		var preservedFirmName = entity.FirmName;
+
+		ClearMaintainedDetails(entity);
+
+		// Restore the preserved master/location fields.
+		entity.SubDealerCode = preservedCode;
+		entity.StateId = preservedStateId;
+		entity.Region = preservedRegionId;
+		entity.HQ = preservedHqId;
+		entity.UpdatedBy = CurrentUserId();
+		entity.UpdatedAt = DateTime.Now;
+		entity.FirmName = preservedFirmName;
+
+		await _db.SaveChangesAsync(cancellationToken);
+		return NoContent();
+	}
+
+	private static void ClearMaintainedDetails(SubDealerRegistration entity)
+	{
+		// Reset every form-maintained detail back to the untouched master state.
+		entity.Status = SubDealerStatus.Active;
+		//entity.FirmName = string.Empty;
+
+		entity.GoogleMapURL = null;
+		entity.Latitude = null;
+		entity.Longitude = null;
+		entity.ShopNoORRoomNoOrBlockNo = string.Empty;
+		entity.Street = null;
+		entity.SubVillage = null;
+		entity.Village = string.Empty;
+		entity.PinCode = string.Empty;
+		entity.Block = null;
+		entity.Taluk = null;
+		entity.DistrictId = null;
+		entity.DealerStateId = null;
+		entity.OfficialContactNumber = string.Empty;
+		entity.WhatsAppNumber = string.Empty;
+		entity.AlternativeNumber = null;
+
+		entity.WholesaleMFMSId = null;
+		entity.RetailMFMSId = null;
+		entity.PANNo = null;
+
+		entity.GSTNumber = null;
+		entity.GSTLegalName = null;
+		entity.GSTTradeName = null;
+		entity.GSTConstitutionofBusiness = null;
+		entity.GSTFilePath = null;
+	}
+
 	private static string NormalizeHeader(string? header)
 	{
 		if (string.IsNullOrWhiteSpace(header))
@@ -859,13 +937,61 @@ public class SubDealerRegistrationController : ControllerBase
 
 		if (model.Status == SubDealerStatus.Active)
 		{
-			// Wholesale mFMS ID is optional for Active Sub Dealers.
-			// Retail mFMS ID keeps the existing mandatory rule.
+			// Enforce the same Active-only required fields as the UI so backend
+			// validation matches frontend behavior.
+			if (string.IsNullOrWhiteSpace(model.ShopNoORRoomNoOrBlockNo))
+				return "Shop No / Room No / Block No is required.";
+
+			if (string.IsNullOrWhiteSpace(model.Village))
+				return "Village is required.";
+
+			if (!model.Latitude.HasValue)
+				return "Latitude is required (click the map or use current location).";
+
+			if (!model.Longitude.HasValue)
+				return "Longitude is required (click the map or use current location).";
+
+			if (string.IsNullOrWhiteSpace(model.PinCode))
+				return "Pincode is required.";
+
+			if (model.PinCode.Length != 6)
+				return "Pincode must be 6 digits.";
+
+			if ((model.DistrictId ?? 0) <= 0)
+				return "District is required in Primary Location.";
+
+			if ((model.DealerStateId ?? 0) <= 0)
+				return "State is required in Primary Location.";
+
+			if (string.IsNullOrWhiteSpace(model.OfficialContactNumber))
+				return "Official Contact Number is required.";
+
+			if (model.OfficialContactNumber.Length != 10)
+				return "Official Contact Number must be 10 digits.";
+
+			if (string.IsNullOrWhiteSpace(model.WhatsAppNumber))
+				return "WhatsApp Number is required.";
+
+			if (model.WhatsAppNumber.Length != 10)
+				return "WhatsApp Number must be 10 digits.";
+
 			if (string.IsNullOrWhiteSpace(model.RetailMFMSId))
 				return "Retail mFMS ID is required for Active Sub Dealer.";
 
 			if (string.IsNullOrWhiteSpace(model.PANNo))
 				return "PAN No is required for Active Sub Dealer.";
+			if (string.IsNullOrWhiteSpace(model.AlternativeNumber))
+				return "Alternative Number is required for Active Sub Dealer.";
+			if (string.IsNullOrWhiteSpace(model.GoogleMapURL))
+				return "Google Map URL is required for Active Sub Dealer.";
+			if (string.IsNullOrWhiteSpace(model.Street))
+				return "Street is required for Active Sub Dealer.";
+			if (string.IsNullOrWhiteSpace(model.SubVillage))
+				return "Sub Village is required for Active Sub Dealer.";
+			if (string.IsNullOrWhiteSpace(model.Block))
+				return "Block is required for Active Sub Dealer.";
+			if (string.IsNullOrWhiteSpace(model.Taluk))
+				return "Taluk is required for Active Sub Dealer.";
 		}
 
 		// PAN is optional for Inactive, but if entered the format is still validated.
@@ -875,6 +1001,57 @@ public class SubDealerRegistrationController : ControllerBase
 				@"^[A-Z]{5}[0-9]{4}[A-Z]$"))
 		{
 			return "Invalid PAN format (e.g., ABCDE1234F).";
+		}
+
+		// Additional Active-only checks for GST and uploaded file
+		if (model.Status == SubDealerStatus.Active)
+		{
+			if (string.IsNullOrWhiteSpace(model.GSTNumber))
+				return "GST Number is required.";
+
+			if (!Regex.IsMatch(
+				model.GSTNumber ?? string.Empty,
+				@"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"))
+				return "Invalid GST format (e.g., 22AAAAA0000A1Z5).";
+
+			if (string.IsNullOrWhiteSpace(model.GSTFilePath))
+				return "GST Certificate PDF is required.";
+		}
+
+		// Inactive: validate formats if present and coordinate pairs
+		if (model.Status == SubDealerStatus.InActive)
+		{
+			if (!string.IsNullOrWhiteSpace(model.PinCode) && model.PinCode.Length != 6)
+				return "Pincode must be 6 digits.";
+
+			if (!string.IsNullOrWhiteSpace(model.OfficialContactNumber) &&
+				model.OfficialContactNumber.Length != 10)
+				return "Official Contact Number must be 10 digits.";
+
+			if (!string.IsNullOrWhiteSpace(model.WhatsAppNumber) && model.WhatsAppNumber.Length != 10)
+				return "WhatsApp Number must be 10 digits.";
+
+			if (!string.IsNullOrWhiteSpace(model.AlternativeNumber) &&
+				model.AlternativeNumber.Length != 10)
+				return "Alternative Number must be 10 digits.";
+
+			if (!string.IsNullOrWhiteSpace(model.GSTNumber) &&
+				!Regex.IsMatch(
+					model.GSTNumber,
+					@"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"))
+				return "Invalid GST format (e.g., 22AAAAA0000A1Z5).";
+
+			if (!string.IsNullOrWhiteSpace(model.PANNo) &&
+				!Regex.IsMatch(
+					model.PANNo.Trim().ToUpperInvariant(),
+					@"^[A-Z]{5}[0-9]{4}[A-Z]$"))
+				return "Invalid PAN format (e.g., ABCDE1234F).";
+
+			if (model.Latitude.HasValue && !model.Longitude.HasValue)
+				return "Longitude is required when Latitude is entered.";
+
+			if (model.Longitude.HasValue && !model.Latitude.HasValue)
+				return "Latitude is required when Longitude is entered.";
 		}
 
 		return null;

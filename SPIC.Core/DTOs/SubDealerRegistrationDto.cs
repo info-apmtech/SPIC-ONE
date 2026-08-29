@@ -1,17 +1,25 @@
-﻿using SPIC.Core.Entities;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Text.RegularExpressions;
+using SPIC.Core.Entities;
 
 namespace SPIC.Core.DTOs;
 
-public class SubDealerFormModel
+public partial class SubDealerFormModel : IValidatableObject
 {
 	public int Id { get; set; }
 	public string? SubDealerCode { get; set; }
 
+	[Range(1, int.MaxValue, ErrorMessage = "State is required.")]
 	public int StateId { get; set; }
+
+	[Range(1, int.MaxValue, ErrorMessage = "Region is required.")]
 	public int Region { get; set; }
+
+	[Range(1, int.MaxValue, ErrorMessage = "HQ is required.")]
 	public int HQ { get; set; }
 	public SubDealerStatus Status { get; set; } = SubDealerStatus.Active;
 
+	[Required(ErrorMessage = "Firm Name is required.")]
 	public string FirmName { get; set; } = string.Empty;
 
 	public string? GoogleMapURL { get; set; }
@@ -33,6 +41,9 @@ public class SubDealerFormModel
 	// mFMS / PAN
 	public string? WholesaleMFMSId { get; set; }
 	public string? RetailMFMSId { get; set; }
+
+	// PAN format is validated in Validate() (trim/uppercase-aware and only
+	// when a value is actually entered), matching backend and frontend rules.
 	public string? PANNo { get; set; }
 
 	// Kept because your current DTO already contains these properties.
@@ -59,6 +70,32 @@ public class SubDealerFormModel
 	// UI-to-API fallback when role claims are unavailable in local/dev.
 	// The server prefers the authenticated role claim when present.
 	public string? SubmittedByRole { get; set; }
+}
+
+// Implement conditional and cross-field validation for shared client/server use.
+public partial class SubDealerFormModel
+{
+	public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+	{
+		if (Status is not SubDealerStatus.Active and not SubDealerStatus.InActive)
+			yield return new ValidationResult("Only Active or Inactive status is allowed.", new[] { nameof(Status) });
+
+		if (Status == SubDealerStatus.Active)
+		{
+			if (string.IsNullOrWhiteSpace(RetailMFMSId))
+				yield return new ValidationResult("Retail mFMS ID is required for Active Sub Dealer.", new[] { nameof(RetailMFMSId) });
+
+			if (string.IsNullOrWhiteSpace(PANNo))
+				yield return new ValidationResult("PAN No is required for Active Sub Dealer.", new[] { nameof(PANNo) });
+		}
+
+		if (!string.IsNullOrWhiteSpace(PANNo))
+		{
+			var pan = PANNo!.Trim().ToUpperInvariant();
+			if (!Regex.IsMatch(pan, "^[A-Z]{5}[0-9]{4}[A-Z]$"))
+				yield return new ValidationResult("Invalid PAN format (e.g., ABCDE1234F).", new[] { nameof(PANNo) });
+		}
+	}
 }
 
 public class SubDealerLookupDto
