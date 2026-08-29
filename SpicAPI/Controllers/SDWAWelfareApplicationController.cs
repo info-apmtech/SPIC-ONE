@@ -51,7 +51,8 @@ namespace SpicAPI.Controllers
                     Status = (int)a.Status,
                     StatusDisplay = GetStatusDisplayName(a.Status),
                     LastUpdatedAt = a.UpdatedAt,
-                    DocumentCount = a.Documents.Count()
+                    DocumentCount = a.Documents.Count(),
+                    IsFirstApplication = a.IsFirstApplication
                 })
                 .ToListAsync();
 
@@ -87,6 +88,42 @@ namespace SpicAPI.Controllers
                     }
                 }
             }
+
+            return Ok(applications);
+        }
+
+        // =====================================================================
+        //  My Applications - previous Educational Assistance applications for
+        //  the logged-in dealer (used by the renewal dropdown)
+        // =====================================================================
+
+        [HttpGet("my-educational-applications")]
+        public async Task<ActionResult<List<EducationalApplicationSummaryDto>>> GetMyEducationalApplications()
+        {
+            var dealer = await GetDealerAsync();
+            if (dealer == null)
+                return NotFound(new { Message = "Dealer profile not found for the logged-in user." });
+
+            var applications = await _db.WelfareApplications
+                .AsNoTracking()
+                .Where(a => a.DealerId == dealer.Id
+                         && a.SchemeName == WelfareSchemeType.EducationalAssistance
+                         && a.Status != WelfareApplicationStatus.Draft)
+                .OrderByDescending(a => a.UpdatedAt)
+                .Select(a => new EducationalApplicationSummaryDto
+                {
+                    Id = a.Id,
+                    ApplicationNumber = a.ApplicationNumber,
+                    Course = a.Course,
+                    EduYear = a.EduYear,
+                    CollegeName = a.CollegeName,
+                    TotalNumberOfCourses = a.TotalNumberOfCourses,
+                    IsFirstApplication = a.IsFirstApplication,
+                    Status = (int)a.Status,
+                    ApplicationDate = a.ApplicationDate,
+                    BeneficiaryName = a.BeneficiaryName
+                })
+                .ToListAsync();
 
             return Ok(applications);
         }

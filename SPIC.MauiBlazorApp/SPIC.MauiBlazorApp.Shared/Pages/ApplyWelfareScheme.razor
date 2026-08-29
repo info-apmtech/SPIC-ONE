@@ -559,10 +559,6 @@
                 <label class="aws-form-label">Wedding Date</label>
                 <input type="date" class="aws-form-control" @bind="EventDate" min="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
             </div>
-            <div class="aws-form-group">
-                <label class="aws-form-label">Event Venue</label>
-                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3" @bind="EventVenue"></textarea>
-            </div>
         </div>
         }
         else if (SelectedScheme == "Sathabhishekam")
@@ -572,10 +568,6 @@
                 <label class="aws-form-label">Event Date</label>
                 <input type="date" class="aws-form-control" @bind="EventDate" min="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
             </div>
-            <div class="aws-form-group">
-                <label class="aws-form-label">Event Venue</label>
-                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3" @bind="EventVenue"></textarea>
-            </div>
         </div>
         }
         else if (SelectedScheme == "Grahapravesam")
@@ -584,20 +576,6 @@
             <div class="aws-form-group">
                 <label class="aws-form-label">Housewarming Date</label>
                 <input type="date" class="aws-form-control" @bind="EventDate" min="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
-            </div>
-            <div class="aws-form-group">
-                <label class="aws-form-label">Ownership Type</label>
-                <select class="aws-form-select" @bind="OwnershipType">
-                    <option value="" disabled selected hidden>Select Ownership Type</option>
-                    <option value="Owned">Owned</option>
-                    <option value="Rented">Rented</option>
-                </select>
-            </div>
-        </div>
-        <div class="aws-form-grid-2col" style="margin-top: 24px; margin-bottom: 0;">
-            <div class="aws-form-group">
-                <label class="aws-form-label">Event Venue (if different from house address)</label>
-                <textarea class="aws-form-control" placeholder="Venue name or address" rows="3" @bind="EventVenue"></textarea>
             </div>
         </div>
         }
@@ -609,21 +587,12 @@
                 <input type="date" class="aws-form-control" @bind="DeathDateOfDeath" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
             </div>
             <div class="aws-form-group">
-                <label class="aws-form-label">Legal Heir Name</label>
-                <input type="text" class="aws-form-control" placeholder="Full Name of Legal Heir" @bind="LegalHeirName">
-            </div>
-            <div class="aws-form-group">
-                <label class="aws-form-label">Relationship to Dealer</label>
-                <select class="aws-form-select" @bind="BeneficiaryRelationship">
-                    <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="Spouse">Spouse</option>
-                    <option value="Child">Child</option>
-                    <option value="Parent">Parent</option>
+                <label class="aws-form-label">Legal Heir Relation</label>
+                <select class="aws-form-select" @bind="LegalHeirRelation">
+                    <option value="" disabled selected hidden>Select relation</option>
+                    <option value="Wife">Wife</option>
+                    <option value="Others">Others</option>
                 </select>
-            </div>
-            <div class="aws-form-group">
-                <label class="aws-form-label">Cause of Death</label>
-                <input type="text" class="aws-form-control" placeholder="e.g. Natural, Illness, Accident" @bind="DeathCause">
             </div>
         </div>
         }
@@ -643,9 +612,46 @@
                     </label>
                 </div>
             </div>
+            @if (!IsEduFirstApplication && !IsResubmissionMode)
+            {
+            <div class="aws-form-group">
+                <label class="aws-form-label">Previously Applied Educational Assistance</label>
+                @if (_isLoadingPreviousEduApps)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading previous applications...</option>
+                    </select>
+                }
+                else if (_previousEduApplications.Count == 0)
+                {
+                    <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 4px;">
+                        <div class="aws-alert-icon" style="color: #e74c3c;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                        </div>
+                        <div style="color: #c0392b;">
+                            @_noPreviousEduAppsMessage
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="SelectedPreviousEduAppId" @bind:after="OnPreviousEduAppSelected">
+                        <option value="" disabled selected hidden>Select previous application</option>
+                        @foreach (var app in _previousEduApplications)
+                        {
+                            <option value="@app.Id">@CreateEduPreviousAppLabel(app)</option>
+                        }
+                    </select>
+                }
+            </div>
+            }
             <div class="aws-form-group">
                 <label class="aws-form-label">Total Number of Courses (Duration in Years)</label>
-                <input type="number" class="aws-form-control" placeholder="e.g. 4" @bind="EduTotalCourses" min="1" max="10">
+                <input type="number" class="aws-form-control" placeholder="e.g. 4" @bind="EduTotalCourses" @bind:event="oninput" @bind:after="OnEduTotalCoursesChanged" min="1" max="10">
             </div>
             <div class="aws-form-group">
                 <label class="aws-form-label">Course</label>
@@ -655,12 +661,10 @@
                 <label class="aws-form-label">Year</label>
                 <select class="aws-form-select" @bind="EduYear">
                     <option value="" disabled selected hidden>Select year</option>
-                    <option value="1">1st Year</option>
-                    <option value="2">2nd Year</option>
-                    <option value="3">3rd Year</option>
-                    <option value="4">4th Year</option>
-                    <option value="5">5th Year</option>
-                    <option value="6">6th Year</option>
+                    @foreach (var eduYearOption in GetEduYearOptions())
+                    {
+                        <option value="@eduYearOption">@GetEduYearLabel(eduYearOption)</option>
+                    }
                 </select>
             </div>
             <div class="aws-form-group">
@@ -763,19 +767,6 @@
                     </label>
                 </div>
             </div>
-            <div class="aws-form-group">
-                <label class="aws-form-label">Are you an approved Employee of a Wholesale Dealer? (TN only)</label>
-                <div style="display: flex; gap: 16px; margin-top: 4px;">
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="radio" name="distEmployee" value="no" checked="@(DistinctionIsWholesaleEmployee == false)" @onchange="() => DistinctionIsWholesaleEmployee = false" />
-                        <span>No</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="radio" name="distEmployee" value="yes" checked="@(DistinctionIsWholesaleEmployee == true)" @onchange="() => DistinctionIsWholesaleEmployee = true" />
-                        <span>Yes</span>
-                    </label>
-                </div>
-            </div>
         </div>
         @if (DistinctionAggregatePercentage > 0 && DistinctionAggregatePercentage <= 80)
         {
@@ -847,6 +838,22 @@
                     {
                         <span class="aws-doc-skip-badge">First year – not required</span>
                     }
+                    @if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of 10th standard" && string.Equals(MeritExamination, "12th", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="aws-doc-skip-badge">Not required for 12th</span>
+                    }
+                    @if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of +2 examinations" && string.Equals(MeritExamination, "10th", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="aws-doc-skip-badge">Not required for 10th</span>
+                    }
+                    @if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs" && IsDeathReliefAffidavitRequired)
+                    {
+                        <span class="aws-doc-skip-badge" style="color:#b91c1c;background:#fee2e2;border-color:#fecaca;">Required</span>
+                    }
+                    @if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs" && !string.IsNullOrWhiteSpace(LegalHeirRelation) && !IsDeathReliefAffidavitRequired)
+                    {
+                        <span class="aws-doc-skip-badge">Not required for @LegalHeirRelation</span>
+                    }
                 </div>
                 @if (uploadedFile != null)
                 {
@@ -896,6 +903,24 @@
                     <span>Skipped – only required for renewal applications</span>
                 </div>
                 }
+                else if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of 10th standard" && string.Equals(MeritExamination, "12th", StringComparison.OrdinalIgnoreCase))
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required when 10th examination is selected</span>
+                </div>
+                }
+                else if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of +2 examinations" && string.Equals(MeritExamination, "10th", StringComparison.OrdinalIgnoreCase))
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required when 12th examination is selected</span>
+                </div>
+                }
+                else if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs" && !IsDeathReliefAffidavitRequired)
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required when the Legal Heir Relation is Others</span>
+                </div>
+                }
                 else
                 {
                 <div class="aws-doc-upload-zone">
@@ -907,6 +932,25 @@
                             <line x1="12" y1="3" x2="12" y2="15"></line>
                         </svg>
                         <span>Click to upload</span>
+                    </div>
+                </div>
+                }
+                @if (doc.Name == "Cancelled Cheque / Bank Passbook")
+                {
+                <div class="aws-doc-cheque-name">
+                    <label class="aws-form-label">Beneficiary Name *</label>
+                    <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName" />
+                </div>
+                <div class="aws-alert-info aws-doc-cheque-note" style="border-color: #e74c3c; background: #fff5f5;">
+                    <div class="aws-alert-icon" style="color: #e74c3c;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </div>
+                    <div style="color: #c0392b;">
+                        <strong>NOTE: @CancelledChequeBeneficiaryNameNote</strong>
                     </div>
                 </div>
                 }
@@ -1158,11 +1202,6 @@
                         <span class="aws-modal-colon">:</span>
                         <span class="aws-modal-value">@(DistinctionHasArrears == true ? "Yes" : "No")</span>
                     </div>
-                    <div class="aws-modal-row">
-                        <span class="aws-modal-label">Wholesale Dealer Employee (TN)</span>
-                        <span class="aws-modal-colon">:</span>
-                        <span class="aws-modal-value">@(DistinctionIsWholesaleEmployee == true ? "Yes" : "No")</span>
-                    </div>
                 </div>
                 }
 
@@ -1365,7 +1404,11 @@
     // Scheme-specific: Death Relief
     private DateTime? DeathDateOfDeath { get; set; }
     private string LegalHeirName { get; set; } = string.Empty;
+    private string LegalHeirRelation { get; set; } = string.Empty;
     private string DeathCause { get; set; } = string.Empty;
+
+    private bool IsDeathReliefAffidavitRequired =>
+        string.Equals(LegalHeirRelation, "Others", StringComparison.OrdinalIgnoreCase);
 
     // Declaration & submission state
     private bool IsDeclarationConfirmed { get; set; }
@@ -1980,11 +2023,114 @@
         }
     }
 
+    private string CancelledChequeBeneficiaryNameNote =>
+        string.IsNullOrWhiteSpace(BeneficiaryName)
+            ? "The Beneficiary Name must exactly match the name mentioned on the Cancelled Cheque / Bank Passbook."
+            : $"The Beneficiary Name \"{BeneficiaryName}\" must exactly match the name mentioned on the Cancelled Cheque / Bank Passbook.";
+
     private string EduCourse { get; set; } = string.Empty;
     private string EduYear { get; set; } = string.Empty;
     private string EduCollegeName { get; set; } = string.Empty;
     private int? EduTotalCourses { get; set; }
     private bool IsEduFirstApplication { get; set; } = true;
+
+    // Year dropdown is generated from EduTotalCourses (1st Year .. Nth Year) instead of a fixed list.
+    private IEnumerable<int> GetEduYearOptions()
+    {
+        var totalCourses = EduTotalCourses.GetValueOrDefault();
+        return totalCourses > 0 ? Enumerable.Range(1, totalCourses) : Enumerable.Empty<int>();
+    }
+
+    private static string GetEduYearLabel(int year) => year switch
+    {
+        1 => "1st Year",
+        2 => "2nd Year",
+        3 => "3rd Year",
+        _ => $"{year}th Year"
+    };
+
+    private void OnEduTotalCoursesChanged()
+    {
+        var totalCourses = EduTotalCourses.GetValueOrDefault();
+        if (int.TryParse(EduYear, out var selectedYear) && (totalCourses <= 0 || selectedYear > totalCourses))
+            EduYear = string.Empty;
+    }
+
+    // Educational Assistance renewal: previously submitted applications of the logged-in user
+    private List<EducationalApplicationSummaryDto> _previousEduApplications = new();
+    private bool _isLoadingPreviousEduApps = false;
+    private string SelectedPreviousEduAppId { get; set; } = string.Empty;
+    private string _noPreviousEduAppsMessage = string.Empty;
+
+    private async Task LoadPreviousEducationalApplications()
+    {
+        _isLoadingPreviousEduApps = true;
+        _noPreviousEduAppsMessage = string.Empty;
+        _previousEduApplications = new List<EducationalApplicationSummaryDto>();
+        SelectedPreviousEduAppId = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<EducationalApplicationSummaryDto>>(
+                "api/SDWAWelfareApplication/my-educational-applications");
+            if (result != null)
+                _previousEduApplications = result;
+        }
+        catch (Exception)
+        {
+            _previousEduApplications = new List<EducationalApplicationSummaryDto>();
+        }
+        finally
+        {
+            _isLoadingPreviousEduApps = false;
+            if (_previousEduApplications.Count == 0)
+                _noPreviousEduAppsMessage = "No previous Educational Assistance application found for renewal.";
+            StateHasChanged();
+        }
+    }
+
+    private static string CreateEduPreviousAppLabel(EducationalApplicationSummaryDto app)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(app.Course))
+            parts.Add(app.Course);
+        if (app.EduYear.HasValue)
+            parts.Add($"{app.EduYear} year");
+        if (!string.IsNullOrWhiteSpace(app.CollegeName))
+            parts.Add(app.CollegeName);
+
+        var baseText = string.Join(" - ", parts);
+        return string.IsNullOrWhiteSpace(baseText)
+            ? app.ApplicationNumber ?? $"Application #{app.Id}"
+            : $"{baseText} ({app.ApplicationNumber})";
+    }
+
+    private async Task OnPreviousEduAppSelected()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedPreviousEduAppId) ||
+            !int.TryParse(SelectedPreviousEduAppId, out var appId))
+            return;
+
+        try
+        {
+            var detail = await Http.GetFromJsonAsync<WelfareApplicationDetailDto>(
+                $"api/SDWAWelfareApplication/my-application/{appId}");
+
+            if (detail != null && detail.SchemeType == (int)WelfareSchemeType.EducationalAssistance)
+            {
+                EduTotalCourses = detail.TotalNumberOfCourses;
+                EduCourse = detail.Course ?? string.Empty;
+                EduYear = detail.EduYear?.ToString() ?? string.Empty;
+                EduCollegeName = detail.CollegeName ?? string.Empty;
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        StateHasChanged();
+    }
 
     private string MedicalTreatmentType { get; set; } = string.Empty;
 
@@ -2071,9 +2217,19 @@
         return false;
     }
 
-    private void OnEduAppTypeChanged(ChangeEventArgs e)
+    private async Task OnEduAppTypeChanged(ChangeEventArgs e)
     {
         IsEduFirstApplication = e.Value?.ToString() == "first";
+
+        if (IsEduFirstApplication)
+        {
+            SelectedPreviousEduAppId = string.Empty;
+            _noPreviousEduAppsMessage = string.Empty;
+        }
+        else
+        {
+            await LoadPreviousEducationalApplications();
+        }
     }
 
     private string MeritCandidateName { get; set; } = string.Empty;
@@ -2343,8 +2499,6 @@
             case "Sathabhishekam":
             case "Grahapravesam":
                 ValidateEventDate(errors);
-                if (SelectedScheme == "Grahapravesam" && string.IsNullOrWhiteSpace(OwnershipType))
-                    errors.Add("Ownership Type is required.");
                 break;
 
             case "Death Relief":
@@ -2353,14 +2507,8 @@
                 else if (DeathDateOfDeath.Value.Date > DateTime.Today)
                     errors.Add("Date of Death cannot be in the future.");
 
-                if (string.IsNullOrWhiteSpace(LegalHeirName))
-                    errors.Add("Legal Heir Name is required.");
-
-                if (string.IsNullOrWhiteSpace(BeneficiaryRelationship))
-                    errors.Add("Relationship to Dealer is required.");
-
-                if (string.IsNullOrWhiteSpace(DeathCause))
-                    errors.Add("Cause of Death is required.");
+                if (string.IsNullOrWhiteSpace(LegalHeirRelation))
+                    errors.Add("Please select the Legal Heir Relation.");
                 break;
 
             case "Medical Assistance":
@@ -2369,6 +2517,12 @@
                 break;
 
             case "Educational Assistance":
+                if (!IsEduFirstApplication && !IsResubmissionMode)
+                {
+                    if (string.IsNullOrWhiteSpace(SelectedPreviousEduAppId))
+                        errors.Add("Please select a previously applied Educational Assistance application for renewal.");
+                }
+
                 if (!EduTotalCourses.HasValue || EduTotalCourses.Value <= 0)
                     errors.Add("Total Number of Courses is required.");
 
@@ -2436,7 +2590,12 @@
         foreach (var doc in CurrentDocuments)
         {
             if (IsDocumentRequired(doc.Name) && !HasDocument(doc.Name))
-                errors.Add($"{doc.Name} is required.");
+            {
+                if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs")
+                    errors.Add("Please upload the affidavit for Others selected.");
+                else
+                    errors.Add($"{doc.Name} is required.");
+            }
         }
 
         // Declaration
@@ -2469,9 +2628,23 @@
             return true;
         }
 
-        if (SelectedScheme == "Death Relief" &&
-            (docName.StartsWith("Legal Heir Certificate") || docName == "Affidavit from other legal heirs"))
-            return false;
+if (SelectedScheme == "Death Relief")
+        {
+            if (docName.StartsWith("Legal Heir Certificate"))
+                return false;
+            if (docName == "Affidavit from other legal heirs")
+                return IsDeathReliefAffidavitRequired;
+            return true;
+        }
+
+        if (SelectedScheme == "Merit Award")
+        {
+            if (docName == "Marks list of 10th standard")
+                return string.Equals(MeritExamination, "10th", StringComparison.OrdinalIgnoreCase);
+            if (docName == "Marks list of +2 examinations")
+                return string.Equals(MeritExamination, "12th", StringComparison.OrdinalIgnoreCase);
+            return true;
+        }
 
         return true;
     }
@@ -2499,6 +2672,7 @@
         OwnershipType = OwnershipType,
         DateOfDeath = DeathDateOfDeath,
         LegalHeirName = LegalHeirName,
+        LegalHeirRelation = LegalHeirRelation,
         DeathCause = DeathCause,
         Course = EduCourse,
         EduYear = int.TryParse(EduYear, out var eduYear) ? eduYear : null,
@@ -2553,6 +2727,7 @@
         AddField("OwnershipType", dto.OwnershipType);
         AddField("DateOfDeath", dto.DateOfDeath?.ToString("yyyy-MM-dd"));
         AddField("LegalHeirName", dto.LegalHeirName);
+        AddField("LegalHeirRelation", dto.LegalHeirRelation);
         AddField("DeathCause", dto.DeathCause);
         AddField("Course", dto.Course);
         AddField("EduYear", dto.EduYear?.ToString());

@@ -347,7 +347,7 @@
                             </td>
                             <td>
                                 <div class="ap-row-actions">
-                                    <button class="ap-icon-btn ap-icon-view" @onclick="() => OpenDrawer(app)" title="View">
+                                    <button class="ap-icon-btn ap-icon-view" @onclick="() => OpenDetail(app)" title="View">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                                     </button>
                                 </div>
@@ -390,14 +390,12 @@
     </div>
     }
 </div>
-<SchemeApprovalDrawer IsOpen="@isDrawerOpen" ApplicationId="@_selectedId" ContextTab="@_activeTab" OnClose="CloseDrawerCallback" OnActionCompleted="OnDrawerActionCompleted" />
+
 @code {
-    private bool isDrawerOpen = false;
     private bool _loading = true;
     private string? _error;
     private WelfareApprovalPageDto? _page;
     private string _activeTab = "pending";
-    private int _selectedId;
 
     private string _search = "";
     private string _schemeFilter = "All Schemes";
@@ -407,6 +405,7 @@
 
     [Inject] private HttpClient Http { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
+    [SupplyParameterFromQuery] public string? Tab { get; set; }
 
     // Stage label for the stat card, e.g. MO / RM / SM / AVP
     private string StageLabel => loginState.UserRole switch
@@ -420,7 +419,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadPageAsync("pending");
+        await LoadPageAsync(string.IsNullOrWhiteSpace(Tab) ? "pending" : Tab);
     }
 
     private async Task LoadPageAsync(string tab)
@@ -456,26 +455,9 @@
         await LoadPageAsync(key);
     }
 
-    private void OpenDrawer(WelfareApprovalApplicationDto app)
+    private void OpenDetail(WelfareApprovalApplicationDto app)
     {
-        if (loginState.UserRole == AppRole.MO)
-        {
-            Nav.NavigateTo($"/MOApproval/{app.Id}");
-            return;
-        }
-        _selectedId = app.Id;
-        isDrawerOpen = true;
-    }
-
-    private async Task CloseDrawerCallback(bool isOpen)
-    {
-        isDrawerOpen = isOpen;
-    }
-
-    private async Task OnDrawerActionCompleted()
-    {
-        isDrawerOpen = false;
-        await LoadPageAsync(_activeTab);
+        Nav.NavigateTo($"/ApprovalDetail/{app.Id}?tab={Uri.EscapeDataString(_activeTab)}");
     }
 
     // ------------------------------------------------------------------
