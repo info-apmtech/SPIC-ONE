@@ -761,6 +761,48 @@
                     </div>
                 </div>
 
+                @if (isSpic)
+                {
+                    <div class="basic-info-card">
+                        <div class="card-header-title mb-2">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                                 class="formicon"
+                                 alt="icon" /> Security Deposit Details for SPIC
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Security Deposit Amount</label>
+                                <div class="input-icon-left-wrapper">
+                                    <span class="input-icon-left">₹</span>
+                                    <input type="number" class="form-control-custom w-100 input-with-left-icon @(_errors.ContainsKey("SpicSecurityDepositAmount") ? "is-invalid" : "")" placeholder="0.00" step="0.01" @bind="_model.SpicSecurityDepositAmount" @bind:after='() => ValidateFieldOnChange("SpicSecurityDepositAmount", (_model.SpicSecurityDepositAmount ?? 0) > 0)'>
+                                </div>
+                                @if (_errors.ContainsKey("SpicSecurityDepositAmount"))
+                                {
+                                    <div class="field-error">@_errors["SpicSecurityDepositAmount"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Security Deposit Receipt No</label>
+                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("SpicSecurityDepositReceiptNo") ? "is-invalid" : "")" @bind="_model.SpicSecurityDepositReceiptNo" @bind:after='() => ValidateFieldOnChange("SpicSecurityDepositReceiptNo", !string.IsNullOrWhiteSpace(_model.SpicSecurityDepositReceiptNo))' placeholder="Enter Security Deposit Receipt Number">
+                                @if (_errors.ContainsKey("SpicSecurityDepositReceiptNo"))
+                                {
+                                    <div class="field-error">@_errors["SpicSecurityDepositReceiptNo"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Security Deposit Date</label>
+                                <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SpicSecurityDepositDate") ? "is-invalid" : "")"
+                                       value="@_securityDepositDateText"
+                                       @onchange="OnSecurityDepositDateChanged">
+                                @if (_errors.ContainsKey("SpicSecurityDepositDate"))
+                                {
+                                    <div class="field-error">@_errors["SpicSecurityDepositDate"]</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
                 @if (isSpic && !IsNewDealerFlow)
                 {
                     <div class="basic-info-card">
@@ -1563,6 +1605,7 @@
     private string _settlementDateText = "";
     private string _tradeDepositDateText = "";
     private string _greenstarTradeDepositDateText = "";
+    private string _securityDepositDateText = "";
     private string _wholesaleLicenseExpiryDateText = "";
     private string _retailLicenseExpiryDateText = "";
     private string _latitudeLongitudeText = "";
@@ -3349,6 +3392,7 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
         _settlementDateText = Fmt(_model.SettlementDate);
         _tradeDepositDateText = Fmt(_model.TradeDepositDate);
         _greenstarTradeDepositDateText = Fmt(_model.GreenstarTradeDepositDateReg);
+        _securityDepositDateText = Fmt(_model.SpicSecurityDepositDate);
         _wholesaleLicenseExpiryDateText = Fmt(_model.WholesaleLicenseExpiryDate);
         _retailLicenseExpiryDateText = Fmt(_model.RetailLicenseExpiryDate);
     }
@@ -3486,6 +3530,24 @@ private void OnGreenstarDateOfAppointmentChanged(ChangeEventArgs e)
         {
             _model.GreenstarTradeDepositDateReg = dt;
             ValidateFieldOnChange("GreenstarTradeDepositDateReg", true);
+        }
+    }
+
+    private void OnSecurityDepositDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _securityDepositDateText = "";
+            _model.SpicSecurityDepositDate = null;
+            return;
+        }
+
+        _securityDepositDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.SpicSecurityDepositDate = dt;
+            ValidateFieldOnChange("SpicSecurityDepositDate", true);
         }
     }
 
@@ -3628,6 +3690,9 @@ private void OnGreenstarDateOfAppointmentChanged(ChangeEventArgs e)
         public decimal? GreenstarTradeDepositAmountReg { get; set; }
         public string? GreenstarTradeDepositReceiptNoReg { get; set; }
         public DateTime? GreenstarTradeDepositDateReg { get; set; }
+        public decimal? SpicSecurityDepositAmount { get; set; }
+        public string? SpicSecurityDepositReceiptNo { get; set; }
+        public DateTime? SpicSecurityDepositDate { get; set; }
        public string? GSTLegalName { get; set; }
 public string? GSTTradeName { get; set; }
 public string? GSTConstitutionofBusiness { get; set; }
