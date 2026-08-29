@@ -463,10 +463,15 @@
                                     }
                                 </label>
                                 <input type="text"
-                                       class="form-control-custom w-100"
+                                       class="form-control-custom w-100 @(_errors.ContainsKey("GoogleMapURL") ? "is-invalid" : "")"
                                        @bind="_model.GoogleMapURL"
                                        @bind:after="OnGoogleMapUrlChanged"
                                        placeholder="Click map or Paste Google Maps link" />
+
+                                @if (_errors.TryGetValue("GoogleMapURL", out var googleMapError))
+                                {
+                                    <div class="field-error">@googleMapError</div>
+                                }
                             </div>
 
                             <div class="col-12 col-sm-6">
@@ -521,8 +526,13 @@
                                     }
                                 </label>
                                 <input type="text"
-                                       class="form-control-custom w-100"
+                                       class="form-control-custom w-100 @(_errors.ContainsKey("Street") ? "is-invalid" : "")"
                                        @bind="_model.Street" />
+
+                                @if (_errors.TryGetValue("Street", out var streetError))
+                                {
+                                    <div class="field-error">@streetError</div>
+                                }
                             </div>
 
                             <div class="col-12 col-sm-6">
@@ -534,9 +544,14 @@
                                     }
                                 </label>
                                 <input type="text"
-                                       class="form-control-custom w-100"
+                                       class="form-control-custom w-100 @(_errors.ContainsKey("SubVillage") ? "is-invalid" : "")"
                                        @bind="_model.SubVillage"
                                        placeholder="Enter Sub Village" />
+
+                                @if (_errors.TryGetValue("SubVillage", out var subVillageError))
+                                {
+                                    <div class="field-error">@subVillageError</div>
+                                }
                             </div>
 
                             <div class="col-12 col-sm-6">
@@ -607,9 +622,14 @@
                             }
                         </label>
                         <input type="text"
-                               class="form-control-custom w-100"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("Block") ? "is-invalid" : "")"
                                @bind="_model.Block"
                                placeholder="Enter Block" />
+
+                        @if (_errors.TryGetValue("Block", out var blockError))
+                        {
+                            <div class="field-error">@blockError</div>
+                        }
                     </div>
 
                     <div class="col-6 col-sm-6 col-md-3">
@@ -621,9 +641,14 @@
                             }
                         </label>
                         <input type="text"
-                               class="form-control-custom w-100"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("Taluk") ? "is-invalid" : "")"
                                @bind="_model.Taluk"
                                placeholder="Enter Taluk" />
+
+                        @if (_errors.TryGetValue("Taluk", out var talukError))
+                        {
+                            <div class="field-error">@talukError</div>
+                        }
                     </div>
 
                     <div class="col-12 col-sm-6 col-md-3">
@@ -771,12 +796,17 @@
                         <input type="tel"
                                inputmode="numeric"
                                pattern="[0-9]*"
-                               class="form-control-custom w-100"
+                               class="form-control-custom w-100 @(_errors.ContainsKey("AlternativeNumber") ? "is-invalid" : "")"
                                @bind="_model.AlternativeNumber"
                                @bind:after="SanitizeAlternativeNumber"
                                placeholder="10-digit mobile number"
                                maxlength="10"
                                oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+
+                        @if (_errors.TryGetValue("AlternativeNumber", out var alternativeNumberError))
+                        {
+                            <div class="field-error">@alternativeNumberError</div>
+                        }
                     </div>
                 </div>
             </div>
@@ -1609,7 +1639,16 @@
         // If validation was already triggered while Active, remove those
         // red errors immediately when the record becomes Inactive.
         if (!IsActiveSubDealer)
+        {
             ClearActiveOnlyValidationErrors();
+        }
+        else
+        {
+            // When switching to Active, immediately validate so the UI shows
+            // the newly-required fields (asterisks) without waiting for submit.
+            Validate();
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     private void ClearActiveOnlyValidationErrors()
@@ -1625,6 +1664,12 @@
             "DealerStateId",
             "OfficialContactNumber",
             "WhatsAppNumber",
+            "AlternativeNumber",
+            "GoogleMapURL",
+            "Street",
+            "SubVillage",
+            "Block",
+            "Taluk",
             "WholesaleMFMSId",
             "RetailMFMSId",
             "PANNo",
@@ -2420,6 +2465,21 @@
             if (string.IsNullOrWhiteSpace(_model.Village))
                 _errors["Village"] = "Village is required";
 
+            if (string.IsNullOrWhiteSpace(_model.GoogleMapURL))
+                _errors["GoogleMapURL"] = "Google Map URL is required";
+
+            if (string.IsNullOrWhiteSpace(_model.Street))
+                _errors["Street"] = "Street is required";
+
+            if (string.IsNullOrWhiteSpace(_model.SubVillage))
+                _errors["SubVillage"] = "Sub Village is required";
+
+            if (string.IsNullOrWhiteSpace(_model.Block))
+                _errors["Block"] = "Block is required";
+
+            if (string.IsNullOrWhiteSpace(_model.Taluk))
+                _errors["Taluk"] = "Taluk is required";
+
             if (!_model.Latitude.HasValue)
                 _errors["Latitude"] =
                     "Latitude is required (click the map or use current location)";
@@ -2465,6 +2525,17 @@
             {
                 _errors["WhatsAppNumber"] =
                     "WhatsApp Number must be 10 digits";
+            }
+
+            if (string.IsNullOrWhiteSpace(_model.AlternativeNumber))
+            {
+                _errors["AlternativeNumber"] =
+                    "Alternative Number is required for Active Sub Dealer";
+            }
+            else if (_model.AlternativeNumber.Length != 10)
+            {
+                _errors["AlternativeNumber"] =
+                    "Alternative Number must be 10 digits";
             }
 
             if (string.IsNullOrWhiteSpace(_model.RetailMFMSId))
@@ -2526,6 +2597,13 @@
             {
                 _errors["WhatsAppNumber"] =
                     "WhatsApp Number must be 10 digits";
+            }
+
+            if (!string.IsNullOrWhiteSpace(_model.AlternativeNumber) &&
+                _model.AlternativeNumber.Length != 10)
+            {
+                _errors["AlternativeNumber"] =
+                    "Alternative Number must be 10 digits";
             }
 
             if (!string.IsNullOrWhiteSpace(_model.GSTNumber) &&

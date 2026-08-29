@@ -4308,6 +4308,24 @@ else
             _message = null;
             _editingCreatedAt ??= DateTime.Now;
 
+            // Editing an existing record: upload newly selected documents BEFORE the
+            // metadata PUT so the saved record references the new file paths. Without
+            // this, a replace (remove old + pick new) would clear the path on the
+            // intermediate PUT and fail the Active required-documents validation.
+            if (_isEditing && _editingId.HasValue && HasFilesWaitingForUpload)
+            {
+                _isUploadingDocuments = true;
+                var preUploadOk = await UploadSelectedDocumentsAsync(_editingId.Value);
+                _isUploadingDocuments = false;
+
+                if (!preUploadOk)
+                {
+                    ShowMessage($"{ActiveTabDisplayName} was not saved because one or more documents failed to upload.", true);
+                    await LoadData();
+                    return;
+                }
+            }
+
             HttpResponseMessage response = ActiveTab switch
             {
                 "Warehouse" => await SaveWarehouse(),
