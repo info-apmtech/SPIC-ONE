@@ -306,6 +306,55 @@ else
             </div>
         }
 
+        <!-- ===================== ELIGIBILITY CONDITION VERIFICATION (MO - DIRECT DEALER ONLY) ===================== -->
+        @if (ShowEligibilityVerification)
+        {
+            <div class="apd-section">
+                <div class="apd-section-head">
+                    <h3>Eligibility Condition Verification</h3>
+                </div>
+
+                @if (_proprietorInfoLoading)
+                {
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+                        <span style="color:#64748B;">Loading dealer proprietor information…</span>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_proprietorInfoError))
+                {
+                    <div class="apd-alert apd-alert-danger">@_proprietorInfoError</div>
+                }
+                else
+                {
+                    <div class="apd-fields-grid apd-fields-3">
+                        <div class="apd-field"><label>Applicant Category</label><div class="apd-field-value">@ApplicantCategoryDisplay</div></div>
+                        <div class="apd-field"><label>Nominee (matched)</label><div class="apd-field-value">@(string.IsNullOrWhiteSpace(d.NomineeName) ? "-" : d.NomineeName)</div></div>
+                        <div class="apd-field"><label>Applicable Condition</label><div class="apd-field-value">@EligibilityCriterionDisplay</div></div>
+                        <div class="apd-field"><label>Current Sales / Registration</label><div class="apd-field-value">@EligibilityActualDisplay</div></div>
+                    </div>
+                    @if (MeetsEligibilityCondition)
+                    {
+                        <div class="apd-alert apd-alert-success">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            <span><strong>Meets eligibility condition.</strong> The dealer satisfies the @ApplicantCategoryDisplay condition.</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="apd-alert apd-alert-danger">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                            <span><strong>Does not meet eligibility condition.</strong> The dealer does not satisfy the @ApplicantCategoryDisplay condition.</span>
+                        </div>
+                    }
+                }
+            </div>
+        }
+
         <!-- ===================== SCHEME SPECIFIC ===================== -->
         <div class="apd-section">
             <h3>Scheme Specific Details</h3>
@@ -578,6 +627,14 @@ else
     private List<SPIC.Core.DTOs.DealerSalesProductDto> _dealerProductSales = new();
     private int _dealerSalesLoadedForId;
 
+    // Dealer / proprietor information used for MO eligibility verification.
+    // Loaded from the same dealer-registration and ownership endpoints used by the Proprietor page.
+    private bool _proprietorInfoLoading;
+    private string? _proprietorInfoError;
+    private int _proprietorLoadedForDealerId;
+    private DealerRegistration? _dealer;
+    private List<DealerOwnershipInfo> _ownershipPartners = new();
+
     private bool IsApproveModalOpen { get; set; }
     private bool IsRejectModalOpen { get; set; }
 
@@ -623,6 +680,7 @@ else
                 $"api/WelfareSchemeApproval/applications/{id}");
             _loadedForId = id;
             await LoadDealerSalesIfNeeded();
+            await LoadProprietorInfoIfNeeded();
         }
         catch
         {
@@ -658,6 +716,160 @@ else
             _dealerSalesLoading = false;
         }
     }
+
+    private async Task LoadProprietorInfoIfNeeded()
+    {
+        if (!IsMoStage || _detail == null || _detail.DealerId <= 0) return;
+        if (_proprietorLoadedForDealerId == _detail.DealerId) return;
+
+        _proprietorInfoLoading = true;
+        _proprietorInfoError = null;
+        try
+        {
+            var dealerTask = Http.GetFromJsonAsync<DealerRegistration>($"api/DealerRegistration/{_detail.DealerId}");
+            var ownersTask = Http.GetFromJsonAsync<List<DealerOwnershipInfo>>($"api/DealerOwnershipInfo/byDealer/{_detail.DealerId}");
+
+            await Task.WhenAll(dealerTask, ownersTask);
+
+            _dealer = dealerTask.Result;
+            _ownershipPartners = ownersTask.Result ?? new();
+            _proprietorLoadedForDealerId = _detail.DealerId;
+        }
+        catch
+        {
+            _proprietorInfoError = "Unable to load dealer/proprietor information.";
+        }
+        finally
+        {
+            _proprietorInfoLoading = false;
+        }
+    }
+
+    // =====================================================================
+    // MO Eligibility Condition Verification (Direct Dealer applications only)
+    //
+    // The applicable condition depends on the applicant category, which is
+    // derived exclusively from the Proprietor-page data (dealer entity type +
+    // saved owner list) matched against the application's nominee:
+    //   - Proprietorship        : sole proprietor whose name matches the nominee
+    //   - Managing Partner      : first saved owner of a Partnership
+    //   - Other Partner         : any remaining saved owner of a Partnership
+    //   - Dealership            : everything else (firm itself / other entity types)
+    // =====================================================================
+
+    private enum DealerApplicantCategory
+    {
+        Proprietorship,
+        ManagingPartner,
+        OtherPartner,
+        Dealership
+    }
+
+    private const decimal ProprietorshipFertilizerThresholdMt = 100m;
+    private const decimal ProprietorshipSpTurnoverLakhs = 3m;
+    private const decimal OtherPartnerFertilizerThresholdMt = 1000m;
+    private const decimal OtherPartnerSpTurnoverLakhs = 30m;
+    private const int DealershipMinimumYears = 1;
+
+    private bool ShowEligibilityVerification =>
+        IsMoStage &&
+        _detail != null &&
+        _detail.DealerId > 0 &&
+        string.Equals(_detail.BeneficiaryGroup, "Direct Dealer", StringComparison.OrdinalIgnoreCase);
+
+    private DealerApplicantCategory ApplicantCategory
+    {
+        get
+        {
+            var nominee = _detail?.NomineeName?.Trim() ?? string.Empty;
+            var entityType = _dealer?.EntityType;
+
+            if (entityType == EntityType.soleProprietor)
+            {
+                return _ownershipPartners.Any(o =>
+                        string.Equals((o.Name ?? string.Empty).Trim(), nominee, StringComparison.OrdinalIgnoreCase))
+                    ? DealerApplicantCategory.Proprietorship
+                    : DealerApplicantCategory.Dealership;
+            }
+
+            if (entityType == EntityType.Partnership)
+            {
+                var firstOwner = _ownershipPartners.FirstOrDefault();
+                if (firstOwner != null &&
+                    string.Equals((firstOwner.Name ?? string.Empty).Trim(), nominee, StringComparison.OrdinalIgnoreCase))
+                {
+                    return DealerApplicantCategory.ManagingPartner;
+                }
+                if (_ownershipPartners.Skip(1).Any(o =>
+                        string.Equals((o.Name ?? string.Empty).Trim(), nominee, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return DealerApplicantCategory.OtherPartner;
+                }
+                return DealerApplicantCategory.Dealership;
+            }
+
+            // LLP / Pvt Ltd / Pub Ltd / Society / unresolvable => the dealership itself
+            return DealerApplicantCategory.Dealership;
+        }
+    }
+
+    // Earliest date the dealership was registered with any company (SPIC or GreenStar).
+    private DateTime? DealerRegistrationDate
+    {
+        get
+        {
+            var spic = _dealer != null && _dealer.DateOfAppointment > DateTime.MinValue
+                ? _dealer.DateOfAppointment
+                : (DateTime?)null;
+            var greenStar = _dealer?.GreenstarDateOfAppointment;
+
+            if (spic.HasValue && greenStar.HasValue)
+                return spic.Value <= greenStar.Value ? spic.Value : greenStar.Value;
+            return spic ?? greenStar;
+        }
+    }
+
+    private decimal FertilizerLiftingMt =>
+        DealerSalesCalculator.GetThreeYearTotal(_dealerProductSales, _dealerAvailableYears);
+
+    private decimal SpTurnoverLakhs =>
+        DealerSalesCalculator.GetThreeYearTurnover(_dealerProductSales, _dealerAvailableYears);
+
+    private bool MeetsEligibilityCondition => ApplicantCategory switch
+    {
+        DealerApplicantCategory.Proprietorship or DealerApplicantCategory.ManagingPartner =>
+            FertilizerLiftingMt >= ProprietorshipFertilizerThresholdMt || SpTurnoverLakhs >= ProprietorshipSpTurnoverLakhs,
+        DealerApplicantCategory.OtherPartner =>
+            FertilizerLiftingMt >= OtherPartnerFertilizerThresholdMt || SpTurnoverLakhs >= OtherPartnerSpTurnoverLakhs,
+        _ => DealerRegistrationDate.HasValue &&
+             DealerRegistrationDate.Value <= DateTime.Today.AddYears(-DealershipMinimumYears)
+    };
+
+    private string ApplicantCategoryDisplay => ApplicantCategory switch
+    {
+        DealerApplicantCategory.Proprietorship => "Proprietorship",
+        DealerApplicantCategory.ManagingPartner => "Managing Partner",
+        DealerApplicantCategory.OtherPartner => "Other Partner",
+        _ => "Dealership"
+    };
+
+    private string EligibilityCriterionDisplay => ApplicantCategory switch
+    {
+        DealerApplicantCategory.Proprietorship or DealerApplicantCategory.ManagingPartner =>
+            $"3-year average of either {ProprietorshipFertilizerThresholdMt:0.##} MT of fertilizers OR Rs. {ProprietorshipSpTurnoverLakhs:0.##} Lakhs of Specialty Products",
+        DealerApplicantCategory.OtherPartner =>
+            $"3-year average of either {OtherPartnerFertilizerThresholdMt:0.##} MT of fertilizers OR Rs. {OtherPartnerSpTurnoverLakhs:0.##} Lakhs of Specialty Products",
+        _ => $"Dealership registered for a minimum of {DealershipMinimumYears} year"
+    };
+
+    private string EligibilityActualDisplay => ApplicantCategory switch
+    {
+        DealerApplicantCategory.Dealership =>
+            DealerRegistrationDate.HasValue
+                ? $"Registered on {DealerRegistrationDate.Value:dd/MM/yyyy} (earliest of SPIC / GreenStar)"
+                : "Dealer registration date not available",
+        _ => $"Fertilizer lifting: {FormatQty(FertilizerLiftingMt)} MT | SP turnover: Rs. {FormatLakhs(SpTurnoverLakhs)} Lakhs"
+    };
 
     // Roll-up logic is shared with the ApplyWelfareScheme page (DealerSalesCalculator)
     // so both pages always present the same figures for the same dealer.
