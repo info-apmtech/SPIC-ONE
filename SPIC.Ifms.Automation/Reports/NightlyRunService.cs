@@ -39,6 +39,13 @@ namespace SPIC.Ifms.Automation.Reports
 	/// </summary>
 	public sealed class NightlyRunService : INightlyRunService
 	{
+		/// <summary>
+		/// How many times one account may sign in again during a single run. Enough
+		/// to survive a couple of expiries across a long night, few enough that a
+		/// login which is genuinely broken stops rather than looping.
+		/// </summary>
+		private const int MaxReLoginsPerAccount = 3;
+
 		private readonly IServiceScopeFactory _scopeFactory;
 		private readonly ISiteProbe _siteProbe;
 		private readonly IReportImporter _importer;
@@ -501,6 +508,7 @@ namespace SPIC.Ifms.Automation.Reports
 			CancellationToken cancellationToken)
 		{
 			var reports = new List<ReportSummary>();
+			var reLogins = 0;
 
 			await using var scope = _scopeFactory.CreateAsyncScope();
 			await using var portal = scope.ServiceProvider.GetRequiredService<IfmsPortalClient>();
@@ -530,6 +538,33 @@ namespace SPIC.Ifms.Automation.Reports
 					portal, runId, account, job, reportDate, cancellationToken);
 
 				reports.AddRange(summaries);
+
+				// Between jobs is the cheap place to notice a lapsed session: the
+				// check costs nothing when it passes, and catching it here means at
+				// most one job's worth of work is lost rather than every remaining one.
+				if (summaries.Any(r => r.Status != IfmsRunStatus.Succeeded) &&
+					reLogins < MaxReLoginsPerAccount &&
+					!await portal.IsSignedInAsync(cancellationToken))
+				{
+					reLogins++;
+
+					_logger.LogWarning(
+						"The {Company} session has lapsed part-way through the run; signing in again " +
+						"(attempt {Attempt} of {Max}).",
+						account.CompanyName, reLogins, MaxReLoginsPerAccount);
+
+					var again = await portal.LoginAsync(account, runId, cancellationToken);
+
+					if (!again.Success)
+					{
+						_logger.LogError(
+							"Could not sign back in as {Company}; abandoning its remaining reports. {Reason}",
+							account.CompanyName, again.FailureReason);
+						break;
+					}
+
+					_logger.LogInformation("Signed back in as {Company}; carrying on.", account.CompanyName);
+				}
 			}
 
 			return new AccountOutcome(

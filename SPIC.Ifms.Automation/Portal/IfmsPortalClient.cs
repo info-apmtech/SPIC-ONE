@@ -688,6 +688,18 @@ namespace SPIC.Ifms.Automation.Portal
 			};
 		}
 
+		/// <summary>
+		/// Whether the portal still considers us signed in.
+		///
+		/// Worth asking mid-run now that fetching every state for both companies
+		/// takes hours rather than minutes: a session that lapses at 05:30 would
+		/// otherwise fail every remaining report in silence, and the morning would
+		/// show a hundred identical errors with no clue that one expiry caused
+		/// them all.
+		/// </summary>
+		public Task<bool> IsSignedInAsync(CancellationToken cancellationToken) =>
+			IsLoggedInAsync(cancellationToken);
+
 		private async Task<bool> IsLoggedInAsync(CancellationToken cancellationToken)
 		{
 			try
