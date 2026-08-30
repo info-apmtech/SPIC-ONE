@@ -1,0 +1,245 @@
+﻿using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services;
+using SPIC.Core.Interfaces;
+using SPIC.Ifms.Automation.Alerts;
+using SPIC.Ifms.Automation.Options;
+using SPIC.Ifms.Automation.Portal;
+using SPIC.Ifms.Automation.Portal.Challenges;
+using SPIC.Ifms.Automation.Reports;
+using SPIC.Ifms.Automation.Scheduling;
+using SPIC.Ifms.Automation.Tools;
+
+// Matches SpicAPI: the existing entities store naive DateTimes and Npgsql 6+
+// would otherwise reject every write.
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddHttpClient();
+
+// ------------------------------------------------------------------ options
+
+builder.Services.Configure<IfmsOptions>(
+	builder.Configuration.GetSection(IfmsOptions.SectionName));
+builder.Services.Configure<ScheduleOptions>(
+	builder.Configuration.GetSection(ScheduleOptions.SectionName));
+builder.Services.Configure<ReportJobsOptions>(
+	builder.Configuration.GetSection(ReportJobsOptions.SectionName));
+builder.Services.Configure<AlertOptions>(
+	builder.Configuration.GetSection(AlertOptions.SectionName));
+
+// --------------------------------------------------------- data protection
+//
+// Portal passwords are stored encrypted, and these keys decrypt them. They live
+// in the database, not on disk, because SpicAPI and this service run on
+// different machines and both need to read the same passwords — a shared folder
+// cannot span those hosts, a shared database already does.
+//
+// The application name is part of the key derivation, so it must match SpicAPI
+// exactly or neither can read what the other wrote.
+
+// ----------------------------------------------------------------- database
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+	options.UseNpgsql(
+		builder.Configuration.GetConnectionString("DefaultConnection"),
+		npgsql =>
+		{
+			npgsql.MigrationsAssembly("Spic.Infrastructure");
+			npgsql.CommandTimeout(600);
+		}));
+
+// The import path is shared with the manual upload page on purpose, so an
+// automated import and a hand upload can never diverge.
+builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
+builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
+
+// ---------------------------------------------------------------- automation
+
+builder.Services.AddSingleton<ISiteProbe, SiteProbe>();
+
+builder.Services.AddSingleton<ICaptchaSolver, HtmlTextCaptchaSolver>();
+builder.Services.AddSingleton<ICaptchaSolver, OcrCaptchaSolver>();
+builder.Services.AddSingleton<OperatorCaptchaSolver>();
+
+builder.Services.AddSingleton<IOtpProvider>(sp =>
+{
+	var strategy = builder.Configuration["Ifms:Otp:Strategy"] ?? "SmsRelay";
+
+	return strategy.Equals("NotRequired", StringComparison.OrdinalIgnoreCase)
+		? ActivatorUtilities.CreateInstance<NoOtpProvider>(sp)
+		: ActivatorUtilities.CreateInstance<SmsRelayOtpProvider>(sp);
+});
+
+builder.Services.AddScoped<IfmsPortalClient>();
+builder.Services.AddSingleton<IReportImporter, ReportImporter>();
+builder.Services.AddSingleton<INightlyRunService, NightlyRunService>();
+
+// -------------------------------------------------------------------- alerts
+
+builder.Services.AddSingleton<PushAlertSink>();
+builder.Services.AddSingleton<IAlertSink, EmailAlertSink>();
+builder.Services.AddSingleton<IAlertSink>(sp => sp.GetRequiredService<PushAlertSink>());
+builder.Services.AddSingleton<IAlertSink, WhatsAppAlertSink>();
+
+// The CAPTCHA prompt rides the push channel when it is on; otherwise it is a
+// no-op and the app's polling is the only way the prompt is seen.
+builder.Services.AddSingleton<IChallengeNotifier>(sp =>
+{
+	var push = sp.GetRequiredService<PushAlertSink>();
+	return push.Enabled ? push : new NullChallengeNotifier();
+});
+
+builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
+
+// ------------------------------------------------------------------- workers
+//
+// The calibration tool runs instead of the schedule, not alongside it, so that
+// "dotnet run -- test-captcha" never fires a real download.
+
+var command = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
+var isTool = command is "test-captcha" or "set-credentials" or "list-credentials";
+
+if (!isTool)
+{
+	builder.Services.AddHostedService<DailyScheduleWorker>();
+	builder.Services.AddHostedService<ManualTriggerWorker>();
+}
+
+var host = builder.Build();
+
+if (command is "set-credentials" or "list-credentials")
+	return await RunCredentialsCommandAsync(host.Services, command, args);
+
+if (command == "test-captcha")
+{
+	// test-captcha replay <folder>   re-reads images captured by an earlier run
+	// test-captcha [n]               fetches n fresh images from the portal
+	if (args.Length > 2 && args[1].Equals("replay", StringComparison.OrdinalIgnoreCase))
+	{
+		return await CaptchaCalibrationTool.ReplayAsync(
+			host.Services,
+			args[2],
+			CancellationToken.None);
+	}
+
+	var sampleSize = args.Length > 1 && int.TryParse(args[1], out var parsed) ? parsed : 25;
+
+	return await CaptchaCalibrationTool.RunAsync(
+		host.Services,
+		Math.Clamp(sampleSize, 1, 200),
+		CancellationToken.None);
+}
+
+var logger = host.Services.GetRequiredService<ILogger<Program>>();
+logger.LogInformation("SPIC IFMS automation starting.");
+
+ValidateConfiguration(host.Services, logger);
+
+host.Run();
+return 0;
+
+/// <summary>
+/// Manages the portal logins from the command line, which is how they get set on
+/// a server with no browser to hand:
+///
+///   dotnet run -- set-credentials spic 1000249825 "the-password" "SPIC"
+///   dotnet run -- list-credentials
+///
+/// The password is encrypted before it touches the database, and never printed.
+/// </summary>
+static async Task<int> RunCredentialsCommandAsync(
+	IServiceProvider services,
+	string command,
+	string[] args)
+{
+	await using var scope = services.CreateAsyncScope();
+	var store = scope.ServiceProvider.GetRequiredService<IIfmsAccountStore>();
+
+	if (command == "list-credentials")
+	{
+		var accounts = await store.GetActiveAsync(CancellationToken.None);
+
+		if (accounts.Count == 0)
+		{
+			Console.WriteLine("No portal logins are configured.");
+			Console.WriteLine("Add one with: dotnet run -- set-credentials <key> <username> <password> [company]");
+			return 0;
+		}
+
+		Console.WriteLine($"{"KEY",-14}{"COMPANY",-20}{"USERNAME",-16}PASSWORD EXPIRES");
+
+		foreach (var account in accounts)
+		{
+			var expiry = account.PasswordExpired
+				? $"EXPIRED {account.PasswordExpiresAt:dd MMM yyyy}"
+				: $"{account.PasswordExpiresAt:dd MMM yyyy} ({account.DaysUntilPasswordExpires} days)";
+
+			Console.WriteLine(
+				$"{account.AccountKey,-14}{account.CompanyName,-20}{account.UserName,-16}{expiry}");
+		}
+
+		return 0;
+	}
+
+	if (args.Length < 4)
+	{
+		Console.WriteLine("Usage: dotnet run -- set-credentials <key> <username> <password> [company]");
+		Console.WriteLine("Example: dotnet run -- set-credentials spic 1000249825 \"â€¦\" SPIC");
+		return 1;
+	}
+
+	var key = args[1];
+	var userName = args[2];
+	var password = args[3];
+	var company = args.Length > 4 ? args[4] : key.ToUpperInvariant();
+
+	await store.SetCredentialsAsync(
+		key, company, userName, password,
+		changedBy: Environment.UserName,
+		reason: "Manual",
+		CancellationToken.None);
+
+	Console.WriteLine($"Saved the login for {company} ({userName}).");
+	Console.WriteLine("The 80-day password clock starts now.");
+	return 0;
+}
+
+/// <summary>
+/// Fails loudly at startup rather than at 04:05. A missing password discovered
+/// now is a two-minute fix; discovered in the small hours it costs a day of data.
+/// </summary>
+static void ValidateConfiguration(IServiceProvider services, ILogger logger)
+{
+	var config = services.GetRequiredService<IConfiguration>();
+	var problems = new List<string>();
+
+	if (string.IsNullOrWhiteSpace(config.GetConnectionString("DefaultConnection")))
+		problems.Add("ConnectionStrings:DefaultConnection is not set.");
+
+	if (string.IsNullOrWhiteSpace(config["Ifms:BaseUrl"]))
+		problems.Add("Ifms:BaseUrl is not set.");
+
+	if (!config.GetSection("ReportJobs:Jobs").GetChildren().Any())
+		problems.Add("ReportJobs:Jobs is empty, so there is nothing to download.");
+
+	foreach (var problem in problems)
+		logger.LogError("Configuration problem: {Problem}", problem);
+
+	if (problems.Count > 0)
+	{
+		logger.LogError(
+			"{Count} configuration problem(s) found. The service will keep running so you can fix " +
+			"appsettings.json and restart, but the scheduled run will fail until they are resolved.",
+			problems.Count);
+	}
+}

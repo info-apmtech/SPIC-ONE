@@ -1,3 +1,4 @@
+﻿using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,7 @@ using static SPIC.Core.Entities.EmployeeRegistration;
 
 namespace Spic.Infrastructure.Data
 {
-    public class AppDbContext : IdentityDbContext<UserInfo>
+    public class AppDbContext : IdentityDbContext<UserInfo>, IDataProtectionKeyContext
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
@@ -44,6 +45,36 @@ namespace Spic.Infrastructure.Data
                 new LyingWithMaster { Id = 3, Name = "Rake Point", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" },
                 new LyingWithMaster { Id = 4, Name = "Warehouse", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" }
             );
+
+            // IFMS nightly automation
+            builder.Entity<IfmsAutomationReportRun>()
+                .HasOne(r => r.Run)
+                .WithMany(r => r.Reports)
+                .HasForeignKey(r => r.RunId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<IfmsAutomationRun>()
+                .HasIndex(r => new { r.ReportDate, r.StartedAt });
+
+            builder.Entity<IfmsAutomationReportRun>()
+                .HasIndex(r => new { r.RunId, r.JobKey });
+
+            // The OTP poller reads unconsumed messages newest-first every second.
+            builder.Entity<IfmsOtpMessage>()
+                .HasIndex(o => new { o.ConsumedAt, o.ReceivedAt });
+
+            builder.Entity<IfmsPortalSession>()
+                .HasIndex(s => new { s.PortalUserName, s.IsActive });
+
+            builder.Entity<IfmsChallengeRequest>()
+                .HasIndex(c => new { c.Status, c.CreatedAt });
+
+            builder.Entity<IfmsPortalAccount>()
+                .HasIndex(a => a.AccountKey)
+                .IsUnique();
+
+            builder.Entity<IfmsPasswordChange>()
+                .HasIndex(c => new { c.AccountId, c.ChangedAt });
         }
 
         // User related
@@ -148,6 +179,27 @@ namespace Spic.Infrastructure.Data
 
 		//// Contact Us
 		//public DbSet<ContactUsMessage> ContactUsMessages { get; set; }
+
+		// IFMS nightly automation
+		public DbSet<IfmsAutomationRun> IfmsAutomationRuns { get; set; }
+		public DbSet<IfmsAutomationReportRun> IfmsAutomationReportRuns { get; set; }
+		public DbSet<IfmsOtpMessage> IfmsOtpMessages { get; set; }
+		public DbSet<IfmsPortalSession> IfmsPortalSessions { get; set; }
+		public DbSet<IfmsChallengeRequest> IfmsChallengeRequests { get; set; }
+		/// <summary>
+		/// Encryption keys for the stored IFMS portal passwords.
+		///
+		/// They live in the database rather than on disk because SpicAPI and the
+		/// automation service run on different machines and both have to read the
+		/// same passwords. A shared folder cannot span those hosts; a shared
+		/// database already does. It also means an ordinary database backup covers
+		/// the keys, instead of a directory somebody has to remember to copy.
+		/// </summary>
+		public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>
+			DataProtectionKeys { get; set; }
+
+		public DbSet<IfmsPortalAccount> IfmsPortalAccounts { get; set; }
+		public DbSet<IfmsPasswordChange> IfmsPasswordChanges { get; set; }
 
 	}
 }

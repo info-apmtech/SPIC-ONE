@@ -1,4 +1,5 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -43,6 +44,7 @@ builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
 builder.Services.AddScoped<IUserService, UserService>();
 //builder.Services.AddScoped<ILocationService, LocationImplementation>();
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
+builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IStockReportService, StockReportService>();
 builder.Services.AddScoped<IPendingAckService, PendingAckService>();
@@ -51,6 +53,14 @@ builder.Services.AddScoped<IAckCycleService, AckCycleService>();
 builder.Services.AddScoped<ILiquidationCycleService, LiquidationCycleService>();
 builder.Services.AddScoped<IProductStockAvailabilityService, ProductStockAvailabilityService>();
 builder.Services.AddScoped<IStockDetailsService, StockDetailsService>();
+
+// Shares the IFMS portal-password encryption keys with the automation service.
+// The application name is part of the key derivation, so it must match the
+// automation exactly or neither can read what the other wrote.
+builder.Services
+    .AddDataProtection()
+    .SetApplicationName("SPIC.Ifms")
+    .PersistKeysToDbContext<AppDbContext>();
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];
