@@ -43,8 +43,11 @@ redeploy.
 Set them from the command line:
 
 ```bash
-dotnet run -- set-credentials spic 1000249825 "<password>" SPIC
+dotnet run -- set-credentials greenstar 1000249825 "<password>" Greenstar
 ```
+
+`1000249825` is the **Greenstar** login — the portal welcome bar reads
+`1000249825 (CDataV ::GFL)`.
 
 ```bash
 dotnet run -- list-credentials
@@ -285,7 +288,7 @@ the service. Re-run it for every update — it deliberately does not use
 Finally the two portal logins, and enable it:
 
 ```bash
-cd /opt/spic-ifms && dotnet SPIC.Ifms.Automation.dll set-credentials spic 1000249825 "<password>" SPIC
+cd /opt/spic-ifms && dotnet SPIC.Ifms.Automation.dll set-credentials greenstar 1000249825 "<password>" Greenstar
 ```
 
 ```bash

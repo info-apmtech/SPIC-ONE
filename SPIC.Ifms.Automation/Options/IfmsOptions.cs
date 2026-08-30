@@ -252,8 +252,14 @@ namespace SPIC.Ifms.Automation.Options
 		/// <summary>How long to wait for the OTP screen to appear after submitting.</summary>
 		public int StepTimeoutMs { get; set; } = 20_000;
 
-		/// <summary>How long to wait for the SMS to land after the portal sends it.</summary>
-		public int WaitSeconds { get; set; } = 180;
+		/// <summary>
+		/// How long to wait for the SMS after the portal sends it.
+		///
+		/// The code lives about five minutes. The 60-second countdown shown on the
+		/// OTP page is only the delay before Regenerate OTP becomes clickable, so
+		/// do not mistake it for an expiry and set this too low.
+		/// </summary>
+		public int WaitSeconds { get; set; } = 120;
 
 		public int PollIntervalSeconds { get; set; } = 2;
 
