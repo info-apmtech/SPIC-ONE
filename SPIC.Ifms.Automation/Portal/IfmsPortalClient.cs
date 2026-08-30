@@ -746,12 +746,11 @@ namespace SPIC.Ifms.Automation.Portal
 		/// </summary>
 		public async Task<IReadOnlyList<string>> DiscoverLoopValuesAsync(
 			ReportJob job,
+			ReportJobLoop loop,
 			RunTokens tokens,
 			CancellationToken cancellationToken)
 		{
-			var loop = job.ForEach;
-
-			if (loop is null || string.IsNullOrWhiteSpace(loop.DiscoverFromSelector))
+			if (string.IsNullOrWhiteSpace(loop.DiscoverFromSelector))
 				return Array.Empty<string>();
 
 			var entry = job.Steps.FirstOrDefault(

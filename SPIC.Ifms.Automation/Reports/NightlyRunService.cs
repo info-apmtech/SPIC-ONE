@@ -236,9 +236,7 @@ namespace SPIC.Ifms.Automation.Reports
 			DateTime reportDate,
 			CancellationToken cancellationToken)
 		{
-			var loop = job.ForEach;
-
-			if (loop is null)
+			if (job.ForEach.Count == 0)
 			{
 				return new List<ReportSummary>
 				{
@@ -246,70 +244,112 @@ namespace SPIC.Ifms.Automation.Reports
 				};
 			}
 
-			var values = loop.Values.Count > 0
-				? loop.Values
-				: (await portal.DiscoverLoopValuesAsync(
-					job,
-					new RunTokens(reportDate, DateTime.Now, account.UserName)
-						.WithLiteral("company", account.CompanyName)
-						.WithLiteral("accountKey", account.AccountKey),
-					cancellationToken)).ToList();
+			var tokens = new RunTokens(reportDate, DateTime.Now, account.UserName)
+				.WithLiteral("company", account.CompanyName)
+				.WithLiteral("accountKey", account.AccountKey);
 
-			if (values.Count == 0)
+			// Resolve every dimension first, then cross them.
+			var dimensions = new List<(string Name, List<string> Values)>();
+
+			foreach (var loop in job.ForEach)
 			{
-				_logger.LogError(
-					"{Title} loops over {Token} but no values were configured or discovered.",
-					job.Title, loop.TokenName);
+				var values = loop.Values.Count > 0
+					? loop.Values.ToList()
+					: (await portal.DiscoverLoopValuesAsync(job, loop, tokens, cancellationToken)).ToList();
 
-				return new List<ReportSummary>
+				if (values.Count == 0)
 				{
-					new()
-					{
-						JobKey = job.Key,
-						AccountKey = account.AccountKey,
-						CompanyName = account.CompanyName,
-						Title = job.Title,
-						CategoryId = job.CategoryId,
-						Status = IfmsRunStatus.Failed,
-						ErrorMessage =
-							$"No values to loop over. Set ReportJobs:Jobs[].ForEach.Values, or a " +
-							$"DiscoverFromSelector that matches a dropdown on the report page."
-					}
-				};
+					_logger.LogError(
+						"{Title} loops over {Token} but no values were configured or discovered.",
+						job.Title, loop.TokenName);
+
+					return new List<ReportSummary> { NoValuesFailure(account, job, loop.TokenName) };
+				}
+
+				dimensions.Add((loop.TokenName, values));
 			}
 
+			var combinations = CrossProduct(dimensions);
+			var continueOnFailure = job.ForEach.All(l => l.ContinueOnFailure);
+
 			_logger.LogInformation(
-				"{Title} for {Company}: {Count} {Token} values to fetch.",
-				job.Title, account.CompanyName, values.Count, loop.TokenName);
+				"{Title} for {Company}: {Count} combination(s) across {Dimensions}.",
+				job.Title, account.CompanyName, combinations.Count,
+				string.Join(" x ", dimensions.Select(d => $"{d.Values.Count} {d.Name}")));
 
-			var summaries = new List<ReportSummary>(values.Count);
+			var summaries = new List<ReportSummary>(combinations.Count);
 
-			foreach (var value in values)
+			foreach (var combination in combinations)
 			{
 				cancellationToken.ThrowIfCancellationRequested();
 
 				var summary = await RunJobAsync(
-					portal, runId, account, job, reportDate, (loop.TokenName, value), cancellationToken);
+					portal, runId, account, job, reportDate, combination, cancellationToken);
 
 				summaries.Add(summary);
 
-				if (summary.Status != IfmsRunStatus.Succeeded && !loop.ContinueOnFailure)
+				if (summary.Status != IfmsRunStatus.Succeeded && !continueOnFailure)
 				{
 					_logger.LogWarning(
-						"Stopping {Title} after {Value} failed, because ContinueOnFailure is off.",
-						job.Title, value);
+						"Stopping {Title} after a failure, because ContinueOnFailure is off.",
+						job.Title);
 					break;
 				}
 			}
 
-			var ok = summaries.Count(s => s.Status == IfmsRunStatus.Succeeded);
-
 			_logger.LogInformation(
-				"{Title} for {Company}: {Ok} of {Total} {Token} values imported.",
-				job.Title, account.CompanyName, ok, summaries.Count, loop.TokenName);
+				"{Title} for {Company}: {Ok} of {Total} combination(s) imported.",
+				job.Title, account.CompanyName,
+				summaries.Count(s => s.Status == IfmsRunStatus.Succeeded), summaries.Count);
 
 			return summaries;
 		}
+
+		/// <summary>
+		/// Every combination of the loop dimensions, in order, with the first
+		/// dimension changing slowest — so a plant is chosen once and then walked
+		/// through its products, rather than the dropdowns thrashing.
+		/// </summary>
+		private static List<List<(string Name, string Value)>> CrossProduct(
+			List<(string Name, List<string> Values)> dimensions)
+		{
+			var result = new List<List<(string, string)>> { new() };
+
+			foreach (var (name, values) in dimensions)
+			{
+				var next = new List<List<(string, string)>>(result.Count * values.Count);
+
+				foreach (var prefix in result)
+				{
+					foreach (var value in values)
+					{
+						var combination = new List<(string, string)>(prefix) { (name, value) };
+						next.Add(combination);
+					}
+				}
+
+				result = next;
+			}
+
+			return result;
+		}
+
+		private static ReportSummary NoValuesFailure(
+			IfmsAccountCredentials account,
+			ReportJob job,
+			string tokenName) =>
+			new()
+			{
+				JobKey = job.Key,
+				AccountKey = account.AccountKey,
+				CompanyName = account.CompanyName,
+				Title = job.Title,
+				CategoryId = job.CategoryId,
+				Status = IfmsRunStatus.Failed,
+				ErrorMessage =
+					$"Nothing to loop over for '{tokenName}'. Set ForEach.Values, or a " +
+					$"DiscoverFromSelector matching a dropdown on the report page."
+			};
 
 		private async Task<ReportSummary> RunJobAsync(
 			IfmsPortalClient portal,
@@ -317,19 +357,21 @@ namespace SPIC.Ifms.Automation.Reports
 			IfmsAccountCredentials account,
 			ReportJob job,
 			DateTime runReportDate,
-			(string Name, string Value)? loopValue,
+			List<(string Name, string Value)>? loopValues,
 			CancellationToken cancellationToken)
 		{
 			var reportDate = job.ReportDateOffsetDays.HasValue
 				? DateTime.Today.AddDays(job.ReportDateOffsetDays.Value)
 				: runReportDate;
 
-			var label = loopValue is null
-				? job.Title
-				: $"{job.Title} — {loopValue.Value.Value}";
+			var suffix = loopValues is null || loopValues.Count == 0
+				? null
+				: string.Join(" / ", loopValues.Select(v => v.Value));
+
+			var label = suffix is null ? job.Title : $"{job.Title} — {suffix}";
 
 			var record = await CreateReportRecordAsync(
-				runId, account, job, reportDate, loopValue?.Value, cancellationToken);
+				runId, account, job, reportDate, suffix, cancellationToken);
 
 			var maxAttempts = Math.Max(1, job.MaxAttempts);
 			Exception? lastError = null;
@@ -348,8 +390,11 @@ namespace SPIC.Ifms.Automation.Reports
 						.WithLiteral("company", account.CompanyName)
 						.WithLiteral("accountKey", account.AccountKey);
 
-					if (loopValue is not null)
-						tokens.WithLiteral(loopValue.Value.Name, loopValue.Value.Value);
+					if (loopValues is not null)
+					{
+						foreach (var (name, value) in loopValues)
+							tokens.WithLiteral(name, value);
+					}
 					var folder = ArchiveFolder(reportDate);
 
 					var download = await portal.DownloadReportAsync(job, tokens, folder, cancellationToken);
@@ -365,8 +410,10 @@ namespace SPIC.Ifms.Automation.Reports
 					if (!import.Success)
 						throw new InvalidOperationException(import.Message);
 
+					// A combination with no rows is normal — a plant that does not
+					// make a given product, a state a company does not trade in.
 					var allowEmpty = job.AllowEmpty ||
-						(loopValue is not null && job.ForEach?.AllowEmptyPerValue == true);
+						(loopValues is not null && job.ForEach.Any(l => l.AllowEmptyPerValue));
 
 					if (import.TotalRows == 0 && !allowEmpty)
 					{

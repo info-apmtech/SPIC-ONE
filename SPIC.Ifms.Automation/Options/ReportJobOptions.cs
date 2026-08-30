@@ -76,11 +76,14 @@ namespace SPIC.Ifms.Automation.Options
 		public string? DirectDownloadUrl { get; set; }
 
 		/// <summary>
-		/// Repeat this job once per value of a filter — the Retailer Stock Report
-		/// insists on one state at a time, so a single definition has to expand
-		/// into one download per state rather than being written out 36 times.
+		/// Repeat this job across one or more filters, as a cartesian product.
+		///
+		/// One dimension covers the Retailer Stock Report, which insists on one
+		/// state at a time. Two covers the Global Stock Reconciliation, which wants
+		/// every plant crossed with every product. Written out by hand these would
+		/// be dozens of near-identical jobs.
 		/// </summary>
-		public ReportJobLoop? ForEach { get; set; }
+		public List<ReportJobLoop> ForEach { get; set; } = new();
 
 		/// <summary>
 		/// Name for the saved file, supporting the same tokens as step values plus
@@ -113,7 +116,7 @@ namespace SPIC.Ifms.Automation.Options
 	}
 
 	/// <summary>
-	/// Turns one job into many, once per value of a filter.
+	/// One dimension of a job's fan-out.
 	///
 	/// Either list the values explicitly, or let the run read them off the page.
 	/// Listing them is usually better: it keeps the nightly run to the states that
