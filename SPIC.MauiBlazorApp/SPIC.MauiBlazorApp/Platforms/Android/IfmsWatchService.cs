@@ -69,6 +69,8 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
 				{
 					if (IfmsRelaySettings.IsConfigured)
 					{
+						// Doubles as the heartbeat: every poll updates LastSeenAt on
+						// the server, so silence genuinely means the phone is gone.
 						var challenge = await IfmsRelayClient.GetPendingChallengeAsync(cancellationToken);
 
 						if (challenge is not null && challenge.Id != _notifiedChallengeId)

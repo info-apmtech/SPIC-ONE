@@ -13,6 +13,8 @@ namespace SPIC.Ifms.Automation.Alerts
 	public interface IAlertDispatcher
 	{
 		Task DispatchAsync(RunSummary summary, CancellationToken cancellationToken);
+
+		Task NoticeAsync(string title, string body, bool urgent, CancellationToken cancellationToken);
 	}
 
 	/// <summary>
@@ -34,6 +36,25 @@ namespace SPIC.Ifms.Automation.Alerts
 			_sinks = sinks;
 			_options = options.Value;
 			_logger = logger;
+		}
+
+		public async Task NoticeAsync(
+			string title,
+			string body,
+			bool urgent,
+			CancellationToken cancellationToken)
+		{
+			foreach (var sink in _sinks.Where(s => s.Enabled))
+			{
+				try
+				{
+					await sink.SendNoticeAsync(title, body, urgent, cancellationToken);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "Alert sink {Sink} could not send a notice.", sink.Name);
+				}
+			}
 		}
 
 		public async Task DispatchAsync(RunSummary summary, CancellationToken cancellationToken)

@@ -75,6 +75,14 @@ namespace Spic.Infrastructure.Data
 
             builder.Entity<IfmsPasswordChange>()
                 .HasIndex(c => new { c.AccountId, c.ChangedAt });
+
+            builder.Entity<IfmsRelayDevice>()
+                .HasIndex(d => d.DeviceId)
+                .IsUnique();
+
+            // The SMS relay looks a device up by its token on every call.
+            builder.Entity<IfmsRelayDevice>()
+                .HasIndex(d => new { d.TokenHash, d.IsActive });
         }
 
         // User related
@@ -200,6 +208,7 @@ namespace Spic.Infrastructure.Data
 
 		public DbSet<IfmsPortalAccount> IfmsPortalAccounts { get; set; }
 		public DbSet<IfmsPasswordChange> IfmsPasswordChanges { get; set; }
+		public DbSet<IfmsRelayDevice> IfmsRelayDevices { get; set; }
 
 	}
 }

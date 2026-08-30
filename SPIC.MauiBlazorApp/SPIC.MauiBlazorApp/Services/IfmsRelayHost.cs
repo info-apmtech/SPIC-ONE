@@ -28,7 +28,7 @@ namespace SPIC.MauiBlazorApp.Services
 				Enabled = IfmsRelaySettings.Enabled,
 				ApiBase = IfmsRelaySettings.ApiBase,
 				DeviceId = IfmsRelaySettings.DeviceId,
-				HasDeviceKey = !string.IsNullOrWhiteSpace(IfmsRelaySettings.DeviceKey),
+				HasDeviceKey = !string.IsNullOrWhiteSpace(IfmsRelaySettings.DeviceToken),
 				SmsPermissionGranted =
 					Permissions.CheckStatusAsync<IfmsSmsPermission>().GetAwaiter().GetResult()
 						== PermissionStatus.Granted,
@@ -68,6 +68,15 @@ namespace SPIC.MauiBlazorApp.Services
 
 			IfmsRelaySettings.ApiBase = apiBase.Trim();
 			IfmsRelaySettings.DeviceKey = deviceKey.Trim();
+
+			// Register before switching the relay on. A phone that failed to pair
+			// must not sit there believing it is working.
+			var (registered, message) = await IfmsRelayClient.RegisterAsync(
+				apiBase.Trim(), deviceKey.Trim());
+
+			if (!registered)
+				return Fail(message);
+
 			IfmsRelaySettings.Enabled = true;
 
 			var context = global::Android.App.Application.Context;
@@ -76,7 +85,7 @@ namespace SPIC.MauiBlazorApp.Services
 			return new IfmsRelayPairResult
 			{
 				Success = true,
-				Message = $"Paired as {IfmsRelaySettings.DeviceId}. " +
+				Message = $"{message} Registered as {IfmsRelaySettings.DeviceId}. " +
 						  "This phone will now forward the IFMS OTP and alert you if a CAPTCHA needs typing."
 			};
 #else
@@ -90,6 +99,7 @@ namespace SPIC.MauiBlazorApp.Services
 #if ANDROID
 			IfmsRelaySettings.Enabled = false;
 			IfmsRelaySettings.DeviceKey = string.Empty;
+			IfmsRelaySettings.DeviceToken = string.Empty;
 
 			IfmsWatchService.Stop(global::Android.App.Application.Context);
 #endif

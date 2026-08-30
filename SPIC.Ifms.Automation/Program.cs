@@ -62,6 +62,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // automated import and a hand upload can never diverge.
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
+builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
 
 // ---------------------------------------------------------------- automation
 
@@ -113,6 +114,7 @@ if (!isTool)
 {
 	builder.Services.AddHostedService<DailyScheduleWorker>();
 	builder.Services.AddHostedService<ManualTriggerWorker>();
+	builder.Services.AddHostedService<RelayPresenceWorker>();
 }
 
 var host = builder.Build();

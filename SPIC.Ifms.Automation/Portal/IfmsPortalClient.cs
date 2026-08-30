@@ -739,6 +739,51 @@ namespace SPIC.Ifms.Automation.Portal
 		/// produces. Everything portal-specific lives in configuration, so a menu
 		/// change on the IFMS side is fixed without touching this method.
 		/// </summary>
+		/// <summary>
+		/// Reads the values a job should loop over off a dropdown on the report
+		/// page. Used only when the configuration does not list them, so that a job
+		/// can be written once without spelling out every state.
+		/// </summary>
+		public async Task<IReadOnlyList<string>> DiscoverLoopValuesAsync(
+			ReportJob job,
+			RunTokens tokens,
+			CancellationToken cancellationToken)
+		{
+			var loop = job.ForEach;
+
+			if (loop is null || string.IsNullOrWhiteSpace(loop.DiscoverFromSelector))
+				return Array.Empty<string>();
+
+			var entry = job.Steps.FirstOrDefault(
+				s => s.Action.Equals("goto", StringComparison.OrdinalIgnoreCase));
+
+			if (entry is null)
+			{
+				throw new InvalidOperationException(
+					$"Job '{job.Key}' asks for discovered loop values but has no goto step " +
+					$"to find the dropdown on.");
+			}
+
+			_activeFrame = null;
+			await ExecuteStepAsync(entry, tokens, cancellationToken);
+
+			var options = await Frame.Locator($"{loop.DiscoverFromSelector} option").AllInnerTextsAsync();
+
+			var values = options
+				.Select(o => o.Trim())
+				.Where(o => o.Length > 0)
+				.Where(o => !loop.ExcludeLabels.Any(
+					x => o.Contains(x, StringComparison.OrdinalIgnoreCase)))
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
+
+			_logger.LogInformation(
+				"Discovered {Count} values for {JobKey} from {Selector}.",
+				values.Count, job.Key, loop.DiscoverFromSelector);
+
+			return values;
+		}
+
 		public async Task<DownloadedReport> DownloadReportAsync(
 			ReportJob job,
 			RunTokens tokens,
@@ -778,7 +823,7 @@ namespace SPIC.Ifms.Automation.Portal
 				suggested = $"{job.Key}{extension}";
 			}
 
-			var fileName = $"{job.Key}_{DateTime.Now:yyyyMMdd_HHmmss}{extension}";
+			var fileName = BuildFileName(job, tokens, extension);
 			var path = Path.Combine(targetDirectory, fileName);
 
 			await download.SaveAsAsync(path);
@@ -1209,6 +1254,30 @@ namespace SPIC.Ifms.Automation.Portal
 			{
 				_logger.LogDebug("Could not capture diagnostics: {Message}", ex.Message);
 			}
+		}
+
+		/// <summary>
+		/// The name the file is archived under. A predictable name matters: these
+		/// are kept for months, and "report (7).csv" tells nobody which state it
+		/// was. Anything unusable in a path is replaced rather than rejected.
+		/// </summary>
+		private static string BuildFileName(ReportJob job, RunTokens tokens, string extension)
+		{
+			var template = job.FileNameTemplate;
+
+			var stem = string.IsNullOrWhiteSpace(template)
+				? $"{job.Key}_{DateTime.Now:yyyyMMdd_HHmmss}"
+				: tokens.Resolve(template)!;
+
+			foreach (var bad in Path.GetInvalidFileNameChars())
+				stem = stem.Replace(bad, '_');
+
+			stem = stem.Replace(' ', '_').Trim('_');
+
+			if (stem.Length == 0)
+				stem = job.Key;
+
+			return stem + extension;
 		}
 
 		private string Absolute(string pathOrUrl) =>

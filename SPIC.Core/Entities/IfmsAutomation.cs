@@ -299,6 +299,21 @@ namespace SPIC.Core.Entities
 		/// </summary>
 		public string ProtectedPassword { get; set; } = string.Empty;
 
+		/// <summary>
+		/// TEMPORARY. The same password in the clear, so it can be eyeballed while
+		/// the automation is being commissioned.
+		///
+		/// Only written when Ifms:StorePlainPasswordForTesting is true, and the run
+		/// logs a warning every time it starts while that flag is on — because a
+		/// column added "for a few days" is exactly the kind of thing that is still
+		/// there in three years.
+		///
+		/// To retire it: set the flag false, then drop this column in a migration.
+		/// Nothing reads it; ProtectedPassword is always the source of truth.
+		/// </summary>
+		[MaxLength(200)]
+		public string? PlainPasswordForTesting { get; set; }
+
 		public bool IsActive { get; set; } = true;
 
 		/// <summary>Lower numbers sign in first.</summary>
@@ -361,5 +376,64 @@ namespace SPIC.Core.Entities
 
 		/// <summary>Whether a login has since succeeded with the new password.</summary>
 		public bool VerifiedByLogin { get; set; }
+	}
+
+	/// <summary>
+	/// A phone paired to relay the IFMS one-time password.
+	///
+	/// One row per handset, rather than one shared key, so that replacing a phone
+	/// actually revokes the old one. With a single shared secret the retired
+	/// handset keeps working forever, which is only ever discovered the hard way.
+	/// </summary>
+	public class IfmsRelayDevice
+	{
+		[Key]
+		public int Id { get; set; }
+
+		/// <summary>Stable id the phone generates for itself at first pairing.</summary>
+		[MaxLength(120)]
+		public string DeviceId { get; set; } = string.Empty;
+
+		/// <summary>Something a person recognises, e.g. "Redmi Note 12 - Satham".</summary>
+		[MaxLength(160)]
+		public string DeviceName { get; set; } = string.Empty;
+
+		/// <summary>
+		/// SHA-256 of the token issued at pairing. A hash rather than the token
+		/// itself: the server only ever needs to check one, never to reproduce it,
+		/// so there is no reason to keep anything replayable.
+		/// </summary>
+		[MaxLength(64)]
+		public string TokenHash { get; set; } = string.Empty;
+
+		public DateTime RegisteredAt { get; set; }
+
+		[MaxLength(120)]
+		public string? RegisteredBy { get; set; }
+
+		/// <summary>
+		/// Updated on every call the phone makes. This is what turns a dead handset
+		/// from a 4am surprise into something noticed the evening before.
+		/// </summary>
+		public DateTime? LastSeenAt { get; set; }
+
+		[MaxLength(60)]
+		public string? LastSeenAction { get; set; }
+
+		public int MessagesRelayed { get; set; }
+
+		public bool IsActive { get; set; } = true;
+
+		public DateTime? RevokedAt { get; set; }
+
+		[MaxLength(120)]
+		public string? RevokedBy { get; set; }
+
+		/// <summary>App version, for working out whether an old build is the problem.</summary>
+		[MaxLength(40)]
+		public string? AppVersion { get; set; }
+
+		[MaxLength(120)]
+		public string? Platform { get; set; }
 	}
 }

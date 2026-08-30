@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
@@ -35,14 +36,17 @@ namespace Spic.Infrastructure.Services
 
 		private readonly AppDbContext _db;
 		private readonly IDataProtector _protector;
+		private readonly IConfiguration _config;
 		private readonly ILogger<IfmsAccountStore> _logger;
 
 		public IfmsAccountStore(
 			AppDbContext db,
 			IDataProtectionProvider dataProtection,
+			IConfiguration config,
 			ILogger<IfmsAccountStore> logger)
 		{
 			_db = db;
+			_config = config;
 			_protector = dataProtection.CreateProtector(ProtectorPurpose);
 			_logger = logger;
 		}
@@ -120,6 +124,22 @@ namespace Spic.Infrastructure.Services
 
 			account.UserName = userName.Trim();
 			account.ProtectedPassword = _protector.Protect(password);
+
+			// Commissioning aid, switched off by default. Kept in step with the
+			// encrypted copy so the two can never disagree, and cleared the moment
+			// the flag goes off rather than lingering until somebody remembers.
+			var keepPlain = _config.GetValue<bool>("Ifms:StorePlainPasswordForTesting");
+
+			account.PlainPasswordForTesting = keepPlain ? password : null;
+
+			if (keepPlain)
+			{
+				_logger.LogWarning(
+					"Ifms:StorePlainPasswordForTesting is ON, so the password for {AccountKey} " +
+					"is also stored in the clear. Turn it off and drop the column once the " +
+					"logins are proven.",
+					account.AccountKey);
+			}
 			account.PasswordSetAt = now;
 			account.PasswordExpiresAt = now.AddDays(Math.Max(1, account.PasswordRotationDays));
 

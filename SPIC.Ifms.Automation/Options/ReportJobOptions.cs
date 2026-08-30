@@ -75,8 +75,26 @@ namespace SPIC.Ifms.Automation.Options
 		/// </summary>
 		public string? DirectDownloadUrl { get; set; }
 
-		/// <summary>Extension to force when the portal sends a nameless stream.</summary>
-		public string ExpectedExtension { get; set; } = ".xlsx";
+		/// <summary>
+		/// Repeat this job once per value of a filter — the Retailer Stock Report
+		/// insists on one state at a time, so a single definition has to expand
+		/// into one download per state rather than being written out 36 times.
+		/// </summary>
+		public ReportJobLoop? ForEach { get; set; }
+
+		/// <summary>
+		/// Name for the saved file, supporting the same tokens as step values plus
+		/// whatever <see cref="ForEach"/> contributes — for example
+		/// "{{company}}_{{state}}_retailerstock". The extension is added.
+		/// Falls back to the job key and a timestamp.
+		/// </summary>
+		public string? FileNameTemplate { get; set; }
+
+		/// <summary>
+		/// Extension to force when the portal sends a nameless stream. The iFMS
+		/// exports are CSV despite the button saying Excel.
+		/// </summary>
+		public string ExpectedExtension { get; set; } = ".csv";
 
 		/// <summary>
 		/// Reject a download smaller than this. A 400-byte "no data found" HTML
@@ -92,6 +110,51 @@ namespace SPIC.Ifms.Automation.Options
 		/// for reports that are legitimately empty on holidays.
 		/// </summary>
 		public bool AllowEmpty { get; set; }
+	}
+
+	/// <summary>
+	/// Turns one job into many, once per value of a filter.
+	///
+	/// Either list the values explicitly, or let the run read them off the page.
+	/// Listing them is usually better: it keeps the nightly run to the states that
+	/// actually matter instead of all thirty-six, and it does not silently grow
+	/// when the portal adds one.
+	/// </summary>
+	public sealed class ReportJobLoop
+	{
+		/// <summary>Token the value is exposed as, e.g. "state" for {{state}}.</summary>
+		public string TokenName { get; set; } = "value";
+
+		/// <summary>
+		/// The values to iterate. When empty, they are discovered from
+		/// <see cref="DiscoverFromSelector"/>.
+		/// </summary>
+		public List<string> Values { get; set; } = new();
+
+		/// <summary>
+		/// A select element whose options become the values. Discovery navigates to
+		/// the job's first "goto" step and reads them there.
+		/// </summary>
+		public string? DiscoverFromSelector { get; set; }
+
+		/// <summary>
+		/// Option labels to ignore during discovery — the placeholder row, mostly.
+		/// Matched case-insensitively.
+		/// </summary>
+		public List<string> ExcludeLabels { get; set; } = new() { "Select" };
+
+		/// <summary>
+		/// Carry on to the next value when one fails. True by default: thirty-five
+		/// states downloading and one failing is a far better morning than nothing
+		/// at all because Assam timed out.
+		/// </summary>
+		public bool ContinueOnFailure { get; set; } = true;
+
+		/// <summary>
+		/// Treat an empty result as success. Many states legitimately have no rows
+		/// for a company that does not trade there, and that is not a failure.
+		/// </summary>
+		public bool AllowEmptyPerValue { get; set; } = true;
 	}
 
 	/// <summary>

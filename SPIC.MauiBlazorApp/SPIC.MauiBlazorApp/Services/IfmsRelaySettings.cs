@@ -11,6 +11,7 @@ namespace SPIC.MauiBlazorApp.Services
 		private const string EnabledKey = "ifms_relay_enabled";
 		private const string ApiBaseKey = "ifms_api_base";
 		private const string DeviceKeyKey = "ifms_device_key";
+		private const string DeviceTokenKey = "ifms_device_token";
 		private const string DeviceIdKey = "ifms_device_id";
 
 		/// <summary>Matches the API address the rest of the app already uses.</summary>
@@ -33,12 +34,25 @@ namespace SPIC.MauiBlazorApp.Services
 		}
 
 		/// <summary>
-		/// Must equal IfmsAutomation:DeviceKey on the server. Sent as X-Device-Key.
+		/// The shared pairing secret, matching IfmsAutomation:DeviceKey on the
+		/// server. Used once, to register this handset, and never again — so the
+		/// server can rotate it without breaking phones already paired.
 		/// </summary>
 		public static string DeviceKey
 		{
 			get => Preferences.Default.Get(DeviceKeyKey, string.Empty);
 			set => Preferences.Default.Set(DeviceKeyKey, value);
+		}
+
+		/// <summary>
+		/// This handset's own token, issued at pairing and sent on every call
+		/// afterwards. Revoking the device on the server makes it stop working
+		/// immediately, which is what a shared key could never do.
+		/// </summary>
+		public static string DeviceToken
+		{
+			get => Preferences.Default.Get(DeviceTokenKey, string.Empty);
+			set => Preferences.Default.Set(DeviceTokenKey, value);
 		}
 
 		/// <summary>A stable label for this handset, purely for the audit trail.</summary>
@@ -59,9 +73,13 @@ namespace SPIC.MauiBlazorApp.Services
 			}
 		}
 
+		/// <summary>
+		/// Ready to relay. That means paired — holding a token — not merely holding
+		/// the pairing key, which on its own can do nothing but register.
+		/// </summary>
 		public static bool IsConfigured =>
 			Enabled &&
 			!string.IsNullOrWhiteSpace(ApiBase) &&
-			!string.IsNullOrWhiteSpace(DeviceKey);
+			!string.IsNullOrWhiteSpace(DeviceToken);
 	}
 }

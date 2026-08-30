@@ -104,14 +104,99 @@ namespace SPIC.MauiBlazorApp.Services
 			}
 		}
 
+		/// <summary>
+		/// Pairs this handset and stores the token it is issued.
+		///
+		/// The pairing key is only used here. Everything afterwards carries the
+		/// per-device token instead, so the key can be rotated on the server
+		/// without touching phones that are already paired.
+		/// </summary>
+		public static async Task<(bool Success, string Message)> RegisterAsync(
+			string apiBase,
+			string pairingKey,
+			CancellationToken cancellationToken = default)
+		{
+			try
+			{
+				var baseUrl = apiBase.TrimEnd('/');
+
+				using var request = new HttpRequestMessage(
+					HttpMethod.Post, $"{baseUrl}/api/IfmsAutomation/devices/register");
+
+				request.Headers.Add("X-Device-Key", pairingKey);
+
+				request.Content = JsonContent.Create(new
+				{
+					DeviceId = IfmsRelaySettings.DeviceId,
+					DeviceName = $"{DeviceInfo.Current.Manufacturer} {DeviceInfo.Current.Model}",
+					AppVersion = AppInfo.Current.VersionString,
+					Platform = $"{DeviceInfo.Current.Platform} {DeviceInfo.Current.VersionString}"
+				});
+
+				using var response = await Http.SendAsync(request, cancellationToken);
+				var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+				if (!response.IsSuccessStatusCode)
+				{
+					return (false, response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+						? "The server rejected that pairing key."
+						: $"Pairing failed: {body}");
+				}
+
+				var result = JsonSerializer.Deserialize<RegisterResult>(body, JsonOptions);
+
+				if (string.IsNullOrWhiteSpace(result?.Token))
+					return (false, "The server did not return a device token.");
+
+				IfmsRelaySettings.DeviceToken = result.Token;
+
+				return (true, result.ReplacedExisting
+					? "Re-paired. The previous token for this phone no longer works."
+					: "Paired.");
+			}
+			catch (Exception ex)
+			{
+				return (false, $"Could not reach the server: {ex.Message}");
+			}
+		}
+
+		/// <summary>
+		/// Tells the server this phone is alive. Without it a handset that is off
+		/// or has had the app killed looks identical to one with nothing to say,
+		/// and that is only discovered when the OTP never arrives at 4am.
+		/// </summary>
+		public static async Task<bool> HeartbeatAsync(CancellationToken cancellationToken = default)
+		{
+			if (!IfmsRelaySettings.IsConfigured)
+				return false;
+
+			try
+			{
+				using var request = Build(HttpMethod.Post, "api/IfmsAutomation/devices/heartbeat");
+				using var response = await Http.SendAsync(request, cancellationToken);
+
+				return response.IsSuccessStatusCode;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
 		private static HttpRequestMessage Build(HttpMethod method, string path)
 		{
 			var baseUrl = IfmsRelaySettings.ApiBase.TrimEnd('/');
 
 			var request = new HttpRequestMessage(method, $"{baseUrl}/{path}");
-			request.Headers.Add("X-Device-Key", IfmsRelaySettings.DeviceKey);
+			request.Headers.Add("X-Device-Token", IfmsRelaySettings.DeviceToken);
 
 			return request;
+		}
+
+		private sealed class RegisterResult
+		{
+			public string? Token { get; set; }
+			public bool ReplacedExisting { get; set; }
 		}
 
 		public sealed class PendingChallenge

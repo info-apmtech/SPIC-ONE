@@ -62,6 +62,32 @@ namespace SPIC.Ifms.Automation.Alerts
 			}
 		}
 
+		public async Task SendNoticeAsync(
+			string title,
+			string body,
+			bool urgent,
+			CancellationToken cancellationToken)
+		{
+			// A quiet phone is exactly the case WhatsApp is good for, so this one
+			// ignores FailuresOnly - it is already only sent when something is wrong.
+			if (!Enabled)
+				return;
+
+			var text = $"{title}\n\n{body}";
+
+			foreach (var recipient in _options.Recipients.Where(r => !string.IsNullOrWhiteSpace(r)))
+			{
+				try
+				{
+					await SendOneAsync(recipient.Trim(), text, cancellationToken);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "WhatsApp notice to {Recipient} failed.", recipient);
+				}
+			}
+		}
+
 		private async Task SendOneAsync(string recipient, string message, CancellationToken cancellationToken)
 		{
 			var client = _httpClientFactory.CreateClient("whatsapp");

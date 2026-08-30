@@ -45,6 +45,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 //builder.Services.AddScoped<ILocationService, LocationImplementation>();
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
+builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IStockReportService, StockReportService>();
 builder.Services.AddScoped<IPendingAckService, PendingAckService>();

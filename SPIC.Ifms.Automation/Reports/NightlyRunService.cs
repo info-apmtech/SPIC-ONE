@@ -221,19 +221,115 @@ namespace SPIC.Ifms.Automation.Reports
 			return summaryModel;
 		}
 
+		/// <summary>
+		/// Runs a job once, or once per value when it loops.
+		///
+		/// The Retailer Stock Report is the reason this exists: its State filter is
+		/// mandatory and takes one value, so a month of retail stock is not one
+		/// download but one per state.
+		/// </summary>
+		private async Task<List<ReportSummary>> RunJobWithLoopAsync(
+			IfmsPortalClient portal,
+			int runId,
+			IfmsAccountCredentials account,
+			ReportJob job,
+			DateTime reportDate,
+			CancellationToken cancellationToken)
+		{
+			var loop = job.ForEach;
+
+			if (loop is null)
+			{
+				return new List<ReportSummary>
+				{
+					await RunJobAsync(portal, runId, account, job, reportDate, null, cancellationToken)
+				};
+			}
+
+			var values = loop.Values.Count > 0
+				? loop.Values
+				: (await portal.DiscoverLoopValuesAsync(
+					job,
+					new RunTokens(reportDate, DateTime.Now, account.UserName)
+						.WithLiteral("company", account.CompanyName)
+						.WithLiteral("accountKey", account.AccountKey),
+					cancellationToken)).ToList();
+
+			if (values.Count == 0)
+			{
+				_logger.LogError(
+					"{Title} loops over {Token} but no values were configured or discovered.",
+					job.Title, loop.TokenName);
+
+				return new List<ReportSummary>
+				{
+					new()
+					{
+						JobKey = job.Key,
+						AccountKey = account.AccountKey,
+						CompanyName = account.CompanyName,
+						Title = job.Title,
+						CategoryId = job.CategoryId,
+						Status = IfmsRunStatus.Failed,
+						ErrorMessage =
+							$"No values to loop over. Set ReportJobs:Jobs[].ForEach.Values, or a " +
+							$"DiscoverFromSelector that matches a dropdown on the report page."
+					}
+				};
+			}
+
+			_logger.LogInformation(
+				"{Title} for {Company}: {Count} {Token} values to fetch.",
+				job.Title, account.CompanyName, values.Count, loop.TokenName);
+
+			var summaries = new List<ReportSummary>(values.Count);
+
+			foreach (var value in values)
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+
+				var summary = await RunJobAsync(
+					portal, runId, account, job, reportDate, (loop.TokenName, value), cancellationToken);
+
+				summaries.Add(summary);
+
+				if (summary.Status != IfmsRunStatus.Succeeded && !loop.ContinueOnFailure)
+				{
+					_logger.LogWarning(
+						"Stopping {Title} after {Value} failed, because ContinueOnFailure is off.",
+						job.Title, value);
+					break;
+				}
+			}
+
+			var ok = summaries.Count(s => s.Status == IfmsRunStatus.Succeeded);
+
+			_logger.LogInformation(
+				"{Title} for {Company}: {Ok} of {Total} {Token} values imported.",
+				job.Title, account.CompanyName, ok, summaries.Count, loop.TokenName);
+
+			return summaries;
+		}
+
 		private async Task<ReportSummary> RunJobAsync(
 			IfmsPortalClient portal,
 			int runId,
 			IfmsAccountCredentials account,
 			ReportJob job,
 			DateTime runReportDate,
+			(string Name, string Value)? loopValue,
 			CancellationToken cancellationToken)
 		{
 			var reportDate = job.ReportDateOffsetDays.HasValue
 				? DateTime.Today.AddDays(job.ReportDateOffsetDays.Value)
 				: runReportDate;
 
-			var record = await CreateReportRecordAsync(runId, account, job, reportDate, cancellationToken);
+			var label = loopValue is null
+				? job.Title
+				: $"{job.Title} — {loopValue.Value.Value}";
+
+			var record = await CreateReportRecordAsync(
+				runId, account, job, reportDate, loopValue?.Value, cancellationToken);
 
 			var maxAttempts = Math.Max(1, job.MaxAttempts);
 			Exception? lastError = null;
@@ -245,12 +341,15 @@ namespace SPIC.Ifms.Automation.Reports
 				try
 				{
 					_logger.LogInformation(
-						"Fetching {Title} for {Company} (attempt {Attempt}/{Max}).",
-						job.Title, account.CompanyName, attempt, maxAttempts);
+						"Fetching {Label} for {Company} (attempt {Attempt}/{Max}).",
+						label, account.CompanyName, attempt, maxAttempts);
 
 					var tokens = new RunTokens(reportDate, DateTime.Now, account.UserName)
 						.WithLiteral("company", account.CompanyName)
 						.WithLiteral("accountKey", account.AccountKey);
+
+					if (loopValue is not null)
+						tokens.WithLiteral(loopValue.Value.Name, loopValue.Value.Value);
 					var folder = ArchiveFolder(reportDate);
 
 					var download = await portal.DownloadReportAsync(job, tokens, folder, cancellationToken);
@@ -266,7 +365,10 @@ namespace SPIC.Ifms.Automation.Reports
 					if (!import.Success)
 						throw new InvalidOperationException(import.Message);
 
-					if (import.TotalRows == 0 && !job.AllowEmpty)
+					var allowEmpty = job.AllowEmpty ||
+						(loopValue is not null && job.ForEach?.AllowEmptyPerValue == true);
+
+					if (import.TotalRows == 0 && !allowEmpty)
 					{
 						throw new InvalidOperationException(
 							"The report downloaded but contained no data rows. If this report is " +
@@ -278,7 +380,7 @@ namespace SPIC.Ifms.Automation.Reports
 						JobKey = job.Key,
 						AccountKey = account.AccountKey,
 						CompanyName = account.CompanyName,
-						Title = job.Title,
+						Title = label,
 						CategoryId = job.CategoryId,
 						Status = IfmsRunStatus.Succeeded,
 						FileName = download.FileName,
@@ -302,7 +404,7 @@ namespace SPIC.Ifms.Automation.Reports
 				{
 					lastError = ex;
 					_logger.LogWarning(
-						ex, "Attempt {Attempt} at {Title} failed.", attempt, job.Title);
+						ex, "Attempt {Attempt} at {Label} failed.", attempt, label);
 
 					if (attempt < maxAttempts)
 						await Task.Delay(TimeSpan.FromSeconds(20), cancellationToken);
@@ -314,7 +416,7 @@ namespace SPIC.Ifms.Automation.Reports
 				JobKey = job.Key,
 				AccountKey = account.AccountKey,
 				CompanyName = account.CompanyName,
-				Title = job.Title,
+				Title = label,
 				CategoryId = job.CategoryId,
 				Status = IfmsRunStatus.Failed,
 				ErrorMessage = lastError?.Message ?? "Unknown failure."
@@ -377,10 +479,10 @@ namespace SPIC.Ifms.Automation.Reports
 			{
 				cancellationToken.ThrowIfCancellationRequested();
 
-				var summary = await RunJobAsync(
+				var summaries = await RunJobWithLoopAsync(
 					portal, runId, account, job, reportDate, cancellationToken);
 
-				reports.Add(summary);
+				reports.AddRange(summaries);
 			}
 
 			return new AccountOutcome(
@@ -537,6 +639,7 @@ namespace SPIC.Ifms.Automation.Reports
 			IfmsAccountCredentials account,
 			ReportJob job,
 			DateTime reportDate,
+			string? loopValue,
 			CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
@@ -548,7 +651,9 @@ namespace SPIC.Ifms.Automation.Reports
 				JobKey = job.Key,
 				AccountKey = account.AccountKey,
 				CategoryId = job.CategoryId,
-				ReportTitle = account.CompanyName + " - " + job.Title,
+				ReportTitle = loopValue is null
+					? account.CompanyName + " - " + job.Title
+					: account.CompanyName + " - " + job.Title + " - " + loopValue,
 				ReportDate = reportDate.Date,
 				Status = IfmsRunStatus.Running,
 				StartedAt = DateTime.UtcNow,

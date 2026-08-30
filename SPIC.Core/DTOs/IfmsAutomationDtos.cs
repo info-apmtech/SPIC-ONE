@@ -122,6 +122,13 @@ namespace SPIC.Core.DTOs
 		public int Order { get; set; }
 
 		public bool HasPassword { get; set; }
+
+		/// <summary>
+		/// TEMPORARY. Only populated while Ifms:StorePlainPasswordForTesting is on,
+		/// so the stored password can be checked by eye during commissioning.
+		/// Null once the flag is off.
+		/// </summary>
+		public string? PlainPasswordForTesting { get; set; }
 		public DateTime PasswordSetAt { get; set; }
 		public DateTime PasswordExpiresAt { get; set; }
 		public int PasswordRotationDays { get; set; }
@@ -150,6 +157,18 @@ namespace SPIC.Core.DTOs
 		public string Password { get; set; } = string.Empty;
 
 		public string? OtpMobileNumber { get; set; }
+	}
+
+	public sealed class IfmsRegisterDeviceDto
+	{
+		/// <summary>Stable id the phone generates for itself, once.</summary>
+		public string DeviceId { get; set; } = string.Empty;
+
+		/// <summary>Something a person recognises in the device list.</summary>
+		public string DeviceName { get; set; } = string.Empty;
+
+		public string? AppVersion { get; set; }
+		public string? Platform { get; set; }
 	}
 
 	/// <summary>

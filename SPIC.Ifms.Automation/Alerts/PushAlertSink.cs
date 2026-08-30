@@ -59,6 +59,19 @@ namespace SPIC.Ifms.Automation.Alerts
 					.ToList()
 			}, cancellationToken);
 
+		public Task SendNoticeAsync(
+			string title,
+			string body,
+			bool urgent,
+			CancellationToken cancellationToken) =>
+			PostAsync(new
+			{
+				Kind = "Notice",
+				Title = title,
+				Body = body,
+				Urgent = urgent
+			}, cancellationToken);
+
 		public Task NotifyCaptchaWaitingAsync(
 			int challengeRequestId,
 			int round,

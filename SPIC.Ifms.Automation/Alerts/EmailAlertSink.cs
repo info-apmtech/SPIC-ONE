@@ -94,6 +94,45 @@ namespace SPIC.Ifms.Automation.Alerts
 			_logger.LogInformation("Run summary emailed to {Recipients}.", string.Join(", ", _options.To));
 		}
 
+		public async Task SendNoticeAsync(
+			string title,
+			string body,
+			bool urgent,
+			CancellationToken cancellationToken)
+		{
+			if (!Enabled)
+				return;
+
+			var message = new MimeMessage();
+			message.From.Add(new MailboxAddress(_options.FromName, _options.FromAddress));
+
+			foreach (var to in _options.To.Where(a => !string.IsNullOrWhiteSpace(a)))
+				message.To.Add(MailboxAddress.Parse(to.Trim()));
+
+			message.Subject = urgent ? $"[IFMS ACTION] {title}" : $"[IFMS] {title}";
+
+			message.Body = new BodyBuilder
+			{
+				HtmlBody =
+					"<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px\">" +
+					$"<h2 style=\"margin:0 0 8px;color:{(urgent ? "#b42318" : "#1f2328")}\">{Escape(title)}</h2>" +
+					$"<p style=\"margin:0;white-space:pre-wrap\">{Escape(body)}</p></div>"
+			}.ToMessageBody();
+
+			using var client = new SmtpClient();
+
+			var security = _options.UseStartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.Auto;
+			await client.ConnectAsync(_options.Host, _options.Port, security, cancellationToken);
+
+			if (!string.IsNullOrWhiteSpace(_options.UserName))
+				await client.AuthenticateAsync(_options.UserName, _options.Password, cancellationToken);
+
+			await client.SendAsync(message, cancellationToken);
+			await client.DisconnectAsync(true, cancellationToken);
+
+			_logger.LogInformation("Notice emailed: {Title}", title);
+		}
+
 		private static string BuildHtml(RunSummary summary)
 		{
 			var accent = summary.Status switch

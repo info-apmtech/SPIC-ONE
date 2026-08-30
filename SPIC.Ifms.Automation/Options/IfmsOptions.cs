@@ -43,6 +43,22 @@ namespace SPIC.Ifms.Automation.Options
 		/// </summary>
 		public bool ReuseStoredSession { get; set; } = true;
 
+		/// <summary>
+		/// TEMPORARY, for commissioning only. Also stores each portal password in
+		/// the clear next to the encrypted one, so it can be checked by eye.
+		///
+		/// The run logs a warning on every start while this is on. Turn it off and
+		/// drop the column once the logins are proven.
+		/// </summary>
+		public bool StorePlainPasswordForTesting { get; set; }
+
+		/// <summary>
+		/// Alert if no paired phone has checked in for this long. The phone polls
+		/// every minute, so silence for hours means it is off, offline, or the app
+		/// has been killed — all of which are better known before 04:05 than after.
+		/// </summary>
+		public int RelayStaleAfterHours { get; set; } = 4;
+
 		/// <summary>Folder that keeps a dated copy of every downloaded report.</summary>
 		public string DownloadRoot { get; set; } = "downloads";
 

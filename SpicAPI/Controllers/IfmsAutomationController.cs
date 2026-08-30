@@ -35,25 +35,29 @@ namespace SpicAPI.Controllers
 		private readonly AppDbContext _db;
 		private readonly IConfiguration _config;
 		private readonly IIfmsAccountStore _accounts;
+		private readonly IIfmsRelayDeviceStore _devices;
 
 		public IfmsAutomationController(
 			AppDbContext db,
 			IConfiguration config,
-			IIfmsAccountStore accounts)
+			IIfmsAccountStore accounts,
+			IIfmsRelayDeviceStore devices)
 		{
 			_db = db;
 			_config = config;
 			_accounts = accounts;
+			_devices = devices;
 		}
 
+		/// <summary>The phone that made this call, once its token has been checked.</summary>
+		private IfmsRelayDeviceDto? _callingDevice;
+
 		/// <summary>
-		/// The Android companion cannot use the user's JWT: that token lives in the
-		/// WebView's sessionStorage and dies with the session, while the SMS relay
-		/// has to work with the app closed at four in the morning. It authenticates
-		/// with a device key instead, set once on the phone and stored in
-		/// IfmsAutomation:DeviceKey on the server.
+		/// The pairing secret, shared and set once. It is only good for registering
+		/// a handset — never for relaying a message — so rotating it does not
+		/// disturb phones that are already paired.
 		/// </summary>
-		private bool IsTrustedDevice()
+		private bool HasPairingKey()
 		{
 			var expected = _config["IfmsAutomation:DeviceKey"];
 
@@ -68,9 +72,29 @@ namespace SpicAPI.Controllers
 					   Encoding.UTF8.GetBytes(expected));
 		}
 
-		/// <summary>A signed-in portal user, or the paired phone.</summary>
-		private bool IsCallerAllowed() =>
-			User.Identity?.IsAuthenticated == true || IsTrustedDevice();
+		/// <summary>
+		/// Checks the per-device token and records that the phone was seen.
+		///
+		/// The Android companion cannot use the user's JWT: that lives in the
+		/// WebView's session storage and is long gone by four in the morning. It
+		/// carries its own token instead, issued at pairing, so a replaced handset
+		/// can be revoked without disturbing anything else.
+		/// </summary>
+		private async Task<bool> IsKnownDeviceAsync(string action, CancellationToken cancellationToken)
+		{
+			var token = Request.Headers["X-Device-Token"].ToString();
+
+			if (string.IsNullOrEmpty(token))
+				return false;
+
+			_callingDevice = await _devices.AuthenticateAsync(token, action, cancellationToken);
+			return _callingDevice is not null;
+		}
+
+		/// <summary>A signed-in portal user, or a paired phone.</summary>
+		private async Task<bool> IsCallerAllowedAsync(string action, CancellationToken cancellationToken) =>
+			User.Identity?.IsAuthenticated == true ||
+			await IsKnownDeviceAsync(action, cancellationToken);
 
 		// ------------------------------------------------------------------ SMS
 
@@ -85,7 +109,7 @@ namespace SpicAPI.Controllers
 			[FromBody] IfmsSmsRelayDto dto,
 			CancellationToken cancellationToken)
 		{
-			if (!IsCallerAllowed())
+			if (!await IsCallerAllowedAsync("sms", cancellationToken))
 				return Unauthorized(new { Success = false, Message = "Unrecognised device." });
 
 			if (string.IsNullOrWhiteSpace(dto.Body))
@@ -109,8 +133,13 @@ namespace SpicAPI.Controllers
 				CreatedAt = DateTime.UtcNow
 			};
 
+			message.DeviceId ??= _callingDevice?.DeviceId;
+
 			_db.IfmsOtpMessages.Add(message);
 			await _db.SaveChangesAsync(cancellationToken);
+
+			if (_callingDevice is not null)
+				await _devices.NoteMessageRelayedAsync(_callingDevice.Id, cancellationToken);
 
 			return Ok(new
 			{
@@ -131,7 +160,7 @@ namespace SpicAPI.Controllers
 		public async Task<ActionResult<IfmsPendingChallengeDto?>> PendingChallenge(
 			CancellationToken cancellationToken)
 		{
-			if (!IsCallerAllowed())
+			if (!await IsCallerAllowedAsync("poll", cancellationToken))
 				return Unauthorized();
 
 			var now = DateTime.UtcNow;
@@ -156,7 +185,7 @@ namespace SpicAPI.Controllers
 			[FromBody] IfmsChallengeAnswerDto dto,
 			CancellationToken cancellationToken)
 		{
-			if (!IsCallerAllowed())
+			if (!await IsCallerAllowedAsync("captcha-answer", cancellationToken))
 				return Unauthorized();
 
 			var answer = (dto.Answer ?? string.Empty).Trim();
@@ -200,6 +229,96 @@ namespace SpicAPI.Controllers
 			return Ok(new { Success = true, Message = "Thanks — the automation is continuing." });
 		}
 
+		// -------------------------------------------------------------- devices
+
+		/// <summary>
+		/// Pairs a phone and issues it a token of its own.
+		///
+		/// Authenticated with the shared pairing key, which is the only thing that
+		/// key is good for. Re-registering the same handset rotates its token
+		/// rather than creating a second row.
+		/// </summary>
+		[AllowAnonymous]
+		[HttpPost("devices/register")]
+		public async Task<IActionResult> RegisterDevice(
+			[FromBody] IfmsRegisterDeviceDto dto,
+			CancellationToken cancellationToken)
+		{
+			if (!HasPairingKey() && User.Identity?.IsAuthenticated != true)
+				return Unauthorized(new { Success = false, Message = "Bad pairing key." });
+
+			if (string.IsNullOrWhiteSpace(dto.DeviceId))
+				return BadRequest(new { Success = false, Message = "A device id is required." });
+
+			var registration = await _devices.RegisterAsync(
+				dto.DeviceId,
+				dto.DeviceName,
+				dto.AppVersion,
+				dto.Platform,
+				User.FindFirstValue(ClaimTypes.Name) ?? "pairing key",
+				cancellationToken);
+
+			// The token is returned here and nowhere else - only its hash is kept.
+			return Ok(new
+			{
+				Success = true,
+				registration.Token,
+				registration.ReplacedExisting,
+				Message = registration.ReplacedExisting
+					? "Re-paired. The previous token for this handset no longer works."
+					: "Paired."
+			});
+		}
+
+		/// <summary>
+		/// Lets the phone say it is alive without doing anything else. The reply
+		/// tells it whether a CAPTCHA is waiting, so one call covers both.
+		/// </summary>
+		[AllowAnonymous]
+		[HttpPost("devices/heartbeat")]
+		public async Task<IActionResult> Heartbeat(CancellationToken cancellationToken)
+		{
+			if (!await IsKnownDeviceAsync("heartbeat", cancellationToken))
+				return Unauthorized();
+
+			var now = DateTime.UtcNow;
+
+			var waiting = await _db.IfmsChallengeRequests
+				.AsNoTracking()
+				.AnyAsync(c => c.Status == "Pending" && c.ExpiresAt > now, cancellationToken);
+
+			return Ok(new { Success = true, CaptchaWaiting = waiting });
+		}
+
+		/// <summary>Paired handsets, with how long since each last spoke.</summary>
+		[Authorize]
+		[HttpGet("devices")]
+		public async Task<ActionResult<IReadOnlyList<IfmsRelayDeviceDto>>> Devices(
+			CancellationToken cancellationToken)
+		{
+			var staleAfterHours = _config.GetValue("Ifms:RelayStaleAfterHours", 4);
+			return Ok(await _devices.ListAsync(staleAfterHours, cancellationToken));
+		}
+
+		/// <summary>
+		/// Stops a handset relaying, immediately. This is the whole point of giving
+		/// each phone its own token: replacing one is pair-new then revoke-old, and
+		/// the retired handset goes quiet at once.
+		/// </summary>
+		[Authorize]
+		[HttpPost("devices/{id:int}/revoke")]
+		public async Task<IActionResult> RevokeDevice(int id, CancellationToken cancellationToken)
+		{
+			var revoked = await _devices.RevokeAsync(
+				id,
+				User.FindFirstValue(ClaimTypes.Name) ?? "Portal",
+				cancellationToken);
+
+			return revoked
+				? Ok(new { Success = true, Message = "Revoked. That phone can no longer relay." })
+				: NotFound(new { Success = false, Message = "No such active device." });
+		}
+
 		// ------------------------------------------------------------- accounts
 
 		/// <summary>
@@ -232,6 +351,7 @@ namespace SpicAPI.Controllers
 					IsActive = a.IsActive,
 					Order = a.Order,
 					HasPassword = !string.IsNullOrWhiteSpace(a.ProtectedPassword),
+					PlainPasswordForTesting = a.PlainPasswordForTesting,
 					PasswordSetAt = a.PasswordSetAt,
 					PasswordExpiresAt = a.PasswordExpiresAt,
 					PasswordRotationDays = a.PasswordRotationDays,
@@ -412,7 +532,7 @@ namespace SpicAPI.Controllers
 		[HttpGet("status")]
 		public async Task<ActionResult<IfmsAutomationStatusDto>> Status(CancellationToken cancellationToken)
 		{
-			if (!IsCallerAllowed())
+			if (!await IsCallerAllowedAsync("status", cancellationToken))
 				return Unauthorized();
 
 			var now = DateTime.UtcNow;

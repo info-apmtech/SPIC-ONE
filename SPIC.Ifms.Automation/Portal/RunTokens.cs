@@ -31,6 +31,7 @@ namespace SPIC.Ifms.Automation.Portal
 				["today"] = runDateLocal.Date,
 				["yesterday"] = runDateLocal.Date.AddDays(-1),
 				["monthStart"] = new DateTime(reportDate.Year, reportDate.Month, 1),
+				["quarterStart"] = QuarterStartWithLookback(reportDate),
 				["monthEnd"] = new DateTime(reportDate.Year, reportDate.Month,
 					DateTime.DaysInMonth(reportDate.Year, reportDate.Month))
 			};
@@ -77,6 +78,26 @@ namespace SPIC.Ifms.Automation.Portal
 				// filter — an obviously wrong value in the log beats a wrong report.
 				return match.Value;
 			});
+		}
+
+		/// <summary>
+		/// The start of the reporting quarter for the sales reports.
+		///
+		/// Normally the first month of the current quarter — but in the first month
+		/// of a quarter that window is only days old, so it steps back to the
+		/// previous quarter instead. The range is therefore never shorter than a
+		/// month and never longer than six, which is what catches transactions
+		/// entered late against an earlier date.
+		///
+		/// August sits second in Jul-Sep, so it gives 1 July. July sits first, so it
+		/// gives 1 April. January steps back across the year end to 1 October.
+		/// </summary>
+		private static DateTime QuarterStartWithLookback(DateTime date)
+		{
+			var firstMonthOfQuarter = ((date.Month - 1) / 3) * 3 + 1;
+			var start = new DateTime(date.Year, firstMonthOfQuarter, 1);
+
+			return date.Month == firstMonthOfQuarter ? start.AddMonths(-3) : start;
 		}
 
 		/// <summary>Indian financial year label for a date, e.g. "2026-2027".</summary>

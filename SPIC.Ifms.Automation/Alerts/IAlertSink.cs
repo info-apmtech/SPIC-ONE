@@ -11,6 +11,21 @@ namespace SPIC.Ifms.Automation.Alerts
 		bool Enabled { get; }
 
 		Task SendRunSummaryAsync(RunSummary summary, CancellationToken cancellationToken);
+
+		/// <summary>
+		/// A short standalone message that is not about a run — today, that the
+		/// relay phone has gone quiet.
+		///
+		/// Deliberately separate from the run summary: this fires in the evening,
+		/// while there is still time to plug the phone in, rather than at 04:05
+		/// when it is already too late to matter.
+		/// </summary>
+		Task SendNoticeAsync(
+			string title,
+			string body,
+			bool urgent,
+			CancellationToken cancellationToken)
+			=> Task.CompletedTask;
 	}
 
 	/// <summary>
