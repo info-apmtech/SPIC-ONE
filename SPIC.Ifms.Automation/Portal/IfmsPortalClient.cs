@@ -460,6 +460,10 @@ namespace SPIC.Ifms.Automation.Portal
 
 			await otpBox.FillAsync(otp);
 			await SubmitOtpAsync(otpBox, cancellationToken);
+
+			// Verifying raises the UIDAI alert, which the dialog handler accepts.
+			// The navigation to the landing page only happens after that, so give
+			// it a moment rather than testing for "logged in" too early.
 			await WaitForSettleAsync(cancellationToken);
 
 			return "SmsRelay";
@@ -969,8 +973,38 @@ namespace SPIC.Ifms.Automation.Portal
 			_context = await NewContextAsync(storageState: null);
 			_page = await _context.NewPageAsync();
 
-			_page.SetDefaultTimeout(_options.Browser.ActionTimeoutMs);
-			_page.SetDefaultNavigationTimeout(_options.Browser.NavigationTimeoutMs);
+			ConfigurePage(_page);
+		}
+
+		/// <summary>
+		/// Wires up a page the way every page in this session needs to behave.
+		///
+		/// The dialog handler is the part that matters: after the OTP is verified
+		/// the portal throws a native alert about UIDAI L1-PoS devices, and until
+		/// it is dismissed the page does not move on. Playwright would auto-dismiss
+		/// it, but relying on that leaves no trace in the log when a new dialog
+		/// appears, so this accepts explicitly and says what it said.
+		/// </summary>
+		private void ConfigurePage(IPage page)
+		{
+			page.SetDefaultTimeout(_options.Browser.ActionTimeoutMs);
+			page.SetDefaultNavigationTimeout(_options.Browser.NavigationTimeoutMs);
+
+			page.Dialog += async (_, dialog) =>
+			{
+				_logger.LogInformation(
+					"Dismissing a {Type} dialog from the portal: {Message}",
+					dialog.Type, dialog.Message);
+
+				try
+				{
+					await dialog.AcceptAsync();
+				}
+				catch (Exception ex)
+				{
+					_logger.LogWarning(ex, "Could not dismiss the dialog.");
+				}
+			};
 		}
 
 		private Task<IBrowserContext> NewContextAsync(string? storageState) =>
@@ -1043,8 +1077,7 @@ namespace SPIC.Ifms.Automation.Portal
 
 				_context = await NewContextAsync(storageState);
 				_page = await _context.NewPageAsync();
-				_page.SetDefaultTimeout(_options.Browser.ActionTimeoutMs);
-				_page.SetDefaultNavigationTimeout(_options.Browser.NavigationTimeoutMs);
+				ConfigurePage(_page);
 
 				await GotoLoginAsync(cancellationToken);
 
