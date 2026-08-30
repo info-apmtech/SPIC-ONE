@@ -258,37 +258,64 @@ button and watch.
 
 ### As a Linux service
 
-```ini
-# /etc/systemd/system/spic-ifms.service
-[Unit]
-Description=SPIC IFMS Automation
-After=network-online.target
+Deploying to **103.14.121.144** (`cam.server`), which also hosts the Postgres
+this writes to. Chosen over the other candidate box because that one had swap
+fully consumed and under 1 GB free, and belongs to a different product; this one
+idles at 9% memory on a current kernel.
 
-[Service]
-Type=notify
-WorkingDirectory=/opt/spic-ifms
-ExecStart=/usr/bin/dotnet /opt/spic-ifms/SPIC.Ifms.Automation.dll
-Restart=always
-RestartSec=30
-EnvironmentFile=/opt/spic-ifms/secrets.env
-User=spic
+Everything needed is in `deploy/`. From a checkout on the server:
 
-[Install]
-WantedBy=multi-user.target
+```bash
+sudo ./deploy/setup.sh
 ```
 
-`secrets.env`, mode `0600`:
+That checks for the .NET runtime and `tzdata`, creates `/opt/spic-ifms`, writes
+a `0600` secrets file and installs the systemd unit. Safe to re-run.
 
+Then edit `/opt/spic-ifms/secrets.env`, and:
+
+```bash
+sudo ./deploy/publish.sh
 ```
-Alerts__Push__ApiKey=…
-Alerts__Email__Password=…
-ConnectionStrings__DefaultConnection=…
+
+Which builds, installs Chromium, fetches the OCR data if missing, and restarts
+the service. Re-run it for every update — it deliberately does not use
+`rsync --delete`, so `downloads/`, `diagnostics/` and `secrets.env` survive.
+
+Finally the two portal logins, and enable it:
+
+```bash
+cd /opt/spic-ifms && dotnet SPIC.Ifms.Automation.dll set-credentials spic 1000249825 "<password>" SPIC
 ```
 
-Portal passwords are not here — they are in the database.
+```bash
+sudo systemctl enable --now spic-ifms && journalctl -u spic-ifms -f
+```
 
-The schedule uses a real time zone, so `Asia/Kolkata` works on a UTC server —
-just make sure `tzdata` is installed.
+#### Notes on the unit
+
+- `MemoryMax=2G` and `CPUQuota=150%`. This box also runs the JT1078 video
+  gateways and Postgres; a stuck Chromium must not be able to starve them.
+- `StartLimitBurst=3`. The service idles until 04:05, so a crash loop would
+  otherwise be invisible — this turns it into a failed unit you can see.
+- `LimitNOFILE=65535`, because Chromium wants far more descriptors than the
+  default 1024.
+- The connection string in `secrets.env` uses `localhost`, since the database is
+  on the same host. It overrides `appsettings.json`.
+
+#### Line endings
+
+`deploy/.gitattributes` pins `*.sh` and `*.service` to LF. Checked out with CRLF
+on a Linux box, a script fails with `bad interpreter: /bin/bash^M` — which is
+not an obvious error the first time you meet it.
+
+#### The first deployment is useful even with no reports configured
+
+All 14 jobs ship disabled. Deploy anyway: at 04:05 the service will wake, probe
+the portal, sign in as both companies, and stop. That proves the CAPTCHA solver,
+the OTP relay and the logged-in selector against the real host — and the log
+tells you the OTP field ids to put in config. Enable reports one at a time
+afterwards.
 
 ## The Android side
 

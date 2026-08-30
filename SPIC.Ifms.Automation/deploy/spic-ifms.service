@@ -1,0 +1,45 @@
+[Unit]
+Description=SPIC IFMS nightly report automation
+Documentation=https://github.com/info-apmtech/SPIC-ONE
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/spic-ifms
+ExecStart=/usr/bin/dotnet /opt/spic-ifms/SPIC.Ifms.Automation.dll
+
+# Secrets live here, not in appsettings.json. Mode 0600, never in git.
+EnvironmentFile=-/opt/spic-ifms/secrets.env
+
+Restart=always
+RestartSec=30
+
+# The service idles until 04:05, so a crash loop would be invisible without
+# this. Three failures inside ten minutes and systemd stops trying, which
+# surfaces as a failed unit rather than a silent restart every 30 seconds.
+StartLimitBurst=3
+StartLimitIntervalSec=600
+
+# This box also runs the JT1078 video gateways and Postgres. A stuck Chromium
+# must never be able to starve them, so the browser gets a hard ceiling rather
+# than the benefit of the doubt.
+MemoryMax=2G
+CPUQuota=150%
+
+# Chromium wants more file descriptors than the default 1024.
+LimitNOFILE=65535
+
+# Ordinary hardening. The service needs to write only its own folder.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/spic-ifms
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=spic-ifms
+
+[Install]
+WantedBy=multi-user.target
