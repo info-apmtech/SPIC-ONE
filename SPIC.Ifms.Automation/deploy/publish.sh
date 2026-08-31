@@ -10,14 +10,22 @@
 #
 set -euo pipefail
 
-REPO="${1:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+# This script lives at <repo>/SPIC.Ifms.Automation/deploy/, so the repository is
+# two levels up - not three. Ask git first, since that is exact whatever the
+# script is invoked from.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO="${1:-$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || cd "$SCRIPT_DIR/../.." && pwd)}"
 PROJECT="$REPO/SPIC.Ifms.Automation/SPIC.Ifms.Automation.csproj"
 APP_DIR=/opt/spic-ifms
 SERVICE=spic-ifms
 
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$1"; }
 
-[ -f "$PROJECT" ] || { echo "Cannot find $PROJECT" >&2; exit 1; }
+if [ ! -f "$PROJECT" ]; then
+  echo "Cannot find $PROJECT" >&2
+  echo "Pass the repository root explicitly:  sudo ./publish.sh /opt/spic-src" >&2
+  exit 1
+fi
 
 say "Publishing from $REPO"
 dotnet publish "$PROJECT" -c Release -o /tmp/spic-ifms-publish --nologo
