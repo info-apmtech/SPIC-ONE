@@ -236,6 +236,95 @@ namespace SpicAPI.Controllers
         }
 
         // =====================================================================
+        //  MO document REPLACE - replace the file of an EXISTING document row
+        //  with a corrected file. MO role only.
+        //
+        //  This updates ONLY the targeted document record (identified by
+        //  documentId): its physical file is swapped, the DB row's file
+        //  metadata is updated in place, and the old file is deleted. The
+        //  document's Id, WelfareApplicationId, DocumentType and DocumentName
+        //  are preserved, so no duplicate document is created and no other
+        //  document/application is affected.
+        // =====================================================================
+
+        [HttpPost("document/{documentId:int}/replace")]
+        public async Task<IActionResult> ReplaceDocument(int documentId, [FromForm] IFormFile file, [FromForm] string documentType)
+        {
+            var (role, user) = await GetActorAsync();
+            if (user == null)
+                return Unauthorized();
+
+            if (!role.HasValue || role.Value != AppRole.MO)
+                return StatusCode(403, new { Message = "Only the MO can replace documents." });
+
+            if (file == null || file.Length == 0)
+                return BadRequest(new { Message = "A replacement file is required." });
+
+            var document = await _db.WelfareApplicationDocuments
+                .FirstOrDefaultAsync(d => d.Id == documentId);
+
+            if (document == null)
+                return NotFound(new { Message = "Document not found." });
+
+            // Only allow replacement of a document belonging to an application the
+            // MO is allowed to access (territory rule).
+            var application = await _db.WelfareApplications
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == document.WelfareApplicationId);
+
+            if (application == null)
+                return NotFound(new { Message = "Application not found." });
+
+            if (!await IsDealerWithinScopeAsync(application.DealerId, role))
+                return StatusCode(403, new { Message = "This document belongs to an application outside your territory." });
+
+            // Save the new file into the same application's upload folder.
+            var oldFilePath = document.FilePath;
+            var uploadDir = Path.Combine(_env.ContentRootPath, "Uploads", "Welfare", application.Id.ToString());
+            System.IO.Directory.CreateDirectory(uploadDir);
+
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var safeFileName = $"{Guid.NewGuid():N}{ext}";
+            var filePath = Path.Combine(uploadDir, safeFileName);
+
+            if (!Path.GetFullPath(filePath).StartsWith(Path.GetFullPath(uploadDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { Message = "Invalid file path." });
+
+            using (var stream = new System.IO.FileStream(filePath, System.IO.FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            // Update the EXISTING document row in place (no new record).
+            var previousName = document.DocumentName ?? document.FileName;
+            document.FileName = file.FileName;
+            document.FilePath = Path.Combine("Welfare", application.Id.ToString(), safeFileName);
+            document.ContentType = file.ContentType;
+            document.FileSize = file.Length;
+            document.UploadedBy = user.Id;
+            document.UploadedAt = DateTime.Now;
+
+            _db.WelfareApplicationActionLogs.Add(new WelfareApplicationActionLog
+            {
+                WelfareApplicationId = application.Id,
+                ActorLevel = role.Value,
+                Action = "DocumentReplaced",
+                Remarks = $"MO replaced document '{previousName}' with '{file.FileName}'.",
+                ActorName = BuildActorName(user, role.Value),
+                CreatedBy = user.Id,
+                CreatedAt = DateTime.Now
+            });
+
+            await _db.SaveChangesAsync();
+
+            // Best-effort removal of the old physical file (the DB row now points
+            // to the new file, so the old one is no longer referenced).
+            DeleteDocumentFile(oldFilePath);
+
+            return Ok(new { Success = true, Message = "Document replaced successfully." });
+        }
+
+        // =====================================================================
         //  MO document upload - add a corrected/replacement document.
         //  MO role only. Reuses the same storage pattern as the dealer flow.
         // =====================================================================

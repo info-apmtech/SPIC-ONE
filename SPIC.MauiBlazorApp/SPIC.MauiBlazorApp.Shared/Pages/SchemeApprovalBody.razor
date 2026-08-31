@@ -394,7 +394,10 @@ else
                                 <button class="apd-btn-download" @onclick="() => OpenDocument(doc.Id, true)">Download</button>
                                 @if (IsMoStage)
                                 {
-                                    <button class="apd-btn-replace" @onclick="() => OpenReplaceModal(doc)">Replace</button>
+                                    <label class="apd-btn-replace mb-0" style="cursor:pointer;">
+                                        <i class="bi bi-arrow-repeat"></i> Replace
+                                        <InputFile hidden OnChange="(e) => OnReplaceFileSelected(doc, e)" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" />
+                                    </label>
                                 }
                             </div>
                         </div>
@@ -570,43 +573,6 @@ else
     </div>
 }
 
-<!-- ================= MO: REPLACE DOCUMENT ================= -->
-@if (_showReplaceModal && _docToReplace != null)
-{
-    <div class="rm-overlay" @onclick="CloseReplaceModal">
-        <div class="rm-container" @onclick:stopPropagation="true">
-            <div class="rm-icon-wrapper">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-            </div>
-            <h2 class="rm-title">Replace Document</h2>
-            <p class="rm-subtitle">Select the corrected file to replace the wrong document. The existing file will be removed and the new file added in its place.</p>
-            <p class="rm-warning" style="word-break:break-word;">@(string.IsNullOrWhiteSpace(_docToReplace.DocumentName) ? _docToReplace.FileName : _docToReplace.DocumentName)</p>
-            <div class="rm-form">
-                <div class="rm-form-group">
-                    <label class="rm-label">Select New File *</label>
-                    <InputFile OnChange="@OnReplaceFileSelected" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" class="rm-file-input" />
-                    @if (_replaceFile != null)
-                    {
-                        <div class="apd-file-chosen">@_replaceFile.Name (@(_replaceFile.Size > 0 ? $"{(_replaceFile.Size / 1024.0):F1} KB" : "0 KB"))</div>
-                    }
-                </div>
-            </div>
-            @if (!string.IsNullOrWhiteSpace(_docActionError))
-            {
-                <p class="rm-warning" style="margin-top:8px;">@_docActionError</p>
-            }
-            <div class="rm-actions">
-                <button class="rm-btn rm-btn-cancel" disabled="@_busy" @onclick="CloseReplaceModal">Cancel</button>
-                <button class="rm-btn rm-btn-reject" disabled="@_busy || _replaceFile == null" @onclick="ConfirmReplaceDocument">
-                    @(_busy ? "Replacing…" : "Replace Document")
-                </button>
-            </div>
-        </div>
-    </div>
-}
-
 @code {
     [Parameter] public int ApplicationId { get; set; }
     [Parameter] public EventCallback OnActionCompleted { get; set; }
@@ -645,12 +611,6 @@ else
     private string? _rejectRemarks;
     private string? _actionError;
     private bool _busy;
-
-    private bool _showReplaceModal;
-    private SPIC.Core.DTOs.WelfareApplicationDocumentDto? _docToReplace;
-    private Microsoft.AspNetCore.Components.Forms.IBrowserFile? _replaceFile;
-    private string? _docActionError;
-    private string? _docActionMessage;
 
     private bool IsMoStage => LoginState.UserRole == AppRole.MO;
 
@@ -1247,83 +1207,37 @@ else
 
     private Task ViewDocument(int documentId) => OpenDocument(documentId, false);
 
-    private void OpenReplaceModal(SPIC.Core.DTOs.WelfareApplicationDocumentDto doc)
+    // Direct replace on file selection (same pattern as Enclosures Partner/Proprietor
+    // document replacement): the moment a file is picked, upload it and update the
+    // existing document row in place, then reload the application.
+    private async Task OnReplaceFileSelected(SPIC.Core.DTOs.WelfareApplicationDocumentDto doc, Microsoft.AspNetCore.Components.Forms.InputFileChangeEventArgs e)
     {
-        _docToReplace = doc;
-        _replaceFile = null;
-        _docActionError = null;
-        _docActionMessage = null;
-        _showReplaceModal = true;
-    }
+        if (doc == null || e.File == null || _busy) return;
 
-    private void CloseReplaceModal()
-    {
-        _showReplaceModal = false;
-        _docToReplace = null;
-        _replaceFile = null;
-        _docActionError = null;
-    }
-
-    private async Task OnReplaceFileSelected(Microsoft.AspNetCore.Components.Forms.InputFileChangeEventArgs e)
-    {
-        _docActionError = null;
-        _docActionMessage = null;
-        if (e.File != null)
-        {
-            _replaceFile = e.File;
-        }
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task ConfirmReplaceDocument()
-    {
-        if (_docToReplace == null || _replaceFile == null) return;
         _busy = true;
-        _docActionError = null;
-        _docActionMessage = null;
         try
         {
-            var delUrl = $"/api/WelfareSchemeApproval/document/{_docToReplace.Id}";
-            var delResponse = await Http.DeleteAsync(delUrl);
-            if (!delResponse.IsSuccessStatusCode)
-            {
-                var delBody = await delResponse.Content.ReadAsStringAsync();
-                var delMsg = ExtractErrorMessage(delBody) ?? "Failed to remove the wrong document.";
-                _docActionError = delMsg;
-                return;
-            }
-
             using var content = new MultipartFormDataContent();
-            using (var stream = _replaceFile.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024))
-            {
-                var buffer = new byte[stream.Length];
-                await stream.ReadAsync(buffer, 0, (int)stream.Length);
-                var fileContent = new ByteArrayContent(buffer);
-                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
-                    _replaceFile.ContentType ?? "application/octet-stream");
-                content.Add(fileContent, "files", _replaceFile.Name);
-                content.Add(new StringContent(_docToReplace.DocumentType ?? ""), "documentTypes");
-            }
+            var stream = e.File.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", e.File.Name);
+            content.Add(new StringContent(doc.DocumentType ?? ""), "documentType");
 
-            var url = $"/api/WelfareSchemeApproval/applications/{_detail?.Id ?? ApplicationId}/documents";
+            var url = $"/api/WelfareSchemeApproval/document/{doc.Id}/replace";
             var response = await Http.PostAsync(url, content);
             if (response.IsSuccessStatusCode)
             {
-                _showReplaceModal = false;
-                _docToReplace = null;
-                _replaceFile = null;
                 await LoadDetail(_detail?.Id ?? ApplicationId);
             }
             else
             {
                 var body = await response.Content.ReadAsStringAsync();
-                var msg = ExtractErrorMessage(body) ?? "Failed to upload the replacement document.";
-                _docActionError = msg;
+                var msg = ExtractErrorMessage(body) ?? "Failed to replace the document.";
+                _actionError = msg;
             }
         }
         catch (Exception ex)
         {
-            _docActionError = ex.Message;
+            _actionError = ex.Message;
         }
         finally
         {
