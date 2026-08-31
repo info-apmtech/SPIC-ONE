@@ -490,7 +490,7 @@ else
                 {
                     <div class="rm-form-group">
                         <label class="rm-label">Comments *</label>
-                        <select class="rm-select" @bind="_approveComment">
+                        <select class="rm-select" @bind="_approveComment" @bind:after="OnCommentChanged">
                             <option value="">--Select--</option>
                             <option value="Information verified and eligible for approval">Information verified and eligible for approval</option>
                             <option value="Documents incomplete or not valid">Documents incomplete or not valid</option>
@@ -500,7 +500,7 @@ else
                     </div>
                     <div class="rm-form-group">
                         <label class="rm-label">Recommendation *</label>
-                        <select class="rm-select" @bind="_approveRecommendation">
+                        <select class="rm-select" @bind="_approveRecommendation" disabled>
                             <option value="">--Select--</option>
                             <option value="Verified">Verified</option>
                             <option value="Rejected">Rejected</option>
@@ -1061,6 +1061,15 @@ else
 
     private void CloseApproveModal() { if (!_busy) IsApproveModalOpen = false; }
     private void CloseRejectModal() { if (!_busy) IsRejectModalOpen = false; }
+
+    private void OnCommentChanged()
+    {
+        _approveRecommendation = _approveComment == "Information verified and eligible for approval"
+            ? "Verified"
+            : string.IsNullOrWhiteSpace(_approveComment)
+                ? ""
+                : "Rejected";
+    }
 
     private async Task ConfirmApprove()
     {
