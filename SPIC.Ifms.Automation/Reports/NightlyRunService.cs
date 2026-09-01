@@ -99,6 +99,7 @@ namespace SPIC.Ifms.Automation.Reports
 
 			var reports = new List<ReportSummary>();
 			string? fatalError = null;
+			var configurationProblem = false;
 			var reachable = false;
 			var loggedIn = false;
 			string? captchaMethod = null;
@@ -129,6 +130,8 @@ namespace SPIC.Ifms.Automation.Reports
 						fatalError =
 							"No IFMS portal logins are configured. Add them on the IFMS Logins page, " +
 							"or with: dotnet run -- set-credentials <key> <username> <password>";
+
+						configurationProblem = true;
 					}
 
 					// Each company is a separate login and a separate browser session,
@@ -214,6 +217,7 @@ namespace SPIC.Ifms.Automation.Reports
 				AccountsTotal = accountsTotal,
 				AccountsSucceeded = accountsSucceeded,
 				ErrorMessage = fatalError,
+				IsConfigurationProblem = configurationProblem,
 				Reports = reports
 			};
 
@@ -221,9 +225,25 @@ namespace SPIC.Ifms.Automation.Reports
 			await _alerts.DispatchAsync(summaryModel, cancellationToken);
 			await MarkAlertSentAsync(run.Id, cancellationToken);
 
-			_logger.LogInformation(
-				"Run {RunId} finished as {Status} in {Minutes:0.0} minutes.",
-				run.Id, status, summaryModel.Duration.TotalMinutes);
+			if (status == IfmsRunStatus.Succeeded)
+			{
+				_logger.LogInformation(
+					"Run {RunId} finished as {Status} in {Minutes:0.0} minutes.",
+					run.Id, status, summaryModel.Duration.TotalMinutes);
+			}
+			else
+			{
+				// Log the reason here, not only in the alert. The first thing that
+				// breaks is often the alert channel itself, and a run that says
+				// "Failed" without saying why leaves nothing to act on.
+				_logger.LogError(
+					"Run {RunId} finished as {Status} in {Minutes:0.0} minutes. {Reason} {Action}",
+					run.Id,
+					status,
+					summaryModel.Duration.TotalMinutes,
+					fatalError ?? "No single cause; see the per-report errors above.",
+					summaryModel.ActionRequired);
+			}
 
 			return summaryModel;
 		}

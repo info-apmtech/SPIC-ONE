@@ -30,6 +30,16 @@ namespace SPIC.Ifms.Automation.Alerts
 
 		public string? ErrorMessage { get; init; }
 
+		/// <summary>
+		/// True when the run failed because something is not set up — no logins, no
+		/// enabled reports — rather than because the portal misbehaved.
+		///
+		/// Retrying these is pointless: nothing changes between attempts except the
+		/// clock, and three identical failure alerts half an hour apart are worse
+		/// than one.
+		/// </summary>
+		public bool IsConfigurationProblem { get; init; }
+
 		public List<ReportSummary> Reports { get; init; } = new();
 
 		public TimeSpan Duration => CompletedAtLocal - StartedAtLocal;
@@ -119,6 +129,16 @@ namespace SPIC.Ifms.Automation.Alerts
 		public int RowsSkipped { get; init; }
 
 		public string? ErrorMessage { get; init; }
+
+		/// <summary>
+		/// True when the run failed because something is not set up — no logins, no
+		/// enabled reports — rather than because the portal misbehaved.
+		///
+		/// Retrying these is pointless: nothing changes between attempts except the
+		/// clock, and three identical failure alerts half an hour apart are worse
+		/// than one.
+		/// </summary>
+		public bool IsConfigurationProblem { get; init; }
 		public List<string> Warnings { get; init; } = new();
 	}
 }

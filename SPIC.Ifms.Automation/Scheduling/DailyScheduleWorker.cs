@@ -120,6 +120,19 @@ namespace SPIC.Ifms.Automation.Scheduling
 					if (summary.Status == IfmsRunStatus.Succeeded)
 						return;
 
+					// Nothing about a missing login gets better by waiting fifteen
+					// minutes and trying again; it just produces three identical
+					// alerts and delays the operator noticing the real message.
+					if (summary.IsConfigurationProblem)
+					{
+						_logger.LogError(
+							"Run {RunId} failed because the automation is not fully configured. " +
+							"Not retrying — fix the configuration and use Run now, or wait for " +
+							"tomorrow's schedule.",
+							summary.RunId);
+						return;
+					}
+
 					// A partial success has already imported what it could and has
 					// already alerted. Retrying the whole thing would re-download
 					// the reports that worked, so stop here and let the operator
