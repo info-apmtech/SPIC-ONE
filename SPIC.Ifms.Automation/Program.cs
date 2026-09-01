@@ -205,27 +205,94 @@ static async Task<int> RunCredentialsCommandAsync(
 		return 0;
 	}
 
-	if (args.Length < 4)
+	if (args.Length < 3)
 	{
-		Console.WriteLine("Usage: dotnet run -- set-credentials <key> <username> <password> [company]");
-		Console.WriteLine("Example: dotnet run -- set-credentials spic 1000249825 \"â€¦\" SPIC");
+		Console.WriteLine("Usage: dotnet SPIC.Ifms.Automation.dll set-credentials <key> <username> [company]");
+		Console.WriteLine();
+		Console.WriteLine("  dotnet SPIC.Ifms.Automation.dll set-credentials greenstar 1000249825 Greenstar");
+		Console.WriteLine();
+		Console.WriteLine("It asks for the password, so it never appears in your shell history");
+		Console.WriteLine("or in the process list. Paste it at the prompt.");
 		return 1;
 	}
 
 	var key = args[1];
 	var userName = args[2];
-	var password = args[3];
-	var company = args.Length > 4 ? args[4] : key.ToUpperInvariant();
+	var company = args.Length > 3 ? args[3] : key.ToUpperInvariant();
 
-	await store.SetCredentialsAsync(
-		key, company, userName, password,
-		changedBy: Environment.UserName,
-		reason: "Manual",
-		CancellationToken.None);
+	// Prompting rather than taking the password as an argument. On the command
+	// line it would sit in ~/.bash_history and be visible in `ps` to every user
+	// on the box for as long as the process ran - and this is a password that
+	// unlocks a government portal.
+	var password = ReadPasswordFromConsole($"Password for {userName} ({company}): ");
+
+	if (string.IsNullOrEmpty(password))
+	{
+		Console.WriteLine("Nothing entered; no change made.");
+		return 1;
+	}
+
+	var confirm = ReadPasswordFromConsole("Type it again to confirm      : ");
+
+	if (!string.Equals(password, confirm, StringComparison.Ordinal))
+	{
+		// Worth the second prompt: a mistyped password here is only discovered
+		// at 04:05, as a login failure that looks like a portal problem.
+		Console.WriteLine("Those do not match; no change made.");
+		return 1;
+	}
 
 	Console.WriteLine($"Saved the login for {company} ({userName}).");
 	Console.WriteLine("The 80-day password clock starts now.");
 	return 0;
+}
+
+/// <summary>
+/// Reads a password without echoing it.
+///
+/// Falls back to a plain read when there is no console — piped input, or a
+/// systemd context — because throwing there would make the command unusable
+/// from a script for no gain.
+/// </summary>
+static string ReadPasswordFromConsole(string prompt)
+{
+	Console.Write(prompt);
+
+	if (Console.IsInputRedirected)
+	{
+		Console.WriteLine("(input is not a terminal; it will not be hidden)");
+		return Console.ReadLine() ?? string.Empty;
+	}
+
+	var builder = new System.Text.StringBuilder();
+
+	while (true)
+	{
+		var key = Console.ReadKey(intercept: true);
+
+		if (key.Key == ConsoleKey.Enter)
+		{
+			Console.WriteLine();
+			return builder.ToString();
+		}
+
+		if (key.Key == ConsoleKey.Backspace)
+		{
+			if (builder.Length > 0)
+				builder.Length--;
+
+			continue;
+		}
+
+		if (key.Key == ConsoleKey.Escape)
+		{
+			Console.WriteLine();
+			return string.Empty;
+		}
+
+		if (!char.IsControl(key.KeyChar))
+			builder.Append(key.KeyChar);
+	}
 }
 
 /// <summary>
