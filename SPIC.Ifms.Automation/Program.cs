@@ -139,7 +139,8 @@ builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 // "dotnet run -- test-captcha" never fires a real download.
 
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
-var isTool = command is "test-captcha" or "set-credentials" or "list-credentials" or "test-email";
+var isTool = command is "test-captcha" or "set-credentials" or "list-credentials"
+	or "test-email" or "otp" or "run-now";
 
 if (!isTool)
 {
@@ -164,6 +165,16 @@ if (command is "set-credentials" or "list-credentials")
 // right, and waiting for 04:05 to find out is no way to iterate.
 if (command == "test-email")
 	return await RunTestEmailAsync(host.Services);
+
+// Hand the login an OTP without a phone. This is the commissioning path, and it
+// stays useful afterwards as the fallback for the morning the handset is flat.
+if (command == "otp")
+	return await RunOtpCommandAsync(host.Services, args);
+
+// Queue a run for the service to pick up within twenty seconds, rather than
+// waiting for 04:05 to find out whether anything works.
+if (command == "run-now")
+	return await RunNowCommandAsync(host.Services, args);
 
 if (command == "test-captcha")
 {
@@ -351,6 +362,95 @@ static string ReadPasswordFromConsole(string prompt)
 		if (!char.IsControl(key.KeyChar))
 			builder.Append(key.KeyChar);
 	}
+}
+
+/// <summary>
+/// Injects a one-time password as though the Android relay had forwarded it.
+///
+///   dotnet SPIC.Ifms.Automation.dll otp 123456
+///
+/// The waiting login picks it up within two seconds. It is written exactly like
+/// a relayed SMS, so nothing downstream can tell the difference — which is the
+/// point: this is the same path the phone uses, exercised by hand.
+/// </summary>
+static async Task<int> RunOtpCommandAsync(IServiceProvider services, string[] args)
+{
+	if (args.Length < 2)
+	{
+		Console.WriteLine("Usage: dotnet SPIC.Ifms.Automation.dll otp <code>");
+		return 1;
+	}
+
+	var code = new string(args[1].Where(char.IsDigit).ToArray());
+
+	if (code.Length is < 4 or > 8)
+	{
+		Console.WriteLine($"'{args[1]}' does not look like an OTP.");
+		return 1;
+	}
+
+	await using var scope = services.CreateAsyncScope();
+	var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
+
+	db.IfmsOtpMessages.Add(new SPIC.Core.Entities.IfmsOtpMessage
+	{
+		DeviceId = "manual",
+		Sender = "MANUAL",
+		Body = $"Your IFMS OTP is {code}",
+		ExtractedOtp = code,
+		ReceivedAt = DateTime.UtcNow,
+		CreatedAt = DateTime.UtcNow
+	});
+
+	await db.SaveChangesAsync();
+
+	Console.WriteLine($"OTP {code} queued. A login waiting for one will use it within two seconds.");
+	Console.WriteLine("It can only be used once, and only by a login that asked after it arrived.");
+	return 0;
+}
+
+/// <summary>
+/// Queues a run for the service to collect, so a change can be tested now rather
+/// than at four tomorrow morning.
+/// </summary>
+static async Task<int> RunNowCommandAsync(IServiceProvider services, string[] args)
+{
+	await using var scope = services.CreateAsyncScope();
+	var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
+
+	var busy = await db.IfmsAutomationRuns.AnyAsync(r =>
+		r.Status == SPIC.Core.Entities.IfmsRunStatus.Pending ||
+		r.Status == SPIC.Core.Entities.IfmsRunStatus.Running);
+
+	if (busy)
+	{
+		Console.WriteLine("A run is already queued or in progress; not queueing another.");
+		return 1;
+	}
+
+	var reportDate = args.Length > 1 && DateTime.TryParse(args[1], out var parsed)
+		? parsed.Date
+		: DateTime.Today.AddDays(-1);
+
+	var run = new SPIC.Core.Entities.IfmsAutomationRun
+	{
+		ReportDate = reportDate,
+		StartedAt = DateTime.UtcNow,
+		Status = SPIC.Core.Entities.IfmsRunStatus.Pending,
+		Trigger = SPIC.Core.Entities.IfmsRunTrigger.Manual,
+		Attempt = 1,
+		CreatedAt = DateTime.UtcNow,
+		UpdatedAt = DateTime.UtcNow,
+		UpdatedBy = Environment.UserName
+	};
+
+	db.IfmsAutomationRuns.Add(run);
+	await db.SaveChangesAsync();
+
+	Console.WriteLine($"Queued run {run.Id} for report date {reportDate:dd MMM yyyy}.");
+	Console.WriteLine("The service picks it up within twenty seconds. Watch it with:");
+	Console.WriteLine("  sudo journalctl -u spic-ifms -f");
+	return 0;
 }
 
 /// <summary>
