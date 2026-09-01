@@ -58,6 +58,22 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 			npgsql.CommandTimeout(600);
 		}));
 
+// Portal passwords are encrypted with Data Protection, and this host has to be
+// able to read what SpicAPI wrote. Three things must match on both sides or the
+// two cannot exchange a single password:
+//
+//   - the same key store, which is why the keys live in the database rather
+//     than in a folder neither machine shares
+//   - the same application name, because it is mixed into the key derivation
+//   - the same DbContext, so both look in the same table
+//
+// Without this the host starts happily and only fails when it first tries to
+// read a credential, which is exactly the wrong time to find out.
+builder.Services
+	.AddDataProtection()
+	.SetApplicationName("SPIC.Ifms")
+	.PersistKeysToDbContext<AppDbContext>();
+
 // The import path is shared with the manual upload page on purpose, so an
 // automated import and a hand upload can never diverge.
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
