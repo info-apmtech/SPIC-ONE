@@ -115,10 +115,7 @@ namespace SPIC.Ifms.Automation.Portal
 				? _ifms.LoginPath
 				: _ifms.HealthCheckPath;
 
-			if (Uri.TryCreate(path, UriKind.Absolute, out var absolute))
-				return absolute.ToString();
-
-			return $"{_ifms.BaseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
+			return IfmsUrl.Absolute(_ifms.BaseUrl, path);
 		}
 	}
 }

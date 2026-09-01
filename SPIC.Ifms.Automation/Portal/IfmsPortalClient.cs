@@ -1292,9 +1292,7 @@ namespace SPIC.Ifms.Automation.Portal
 		}
 
 		private string Absolute(string pathOrUrl) =>
-			Uri.TryCreate(pathOrUrl, UriKind.Absolute, out var absolute)
-				? absolute.ToString()
-				: $"{_options.BaseUrl.TrimEnd('/')}/{pathOrUrl.TrimStart('/')}";
+			IfmsUrl.Absolute(_options.BaseUrl, pathOrUrl);
 
 		public async ValueTask DisposeAsync()
 		{

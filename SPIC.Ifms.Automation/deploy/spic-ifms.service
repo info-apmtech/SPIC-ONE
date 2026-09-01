@@ -4,6 +4,16 @@ Documentation=https://github.com/info-apmtech/SPIC-ONE
 After=network-online.target
 Wants=network-online.target
 
+# These two belong in [Unit], not [Service]. systemd ignores them in [Service]
+# with only a log line, so the crash-loop guard silently did nothing:
+#   "Unknown key name 'StartLimitIntervalSec' in section 'Service', ignoring"
+#
+# The service idles until 04:05, so without this a crash loop would restart
+# every 30 seconds for ever and look like nothing at all. Three failures inside
+# ten minutes now leaves a failed unit you can actually see.
+StartLimitBurst=3
+StartLimitIntervalSec=600
+
 [Service]
 Type=simple
 WorkingDirectory=/opt/spic-ifms
@@ -14,12 +24,6 @@ EnvironmentFile=-/opt/spic-ifms/secrets.env
 
 Restart=always
 RestartSec=30
-
-# The service idles until 04:05, so a crash loop would be invisible without
-# this. Three failures inside ten minutes and systemd stops trying, which
-# surfaces as a failed unit rather than a silent restart every 30 seconds.
-StartLimitBurst=3
-StartLimitIntervalSec=600
 
 # This box also runs the JT1078 video gateways and Postgres. A stuck Chromium
 # must never be able to starve them, so the browser gets a hard ceiling rather
