@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.DataProtection;
@@ -272,8 +273,35 @@ static async Task<int> RunCredentialsCommandAsync(
 		return 1;
 	}
 
-	Console.WriteLine($"Saved the login for {company} ({userName}).");
-	Console.WriteLine("The 80-day password clock starts now.");
+	await store.SetCredentialsAsync(
+		key, company, userName, password,
+		changedBy: Environment.UserName,
+		reason: "Manual",
+		CancellationToken.None);
+
+	// Read it back rather than trusting the write. This command reported success
+	// for two days while silently storing nothing, and the only reason that was
+	// survivable is that it fails at 04:05 rather than corrupting anything — but
+	// a confirmation that came from the database would have caught it at once.
+	var saved = await store.GetActiveAsync(CancellationToken.None);
+	var stored = saved.FirstOrDefault(a =>
+		string.Equals(a.AccountKey, key, StringComparison.OrdinalIgnoreCase));
+
+	if (stored is null)
+	{
+		Console.WriteLine(
+			$"WROTE NOTHING. '{key}' is not in the database after saving. " +
+			"Check the connection string and try again.");
+		return 1;
+	}
+
+	Console.WriteLine(
+		$"Saved the login for {stored.CompanyName} ({stored.UserName}), " +
+		$"read back from the database.");
+	Console.WriteLine(
+		$"The password expires on {stored.PasswordExpiresAt:dd MMM yyyy} " +
+		$"({stored.DaysUntilPasswordExpires} days).");
+
 	return 0;
 }
 
