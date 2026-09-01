@@ -140,7 +140,7 @@ builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
 var isTool = command is "test-captcha" or "set-credentials" or "list-credentials"
-	or "test-email" or "otp" or "run-now";
+	or "test-email" or "otp" or "run-now" or "test-login";
 
 if (!isTool)
 {
@@ -175,6 +175,12 @@ if (command == "otp")
 // waiting for 04:05 to find out whether anything works.
 if (command == "run-now")
 	return await RunNowCommandAsync(host.Services, args);
+
+// Sign in and stop. A normal run skips the login when no reports are enabled -
+// sensibly, since there would be nothing to do with it - so proving the login
+// needs a command that does nothing else.
+if (command == "test-login")
+	return await RunTestLoginAsync(host.Services, args);
 
 if (command == "test-captcha")
 {
@@ -361,6 +367,80 @@ static string ReadPasswordFromConsole(string prompt)
 
 		if (!char.IsControl(key.KeyChar))
 			builder.Append(key.KeyChar);
+	}
+}
+
+/// <summary>
+/// Signs in to the portal and stops, reporting exactly what happened at each
+/// step. This is the commissioning tool: it exercises the CAPTCHA solver against
+/// live images, the OTP handoff and the logged-in selector, and touches no
+/// reports at all.
+///
+///   dotnet SPIC.Ifms.Automation.dll test-login greenstar
+///
+/// With no phone paired, feed it the code from another terminal:
+///   dotnet SPIC.Ifms.Automation.dll otp 123456
+/// </summary>
+static async Task<int> RunTestLoginAsync(IServiceProvider services, string[] args)
+{
+	var key = args.Length > 1 ? args[1] : null;
+
+	await using var scope = services.CreateAsyncScope();
+	var store = scope.ServiceProvider.GetRequiredService<IIfmsAccountStore>();
+
+	var accounts = await store.GetActiveAsync(CancellationToken.None);
+
+	if (accounts.Count == 0)
+	{
+		Console.WriteLine("No portal logins are configured.");
+		return 1;
+	}
+
+	var account = key is null
+		? accounts[0]
+		: accounts.FirstOrDefault(a => string.Equals(a.AccountKey, key, StringComparison.OrdinalIgnoreCase));
+
+	if (account is null)
+	{
+		Console.WriteLine($"No login found for '{key}'. Known keys: " +
+			string.Join(", ", accounts.Select(a => a.AccountKey)));
+		return 1;
+	}
+
+	Console.WriteLine($"Signing in as {account.CompanyName} ({account.UserName}).");
+	Console.WriteLine();
+	Console.WriteLine("If the portal asks for an OTP, paste it from another terminal:");
+	Console.WriteLine("  dotnet SPIC.Ifms.Automation.dll otp <code>");
+	Console.WriteLine();
+
+	var portal = scope.ServiceProvider.GetRequiredService<IfmsPortalClient>();
+
+	try
+	{
+		var result = await portal.LoginAsync(account, runId: 0, CancellationToken.None);
+
+		Console.WriteLine();
+		Console.WriteLine("---------------------------------------------");
+		Console.WriteLine($"Signed in       : {(result.Success ? "YES" : "NO")}");
+		Console.WriteLine($"CAPTCHA solved  : {result.CaptchaMethod ?? "n/a"} " +
+						  $"after {result.CaptchaAttempts} attempt(s)");
+		Console.WriteLine($"OTP             : {result.OtpMethod ?? "not requested"}");
+
+		if (!result.Success)
+		{
+			Console.WriteLine($"Why not         : {result.FailureReason}");
+			Console.WriteLine();
+			Console.WriteLine("A screenshot and the page HTML are in /opt/spic-ifms/diagnostics/<today>/.");
+			return 1;
+		}
+
+		Console.WriteLine();
+		Console.WriteLine("The login works end to end. Enable a report job next.");
+		return 0;
+	}
+	finally
+	{
+		await portal.DisposeAsync();
 	}
 }
 

@@ -437,7 +437,16 @@ namespace SPIC.Ifms.Automation.Portal
 				return null;
 			}
 
-			_logger.LogInformation("The portal is asking for an OTP.");
+			// Report the field's real id and name, so the guessing can stop. Until
+			// Ifms:Selectors:OtpInput is set this is auto-detected on every login,
+			// and auto-detection is a thing to retire rather than rely on.
+			var otpId = await otpBox.GetAttributeAsync("id");
+			var otpName = await otpBox.GetAttributeAsync("name");
+
+			_logger.LogInformation(
+				"The portal is asking for an OTP. The field is id='{Id}' name='{Name}' — " +
+				"put \"#{Id}\" in Ifms:Selectors:OtpInput and it will stop guessing.",
+				otpId ?? "(none)", otpName ?? "(none)", otpId ?? "");
 
 			var otp = await _otpProvider.WaitForOtpAsync(
 				requestedAtUtc, runId, cancellationToken, Account.AccountKey);
