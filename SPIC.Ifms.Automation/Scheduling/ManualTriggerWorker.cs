@@ -90,7 +90,7 @@ namespace SPIC.Ifms.Automation.Scheduling
 		private async Task<IfmsAutomationRun?> ClaimNextAsync(CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			return await db.IfmsAutomationRuns
 				.AsNoTracking()
@@ -104,7 +104,7 @@ namespace SPIC.Ifms.Automation.Scheduling
 			try
 			{
 				await using var scope = _scopeFactory.CreateAsyncScope();
-				var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+				var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 				var orphans = await db.IfmsAutomationRuns
 					.Where(r => r.Status == IfmsRunStatus.Running)

@@ -109,7 +109,7 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 			CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			var oldestAcceptable = DateTime.UtcNow.AddSeconds(-Math.Max(30, _options.MaxMessageAgeSeconds));
 			if (floorUtc > oldestAcceptable)

@@ -699,7 +699,7 @@ namespace SPIC.Ifms.Automation.Reports
 			CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			if (existingRunId is int id)
 			{
@@ -745,7 +745,7 @@ namespace SPIC.Ifms.Automation.Reports
 			CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			var record = new IfmsAutomationReportRun
 			{
@@ -789,7 +789,7 @@ namespace SPIC.Ifms.Automation.Reports
 			CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			var record = await db.IfmsAutomationReportRuns
 				.FirstOrDefaultAsync(r => r.Id == recordId, cancellationToken);
@@ -822,7 +822,7 @@ namespace SPIC.Ifms.Automation.Reports
 			CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			var run = await db.IfmsAutomationRuns
 				.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
@@ -854,7 +854,7 @@ namespace SPIC.Ifms.Automation.Reports
 		private async Task MarkAlertSentAsync(int runId, CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			var run = await db.IfmsAutomationRuns
 				.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);

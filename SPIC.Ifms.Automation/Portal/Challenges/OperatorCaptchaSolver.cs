@@ -74,7 +74,7 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 			int requestId;
 			await using (var scope = _scopeFactory.CreateAsyncScope())
 			{
-				var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+				var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 				var request = new IfmsChallengeRequest
 				{
@@ -117,7 +117,7 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 				await Task.Delay(poll, cancellationToken);
 
 				await using var scope = _scopeFactory.CreateAsyncScope();
-				var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+				var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 				var answer = await db.IfmsChallengeRequests
 					.AsNoTracking()
@@ -155,7 +155,7 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 		private async Task SetStatusAsync(int requestId, string status, CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			var request = await db.IfmsChallengeRequests
 				.FirstOrDefaultAsync(c => c.Id == requestId, cancellationToken);
@@ -174,7 +174,7 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 		private async Task CancelStalePendingAsync(CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			var stale = await db.IfmsChallengeRequests
 				.Where(c => c.Status == "Pending")

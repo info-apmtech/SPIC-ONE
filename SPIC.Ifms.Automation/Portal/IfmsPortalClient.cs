@@ -1113,7 +1113,7 @@ namespace SPIC.Ifms.Automation.Portal
 
 			await using (var scope = _scopeFactory.CreateAsyncScope())
 			{
-				var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+				var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 				storageState = await db.IfmsPortalSessions
 					.AsNoTracking()
@@ -1165,7 +1165,7 @@ namespace SPIC.Ifms.Automation.Portal
 				var state = await _context.StorageStateAsync();
 
 				await using var scope = _scopeFactory.CreateAsyncScope();
-				var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+				var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 				var existing = await db.IfmsPortalSessions
 					.Where(s => s.PortalUserName == Account.UserName && s.IsActive)
@@ -1199,7 +1199,7 @@ namespace SPIC.Ifms.Automation.Portal
 		private async Task TouchSessionAsync(CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			var session = await db.IfmsPortalSessions
 				.Where(s => s.IsActive && s.PortalUserName == Account.UserName)
@@ -1216,7 +1216,7 @@ namespace SPIC.Ifms.Automation.Portal
 		private async Task InvalidateSessionAsync(string reason, CancellationToken cancellationToken)
 		{
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			var sessions = await db.IfmsPortalSessions
 				.Where(s => s.IsActive && s.PortalUserName == Account.UserName)

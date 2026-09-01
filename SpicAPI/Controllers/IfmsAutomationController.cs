@@ -32,13 +32,13 @@ namespace SpicAPI.Controllers
 	{
 		private const int MaxOtpBodyLength = 2000;
 
-		private readonly AppDbContext _db;
+		private readonly IfmsDbContext _db;
 		private readonly IConfiguration _config;
 		private readonly IIfmsAccountStore _accounts;
 		private readonly IIfmsRelayDeviceStore _devices;
 
 		public IfmsAutomationController(
-			AppDbContext db,
+			IfmsDbContext db,
 			IConfiguration config,
 			IIfmsAccountStore accounts,
 			IIfmsRelayDeviceStore devices)

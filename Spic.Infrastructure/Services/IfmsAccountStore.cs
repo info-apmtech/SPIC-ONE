@@ -34,13 +34,13 @@ namespace Spic.Infrastructure.Services
 		/// </summary>
 		private const string ProtectorPurpose = "SPIC.Ifms.Automation.PortalPassword.v1";
 
-		private readonly AppDbContext _db;
+		private readonly IfmsDbContext _db;
 		private readonly IDataProtector _protector;
 		private readonly IConfiguration _config;
 		private readonly ILogger<IfmsAccountStore> _logger;
 
 		public IfmsAccountStore(
-			AppDbContext db,
+			IfmsDbContext db,
 			IDataProtectionProvider dataProtection,
 			IConfiguration config,
 			ILogger<IfmsAccountStore> logger)

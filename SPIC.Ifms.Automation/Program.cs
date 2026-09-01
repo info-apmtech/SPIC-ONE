@@ -37,6 +37,8 @@ builder.Services.Configure<ReportJobsOptions>(
 	builder.Configuration.GetSection(ReportJobsOptions.SectionName));
 builder.Services.Configure<AlertOptions>(
 	builder.Configuration.GetSection(AlertOptions.SectionName));
+builder.Services.Configure<UploadOptions>(
+	builder.Configuration.GetSection(UploadOptions.SectionName));
 
 // ----------------------------------------------------------------- database
 //
@@ -60,7 +62,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
 	return 1;
 }
 
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddDbContext<IfmsDbContext>(options =>
 	options.UseNpgsql(
 		connectionString,
 		npgsql =>
@@ -76,18 +78,19 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 //   - the same key store, which is why the keys live in the database rather
 //     than in a folder neither machine shares
 //   - the same application name, because it is mixed into the key derivation
-//   - the same DbContext, so both look in the same table
+//   - the same DbContext and database, so both look in the same table
 //
 // Without this the host starts happily and only fails when it first tries to
 // read a credential, which is exactly the wrong time to find out.
 builder.Services
 	.AddDataProtection()
 	.SetApplicationName("SPIC.Ifms")
-	.PersistKeysToDbContext<AppDbContext>();
+	.PersistKeysToDbContext<IfmsDbContext>();
 
-// The import path is shared with the manual upload page on purpose, so an
-// automated import and a hand upload can never diverge.
-builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
+// No IExcelBulkUploadService here any more. Downloaded files are posted to
+// SpicAPI's upload endpoint, exactly as a person would from the Excel Upload
+// page — so the import runs in one place, against the portal's own database,
+// and this service never needs to know the SPIC schema at all.
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
 

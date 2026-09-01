@@ -23,10 +23,10 @@ namespace Spic.Infrastructure.Services
 	/// </summary>
 	public sealed class IfmsRelayDeviceStore : IIfmsRelayDeviceStore
 	{
-		private readonly AppDbContext _db;
+		private readonly IfmsDbContext _db;
 		private readonly ILogger<IfmsRelayDeviceStore> _logger;
 
-		public IfmsRelayDeviceStore(AppDbContext db, ILogger<IfmsRelayDeviceStore> logger)
+		public IfmsRelayDeviceStore(IfmsDbContext db, ILogger<IfmsRelayDeviceStore> logger)
 		{
 			_db = db;
 			_logger = logger;

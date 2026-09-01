@@ -28,6 +28,20 @@ builder.Services.AddDbContext<AppDbContext>(options =>
             }
     ));
 
+// The IFMS automation keeps its tables in a database of its own. SpicAPI needs
+// to read them for the dashboard, the OTP relay and the login screen — but it
+// has no business creating them, and the automation has no business reaching
+// the portal's tables.
+builder.Services.AddDbContext<IfmsDbContext>(options =>
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("IfmsConnection")
+            ?? builder.Configuration.GetConnectionString("DefaultConnection"),
+        b =>
+        {
+            b.MigrationsAssembly("Spic.Infrastructure");
+            b.CommandTimeout(600);
+        }));
+
 builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
 {
     options.Password.RequireDigit = false;
@@ -61,7 +75,7 @@ builder.Services.AddScoped<IStockDetailsService, StockDetailsService>();
 builder.Services
     .AddDataProtection()
     .SetApplicationName("SPIC.Ifms")
-    .PersistKeysToDbContext<AppDbContext>();
+    .PersistKeysToDbContext<IfmsDbContext>();
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];

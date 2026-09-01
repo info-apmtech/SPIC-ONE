@@ -191,7 +191,7 @@ namespace SPIC.Ifms.Automation.Scheduling
 			var reportDate = now.Date.AddDays(_options.ReportDateOffsetDays);
 
 			await using var scope = _scopeFactory.CreateAsyncScope();
-			var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
 			var alreadyDone = await db.IfmsAutomationRuns
 				.AnyAsync(
