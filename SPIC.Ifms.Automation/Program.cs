@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Spic.Infrastructure.Data;
 using Spic.Infrastructure.Services;
 using SPIC.Core.Interfaces;
@@ -36,16 +37,6 @@ builder.Services.Configure<ReportJobsOptions>(
 	builder.Configuration.GetSection(ReportJobsOptions.SectionName));
 builder.Services.Configure<AlertOptions>(
 	builder.Configuration.GetSection(AlertOptions.SectionName));
-
-// --------------------------------------------------------- data protection
-//
-// Portal passwords are stored encrypted, and these keys decrypt them. They live
-// in the database, not on disk, because SpicAPI and this service run on
-// different machines and both need to read the same passwords — a shared folder
-// cannot span those hosts, a shared database already does.
-//
-// The application name is part of the key derivation, so it must match SpicAPI
-// exactly or neither can read what the other wrote.
 
 // ----------------------------------------------------------------- database
 
@@ -124,7 +115,7 @@ builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 // "dotnet run -- test-captcha" never fires a real download.
 
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
-var isTool = command is "test-captcha" or "set-credentials" or "list-credentials";
+var isTool = command is "test-captcha" or "set-credentials" or "list-credentials" or "test-email";
 
 if (!isTool)
 {
@@ -137,6 +128,11 @@ var host = builder.Build();
 
 if (command is "set-credentials" or "list-credentials")
 	return await RunCredentialsCommandAsync(host.Services, command, args);
+
+// Email settings are the sort of thing that is wrong three times before it is
+// right, and waiting for 04:05 to find out is no way to iterate.
+if (command == "test-email")
+	return await RunTestEmailAsync(host.Services);
 
 if (command == "test-captcha")
 {
@@ -230,6 +226,65 @@ static async Task<int> RunCredentialsCommandAsync(
 	Console.WriteLine($"Saved the login for {company} ({userName}).");
 	Console.WriteLine("The 80-day password clock starts now.");
 	return 0;
+}
+
+/// <summary>
+/// Sends one message through the configured SMTP settings and reports exactly
+/// what the server said, rather than leaving it buried in a run's alert failure.
+/// </summary>
+static async Task<int> RunTestEmailAsync(IServiceProvider services)
+{
+	var options = services.GetRequiredService<IOptions<AlertOptions>>().Value.Email;
+
+	Console.WriteLine($"Host      : {options.Host}:{options.Port}");
+	Console.WriteLine($"StartTls  : {options.UseStartTls}");
+	Console.WriteLine($"From      : {options.FromAddress}");
+	Console.WriteLine($"To        : {string.Join(", ", options.To)}");
+	Console.WriteLine($"Password  : {(string.IsNullOrEmpty(options.Password) ? "NOT SET" : "set")}");
+	Console.WriteLine();
+
+	if (!options.Enabled)
+	{
+		Console.WriteLine("Alerts:Email:Enabled is false; nothing to test.");
+		return 1;
+	}
+
+	var sink = services.GetServices<IAlertSink>().FirstOrDefault(s => s.Name == "Email");
+
+	if (sink is null)
+	{
+		Console.WriteLine("The email sink is not registered.");
+		return 1;
+	}
+
+	try
+	{
+		await sink.SendNoticeAsync(
+			"IFMS automation test message",
+			"If you are reading this, the alert email is working.\n\n" +
+			"Sent by: dotnet SPIC.Ifms.Automation.dll test-email",
+			urgent: false,
+			CancellationToken.None);
+
+		Console.WriteLine("SENT. Check the inbox.");
+		return 0;
+	}
+	catch (Exception ex)
+	{
+		Console.WriteLine($"FAILED: {ex.GetType().Name}");
+		Console.WriteLine($"        {ex.Message}");
+
+		if (ex.InnerException is not null)
+			Console.WriteLine($"        inner: {ex.InnerException.Message}");
+
+		Console.WriteLine();
+		Console.WriteLine("Common causes:");
+		Console.WriteLine("  does not support STARTTLS  -> set Alerts:Email:UseStartTls false");
+		Console.WriteLine("  timed out                  -> that host/port is not reachable from here");
+		Console.WriteLine("  authentication failed      -> wrong Alerts__Email__Password in secrets.env");
+
+		return 1;
+	}
 }
 
 /// <summary>
