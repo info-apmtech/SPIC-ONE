@@ -39,10 +39,30 @@ builder.Services.Configure<AlertOptions>(
 	builder.Configuration.GetSection(AlertOptions.SectionName));
 
 // ----------------------------------------------------------------- database
+//
+// Refuse to start without a connection string rather than falling back to
+// something plausible. Two databases are in play here - spicone for the portal
+// and spiconeifms for the automation - and quietly choosing the wrong one
+// produces the worst kind of bug: commands that report success against a
+// database nobody is looking at.
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+	Console.Error.WriteLine(
+		"ConnectionStrings:DefaultConnection is not set.\n\n" +
+		"The service gets it from /opt/spic-ifms/secrets.env via systemd.\n" +
+		"To run a command by hand, load the same file first:\n\n" +
+		"  set -a; . /opt/spic-ifms/secrets.env; set +a\n" +
+		"  dotnet SPIC.Ifms.Automation.dll list-credentials\n");
+
+	return 1;
+}
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 	options.UseNpgsql(
-		builder.Configuration.GetConnectionString("DefaultConnection"),
+		connectionString,
 		npgsql =>
 		{
 			npgsql.MigrationsAssembly("Spic.Infrastructure");
@@ -125,6 +145,13 @@ if (!isTool)
 }
 
 var host = builder.Build();
+
+if (isTool && command != "test-captcha")
+{
+	var target = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+	Console.WriteLine($"Database: {target.Database} on {target.Host}:{target.Port}");
+	Console.WriteLine();
+}
 
 if (command is "set-credentials" or "list-credentials")
 	return await RunCredentialsCommandAsync(host.Services, command, args);
