@@ -417,7 +417,7 @@
                         <option value="new">Add new beneficiary</option>
                         @foreach (var fm in _dynamicFamilyMembers)
                         {
-                            <option value="@fm.FamilyMemberName">@fm.FamilyMemberName (@GetWelfareRelationshipName(fm.RelationshipId))</option>
+                            <option value="@fm.Id">@fm.FamilyMemberName (@GetWelfareRelationshipName(fm.RelationshipId))</option>
                         }
                     </select>
                 }
@@ -427,22 +427,13 @@
                 <label class="aws-form-label">Nominee Relationship *</label>
                 <select class="aws-form-select" @bind="NomineeRelationship">
                     <option value="" disabled selected hidden>Select relationship</option>
-                    <option value="Spouse">Spouse</option>
-                    <option value="Son">Son</option>
-                    <option value="Father">Father</option>
-                     <option value="Daughter">Daughter</option>
-                      <option value="Self">Self</option>
-                        <option value="Sister">Sister</option>
-                            <option value="brother">brother</option>
-                                <option value="Mother">Mother</option>
+                    @foreach (var rel in _welfareRelationships.Where(r => r.IsActive))
+                    {
+                        <option value="@rel.Name">@rel.Name</option>
+                    }
                 </select>
             </div>
             
-            <div class="aws-form-group">
-                <label class="aws-form-label">Beneficiary Name *</label>
-                <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
-            </div>
-
             <div class="aws-form-group">
                 <label class="aws-form-label">Date of Birth</label>
                 <input type="date" class="aws-form-control" @bind="BeneficiaryDateOfBirth" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
@@ -485,11 +476,6 @@
             </div>
 
             <div class="aws-form-group">
-                <label class="aws-form-label">Beneficiary Name *</label>
-                <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
-            </div>
-
-            <div class="aws-form-group">
                 <label class="aws-form-label">Date of Birth</label>
                 <input type="date" class="aws-form-control" @bind="BeneficiaryDateOfBirth" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
             </div>
@@ -528,11 +514,6 @@
             <div class="aws-form-group">
                 <label class="aws-form-label">Nominee Name *</label>
                 <input type="text" class="aws-form-control" placeholder="Nominee's Full Name" @bind="NomineeName">
-            </div>
-
-            <div class="aws-form-group">
-                <label class="aws-form-label">Beneficiary Name *</label>
-                <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName">
             </div>
 
             <div class="aws-form-group">
@@ -1608,7 +1589,7 @@
             {
                 var match = _dynamicFamilyMembers.FirstOrDefault(b =>
                     string.Equals(b.FamilyMemberName, BeneficiaryName, StringComparison.OrdinalIgnoreCase));
-                SelectedExistingBeneficiary = match?.FamilyMemberName ?? "new";
+                SelectedExistingBeneficiary = match != null ? match.Id.ToString() : "new";
             }
             else if (SelectedBeneficiaryGroup == "Sub Dealer")
             {
@@ -1898,10 +1879,11 @@
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(SelectedExistingBeneficiary))
+        if (string.IsNullOrWhiteSpace(SelectedExistingBeneficiary) ||
+            !int.TryParse(SelectedExistingBeneficiary, out var beneficiaryId))
             return;
 
-        var match = _dynamicFamilyMembers.FirstOrDefault(b => b.FamilyMemberName == SelectedExistingBeneficiary);
+        var match = _dynamicFamilyMembers.FirstOrDefault(b => b.Id == beneficiaryId);
         if (match != null)
         {
             BeneficiaryName = match.FamilyMemberName;
