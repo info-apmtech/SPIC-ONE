@@ -248,8 +248,8 @@ else
             </div>
         </div>
 
-        <!-- ===================== DEALER SALES / LIFTING (MO ONLY) ===================== -->
-        @if (IsMoStage && d.DealerId > 0)
+        <!-- ===================== DEALER SALES / LIFTING (ALL APPROVAL ROLES) ===================== -->
+        @if (IsApprovalStage && d.DealerId > 0)
         {
             <div class="apd-section">
                 <div class="apd-section-head">
@@ -464,17 +464,17 @@ else
         @if (CanProcessCurrentStage())
         {
             <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
-                @if (IsMoStage)
+                @if (IsMoStage || IsRmStage || IsSmmStage)
                 {
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                         <div style="display:flex; flex-direction:column; gap:4px;">
                             <label style="font-size:12px; font-weight:600; color:#374151;">Comments *</label>
                             <select class="rm-select" @bind="_approveComment" @bind:after="OnCommentChanged" disabled="@_busy" style="width:100%;">
                                 <option value="">--Select--</option>
-                                <option value="Information verified and eligible for approval">Information verified and eligible for approval</option>
-                                <option value="Documents incomplete or not valid">Documents incomplete or not valid</option>
-                                <option value="Information mismatch found">Information mismatch found</option>
-                                <option value="Eligibility criteria not met at verification stage">Eligibility criteria not met at verification stage</option>
+                                @foreach (var option in CurrentLevelCommentOptions)
+                                {
+                                    <option value="@option">@option</option>
+                                }
                             </select>
                         </div>
                         <div style="display:flex; flex-direction:column; gap:4px;">
@@ -549,6 +549,11 @@ else
     private bool _busy;
 
     private bool IsMoStage => LoginState.UserRole == AppRole.MO;
+    private bool IsRmStage => LoginState.UserRole == AppRole.RM;
+    private bool IsSmmStage => LoginState.UserRole == AppRole.SMM;
+    private bool IsAvpStage => LoginState.UserRole == AppRole.AVP;
+
+    private bool IsApprovalStage => IsMoStage || IsRmStage || IsSmmStage || IsAvpStage;
 
     private async Task CloseDrawer()
     {
@@ -590,7 +595,7 @@ else
 
     private async Task LoadDealerSalesIfNeeded()
     {
-        if (!IsMoStage || _detail == null || _detail.DealerId <= 0) return;
+        if (!IsApprovalStage || _detail == null || _detail.DealerId <= 0) return;
         if (_dealerSalesLoadedForId == _detail.DealerId) return;
 
         _dealerSalesLoading = true;
@@ -980,30 +985,33 @@ else
 
     private void OnCommentChanged()
     {
-        _approveRecommendation = _approveComment == "Information verified and eligible for approval"
+        if (string.IsNullOrWhiteSpace(_approveComment))
+        {
+            _approveRecommendation = "";
+            return;
+        }
+        _approveRecommendation = CurrentLevelApprovalComments.Contains(_approveComment, StringComparer.Ordinal)
             ? "Verified"
-            : string.IsNullOrWhiteSpace(_approveComment)
-                ? ""
-                : "Rejected";
+            : "Rejected";
     }
 
     private async Task ConfirmSubmit()
     {
         if (_detail == null || _busy) return;
 
-        if (IsMoStage && string.IsNullOrWhiteSpace(_approveComment))
+        if ((IsMoStage || IsRmStage || IsSmmStage) && string.IsNullOrWhiteSpace(_approveComment))
         {
             _actionError = "Please select a comment.";
             return;
         }
 
-        if (IsMoStage && !IsValidMoComment(_approveComment))
+        if ((IsMoStage || IsRmStage || IsSmmStage) && !IsValidLevelComment(_approveComment))
         {
             _actionError = "Please select a valid comment.";
             return;
         }
 
-        if (IsMoStage && string.IsNullOrWhiteSpace(_approveRecommendation))
+        if ((IsMoStage || IsRmStage || IsSmmStage) && string.IsNullOrWhiteSpace(_approveRecommendation))
         {
             _actionError = "Please select a recommendation.";
             return;
@@ -1014,8 +1022,9 @@ else
         try
         {
             HttpResponseMessage response;
+            var hasRecommendationFlow = IsMoStage || IsRmStage || IsSmmStage;
 
-            if (IsMoStage && _approveRecommendation == "Verified")
+            if (hasRecommendationFlow && _approveRecommendation == "Verified")
             {
                 response = await Http.PostAsJsonAsync(
                     $"api/WelfareSchemeApproval/applications/{_detail.Id}/approve",
@@ -1025,7 +1034,7 @@ else
                         Comment = _approveComment
                     });
             }
-            else if (IsMoStage && _approveRecommendation == "Rejected")
+            else if (hasRecommendationFlow && _approveRecommendation == "Rejected")
             {
                 response = await Http.PostAsJsonAsync(
                     $"api/WelfareSchemeApproval/applications/{_detail.Id}/reject",
@@ -1073,9 +1082,42 @@ else
         "Eligibility criteria not met at verification stage"
     };
 
-    private static bool IsValidMoComment(string? value) =>
+    private static readonly string[] RmCommentOptions =
+    {
+        "Verified and recommended as a genuine dealer",
+        "Information mismatch found",
+        "Verification failed at regional level"
+    };
+
+    private static readonly string[] SmmCommentOptions =
+    {
+        "Recommended for management approval",
+        "Application does not meet approval criteria",
+        "Rejected after review of verification remarks",
+        "Recommendation not accepted at state level",
+        "Not recommended for approval based on field reports"
+    };
+
+    // Comments that resolve to an approval recommendation for the current level.
+    private IReadOnlyList<string> CurrentLevelApprovalComments => LoginState.UserRole switch
+    {
+        AppRole.MO => new[] { "Information verified and eligible for approval" },
+        AppRole.RM => new[] { "Verified and recommended as a genuine dealer" },
+        AppRole.SMM => new[] { "Recommended for management approval" },
+        _ => Array.Empty<string>()
+    };
+
+    private IReadOnlyList<string> CurrentLevelCommentOptions => LoginState.UserRole switch
+    {
+        AppRole.MO => MoCommentOptions,
+        AppRole.RM => RmCommentOptions,
+        AppRole.SMM => SmmCommentOptions,
+        _ => Array.Empty<string>()
+    };
+
+    private bool IsValidLevelComment(string? value) =>
         !string.IsNullOrWhiteSpace(value) &&
-        MoCommentOptions.Contains(value, StringComparer.Ordinal);
+        CurrentLevelCommentOptions.Contains(value, StringComparer.Ordinal);
 
     private static async Task<string> ReadErrorMessageAsync(HttpResponseMessage response)
     {
