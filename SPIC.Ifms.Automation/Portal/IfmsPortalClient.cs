@@ -492,12 +492,29 @@ namespace SPIC.Ifms.Automation.Portal
 			var otp = await _otpProvider.WaitForOtpAsync(
 				requestedAtUtc, runId, cancellationToken, Account.AccountKey);
 
-			if (otp is null && _options.Otp.AllowResend && !string.IsNullOrWhiteSpace(_options.Selectors.OtpResend))
+			// The portal's code lives about sixty seconds (the page counts them
+			// down), and Regenerate is enabled once that runs out. Each cycle is
+			// a fresh sixty-second chance for whoever is relaying the SMS.
+			var resends = 0;
+			var maxResends = _options.Otp.AllowResend ? Math.Max(0, _options.Otp.MaxResends) : 0;
+
+			while (otp is null && resends < maxResends && !string.IsNullOrWhiteSpace(_options.Selectors.OtpResend))
 			{
-				_logger.LogWarning("No OTP arrived; asking the portal to resend once.");
+				resends++;
+				_logger.LogWarning(
+					"No OTP arrived; asking the portal to resend ({Resend} of {Max}).", resends, maxResends);
 
 				var resentAt = DateTime.UtcNow;
-				await Frame.ClickAsync(_options.Selectors.OtpResend);
+				try
+				{
+					await Frame.ClickAsync(_options.Selectors.OtpResend, new FrameClickOptions { Timeout = 15_000 });
+				}
+				catch (TimeoutException)
+				{
+					_logger.LogWarning("The Regenerate button could not be clicked; giving up on this OTP.");
+					break;
+				}
+
 				otp = await _otpProvider.WaitForOtpAsync(
 					resentAt, runId, cancellationToken, Account.AccountKey);
 			}

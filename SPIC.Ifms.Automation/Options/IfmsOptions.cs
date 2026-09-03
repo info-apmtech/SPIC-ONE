@@ -303,5 +303,8 @@ namespace SPIC.Ifms.Automation.Options
 
 		/// <summary>Ask the portal to resend once if the first SMS never arrives.</summary>
 		public bool AllowResend { get; set; } = true;
+
+		/// <summary>How many times to press Regenerate before giving up on the login attempt.</summary>
+		public int MaxResends { get; set; } = 4;
 	}
 }
