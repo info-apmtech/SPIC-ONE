@@ -533,7 +533,7 @@ static async Task<int> RunTestJobAsync(IServiceProvider services, string[] args)
 		.ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
 
 	await using var scope = services.CreateAsyncScope();
-	var jobs = scope.ServiceProvider.GetRequiredService<IOptions<ReportJobOptions>>().Value.Jobs;
+	var jobs = scope.ServiceProvider.GetRequiredService<IOptions<ReportJobsOptions>>().Value.Jobs;
 	var job = jobs.FirstOrDefault(j => string.Equals(j.Key, jobKey, StringComparison.OrdinalIgnoreCase));
 	if (job is null)
 	{
