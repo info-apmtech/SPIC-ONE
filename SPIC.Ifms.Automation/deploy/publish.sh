@@ -51,6 +51,40 @@ else
   echo "  run: pwsh $APP_DIR/playwright.ps1 install --with-deps chromium"
 fi
 
+say "Tesseract native libraries"
+# The Tesseract NuGet package ships Windows DLLs only. On Linux the wrapper
+# dlopens three names that Ubuntu does not provide under those names:
+#
+#   libleptonica-1.82.0.so  -> liblept.so.5      (package liblept5)
+#   libtesseract50.so       -> libtesseract.so.5 (package libtesseract5)
+#   libdl.so                -> libdl.so.2        (glibc >= 2.34 dropped the bare name)
+#
+# Symlinks beside the app bridge the gap without touching /usr/lib, and this
+# block re-creates them on every deploy so a fresh host does not silently lose
+# OCR. Install the packages first:
+#   sudo apt-get install -y tesseract-ocr libtesseract-dev libleptonica-dev
+LIBDIR=/usr/lib/x86_64-linux-gnu
+mkdir -p "$APP_DIR/x64"
+for pair in   "libleptonica-1.82.0.so:liblept.so.5"   "libtesseract50.so:libtesseract.so.5"   "libdl.so:libdl.so.2"
+do
+  want=${pair%%:*}; have=${pair##*:}
+  real=$(readlink -f "$LIBDIR/$have" 2>/dev/null || true)
+  if [ -n "$real" ]; then
+    ln -sfn "$real" "$APP_DIR/x64/$want"
+    [ "$want" = "libdl.so" ] && ln -sfn "$real" "$APP_DIR/$want"
+    echo "  $want -> $real"
+  else
+    echo "  WARNING: $have not found; OCR will fail. Install libtesseract-dev libleptonica-dev."
+  fi
+done
+
+if ! grep -q '^LD_LIBRARY_PATH=' "$APP_DIR/secrets.env" 2>/dev/null; then
+  printf '
+LD_LIBRARY_PATH=%s/x64:%s
+' "$APP_DIR" "$APP_DIR" >> "$APP_DIR/secrets.env"
+  echo "  LD_LIBRARY_PATH added to secrets.env"
+fi
+
 say "Checking the OCR language data"
 if [ ! -f "$APP_DIR/tessdata/eng.traineddata" ]; then
   echo "  missing; downloading"
