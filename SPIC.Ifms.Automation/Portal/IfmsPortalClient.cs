@@ -785,23 +785,41 @@ namespace SPIC.Ifms.Automation.Portal
 			if (url.Contains("struts.token", StringComparison.OrdinalIgnoreCase))
 				return url;
 
-			string[] pairs;
-			try
+			var pairs = await ReadPortalTokenAsync();
+
+			if (pairs.Length == 0)
 			{
-				pairs = await Page.EvaluateAsync<string[]>(
-					@"() => Array.from(document.querySelectorAll('#tokenContainer input'))
-						.filter(i => ['struts.token.name','struts.token','token'].includes(i.name))
-						.map(i => i.name + '=' + encodeURIComponent(i.value))");
-			}
-			catch (PlaywrightException)
-			{
-				return url;
+				// A 404 or error page has no token container. The token-free home
+				// page always renders the menu, and with it a fresh token.
+				_activeFrame = null;
+				await Page.GotoAsync(Absolute("/mFMS/home.action"), new PageGotoOptions
+				{
+					Timeout = _options.Browser.NavigationTimeoutMs,
+					WaitUntil = WaitUntilState.DOMContentLoaded
+				});
+				await WaitForSettleAsync(CancellationToken.None);
+				pairs = await ReadPortalTokenAsync();
 			}
 
 			if (pairs.Length == 0)
 				return url;
 
 			return url + (url.Contains('?') ? "&" : "?") + string.Join("&", pairs);
+		}
+
+		private async Task<string[]> ReadPortalTokenAsync()
+		{
+			try
+			{
+				return await Page.EvaluateAsync<string[]>(
+					@"() => Array.from(document.querySelectorAll('#tokenContainer input'))
+						.filter(i => ['struts.token.name','struts.token','token'].includes(i.name))
+						.map(i => i.name + '=' + encodeURIComponent(i.value))");
+			}
+			catch (PlaywrightException)
+			{
+				return Array.Empty<string>();
+			}
 		}
 
 		/// <summary>
@@ -1319,6 +1337,7 @@ namespace SPIC.Ifms.Automation.Portal
 					return true;
 				}
 
+				await CaptureDiagnosticAsync("session-probe", cancellationToken);
 				_logger.LogInformation("The stored session has expired; falling back to a full login.");
 				await InvalidateSessionAsync("Portal no longer accepts the stored cookies.", cancellationToken);
 				return false;
