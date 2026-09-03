@@ -124,7 +124,12 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 			foreach (var message in candidates)
 			{
 				if (!SenderAccepted(message.Sender))
+				{
+					_logger.LogWarning(
+						"OTP message {Id} from '{Sender}' ignored: not in Ifms:Otp:AcceptedSenders.",
+						message.Id, message.Sender);
 					continue;
+				}
 
 				var otp = message.ExtractedOtp;
 				if (string.IsNullOrWhiteSpace(otp))
@@ -153,6 +158,12 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 		private bool SenderAccepted(string? sender)
 		{
 			if (_options.AcceptedSenders.Count == 0)
+				return true;
+
+			// A code typed by an operator with the `otp` command is stamped MANUAL.
+			// It was read off the handset by a person; the sender list exists to
+			// ignore unrelated SMS, not to second-guess them.
+			if (string.Equals(sender, "MANUAL", StringComparison.OrdinalIgnoreCase))
 				return true;
 
 			if (string.IsNullOrWhiteSpace(sender))
