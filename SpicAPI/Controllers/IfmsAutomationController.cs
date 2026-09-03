@@ -250,13 +250,31 @@ namespace SpicAPI.Controllers
 			if (string.IsNullOrWhiteSpace(dto.DeviceId))
 				return BadRequest(new { Success = false, Message = "A device id is required." });
 
-			var registration = await _devices.RegisterAsync(
-				dto.DeviceId,
-				dto.DeviceName,
-				dto.AppVersion,
-				dto.Platform,
-				User.FindFirstValue(ClaimTypes.Name) ?? "pairing key",
-				cancellationToken);
+			IfmsRelayRegistration registration;
+			try
+			{
+				registration = await _devices.RegisterAsync(
+					dto.DeviceId,
+					dto.DeviceName,
+					dto.AppVersion,
+					dto.Platform,
+					User.FindFirstValue(ClaimTypes.Name) ?? "pairing key",
+					cancellationToken);
+			}
+			catch (Exception ex)
+			{
+				// Pairing is done by an administrator holding the pairing key, and
+				// the API's log is not always at hand. Name the failure here so a
+				// missing IfmsConnection or table shows up in the reply itself.
+				var root = ex;
+				while (root.InnerException is not null) root = root.InnerException;
+				return StatusCode(500, new
+				{
+					Success = false,
+					Message = $"Pairing failed inside SpicAPI: {root.GetType().Name}: {root.Message}",
+					Hint = "Check ConnectionStrings:IfmsConnection points at spiconeifms and its migrations are applied."
+				});
+			}
 
 			// The token is returned here and nowhere else - only its hash is kept.
 			return Ok(new
