@@ -59,13 +59,16 @@ namespace SpicAPI.Controllers
             var jwtToken = handler.ReadToken(token) as JwtSecurityToken;
 
             // Resolve the user's designation -> RoleAccess (CSV of PagePermission names)
+            // and Designation Name (e.g. "SDWA"), kept separate from AppRole.
             string? roleAccess = null;
+            string? designationName = null;
             if (user.DesignationId.HasValue && user.DesignationId.Value > 0)
             {
                 var desig = await _db.Designations
                     .AsNoTracking()
                     .FirstOrDefaultAsync(d => d.Id == user.DesignationId.Value && d.IsActive);
                 roleAccess = desig?.RoleAccess;
+                designationName = desig?.Name;
             }
 
             var responseData = new LoginResponseModel
@@ -73,7 +76,8 @@ namespace SpicAPI.Controllers
                 Token = $"Bearer {token}",
                 User = user,
                 Expiration = jwtToken?.ValidTo ?? DateTime.UtcNow.AddHours(1),
-                RoleAccess = roleAccess
+                RoleAccess = roleAccess,
+                DesignationName = designationName
             };
 
             return Ok(responseData);
