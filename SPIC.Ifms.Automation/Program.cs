@@ -83,10 +83,9 @@ builder.Services.AddDbContext<IfmsDbContext>(options =>
 //
 // Without this the host starts happily and only fails when it first tries to
 // read a credential, which is exactly the wrong time to find out.
-builder.Services
-	.AddDataProtection()
-	.SetApplicationName("SPIC.Ifms")
-	.PersistKeysToDbContext<IfmsDbContext>();
+// Same isolated key ring as SpicAPI (spiconeifms, application name "SPIC.Ifms").
+builder.Services.AddSingleton<IIfmsDataProtection>(_ =>
+	new IfmsDataProtection(builder.Configuration.GetConnectionString("DefaultConnection") ?? string.Empty));
 
 // No IExcelBulkUploadService here any more. Downloaded files are posted to
 // SpicAPI's upload endpoint, exactly as a person would from the Excel Upload

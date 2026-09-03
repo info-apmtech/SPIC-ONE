@@ -72,10 +72,13 @@ builder.Services.AddScoped<IStockDetailsService, StockDetailsService>();
 // Shares the IFMS portal-password encryption keys with the automation service.
 // The application name is part of the key derivation, so it must match the
 // automation exactly or neither can read what the other wrote.
-builder.Services
-    .AddDataProtection()
-    .SetApplicationName("SPIC.Ifms")
-    .PersistKeysToDbContext<IfmsDbContext>();
+// The IFMS credential protector has its OWN key ring (spiconeifms). The API's
+// Data Protection stays on its default key ring, as production ran before.
+builder.Services.AddSingleton<IIfmsDataProtection>(_ =>
+    new IfmsDataProtection(
+        builder.Configuration.GetConnectionString("IfmsConnection")
+        ?? builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? string.Empty));
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];
