@@ -149,6 +149,33 @@
 		gap: 8px;
 		flex-shrink: 0;
 	}
+
+	/* Required indicator badge used for mandatory valuation fields */
+	.val-required-badge {
+		font-size: 0.62rem;
+		font-weight: 700;
+		padding: 2px 6px;
+		border-radius: 4px;
+		color: #DC2626;
+		border: 1px solid #FECACA;
+		background: #FEF2F2;
+		margin-left: 6px;
+		white-space: nowrap;
+		vertical-align: middle;
+	}
+
+	/* Red border + message when a mandatory valuation field is left empty on submit */
+	.val-input-error {
+		border-color: #DC2626 !important;
+		box-shadow: 0 0 0 0.2rem rgba(220, 38, 38, 0.12) !important;
+	}
+	.val-field-error {
+		display: block;
+		color: #DC2626;
+		font-size: 0.75rem;
+		font-weight: 600;
+		margin-top: 4px;
+	}
 	</style>
 @if (!_isCheckingGreenStar)
 {
@@ -502,7 +529,7 @@
 								<!-- 7. Monthly Average Net Overdues -->
 								<tr>
 									<td rowspan="2" class="text-center align-middle">7</td>
-									<td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+									<td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year <span class="val-required-badge">Required</span></td>
 									<td rowspan="2" class="text-center align-middle"></td>
 									<td rowspan="2" class="text-center align-middle">20</td>
 									<td class="text-center">Rs. Lakhs</td>
@@ -512,7 +539,11 @@
 									<td class="text-center">&lt;20</td>
 									<td class="text-center">&lt;30</td>
 									<td rowspan="2" class="align-middle">
-                                        <input type="number" class="form-control-custom w-100" step="0.01" value="@_greenstarValues[6]" @onchange="(e) => OnGreenstarValueChanged(6, e)" />
+                                        <input type="number" class="form-control-custom w-100 @(_overduesError ? "val-input-error" : "")" step="0.01" value="@_greenstarValues[6]" @onchange="(e) => OnGreenstarValueChanged(6, e)" />
+									@if (_overduesError)
+									{
+										<div class="val-field-error">Monthly Average Net Overdues is required.</div>
+									}
 									</td>
 									<td rowspan="2" class="text-center align-middle">
 										<div class="table-val-box">@GetGreenstarMark(6).ToString("N0")</div>
@@ -828,6 +859,7 @@ private List<DealerCreditLimitSales> _creditLimitSalesData = new();
 	private bool _isSaving;
 	private bool _isUploadingGflTradeDepositAttachment;
 	private bool _isCheckingGreenStar = true;
+	private bool _overduesError;
 	private string? _message;
 	private bool _isError;
 	private string _gsValidFromText = "2025-04-01";
@@ -1495,6 +1527,8 @@ private decimal GetFYTotalAmount(int fyIdx) => GetFYTotalAmountByCategory(fyIdx)
 		{
 			_greenstarValues[idx] = val;
 			_greenstarValueEntered[idx] = true;
+			if (idx == 6)
+				_overduesError = false;
 		}
 		else if (string.IsNullOrWhiteSpace(e.Value?.ToString()))
 		{
@@ -1945,6 +1979,13 @@ if (dealerTenure > 0 && !_greenstarValueEntered[5])
 				var dealerSave = await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", _dealer);
 				dealerSave.EnsureSuccessStatusCode();
 				Nav.NavigateTo($"/Enclosures?dealerId={DealerId}{FlowParam}");
+				return;
+			}
+
+			if (!_greenstarValueEntered[6])
+			{
+				_overduesError = true;
+				ShowMessage("Monthly Average Net Overdues during last year is required.", true);
 				return;
 			}
 

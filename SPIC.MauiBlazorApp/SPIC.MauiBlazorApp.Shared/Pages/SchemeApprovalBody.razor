@@ -248,8 +248,8 @@ else
             </div>
         </div>
 
-        <!-- ===================== DEALER SALES / LIFTING (MO ONLY) ===================== -->
-        @if (IsMoStage && d.DealerId > 0)
+        <!-- ===================== DEALER SALES / LIFTING (ALL APPROVAL ROLES) ===================== -->
+        @if (IsApprovalStage && d.DealerId > 0)
         {
             <div class="apd-section">
                 <div class="apd-section-head">
@@ -394,7 +394,10 @@ else
                                 <button class="apd-btn-download" @onclick="() => OpenDocument(doc.Id, true)">Download</button>
                                 @if (IsMoStage)
                                 {
-                                    <button class="apd-btn-replace" @onclick="() => OpenReplaceModal(doc)">Replace</button>
+                                    <label class="apd-btn-replace mb-0" style="cursor:pointer;">
+                                        <i class="bi bi-arrow-repeat"></i> Replace
+                                        <InputFile hidden OnChange="(e) => OnReplaceFileSelected(doc, e)" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" />
+                                    </label>
                                 }
                             </div>
                         </div>
@@ -460,8 +463,47 @@ else
     <div class="apd-footer">
         @if (CanProcessCurrentStage())
         {
-            <button class="apd-btn-action apd-btn-reject" @onclick="HandleRejectClick">Reject</button>
-            <button class="apd-btn-action apd-btn-validate" disabled="@_busy" @onclick="HandleApproveClick">Approve &amp; Forward</button>
+            <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
+                @if (IsMoStage || IsRmStage || IsSmmStage)
+                {
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <label style="font-size:12px; font-weight:600; color:#374151;">Comments *</label>
+                            <select class="rm-select" @bind="_approveComment" @bind:after="OnCommentChanged" disabled="@_busy" style="width:100%;">
+                                <option value="">--Select--</option>
+                                @foreach (var option in CurrentLevelCommentOptions)
+                                {
+                                    <option value="@option">@option</option>
+                                }
+                            </select>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <label style="font-size:12px; font-weight:600; color:#374151;">Recommendation *</label>
+                            <select class="rm-select" @bind="_approveRecommendation" disabled style="width:100%;">
+                                <option value="">--Select--</option>
+                                <option value="Verified">Verified</option>
+                                <option value="Rejected">Rejected</option>
+                            </select>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <label style="font-size:12px; font-weight:600; color:#374151;">Approval Remarks (Optional)</label>
+                        <textarea class="rm-textarea" placeholder="Add your approval remarks..." @bind="_approveRemarks" disabled="@_busy" rows="2" style="width:100%;"></textarea>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_actionError))
+                {
+                    <div class="apd-alert apd-alert-danger" style="margin:0;">@_actionError</div>
+                }
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button class="apd-btn-action apd-btn-validate" disabled="@_busy" @onclick="ConfirmSubmit">
+                        @(_busy ? "Processing..." : "Submit")
+                    </button>
+                </div>
+            </div>
         }
         else if (OnClose.HasDelegate)
         {
@@ -470,142 +512,7 @@ else
     </div>
 }
 
-<!-- ===================== APPROVE CONFIRM MODAL ===================== -->
-@if (IsApproveModalOpen)
-{
-    <div class="rm-overlay" @onclick="CloseApproveModal">
-        <div class="rm-container" @onclick:stopPropagation="true">
-            <div class="rm-icon-wrapper" style="background-color:#DCFCE7; color:#16A34A;">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-            </div>
-            <h2 class="rm-title">Approve Application?</h2>
-            <p class="rm-subtitle">Are you sure you want to approve this welfare application and forward it to the next level (@NextStageName)?</p>
-            <div class="rm-form">
-                @if (IsMoStage)
-                {
-                    <div class="rm-form-group">
-                        <label class="rm-label">Comments *</label>
-                        <select class="rm-select" @bind="_approveComment">
-                            <option value="">--Select--</option>
-                            <option value="Information verified and eligible for approval">Information verified and eligible for approval</option>
-                            <option value="Documents incomplete or not valid">Documents incomplete or not valid</option>
-                            <option value="Information mismatch found">Information mismatch found</option>
-                            <option value="Eligibility criteria not met at verification stage">Eligibility criteria not met at verification stage</option>
-                        </select>
-                    </div>
-                    <div class="rm-form-group">
-                        <label class="rm-label">Recommendation *</label>
-                        <select class="rm-select" @bind="_approveRecommendation">
-                            <option value="">--Select--</option>
-                            <option value="Verified">Verified</option>
-                            <option value="Rejected">Rejected</option>
-                        </select>
-                    </div>
-                }
-                else
-                {
-                    <div class="rm-form-group">
-                        <label class="rm-label">Approval Remarks (Optional)</label>
-                        <textarea class="rm-textarea" placeholder="Add your approval remarks..." @bind="_approveRemarks"></textarea>
-                    </div>
-                }
-            </div>
-            @if (!string.IsNullOrWhiteSpace(_actionError))
-            {
-                <p class="rm-warning" style="margin-top:8px;">@_actionError</p>
-            }
-            <div class="rm-actions">
-                <button class="rm-btn rm-btn-cancel" disabled="@_busy" @onclick="CloseApproveModal">Cancel</button>
-                <button class="rm-btn rm-btn-reject" style="background-color:#16A34A;" disabled="@_busy" @onclick="ConfirmApprove">
-                    @(_busy ? "Processing…" : "Approve Application")
-                </button>
-            </div>
-        </div>
-    </div>
-}
 
-<!-- ===================== REJECT MODAL ===================== -->
-@if (IsRejectModalOpen)
-{
-    <div class="rm-overlay" @onclick="CloseRejectModal">
-        <div class="rm-container" @onclick:stopPropagation="true">
-            <div class="rm-icon-wrapper">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-            </div>
-            <h2 class="rm-title">Reject Application?</h2>
-            <p class="rm-subtitle">Are you sure you want to reject this welfare application?</p>
-            <p class="rm-warning">On rejection this application will be @RejectDestinationText.</p>
-            <div class="rm-form">
-                <div class="rm-form-group">
-                    <label class="rm-label">Rejection Reason</label>
-                    <select class="rm-select" @bind="_rejectReason">
-                        <option value="">Select a reason</option>
-                        <option value="Incomplete Application">Incomplete Application</option>
-                        <option value="Invalid Documents">Invalid Documents</option>
-                        <option value="Not Eligible">Not Eligible</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-                <div class="rm-form-group">
-                    <label class="rm-label">Detailed Remarks *</label>
-                    <textarea class="rm-textarea" placeholder="Add your detailed remarks..." @bind="_rejectRemarks"></textarea>
-                </div>
-            </div>
-            @if (!string.IsNullOrWhiteSpace(_actionError))
-            {
-                <p class="rm-warning" style="margin-top:8px;">@_actionError</p>
-            }
-            <div class="rm-actions">
-                <button class="rm-btn rm-btn-cancel" disabled="@_busy" @onclick="CloseRejectModal">Cancel</button>
-                <button class="rm-btn rm-btn-reject" disabled="@_busy" @onclick="ConfirmReject">
-                    @(_busy ? "Processing…" : "Reject Application")
-                </button>
-            </div>
-        </div>
-    </div>
-}
-
-<!-- ================= MO: REPLACE DOCUMENT ================= -->
-@if (_showReplaceModal && _docToReplace != null)
-{
-    <div class="rm-overlay" @onclick="CloseReplaceModal">
-        <div class="rm-container" @onclick:stopPropagation="true">
-            <div class="rm-icon-wrapper">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-            </div>
-            <h2 class="rm-title">Replace Document</h2>
-            <p class="rm-subtitle">Select the corrected file to replace the wrong document. The existing file will be removed and the new file added in its place.</p>
-            <p class="rm-warning" style="word-break:break-word;">@(string.IsNullOrWhiteSpace(_docToReplace.DocumentName) ? _docToReplace.FileName : _docToReplace.DocumentName)</p>
-            <div class="rm-form">
-                <div class="rm-form-group">
-                    <label class="rm-label">Select New File *</label>
-                    <InputFile OnChange="@OnReplaceFileSelected" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" class="rm-file-input" />
-                    @if (_replaceFile != null)
-                    {
-                        <div class="apd-file-chosen">@_replaceFile.Name (@(_replaceFile.Size > 0 ? $"{(_replaceFile.Size / 1024.0):F1} KB" : "0 KB"))</div>
-                    }
-                </div>
-            </div>
-            @if (!string.IsNullOrWhiteSpace(_docActionError))
-            {
-                <p class="rm-warning" style="margin-top:8px;">@_docActionError</p>
-            }
-            <div class="rm-actions">
-                <button class="rm-btn rm-btn-cancel" disabled="@_busy" @onclick="CloseReplaceModal">Cancel</button>
-                <button class="rm-btn rm-btn-reject" disabled="@_busy || _replaceFile == null" @onclick="ConfirmReplaceDocument">
-                    @(_busy ? "Replacing…" : "Replace Document")
-                </button>
-            </div>
-        </div>
-    </div>
-}
 
 @code {
     [Parameter] public int ApplicationId { get; set; }
@@ -635,24 +542,18 @@ else
     private DealerRegistration? _dealer;
     private List<DealerOwnershipInfo> _ownershipPartners = new();
 
-    private bool IsApproveModalOpen { get; set; }
-    private bool IsRejectModalOpen { get; set; }
-
     private string? _approveRemarks;
     private string _approveRecommendation = "";
     private string? _approveComment;
-    private string? _rejectReason;
-    private string? _rejectRemarks;
     private string? _actionError;
     private bool _busy;
 
-    private bool _showReplaceModal;
-    private SPIC.Core.DTOs.WelfareApplicationDocumentDto? _docToReplace;
-    private Microsoft.AspNetCore.Components.Forms.IBrowserFile? _replaceFile;
-    private string? _docActionError;
-    private string? _docActionMessage;
-
     private bool IsMoStage => LoginState.UserRole == AppRole.MO;
+    private bool IsRmStage => LoginState.UserRole == AppRole.RM;
+    private bool IsSmmStage => LoginState.UserRole == AppRole.SMM;
+    private bool IsAvpStage => LoginState.UserRole == AppRole.AVP;
+
+    private bool IsApprovalStage => IsMoStage || IsRmStage || IsSmmStage || IsAvpStage;
 
     private async Task CloseDrawer()
     {
@@ -694,7 +595,7 @@ else
 
     private async Task LoadDealerSalesIfNeeded()
     {
-        if (!IsMoStage || _detail == null || _detail.DealerId <= 0) return;
+        if (!IsApprovalStage || _detail == null || _detail.DealerId <= 0) return;
         if (_dealerSalesLoadedForId == _detail.DealerId) return;
 
         _dealerSalesLoading = true;
@@ -1082,45 +983,37 @@ else
         return fields;
     }
 
-    private void HandleApproveClick()
+    private void OnCommentChanged()
     {
-        _actionError = null;
-        _approveRemarks = null;
-        _approveRecommendation = "";
-        _approveComment = null;
-        IsApproveModalOpen = true;
+        if (string.IsNullOrWhiteSpace(_approveComment))
+        {
+            _approveRecommendation = "";
+            return;
+        }
+        _approveRecommendation = CurrentLevelApprovalComments.Contains(_approveComment, StringComparer.Ordinal)
+            ? "Verified"
+            : "Rejected";
     }
 
-    private void HandleRejectClick()
-    {
-        _actionError = null;
-        _rejectReason = "";
-        _rejectRemarks = null;
-        IsRejectModalOpen = true;
-    }
-
-    private void CloseApproveModal() { if (!_busy) IsApproveModalOpen = false; }
-    private void CloseRejectModal() { if (!_busy) IsRejectModalOpen = false; }
-
-    private async Task ConfirmApprove()
+    private async Task ConfirmSubmit()
     {
         if (_detail == null || _busy) return;
 
-        if (IsMoStage && string.IsNullOrWhiteSpace(_approveComment))
+        if ((IsMoStage || IsRmStage || IsSmmStage) && string.IsNullOrWhiteSpace(_approveComment))
         {
-            _actionError = "Please select a comment before approving.";
+            _actionError = "Please select a comment.";
             return;
         }
 
-        if (IsMoStage && !IsValidMoComment(_approveComment))
+        if ((IsMoStage || IsRmStage || IsSmmStage) && !IsValidLevelComment(_approveComment))
         {
             _actionError = "Please select a valid comment.";
             return;
         }
 
-        if (IsMoStage && string.IsNullOrWhiteSpace(_approveRecommendation))
+        if ((IsMoStage || IsRmStage || IsSmmStage) && string.IsNullOrWhiteSpace(_approveRecommendation))
         {
-            _actionError = "Please select a recommendation before approving.";
+            _actionError = "Please select a recommendation.";
             return;
         }
 
@@ -1128,56 +1021,42 @@ else
         _actionError = null;
         try
         {
-            var response = await Http.PostAsJsonAsync(
-                $"api/WelfareSchemeApproval/applications/{_detail.Id}/approve",
-                new WelfareApprovalActionRequest
-                {
-                    Remarks = _approveRemarks,
-                    Recommendation = IsMoStage ? _approveRecommendation : null,
-                    Comment = IsMoStage ? _approveComment : null
-                });
+            HttpResponseMessage response;
+            var hasRecommendationFlow = IsMoStage || IsRmStage || IsSmmStage;
 
-            if (response.IsSuccessStatusCode)
+            if (hasRecommendationFlow && _approveRecommendation == "Verified")
             {
-                IsApproveModalOpen = false;
-                await OnActionCompleted.InvokeAsync();
+                response = await Http.PostAsJsonAsync(
+                    $"api/WelfareSchemeApproval/applications/{_detail.Id}/approve",
+                    new WelfareApprovalActionRequest
+                    {
+                        Recommendation = _approveRecommendation,
+                        Comment = _approveComment
+                    });
+            }
+            else if (hasRecommendationFlow && _approveRecommendation == "Rejected")
+            {
+                response = await Http.PostAsJsonAsync(
+                    $"api/WelfareSchemeApproval/applications/{_detail.Id}/reject",
+                    new WelfareApprovalActionRequest
+                    {
+                        Remarks = _approveComment,
+                        Recommendation = _approveRecommendation,
+                        Comment = _approveComment
+                    });
             }
             else
             {
-                _actionError = await ReadErrorMessageAsync(response);
+                response = await Http.PostAsJsonAsync(
+                    $"api/WelfareSchemeApproval/applications/{_detail.Id}/approve",
+                    new WelfareApprovalActionRequest
+                    {
+                        Remarks = _approveRemarks
+                    });
             }
-        }
-        catch
-        {
-            _actionError = "Unable to reach the server. Please try again.";
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private async Task ConfirmReject()
-    {
-        if (_detail == null || _busy) return;
-
-        if (string.IsNullOrWhiteSpace(_rejectRemarks))
-        {
-            _actionError = "Remarks are mandatory when rejecting an application.";
-            return;
-        }
-
-        _busy = true;
-        _actionError = null;
-        try
-        {
-            var response = await Http.PostAsJsonAsync(
-                $"api/WelfareSchemeApproval/applications/{_detail.Id}/reject",
-                new WelfareApprovalActionRequest { Reason = _rejectReason, Remarks = _rejectRemarks });
 
             if (response.IsSuccessStatusCode)
             {
-                IsRejectModalOpen = false;
                 await OnActionCompleted.InvokeAsync();
             }
             else
@@ -1203,9 +1082,42 @@ else
         "Eligibility criteria not met at verification stage"
     };
 
-    private static bool IsValidMoComment(string? value) =>
+    private static readonly string[] RmCommentOptions =
+    {
+        "Verified and recommended as a genuine dealer",
+        "Information mismatch found",
+        "Verification failed at regional level"
+    };
+
+    private static readonly string[] SmmCommentOptions =
+    {
+        "Recommended for management approval",
+        "Application does not meet approval criteria",
+        "Rejected after review of verification remarks",
+        "Recommendation not accepted at state level",
+        "Not recommended for approval based on field reports"
+    };
+
+    // Comments that resolve to an approval recommendation for the current level.
+    private IReadOnlyList<string> CurrentLevelApprovalComments => LoginState.UserRole switch
+    {
+        AppRole.MO => new[] { "Information verified and eligible for approval" },
+        AppRole.RM => new[] { "Verified and recommended as a genuine dealer" },
+        AppRole.SMM => new[] { "Recommended for management approval" },
+        _ => Array.Empty<string>()
+    };
+
+    private IReadOnlyList<string> CurrentLevelCommentOptions => LoginState.UserRole switch
+    {
+        AppRole.MO => MoCommentOptions,
+        AppRole.RM => RmCommentOptions,
+        AppRole.SMM => SmmCommentOptions,
+        _ => Array.Empty<string>()
+    };
+
+    private bool IsValidLevelComment(string? value) =>
         !string.IsNullOrWhiteSpace(value) &&
-        MoCommentOptions.Contains(value, StringComparer.Ordinal);
+        CurrentLevelCommentOptions.Contains(value, StringComparer.Ordinal);
 
     private static async Task<string> ReadErrorMessageAsync(HttpResponseMessage response)
     {
@@ -1223,13 +1135,9 @@ else
 
     private void ResetActionState()
     {
-        IsApproveModalOpen = false;
-        IsRejectModalOpen = false;
         _approveRemarks = null;
         _approveRecommendation = "";
         _approveComment = null;
-        _rejectReason = null;
-        _rejectRemarks = null;
         _actionError = null;
         _busy = false;
     }
@@ -1247,83 +1155,37 @@ else
 
     private Task ViewDocument(int documentId) => OpenDocument(documentId, false);
 
-    private void OpenReplaceModal(SPIC.Core.DTOs.WelfareApplicationDocumentDto doc)
+    // Direct replace on file selection (same pattern as Enclosures Partner/Proprietor
+    // document replacement): the moment a file is picked, upload it and update the
+    // existing document row in place, then reload the application.
+    private async Task OnReplaceFileSelected(SPIC.Core.DTOs.WelfareApplicationDocumentDto doc, Microsoft.AspNetCore.Components.Forms.InputFileChangeEventArgs e)
     {
-        _docToReplace = doc;
-        _replaceFile = null;
-        _docActionError = null;
-        _docActionMessage = null;
-        _showReplaceModal = true;
-    }
+        if (doc == null || e.File == null || _busy) return;
 
-    private void CloseReplaceModal()
-    {
-        _showReplaceModal = false;
-        _docToReplace = null;
-        _replaceFile = null;
-        _docActionError = null;
-    }
-
-    private async Task OnReplaceFileSelected(Microsoft.AspNetCore.Components.Forms.InputFileChangeEventArgs e)
-    {
-        _docActionError = null;
-        _docActionMessage = null;
-        if (e.File != null)
-        {
-            _replaceFile = e.File;
-        }
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task ConfirmReplaceDocument()
-    {
-        if (_docToReplace == null || _replaceFile == null) return;
         _busy = true;
-        _docActionError = null;
-        _docActionMessage = null;
         try
         {
-            var delUrl = $"/api/WelfareSchemeApproval/document/{_docToReplace.Id}";
-            var delResponse = await Http.DeleteAsync(delUrl);
-            if (!delResponse.IsSuccessStatusCode)
-            {
-                var delBody = await delResponse.Content.ReadAsStringAsync();
-                var delMsg = ExtractErrorMessage(delBody) ?? "Failed to remove the wrong document.";
-                _docActionError = delMsg;
-                return;
-            }
-
             using var content = new MultipartFormDataContent();
-            using (var stream = _replaceFile.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024))
-            {
-                var buffer = new byte[stream.Length];
-                await stream.ReadAsync(buffer, 0, (int)stream.Length);
-                var fileContent = new ByteArrayContent(buffer);
-                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
-                    _replaceFile.ContentType ?? "application/octet-stream");
-                content.Add(fileContent, "files", _replaceFile.Name);
-                content.Add(new StringContent(_docToReplace.DocumentType ?? ""), "documentTypes");
-            }
+            var stream = e.File.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", e.File.Name);
+            content.Add(new StringContent(doc.DocumentType ?? ""), "documentType");
 
-            var url = $"/api/WelfareSchemeApproval/applications/{_detail?.Id ?? ApplicationId}/documents";
+            var url = $"/api/WelfareSchemeApproval/document/{doc.Id}/replace";
             var response = await Http.PostAsync(url, content);
             if (response.IsSuccessStatusCode)
             {
-                _showReplaceModal = false;
-                _docToReplace = null;
-                _replaceFile = null;
                 await LoadDetail(_detail?.Id ?? ApplicationId);
             }
             else
             {
                 var body = await response.Content.ReadAsStringAsync();
-                var msg = ExtractErrorMessage(body) ?? "Failed to upload the replacement document.";
-                _docActionError = msg;
+                var msg = ExtractErrorMessage(body) ?? "Failed to replace the document.";
+                _actionError = msg;
             }
         }
         catch (Exception ex)
         {
-            _docActionError = ex.Message;
+            _actionError = ex.Message;
         }
         finally
         {
