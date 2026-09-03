@@ -204,6 +204,21 @@ namespace SPIC.Ifms.Automation.Options
 		public string TessLanguage { get; set; } = "eng";
 
 		/// <summary>
+		/// A second Tesseract model (e.g. "eng.fast" beside "eng.best") read on
+		/// every image. When both models produce the same six characters the read
+		/// is trusted; when they differ, the primary read is used only if it is
+		/// confident. Empty disables the second opinion.
+		/// </summary>
+		public string SecondaryTessLanguage { get; set; } = "";
+
+		/// <summary>
+		/// Below this mean confidence a read that the second model does not
+		/// confirm is not submitted: a fresh image costs nothing, a wrong submit
+		/// costs an attempt and, repeated, the portal's "invalid access" refusal.
+		/// </summary>
+		public float MinimumConfidence { get; set; } = 0.60f;
+
+		/// <summary>
 		/// Characters the CAPTCHA can contain. Restricting this lifts OCR accuracy
 		/// dramatically. Empty means "no restriction".
 		/// </summary>
