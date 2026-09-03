@@ -192,6 +192,7 @@ namespace SPIC.Ifms.Automation.Portal
 				if (outcome.Success)
 				{
 					await SaveSessionAsync(cancellationToken);
+					await CaptureDiagnosticAsync("landing-page", cancellationToken);
 					return new LoginResult
 					{
 						Success = true,
@@ -276,6 +277,7 @@ namespace SPIC.Ifms.Automation.Portal
 				if (outcome.Success)
 				{
 					await SaveSessionAsync(cancellationToken);
+					await CaptureDiagnosticAsync("landing-page", cancellationToken);
 					_logger.LogInformation("Signed in using the CAPTCHA answered from the app (round {Round}).", round);
 
 					return new LoginResult
@@ -772,6 +774,24 @@ namespace SPIC.Ifms.Automation.Portal
 		/// </summary>
 		public Task<bool> IsSignedInAsync(CancellationToken cancellationToken) =>
 			IsLoggedInAsync(cancellationToken);
+
+		/// <summary>
+		/// The portal answers an unknown action with its own "404 Error Found"
+		/// page. That is a wrong job URL, and must not be read as a dead session.
+		/// </summary>
+		public async Task<bool> IsPortalNotFoundPageAsync()
+		{
+			try
+			{
+				var text = await Page.Locator("body").InnerTextAsync(new LocatorInnerTextOptions { Timeout = 3_000 });
+				return text.Contains("404 Error Found", StringComparison.OrdinalIgnoreCase) ||
+					   text.Contains("Resource was unavailable", StringComparison.OrdinalIgnoreCase);
+			}
+			catch (TimeoutException)
+			{
+				return false;
+			}
+		}
 
 		private async Task<bool> IsLoggedInAsync(CancellationToken cancellationToken)
 		{

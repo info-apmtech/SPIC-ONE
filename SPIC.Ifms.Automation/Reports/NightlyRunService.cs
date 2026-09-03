@@ -573,6 +573,7 @@ namespace SPIC.Ifms.Automation.Reports
 				// most one job's worth of work is lost rather than every remaining one.
 				if (summaries.Any(r => r.Status != IfmsRunStatus.Succeeded) &&
 					reLogins < MaxReLoginsPerAccount &&
+					!await portal.IsPortalNotFoundPageAsync() &&
 					!await portal.IsSignedInAsync(cancellationToken))
 				{
 					reLogins++;
