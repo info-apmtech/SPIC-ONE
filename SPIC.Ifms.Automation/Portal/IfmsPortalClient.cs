@@ -774,6 +774,37 @@ namespace SPIC.Ifms.Automation.Portal
 		/// them all.
 		/// </summary>
 		/// <summary>
+		/// Every menu link on this portal goes through its buildLinkToken(): the
+		/// current page's struts.token.name / struts.token / token inputs inside
+		/// #tokenContainer are appended to the target, and a link without them
+		/// is answered with the portal's own 404 page. Mirror that here so a
+		/// configured action URL behaves exactly like a click on the menu.
+		/// </summary>
+		private async Task<string> WithPortalTokenAsync(string url)
+		{
+			if (url.Contains("struts.token", StringComparison.OrdinalIgnoreCase))
+				return url;
+
+			string[] pairs;
+			try
+			{
+				pairs = await Page.EvaluateAsync<string[]>(
+					@"() => Array.from(document.querySelectorAll('#tokenContainer input'))
+						.filter(i => ['struts.token.name','struts.token','token'].includes(i.name))
+						.map(i => i.name + '=' + encodeURIComponent(i.value))");
+			}
+			catch (PlaywrightException)
+			{
+				return url;
+			}
+
+			if (pairs.Length == 0)
+				return url;
+
+			return url + (url.Contains('?') ? "&" : "?") + string.Join("&", pairs);
+		}
+
+		/// <summary>
 		/// Opens a portal path on the signed-in browser (or stays on the current
 		/// page when null), saves HTML and screenshot as a diagnostic, and prints
 		/// every link and form field found. Returns the diagnostic label.
@@ -783,7 +814,7 @@ namespace SPIC.Ifms.Automation.Portal
 			if (path is not null)
 			{
 				_activeFrame = null;
-				await Page.GotoAsync(Absolute(path), new PageGotoOptions
+				await Page.GotoAsync(await WithPortalTokenAsync(Absolute(path)), new PageGotoOptions
 				{
 					Timeout = _options.Browser.NavigationTimeoutMs,
 					WaitUntil = WaitUntilState.DOMContentLoaded
@@ -800,7 +831,7 @@ namespace SPIC.Ifms.Automation.Portal
 			Console.WriteLine($"  url now: {Page.Url}");
 
 			var links = await Page.EvaluateAsync<string[]>(
-				"() => Array.from(document.querySelectorAll('a[href]')).map(a => (a.innerText || '').trim().replace(/[ \t\r\n]+/g, ' ') + '  =>  ' + a.getAttribute('href'))");
+				@"() => Array.from(document.querySelectorAll('a[href]')).map(a => (a.innerText || '').trim().replace(/\s+/g, ' ') + '  =>  ' + a.getAttribute('href'))");
 			Console.WriteLine($"  links ({links.Length}):");
 			foreach (var l in links.Where(l => !string.IsNullOrWhiteSpace(l)))
 				Console.WriteLine("    " + l);
@@ -1045,7 +1076,7 @@ namespace SPIC.Ifms.Automation.Portal
 				switch (step.Action.ToLowerInvariant())
 				{
 					case "goto":
-						await Page.GotoAsync(Absolute(value!), new PageGotoOptions
+						await Page.GotoAsync(await WithPortalTokenAsync(Absolute(value!)), new PageGotoOptions
 						{
 							Timeout = _options.Browser.NavigationTimeoutMs,
 							WaitUntil = WaitUntilState.DOMContentLoaded

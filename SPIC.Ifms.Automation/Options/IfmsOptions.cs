@@ -22,7 +22,7 @@ namespace SPIC.Ifms.Automation.Options
 		/// stored session is still alive. Never the login page: opening that
 		/// starts a fresh portal session and drops the one being tested.
 		/// </summary>
-		public string SessionProbePath { get; set; } = "/mFMS/companyTransactionViewEdit.action";
+		public string SessionProbePath { get; set; } = "/mFMS/home.action";
 
 		/// <summary>
 		/// Cheap URL hit used to decide "is the site up yet" before a real login.
