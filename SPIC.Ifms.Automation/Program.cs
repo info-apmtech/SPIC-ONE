@@ -140,7 +140,7 @@ builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
 var isTool = command is "test-captcha" or "set-credentials" or "list-credentials"
-	or "test-email" or "otp" or "run-now" or "test-login";
+	or "test-email" or "otp" or "run-now" or "test-login" or "dump-page";
 
 if (!isTool)
 {
@@ -181,6 +181,9 @@ if (command == "run-now")
 // needs a command that does nothing else.
 if (command == "test-login")
 	return await RunTestLoginAsync(host.Services, args);
+
+if (command == "dump-page")
+	return await RunDumpPageAsync(host.Services, args);
 
 if (command == "test-captcha")
 {
@@ -436,6 +439,66 @@ static async Task<int> RunTestLoginAsync(IServiceProvider services, string[] arg
 
 		Console.WriteLine();
 		Console.WriteLine("The login works end to end. Enable a report job next.");
+		return 0;
+	}
+	finally
+	{
+		await portal.DisposeAsync();
+	}
+}
+
+/// <summary>
+/// Signs in (reusing the stored session when the portal still honours it),
+/// opens each given path, and saves its HTML and screenshot under
+/// diagnostics/, printing every link on the page. This is how the real
+/// report URLs and field names are read off the portal instead of guessed.
+///
+///   dotnet SPIC.Ifms.Automation.dll dump-page greenstar /mFMS/welcome.action /mFMS/other.action
+///
+/// With no paths, only the landing page after login is captured.
+/// </summary>
+static async Task<int> RunDumpPageAsync(IServiceProvider services, string[] args)
+{
+	var key = args.Length > 1 ? args[1] : null;
+	var paths = args.Skip(2).ToList();
+
+	await using var scope = services.CreateAsyncScope();
+	var store = scope.ServiceProvider.GetRequiredService<IIfmsAccountStore>();
+	var accounts = await store.GetActiveAsync(CancellationToken.None);
+
+	var account = key is null
+		? accounts.FirstOrDefault()
+		: accounts.FirstOrDefault(a => string.Equals(a.AccountKey, key, StringComparison.OrdinalIgnoreCase));
+
+	if (account is null)
+	{
+		Console.WriteLine($"No login found for '{key}'. Known keys: " +
+			string.Join(", ", accounts.Select(a => a.AccountKey)));
+		return 1;
+	}
+
+	var portal = scope.ServiceProvider.GetRequiredService<IfmsPortalClient>();
+
+	try
+	{
+		var result = await portal.LoginAsync(account, runId: 0, CancellationToken.None);
+		if (!result.Success)
+		{
+			Console.WriteLine($"Not signed in: {result.FailureReason}");
+			return 1;
+		}
+
+		Console.WriteLine($"Signed in ({result.CaptchaMethod}, OTP {result.OtpMethod ?? "not requested"}).");
+
+		var captured = await portal.CapturePageAsync(null, CancellationToken.None);
+		Console.WriteLine($"Landing page -> {captured}");
+
+		foreach (var path in paths)
+		{
+			captured = await portal.CapturePageAsync(path, CancellationToken.None);
+			Console.WriteLine($"{path} -> {captured}");
+		}
+
 		return 0;
 	}
 	finally

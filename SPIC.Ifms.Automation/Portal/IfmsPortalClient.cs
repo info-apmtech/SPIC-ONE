@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -772,6 +773,47 @@ namespace SPIC.Ifms.Automation.Portal
 		/// show a hundred identical errors with no clue that one expiry caused
 		/// them all.
 		/// </summary>
+		/// <summary>
+		/// Opens a portal path on the signed-in browser (or stays on the current
+		/// page when null), saves HTML and screenshot as a diagnostic, and prints
+		/// every link and form field found. Returns the diagnostic label.
+		/// </summary>
+		public async Task<string> CapturePageAsync(string? path, CancellationToken cancellationToken)
+		{
+			if (path is not null)
+			{
+				_activeFrame = null;
+				await Page.GotoAsync(Absolute(path), new PageGotoOptions
+				{
+					Timeout = _options.Browser.NavigationTimeoutMs,
+					WaitUntil = WaitUntilState.DOMContentLoaded
+				});
+				await WaitForSettleAsync(cancellationToken);
+			}
+
+			var label = path is null
+				? "dump-landing"
+				: "dump-" + Regex.Replace(path.Trim('/'), "[^A-Za-z0-9]+", "_");
+
+			await CaptureDiagnosticAsync(label, cancellationToken);
+
+			Console.WriteLine($"  url now: {Page.Url}");
+
+			var links = await Page.EvaluateAsync<string[]>(
+				"() => Array.from(document.querySelectorAll('a[href]')).map(a => (a.innerText || '').trim().replace(/[ \t\r\n]+/g, ' ') + '  =>  ' + a.getAttribute('href'))");
+			Console.WriteLine($"  links ({links.Length}):");
+			foreach (var l in links.Where(l => !string.IsNullOrWhiteSpace(l)))
+				Console.WriteLine("    " + l);
+
+			var fields = await Page.EvaluateAsync<string[]>(
+				"() => Array.from(document.querySelectorAll('input,select,button,textarea')).filter(e => e.type !== 'hidden').map(e => e.tagName.toLowerCase() + ' name=' + (e.name||'') + ' id=' + (e.id||'') + ' type=' + (e.type||'') + ' value=' + ((e.value||'').toString().slice(0,30)))");
+			Console.WriteLine($"  fields ({fields.Length}):");
+			foreach (var f in fields)
+				Console.WriteLine("    " + f);
+
+			return label;
+		}
+
 		public Task<bool> IsSignedInAsync(CancellationToken cancellationToken) =>
 			IsLoggedInAsync(cancellationToken);
 
