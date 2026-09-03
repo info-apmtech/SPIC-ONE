@@ -366,14 +366,10 @@ namespace SPIC.Ifms.Automation.Portal
 			if (await IsLoggedInAsync(cancellationToken))
 				return new SubmitOutcome(true, false, null, "NotRequired");
 
-			// A rejected CAPTCHA leaves us on the login page, whose three empty
-			// boxes look like OTP candidates. Read the error first so that a
-			// wrong guess is reported as one, not as an ambiguous OTP field.
-			var earlyError = await ReadLoginErrorAsync();
-
-			var otpMethod = earlyError is null
-				? await HandleOtpStepAsync(runId, otpRequestedAt, cancellationToken)
-				: null;
+			// The OTP page itself carries a red "OTP has been sent successfully"
+			// line that the error selector matches, so the OTP field must be
+			// looked for BEFORE any error is read.
+			var otpMethod = await HandleOtpStepAsync(runId, otpRequestedAt, cancellationToken);
 
 			if (otpMethod is null && _otpStepReached)
 			{
@@ -413,7 +409,7 @@ namespace SPIC.Ifms.Automation.Portal
 					OtpMethod: otpMethod);
 			}
 
-			var error = earlyError ?? await ReadLoginErrorAsync();
+			var error = await ReadLoginErrorAsync();
 			var isCaptchaError = error is not null && selectors.CaptchaErrorMarkers.Any(
 				marker => error.Contains(marker, StringComparison.OrdinalIgnoreCase));
 
@@ -554,6 +550,12 @@ namespace SPIC.Ifms.Automation.Portal
 				}
 				catch (TimeoutException)
 				{
+					// A rejected CAPTCHA leaves the login page up, with an error
+					// shown and three empty boxes that look like OTP candidates.
+					// Do not hunt through them when the page is telling us why.
+					if (await ReadLoginErrorAsync() is not null)
+						return null;
+
 					_logger.LogWarning(
 						"The configured OTP selector '{Selector}' did not appear; trying to find the field.",
 						configured);
