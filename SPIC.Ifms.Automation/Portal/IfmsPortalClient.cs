@@ -1189,9 +1189,19 @@ namespace SPIC.Ifms.Automation.Portal
 				_page = await _context.NewPageAsync();
 				ConfigurePage(_page);
 
-				await GotoLoginAsync(cancellationToken);
+				// Probe a page behind the login. The login page itself would
+				// start a new portal session and silently discard this one.
+				_activeFrame = null;
+				await Page.GotoAsync(Absolute(_options.SessionProbePath), new PageGotoOptions
+				{
+					Timeout = _options.Browser.NavigationTimeoutMs,
+					WaitUntil = WaitUntilState.DOMContentLoaded
+				});
+				await WaitForSettleAsync(cancellationToken);
 
-				if (await IsLoggedInAsync(cancellationToken))
+				var bouncedToLogin = Page.Url.Contains("login", StringComparison.OrdinalIgnoreCase);
+
+				if (!bouncedToLogin && await IsLoggedInAsync(cancellationToken))
 				{
 					await TouchSessionAsync(cancellationToken);
 					return true;

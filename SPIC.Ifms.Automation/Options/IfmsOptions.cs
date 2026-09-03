@@ -18,6 +18,13 @@ namespace SPIC.Ifms.Automation.Options
 		public string LoginPath { get; set; } = "/";
 
 		/// <summary>
+		/// A page that exists only behind the login, used to test whether a
+		/// stored session is still alive. Never the login page: opening that
+		/// starts a fresh portal session and drops the one being tested.
+		/// </summary>
+		public string SessionProbePath { get; set; } = "/mFMS/companyTransactionViewEdit.action";
+
+		/// <summary>
 		/// Cheap URL hit used to decide "is the site up yet" before a real login.
 		/// Defaults to the login page.
 		/// </summary>
