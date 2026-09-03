@@ -26,6 +26,12 @@ namespace SPIC.Ifms.Automation.Portal
 		public string? CaptchaMethod { get; init; }
 		public int CaptchaAttempts { get; init; }
 		public string? OtpMethod { get; init; }
+
+		/// <summary>
+		/// True when the portal accepted the CAPTCHA and the failure lies past
+		/// it (typically no OTP). A human CAPTCHA round cannot help then.
+		/// </summary>
+		public bool CaptchaAccepted { get; init; }
 	}
 
 	public sealed class DownloadedReport
@@ -129,7 +135,11 @@ namespace SPIC.Ifms.Automation.Portal
 				return automatic;
 
 			// Only a CAPTCHA we could not read is worth asking a human about.
-			// A wrong password will not get better with a second pair of eyes.
+			// A wrong password will not get better with a second pair of eyes,
+			// and neither will an OTP that never arrived.
+			if (automatic.CaptchaAccepted)
+				return automatic;
+
 			if (automatic.FailureReason is not null &&
 				!automatic.FailureReason.Contains("captcha", StringComparison.OrdinalIgnoreCase))
 			{
@@ -201,7 +211,8 @@ namespace SPIC.Ifms.Automation.Portal
 						Success = false,
 						FailureReason = lastFailure,
 						CaptchaMethod = method,
-						CaptchaAttempts = attempt
+						CaptchaAttempts = attempt,
+						CaptchaAccepted = outcome.CaptchaAccepted
 					};
 				}
 
