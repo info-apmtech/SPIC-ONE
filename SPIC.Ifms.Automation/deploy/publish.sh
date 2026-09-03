@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# publish.sh is run as spicops (sudo limited to the spic-ifms unit) or as
+# root; only the former needs the prefix. -n so a missing rule fails loudly
+# instead of prompting inside a pipe.
+if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo -n"; fi
 #
 # Build the automation from the checked-out repository and install it into
 # /opt/spic-ifms, then restart the service.
@@ -31,7 +36,7 @@ say "Publishing from $REPO"
 dotnet publish "$PROJECT" -c Release -o /tmp/spic-ifms-publish --nologo
 
 say "Stopping $SERVICE"
-systemctl stop $SERVICE 2>/dev/null || true
+$SUDO systemctl stop $SERVICE 2>/dev/null || true
 
 say "Installing to $APP_DIR"
 # Deliberately not --delete: downloads/, diagnostics/ and secrets.env live here
@@ -94,8 +99,8 @@ if [ ! -f "$APP_DIR/tessdata/eng.traineddata" ]; then
 fi
 
 say "Starting $SERVICE"
-systemctl start $SERVICE
+$SUDO systemctl start $SERVICE
 sleep 2
-systemctl --no-pager --lines=15 status $SERVICE || true
+$SUDO systemctl --no-pager --lines=15 status $SERVICE || true
 
 say "Done. Follow the log with: journalctl -u $SERVICE -f"
