@@ -97,6 +97,19 @@ LD_LIBRARY_PATH=%s/x64:%s
 fi
 
 say "Checking the OCR language data"
+# The repo ships the 4 MB "fast" eng.traineddata; the 15 MB tessdata_best
+# model reads these CAPTCHAs noticeably better. rsync just put the fast one
+# back, so restore the best one if it was downloaded before, else fetch it.
+TD="$APP_DIR/tessdata"
+if [ -s "$TD/eng.best.traineddata" ] && [ "$(stat -c %s "$TD/eng.best.traineddata")" -gt 10000000 ]; then
+  cp "$TD/eng.best.traineddata" "$TD/eng.traineddata"; echo "  best model restored"
+else
+  if curl -sSL -m 300 -o "$TD/eng.best.traineddata" "https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata"      && [ "$(stat -c %s "$TD/eng.best.traineddata")" -gt 10000000 ]; then
+    cp "$TD/eng.best.traineddata" "$TD/eng.traineddata"; echo "  best model downloaded and installed"
+  else
+    echo "  could not fetch tessdata_best; the fast model stays"
+  fi
+fi
 if [ ! -f "$APP_DIR/tessdata/eng.traineddata" ]; then
   echo "  missing; downloading"
   mkdir -p "$APP_DIR/tessdata"
