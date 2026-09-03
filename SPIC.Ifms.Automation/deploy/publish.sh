@@ -51,9 +51,15 @@ if [ -f "$PW" ]; then
   chmod +x "$PW"
   "$PW" install --with-deps chromium
 else
-  echo "  playwright.sh not found in the publish output; installing via dotnet"
-  ( cd "$APP_DIR" && dotnet SPIC.Ifms.Automation.dll --help >/dev/null 2>&1 || true )
-  echo "  run: pwsh $APP_DIR/playwright.ps1 install --with-deps chromium"
+  # Never run the app here: the host does not stop at --help, it starts the
+  # worker as an orphan outside systemd (seen 2026-09-03). The browsers live in
+  # PLAYWRIGHT_BROWSERS_PATH and survive a redeploy; if they are missing, say so.
+  BROWSERS="${PLAYWRIGHT_BROWSERS_PATH:-$APP_DIR/browsers}"
+  if ls -d "$BROWSERS"/chromium* >/dev/null 2>&1; then
+    echo "  Chromium already present in $BROWSERS"
+  else
+    echo "  Chromium MISSING in $BROWSERS - run: pwsh $APP_DIR/playwright.ps1 install --with-deps chromium"
+  fi
 fi
 
 say "Tesseract native libraries"
