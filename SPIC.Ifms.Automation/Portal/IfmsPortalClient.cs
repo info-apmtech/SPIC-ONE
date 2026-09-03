@@ -355,7 +355,14 @@ namespace SPIC.Ifms.Automation.Portal
 			if (await IsLoggedInAsync(cancellationToken))
 				return new SubmitOutcome(true, false, null, "NotRequired");
 
-			var otpMethod = await HandleOtpStepAsync(runId, otpRequestedAt, cancellationToken);
+			// A rejected CAPTCHA leaves us on the login page, whose three empty
+			// boxes look like OTP candidates. Read the error first so that a
+			// wrong guess is reported as one, not as an ambiguous OTP field.
+			var earlyError = await ReadLoginErrorAsync();
+
+			var otpMethod = earlyError is null
+				? await HandleOtpStepAsync(runId, otpRequestedAt, cancellationToken)
+				: null;
 
 			if (otpMethod is null && _otpStepReached)
 			{
@@ -395,7 +402,7 @@ namespace SPIC.Ifms.Automation.Portal
 					OtpMethod: otpMethod);
 			}
 
-			var error = await ReadLoginErrorAsync();
+			var error = earlyError ?? await ReadLoginErrorAsync();
 			var isCaptchaError = error is not null && selectors.CaptchaErrorMarkers.Any(
 				marker => error.Contains(marker, StringComparison.OrdinalIgnoreCase));
 
