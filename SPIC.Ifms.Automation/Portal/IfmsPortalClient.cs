@@ -259,7 +259,8 @@ namespace SPIC.Ifms.Automation.Portal
 				var outcome = await SubmitCredentialsAsync(runId, answer.Value, cancellationToken);
 
 				if (answer.ChallengeRequestId is int requestId)
-					await _operatorSolver.ReportOutcomeAsync(requestId, outcome.Success, cancellationToken);
+					await _operatorSolver.ReportOutcomeAsync(
+						requestId, outcome.Success || outcome.CaptchaAccepted, cancellationToken);
 
 				if (outcome.Success)
 				{
@@ -321,7 +322,14 @@ namespace SPIC.Ifms.Automation.Portal
 			bool Success,
 			bool RetryWorthwhile,
 			string? FailureReason,
-			string? OtpMethod);
+			string? OtpMethod,
+			bool CaptchaAccepted = false);
+
+		/// <summary>
+		/// Set once the portal shows its OTP field: on this portal that only
+		/// happens after the username, password and CAPTCHA were all accepted.
+		/// </summary>
+		private bool _otpStepReached;
 
 		private async Task<SubmitOutcome> SubmitCredentialsAsync(
 			int runId,
@@ -329,6 +337,7 @@ namespace SPIC.Ifms.Automation.Portal
 			CancellationToken cancellationToken)
 		{
 			var selectors = _options.Selectors;
+			_otpStepReached = false;
 
 			await Frame.FillAsync(selectors.UserNameInput, Account.UserName);
 			await Frame.FillAsync(selectors.PasswordInput, Account.Password);
@@ -347,6 +356,22 @@ namespace SPIC.Ifms.Automation.Portal
 				return new SubmitOutcome(true, false, null, "NotRequired");
 
 			var otpMethod = await HandleOtpStepAsync(runId, otpRequestedAt, cancellationToken);
+
+			if (otpMethod is null && _otpStepReached)
+			{
+				// The credentials and CAPTCHA were right; the code never came. A
+				// fresh CAPTCHA cannot fix that, so stop here and say so. The run
+				// level retry, fifteen minutes on, gives the relay another chance.
+				return new SubmitOutcome(
+					Success: false,
+					RetryWorthwhile: false,
+					FailureReason:
+						"The portal asked for an OTP but none arrived within the two windows. " +
+						"The password and CAPTCHA were accepted. Check the Android relay, or type " +
+						"the code with the otp command during the next attempt.",
+					OtpMethod: null,
+					CaptchaAccepted: true);
+			}
 
 			if (otpMethod is not null)
 			{
@@ -436,6 +461,8 @@ namespace SPIC.Ifms.Automation.Portal
 				// tell those apart.
 				return null;
 			}
+
+			_otpStepReached = true;
 
 			// Report the field's real id and name, so the guessing can stop. Until
 			// Ifms:Selectors:OtpInput is set this is auto-detected on every login,
