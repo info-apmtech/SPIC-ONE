@@ -139,7 +139,7 @@ builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
 var isTool = command is "test-captcha" or "set-credentials" or "list-credentials"
-	or "test-email" or "otp" or "run-now" or "test-login" or "dump-page" or "test-job";
+	or "test-email" or "otp" or "run-now" or "test-login" or "dump-page" or "test-job" or "test-jobs";
 
 if (!isTool)
 {
@@ -184,7 +184,7 @@ if (command == "test-login")
 if (command == "dump-page")
 	return await RunDumpPageAsync(host.Services, args);
 
-if (command == "test-job")
+if (command == "test-job" || command == "test-jobs")
 	return await RunTestJobAsync(host.Services, args);
 
 if (command == "test-captcha")
@@ -525,21 +525,30 @@ static async Task<int> RunTestJobAsync(IServiceProvider services, string[] args)
 		return 1;
 	}
 
-	var jobKey = args[1];
-	var pinned = args.Skip(2)
+	// Job keys first, then token=value pins that apply to every job. "all"
+	// means every job of the first job's account, enabled or not - one login
+	// for the whole set, which is what makes a mapping round affordable.
+	var keys = args.Skip(1).Where(a => !a.Contains('=')).ToList();
+	var pinned = args.Skip(1)
+		.Where(a => a.Contains('='))
 		.Select(a => a.Split('=', 2))
-		.Where(p => p.Length == 2)
 		.ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
 
 	await using var scope = services.CreateAsyncScope();
-	var jobs = scope.ServiceProvider.GetRequiredService<IOptions<ReportJobsOptions>>().Value.Jobs;
-	var job = jobs.FirstOrDefault(j => string.Equals(j.Key, jobKey, StringComparison.OrdinalIgnoreCase));
-	if (job is null)
+	var allJobs = scope.ServiceProvider.GetRequiredService<IOptions<ReportJobsOptions>>().Value.Jobs;
+
+	var selected = keys.Contains("all", StringComparer.OrdinalIgnoreCase)
+		? allJobs.ToList()
+		: keys.Select(k => allJobs.FirstOrDefault(j => string.Equals(j.Key, k, StringComparison.OrdinalIgnoreCase)))
+			.ToList();
+
+	if (selected.Count == 0 || selected.Any(j => j is null))
 	{
-		Console.WriteLine($"No job '{jobKey}'. Known: {string.Join(", ", jobs.Select(j => j.Key))}");
+		Console.WriteLine($"Unknown job key. Known: {string.Join(", ", allJobs.Select(j => j.Key))}, or 'all'.");
 		return 1;
 	}
 
+	var job = selected[0]!;
 	var store = scope.ServiceProvider.GetRequiredService<IIfmsAccountStore>();
 	var accounts = await store.GetActiveAsync(CancellationToken.None);
 	var account = accounts.FirstOrDefault(a => string.IsNullOrWhiteSpace(job.AccountKey) ||
@@ -549,6 +558,12 @@ static async Task<int> RunTestJobAsync(IServiceProvider services, string[] args)
 		Console.WriteLine($"No login for account '{job.AccountKey}'.");
 		return 1;
 	}
+
+	selected = selected
+		.Where(j => string.IsNullOrWhiteSpace(j!.AccountKey) ||
+					string.Equals(j.AccountKey, account.AccountKey, StringComparison.OrdinalIgnoreCase))
+		.OrderBy(j => j!.Order)
+		.ToList();
 
 	var portal = scope.ServiceProvider.GetRequiredService<IfmsPortalClient>();
 	portal.CaptureEveryStep = true;
@@ -563,41 +578,54 @@ static async Task<int> RunTestJobAsync(IServiceProvider services, string[] args)
 		}
 		Console.WriteLine($"Signed in ({login.CaptchaMethod}, OTP {login.OtpMethod ?? "not requested"}).");
 
-		var reportDate = DateTime.Today.AddDays(job.ReportDateOffsetDays ?? -1);
-		var tokens = new RunTokens(reportDate, DateTime.Now, account.UserName)
-			.WithLiteral("company", account.CompanyName)
-			.WithLiteral("accountKey", account.AccountKey);
+		var failures = 0;
+		var dir = Path.Combine(AppContext.BaseDirectory, "downloads", DateTime.Now.ToString("yyyy-MM-dd"));
 
-		foreach (var loop in job.ForEach)
+		foreach (var current in selected)
 		{
-			string value;
-			if (pinned.TryGetValue(loop.TokenName, out var given))
-				value = given;
-			else if (loop.Values.Count > 0)
-				value = loop.Values[0];
-			else
+			var j = current!;
+			Console.WriteLine();
+			Console.WriteLine($"=== {j.Key} : {j.Title} ===");
+
+			try
 			{
-				var found = await portal.DiscoverLoopValuesAsync(job, loop, tokens, CancellationToken.None);
-				Console.WriteLine($"  {loop.TokenName}: {found.Count} value(s) discovered: {string.Join(" | ", found.Take(12))}{(found.Count > 12 ? " ..." : "")}");
-				if (found.Count == 0) { Console.WriteLine($"Nothing to loop over for '{loop.TokenName}'."); return 1; }
-				value = found[0];
+				var reportDate = DateTime.Today.AddDays(j.ReportDateOffsetDays ?? -1);
+				var tokens = new RunTokens(reportDate, DateTime.Now, account.UserName)
+					.WithLiteral("company", account.CompanyName)
+					.WithLiteral("accountKey", account.AccountKey);
+
+				foreach (var loop in j.ForEach)
+				{
+					string value;
+					if (pinned.TryGetValue(loop.TokenName, out var given))
+						value = given;
+					else if (loop.Values.Count > 0)
+						value = loop.Values[0];
+					else
+					{
+						var found = await portal.DiscoverLoopValuesAsync(j, loop, tokens, CancellationToken.None);
+						Console.WriteLine($"  {loop.TokenName}: {found.Count} value(s) discovered: {string.Join(" | ", found.Take(12))}{(found.Count > 12 ? " ..." : "")}");
+						if (found.Count == 0) throw new InvalidOperationException($"Nothing to loop over for '{loop.TokenName}'.");
+						value = found[0];
+					}
+					Console.WriteLine($"  using {loop.TokenName} = {value}");
+					tokens.WithLiteral(loop.TokenName, value);
+				}
+
+				var file = await portal.DownloadReportAsync(j, tokens, dir, CancellationToken.None);
+				Console.WriteLine($"  DOWNLOADED: {file.FilePath} ({file.Bytes:N0} bytes, {file.Extension})");
 			}
-			Console.WriteLine($"  using {loop.TokenName} = {value}");
-			tokens.WithLiteral(loop.TokenName, value);
+			catch (Exception ex)
+			{
+				failures++;
+				Console.WriteLine($"  FAILED: {ex.GetType().Name}: {ex.Message.Split(Environment.NewLine)[0]}");
+				Console.WriteLine("  (step captures are under diagnostics/<today>/; the login is kept for the next job)");
+			}
 		}
 
-		var dir = Path.Combine(AppContext.BaseDirectory, "downloads", DateTime.Now.ToString("yyyy-MM-dd"));
-		var file = await portal.DownloadReportAsync(job, tokens, dir, CancellationToken.None);
 		Console.WriteLine();
-		Console.WriteLine($"Downloaded: {file.FilePath} ({file.Bytes:N0} bytes, {file.Extension})");
-		return 0;
-	}
-	catch (Exception ex)
-	{
-		Console.WriteLine();
-		Console.WriteLine($"FAILED: {ex.GetType().Name}: {ex.Message.Split(Environment.NewLine)[0]}");
-		Console.WriteLine("Look at the newest files under diagnostics/<today>/ for the page it was on.");
-		return 1;
+		Console.WriteLine($"{selected.Count - failures} of {selected.Count} job(s) downloaded.");
+		return failures == 0 ? 0 : 1;
 	}
 	finally
 	{
