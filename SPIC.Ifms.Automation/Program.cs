@@ -596,8 +596,7 @@ static async Task<int> RunTestJobAsync(IServiceProvider services, string[] args)
 	catch (Exception ex)
 	{
 		Console.WriteLine();
-		Console.WriteLine($"FAILED: {ex.GetType().Name}: {ex.Message.Split('
-')[0]}");
+		Console.WriteLine($"FAILED: {ex.GetType().Name}: {ex.Message.Split(Environment.NewLine)[0]}");
 		Console.WriteLine("Look at the newest files under diagnostics/<today>/ for the page it was on.");
 		return 1;
 	}
