@@ -83,7 +83,19 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 			{
 				cancellationToken.ThrowIfCancellationRequested();
 
-				var otp = await TryClaimAsync(floor, runId, accountKey, cancellationToken);
+				string? otp;
+				try
+				{
+					otp = await TryClaimAsync(floor, runId, accountKey, cancellationToken);
+				}
+				catch (Exception ex) when (ex is not OperationCanceledException)
+				{
+					// The window is short; a dropped database connection must not
+					// end it. The next poll reconnects.
+					_logger.LogWarning("OTP poll hit a database error, retrying: {Message}", ex.Message);
+					otp = null;
+				}
+
 				if (otp is not null)
 				{
 					_logger.LogInformation("OTP received from the Android relay.");
