@@ -773,6 +773,9 @@ namespace SPIC.Ifms.Automation.Portal
 		/// show a hundred identical errors with no clue that one expiry caused
 		/// them all.
 		/// </summary>
+		/// <summary>Set by test-job: screenshot + HTML after every job step.</summary>
+		public bool CaptureEveryStep { get; set; }
+
 		/// <summary>
 		/// Every menu link on this portal goes through its buildLinkToken(): the
 		/// current page's struts.token.name / struts.token / token inputs inside
@@ -794,6 +797,7 @@ namespace SPIC.Ifms.Automation.Portal
 				_activeFrame = null;
 				await Page.GotoAsync(Absolute("/mFMS/home.action"), new PageGotoOptions
 				{
+					Referer = Absolute("/mFMS/"),
 					Timeout = _options.Browser.NavigationTimeoutMs,
 					WaitUntil = WaitUntilState.DOMContentLoaded
 				});
@@ -834,6 +838,7 @@ namespace SPIC.Ifms.Automation.Portal
 				_activeFrame = null;
 				await Page.GotoAsync(await WithPortalTokenAsync(Absolute(path)), new PageGotoOptions
 				{
+					Referer = Absolute("/mFMS/"),
 					Timeout = _options.Browser.NavigationTimeoutMs,
 					WaitUntil = WaitUntilState.DOMContentLoaded
 				});
@@ -987,8 +992,14 @@ namespace SPIC.Ifms.Automation.Portal
 		{
 			_activeFrame = null;
 
+			var stepNo = 0;
 			foreach (var step in job.Steps)
+			{
+				stepNo++;
 				await ExecuteStepAsync(step, tokens, cancellationToken);
+				if (CaptureEveryStep)
+					await CaptureDiagnosticAsync($"{job.Key}-step{stepNo:00}-{step.Action}", cancellationToken);
+			}
 
 			Directory.CreateDirectory(targetDirectory);
 
@@ -1096,6 +1107,7 @@ namespace SPIC.Ifms.Automation.Portal
 					case "goto":
 						await Page.GotoAsync(await WithPortalTokenAsync(Absolute(value!)), new PageGotoOptions
 						{
+							Referer = Absolute("/mFMS/"),
 							Timeout = _options.Browser.NavigationTimeoutMs,
 							WaitUntil = WaitUntilState.DOMContentLoaded
 						});
@@ -1263,6 +1275,7 @@ namespace SPIC.Ifms.Automation.Portal
 
 			await Page.GotoAsync(Absolute(_options.LoginPath), new PageGotoOptions
 			{
+				Referer = Absolute("/mFMS/"),
 				Timeout = _options.Browser.NavigationTimeoutMs,
 				WaitUntil = WaitUntilState.DOMContentLoaded
 			});
@@ -1324,6 +1337,7 @@ namespace SPIC.Ifms.Automation.Portal
 				_activeFrame = null;
 				await Page.GotoAsync(Absolute(_options.SessionProbePath), new PageGotoOptions
 				{
+					Referer = Absolute("/mFMS/"),
 					Timeout = _options.Browser.NavigationTimeoutMs,
 					WaitUntil = WaitUntilState.DOMContentLoaded
 				});

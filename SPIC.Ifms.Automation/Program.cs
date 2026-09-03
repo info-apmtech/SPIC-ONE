@@ -140,7 +140,7 @@ builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
 var isTool = command is "test-captcha" or "set-credentials" or "list-credentials"
-	or "test-email" or "otp" or "run-now" or "test-login" or "dump-page";
+	or "test-email" or "otp" or "run-now" or "test-login" or "dump-page" or "test-job";
 
 if (!isTool)
 {
@@ -184,6 +184,9 @@ if (command == "test-login")
 
 if (command == "dump-page")
 	return await RunDumpPageAsync(host.Services, args);
+
+if (command == "test-job")
+	return await RunTestJobAsync(host.Services, args);
 
 if (command == "test-captcha")
 {
@@ -500,6 +503,103 @@ static async Task<int> RunDumpPageAsync(IServiceProvider services, string[] args
 		}
 
 		return 0;
+	}
+	finally
+	{
+		await portal.DisposeAsync();
+	}
+}
+
+/// <summary>
+/// Runs one report job's steps on this machine, with a screenshot and the
+/// page HTML saved after every step, and the file kept under downloads/.
+/// Nothing is uploaded. Loop tokens can be pinned on the command line:
+///
+///   dotnet SPIC.Ifms.Automation.dll test-job company-sales-greenstar
+///   dotnet SPIC.Ifms.Automation.dll test-job retail-stocks-greenstar state="TAMIL NADU"
+/// </summary>
+static async Task<int> RunTestJobAsync(IServiceProvider services, string[] args)
+{
+	if (args.Length < 2)
+	{
+		Console.WriteLine("usage: test-job <jobKey> [token=value ...]");
+		return 1;
+	}
+
+	var jobKey = args[1];
+	var pinned = args.Skip(2)
+		.Select(a => a.Split('=', 2))
+		.Where(p => p.Length == 2)
+		.ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
+
+	await using var scope = services.CreateAsyncScope();
+	var jobs = scope.ServiceProvider.GetRequiredService<IOptions<ReportJobOptions>>().Value.Jobs;
+	var job = jobs.FirstOrDefault(j => string.Equals(j.Key, jobKey, StringComparison.OrdinalIgnoreCase));
+	if (job is null)
+	{
+		Console.WriteLine($"No job '{jobKey}'. Known: {string.Join(", ", jobs.Select(j => j.Key))}");
+		return 1;
+	}
+
+	var store = scope.ServiceProvider.GetRequiredService<IIfmsAccountStore>();
+	var accounts = await store.GetActiveAsync(CancellationToken.None);
+	var account = accounts.FirstOrDefault(a => string.IsNullOrWhiteSpace(job.AccountKey) ||
+		string.Equals(a.AccountKey, job.AccountKey, StringComparison.OrdinalIgnoreCase));
+	if (account is null)
+	{
+		Console.WriteLine($"No login for account '{job.AccountKey}'.");
+		return 1;
+	}
+
+	var portal = scope.ServiceProvider.GetRequiredService<IfmsPortalClient>();
+	portal.CaptureEveryStep = true;
+
+	try
+	{
+		var login = await portal.LoginAsync(account, runId: 0, CancellationToken.None);
+		if (!login.Success)
+		{
+			Console.WriteLine($"Not signed in: {login.FailureReason}");
+			return 1;
+		}
+		Console.WriteLine($"Signed in ({login.CaptchaMethod}, OTP {login.OtpMethod ?? "not requested"}).");
+
+		var reportDate = DateTime.Today.AddDays(job.ReportDateOffsetDays ?? -1);
+		var tokens = new RunTokens(reportDate, DateTime.Now, account.UserName)
+			.WithLiteral("company", account.CompanyName)
+			.WithLiteral("accountKey", account.AccountKey);
+
+		foreach (var loop in job.ForEach)
+		{
+			string value;
+			if (pinned.TryGetValue(loop.TokenName, out var given))
+				value = given;
+			else if (loop.Values.Count > 0)
+				value = loop.Values[0];
+			else
+			{
+				var found = await portal.DiscoverLoopValuesAsync(job, loop, tokens, CancellationToken.None);
+				Console.WriteLine($"  {loop.TokenName}: {found.Count} value(s) discovered: {string.Join(" | ", found.Take(12))}{(found.Count > 12 ? " ..." : "")}");
+				if (found.Count == 0) { Console.WriteLine($"Nothing to loop over for '{loop.TokenName}'."); return 1; }
+				value = found[0];
+			}
+			Console.WriteLine($"  using {loop.TokenName} = {value}");
+			tokens.WithLiteral(loop.TokenName, value);
+		}
+
+		var dir = Path.Combine(AppContext.BaseDirectory, "downloads", DateTime.Now.ToString("yyyy-MM-dd"));
+		var file = await portal.DownloadReportAsync(job, tokens, dir, CancellationToken.None);
+		Console.WriteLine();
+		Console.WriteLine($"Downloaded: {file.FilePath} ({file.Bytes:N0} bytes, {file.Extension})");
+		return 0;
+	}
+	catch (Exception ex)
+	{
+		Console.WriteLine();
+		Console.WriteLine($"FAILED: {ex.GetType().Name}: {ex.Message.Split('
+')[0]}");
+		Console.WriteLine("Look at the newest files under diagnostics/<today>/ for the page it was on.");
+		return 1;
 	}
 	finally
 	{
