@@ -1,3 +1,4 @@
+﻿using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +45,9 @@ namespace Spic.Infrastructure.Data
                 new LyingWithMaster { Id = 3, Name = "Rake Point", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" },
                 new LyingWithMaster { Id = 4, Name = "Warehouse", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" }
             );
+
+        // The IFMS automation keeps its own tables in its own database; see
+        // IfmsDbContext. They are deliberately not reachable from here.
         }
 
         // User related
@@ -149,5 +153,7 @@ namespace Spic.Infrastructure.Data
 		//// Contact Us
 		//public DbSet<ContactUsMessage> ContactUsMessages { get; set; }
 
+        // The IFMS automation keeps its own tables in its own database; see
+        // IfmsDbContext. They are deliberately not reachable from here.
 	}
 }

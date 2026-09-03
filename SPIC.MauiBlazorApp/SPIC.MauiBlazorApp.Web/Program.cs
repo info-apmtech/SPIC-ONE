@@ -1,4 +1,4 @@
-using SPIC.MauiBlazorApp.Shared.Services;
+﻿using SPIC.MauiBlazorApp.Shared.Services;
 using SPIC.MauiBlazorApp.Web.Components;
 using SPIC.MauiBlazorApp.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -19,6 +19,7 @@ builder.Services.AddRazorComponents()
 
 // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
+builder.Services.AddSingleton<IIfmsRelayHost, SPIC.MauiBlazorApp.Web.Services.IfmsRelayHost>();
 builder.Services.AddScoped<LoginState>();
 builder.Services.AddScoped<LoadingService>();
 builder.Services.AddScoped<AppSearchState>();

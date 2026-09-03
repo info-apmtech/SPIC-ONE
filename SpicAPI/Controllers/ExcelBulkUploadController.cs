@@ -4,14 +4,16 @@ using System.IO;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using SPIC.Core.Interfaces;
 
 namespace SpicAPI.Controllers
 {
-	[Authorize]
 	[ApiController]
 	[Route("api/[controller]")]
 	public sealed class ExcelBulkUploadController : ControllerBase
@@ -25,12 +27,40 @@ namespace SpicAPI.Controllers
 			};
 
 		private readonly IExcelBulkUploadService _uploadService;
+		private readonly IConfiguration _config;
 
-		public ExcelBulkUploadController(IExcelBulkUploadService uploadService)
+		public ExcelBulkUploadController(
+			IExcelBulkUploadService uploadService,
+			IConfiguration config)
 		{
 			_uploadService = uploadService;
+			_config = config;
 		}
 
+		/// <summary>
+		/// The nightly automation uploads through this endpoint too, and there is
+		/// nobody signed in at four in the morning to supply a JWT.
+		///
+		/// It carries a shared key instead. The key only reaches this one endpoint
+		/// and it cannot read anything — the worst it permits is importing a
+		/// report, which is the thing it exists to do.
+		/// </summary>
+		private bool HasAutomationKey()
+		{
+			var expected = _config["IfmsAutomation:AutomationKey"];
+
+			if (string.IsNullOrWhiteSpace(expected))
+				return false;
+
+			var supplied = Request.Headers["X-Automation-Key"].ToString();
+
+			return !string.IsNullOrEmpty(supplied) &&
+				   CryptographicOperations.FixedTimeEquals(
+					   Encoding.UTF8.GetBytes(supplied),
+					   Encoding.UTF8.GetBytes(expected));
+		}
+
+		[AllowAnonymous]
 		[HttpPost("import")]
 		[Consumes("multipart/form-data")]
 		[RequestSizeLimit(MaxUploadBytes)]
@@ -41,6 +71,17 @@ namespace SpicAPI.Controllers
 			[FromForm] DateTime? reportDate,
 			CancellationToken cancellationToken)
 		{
+			var automated = HasAutomationKey();
+
+			if (User.Identity?.IsAuthenticated != true && !automated)
+			{
+				return Unauthorized(new
+				{
+					Success = false,
+					Message = "Sign in, or supply a valid X-Automation-Key."
+				});
+			}
+
 			if (file is null || file.Length == 0)
 			{
 				return BadRequest(new
@@ -89,10 +130,12 @@ namespace SpicAPI.Controllers
 				});
 			}
 
+			// Stamped on every row, so an automated import is distinguishable from
+			// a hand upload months later without consulting a log.
 			var currentUserId =
 				User.FindFirstValue(ClaimTypes.NameIdentifier) ??
 				User.FindFirstValue(ClaimTypes.Name) ??
-				"System";
+				(automated ? "IFMS-Automation" : "System");
 
 			await using var stream = file.OpenReadStream();
 			var result = await _uploadService.ImportAsync(

@@ -1,0 +1,205 @@
+@page "/IfmsRelaySetup"
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject IIfmsRelayHost RelayHost
+@inject NavigationManager Nav
+<PageTitle>IFMS OTP Relay</PageTitle>
+
+<style>
+    .rs-container { font-family: 'Inter', sans-serif; max-width: 720px; }
+    .rs-container h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; color: #1e293b; }
+    .rs-container > p.lede { margin: 0 0 24px; font-size: 15px; color: #64748b; }
+
+    .rs-card { border: 1px solid #e2e8f0; border-radius: 10px; background: #fff;
+               padding: 20px; margin-bottom: 18px; }
+    .rs-card h2 { margin: 0 0 12px; font-size: 17px; color: #1e293b; }
+
+    .rs-field { margin-bottom: 16px; }
+    .rs-field label { display: block; font-size: 13px; font-weight: 600;
+                      color: #475569; margin-bottom: 6px; }
+    .rs-field input { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1;
+                      border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+    .rs-hint { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+    .rs-btn { border: none; border-radius: 8px; padding: 11px 20px; font-size: 14px;
+              font-weight: 600; cursor: pointer; background: #1d4ed8; color: #fff; }
+    .rs-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+    .rs-btn-danger { background: #dc2626; }
+
+    .rs-row { display: flex; justify-content: space-between; padding: 9px 0;
+              border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    .rs-row:last-child { border-bottom: none; }
+    .rs-row span:first-child { color: #64748b; }
+    .rs-yes { color: #166534; font-weight: 600; }
+    .rs-no  { color: #991b1b; font-weight: 600; }
+
+    .rs-note { border-left: 3px solid #1d4ed8; background: #eff6ff; padding: 12px 16px;
+               border-radius: 0 8px 8px 0; font-size: 14px; color: #1e3a5f;
+               margin-bottom: 18px; }
+    .rs-msg-ok   { color: #166534; font-size: 14px; margin-top: 12px; }
+    .rs-msg-bad  { color: #991b1b; font-size: 14px; margin-top: 12px; }
+</style>
+
+<div class="rs-container">
+    <h1>IFMS OTP Relay</h1>
+    <p class="lede">
+        Pair this phone so it forwards the IFMS one-time password automatically and
+        alerts you if a CAPTCHA needs typing.
+    </p>
+
+    @if (!RelayHost.IsSupported)
+    {
+        <div class="rs-note">
+            <strong>This has to be done on the phone.</strong>
+            Open the SPIC Android app on the handset holding the IFMS SIM and come
+            to this same screen there. Reading SMS is something only the phone can do.
+        </div>
+
+        <div class="rs-card">
+            <h2>What the phone does</h2>
+            <p style="font-size:14px; color:#475569; margin:0;">
+                When the automation signs in at 04:05 and the portal sends an OTP,
+                the paired phone forwards the message to the server within a couple
+                of seconds and the login continues. Nobody has to be awake. If the
+                CAPTCHA cannot be read after five tries, the phone rings and you
+                type it from the
+                <a href="/IfmsAutoImport">IFMS Auto Import</a> screen.
+            </p>
+        </div>
+    }
+    else
+    {
+        <div class="rs-card">
+            <h2>Status</h2>
+            <div class="rs-row">
+                <span>Relay</span>
+                <span class="@(status.Enabled ? "rs-yes" : "rs-no")">
+                    @(status.Enabled ? "On" : "Off")
+                </span>
+            </div>
+            <div class="rs-row">
+                <span>SMS permission</span>
+                <span class="@(status.SmsPermissionGranted ? "rs-yes" : "rs-no")">
+                    @(status.SmsPermissionGranted ? "Granted" : "Not granted")
+                </span>
+            </div>
+            <div class="rs-row">
+                <span>Device key</span>
+                <span class="@(status.HasDeviceKey ? "rs-yes" : "rs-no")">
+                    @(status.HasDeviceKey ? "Set" : "Missing")
+                </span>
+            </div>
+            <div class="rs-row">
+                <span>CAPTCHA watcher</span>
+                <span class="@(status.WatcherRunning ? "rs-yes" : "rs-no")">
+                    @(status.WatcherRunning ? "Running" : "Stopped")
+                </span>
+            </div>
+            <div class="rs-row">
+                <span>Device id</span>
+                <span>@status.DeviceId</span>
+            </div>
+        </div>
+
+        <div class="rs-card">
+            <h2>@(status.Enabled ? "Update pairing" : "Pair this phone")</h2>
+
+            <div class="rs-field">
+                <label>API address</label>
+                <input @bind="apiBase" placeholder="https://spicapi.apmiot.com/" />
+                <div class="rs-hint">The same server the app already talks to.</div>
+            </div>
+
+            <div class="rs-field">
+                <label>Device key</label>
+                <input @bind="deviceKey" type="password" placeholder="device key" />
+                <div class="rs-hint">
+                    Must match <code>IfmsAutomation:DeviceKey</code> on the server.
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="rs-btn" @onclick="PairAsync" disabled="@working">
+                    @(working ? "Working…" : status.Enabled ? "Save" : "Pair")
+                </button>
+
+                @if (status.Enabled)
+                {
+                    <button class="rs-btn rs-btn-danger" @onclick="UnpairAsync" disabled="@working">
+                        Turn off
+                    </button>
+                }
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(message))
+            {
+                <div class="@(succeeded ? "rs-msg-ok" : "rs-msg-bad")">@message</div>
+            }
+        </div>
+
+        <div class="rs-note">
+            Android will ask for SMS permission when you pair. The relay only
+            forwards messages while it is switched on here, and turning it off
+            stops it immediately.
+        </div>
+    }
+</div>
+
+@code {
+    private IfmsRelayStatus status = IfmsRelayStatus.Unsupported;
+
+    private string apiBase = string.Empty;
+    private string deviceKey = string.Empty;
+    private string? message;
+    private bool succeeded;
+    private bool working;
+
+    protected override void OnInitialized()
+    {
+        status = RelayHost.GetStatus();
+
+        apiBase = string.IsNullOrWhiteSpace(status.ApiBase)
+            ? "https://spicapi.apmiot.com/"
+            : status.ApiBase;
+    }
+
+    private async Task PairAsync()
+    {
+        working = true;
+        message = null;
+
+        try
+        {
+            var result = await RelayHost.PairAsync(apiBase, deviceKey);
+
+            succeeded = result.Success;
+            message = result.Message;
+
+            if (result.Success)
+                deviceKey = string.Empty;
+
+            status = RelayHost.GetStatus();
+        }
+        finally
+        {
+            working = false;
+        }
+    }
+
+    private async Task UnpairAsync()
+    {
+        working = true;
+
+        try
+        {
+            await RelayHost.UnpairAsync();
+
+            status = RelayHost.GetStatus();
+            succeeded = true;
+            message = "Relay turned off. This phone will no longer forward messages.";
+        }
+        finally
+        {
+            working = false;
+        }
+    }
+}

@@ -18,6 +18,7 @@ namespace SPIC.MauiBlazorApp
 
             // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
             builder.Services.AddSingleton<IFormFactor, FormFactor>();
+            builder.Services.AddSingleton<IIfmsRelayHost, IfmsRelayHost>();
 
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddScoped<LoginState>();
