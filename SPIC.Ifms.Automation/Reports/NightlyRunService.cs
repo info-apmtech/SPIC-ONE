@@ -182,6 +182,15 @@ namespace SPIC.Ifms.Automation.Reports
 						captchaAttempts += outcome.CaptchaAttempts;
 						otpMethod ??= outcome.OtpMethod;
 					}
+
+					if (accountsTotal == 0)
+					{
+						// Every account was skipped for having no enabled reports.
+						// That is configuration, not the portal; retrying in fifteen
+						// minutes cannot change it.
+						configurationProblem = true;
+						fatalError ??= "No enabled reports are assigned to any account. Enable a job under Ifms:Reports.";
+					}
 				}
 			}
 			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
