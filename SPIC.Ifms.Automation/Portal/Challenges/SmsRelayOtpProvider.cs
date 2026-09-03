@@ -68,7 +68,10 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 		{
 			// Allow a little slack: phone clocks drift, and the relay stamps
 			// ReceivedAt from the device.
-			var floor = requestedAtUtc.AddSeconds(-30);
+			// Five seconds of slack, not thirty: a code queued just before a
+			// Regenerate is a dead code, and with thirty it was being picked up
+			// for the new window and rejected, burning a whole login attempt.
+			var floor = requestedAtUtc.AddSeconds(-5);
 			var deadline = DateTime.UtcNow.AddSeconds(_options.WaitSeconds);
 			var poll = TimeSpan.FromSeconds(Math.Max(1, _options.PollIntervalSeconds));
 

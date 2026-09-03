@@ -292,8 +292,12 @@ namespace SPIC.Ifms.Automation.Portal
 
 				lastFailure = outcome.FailureReason;
 
-				if (!outcome.RetryWorthwhile)
+				if (!outcome.RetryWorthwhile || outcome.CaptchaAccepted)
+				{
+					// The person read the CAPTCHA right; what failed came after it
+					// (typically the OTP). Asking for another image would be wrong.
 					break;
+				}
 
 				_logger.LogWarning(
 					"The CAPTCHA answered from the app was rejected (round {Round}); asking again with a fresh image.",
@@ -409,7 +413,8 @@ namespace SPIC.Ifms.Automation.Portal
 						? "The OTP was submitted but the portal did not sign us in. The relayed code " +
 						  "may have been the wrong one, or the OTP submit button was not clicked."
 						: $"OTP rejected: {otpError}",
-					OtpMethod: otpMethod);
+					OtpMethod: otpMethod,
+					CaptchaAccepted: true);
 			}
 
 			var error = await ReadLoginErrorAsync();
