@@ -272,6 +272,7 @@ namespace SPIC.Core.Entities
 		public string? Block { get; set; }
 		public string? Taluk { get; set; }
 		public string? ContactNumber { get; set; }
+		public string? AdditionalContactNumber { get; set; }
 
 		public string? OtherDocumentPathsJson { get; set; }
 
