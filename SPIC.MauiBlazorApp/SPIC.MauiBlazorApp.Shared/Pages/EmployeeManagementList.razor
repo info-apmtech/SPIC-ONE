@@ -103,7 +103,8 @@
                    IsLoading="_isLoading" 
                    Title="Employee List" 
                    FileName="Employees" 
-                   ExportColumns="GetExportColumns()">
+                   ExportColumns="GetExportColumns()"
+                   ExcelExportColumns="GetExcelExportColumns()">
                    
         <FilterControls>
             <div class="search-box">
@@ -177,6 +178,10 @@
     private Dictionary<string, UserInfoDto> userById = new();
     private Dictionary<int, string> stateNameById = new();
     private Dictionary<string, UserInfoDto> userByGuid = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<int, string> zoneNameById = new();
+    private Dictionary<int, string> regionNameById = new();
+    private Dictionary<int, string> headquarterNameById = new();
+    private Dictionary<int, string> designationNameById = new();
 
     private bool _isLoading = true;
     private string _searchText = string.Empty;
@@ -206,9 +211,20 @@
         users = await Http.GetFromJsonAsync<List<UserInfoDto>>("api/UserInfo/all") ?? new();
         states = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/State/all") ?? new();
 
+        var zones = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Zone/all") ?? new();
+        var regions = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all") ?? new();
+        var headquarters = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all") ?? new();
+        var designations = await Http.GetFromJsonAsync<List<SPIC.Core.Entities.Designation>>("api/Designation") ?? new();
+
         userById = users.Where(u => !string.IsNullOrWhiteSpace(u.UserName)).ToDictionary(u => u.UserName!, u => u, StringComparer.OrdinalIgnoreCase);
         userByGuid = users.Where(u => !string.IsNullOrWhiteSpace(u.Id)).ToDictionary(u => u.Id, u => u, StringComparer.OrdinalIgnoreCase);
         stateNameById = states.ToDictionary(s => s.Id, s => string.IsNullOrWhiteSpace(s.StateName) ? "-" : s.StateName);
+        zoneNameById = zones.ToDictionary(z => z.Id, z => string.IsNullOrWhiteSpace(z.ZoneName) ? "-" : z.ZoneName);
+        regionNameById = regions.ToDictionary(r => r.Id, r => string.IsNullOrWhiteSpace(r.RegionName) ? "-" : r.RegionName);
+        headquarterNameById = headquarters.ToDictionary(h => h.Id, h => string.IsNullOrWhiteSpace(h.HeadquarterName) ? "-" : h.HeadquarterName);
+        designationNameById = designations
+            .Where(d => d.IsActive)
+            .ToDictionary(d => d.Id, d => string.IsNullOrWhiteSpace(d.Name) ? "-" : d.Name);
 
         ApplyFilter();
         _isLoading = false;
@@ -219,6 +235,13 @@
         if (string.IsNullOrWhiteSpace(userId)) return "-";
         if (userByGuid.TryGetValue(userId, out var user)) return user.UserName;
         return userId;
+    }
+
+    private string GetCreatedByName(string? createdBy)
+    {
+        if (string.IsNullOrWhiteSpace(createdBy)) return "-";
+        if (userByGuid.TryGetValue(createdBy, out var user)) return user.UserName;
+        return createdBy;
     }
 
     private string GetPassword(int empId, string? userId)
@@ -235,17 +258,70 @@
     private string GetStateName(int? stateId)
         => stateId == null ? "-" : stateNameById.TryGetValue(stateId.Value, out var v) ? v : "-";
 
+    private string GetZoneName(int? zoneId)
+        => zoneId == null ? "-" : zoneNameById.TryGetValue(zoneId.Value, out var v) ? v : "-";
+
+    private string GetRegionName(int? regionId)
+        => regionId == null ? "-" : regionNameById.TryGetValue(regionId.Value, out var v) ? v : "-";
+
+    private string GetHeadquarterName(int? headquarterId)
+        => headquarterId == null ? "-" : headquarterNameById.TryGetValue(headquarterId.Value, out var v) ? v : "-";
+
+    private string GetDesignationName(string? userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId)) return "-";
+        if (userByGuid.TryGetValue(userId, out var user) && user.DesignationId.HasValue)
+        {
+            if (designationNameById.TryGetValue(user.DesignationId.Value, out var name))
+                return name;
+        }
+        return "-";
+    }
+
+    private static string FormatDate(DateTime dt)
+        => dt == default ? "-" : dt.ToString("yyyy-MM-dd HH:mm:ss");
+
     private List<ExportColumn<EmployeeGridItem>> GetExportColumns()
     {
         return new List<ExportColumn<EmployeeGridItem>>
         {
             new ExportColumn<EmployeeGridItem> { Header = "S:No", ValueSelector = item => (FilteredItems.IndexOf(item) + 1).ToString() },
             new ExportColumn<EmployeeGridItem> { Header = "Employee ID", ValueSelector = item => item.EmployeeCode },
-            new ExportColumn<EmployeeGridItem> { Header = "Name", ValueSelector = item => item.Name },
+            new ExportColumn<EmployeeGridItem> { Header = "Employee Name", ValueSelector = item => item.Name },
             new ExportColumn<EmployeeGridItem> { Header = "User Name", ValueSelector = item => item.UserName },
-            new ExportColumn<EmployeeGridItem> { Header = "Password", ValueSelector = item => item.Password },
+            new ExportColumn<EmployeeGridItem> { Header = "Personal Phone Number", ValueSelector = item => item.PersonalPhoneNumber },
+            new ExportColumn<EmployeeGridItem> { Header = "Official Phone Number", ValueSelector = item => item.OfficialPhoneNumber },
+            new ExportColumn<EmployeeGridItem> { Header = "Email", ValueSelector = item => item.Email },
             new ExportColumn<EmployeeGridItem> { Header = "Role", ValueSelector = item => item.Role },
-            new ExportColumn<EmployeeGridItem> { Header = "State", ValueSelector = item => item.StateName }
+            new ExportColumn<EmployeeGridItem> { Header = "Designation", ValueSelector = item => item.DesignationName },
+            new ExportColumn<EmployeeGridItem> { Header = "Zone", ValueSelector = item => item.ZoneName },
+            new ExportColumn<EmployeeGridItem> { Header = "State", ValueSelector = item => item.StateName },
+            new ExportColumn<EmployeeGridItem> { Header = "Region", ValueSelector = item => item.RegionName },
+            new ExportColumn<EmployeeGridItem> { Header = "Headquarters", ValueSelector = item => item.HeadquartersName },
+            new ExportColumn<EmployeeGridItem> { Header = "Status", ValueSelector = item => item.Status },
+            new ExportColumn<EmployeeGridItem> { Header = "Created By", ValueSelector = item => item.CreatedBy },
+            new ExportColumn<EmployeeGridItem> { Header = "Created At", ValueSelector = item => FormatDate(item.CreatedAt) }
+        };
+    }
+    private List<ExportColumn<EmployeeGridItem>> GetExcelExportColumns()
+    {
+        return new List<ExportColumn<EmployeeGridItem>>
+        {
+            new ExportColumn<EmployeeGridItem> { Header = "S:No", ValueSelector = item => (FilteredItems.IndexOf(item) + 1).ToString() },
+            new ExportColumn<EmployeeGridItem> { Header = "Employee ID", ValueSelector = item => item.EmployeeCode },
+            new ExportColumn<EmployeeGridItem> { Header = "Employee Name", ValueSelector = item => item.Name },
+            new ExportColumn<EmployeeGridItem> { Header = "User Name", ValueSelector = item => item.UserName },
+            new ExportColumn<EmployeeGridItem> { Header = "Personal Phone Number", ValueSelector = item => item.PersonalPhoneNumber },
+            new ExportColumn<EmployeeGridItem> { Header = "Official Phone Number", ValueSelector = item => item.OfficialPhoneNumber },
+            new ExportColumn<EmployeeGridItem> { Header = "Email", ValueSelector = item => item.Email },
+            new ExportColumn<EmployeeGridItem> { Header = "Role", ValueSelector = item => item.Role },
+            new ExportColumn<EmployeeGridItem> { Header = "Designation", ValueSelector = item => item.DesignationName },
+            new ExportColumn<EmployeeGridItem> { Header = "State", ValueSelector = item => item.StateName },
+            new ExportColumn<EmployeeGridItem> { Header = "Region", ValueSelector = item => item.RegionName },
+            new ExportColumn<EmployeeGridItem> { Header = "Headquarters", ValueSelector = item => item.HeadquartersName },
+            new ExportColumn<EmployeeGridItem> { Header = "Status", ValueSelector = item => item.Status },
+            new ExportColumn<EmployeeGridItem> { Header = "Created By", ValueSelector = item => item.CreatedBy },
+            new ExportColumn<EmployeeGridItem> { Header = "Created At", ValueSelector = item => FormatDate(item.CreatedAt) }
         };
     }
     private async Task DownloadSampleTemplate()
@@ -288,7 +364,19 @@
                         Password = GetPassword(emp.Id, login.UserId),
                         Role = login.Role.ToString(),
                         StateId = login.StateId,
-                        StateName = GetStateName(login.StateId)
+                        StateName = GetStateName(login.StateId),
+                        PersonalPhoneNumber = string.IsNullOrWhiteSpace(emp.PersonalPhoneNumber) ? "-" : emp.PersonalPhoneNumber,
+                        OfficialPhoneNumber = string.IsNullOrWhiteSpace(emp.OfficialPhoneNumber) ? "-" : emp.OfficialPhoneNumber,
+                        Email = string.IsNullOrWhiteSpace(emp.Email) ? "-" : emp.Email,
+                        ZoneName = GetZoneName(login.ZoneId),
+                        RegionName = GetRegionName(login.RegionId),
+                        HeadquartersName = GetHeadquarterName(login.HeadquartersId),
+                        DesignationName = GetDesignationName(login.UserId),
+                        Status = login.IsActive ? "Active" : "Inactive",
+                        CreatedBy = GetCreatedByName(emp.CreatedBy),
+                        UpdatedBy = string.IsNullOrWhiteSpace(emp.UpdatedBy) ? "-" : emp.UpdatedBy,
+                        CreatedAt = emp.CreatedAt,
+                        UpdatedAt = emp.UpdatedAt
                     });
                 }
             }
@@ -305,7 +393,19 @@
                     Password = GetPassword(emp.Id, null),
                     Role = "-",
                     StateId = 0,
-                    StateName = "-"
+                    StateName = "-",
+                    PersonalPhoneNumber = string.IsNullOrWhiteSpace(emp.PersonalPhoneNumber) ? "-" : emp.PersonalPhoneNumber,
+                    OfficialPhoneNumber = string.IsNullOrWhiteSpace(emp.OfficialPhoneNumber) ? "-" : emp.OfficialPhoneNumber,
+                    Email = string.IsNullOrWhiteSpace(emp.Email) ? "-" : emp.Email,
+                    ZoneName = "-",
+                    RegionName = "-",
+                    HeadquartersName = "-",
+                    DesignationName = "-",
+                    Status = "-",
+                    CreatedBy = GetCreatedByName(emp.CreatedBy),
+                    UpdatedBy = string.IsNullOrWhiteSpace(emp.UpdatedBy) ? "-" : emp.UpdatedBy,
+                    CreatedAt = emp.CreatedAt,
+                    UpdatedAt = emp.UpdatedAt
                 });
             }
         }
@@ -427,6 +527,18 @@
         public string Role { get; set; } = "-";
         public int StateId { get; set; }
         public string StateName { get; set; } = "-";
+        public string PersonalPhoneNumber { get; set; } = "-";
+        public string OfficialPhoneNumber { get; set; } = "-";
+        public string Email { get; set; } = "-";
+        public string ZoneName { get; set; } = "-";
+        public string RegionName { get; set; } = "-";
+        public string HeadquartersName { get; set; } = "-";
+        public string DesignationName { get; set; } = "-";
+        public string Status { get; set; } = "-";
+        public string CreatedBy { get; set; } = "-";
+        public string UpdatedBy { get; set; } = "-";
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 
     private class BulkUploadResult
@@ -444,6 +556,7 @@
         public string? Email { get; set; }
         public string? Name { get; set; }
         public bool IsActive { get; set; }
+        public int? DesignationId { get; set; }
         public string? Password { get; set; }
     }
 

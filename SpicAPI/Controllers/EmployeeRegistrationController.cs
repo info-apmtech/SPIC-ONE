@@ -473,6 +473,7 @@ namespace SpicAPI.Controllers
                     u.Email,
                     u.Name,
                     u.IsActive,
+                    u.DesignationId,
                     u.Password
                 })
                 .ToListAsync();
