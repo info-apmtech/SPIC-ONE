@@ -293,7 +293,7 @@
                         <th>Beneficiary</th>
                         <th>Submitted Date</th>
                         <th>Status</th>
-                        <th>Approval Flow (MO → RM → SM → AVP)</th>
+                        <th>Approval Flow (MO → RM → SM → SDWA)</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -407,15 +407,19 @@
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [SupplyParameterFromQuery] public string? Tab { get; set; }
 
-    // Stage label for the stat card, e.g. MO / RM / SM / AVP
-    private string StageLabel => loginState.UserRole switch
-    {
-        AppRole.MO => "MO",
-        AppRole.RM => "RM",
-        AppRole.SMM => "SM",
-        AppRole.AVP => "AVP",
-        _ => ""
-    };
+    // Stage label for the stat card, e.g. MO / RM / SM / SDWA.
+    // SDWA is resolved from the user's EXISTING RoleAccess permission
+    // (PagePermission.SDWA), not AppRole, so it takes precedence when present
+    // (a user can also be MO/RM/SM at the same time).
+    private string StageLabel => loginState.CanAccess(PagePermission.SDWA)
+        ? "SDWA"
+        : loginState.UserRole switch
+        {
+            AppRole.MO => "MO",
+            AppRole.RM => "RM",
+            AppRole.SMM => "SM",
+            _ => ""
+        };
 
     protected override async Task OnInitializedAsync()
     {
@@ -527,7 +531,7 @@
     private sealed record ApprovalFlowStep(string Code, FlowState State);
 
     private static readonly (string Code, int Index)[] FlowStageOrder =
-        { ("MO", 0), ("RM", 1), ("SM", 2), ("AVP", 3) };
+        { ("MO", 0), ("RM", 1), ("SM", 2), ("SDWA", 3) };
 
     private List<ApprovalFlowStep> BuildFlowSteps(WelfareApprovalApplicationDto app)
     {
@@ -565,7 +569,7 @@
     private string GetFlowSummary(WelfareApprovalApplicationDto app)
     {
         if (app.Status == 5)
-            return "Approved by all levels (MO → RM → SM → AVP)";
+            return "Approved by all levels (MO → RM → SM → SDWA)";
 
         var rejection = app.Approvals?
             .Where(a => string.Equals(a.ApprovalStatus, "Rejected", StringComparison.OrdinalIgnoreCase))
@@ -584,7 +588,7 @@
             1 or 2 => "Pending at MO",
             3 => "Pending at RM",
             4 => "Pending at SM",
-            8 => "Pending at AVP",
+            8 => "Pending at SDWA",
             _ => "Approval flow"
         };
     }

@@ -75,7 +75,7 @@ else
 
         <!-- ===================== WORKFLOW ===================== -->
         <div class="apd-section">
-            <h3>Approval Workflow (MO → RM → SM → AVP)</h3>
+            <h3>Approval Workflow (MO → RM → SM → SDWA)</h3>
             <div class="apd-stepper">
                 @{ var steps = BuildSteps(); }
                 @for (var i = 0; i < steps.Count; i++)
@@ -167,7 +167,7 @@ else
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
                 </svg>
-                <span>This application has been fully approved by AVP. The approval workflow is completed.</span>
+                <span>This application has been fully approved by SDWA. The approval workflow is completed.</span>
             </div>
         }
         else if (d.Status == 6)
@@ -447,13 +447,13 @@ else
         <!-- ===================== FINAL APPROVAL SUMMARY ===================== -->
         @if (d.Status == 5)
         {
-            var avp = d.Approvals.FirstOrDefault(ap => ap.ApprovalStatus == "Approved" && ap.ApprovalLevel == "AVP");
+            var sdwa = d.Approvals.FirstOrDefault(ap => ap.ApprovalStatus == "Approved" && ap.ApprovalLevel == "SDWA");
             <div class="apd-summary-box apd-box-green">
                 <h4 class="apd-box-title">Approval Details</h4>
                 <div class="apd-summary-grid">
-                    <div class="apd-summary-item"><label>Approved By</label><span>@(avp?.ApprovedBy ?? "AVP")</span></div>
-                    <div class="apd-summary-item"><label>Approved On</label><span>@(avp?.ApprovedAt.HasValue == true ? FormatDateTime(avp.ApprovedAt.Value) : "-")</span></div>
-                    <div class="apd-summary-item"><label>Final Remarks</label><span>@(avp?.Remarks ?? "-")</span></div>
+                    <div class="apd-summary-item"><label>Approved By</label><span>@(sdwa?.ApprovedBy ?? "SDWA")</span></div>
+                    <div class="apd-summary-item"><label>Approved On</label><span>@(sdwa?.ApprovedAt.HasValue == true ? FormatDateTime(sdwa.ApprovedAt.Value) : "-")</span></div>
+                    <div class="apd-summary-item"><label>Final Remarks</label><span>@(sdwa?.Remarks ?? "-")</span></div>
                 </div>
             </div>
         }
@@ -464,7 +464,7 @@ else
         @if (CanProcessCurrentStage())
         {
             <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
-                @if (IsMoStage || IsRmStage || IsSmmStage)
+                @if (IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage)
                 {
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                         <div style="display:flex; flex-direction:column; gap:4px;">
@@ -551,9 +551,14 @@ else
     private bool IsMoStage => LoginState.UserRole == AppRole.MO;
     private bool IsRmStage => LoginState.UserRole == AppRole.RM;
     private bool IsSmmStage => LoginState.UserRole == AppRole.SMM;
-    private bool IsAvpStage => LoginState.UserRole == AppRole.AVP;
 
-    private bool IsApprovalStage => IsMoStage || IsRmStage || IsSmmStage || IsAvpStage;
+    // Final approver identity comes from the logged-in user's EXISTING RoleAccess
+    // permission PagePermission.SDWA (reusing the existing CanAccess implementation),
+    // NOT their AppRole - any AppRole (CorporateAdmin, AVP, MO, RM, SM...) whose
+    // Designation grants SDWA.* can act as the final approver.
+    private bool IsSdwaFinalStage => LoginState.CanAccess(PagePermission.SDWA);
+
+    private bool IsApprovalStage => IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage;
 
     private async Task CloseDrawer()
     {
@@ -793,43 +798,58 @@ else
 
     private static string FormatLakhs(decimal value) => value == 0 ? "-" : value.ToString("0.##");
 
+    // MO/RM/SM stages only - resolved from AppRole. The final (SDWA) stage is
+    // resolved separately via IsSdwaFinalStage (PagePermission.SDWA-based), not here.
     private static readonly Dictionary<AppRole, int[]> StageMap = new()
     {
         [AppRole.MO] = new[] { 1, 2 },
         [AppRole.RM] = new[] { 3 },
         [AppRole.SMM] = new[] { 4 },
-        [AppRole.AVP] = new[] { 8 }
     };
 
     private bool CanProcessCurrentStage() =>
-        LoginState.UserRole != null &&
-        StageMap.TryGetValue(LoginState.UserRole.Value, out var statuses) &&
         _detail != null &&
-        statuses.Contains(_detail.Status);
+        ((LoginState.UserRole != null &&
+          StageMap.TryGetValue(LoginState.UserRole.Value, out var statuses) &&
+          statuses.Contains(_detail.Status))
+         || (IsSdwaFinalStage && _detail.Status == 8));
 
-    private string NextStageName => LoginState.UserRole switch
+    private string NextStageName
     {
-        AppRole.MO => "RM",
-        AppRole.RM => "SM",
-        AppRole.SMM => "AVP",
-        _ => "completion"
-    };
+        get
+        {
+            if (IsSdwaFinalStage && _detail?.Status == 8) return "completion";
+            return LoginState.UserRole switch
+            {
+                AppRole.MO => "RM",
+                AppRole.RM => "SM",
+                AppRole.SMM => "SDWA",
+                _ => "completion"
+            };
+        }
+    }
 
-    private string RejectDestinationText => LoginState.UserRole switch
+    private string RejectDestinationText
     {
-        AppRole.MO => "returned to the Dealer for correction and resubmission (the application will NOT be closed)",
-        AppRole.RM => "returned to the MO for review",
-        AppRole.SMM => "returned to the RM for review",
-        AppRole.AVP => "returned to the SM for review",
-        _ => "returned to the previous stage for review"
-    };
+        get
+        {
+            if (IsSdwaFinalStage && _detail?.Status == 8) return "returned to the SM for review";
+            return LoginState.UserRole switch
+            {
+                AppRole.MO => "returned to the Dealer for correction and resubmission (the application will NOT be closed)",
+                AppRole.RM => "returned to the MO for review",
+                AppRole.SMM => "returned to the RM for review",
+                _ => "returned to the previous stage for review"
+            };
+        }
+    }
 
     private static string GetPendingStageName(int status) => status switch
     {
         1 or 2 => "MO",
         3 => "RM",
         4 => "SM",
-        8 => "AVP",
+        8 => "SDWA",
         _ => "-"
     };
 
@@ -838,7 +858,7 @@ else
         "MO" => "Marketing Officer (MO)",
         "RM" => "Regional Manager (RM)",
         "SM" => "Senior Manager (SM)",
-        "AVP" => "AVP",
+        "SDWA" => "SDWA Approver",
         _ => level
     };
 
@@ -851,7 +871,7 @@ else
 
         var stages = new (string Code, string Name)[]
         {
-            ("MO", "MO"), ("RM", "RM"), ("SM", "SM"), ("AVP", "AVP")
+            ("MO", "MO"), ("RM", "RM"), ("SM", "SM"), ("SDWA", "SDWA")
         };
 
         var status = _detail.Status;
@@ -999,19 +1019,21 @@ else
     {
         if (_detail == null || _busy) return;
 
-        if ((IsMoStage || IsRmStage || IsSmmStage) && string.IsNullOrWhiteSpace(_approveComment))
+        var usesRecommendationFlow = IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage;
+
+        if (usesRecommendationFlow && string.IsNullOrWhiteSpace(_approveComment))
         {
             _actionError = "Please select a comment.";
             return;
         }
 
-        if ((IsMoStage || IsRmStage || IsSmmStage) && !IsValidLevelComment(_approveComment))
+        if (usesRecommendationFlow && !IsValidLevelComment(_approveComment))
         {
             _actionError = "Please select a valid comment.";
             return;
         }
 
-        if ((IsMoStage || IsRmStage || IsSmmStage) && string.IsNullOrWhiteSpace(_approveRecommendation))
+        if (usesRecommendationFlow && string.IsNullOrWhiteSpace(_approveRecommendation))
         {
             _actionError = "Please select a recommendation.";
             return;
@@ -1022,7 +1044,7 @@ else
         try
         {
             HttpResponseMessage response;
-            var hasRecommendationFlow = IsMoStage || IsRmStage || IsSmmStage;
+            var hasRecommendationFlow = usesRecommendationFlow;
 
             if (hasRecommendationFlow && _approveRecommendation == "Verified")
             {
@@ -1098,22 +1120,47 @@ else
         "Not recommended for approval based on field reports"
     };
 
-    // Comments that resolve to an approval recommendation for the current level.
-    private IReadOnlyList<string> CurrentLevelApprovalComments => LoginState.UserRole switch
+    // SDWA final-approval comment options - shown to the user whose DATABASE
+    // Designation is SDWA, regardless of their AppRole.
+    private static readonly string[] SdwaCommentOptions =
     {
-        AppRole.MO => new[] { "Information verified and eligible for approval" },
-        AppRole.RM => new[] { "Verified and recommended as a genuine dealer" },
-        AppRole.SMM => new[] { "Recommended for management approval" },
-        _ => Array.Empty<string>()
+        "Verified and approved for final release",
+        "Documents / eligibility not satisfied at final review",
+        "Rejected after final review"
     };
 
-    private IReadOnlyList<string> CurrentLevelCommentOptions => LoginState.UserRole switch
+    // Comments that resolve to an approval recommendation for the current level.
+    // SDWA (Designation-based) is checked first since a user can hold it
+    // alongside an AppRole of MO/RM/SM.
+    private IReadOnlyList<string> CurrentLevelApprovalComments
     {
-        AppRole.MO => MoCommentOptions,
-        AppRole.RM => RmCommentOptions,
-        AppRole.SMM => SmmCommentOptions,
-        _ => Array.Empty<string>()
-    };
+        get
+        {
+            if (IsSdwaFinalStage) return new[] { "Verified and approved for final release" };
+            return LoginState.UserRole switch
+            {
+                AppRole.MO => new[] { "Information verified and eligible for approval" },
+                AppRole.RM => new[] { "Verified and recommended as a genuine dealer" },
+                AppRole.SMM => new[] { "Recommended for management approval" },
+                _ => Array.Empty<string>()
+            };
+        }
+    }
+
+    private IReadOnlyList<string> CurrentLevelCommentOptions
+    {
+        get
+        {
+            if (IsSdwaFinalStage) return SdwaCommentOptions;
+            return LoginState.UserRole switch
+            {
+                AppRole.MO => MoCommentOptions,
+                AppRole.RM => RmCommentOptions,
+                AppRole.SMM => SmmCommentOptions,
+                _ => Array.Empty<string>()
+            };
+        }
+    }
 
     private bool IsValidLevelComment(string? value) =>
         !string.IsNullOrWhiteSpace(value) &&

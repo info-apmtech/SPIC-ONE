@@ -23,6 +23,10 @@ namespace SPIC.Core.DTOs
             public required UserInfo User { get; set; }
             public DateTime Expiration { get; set; }
             public string? RoleAccess { get; set; }
+            // Name of the user's assigned Designation (e.g. "SDWA"), resolved from
+            // UserInfo.DesignationId. Separate from AppRole — a user's AppRole
+            // never changes based on their Designation.
+            public string? DesignationName { get; set; }
 
         }
     }

@@ -374,7 +374,7 @@ namespace SpicAPI.Controllers
             WelfareApplicationStatus.MOReview => "Pending MO",
             WelfareApplicationStatus.RMReview => "Pending RM",
             WelfareApplicationStatus.SMReview => "Pending SM",
-            WelfareApplicationStatus.AVPReview => "Pending AVP",
+            WelfareApplicationStatus.AVPReview => "Pending SDWA",
             WelfareApplicationStatus.Approved => "Approved",
             WelfareApplicationStatus.Rejected => "Rejected",
             WelfareApplicationStatus.Cancelled => "Cancelled",
@@ -387,7 +387,7 @@ namespace SpicAPI.Controllers
             AppRole.MO => "Marketing Officer (MO)",
             AppRole.RM => "Regional Manager (RM)",
             AppRole.SMM => "Senior Manager (SM)",
-            AppRole.AVP => "AVP",
+            AppRole.AVP => "SDWA",
             _ => role.ToString()
         };
 

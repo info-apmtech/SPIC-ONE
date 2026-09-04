@@ -38,6 +38,18 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         // Current authenticated user id (from token claims)
         public string? UserId { get; private set; }
 
+        // ---------------- Designation (separate from AppRole) ----------------
+        // Resolved server-side from UserInfo.DesignationId -> Designation.Name at
+        // login (AuthenticationController). Kept independent of AppRole: a user's
+        // AppRole (e.g. CorporateAdmin) never changes based on their Designation.
+        public string? DesignationName { get; private set; }
+
+        public void SetDesignationName(string? designationName)
+        {
+            DesignationName = string.IsNullOrWhiteSpace(designationName) ? null : designationName.Trim();
+            OnChange?.Invoke();
+        }
+
         public bool IsAdmin => UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP;
         public bool IsStateRole => UserRole is AppRole.SMD or AppRole.SMM;
         public bool IsRegionRole => UserRole is AppRole.RM or AppRole.RMD;
@@ -73,6 +85,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public void Logout()
         {
             ClearAllowedPages();
+            SetDesignationName(null);
             Token = null; // triggers ParseClaims(null) + OnChange
         }
 
