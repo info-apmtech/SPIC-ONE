@@ -458,6 +458,58 @@ else
             </div>
         }
 
+        <!-- ===================== DIRECTOR REVIEW (OPTIONAL) ===================== -->
+        @if (ShowDirectorReviewPanel)
+        {
+            <div class="apd-section">
+                <div class="apd-section-head">
+                    <h3>Director Review (Optional)</h3>
+                </div>
+                @if (DirectorReviewStep != null)
+                {
+                    <div class="apd-summary-box @(DirectorReviewStep.ApprovalStatus == "Approved" ? "apd-box-green" : "apd-box-red")">
+                        <div class="apd-summary-grid">
+                            <div class="apd-summary-item"><label>Decision</label><span>@DirectorReviewStep.ApprovalStatus</span></div>
+                            <div class="apd-summary-item"><label>Reviewed By</label><span>@(DirectorReviewStep.ApprovedBy ?? "-")</span></div>
+                            <div class="apd-summary-item"><label>Reviewed On</label><span>@(DirectorReviewStep.ApprovedAt.HasValue ? FormatDateTime(DirectorReviewStep.ApprovedAt.Value) : "-")</span></div>
+                            <div class="apd-summary-item"><label>Remarks</label><span>@(DirectorReviewStep.Remarks ?? "-")</span></div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="apd-alert apd-alert-success" style="margin-bottom:12px;">
+                        <span>This is an optional additional review. It does not block SDWA Admin and is not required to complete the application.</span>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:12px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label style="font-size:12px; font-weight:600; color:#374151;">Decision *</label>
+                                <select class="rm-select" @bind="_directorDecision" disabled="@_directorBusy" style="width:100%;">
+                                    <option value="">--Select--</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Rejected">Rejected</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <label style="font-size:12px; font-weight:600; color:#374151;">Remarks @(_directorDecision == "Rejected" ? "*" : "(Optional)")</label>
+                            <textarea class="rm-textarea" placeholder="Add remarks..." @bind="_directorRemarks" disabled="@_directorBusy" rows="2" style="width:100%;"></textarea>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_directorError))
+                        {
+                            <div class="apd-alert apd-alert-danger" style="margin:0;">@_directorError</div>
+                        }
+                        <div style="display:flex; justify-content:flex-end; gap:8px;">
+                            <button class="apd-btn-action apd-btn-validate" disabled="@_directorBusy" @onclick="SubmitDirectorReview">
+                                @(_directorBusy ? "Processing..." : "Submit Director Review")
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
     </div>
 
     <div class="apd-footer">
@@ -561,6 +613,90 @@ else
     private bool IsSdwaAdminFinalStage => LoginState.CanAccess(PagePermission.SDWAAdmin);
 
     private bool IsApprovalStage => IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage || IsSdwaAdminFinalStage;
+
+    // =====================================================================
+    //  DIRECTOR — OPTIONAL post-SDWA review (additive only).
+    //  Uses the EXISTING AppRole.Director. Does not participate in
+    //  IsApprovalStage / CanProcessCurrentStage / the mandatory footer -
+    //  it is a wholly separate, non-blocking panel. Visibility mirrors the
+    //  server-side checks in WelfareSchemeApprovalController.DirectorReview
+    //  (defense in depth only; the server is the source of truth).
+    // =====================================================================
+
+    private static readonly HashSet<WelfareSchemeType> DirectorApplicableSchemes = new()
+    {
+        WelfareSchemeType.DeathRelief,
+        WelfareSchemeType.EducationalAssistance,
+        WelfareSchemeType.MeritAward,
+        WelfareSchemeType.MedicalAssistance
+    };
+
+    private bool IsDirector => LoginState.UserRole == AppRole.Director;
+
+    private bool IsDirectorApplicableScheme =>
+        _detail != null && DirectorApplicableSchemes.Contains((WelfareSchemeType)_detail.SchemeType);
+
+    private bool IsSdwaApproved =>
+        _detail?.Approvals.Any(ap => ap.ApprovalLevel == "SDWA" && ap.ApprovalStatus == "Approved") == true;
+
+    private WelfareApprovalStepDto? DirectorReviewStep =>
+        _detail?.Approvals.FirstOrDefault(ap => ap.ApprovalLevel == "Director");
+
+    private bool ShowDirectorReviewPanel =>
+        IsDirector && _detail != null && IsDirectorApplicableScheme && IsSdwaApproved;
+
+    private string _directorDecision = "";
+    private string? _directorRemarks;
+    private string? _directorError;
+    private bool _directorBusy;
+
+    private async Task SubmitDirectorReview()
+    {
+        if (_detail == null || _directorBusy) return;
+
+        if (string.IsNullOrWhiteSpace(_directorDecision))
+        {
+            _directorError = "Please select a decision.";
+            return;
+        }
+
+        if (_directorDecision == "Rejected" && string.IsNullOrWhiteSpace(_directorRemarks))
+        {
+            _directorError = "Remarks are mandatory when rejecting.";
+            return;
+        }
+
+        _directorBusy = true;
+        _directorError = null;
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"api/WelfareSchemeApproval/applications/{_detail.Id}/director-review",
+                new WelfareDirectorReviewRequest
+                {
+                    Decision = _directorDecision,
+                    Remarks = _directorRemarks
+                });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _loadedForId = 0; // force reload so DirectorReviewStep reflects the saved review
+                await LoadDetail(_detail.Id);
+            }
+            else
+            {
+                _directorError = await ReadErrorMessageAsync(response);
+            }
+        }
+        catch
+        {
+            _directorError = "Unable to reach the server. Please try again.";
+        }
+        finally
+        {
+            _directorBusy = false;
+        }
+    }
 
     private async Task CloseDrawer()
     {
@@ -1215,6 +1351,11 @@ else
         _approveComment = null;
         _actionError = null;
         _busy = false;
+
+        _directorDecision = "";
+        _directorRemarks = null;
+        _directorError = null;
+        _directorBusy = false;
     }
 
     private async Task OpenDocument(int documentId, bool download)

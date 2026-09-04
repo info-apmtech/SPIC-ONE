@@ -133,6 +133,27 @@ namespace SPIC.Core.DTOs
         public DateTime? ApprovedAt { get; set; }
     }
 
+    // =====================================================================
+    //  Director — OPTIONAL post-SDWA review (Death Relief / Educational
+    //  Assistance / Merit Award / Medical Assistance only). Purely additive:
+    //  never affects the mandatory MO -> RM -> SM -> SDWA -> SDWA Admin
+    //  status flow.
+    // =====================================================================
+
+    public class WelfareDirectorReviewRequest
+    {
+        public string? Decision { get; set; }   // "Approved" / "Rejected"
+        public string? Remarks { get; set; }    // Mandatory when Decision is "Rejected"
+    }
+
+    public class WelfareDirectorReviewResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int ApplicationId { get; set; }
+        public string DirectorApprovalStatus { get; set; } = string.Empty;
+    }
+
     public class WelfareApplicationDetailDto
     {
         public int Id { get; set; }

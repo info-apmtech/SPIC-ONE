@@ -691,6 +691,121 @@ namespace SpicAPI.Controllers
         }
 
         // =====================================================================
+        //  DIRECTOR — OPTIONAL post-SDWA review (additive only).
+        //
+        //  This is a NEW, independent capability, not a new workflow stage:
+        //  it never writes application.Status, never appears in NextStage/
+        //  PreviousStage/StageStatuses/ResolveActingRole, and therefore can
+        //  never block or gate the existing SDWA -> SDWA Admin -> Approved
+        //  transition. SDWA Admin can act whether or not the Director has
+        //  reviewed. Uses the EXISTING AppRole.Director - no new role,
+        //  designation or permission mechanism. Applicable only to the four
+        //  schemes below, and only once SDWA (AppRole.AVP marker) has
+        //  already approved.
+        // =====================================================================
+
+        private static readonly WelfareSchemeType[] DirectorApplicableSchemes =
+        {
+            WelfareSchemeType.DeathRelief,
+            WelfareSchemeType.EducationalAssistance,
+            WelfareSchemeType.MeritAward,
+            WelfareSchemeType.MedicalAssistance
+        };
+
+        internal static bool IsDirectorApplicableScheme(WelfareSchemeType scheme) =>
+            DirectorApplicableSchemes.Contains(scheme);
+
+        [HttpPost("applications/{id:int}/director-review")]
+        public async Task<ActionResult<WelfareDirectorReviewResponse>> DirectorReview(int id, [FromBody] WelfareDirectorReviewRequest? request)
+        {
+            var (role, user) = await GetActorAsync();
+            if (user == null)
+                return Unauthorized();
+
+            if (role != AppRole.Director)
+                return StatusCode(403, new { Message = "Only the Director role can perform this review." });
+
+            var application = await _db.WelfareApplications
+                .Include(a => a.Approvals)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null)
+                return NotFound(new { Message = "Application not found." });
+
+            if (!IsDirectorApplicableScheme(application.SchemeName))
+                return StatusCode(403, new { Message = "Director review is not applicable to this welfare scheme." });
+
+            var sdwaApproved = application.Approvals.Any(a =>
+                a.ApprovalLevel == AppRole.AVP && a.ApprovalStatus == WelfareApprovalStatus.Approved);
+            if (!sdwaApproved)
+                return Conflict(new { Message = "Director review is only available after SDWA approval has been completed." });
+
+            var decision = request?.Decision?.Trim();
+            var isApproval = string.Equals(decision, "Approved", StringComparison.OrdinalIgnoreCase);
+            var isRejection = string.Equals(decision, "Rejected", StringComparison.OrdinalIgnoreCase);
+            if (!isApproval && !isRejection)
+                return BadRequest(new { Message = "A valid decision (Approved / Rejected) is required." });
+
+            var remarks = request?.Remarks?.Trim();
+            if (isRejection && string.IsNullOrWhiteSpace(remarks))
+                return BadRequest(new { Message = "Remarks are mandatory when recording a Director rejection." });
+
+            var actorName = BuildActorName(user, AppRole.Director);
+            var now = DateTime.Now;
+
+            // Recorded on the SAME per-level approval entity used by every other
+            // stage (upsert pattern identical to ProcessAction), but this NEVER
+            // touches application.Status - SDWA Admin does not wait on it.
+            var step = application.Approvals.FirstOrDefault(x => x.ApprovalLevel == AppRole.Director);
+            if (step == null)
+            {
+                step = new WelfareApplicationApproval
+                {
+                    WelfareApplicationId = application.Id,
+                    ApprovalLevel = AppRole.Director,
+                    CreatedBy = actorName,
+                    CreatedAt = now
+                };
+                application.Approvals.Add(step);
+                _db.WelfareApplicationApprovals.Add(step);
+            }
+
+            step.ApprovalStatus = isApproval ? WelfareApprovalStatus.Approved : WelfareApprovalStatus.Rejected;
+            step.ApprovedBy = actorName;
+            step.ApprovedAt = now;
+            step.Remarks = remarks;
+            step.UpdatedBy = actorName;
+            step.UpdatedAt = now;
+
+            _db.WelfareApplicationActionLogs.Add(new WelfareApplicationActionLog
+            {
+                WelfareApplicationId = application.Id,
+                ActorLevel = AppRole.Director,
+                Action = isApproval ? "DirectorReviewed" : "DirectorReviewRejected",
+                Remarks = remarks,
+                ActorName = actorName,
+                CreatedBy = actorName,
+                CreatedAt = now
+            });
+
+            // Deliberately NOT touching application.Status / UpdatedBy / UpdatedAt -
+            // Director review is an optional side-channel, never a workflow stage.
+            await _db.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Welfare application {ApplicationId} Director review recorded ({Decision}) by {Actor}. Application status unchanged ({Status}).",
+                id, step.ApprovalStatus, actorName, application.Status);
+
+            return Ok(new WelfareDirectorReviewResponse
+            {
+                Success = true,
+                Message = isApproval ? "Director review recorded (approved)." : "Director review recorded (rejected).",
+                ApplicationId = application.Id,
+                DirectorApprovalStatus = step.ApprovalStatus.ToString()
+            });
+        }
+
+        // =====================================================================
         //  Helpers
         // =====================================================================
 
