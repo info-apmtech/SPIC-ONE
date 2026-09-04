@@ -10,12 +10,15 @@ using System.Security.Claims;
 namespace SpicAPI.Controllers
 {
     /// <summary>
-    /// Welfare Scheme Approval workflow: MO -> RM -> SM -> SDWA (final approval).
-    /// MO/RM/SM are resolved from the actor's AppRole (unchanged). The final stage
-    /// is resolved from the actor's existing Designation.RoleAccess granting the
-    /// existing PagePermission.SDWA page permission, NOT from AppRole and NOT from
-    /// the Designation's name - any AppRole whose Designation's RoleAccess includes
-    /// an "SDWA.*" token acts as the final approver.
+    /// Welfare Scheme Approval workflow: MO -> RM -> SM -> SDWA -> SDWA Admin (final approval).
+    /// MO/RM/SM are resolved from the actor's AppRole (unchanged). The SDWA and SDWA
+    /// Admin stages are each resolved from the actor's existing Designation.RoleAccess
+    /// granting the existing PagePermission.SDWA / PagePermission.SDWAAdmin page
+    /// permissions, NOT from AppRole and NOT from the Designation's name - any AppRole
+    /// whose Designation's RoleAccess includes an "SDWA.*" / "SDWAAdmin.*" token acts
+    /// as that approver. There is deliberately NO AppRole.SDWAAdmin - SDWA Admin is a
+    /// Designation/permission concept only. SDWA Admin can only ever act once an
+    /// application has already cleared the SDWA stage (see NextStage) - it is never skippable.
     /// Each stage can only act on applications currently pending at its own stage;
     /// the stage is enforced server-side (frontend hiding alone is not trusted).
     /// </summary>
@@ -39,10 +42,11 @@ namespace SpicAPI.Controllers
         //  Workflow definition: role -> statuses actionable by that role
         // =====================================================================
 
-        // MO/RM/SM stages only - resolved from the actor's AppRole. The final
-        // (SDWA) stage is NOT here: it is resolved from the actor's DATABASE
-        // Designation (see IsFinalApproverAsync / GetActorStatuses / ResolveActingRole
-        // below), so it works no matter what AppRole the SDWA-designated user holds.
+        // MO/RM/SM stages only - resolved from the actor's AppRole. The SDWA and
+        // SDWA Admin stages are NOT here: they are resolved from the actor's
+        // Designation.RoleAccess permissions (see GetDesignationApproverFlagsAsync /
+        // GetActorStatuses / ResolveActingRole below), so they work no matter what
+        // AppRole the SDWA/SDWA-Admin-permissioned user holds.
         private static readonly IReadOnlyDictionary<AppRole, WelfareApplicationStatus[]> StageStatuses =
             new Dictionary<AppRole, WelfareApplicationStatus[]>
             {
@@ -51,33 +55,43 @@ namespace SpicAPI.Controllers
                 [AppRole.SMM] = new[] { WelfareApplicationStatus.SMReview },                                     // Pending SM
             };
 
-        // Stage TRANSITION definitions (not authorization). AppRole.AVP is kept
-        // here purely as the internal "final/SDWA stage" marker used once a
-        // Designation-based actor has already been authorized (ResolveActingRole) -
-        // it is never used to grant access by itself.
+        // Stage TRANSITION definitions (not authorization - purely "what status comes
+        // next/previous for this internal stage marker"). AppRole.AVP / AppRole.RMD are
+        // reused here PURELY as internal storage/transition markers for the SDWA / SDWA
+        // Admin stages (WelfareApplicationApproval.ApprovalLevel is AppRole-typed, and
+        // there is deliberately no AppRole.SDWAAdmin - SDWA Admin is a Designation/
+        // permission concept only, never an AppRole). Neither AppRole.AVP nor
+        // AppRole.RMD is ever used to GRANT access by itself anywhere in this file -
+        // access is decided exclusively by ResolveActingRole below, which only ever
+        // returns these markers after the actor's Designation permission has already
+        // been checked (GetDesignationApproverFlagsAsync). AppRole.RMD's real-world
+        // meaning (Regional Manager Deputy, used elsewhere in the app e.g. Logistics/
+        // Dashboard) is otherwise completely unrelated and untouched by this reuse.
         private static readonly IReadOnlyDictionary<AppRole, WelfareApplicationStatus> NextStage =
             new Dictionary<AppRole, WelfareApplicationStatus>
             {
                 [AppRole.MO]  = WelfareApplicationStatus.RMReview,
                 [AppRole.RM]  = WelfareApplicationStatus.SMReview,
                 [AppRole.SMM] = WelfareApplicationStatus.AVPReview,
-                [AppRole.AVP] = WelfareApplicationStatus.Approved
+                [AppRole.AVP] = WelfareApplicationStatus.SDWAAdminReview, // SDWA approves -> Pending SDWA Admin
+                [AppRole.RMD] = WelfareApplicationStatus.Approved         // SDWA Admin approves -> Approved (final)
             };
 
         // Reverse rejection flow: on rejection the application goes back ONE stage
-        // (SDWA -> SM, SM -> RM, RM -> MO); a MO rejection returns it to the dealer
-        // for correction/resubmission instead of permanently closing it.
+        // (SDWA Admin -> SDWA, SDWA -> SM, SM -> RM, RM -> MO); a MO rejection returns
+        // it to the dealer for correction/resubmission instead of permanently closing it.
         private static readonly IReadOnlyDictionary<AppRole, WelfareApplicationStatus> PreviousStage =
             new Dictionary<AppRole, WelfareApplicationStatus>
             {
+                [AppRole.RMD] = WelfareApplicationStatus.AVPReview, // SDWA Admin rejects -> back to Pending SDWA
                 [AppRole.AVP] = WelfareApplicationStatus.SMReview,
                 [AppRole.SMM] = WelfareApplicationStatus.RMReview,
                 [AppRole.RM]  = WelfareApplicationStatus.MOReview,
                 [AppRole.MO]  = WelfareApplicationStatus.ReturnedToDealer
             };
 
-        // AppRole-based approver roles (MO/RM/SM). The final stage is granted
-        // separately and exclusively via the SDWA Designation - see IsApprover().
+        // AppRole-based approver roles (MO/RM/SM). The SDWA and SDWA Admin stages are
+        // granted separately and exclusively via their Designation permissions - see IsApprover().
         internal static readonly AppRole[] ApproverRoles =
             { AppRole.MO, AppRole.RM, AppRole.SMM };
 
@@ -85,20 +99,28 @@ namespace SpicAPI.Controllers
             { AppRole.Admin, AppRole.CorporateAdmin, AppRole.Director };
 
         private static readonly WelfareApplicationStatus[] AllPendingStages =
-            { WelfareApplicationStatus.Submitted, WelfareApplicationStatus.MOReview, WelfareApplicationStatus.RMReview, WelfareApplicationStatus.SMReview, WelfareApplicationStatus.AVPReview };
+            { WelfareApplicationStatus.Submitted, WelfareApplicationStatus.MOReview, WelfareApplicationStatus.RMReview, WelfareApplicationStatus.SMReview, WelfareApplicationStatus.AVPReview, WelfareApplicationStatus.SDWAAdminReview };
 
         // =====================================================================
-        //  Permission-based final approver resolution (replaces AppRole.AVP)
+        //  Permission-based approver resolution (SDWA / SDWA Admin - no AppRole involved)
         // =====================================================================
 
-        // Resolves whether the given user is the final (SDWA) approver by
-        // following UserInfo.DesignationId -> Designation.RoleAccess (exactly like
-        // AuthenticationController.Login() already resolves RoleAccess) and checking
-        // for the existing PagePermission.SDWA page token via the SAME parsing rules
-        // LoginState.CanAccess/Can already use client-side (RoleAccessPermissions).
-        // NOT based on AppRole, Designation NAME, UserId, EmployeeId or DesignationId
-        // comparisons - purely "does this user's existing RoleAccess grant SDWA".
-        private async Task<bool> IsFinalApproverAsync(UserInfo user)
+        // Bundles the two Designation-permission-based approver flags for one actor.
+        // A user can hold either, both, or neither, independent of their AppRole and
+        // independent of each other (e.g. SDWA without SDWA Admin, or both at once).
+        private readonly record struct DesignationApproverFlags(bool IsSdwaApprover, bool IsSdwaAdminApprover)
+        {
+            public bool Any => IsSdwaApprover || IsSdwaAdminApprover;
+        }
+
+        // Resolves whether the given user's Designation.RoleAccess grants the given
+        // PagePermission, following UserInfo.DesignationId -> Designation.RoleAccess
+        // (exactly like AuthenticationController.Login() already resolves RoleAccess)
+        // via the SAME parsing rules LoginState.CanAccess/Can use client-side
+        // (RoleAccessPermissions). NOT based on AppRole, Designation NAME, UserId,
+        // EmployeeId or DesignationId comparisons - purely "does this user's existing
+        // RoleAccess grant this permission". Shared by both the SDWA and SDWA Admin checks.
+        private async Task<bool> UserHasDesignationPermissionAsync(UserInfo user, PagePermission permission)
         {
             if (!user.DesignationId.HasValue || user.DesignationId.Value <= 0)
                 return false;
@@ -107,37 +129,51 @@ namespace SpicAPI.Controllers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.Id == user.DesignationId.Value && d.IsActive);
 
-            return designation != null && RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.SDWA);
+            return designation != null && RoleAccessPermissions.HasPage(designation.RoleAccess, permission);
         }
 
-        // Is this actor an approver at all - by AppRole (MO/RM/SM) OR by SDWA Designation?
-        private static bool IsApprover(AppRole? role, bool isFinalApprover) =>
-            (role.HasValue && ApproverRoles.Contains(role.Value)) || isFinalApprover;
+        private async Task<DesignationApproverFlags> GetDesignationApproverFlagsAsync(UserInfo user) =>
+            new DesignationApproverFlags(
+                await UserHasDesignationPermissionAsync(user, PagePermission.SDWA),
+                await UserHasDesignationPermissionAsync(user, PagePermission.SDWAAdmin));
+
+        // Is this actor an approver at all - by AppRole (MO/RM/SM) OR by SDWA/SDWA Admin Designation?
+        private static bool IsApprover(AppRole? role, DesignationApproverFlags flags) =>
+            (role.HasValue && ApproverRoles.Contains(role.Value)) || flags.Any;
 
         // All statuses this actor may act on right now: their AppRole's stage
-        // (if MO/RM/SM) UNION the final/SDWA stage (if their Designation is SDWA).
-        // A user can hold both at once (e.g. AppRole=MO plus Designation=SDWA).
-        private static WelfareApplicationStatus[] GetActorStatuses(AppRole? role, bool isFinalApprover)
+        // (if MO/RM/SM) UNION the SDWA stage (if their Designation grants SDWA) UNION
+        // the SDWA Admin stage (if their Designation grants SDWA Admin). A user can
+        // hold any combination at once (e.g. AppRole=MO plus SDWA Admin permission).
+        private static WelfareApplicationStatus[] GetActorStatuses(AppRole? role, DesignationApproverFlags flags)
         {
             var statuses = new List<WelfareApplicationStatus>();
             if (role.HasValue && StageStatuses.TryGetValue(role.Value, out var roleStatuses))
                 statuses.AddRange(roleStatuses);
-            if (isFinalApprover)
+            if (flags.IsSdwaApprover)
                 statuses.Add(WelfareApplicationStatus.AVPReview);
+            if (flags.IsSdwaAdminApprover)
+                statuses.Add(WelfareApplicationStatus.SDWAAdminReview);
             return statuses.Distinct().ToArray();
         }
 
         // Resolves which capacity the actor is acting IN for one specific
         // application, matched against that application's CURRENT status.
         // Returns the AppRole to use for stage transition/display/territory
-        // purposes (AppRole.AVP is the internal final/SDWA marker), or null if
-        // this actor is not authorized to act on the application in its current state.
-        private static AppRole? ResolveActingRole(AppRole? role, bool isFinalApprover, WelfareApplicationStatus status)
+        // purposes (AppRole.AVP / AppRole.RMD are internal stage markers - see the
+        // NextStage/PreviousStage comment above), or null if this actor is not
+        // authorized to act on the application in its current state. SDWA Admin can
+        // only ever be resolved when the application is ALREADY at the SDWA Admin
+        // stage - it structurally cannot be reached before the SDWA stage has
+        // approved it (see NextStage), so SDWA is never skipped.
+        private static AppRole? ResolveActingRole(AppRole? role, DesignationApproverFlags flags, WelfareApplicationStatus status)
         {
             if (role.HasValue && StageStatuses.TryGetValue(role.Value, out var roleStatuses) && roleStatuses.Contains(status))
                 return role.Value;
-            if (isFinalApprover && status == WelfareApplicationStatus.AVPReview)
+            if (flags.IsSdwaApprover && status == WelfareApplicationStatus.AVPReview)
                 return AppRole.AVP;
+            if (flags.IsSdwaAdminApprover && status == WelfareApplicationStatus.SDWAAdminReview)
+                return AppRole.RMD;
             return null;
         }
 
@@ -152,8 +188,8 @@ namespace SpicAPI.Controllers
             if (user == null)
                 return Unauthorized();
 
-            bool isFinalApprover = await IsFinalApproverAsync(user);
-            bool isApprover = IsApprover(role, isFinalApprover);
+            var flags = await GetDesignationApproverFlagsAsync(user);
+            bool isApprover = IsApprover(role, flags);
             bool isViewer = role.HasValue && ViewerRoles.Contains(role.Value);
             if (!isApprover && !isViewer)
                 return StatusCode(403, new { Message = "You are not authorized to access welfare scheme approvals." });
@@ -161,8 +197,9 @@ namespace SpicAPI.Controllers
             var activeTab = NormalizeTab(tab);
 
             // Geographic visibility: MO -> own HQ, RM -> own Region, SMM -> own State.
-            // The SDWA final approver / Admin / CorporateAdmin / Director see every application.
-            Expression<Func<DealerRegistration, bool>> dealerScope = isFinalApprover
+            // The SDWA / SDWA Admin final approvers / Admin / CorporateAdmin / Director
+            // see every application.
+            Expression<Func<DealerRegistration, bool>> dealerScope = flags.Any
                 ? (dealer => true)
                 : BuildDealerGeoScope(role);
 
@@ -177,12 +214,12 @@ namespace SpicAPI.Controllers
             var page = new WelfareApprovalPageDto
             {
                 ActiveTab = activeTab,
-                Stats = BuildStats(applications, role, isFinalApprover),
-                Tabs = BuildTabs(applications, role, isFinalApprover),
+                Stats = BuildStats(applications, role, flags),
+                Tabs = BuildTabs(applications, role, flags),
                 Applications = applications
-                    .Where(a => MatchesTab(a, activeTab, role, isFinalApprover))
+                    .Where(a => MatchesTab(a, activeTab, role, flags))
                 .OrderByDescending(a => a.ApplicationDate)
-                .Select(a => MapToListRow(a, activeTab, role, isFinalApprover))
+                .Select(a => MapToListRow(a, activeTab, role, flags))
                 .ToList()
             };
 
@@ -200,8 +237,8 @@ namespace SpicAPI.Controllers
             if (user == null)
                 return Unauthorized();
 
-            bool isFinalApprover = await IsFinalApproverAsync(user);
-            if (!IsApprover(role, isFinalApprover) && !(role.HasValue && ViewerRoles.Contains(role.Value)))
+            var flags = await GetDesignationApproverFlagsAsync(user);
+            if (!IsApprover(role, flags) && !(role.HasValue && ViewerRoles.Contains(role.Value)))
                 return StatusCode(403, new { Message = "You are not authorized to view welfare scheme approvals." });
 
             var application = await _db.WelfareApplications
@@ -214,9 +251,9 @@ namespace SpicAPI.Controllers
                 return NotFound(new { Message = "Application not found." });
 
             // Same territory rule as the queue: officers may only open applications
-            // belonging to dealers inside their own HQ / Region / State. The SDWA
-            // final approver sees every territory (same as the old AVP behavior).
-            if (!isFinalApprover && !await IsDealerWithinScopeAsync(application.DealerId, role))
+            // belonging to dealers inside their own HQ / Region / State. The SDWA /
+            // SDWA Admin final approvers see every territory (same as the old AVP behavior).
+            if (!flags.Any && !await IsDealerWithinScopeAsync(application.DealerId, role))
                 return StatusCode(403, new { Message = "This application belongs to another territory." });
 
             return Ok(MapToDetail(application));
@@ -230,8 +267,8 @@ namespace SpicAPI.Controllers
         public async Task<IActionResult> GetDocument(int documentId, [FromQuery] string? disposition)
         {
             var (role, user) = await GetActorAsync();
-            bool isFinalApprover = user != null && await IsFinalApproverAsync(user);
-            if (!IsApprover(role, isFinalApprover) && !(role.HasValue && ViewerRoles.Contains(role.Value)))
+            var flags = user != null ? await GetDesignationApproverFlagsAsync(user) : default;
+            if (!IsApprover(role, flags) && !(role.HasValue && ViewerRoles.Contains(role.Value)))
                 return StatusCode(403, new { Message = "You are not authorized to download this document." });
 
             var document = await _db.WelfareApplicationDocuments
@@ -517,8 +554,8 @@ namespace SpicAPI.Controllers
             if (user == null)
                 return Unauthorized();
 
-            bool isFinalApprover = await IsFinalApproverAsync(user);
-            if (!IsApprover(role, isFinalApprover))
+            var flags = await GetDesignationApproverFlagsAsync(user);
+            if (!IsApprover(role, flags))
                 return StatusCode(403, new { Message = "You are not authorized to approve or reject welfare scheme applications." });
 
             var application = await _db.WelfareApplications
@@ -529,11 +566,11 @@ namespace SpicAPI.Controllers
                 return NotFound(new { Message = "Application not found." });
 
             // Resolve WHICH capacity this actor is using for THIS application, matched
-            // against its current status - not a blanket "role == AVP" check. A user
-            // can be, for example, AppRole=MO with a separate SDWA Designation: they act
-            // as MO on MO-stage applications and as the SDWA final approver on
-            // final-stage applications, resolved purely from the application's status.
-            var actingRole = ResolveActingRole(role, isFinalApprover, application.Status);
+            // against its current status - not a blanket "role == X" check. A user can
+            // be, for example, AppRole=MO with a separate SDWA Admin permission: they
+            // act as MO on MO-stage applications and as the SDWA Admin final approver on
+            // SDWA-Admin-stage applications, resolved purely from the application's status.
+            var actingRole = ResolveActingRole(role, flags, application.Status);
             if (actingRole == null)
             {
                 var actual = GetStatusDisplayName(application.Status);
@@ -607,12 +644,12 @@ namespace SpicAPI.Controllers
 
             if (isApproval)
             {
-                application.Status = NextStage[actingRole.Value];   // MO->RM, RM->SM, SM->SDWA, SDWA->Approved
+                application.Status = NextStage[actingRole.Value];   // MO->RM, RM->SM, SM->SDWA, SDWA->SDWA Admin, SDWA Admin->Approved
             }
             else
             {
                 // Reverse rejection flow: return to the previous stage instead of stopping the workflow.
-                // SDWA reject -> SM, SM reject -> RM, RM reject -> MO, MO reject -> Dealer (resubmission required).
+                // SDWA Admin reject -> SDWA, SDWA reject -> SM, SM reject -> RM, RM reject -> MO, MO reject -> Dealer (resubmission required).
                 application.Status = PreviousStage[actingRole.Value];
             }
 
@@ -650,6 +687,121 @@ namespace SpicAPI.Controllers
                 ApplicationId = application.Id,
                 Status = (int)application.Status,
                 StatusDisplay = GetStatusDisplayName(application.Status)
+            });
+        }
+
+        // =====================================================================
+        //  DIRECTOR — OPTIONAL post-SDWA review (additive only).
+        //
+        //  This is a NEW, independent capability, not a new workflow stage:
+        //  it never writes application.Status, never appears in NextStage/
+        //  PreviousStage/StageStatuses/ResolveActingRole, and therefore can
+        //  never block or gate the existing SDWA -> SDWA Admin -> Approved
+        //  transition. SDWA Admin can act whether or not the Director has
+        //  reviewed. Uses the EXISTING AppRole.Director - no new role,
+        //  designation or permission mechanism. Applicable only to the four
+        //  schemes below, and only once SDWA (AppRole.AVP marker) has
+        //  already approved.
+        // =====================================================================
+
+        private static readonly WelfareSchemeType[] DirectorApplicableSchemes =
+        {
+            WelfareSchemeType.DeathRelief,
+            WelfareSchemeType.EducationalAssistance,
+            WelfareSchemeType.MeritAward,
+            WelfareSchemeType.MedicalAssistance
+        };
+
+        internal static bool IsDirectorApplicableScheme(WelfareSchemeType scheme) =>
+            DirectorApplicableSchemes.Contains(scheme);
+
+        [HttpPost("applications/{id:int}/director-review")]
+        public async Task<ActionResult<WelfareDirectorReviewResponse>> DirectorReview(int id, [FromBody] WelfareDirectorReviewRequest? request)
+        {
+            var (role, user) = await GetActorAsync();
+            if (user == null)
+                return Unauthorized();
+
+            if (role != AppRole.Director)
+                return StatusCode(403, new { Message = "Only the Director role can perform this review." });
+
+            var application = await _db.WelfareApplications
+                .Include(a => a.Approvals)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null)
+                return NotFound(new { Message = "Application not found." });
+
+            if (!IsDirectorApplicableScheme(application.SchemeName))
+                return StatusCode(403, new { Message = "Director review is not applicable to this welfare scheme." });
+
+            var sdwaApproved = application.Approvals.Any(a =>
+                a.ApprovalLevel == AppRole.AVP && a.ApprovalStatus == WelfareApprovalStatus.Approved);
+            if (!sdwaApproved)
+                return Conflict(new { Message = "Director review is only available after SDWA approval has been completed." });
+
+            var decision = request?.Decision?.Trim();
+            var isApproval = string.Equals(decision, "Approved", StringComparison.OrdinalIgnoreCase);
+            var isRejection = string.Equals(decision, "Rejected", StringComparison.OrdinalIgnoreCase);
+            if (!isApproval && !isRejection)
+                return BadRequest(new { Message = "A valid decision (Approved / Rejected) is required." });
+
+            var remarks = request?.Remarks?.Trim();
+            if (isRejection && string.IsNullOrWhiteSpace(remarks))
+                return BadRequest(new { Message = "Remarks are mandatory when recording a Director rejection." });
+
+            var actorName = BuildActorName(user, AppRole.Director);
+            var now = DateTime.Now;
+
+            // Recorded on the SAME per-level approval entity used by every other
+            // stage (upsert pattern identical to ProcessAction), but this NEVER
+            // touches application.Status - SDWA Admin does not wait on it.
+            var step = application.Approvals.FirstOrDefault(x => x.ApprovalLevel == AppRole.Director);
+            if (step == null)
+            {
+                step = new WelfareApplicationApproval
+                {
+                    WelfareApplicationId = application.Id,
+                    ApprovalLevel = AppRole.Director,
+                    CreatedBy = actorName,
+                    CreatedAt = now
+                };
+                application.Approvals.Add(step);
+                _db.WelfareApplicationApprovals.Add(step);
+            }
+
+            step.ApprovalStatus = isApproval ? WelfareApprovalStatus.Approved : WelfareApprovalStatus.Rejected;
+            step.ApprovedBy = actorName;
+            step.ApprovedAt = now;
+            step.Remarks = remarks;
+            step.UpdatedBy = actorName;
+            step.UpdatedAt = now;
+
+            _db.WelfareApplicationActionLogs.Add(new WelfareApplicationActionLog
+            {
+                WelfareApplicationId = application.Id,
+                ActorLevel = AppRole.Director,
+                Action = isApproval ? "DirectorReviewed" : "DirectorReviewRejected",
+                Remarks = remarks,
+                ActorName = actorName,
+                CreatedBy = actorName,
+                CreatedAt = now
+            });
+
+            // Deliberately NOT touching application.Status / UpdatedBy / UpdatedAt -
+            // Director review is an optional side-channel, never a workflow stage.
+            await _db.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Welfare application {ApplicationId} Director review recorded ({Decision}) by {Actor}. Application status unchanged ({Status}).",
+                id, step.ApprovalStatus, actorName, application.Status);
+
+            return Ok(new WelfareDirectorReviewResponse
+            {
+                Success = true,
+                Message = isApproval ? "Director review recorded (approved)." : "Director review recorded (rejected).",
+                ApplicationId = application.Id,
+                DirectorApprovalStatus = step.ApprovalStatus.ToString()
             });
         }
 
@@ -750,15 +902,17 @@ namespace SpicAPI.Controllers
         private static string BuildActorName(UserInfo user, AppRole role)
             => $"{(string.IsNullOrWhiteSpace(user.Name) ? user.UserName : user.Name)} ({GetStageDisplay(role)})";
 
-        // AppRole.AVP is the internal marker for the final/SDWA stage (see
-        // ResolveActingRole) - it displays as "SDWA", regardless of whether the
-        // acting user's actual AppRole happens to be AVP.
+        // AppRole.AVP / AppRole.RMD are internal storage markers for the SDWA / SDWA
+        // Admin stages (see NextStage/PreviousStage comment above and ResolveActingRole)
+        // - they display as "SDWA" / "SDWA Admin" here, regardless of whether the
+        // acting user's actual AppRole happens to match. There is no AppRole.SDWAAdmin.
         internal static string GetStageDisplay(AppRole role) => role switch
         {
             AppRole.MO => "MO",
             AppRole.RM => "RM",
             AppRole.SMM => "SM",
             AppRole.AVP => "SDWA",
+            AppRole.RMD => "SDWA Admin",
             _ => role.ToString()
         };
 
@@ -770,6 +924,7 @@ namespace SpicAPI.Controllers
             WelfareApplicationStatus.RMReview => "Pending RM",
             WelfareApplicationStatus.SMReview => "Pending SM",
             WelfareApplicationStatus.AVPReview => "Pending SDWA",
+            WelfareApplicationStatus.SDWAAdminReview => "Pending SDWA Admin",
             WelfareApplicationStatus.Approved => "Approved",
             WelfareApplicationStatus.Rejected => "Rejected",
             WelfareApplicationStatus.Cancelled => "Cancelled",
@@ -780,6 +935,7 @@ namespace SpicAPI.Controllers
         // Stage name for the status an application was returned to by the reverse rejection flow
         private static string GetStageDisplayFromStatus(WelfareApplicationStatus status) => status switch
         {
+            WelfareApplicationStatus.AVPReview => "SDWA",
             WelfareApplicationStatus.SMReview => "SM",
             WelfareApplicationStatus.RMReview => "RM",
             WelfareApplicationStatus.MOReview or WelfareApplicationStatus.Submitted => "MO",
@@ -801,12 +957,12 @@ namespace SpicAPI.Controllers
             };
         }
 
-        private static bool MatchesTab(WelfareApplication app, string tab, AppRole? role, bool isFinalApprover)
+        private static bool MatchesTab(WelfareApplication app, string tab, AppRole? role, DesignationApproverFlags flags)
         {
             // For read-only viewers (Admin/Director), "pending" shows everything still in the flow.
             if (tab == "pending")
-                return IsApprover(role, isFinalApprover)
-                    ? GetActorStatuses(role, isFinalApprover).Contains(app.Status)
+                return IsApprover(role, flags)
+                    ? GetActorStatuses(role, flags).Contains(app.Status)
                     : AllPendingStages.Contains(app.Status);
 
             return tab switch
@@ -814,84 +970,89 @@ namespace SpicAPI.Controllers
                 // Applications this approver has already cleared stay visible to them
                 // (labelled "Approved by <stage>"); apps back pending at their own stage
                 // after a reverse rejection are excluded so they remain actionable only.
-                "approvedbyme" => ClearedByApprover(app, role, isFinalApprover),
-                "validatedmo" => app.Status is WelfareApplicationStatus.RMReview or WelfareApplicationStatus.SMReview or WelfareApplicationStatus.AVPReview,
-                "recommendedrm" => app.Status is WelfareApplicationStatus.SMReview or WelfareApplicationStatus.AVPReview,
-                "recommendedsm" => app.Status == WelfareApplicationStatus.AVPReview,
+                "approvedbyme" => ClearedByApprover(app, role, flags),
+                "validatedmo" => app.Status is WelfareApplicationStatus.RMReview or WelfareApplicationStatus.SMReview or WelfareApplicationStatus.AVPReview or WelfareApplicationStatus.SDWAAdminReview,
+                "recommendedrm" => app.Status is WelfareApplicationStatus.SMReview or WelfareApplicationStatus.AVPReview or WelfareApplicationStatus.SDWAAdminReview,
+                "recommendedsm" => app.Status is WelfareApplicationStatus.AVPReview or WelfareApplicationStatus.SDWAAdminReview,
                 "rejected" => app.Status == WelfareApplicationStatus.Rejected,
                 "completed" => app.Status == WelfareApplicationStatus.Approved,
                 _ => false
             };
         }
 
-        private static bool ClearedByApprover(WelfareApplication app, AppRole? role, bool isFinalApprover)
+        private static bool ClearedByApprover(WelfareApplication app, AppRole? role, DesignationApproverFlags flags)
         {
             bool clearedByRole = role.HasValue &&
                 ApproverRoles.Contains(role.Value) &&
                 !StageStatuses[role.Value].Contains(app.Status) &&
                 app.Approvals.Any(ap => ap.ApprovalLevel == role.Value && ap.ApprovalStatus == WelfareApprovalStatus.Approved);
 
-            bool clearedAsFinalApprover = isFinalApprover &&
+            bool clearedAsSdwa = flags.IsSdwaApprover &&
                 app.Status != WelfareApplicationStatus.AVPReview &&
                 app.Approvals.Any(ap => ap.ApprovalLevel == AppRole.AVP && ap.ApprovalStatus == WelfareApprovalStatus.Approved);
 
-            return clearedByRole || clearedAsFinalApprover;
+            bool clearedAsSdwaAdmin = flags.IsSdwaAdminApprover &&
+                app.Status != WelfareApplicationStatus.SDWAAdminReview &&
+                app.Approvals.Any(ap => ap.ApprovalLevel == AppRole.RMD && ap.ApprovalStatus == WelfareApprovalStatus.Approved);
+
+            return clearedByRole || clearedAsSdwa || clearedAsSdwaAdmin;
         }
 
-        private static WelfareApprovalStatsDto BuildStats(List<WelfareApplication> apps, AppRole? role, bool isFinalApprover)
+        private static WelfareApprovalStatsDto BuildStats(List<WelfareApplication> apps, AppRole? role, DesignationApproverFlags flags)
         {
             Func<WelfareApplicationStatus[], int> countStages = stages => apps.Count(a => stages.Contains(a.Status));
 
             return new WelfareApprovalStatsDto
             {
                 TotalApplications = apps.Count,
-                PendingMyStage = IsApprover(role, isFinalApprover)
-                    ? countStages(GetActorStatuses(role, isFinalApprover))
+                PendingMyStage = IsApprover(role, flags)
+                    ? countStages(GetActorStatuses(role, flags))
                     : countStages(AllPendingStages),
-                ValidatedByMO = countStages(new[] { WelfareApplicationStatus.RMReview, WelfareApplicationStatus.SMReview, WelfareApplicationStatus.AVPReview }),
+                ValidatedByMO = countStages(new[] { WelfareApplicationStatus.RMReview, WelfareApplicationStatus.SMReview, WelfareApplicationStatus.AVPReview, WelfareApplicationStatus.SDWAAdminReview }),
                 Rejected = apps.Count(a => a.Status == WelfareApplicationStatus.Rejected),
                 Completed = apps.Count(a => a.Status == WelfareApplicationStatus.Approved)
             };
         }
 
-        private static List<WelfareApprovalTabDto> BuildTabs(List<WelfareApplication> apps, AppRole? role, bool isFinalApprover)
+        private static List<WelfareApprovalTabDto> BuildTabs(List<WelfareApplication> apps, AppRole? role, DesignationApproverFlags flags)
         {
             var tabs = new List<WelfareApprovalTabDto>();
 
-            var pendingCount = IsApprover(role, isFinalApprover)
-                ? apps.Count(a => GetActorStatuses(role, isFinalApprover).Contains(a.Status))
+            var pendingCount = IsApprover(role, flags)
+                ? apps.Count(a => GetActorStatuses(role, flags).Contains(a.Status))
                 : apps.Count(a => AllPendingStages.Contains(a.Status));
 
             tabs.Add(new WelfareApprovalTabDto { Key = "pending", Label = "Pending", Count = pendingCount });
-            if (IsApprover(role, isFinalApprover))
+            if (IsApprover(role, flags))
             {
-                // SDWA final-approver identity takes precedence in the label when present,
-                // since it is the more specific/rarer capacity; MO/RM/SM still act normally.
-                var label = isFinalApprover ? "SDWA" : GetStageDisplay(role!.Value);
+                // SDWA Admin identity takes precedence over SDWA, which takes precedence
+                // over role, in the label when present - most specific/senior capacity wins;
+                // MO/RM/SM (and SDWA) still act normally on their own stages regardless.
+                var label = flags.IsSdwaAdminApprover ? "SDWA Admin" : flags.IsSdwaApprover ? "SDWA" : GetStageDisplay(role!.Value);
                 tabs.Add(new WelfareApprovalTabDto
                 {
                     Key = "approvedbyme",
                     Label = $"Approved by {label}",
-                    Count = apps.Count(a => ClearedByApprover(a, role, isFinalApprover))
+                    Count = apps.Count(a => ClearedByApprover(a, role, flags))
                 });
             }
             tabs.Add(new WelfareApprovalTabDto
             {
                 Key = "validatedmo",
                 Label = "Validated by MO",
-                Count = apps.Count(a => a.Status is WelfareApplicationStatus.RMReview or WelfareApplicationStatus.SMReview or WelfareApplicationStatus.AVPReview)
+                Count = apps.Count(a => a.Status is WelfareApplicationStatus.RMReview or WelfareApplicationStatus.SMReview or WelfareApplicationStatus.AVPReview or WelfareApplicationStatus.SDWAAdminReview)
             });
             tabs.Add(new WelfareApprovalTabDto
             {
                 Key = "recommendedrm",
                 Label = "Recommended by RM",
-                Count = apps.Count(a => a.Status is WelfareApplicationStatus.SMReview or WelfareApplicationStatus.AVPReview)
+                Count = apps.Count(a => a.Status is WelfareApplicationStatus.SMReview or WelfareApplicationStatus.AVPReview or WelfareApplicationStatus.SDWAAdminReview)
             });
             tabs.Add(new WelfareApprovalTabDto
             {
                 Key = "recommendedsm",
                 Label = "Approved by SM",
-                Count = apps.Count(a => a.Status == WelfareApplicationStatus.AVPReview)
+                Count = apps.Count(a => a.Status is WelfareApplicationStatus.AVPReview or WelfareApplicationStatus.SDWAAdminReview)
             });
             tabs.Add(new WelfareApprovalTabDto { Key = "rejected", Label = "Rejected", Count = apps.Count(a => a.Status == WelfareApplicationStatus.Rejected) });
             tabs.Add(new WelfareApprovalTabDto { Key = "completed", Label = "Completed", Count = apps.Count(a => a.Status == WelfareApplicationStatus.Approved) });
@@ -899,11 +1060,11 @@ namespace SpicAPI.Controllers
             return tabs;
         }
 
-        private static WelfareApprovalApplicationDto MapToListRow(WelfareApplication a, string tab, AppRole? role, bool isFinalApprover)
+        private static WelfareApprovalApplicationDto MapToListRow(WelfareApplication a, string tab, AppRole? role, DesignationApproverFlags flags)
         {
             var stageLabel = tab != "approvedbyme"
                 ? null
-                : isFinalApprover ? "SDWA" : (role.HasValue ? GetStageDisplay(role.Value) : null);
+                : flags.IsSdwaAdminApprover ? "SDWA Admin" : flags.IsSdwaApprover ? "SDWA" : (role.HasValue ? GetStageDisplay(role.Value) : null);
 
             return new WelfareApprovalApplicationDto
             {

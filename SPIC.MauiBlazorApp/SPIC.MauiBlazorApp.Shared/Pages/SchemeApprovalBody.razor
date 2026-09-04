@@ -75,7 +75,7 @@ else
 
         <!-- ===================== WORKFLOW ===================== -->
         <div class="apd-section">
-            <h3>Approval Workflow (MO → RM → SM → SDWA)</h3>
+            <h3>Approval Workflow (MO → RM → SM → SDWA → SDWA Admin)</h3>
             <div class="apd-stepper">
                 @{ var steps = BuildSteps(); }
                 @for (var i = 0; i < steps.Count; i++)
@@ -167,7 +167,7 @@ else
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
                 </svg>
-                <span>This application has been fully approved by SDWA. The approval workflow is completed.</span>
+                <span>This application has been fully approved by SDWA Admin. The approval workflow is completed.</span>
             </div>
         }
         else if (d.Status == 6)
@@ -447,14 +447,66 @@ else
         <!-- ===================== FINAL APPROVAL SUMMARY ===================== -->
         @if (d.Status == 5)
         {
-            var sdwa = d.Approvals.FirstOrDefault(ap => ap.ApprovalStatus == "Approved" && ap.ApprovalLevel == "SDWA");
+            var sdwaAdmin = d.Approvals.FirstOrDefault(ap => ap.ApprovalStatus == "Approved" && ap.ApprovalLevel == "SDWA Admin");
             <div class="apd-summary-box apd-box-green">
                 <h4 class="apd-box-title">Approval Details</h4>
                 <div class="apd-summary-grid">
-                    <div class="apd-summary-item"><label>Approved By</label><span>@(sdwa?.ApprovedBy ?? "SDWA")</span></div>
-                    <div class="apd-summary-item"><label>Approved On</label><span>@(sdwa?.ApprovedAt.HasValue == true ? FormatDateTime(sdwa.ApprovedAt.Value) : "-")</span></div>
-                    <div class="apd-summary-item"><label>Final Remarks</label><span>@(sdwa?.Remarks ?? "-")</span></div>
+                    <div class="apd-summary-item"><label>Approved By</label><span>@(sdwaAdmin?.ApprovedBy ?? "SDWA Admin")</span></div>
+                    <div class="apd-summary-item"><label>Approved On</label><span>@(sdwaAdmin?.ApprovedAt.HasValue == true ? FormatDateTime(sdwaAdmin.ApprovedAt.Value) : "-")</span></div>
+                    <div class="apd-summary-item"><label>Final Remarks</label><span>@(sdwaAdmin?.Remarks ?? "-")</span></div>
                 </div>
+            </div>
+        }
+
+        <!-- ===================== DIRECTOR REVIEW (OPTIONAL) ===================== -->
+        @if (ShowDirectorReviewPanel)
+        {
+            <div class="apd-section">
+                <div class="apd-section-head">
+                    <h3>Director Review (Optional)</h3>
+                </div>
+                @if (DirectorReviewStep != null)
+                {
+                    <div class="apd-summary-box @(DirectorReviewStep.ApprovalStatus == "Approved" ? "apd-box-green" : "apd-box-red")">
+                        <div class="apd-summary-grid">
+                            <div class="apd-summary-item"><label>Decision</label><span>@DirectorReviewStep.ApprovalStatus</span></div>
+                            <div class="apd-summary-item"><label>Reviewed By</label><span>@(DirectorReviewStep.ApprovedBy ?? "-")</span></div>
+                            <div class="apd-summary-item"><label>Reviewed On</label><span>@(DirectorReviewStep.ApprovedAt.HasValue ? FormatDateTime(DirectorReviewStep.ApprovedAt.Value) : "-")</span></div>
+                            <div class="apd-summary-item"><label>Remarks</label><span>@(DirectorReviewStep.Remarks ?? "-")</span></div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="apd-alert apd-alert-success" style="margin-bottom:12px;">
+                        <span>This is an optional additional review. It does not block SDWA Admin and is not required to complete the application.</span>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:12px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label style="font-size:12px; font-weight:600; color:#374151;">Decision *</label>
+                                <select class="rm-select" @bind="_directorDecision" disabled="@_directorBusy" style="width:100%;">
+                                    <option value="">--Select--</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Rejected">Rejected</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <label style="font-size:12px; font-weight:600; color:#374151;">Remarks @(_directorDecision == "Rejected" ? "*" : "(Optional)")</label>
+                            <textarea class="rm-textarea" placeholder="Add remarks..." @bind="_directorRemarks" disabled="@_directorBusy" rows="2" style="width:100%;"></textarea>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_directorError))
+                        {
+                            <div class="apd-alert apd-alert-danger" style="margin:0;">@_directorError</div>
+                        }
+                        <div style="display:flex; justify-content:flex-end; gap:8px;">
+                            <button class="apd-btn-action apd-btn-validate" disabled="@_directorBusy" @onclick="SubmitDirectorReview">
+                                @(_directorBusy ? "Processing..." : "Submit Director Review")
+                            </button>
+                        </div>
+                    </div>
+                }
             </div>
         }
 
@@ -464,7 +516,7 @@ else
         @if (CanProcessCurrentStage())
         {
             <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
-                @if (IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage)
+                @if (IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage || IsSdwaAdminFinalStage)
                 {
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                         <div style="display:flex; flex-direction:column; gap:4px;">
@@ -552,13 +604,99 @@ else
     private bool IsRmStage => LoginState.UserRole == AppRole.RM;
     private bool IsSmmStage => LoginState.UserRole == AppRole.SMM;
 
-    // Final approver identity comes from the logged-in user's EXISTING RoleAccess
-    // permission PagePermission.SDWA (reusing the existing CanAccess implementation),
-    // NOT their AppRole - any AppRole (CorporateAdmin, AVP, MO, RM, SM...) whose
-    // Designation grants SDWA.* can act as the final approver.
+    // SDWA / SDWA Admin approver identity comes from the logged-in user's EXISTING
+    // RoleAccess permissions (PagePermission.SDWA / PagePermission.SDWAAdmin, reusing
+    // the existing CanAccess implementation), NOT their AppRole - any AppRole
+    // (CorporateAdmin, AVP, MO, RM, SM...) whose Designation grants SDWA.* / SDWAAdmin.*
+    // can act as that approver. There is no AppRole.SDWAAdmin.
     private bool IsSdwaFinalStage => LoginState.CanAccess(PagePermission.SDWA);
+    private bool IsSdwaAdminFinalStage => LoginState.CanAccess(PagePermission.SDWAAdmin);
 
-    private bool IsApprovalStage => IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage;
+    private bool IsApprovalStage => IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage || IsSdwaAdminFinalStage;
+
+    // =====================================================================
+    //  DIRECTOR — OPTIONAL post-SDWA review (additive only).
+    //  Uses the EXISTING AppRole.Director. Does not participate in
+    //  IsApprovalStage / CanProcessCurrentStage / the mandatory footer -
+    //  it is a wholly separate, non-blocking panel. Visibility mirrors the
+    //  server-side checks in WelfareSchemeApprovalController.DirectorReview
+    //  (defense in depth only; the server is the source of truth).
+    // =====================================================================
+
+    private static readonly HashSet<WelfareSchemeType> DirectorApplicableSchemes = new()
+    {
+        WelfareSchemeType.DeathRelief,
+        WelfareSchemeType.EducationalAssistance,
+        WelfareSchemeType.MeritAward,
+        WelfareSchemeType.MedicalAssistance
+    };
+
+    private bool IsDirector => LoginState.UserRole == AppRole.Director;
+
+    private bool IsDirectorApplicableScheme =>
+        _detail != null && DirectorApplicableSchemes.Contains((WelfareSchemeType)_detail.SchemeType);
+
+    private bool IsSdwaApproved =>
+        _detail?.Approvals.Any(ap => ap.ApprovalLevel == "SDWA" && ap.ApprovalStatus == "Approved") == true;
+
+    private WelfareApprovalStepDto? DirectorReviewStep =>
+        _detail?.Approvals.FirstOrDefault(ap => ap.ApprovalLevel == "Director");
+
+    private bool ShowDirectorReviewPanel =>
+        IsDirector && _detail != null && IsDirectorApplicableScheme && IsSdwaApproved;
+
+    private string _directorDecision = "";
+    private string? _directorRemarks;
+    private string? _directorError;
+    private bool _directorBusy;
+
+    private async Task SubmitDirectorReview()
+    {
+        if (_detail == null || _directorBusy) return;
+
+        if (string.IsNullOrWhiteSpace(_directorDecision))
+        {
+            _directorError = "Please select a decision.";
+            return;
+        }
+
+        if (_directorDecision == "Rejected" && string.IsNullOrWhiteSpace(_directorRemarks))
+        {
+            _directorError = "Remarks are mandatory when rejecting.";
+            return;
+        }
+
+        _directorBusy = true;
+        _directorError = null;
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"api/WelfareSchemeApproval/applications/{_detail.Id}/director-review",
+                new WelfareDirectorReviewRequest
+                {
+                    Decision = _directorDecision,
+                    Remarks = _directorRemarks
+                });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _loadedForId = 0; // force reload so DirectorReviewStep reflects the saved review
+                await LoadDetail(_detail.Id);
+            }
+            else
+            {
+                _directorError = await ReadErrorMessageAsync(response);
+            }
+        }
+        catch
+        {
+            _directorError = "Unable to reach the server. Please try again.";
+        }
+        finally
+        {
+            _directorBusy = false;
+        }
+    }
 
     private async Task CloseDrawer()
     {
@@ -798,8 +936,9 @@ else
 
     private static string FormatLakhs(decimal value) => value == 0 ? "-" : value.ToString("0.##");
 
-    // MO/RM/SM stages only - resolved from AppRole. The final (SDWA) stage is
-    // resolved separately via IsSdwaFinalStage (PagePermission.SDWA-based), not here.
+    // MO/RM/SM stages only - resolved from AppRole. The SDWA and SDWA Admin stages
+    // are resolved separately via IsSdwaStageActionable / IsSdwaAdminStageActionable
+    // (PagePermission.SDWA / PagePermission.SDWAAdmin - based), not here.
     private static readonly Dictionary<AppRole, int[]> StageMap = new()
     {
         [AppRole.MO] = new[] { 1, 2 },
@@ -807,18 +946,26 @@ else
         [AppRole.SMM] = new[] { 4 },
     };
 
+    // "Actionable" = the actor holds the permission AND the application is actually
+    // at that stage right now. Combines the two required conditions in one place so
+    // the footer, comment-option selection and CanProcessCurrentStage never disagree.
+    private bool IsSdwaStageActionable => IsSdwaFinalStage && _detail?.Status == 8;
+    private bool IsSdwaAdminStageActionable => IsSdwaAdminFinalStage && _detail?.Status == 10;
+
     private bool CanProcessCurrentStage() =>
         _detail != null &&
         ((LoginState.UserRole != null &&
           StageMap.TryGetValue(LoginState.UserRole.Value, out var statuses) &&
           statuses.Contains(_detail.Status))
-         || (IsSdwaFinalStage && _detail.Status == 8));
+         || IsSdwaStageActionable
+         || IsSdwaAdminStageActionable);
 
     private string NextStageName
     {
         get
         {
-            if (IsSdwaFinalStage && _detail?.Status == 8) return "completion";
+            if (IsSdwaAdminStageActionable) return "completion";
+            if (IsSdwaStageActionable) return "SDWA Admin";
             return LoginState.UserRole switch
             {
                 AppRole.MO => "RM",
@@ -833,7 +980,8 @@ else
     {
         get
         {
-            if (IsSdwaFinalStage && _detail?.Status == 8) return "returned to the SM for review";
+            if (IsSdwaAdminStageActionable) return "returned to the SDWA stage for review";
+            if (IsSdwaStageActionable) return "returned to the SM for review";
             return LoginState.UserRole switch
             {
                 AppRole.MO => "returned to the Dealer for correction and resubmission (the application will NOT be closed)",
@@ -850,6 +998,7 @@ else
         3 => "RM",
         4 => "SM",
         8 => "SDWA",
+        10 => "SDWA Admin",
         _ => "-"
     };
 
@@ -859,6 +1008,7 @@ else
         "RM" => "Regional Manager (RM)",
         "SM" => "Senior Manager (SM)",
         "SDWA" => "SDWA Approver",
+        "SDWA Admin" => "SDWA Admin Approver",
         _ => level
     };
 
@@ -871,7 +1021,7 @@ else
 
         var stages = new (string Code, string Name)[]
         {
-            ("MO", "MO"), ("RM", "RM"), ("SM", "SM"), ("SDWA", "SDWA")
+            ("MO", "MO"), ("RM", "RM"), ("SM", "SM"), ("SDWA", "SDWA"), ("SDWA Admin", "SDWA Admin")
         };
 
         var status = _detail.Status;
@@ -881,7 +1031,8 @@ else
             3 => 1,
             4 => 2,
             8 => 3,
-            5 => 4,
+            10 => 4,
+            5 => 5,
             _ => -1
         };
 
@@ -1019,7 +1170,7 @@ else
     {
         if (_detail == null || _busy) return;
 
-        var usesRecommendationFlow = IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage;
+        var usesRecommendationFlow = IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage || IsSdwaAdminFinalStage;
 
         if (usesRecommendationFlow && string.IsNullOrWhiteSpace(_approveComment))
         {
@@ -1120,8 +1271,8 @@ else
         "Not recommended for approval based on field reports"
     };
 
-    // SDWA final-approval comment options - shown to the user whose DATABASE
-    // Designation is SDWA, regardless of their AppRole.
+    // SDWA final-approval comment options - shown to the user whose EXISTING
+    // RoleAccess grants PagePermission.SDWA, regardless of their AppRole.
     private static readonly string[] SdwaCommentOptions =
     {
         "Verified and approved for final release",
@@ -1129,14 +1280,26 @@ else
         "Rejected after final review"
     };
 
+    // SDWA Admin final-approval comment options - shown to the user whose EXISTING
+    // RoleAccess grants PagePermission.SDWAAdmin, regardless of their AppRole.
+    private static readonly string[] SdwaAdminCommentOptions =
+    {
+        "Verified and approved for final release by SDWA Admin",
+        "Documents / eligibility not satisfied at SDWA Admin review",
+        "Rejected after SDWA Admin review"
+    };
+
     // Comments that resolve to an approval recommendation for the current level.
-    // SDWA (Designation-based) is checked first since a user can hold it
-    // alongside an AppRole of MO/RM/SM.
+    // Checked against the composite "actionable" flags (permission AND the
+    // application is actually at that stage) so a user holding BOTH SDWA and SDWA
+    // Admin permissions always sees the options for whichever stage the CURRENTLY
+    // loaded application is really pending at, not just whichever permission they hold.
     private IReadOnlyList<string> CurrentLevelApprovalComments
     {
         get
         {
-            if (IsSdwaFinalStage) return new[] { "Verified and approved for final release" };
+            if (IsSdwaAdminStageActionable) return new[] { "Verified and approved for final release by SDWA Admin" };
+            if (IsSdwaStageActionable) return new[] { "Verified and approved for final release" };
             return LoginState.UserRole switch
             {
                 AppRole.MO => new[] { "Information verified and eligible for approval" },
@@ -1151,7 +1314,8 @@ else
     {
         get
         {
-            if (IsSdwaFinalStage) return SdwaCommentOptions;
+            if (IsSdwaAdminStageActionable) return SdwaAdminCommentOptions;
+            if (IsSdwaStageActionable) return SdwaCommentOptions;
             return LoginState.UserRole switch
             {
                 AppRole.MO => MoCommentOptions,
@@ -1187,6 +1351,11 @@ else
         _approveComment = null;
         _actionError = null;
         _busy = false;
+
+        _directorDecision = "";
+        _directorRemarks = null;
+        _directorError = null;
+        _directorBusy = false;
     }
 
     private async Task OpenDocument(int documentId, bool download)

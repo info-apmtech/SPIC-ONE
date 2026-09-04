@@ -152,11 +152,12 @@ public enum WelfareApplicationStatus
     MOReview = 2,     // Legacy alias of Pending MO (kept for existing data)
     RMReview = 3,     // Pending RM (approved by MO)
     SMReview = 4,     // Pending SM / SMM (approved by RM)
-    Approved = 5,     // Fully approved by AVP, benefit can be released
+    Approved = 5,     // Fully approved after the SDWA Admin stage, benefit can be released
     Rejected = 6,     // Rejected at any approval level, process stopped (legacy - kept for existing data)
     Cancelled = 7,    // Cancelled by dealer/office before approval
-    AVPReview = 8,    // Pending AVP (approved by SM) - final approval stage
-    ReturnedToDealer = 9 // Rejected by MO and returned to the dealer for correction/resubmission (reverse rejection flow)
+    AVPReview = 8,    // Pending SDWA (approved by SM) - was the final stage, now followed by SDWA Admin
+    ReturnedToDealer = 9, // Rejected by MO and returned to the dealer for correction/resubmission (reverse rejection flow)
+    SDWAAdminReview = 10 // Pending SDWA Admin (approved by SDWA) - final approval stage
 }
 
 public enum WelfareApprovalStatus

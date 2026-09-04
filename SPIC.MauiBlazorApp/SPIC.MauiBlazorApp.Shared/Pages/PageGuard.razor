@@ -88,6 +88,16 @@
             }
         }
 
+        // Director (existing AppRole) needs to reach SchemeApproval / ApprovalDetail
+        // for the OPTIONAL post-SDWA Director review, independent of whatever
+        // Designation.RoleAccess they may or may not hold - this is an AppRole-based
+        // capability, not a Designation/PagePermission one (see WelfareSchemeApprovalController.
+        // ViewerRoles, which already grants Director read access to every application).
+        bool isDirectorSchemeApproval = LoginState.UserRole == AppRole.Director
+            && (firstSegment.Equals("SchemeApproval", StringComparison.OrdinalIgnoreCase)
+                || firstSegment.Equals("ApprovalDetail", StringComparison.OrdinalIgnoreCase)
+                || firstSegment.Equals("MOApproval", StringComparison.OrdinalIgnoreCase));
+
         // Users with NO designation assigned (no allowed pages) can ONLY see the
         // Welcome page. Infrastructure pages (login / AccountSelector / error /
         // notfound / forbidden) stay reachable so the login and multi-role flows
@@ -103,7 +113,7 @@
             bool isInfra = _alwaysOpen.Contains(firstSegment)
                            && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase);
 
-            if (!isWelcome && !isDealerDash && !isInfra)
+            if (!isWelcome && !isDealerDash && !isInfra && !isDirectorSchemeApproval)
             {
                 Nav.NavigateTo("/Welcome", replace: true);
             }
@@ -123,7 +133,7 @@
 
         // CanAccess understands "Page.Action" tokens (page reachable if any action
         // is granted) as well as legacy bare page tokens.
-        if (!LoginState.CanAccess(firstSegment))
+        if (!LoginState.CanAccess(firstSegment) && !isDirectorSchemeApproval)
         {
             var fallback = LoginState.UserRole == AppRole.Dealer ? "/SDWADashboard" : "/Dashboard";
             Nav.NavigateTo(fallback, replace: true);
