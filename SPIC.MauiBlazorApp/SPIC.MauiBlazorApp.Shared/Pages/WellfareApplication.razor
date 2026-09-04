@@ -253,9 +253,16 @@ else
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
+    [SupplyParameterFromQuery(Name = "appId")]
+    private int? AppId { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         await LoadApplications();
+        if (AppId.HasValue && _applications.Any(a => a.Id == AppId.Value))
+        {
+            OpenDetails(AppId.Value);
+        }
     }
 
     private async Task LoadApplications()
