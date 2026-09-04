@@ -216,6 +216,36 @@
                         </div>
                     </div>
 
+                    <!-- Cheque Details (SDWA Admin) -->
+                    @{
+                        var chequeDoc = _detail.Documents.FirstOrDefault(doc => doc.DocumentType == "Cheque Image");
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_detail.ChequeNumber) || _detail.ChequeAmount.HasValue || chequeDoc != null)
+                    {
+                        <div class="apd-section">
+                            <h3>Cheque details</h3>
+                            <div class="apd-fields-grid apd-cols-3">
+                                <div class="apd-field">
+                                    <label>Cheque Number</label>
+                                    <div class="apd-field-value">@(OrDash(_detail.ChequeNumber))</div>
+                                </div>
+                                <div class="apd-field">
+                                    <label>Cheque Amount</label>
+                                    <div class="apd-field-value">@(_detail.ChequeAmount.HasValue ? $"Rs. {_detail.ChequeAmount.Value:N2}" : "-")</div>
+                                </div>
+                                @if (chequeDoc != null)
+                                {
+                                    <div class="apd-field">
+                                        <label>Cheque Image</label>
+                                        <div class="apd-field-value">
+                                            <button class="apd-btn-download" @onclick="() => OpenDocument(chequeDoc.Id, false)">View Cheque Image</button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
                     <!-- Dealer Details -->
                     <div class="apd-section">
                         <h3>Dealer details</h3>
@@ -331,14 +361,14 @@
                     <!-- Uploaded Documents -->
                     <div class="apd-section">
                         <h3>Uploaded documents</h3>
-                        @if (_detail.Documents.Count == 0)
+                        @if (!_detail.Documents.Any(x => x.DocumentType != "Cheque Image"))
                         {
                             <div class="wapd-empty-docs">No documents were uploaded with this application.</div>
                         }
                         else
                         {
                             <div class="apd-doc-list">
-                                @foreach (var doc in _detail.Documents)
+                                @foreach (var doc in _detail.Documents.Where(x => x.DocumentType != "Cheque Image"))
                                 {
                                     <div class="apd-doc-item">
                                         <div class="apd-doc-icon">

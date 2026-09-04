@@ -298,6 +298,8 @@ namespace SpicAPI.Controllers
         }
 
         // =====================================================================
+
+        // =====================================================================
         //  MO document management - delete an incorrect uploaded document
         //  (removes the DB row and the physical file). MO role only.
         // =====================================================================
@@ -542,6 +544,113 @@ namespace SpicAPI.Controllers
         public async Task<ActionResult<WelfareApprovalActionResponse>> Reject(int id, [FromBody] WelfareApprovalActionRequest? request)
         {
             return await ProcessAction(id, request, isApproval: false);
+        }
+
+        // =====================================================================
+        //  SDWA ADMIN APPROVE WITH CHEQUE DETAILS (multipart form data).
+        //
+        //  Handles cheque number, cheque amount, and cheque image upload
+        //  alongside the SDWA Admin approval action. Only available when the
+        //  application is pending SDWA Admin review (status 10).
+        // =====================================================================
+
+        [HttpPost("applications/{id:int}/sdwa-admin-approve")]
+        public async Task<ActionResult<WelfareApprovalActionResponse>> SdwaAdminApprove(
+            int id,
+            [FromForm] string? chequeNumber,
+            [FromForm] string? chequeAmount,
+            [FromForm] IFormFile? chequeImage,
+            [FromForm] string? comment,
+            [FromForm] string? recommendation)
+        {
+            var (role, user) = await GetActorAsync();
+            if (user == null)
+                return Unauthorized();
+
+            var flags = await GetDesignationApproverFlagsAsync(user);
+            if (!IsApprover(role, flags))
+                return StatusCode(403, new { Message = "You are not authorized to approve or reject welfare scheme applications." });
+
+            var application = await _db.WelfareApplications
+                .Include(a => a.Approvals)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null)
+                return NotFound(new { Message = "Application not found." });
+
+            var actingRole = ResolveActingRole(role, flags, application.Status);
+            if (actingRole == null)
+            {
+                var actual = GetStatusDisplayName(application.Status);
+                return Conflict(new
+                {
+                    Message = $"This application is currently '{actual}'. You are not authorized to process it at this stage.",
+                    CurrentStatus = (int)application.Status,
+                    CurrentStatusDisplay = actual
+                });
+            }
+
+            if (actingRole != AppRole.RMD)
+                return StatusCode(403, new { Message = "This endpoint is only available for SDWA Admin approval." });
+
+            if (!await IsDealerWithinScopeAsync(application.DealerId, actingRole))
+                return StatusCode(403, new { Message = "This application belongs to another territory." });
+
+            // Save cheque image if provided
+            if (chequeImage != null && chequeImage.Length > 0)
+            {
+                var uploadDir = Path.Combine(_env.ContentRootPath, "Uploads", "Welfare", id.ToString(), "cheque");
+                System.IO.Directory.CreateDirectory(uploadDir);
+
+                var ext = Path.GetExtension(chequeImage.FileName).ToLowerInvariant();
+                if (string.IsNullOrEmpty(ext))
+                    ext = ".jpg";
+                var safeFileName = $"{Guid.NewGuid():N}{ext}";
+                var filePath = Path.Combine(uploadDir, safeFileName);
+
+                if (!Path.GetFullPath(filePath).StartsWith(Path.GetFullPath(uploadDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    return BadRequest(new { Message = "Invalid file path." });
+
+                using (var stream = new System.IO.FileStream(filePath, System.IO.FileMode.Create))
+                {
+                    await chequeImage.CopyToAsync(stream);
+                }
+
+                var chequeFilePath = Path.Combine("Welfare", id.ToString(), "cheque", safeFileName);
+                application.ChequeImagePath = chequeFilePath;
+
+                // Store as a WelfareApplicationDocument so it uses the same retrieval
+                // pattern (GetDocument by ID) as all other uploaded documents.
+                _db.WelfareApplicationDocuments.Add(new WelfareApplicationDocument
+                {
+                    WelfareApplicationId = application.Id,
+                    DocumentType = "Cheque Image",
+                    DocumentName = "Cheque Image",
+                    FileName = chequeImage.FileName,
+                    FilePath = chequeFilePath,
+                    ContentType = chequeImage.ContentType,
+                    FileSize = chequeImage.Length,
+                    UploadedBy = user.Id,
+                    UploadedAt = DateTime.Now
+                });
+            }
+
+            // Save cheque number and amount
+            if (!string.IsNullOrWhiteSpace(chequeNumber))
+                application.ChequeNumber = chequeNumber.Trim();
+
+            if (!string.IsNullOrWhiteSpace(chequeAmount) && decimal.TryParse(chequeAmount, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var amt))
+                application.ChequeAmount = amt;
+
+            // Process the approval using the existing pipeline
+            // (cheque fields are already on the entity, SaveChangesAsync in ProcessAction will persist them)
+            var request = new WelfareApprovalActionRequest
+            {
+                Recommendation = recommendation?.Trim(),
+                Comment = comment?.Trim()
+            };
+
+            return await ProcessAction(id, request, isApproval: true);
         }
 
         // =====================================================================
@@ -1167,6 +1276,10 @@ namespace SpicAPI.Controllers
             LastYearQuantityLifted = application.LastYearQuantityLifted,
 
             IsDeclarationConfirmed = application.IsDeclarationConfirmed,
+
+            ChequeNumber = application.ChequeNumber,
+            ChequeAmount = application.ChequeAmount,
+            ChequeImagePath = application.ChequeImagePath,
 
             Documents = application.Documents
                 .OrderBy(d => d.UploadedAt)

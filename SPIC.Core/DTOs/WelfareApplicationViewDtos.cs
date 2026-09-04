@@ -239,6 +239,11 @@ namespace SPIC.Core.DTOs
 
         public bool IsDeclarationConfirmed { get; set; }
 
+        // SDWA Admin — Cheque details
+        public string? ChequeNumber { get; set; }
+        public decimal? ChequeAmount { get; set; }
+        public string? ChequeImagePath { get; set; }
+
         // Resubmission (reverse rejection flow)
         public bool CanResubmit { get; set; }                 // True when Status == ReturnedToDealer and the dealer may correct & resubmit
         public int ResubmissionCount { get; set; }            // Number of dealer resubmissions so far

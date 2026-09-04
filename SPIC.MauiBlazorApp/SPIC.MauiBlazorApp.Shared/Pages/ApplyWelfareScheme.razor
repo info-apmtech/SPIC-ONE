@@ -1321,8 +1321,7 @@
 
             <div class="aws-success-actions">
                 <button class="aws-success-btn aws-success-btn-back" @onclick="CloseSuccessModal">Back</button>
-                <button class="aws-success-btn aws-success-btn-download">Download Acknowledgement</button>
-                <button class="aws-success-btn aws-success-btn-track">Track Application</button>
+                <button class="aws-success-btn aws-success-btn-track" @onclick="TrackApplication">Track Application</button>
             </div>
 
         </div>
@@ -1428,6 +1427,7 @@
     private bool _draftSuccess = false;
     private string DraftMessage { get; set; } = string.Empty;
     private string? SubmittedApplicationNumber { get; set; }
+    private int? SubmittedApplicationId { get; set; }
 
     private void OnDateChanged()
     {
@@ -1631,10 +1631,11 @@
 
     private static string StageLevelName(string level) => level switch
     {
-        "MO" => "MO",
-        "RM" => "RM",
-        "SM" => "SM",
-        "AVP" => "AVP",
+        "Marketing Officer (MO)" or "MO" => "MO",
+        "Regional Manager (RM)" or "RM" => "RM",
+        "Senior Manager (SM)" or "SM" => "SM",
+        "SDWA" or "AVP" => "SDWA",
+        "SDWA Admin" or "RMD" => "SDWA Admin",
         _ => "the approval officer"
     };
 
@@ -2416,6 +2417,7 @@
             if (response.IsSuccessStatusCode)
             {
                 SubmittedApplicationNumber = TryGetStringProperty(body, "applicationNumber");
+                SubmittedApplicationId = TryGetIntProperty(body, "applicationId");
                 IsSubmitModalOpen = false;
                 IsSuccessModalOpen = true;
             }
@@ -2836,8 +2838,32 @@ if (SelectedScheme == "Death Relief")
         }
     }
 
+    private static int? TryGetIntProperty(string json, string propertyName)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty(propertyName, out var element)
+                && element.TryGetInt32(out var value)
+                ? value
+                : (int?)null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private void CloseSuccessModal()
     {
         IsSuccessModalOpen = false;
+    }
+
+    private void TrackApplication()
+    {
+        var url = SubmittedApplicationId.HasValue
+            ? $"/WellfareApplication?appId={SubmittedApplicationId.Value}"
+            : "/WellfareApplication";
+        NavigationManager.NavigateTo(url);
     }
 }

@@ -371,14 +371,14 @@ else
             <div class="apd-section-head">
                 <h3>Uploaded Documents</h3>
             </div>
-            @if (d.Documents.Count == 0)
+            @if (!d.Documents.Any(x => x.DocumentType != "Cheque Image"))
             {
                 <p style="color:#94A3B8;">No documents were uploaded with this application.</p>
             }
             else
             {
                 <div class="apd-doc-list">
-                    @foreach (var doc in d.Documents)
+                    @foreach (var doc in d.Documents.Where(x => x.DocumentType != "Cheque Image"))
                     {
                         <div class="apd-doc-item">
                             <div class="apd-doc-icon"><img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/PdfIcon.png" /></div>
@@ -456,6 +456,24 @@ else
                     <div class="apd-summary-item"><label>Final Remarks</label><span>@(sdwaAdmin?.Remarks ?? "-")</span></div>
                 </div>
             </div>
+
+            var chequeDoc = d.Documents.FirstOrDefault(doc => doc.DocumentType == "Cheque Image");
+            @if (!string.IsNullOrWhiteSpace(d.ChequeNumber) || d.ChequeAmount.HasValue || chequeDoc != null)
+            {
+                <div class="apd-section" style="margin-top:12px;">
+                    <div class="apd-section-head">
+                        <h3>Cheque Details (SDWA Admin)</h3>
+                    </div>
+                    <div class="apd-fields-grid apd-fields-3">
+                        <div class="apd-field"><label>Cheque Number</label><div class="apd-field-value">@(d.ChequeNumber ?? "-")</div></div>
+                        <div class="apd-field"><label>Cheque Amount</label><div class="apd-field-value">@(d.ChequeAmount.HasValue ? $"Rs. {d.ChequeAmount.Value:N2}" : "-")</div></div>
+                        @if (chequeDoc != null)
+                        {
+                            <div class="apd-field"><label>Cheque Image</label><div class="apd-field-value"><button class="apd-btn-download" @onclick="() => OpenDocument(chequeDoc.Id, false)">View Cheque Image</button></div></div>
+                        }
+                    </div>
+                </div>
+            }
         }
 
         <!-- ===================== DIRECTOR REVIEW (OPTIONAL) ===================== -->
@@ -516,6 +534,41 @@ else
         @if (CanProcessCurrentStage())
         {
             <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
+                @if (IsSdwaAdminStageActionable)
+                {
+                    <!-- SDWA Admin Cheque Details -->
+                    <div class="apd-section" style="margin-bottom:0; padding:0;">
+                        <div class="apd-section-head" style="margin-bottom:8px;">
+                            <h3 style="font-size:14px;">Cheque Details (SDWA Admin)</h3>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label style="font-size:12px; font-weight:600; color:#374151;">Cheque Number *</label>
+                                <input type="text" class="rm-select" placeholder="Enter cheque number" @bind="_chequeNumber" disabled="@_busy" style="width:100%;" />
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label style="font-size:12px; font-weight:600; color:#374151;">Cheque Amount *</label>
+                                <input type="number" step="0.01" min="0" class="rm-select" placeholder="Enter cheque amount" @bind="_chequeAmount" disabled="@_busy" style="width:100%;" />
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:4px; margin-top:12px;">
+                            <label style="font-size:12px; font-weight:600; color:#374151;">Cheque Image</label>
+                            <label class="apd-btn-download mb-0" style="cursor:pointer; display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border:1px dashed #CBD5E1; border-radius:6px; background:#F9FAFB; width:fit-content;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                                @(_chequeImageFile != null ? _chequeImageFile.Name : "Choose cheque image...")
+                                <InputFile hidden OnChange="OnChequeImageSelected" accept=".jpg,.jpeg,.png,.pdf" disabled="@_busy" />
+                            </label>
+                            @if (_chequeImageFile != null)
+                            {
+                                <small style="color:#6B7280;">Selected: @_chequeImageFile.Name (@((_chequeImageFile.Size / 1024.0).ToString("0.#")) KB)</small>
+                            }
+                        </div>
+                    </div>
+                }
                 @if (IsMoStage || IsRmStage || IsSmmStage || IsSdwaFinalStage || IsSdwaAdminFinalStage)
                 {
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
@@ -599,6 +652,11 @@ else
     private string? _approveComment;
     private string? _actionError;
     private bool _busy;
+
+    // SDWA Admin cheque fields
+    private string? _chequeNumber;
+    private string? _chequeAmount;
+    private IBrowserFile? _chequeImageFile;
 
     private bool IsMoStage => LoginState.UserRole == AppRole.MO;
     private bool IsRmStage => LoginState.UserRole == AppRole.RM;
@@ -1190,14 +1248,47 @@ else
             return;
         }
 
+        // Validate cheque fields for SDWA Admin approval
+        if (IsSdwaAdminStageActionable && _approveRecommendation == "Verified")
+        {
+            if (string.IsNullOrWhiteSpace(_chequeNumber))
+            {
+                _actionError = "Cheque Number is required for SDWA Admin approval.";
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(_chequeAmount) || !decimal.TryParse(_chequeAmount, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _))
+            {
+                _actionError = "A valid Cheque Amount is required for SDWA Admin approval.";
+                return;
+            }
+        }
+
         _busy = true;
         _actionError = null;
         try
         {
             HttpResponseMessage response;
-            var hasRecommendationFlow = usesRecommendationFlow;
 
-            if (hasRecommendationFlow && _approveRecommendation == "Verified")
+            if (IsSdwaAdminStageActionable && _approveRecommendation == "Verified")
+            {
+                // SDWA Admin approval with cheque details — use multipart endpoint
+                using var content = new MultipartFormDataContent();
+                content.Add(new StringContent(_chequeNumber ?? ""), "chequeNumber");
+                content.Add(new StringContent(_chequeAmount ?? ""), "chequeAmount");
+                content.Add(new StringContent(_approveComment ?? ""), "comment");
+                content.Add(new StringContent(_approveRecommendation ?? ""), "recommendation");
+
+                if (_chequeImageFile != null)
+                {
+                    var stream = _chequeImageFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                    content.Add(new StreamContent(stream), "chequeImage", _chequeImageFile.Name);
+                }
+
+                response = await Http.PostAsync(
+                    $"api/WelfareSchemeApproval/applications/{_detail.Id}/sdwa-admin-approve",
+                    content);
+            }
+            else if (usesRecommendationFlow && _approveRecommendation == "Verified")
             {
                 response = await Http.PostAsJsonAsync(
                     $"api/WelfareSchemeApproval/applications/{_detail.Id}/approve",
@@ -1207,7 +1298,7 @@ else
                         Comment = _approveComment
                     });
             }
-            else if (hasRecommendationFlow && _approveRecommendation == "Rejected")
+            else if (usesRecommendationFlow && _approveRecommendation == "Rejected")
             {
                 response = await Http.PostAsJsonAsync(
                     $"api/WelfareSchemeApproval/applications/{_detail.Id}/reject",
@@ -1344,6 +1435,11 @@ else
             : "Action failed. Please try again.";
     }
 
+    private void OnChequeImageSelected(InputFileChangeEventArgs e)
+    {
+        _chequeImageFile = e.File;
+    }
+
     private void ResetActionState()
     {
         _approveRemarks = null;
@@ -1351,6 +1447,10 @@ else
         _approveComment = null;
         _actionError = null;
         _busy = false;
+
+        _chequeNumber = null;
+        _chequeAmount = null;
+        _chequeImageFile = null;
 
         _directorDecision = "";
         _directorRemarks = null;
