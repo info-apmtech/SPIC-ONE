@@ -85,6 +85,11 @@ public class WelfareApplication
 	public decimal? AverageQuantityLifted3Years { get; set; }             // 3-year average quantity in MT
 	public decimal? LastYearQuantityLifted { get; set; }                  // Last financial year quantity in MT
 
+	// SDWA Admin — Cheque details (populated by SDWA Admin at final approval)
+	public string? ChequeNumber { get; set; }                           // Cheque number issued by SDWA Admin
+	public decimal? ChequeAmount { get; set; }                          // Amount on the cheque
+	public string? ChequeImagePath { get; set; }                        // Stored path to the uploaded cheque image file
+
 	// Declaration
 	public bool IsDeclarationConfirmed { get; set; }                     // Whether the dealer ticked the declaration checkbox before submitting
 

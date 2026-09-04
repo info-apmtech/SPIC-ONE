@@ -228,6 +228,10 @@ namespace SpicAPI.Controllers
                 ResubmissionCount = application.ResubmissionCount,
                 LastResubmittedAt = application.LastResubmittedAt,
 
+                ChequeNumber = application.ChequeNumber,
+                ChequeAmount = application.ChequeAmount,
+                ChequeImagePath = application.ChequeImagePath,
+
                 Documents = application.Documents
                     .OrderBy(d => d.UploadedAt)
                     .Select(d => new WelfareApplicationDocumentDto
