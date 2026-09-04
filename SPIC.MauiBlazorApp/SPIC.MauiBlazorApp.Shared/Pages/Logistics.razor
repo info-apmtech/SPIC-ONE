@@ -123,7 +123,7 @@
     }
 
     /* Logistics list -> PDF detail view.
-           Uses internal Blazor navigation so MAUI authentication state is preserved. */
+                       Uses internal Blazor navigation so MAUI authentication state is preserved. */
     .lm-pdf-view-icon {
         color: #dc3545;
         font-size: 1.18rem;
@@ -634,8 +634,8 @@
     }
 
     /* =========================================================
-           Logistics list - compact Documents modal
-           ========================================================= */
+                       Logistics list - compact Documents modal
+                       ========================================================= */
 
     .lm-doc-modal-open-btn {
         display: inline-flex;
@@ -855,8 +855,8 @@
 
 
     /* =========================================================
-           Logistics list - professional alignment (visual only)
-           ========================================================= */
+                       Logistics list - professional alignment (visual only)
+                       ========================================================= */
     .lm-professional-list {
         width: 100%;
         min-width: 0;
@@ -1217,9 +1217,9 @@
 
 
     /* =========================================================
-           Logistics approval / send-back popup
-           Matches the review workflow pattern used by SavedDealerReview.
-           ========================================================= */
+                       Logistics approval / send-back popup
+                       Matches the review workflow pattern used by SavedDealerReview.
+                       ========================================================= */
     .lm-flow-modal .modal-dialog {
         max-width: 620px;
     }
@@ -4714,7 +4714,7 @@ else
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync();
-                ShowMessage($"Save failed: {ParseErrorMessage(body)}", true);
+                ShowMessage(ParseErrorMessage(body), true);
                 return;
             }
 
@@ -4780,9 +4780,15 @@ else
             ResetForm(clearMessage: false);
             await LoadData();
         }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"Logistics save HTTP error: {ex}");
+            ShowMessage("Unable to connect to the server. Please check your connection and try again.", true);
+        }
         catch (Exception ex)
         {
-            ShowMessage($"Error: {ex.Message}", true);
+            Console.WriteLine($"Logistics save error: {ex}");
+            ShowMessage($"Unable to save the {ActiveTabDisplayName}. Please try again. If the problem continues, contact the administrator.", true);
         }
         finally
         {
@@ -4825,8 +4831,8 @@ else
             Village = NullIfWhiteSpace(_form.Village),
             Block = NullIfWhiteSpace(_form.Block),
             Taluk = NullIfWhiteSpace(_form.Taluk),
-            StateId = _form.StateId,
-            DistrictId = _form.DistrictId,
+            StateId = ToNullableId(_form.StateId),
+            DistrictId = ToNullableId(_form.DistrictId),
             ContactNumber = NullIfWhiteSpace(_form.ContactNumber),
             AdditionalPhoneNo = NullIfWhiteSpace(_form.AdditionalPhoneNo),
 
@@ -4888,8 +4894,8 @@ else
             Village = NullIfWhiteSpace(_form.Village),
             Block = NullIfWhiteSpace(_form.Block),
             Taluk = NullIfWhiteSpace(_form.Taluk),
-            StateId = _form.StateId,
-            DistrictId = _form.DistrictId,
+            StateId = ToNullableId(_form.StateId),
+            DistrictId = ToNullableId(_form.DistrictId),
             ContactNumber = NullIfWhiteSpace(_form.ContactNumber),
             OtherDocumentPathsJson = SerializeDocumentPaths(_otherDocumentPaths),
             IsActive = _form.IsActive,
@@ -4938,8 +4944,8 @@ else
             SyncLatitudeLongitudeText();
             _form.Name = item.Name;
             _form.GoogleURL = item.GoogleURL;
-            _form.StateId = item.StateId;
-            _form.DistrictId = item.DistrictId;
+            _form.StateId = item.StateId ?? 0;
+            _form.DistrictId = item.DistrictId ?? 0;
             _form.IsActive = item.IsActive;
             _filteredDistricts = _districts.Where(x => x.StateId == _form.StateId).ToList();
             ClearSelectedDocumentFiles();
@@ -4977,8 +4983,8 @@ else
             Village = item.Village ?? "",
             Block = item.Block ?? "",
             Taluk = item.Taluk ?? "",
-            StateId = item.StateId,
-            DistrictId = item.DistrictId,
+            StateId = item.StateId ?? 0,
+            DistrictId = item.DistrictId ?? 0,
             ContactNumber = item.ContactNumber ?? "",
             AdditionalPhoneNo = IsWarehouseTab ? item.AdditionalPhoneNo ?? "" : "",
 
@@ -6507,8 +6513,15 @@ else
     private static int? ToNullableId(int value) => value > 0 ? value : null;
     private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private string GetStateName(int id) => _states.FirstOrDefault(x => x.Id == id)?.StateName ?? "";
-    private string GetDistrictName(int id) => _districts.FirstOrDefault(x => x.Id == id)?.DistrictName ?? "";
+    private string GetStateName(int? id) =>
+        id.HasValue && id.Value > 0
+            ? _states.FirstOrDefault(x => x.Id == id.Value)?.StateName ?? ""
+            : "";
+
+    private string GetDistrictName(int? id) =>
+        id.HasValue && id.Value > 0
+            ? _districts.FirstOrDefault(x => x.Id == id.Value)?.DistrictName ?? ""
+            : "";
 
     private void ShowMessage(string message, bool isError)
     {
@@ -6516,17 +6529,77 @@ else
         _isError = isError;
     }
 
-    private static string ParseErrorMessage(string body)
+    private static string ParseErrorMessage(string? body)
     {
+        if (string.IsNullOrWhiteSpace(body))
+            return "Unable to save the record. Please try again.";
+
         try
         {
-            if (string.IsNullOrWhiteSpace(body)) return body;
             using var doc = JsonDocument.Parse(body);
-            if (doc.RootElement.TryGetProperty("message", out var msg))
-                return msg.GetString() ?? body;
+            var root = doc.RootElement;
+
+            // ASP.NET validation ProblemDetails. Show the actual field validation
+            // instead of only "One or more validation errors occurred."
+            if (root.TryGetProperty("errors", out var errors) &&
+                errors.ValueKind == JsonValueKind.Object)
+            {
+                var messages = new List<string>();
+
+                foreach (var property in errors.EnumerateObject())
+                {
+                    if (property.Value.ValueKind != JsonValueKind.Array)
+                        continue;
+
+                    foreach (var item in property.Value.EnumerateArray())
+                    {
+                        var message = item.GetString();
+                        if (!string.IsNullOrWhiteSpace(message))
+                            messages.Add(message);
+                    }
+                }
+
+                if (messages.Count > 0)
+                    return string.Join(" ", messages.Distinct());
+            }
+
+            if (root.TryGetProperty("message", out var msg))
+            {
+                var message = msg.GetString();
+                if (!string.IsNullOrWhiteSpace(message))
+                    return message;
+            }
+
+            if (root.TryGetProperty("title", out var title))
+            {
+                var message = title.GetString();
+                if (!string.IsNullOrWhiteSpace(message))
+                    return message;
+            }
         }
-        catch { }
-        return body;
+        catch
+        {
+            // Plain-text API errors can contain internal EF/PostgreSQL stack traces.
+            // Do not expose those technical details to the end user.
+        }
+
+        if (body.Contains("FK_RackPoints_Districts_DistrictId", StringComparison.OrdinalIgnoreCase))
+            return "Unable to save the Rake Point because the selected District is invalid. Please select a valid District and try again.";
+
+        if (body.Contains("FK_RackPoints_States_StateId", StringComparison.OrdinalIgnoreCase))
+            return "Unable to save the Rake Point because the selected State is invalid. Please select a valid State and try again.";
+
+        if (body.Contains("FK_Warehouses_Districts_DistrictId", StringComparison.OrdinalIgnoreCase))
+            return "Unable to save the Warehouse because the selected District is invalid. Please select a valid District and try again.";
+
+        if (body.Contains("FK_Warehouses_States_StateId", StringComparison.OrdinalIgnoreCase))
+            return "Unable to save the Warehouse because the selected State is invalid. Please select a valid State and try again.";
+
+        if (body.Contains("23503", StringComparison.OrdinalIgnoreCase) ||
+            body.Contains("foreign key", StringComparison.OrdinalIgnoreCase))
+            return "Unable to save because one of the selected values is invalid. Please refresh the page, select valid values and try again.";
+
+        return "Unable to save the record. Please check the entered details and try again.";
     }
 
     private async Task TriggerMapUpdate(double lat, double lng)
@@ -6952,8 +7025,8 @@ else
         public string? Village { get; set; }
         public string? Block { get; set; }
         public string? Taluk { get; set; }
-        public int StateId { get; set; }
-        public int DistrictId { get; set; }
+        public int? StateId { get; set; }
+        public int? DistrictId { get; set; }
         public string? ContactNumber { get; set; }
         public string? AdditionalPhoneNo { get; set; }
         public decimal? SpicApprovedReservationQuantityMT { get; set; }
@@ -7010,8 +7083,8 @@ else
         public string? Village { get; set; }
         public string? Block { get; set; }
         public string? Taluk { get; set; }
-        public int StateId { get; set; }
-        public int DistrictId { get; set; }
+        public int? StateId { get; set; }
+        public int? DistrictId { get; set; }
         public string? ContactNumber { get; set; }
         public string? AdditionalPhoneNo { get; set; }
 
@@ -7057,8 +7130,8 @@ else
         public string? Village { get; set; }
         public string? Block { get; set; }
         public string? Taluk { get; set; }
-        public int StateId { get; set; }
-        public int DistrictId { get; set; }
+        public int? StateId { get; set; }
+        public int? DistrictId { get; set; }
         public string? ContactNumber { get; set; }
         public string? OtherDocumentPathsJson { get; set; }
         public bool IsActive { get; set; }

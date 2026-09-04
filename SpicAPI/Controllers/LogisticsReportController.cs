@@ -30,12 +30,26 @@ namespace SpicAPI.Controllers
             var role = CurrentRole();
 
             var warehouses = await ApplyWarehouseRoleFilter(
-                    _context.Warehouses.Where(w => w.IsActive), role)
-                .Select(w => new { w.Id, w.StateId,
-                    w.IsSubmittedForReview, w.RMApproved, w.SMApproved, w.AVPApproved })
+                    _context.Warehouses
+                        .Where(w => w.IsActive && w.StateId.HasValue),
+                    role)
+                .Select(w => new
+                {
+                    w.Id,
+
+                    // StateId is nullable in entity,
+                    // but Active report only includes records having a State.
+                    StateId = w.StateId.Value,
+
+                    w.IsSubmittedForReview,
+                    w.RMApproved,
+                    w.SMApproved,
+                    w.AVPApproved
+                })
                 .ToListAsync();
 
-            var sapTotal = await _context.PVTMasters.CountAsync(p => p.IsActive);
+            var sapTotal = await _context.PVTMasters
+                .CountAsync(p => p.IsActive);
 
             var rows = warehouses
                 .GroupBy(w => w.StateId)
@@ -45,21 +59,25 @@ namespace SpicAPI.Controllers
                     TotalCount = g.Count(),
                     AsPerSap = 0,
                     PendingWithMo = 0,
+
                     PendingRm = g.Count(w =>
                         w.IsSubmittedForReview &&
                         w.RMApproved == null &&
                         w.SMApproved == null &&
                         w.AVPApproved == null),
+
                     PendingSmm = g.Count(w =>
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
                         w.SMApproved == null &&
                         w.AVPApproved == null),
+
                     PendingWithAvp = g.Count(w =>
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
                         w.SMApproved == true &&
                         w.AVPApproved == null),
+
                     Completed = g.Count(w =>
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
@@ -90,12 +108,26 @@ namespace SpicAPI.Controllers
             var role = CurrentRole();
 
             var rakepoints = await ApplyRakepointRoleFilter(
-                    _context.RackPoints.Where(r => r.IsActive), role)
-                .Select(r => new { r.Id, r.StateId,
-                    r.IsSubmittedForReview, r.RMApproved, r.SMApproved, r.AVPApproved })
+                    _context.RackPoints
+                        .Where(r => r.IsActive && r.StateId.HasValue),
+                    role)
+                .Select(r => new
+                {
+                    r.Id,
+
+                    // StateId is nullable in entity,
+                    // but Active report only includes records having a State.
+                    StateId = r.StateId.Value,
+
+                    r.IsSubmittedForReview,
+                    r.RMApproved,
+                    r.SMApproved,
+                    r.AVPApproved
+                })
                 .ToListAsync();
 
-            var sapTotal = await _context.RakePointMasters.CountAsync(rp => rp.IsActive);
+            var sapTotal = await _context.RakePointMasters
+                .CountAsync(rp => rp.IsActive);
 
             var rows = rakepoints
                 .GroupBy(r => r.StateId)
@@ -105,21 +137,25 @@ namespace SpicAPI.Controllers
                     TotalCount = g.Count(),
                     AsPerSap = 0,
                     PendingWithMo = 0,
+
                     PendingRm = g.Count(r =>
                         r.IsSubmittedForReview &&
                         r.RMApproved == null &&
                         r.SMApproved == null &&
                         r.AVPApproved == null),
+
                     PendingSmm = g.Count(r =>
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
                         r.SMApproved == null &&
                         r.AVPApproved == null),
+
                     PendingWithAvp = g.Count(r =>
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
                         r.SMApproved == true &&
                         r.AVPApproved == null),
+
                     Completed = g.Count(r =>
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
