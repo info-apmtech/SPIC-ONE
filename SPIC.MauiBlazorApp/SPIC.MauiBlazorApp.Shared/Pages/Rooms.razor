@@ -1,4 +1,7 @@
 ﻿@page "/Rooms"
+@using System.Globalization
+@inject HttpClient Http
+@inject NavigationManager Navigation
 
 <div class="container-fluid py-4 px-0">
     <div class="rm-wrapper">
@@ -11,13 +14,10 @@
         <div class="rm-controls-row">
             
             <div class="rm-tabs">
-                <button class="rm-tab active">All</button>
-                <button class="rm-tab">AC Deluxe Room</button>
-                <button class="rm-tab">Non AC Standard Room</button>
-                <button class="rm-tab">Premium AC Suite</button>
-                <button class="rm-tab">Dormitory Bed</button>
-                <button class="rm-tab">AC Standard Room</button>
-                <button class="rm-tab">Family Suite</button>
+                @foreach (var tab in _tabOptions)
+                {
+                    <button class="rm-tab @(tab == _activeTab ? "active" : "")" @onclick="() => SetTab(tab)">@tab</button>
+                }
             </div>
 
             <div class="rm-search-box">
@@ -25,186 +25,262 @@
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <input type="text" class="rm-search-input" placeholder="Search">
+                <input type="text" class="rm-search-input" placeholder="Search" @bind="_searchText" @bind:event="oninput" />
             </div>
 
         </div>
 
         <div class="rm-grid">
             
-            <div class="rm-card">
-                <div class="rm-card-img-wrap">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image12.png" alt="AC Deluxe Room" onerror="this.style.backgroundColor='#cbd5e1';" />
-                    
-                    <div class="rm-media-badges">
-                        <div class="rm-badge-dark">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                            12
+            @foreach (var room in FilteredRooms)
+            {
+                <div class="rm-card">
+                    <div class="rm-card-img-wrap">
+                        <img src="@room.ImageUrl" alt="@room.RoomType" onerror="this.style.backgroundColor='#cbd5e1';" />
+                        
+                        <div class="rm-media-badges">
+                            <div class="rm-badge-dark">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                @room.PhotoCount
+                            </div>
+                            <div class="rm-badge-dark">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                                @room.VideoCount
+                            </div>
                         </div>
-                        <div class="rm-badge-dark">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                            12
+                        
+                        <div class="rm-price-badge">₹@room.PriceDisplay<span>/night</span></div>
+                    </div>
+
+                    <div class="rm-card-body">
+                        <div class="rm-card-header">
+                            <h2 class="rm-room-title">@room.RoomType</h2>
+                            <span class="rm-room-availability">@room.AvailableQuantity Rooms Available</span>
                         </div>
-                    </div>
-                    
-                    <div class="rm-price-badge">₹999<span>/night</span></div>
-                </div>
 
-                <div class="rm-card-body">
-                    <div class="rm-card-header">
-                        <h2 class="rm-room-title">AC Deluxe Room</h2>
-                        <span class="rm-room-availability">3 Rooms Available</span>
-                    </div>
-
-                    <div class="rm-guests">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                        2 Guests were allowed
-                    </div>
-
-                    <div class="rm-amenities">
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> AC</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg> WIFI</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg> TV</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Hot Water</div>
-                    </div>
-
-                    <div class="rm-card-actions">
-                        <button class="rm-btn rm-btn-outline">View Details</button>
-                        <button class="rm-btn rm-btn-solid">Book Now</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="rm-card">
-                <div class="rm-card-img-wrap">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image13.png" alt="Non AC Standard Room" onerror="this.style.backgroundColor='#cbd5e1';" />
-                    
-                    <div class="rm-media-badges">
-                        <div class="rm-badge-dark">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                            12
+                        <div class="rm-guests">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                            @room.GuestLabel
                         </div>
-                        <div class="rm-badge-dark">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                            12
+
+                        <div class="rm-amenities">
+                            @foreach (var amenity in room.Amenities)
+                            {
+                                <div class="rm-amenity-pill">@((MarkupString)amenity)</div>
+                            }
+                        </div>
+
+                        <div class="rm-card-actions">
+                            <button class="rm-btn rm-btn-outline">View Details</button>
+                            <button class="rm-btn rm-btn-solid" @onclick="() => GoToGuestDetails(room)">Book Now</button>
                         </div>
                     </div>
-                    
-                    <div class="rm-price-badge">₹599<span>/night</span></div>
                 </div>
-
-                <div class="rm-card-body">
-                    <div class="rm-card-header">
-                        <h2 class="rm-room-title">Non AC Standard Room</h2>
-                        <span class="rm-room-availability">5 Rooms Available</span>
-                    </div>
-
-                    <div class="rm-guests">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                        2 Guests were allowed
-                    </div>
-
-                    <div class="rm-amenities">
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg> WIFI</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg> TV</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Hot Water</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Parking</div>
-                    </div>
-
-                    <div class="rm-card-actions">
-                        <button class="rm-btn rm-btn-outline">View Details</button>
-                        <button class="rm-btn rm-btn-solid">Book Now</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="rm-card">
-                <div class="rm-card-img-wrap">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image14.png" alt="Premium AC Suite" onerror="this.style.backgroundColor='#cbd5e1';" />
-                    
-                    <div class="rm-media-badges">
-                        <div class="rm-badge-dark">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                            12
-                        </div>
-                        <div class="rm-badge-dark">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                            12
-                        </div>
-                    </div>
-                    
-                    <div class="rm-price-badge">₹1499<span>/night</span></div>
-                </div>
-
-                <div class="rm-card-body">
-                    <div class="rm-card-header">
-                        <h2 class="rm-room-title">Premium AC Suite</h2>
-                        <span class="rm-room-availability">3 Rooms Available</span>
-                    </div>
-
-                    <div class="rm-guests">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                        3 Guests were allowed
-                    </div>
-
-                    <div class="rm-amenities">
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> AC</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg> WIFI</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg> TV</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2z"></path><path d="M8 21v-8"></path><path d="M16 21v-8"></path><path d="M2 9h20"></path></svg> Mini Fridge</div>
-                    </div>
-
-                    <div class="rm-card-actions">
-                        <button class="rm-btn rm-btn-outline">View Details</button>
-                        <button class="rm-btn rm-btn-solid">Book Now</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="rm-card">
-                <div class="rm-card-img-wrap">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image15.png" alt="Dormitory Bed" onerror="this.style.backgroundColor='#cbd5e1';" />
-                    
-                    <div class="rm-media-badges">
-                        <div class="rm-badge-dark">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                            12
-                        </div>
-                        <div class="rm-badge-dark">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                            12
-                        </div>
-                    </div>
-                    
-                    <div class="rm-price-badge">₹299<span>/night</span></div>
-                </div>
-
-                <div class="rm-card-body">
-                    <div class="rm-card-header">
-                        <h2 class="rm-room-title">Dormitory Bed</h2>
-                        <span class="rm-room-availability">5 Rooms Available</span>
-                    </div>
-
-                    <div class="rm-guests">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                        1 Guest were allowed
-                    </div>
-
-                    <div class="rm-amenities">
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg> WIFI</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Locker</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Hot Water</div>
-                        <div class="rm-amenity-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg> Common Bath</div>
-                    </div>
-
-                    <div class="rm-card-actions">
-                        <button class="rm-btn rm-btn-outline">View Details</button>
-                        <button class="rm-btn rm-btn-solid">Book Now</button>
-                    </div>
-                </div>
-            </div>
+            }
 
         </div>
 
+        @if (!_isLoading && _rooms.Count == 0)
+        {
+            <div class="text-center text-muted" style="padding: 48px 0;">
+                @(_loadError ?? "No rooms available for the selected dates. Please try different dates.")
+            </div>
+        }
+
     </div>
 </div>
+
+@code {
+    [SupplyParameterFromQuery] public int? guestHouseId { get; set; }
+    [SupplyParameterFromQuery] public string? checkIn { get; set; }
+    [SupplyParameterFromQuery] public string? checkOut { get; set; }
+
+    private static readonly string[] RoomImages =
+    [
+        "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image12.png",
+        "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image13.png",
+        "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image14.png",
+        "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Image15.png"
+    ];
+
+    private List<RoomCardModel> _rooms = new();
+    private List<string> _tabOptions = new() { "All" };
+    private string _activeTab = "All";
+    private string _searchText = "";
+    private bool _isLoading = true;
+    private string? _loadError;
+
+    private int _guestHouseId;
+    private DateTime _checkIn;
+    private DateTime _checkOut;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _guestHouseId = guestHouseId ?? 0;
+        if (_guestHouseId <= 0 ||
+            !TryParseDateTime(checkIn, out _checkIn) ||
+            !TryParseDateTime(checkOut, out _checkOut))
+        {
+            Navigation.NavigateTo("/GuestHouse");
+            return;
+        }
+
+        await LoadAvailableRooms();
+        _isLoading = false;
+    }
+
+    private void SetTab(string tab)
+    {
+        _activeTab = tab;
+    }
+
+    private void GoToGuestDetails(RoomCardModel room)
+    {
+        var url = $"/GuestDetails?guestHouseId={_guestHouseId}" +
+                  $"&roomId={room.RoomId}" +
+                  $"&checkIn={Uri.EscapeDataString(_checkIn.ToString("yyyy-MM-ddTHH:mm:ss"))}" +
+                  $"&checkOut={Uri.EscapeDataString(_checkOut.ToString("yyyy-MM-ddTHH:mm:ss"))}";
+        Navigation.NavigateTo(url);
+    }
+
+    private List<RoomCardModel> FilteredRooms
+    {
+        get
+        {
+            IEnumerable<RoomCardModel> query = _rooms;
+            if (_activeTab != "All")
+                query = query.Where(r => string.Equals(r.RoomType, _activeTab, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(_searchText))
+            {
+                var term = _searchText.Trim();
+                query = query.Where(r =>
+                    r.RoomType.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    (r.RoomNumber ?? "").Contains(term, StringComparison.OrdinalIgnoreCase));
+            }
+            return query.ToList();
+        }
+    }
+
+    private async Task LoadAvailableRooms()
+    {
+        try
+        {
+            var url = $"api/GuestHouseBooking/availability?guestHouseId={_guestHouseId}" +
+                      $"&checkIn={Uri.EscapeDataString(_checkIn.ToString("yyyy-MM-ddTHH:mm:ss"))}" +
+                      $"&checkOut={Uri.EscapeDataString(_checkOut.ToString("yyyy-MM-ddTHH:mm:ss"))}";
+
+            var result = await Http.GetFromJsonAsync<AvailabilityResultDto>(url);
+            if (result is null)
+            {
+                _loadError = "No availability data found.";
+                _rooms = new();
+                return;
+            }
+
+            var mapped = new List<RoomCardModel>();
+            var index = 0;
+            foreach (var room in result.Rooms)
+            {
+                mapped.Add(new RoomCardModel
+                {
+                    RoomId = room.RoomId,
+                    RoomType = room.RoomType,
+                    RoomNumber = room.RoomNumber,
+                    ImageUrl = RoomImages[index % RoomImages.Length],
+                    PricePerNight = room.PricePerNight,
+                    ExtraCotPrice = room.ExtraCotPrice,
+                    AvailableQuantity = room.AvailableQuantity,
+                    NumberOfAdults = room.NumberOfAdults ?? room.Capacity ?? 2
+                });
+                index++;
+            }
+
+            _rooms = mapped;
+            _tabOptions = new List<string> { "All" };
+            _tabOptions.AddRange(_rooms.Select(r => r.RoomType).Distinct(StringComparer.OrdinalIgnoreCase));
+            _activeTab = "All";
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Could not load available rooms: {ex.Message}";
+            _rooms = new();
+        }
+    }
+
+    private static bool TryParseDateTime(string? value, out DateTime result)
+    {
+        result = default;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        return DateTime.TryParseExact(value, "yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out result)
+            || DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
+    }
+
+    private static List<string> SelectAmenities(string roomType)
+    {
+        var t = (roomType ?? "").ToLowerInvariant();
+        var pills = new List<string>();
+
+        if (t.Contains("ac"))
+            pills.Add($"<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M12 2v20\"></path><path d=\"M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6\"></path></svg> AC");
+
+        pills.Add($"<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M5 12.55a11 11 0 0 1 14.08 0\"></path><path d=\"M1.42 9a16 16 0 0 1 21.16 0\"></path><path d=\"M8.53 16.11a6 6 0 0 1 6.95 0\"></path><line x1=\"12\" y1=\"20\" x2=\"12.01\" y2=\"20\"></line></svg> WIFI");
+
+        if (!t.Contains("dorm"))
+            pills.Add($"<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"2\" y=\"7\" width=\"20\" height=\"15\" rx=\"2\" ry=\"2\"></rect><polyline points=\"17 2 12 7 7 2\"></polyline></svg> TV");
+
+        if (t.Contains("suite"))
+            pills.Add($"<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M20 21H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2z\"></path><path d=\"M8 21v-8\"></path><path d=\"M16 21v-8\"></path><path d=\"M2 9h20\"></path></svg> Mini Fridge");
+        else if (t.Contains("dorm"))
+        {
+            pills.Add($"<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg> Locker");
+            pills.Add($"<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M18 8h1a4 4 0 0 1 0 8h-1\"></path><path d=\"M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z\"></path><line x1=\"6\" y1=\"1\" x2=\"6\" y2=\"4\"></line><line x1=\"10\" y1=\"1\" x2=\"10\" y2=\"4\"></line><line x1=\"14\" y1=\"1\" x2=\"14\" y2=\"4\"></line></svg> Common Bath");
+        }
+        else
+        {
+            pills.Add($"<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M12 2v20\"></path><path d=\"M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6\"></path></svg> Hot Water");
+            if (t.Contains("non ac"))
+                pills.Add($"<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg> Parking");
+        }
+
+        return pills;
+    }
+
+    public class RoomCardModel
+    {
+        public int RoomId { get; set; }
+        public string RoomType { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public string ImageUrl { get; set; } = "";
+        public decimal PricePerNight { get; set; }
+        public decimal? ExtraCotPrice { get; set; }
+        public int AvailableQuantity { get; set; }
+        public int NumberOfAdults { get; set; }
+        public List<string> Amenities => SelectAmenities(RoomType);
+        public string PriceDisplay => PricePerNight.ToString("N0");
+        public string GuestLabel => NumberOfAdults == 1 ? "1 Guest were allowed" : $"{NumberOfAdults} Guests were allowed";
+        public int PhotoCount => 0;
+        public int VideoCount => 0;
+    }
+
+    public class AvailabilityResultDto
+    {
+        public int GuestHouseId { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public DateTime CheckIn { get; set; }
+        public DateTime CheckOut { get; set; }
+        public List<AvailableRoomDto> Rooms { get; set; } = new();
+    }
+
+    public class AvailableRoomDto
+    {
+        public int RoomId { get; set; }
+        public string RoomType { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public string? Description { get; set; }
+        public decimal PricePerNight { get; set; }
+        public decimal? ExtraCotPrice { get; set; }
+        public int? Capacity { get; set; }
+        public int? NumberOfAdults { get; set; }
+        public int AvailableQuantity { get; set; }
+    }
+}

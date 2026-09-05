@@ -135,13 +135,13 @@ namespace Spic.Infrastructure.Data
 		public DbSet<WelfareApplicationApproval> WelfareApplicationApprovals { get; set; }
 		public DbSet<WelfareApplicationActionLog> WelfareApplicationActionLogs { get; set; }
 
-		//// Guest House Booking
-		//public DbSet<GuestHouse> GuestHouses { get; set; }
+		//// Guest House Master Data
+		public DbSet<GuestHouse> GuestHouses { get; set; }
+		public DbSet<GuestHouseRoom> GuestHouseRooms { get; set; }
 		//public DbSet<GuestHouseImage> GuestHouseImages { get; set; }
-		//public DbSet<GuestHouseRoom> GuestHouseRooms { get; set; }
 		//public DbSet<GuestHouseRoomImage> GuestHouseRoomImages { get; set; }
 		//public DbSet<GuestHouseRoomAmenity> GuestHouseRoomAmenities { get; set; }
-		//public DbSet<GuestHouseRoomAvailability> GuestHouseRoomAvailabilities { get; set; }
+		public DbSet<GuestHouseRoomAvailability> GuestHouseRoomAvailabilities { get; set; }
 		//public DbSet<GuestHouseBooking> GuestHouseBookings { get; set; }
 		//public DbSet<GuestHouseBookingGuest> GuestHouseBookingGuests { get; set; }
 		//public DbSet<GuestHouseBookingDocument> GuestHouseBookingDocuments { get; set; }

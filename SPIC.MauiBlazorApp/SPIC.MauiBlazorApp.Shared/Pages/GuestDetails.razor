@@ -1,5 +1,11 @@
 ﻿@page "/GuestDetails"
 
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+@using System.Globalization
+@using Microsoft.AspNetCore.Components
+
 <style>
     :root {
         --bg-body: #f4f6f8;
@@ -237,34 +243,34 @@
                     
                     <div class="col-md-6">
                         <label class="form-label">Employee ID / Dealer Code</label>
-                        <input type="text" class="form-control-custom" placeholder="Enter Employee ID / Dealer Code">
+                        <input type="text" class="form-control-custom" placeholder="Enter Employee ID / Dealer Code" @bind="_form.EmployeeOrDealerCode">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Guest Name</label>
-                        <input type="text" class="form-control-custom" placeholder="Enter Guest Name">
+                        <input type="text" class="form-control-custom" placeholder="Enter Guest Name" @bind="_form.GuestName">
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label">Company Name</label>
-                        <input type="text" class="form-control-custom" placeholder="Enter Company Name">
+                        <input type="text" class="form-control-custom" placeholder="Enter Company Name" @bind="_form.CompanyName">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Phone Number</label>
-                        <input type="text" class="form-control-custom" placeholder="Enter Phone Number">
+                        <input type="text" class="form-control-custom" placeholder="Enter Phone Number" @bind="_form.PhoneNumber">
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label">Email ID</label>
-                        <input type="email" class="form-control-custom" placeholder="Enter Email ID">
+                        <input type="email" class="form-control-custom" placeholder="Enter Email ID" @bind="_form.Email">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Aadhaar / Passport Number</label>
-                        <input type="text" class="form-control-custom" placeholder="Enter Aadhaar / Passport Number">
+                        <input type="text" class="form-control-custom" placeholder="Enter Aadhaar / Passport Number" @bind="_form.AadhaarOrPassport">
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label">Nationality</label>
-                        <select class="form-select-custom">
+                        <select class="form-select-custom" @bind="_form.Nationality">
                             <option value="" disabled selected>Select Nationality</option>
                             <option value="indian">Indian</option>
                             <option value="nri">NRI</option>
@@ -273,7 +279,7 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Number of Persons</label>
-                        <select class="form-select-custom">
+                        <select class="form-select-custom" @bind="_form.NumberOfPersons">
                             <option value="" disabled selected>Select Number of Persons</option>
                             <option value="1">1</option>
                             <option value="2">2</option>
@@ -285,7 +291,7 @@
 
                     <div class="col-md-6">
                         <label class="form-label">Number of Adults</label>
-                        <select class="form-select-custom">
+                        <select class="form-select-custom" @bind="_form.NumberOfAdults">
                             <option value="" disabled selected>Select Number of Adults</option>
                             <option value="1">1</option>
                             <option value="2">2</option>
@@ -294,7 +300,7 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Number of Children (below 12 years)</label>
-                        <select class="form-select-custom">
+                        <select class="form-select-custom" @bind="_form.NumberOfChildren">
                             <option value="" disabled selected>Select Number of Children</option>
                             <option value="0">0</option>
                             <option value="1">1</option>
@@ -304,7 +310,7 @@
 
                     <div class="col-md-6">
                         <label class="form-label">Address</label>
-                        <textarea class="form-control-custom" placeholder="Enter Address"></textarea>
+                        <textarea class="form-control-custom" placeholder="Enter Address" @bind="_form.Address"></textarea>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Upload ID Proof (Optional)</label>
@@ -324,52 +330,70 @@
         <div class="col-lg-4">
             <div class="summary-card">
                 <h3 class="summary-title">Booking Summary</h3>
-                
-                <div class="summary-row bold-val mt-4">
-                    <span class="lbl">Room Type</span>
-                    <span class="val">AC Deluxe Room</span>
-                </div>
-                
-                <div class="summary-row bold-val">
-                    <span class="lbl">Room Price</span>
-                    <span class="val">₹999.00</span>
-                </div>
-                
-                <div class="summary-row bold-val">
-                    <span class="lbl">Number of nights</span>
-                    <span class="val">3</span>
-                </div>
-                
-                <div class="summary-row bold-val">
-                    <span class="lbl">Extra Cot × 1</span>
-                    <span class="val">₹250.00</span>
-                </div>
 
-                <div class="summary-divider"></div>
+                @if (_isLoading)
+                {
+                    <div class="summary-row bold-val mt-4">
+                        <span class="val" style="color:#6b7280;">Loading...</span>
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(_loadError))
+                {
+                    <div class="summary-row bold-val mt-4">
+                        <span class="val" style="color:#b91c1c;">@_loadError</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="summary-row bold-val mt-4">
+                        <span class="lbl">Room Type</span>
+                        <span class="val">@_roomType</span>
+                    </div>
+                    
+                    <div class="summary-row bold-val">
+                        <span class="lbl">Room Price</span>
+                        <span class="val">@_money(_roomPricePerNight)</span>
+                    </div>
+                    
+                    <div class="summary-row bold-val">
+                        <span class="lbl">Number of nights</span>
+                        <span class="val">@_numberOfNights</span>
+                    </div>
 
-                <div class="summary-row bold-val">
-                    <span class="lbl">Subtotal</span>
-                    <span class="val">₹3247.00</span>
-                </div>
-                
-                <div class="summary-row bold-val">
-                    <span class="lbl">Taxes (12%)</span>
-                    <span class="val">₹120.00</span>
-                </div>
+                    @if (_extraCotApplicable)
+                    {
+                        <div class="summary-row bold-val">
+                            <span class="lbl">Extra Cot × @ExtraCotQuantity</span>
+                            <span class="val">@_money(_extraCotTotal)</span>
+                        </div>
+                    }
 
-                <div class="summary-divider"></div>
+                    <div class="summary-divider"></div>
 
-                <div class="summary-total">
-                    <span class="lbl">Total</span>
-                    <span class="val">₹3367.00</span>
-                </div>
+                    <div class="summary-row bold-val">
+                        <span class="lbl">Subtotal</span>
+                        <span class="val">@_money(_subtotal)</span>
+                    </div>
+                    
+                    <div class="summary-row bold-val">
+                        <span class="lbl">Taxes (@(_taxRatePercent)%)</span>
+                        <span class="val">@_money(_tax)</span>
+                    </div>
+
+                    <div class="summary-divider"></div>
+
+                    <div class="summary-total">
+                        <span class="lbl">Total</span>
+                        <span class="val">@_money(_total)</span>
+                    </div>
+                }
             </div>
         </div>
 
     </div>
 
     <div class="btn-action-row">
-        <button class="btn-outline-back">Back</button>
+        <button class="btn-outline-back" @onclick="GoBack">Back</button>
         <button class="btn-primary-continue">Continue Review</button>
     </div>
 
@@ -377,4 +401,141 @@
 
 @code {
 
+    [SupplyParameterFromQuery(Name = "guestHouseId")]
+    public int? GuestHouseId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "roomId")]
+    public int? RoomId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "checkIn")]
+    public string? CheckIn { get; set; }
+
+    [SupplyParameterFromQuery(Name = "checkOut")]
+    public string? CheckOut { get; set; }
+
+    private const decimal TaxRate = 12m;
+    private const int ExtraCotQuantity = 1;
+
+    private GuestForm _form = new GuestForm();
+
+    private bool _isLoading = true;
+    private string _loadError = "";
+
+    private DateTime _checkInDate;
+    private DateTime _checkOutDate;
+    private int _numberOfNights;
+    private string _roomType = "";
+    private decimal _roomPricePerNight;
+    private bool _extraCotApplicable;
+    private decimal _extraCotPrice;
+    private decimal _extraCotTotal;
+    private decimal _subtotal;
+    private decimal _tax;
+    private decimal _total;
+    private int _taxRatePercent => (int)TaxRate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!RoomId.HasValue || string.IsNullOrWhiteSpace(CheckIn) || string.IsNullOrWhiteSpace(CheckOut))
+        {
+            Navigation.NavigateTo("/GuestHouse");
+            return;
+        }
+
+        if (!DateTime.TryParse(CheckIn, out _checkInDate) || !DateTime.TryParse(CheckOut, out _checkOutDate))
+        {
+            Navigation.NavigateTo("/GuestHouse");
+            return;
+        }
+
+        _numberOfNights = (_checkOutDate.Date - _checkInDate.Date).Days;
+        if (_numberOfNights < 1)
+        {
+            Navigation.NavigateTo("/GuestHouse");
+            return;
+        }
+
+        await LoadRoomAsync();
+    }
+
+    private async Task LoadRoomAsync()
+    {
+        _isLoading = true;
+        _loadError = "";
+        try
+        {
+            var room = await Http.GetFromJsonAsync<RoomDetailDto>($"api/GuestHouseBooking/rooms/{RoomId}");
+            if (room == null || room.RoomId == 0)
+            {
+                _loadError = "Room information could not be loaded.";
+                _isLoading = false;
+                return;
+            }
+
+            _roomType = room.RoomType;
+            _roomPricePerNight = room.PricePerNight;
+            _extraCotApplicable = room.ExtraCotPrice.HasValue && room.ExtraCotPrice.Value > 0;
+            _extraCotPrice = _extraCotApplicable ? room.ExtraCotPrice.Value : 0m;
+            _extraCotTotal = _extraCotApplicable ? _extraCotPrice * ExtraCotQuantity : 0m;
+
+            _subtotal = (_roomPricePerNight * _numberOfNights) + _extraCotTotal;
+            _tax = Math.Round(_subtotal * (TaxRate / 100m), 2, MidpointRounding.AwayFromZero);
+            _total = _subtotal + _tax;
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not load the booking details. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static string _money(decimal value)
+    {
+        return "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+    }
+
+    private void GoBack()
+    {
+        if (_checkInDate == default || _checkOutDate == default)
+        {
+            Navigation.NavigateTo("/GuestHouse");
+            return;
+        }
+
+        var checkIn = Uri.EscapeDataString(_checkInDate.ToString("yyyy-MM-ddTHH:mm:ss"));
+        var checkOut = Uri.EscapeDataString(_checkOutDate.ToString("yyyy-MM-ddTHH:mm:ss"));
+        Navigation.NavigateTo($"/Rooms?guestHouseId={GuestHouseId}&checkIn={checkIn}&checkOut={checkOut}");
+    }
+
+    public class RoomDetailDto
+    {
+        public int RoomId { get; set; }
+        public int GuestHouseId { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public string RoomType { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public string? Description { get; set; }
+        public decimal PricePerNight { get; set; }
+        public decimal? ExtraCotPrice { get; set; }
+        public int? Capacity { get; set; }
+        public int? NumberOfAdults { get; set; }
+    }
+
+    public class GuestForm
+    {
+        public string? EmployeeOrDealerCode { get; set; }
+        public string? GuestName { get; set; }
+        public string? CompanyName { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+        public string? AadhaarOrPassport { get; set; }
+        public string? Nationality { get; set; }
+        public string? NumberOfPersons { get; set; }
+        public string? NumberOfAdults { get; set; }
+        public string? NumberOfChildren { get; set; }
+        public string? Address { get; set; }
+    }
 }

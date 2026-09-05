@@ -103,6 +103,7 @@ public class GuestHouseRoom
 	public GuestHouse? GuestHouse { get; set; }                          // Navigation to the parent guest house
 
 	public string? RoomType { get; set; }                                // Name of the room type (e.g. "AC Deluxe Room")
+	public string? RoomNumber { get; set; }                              // Physical room identifier (e.g. "101"), preserved from the master data file
 	public string? Description { get; set; }                             // Description shown on the room details page
 	public int? Capacity { get; set; }                                   // Maximum total occupants the room can hold
 	public int? NumberOfAdults { get; set; }                             // Base number of adults the room accommodates (max occupancy)
