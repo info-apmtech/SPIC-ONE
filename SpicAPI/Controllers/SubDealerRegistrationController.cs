@@ -72,6 +72,22 @@ public class SubDealerRegistrationController : ControllerBase
 
 			query = query.Where(x => x.StateId == effectiveStateId.Value);
 		}
+		else if (IsAvpRole(role))
+		{
+			// AVP sees only Sub Dealers belonging to the Zone assigned to the logged-in AVP.
+			var zoneId = CurrentZoneId();
+
+			if (!zoneId.HasValue || zoneId.Value <= 0)
+				return Ok(new List<SubDealerLookupDto>());
+
+			var stateIdsInZone = await _db.States
+				.AsNoTracking()
+				.Where(s => s.ZoneId == zoneId.Value)
+				.Select(s => s.Id)
+				.ToListAsync(cancellationToken);
+
+			query = query.Where(x => stateIdsInZone.Contains(x.StateId));
+		}
 		else if (!isUnrestrictedRole && !string.IsNullOrWhiteSpace(role))
 		{
 			// Preserve existing fallback for other restricted/custom roles.
@@ -127,6 +143,9 @@ public class SubDealerRegistrationController : ControllerBase
 	private int? CurrentHqId() =>
 		ReadIntClaim("spic:hq_id", "HQId", "HqId");
 
+	private int? CurrentZoneId() =>
+		ReadIntClaim("spic:zone_id", "ZoneId");
+
 	private int? ReadIntClaim(params string[] names)
 	{
 		foreach (var name in names)
@@ -151,6 +170,9 @@ public class SubDealerRegistrationController : ControllerBase
 	private static bool IsStateRole(string role) =>
 		role.Equals("SMM", StringComparison.OrdinalIgnoreCase) ||
 		role.Equals("SMD", StringComparison.OrdinalIgnoreCase);
+
+	private static bool IsAvpRole(string role) =>
+		role.Equals("AVP", StringComparison.OrdinalIgnoreCase);
 
 	private static bool IsUnrestrictedRole(string role) =>
 		role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
@@ -248,6 +270,22 @@ public class SubDealerRegistrationController : ControllerBase
 				return Ok(EmptyPagedResult(page, pageSize));
 
 			query = query.Where(x => x.StateId == effectiveStateId.Value);
+		}
+		else if (IsAvpRole(role))
+		{
+			// AVP sees only Sub Dealers belonging to the Zone assigned to the logged-in AVP.
+			var zoneId = CurrentZoneId();
+
+			if (!zoneId.HasValue || zoneId.Value <= 0)
+				return Ok(EmptyPagedResult(page, pageSize));
+
+			var stateIdsInZone = await _db.States
+				.AsNoTracking()
+				.Where(s => s.ZoneId == zoneId.Value)
+				.Select(s => s.Id)
+				.ToListAsync(cancellationToken);
+
+			query = query.Where(x => stateIdsInZone.Contains(x.StateId));
 		}
 		else if (!unrestricted && !string.IsNullOrWhiteSpace(role))
 		{

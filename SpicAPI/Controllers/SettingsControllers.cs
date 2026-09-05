@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 using System.Security.Claims;
+using Spic.Infrastructure.Data;
 
 namespace SpicAPI.Controllers
 {
@@ -39,12 +40,15 @@ namespace SpicAPI.Controllers
     public class WarehouseController : GenericCrudController<Warehouse>
     {
         private readonly IGenericRepository<LogisticsApprovalHistory> _historyRepo;
+        private readonly AppDbContext _db;
 
         public WarehouseController(
             IGenericRepository<Warehouse> repo,
-            IGenericRepository<LogisticsApprovalHistory> historyRepo) : base(repo)
+            IGenericRepository<LogisticsApprovalHistory> historyRepo,
+            AppDbContext db) : base(repo)
         {
             _historyRepo = historyRepo;
+            _db = db;
         }
 
         [HttpGet("all")]
@@ -54,7 +58,22 @@ namespace SpicAPI.Controllers
             var role = CurrentRole();
             var userId = CurrentUserId();
 
-            if (IsUnrestrictedRole(role))
+            if (IsAvpRole(role))
+            {
+                // AVP sees only Warehouses belonging to the Zone assigned to the logged-in AVP.
+                var zoneId = CurrentZoneId();
+                if (!zoneId.HasValue || zoneId.Value <= 0)
+                    return Ok(new List<Warehouse>());
+
+                var stateIdsInZone = await _db.States
+                    .AsNoTracking()
+                    .Where(s => s.ZoneId == zoneId.Value)
+                    .Select(s => s.Id)
+                    .ToListAsync();
+
+                query = query.Where(x => x.BasicStateId.HasValue && stateIdsInZone.Contains(x.BasicStateId.Value));
+            }
+            else if (IsUnrestrictedRole(role))
                 return Ok(await query.OrderByDescending(x => x.CreatedAt).ToListAsync());
 
             if (IsStateRole(role))
@@ -496,6 +515,7 @@ namespace SpicAPI.Controllers
 
         private int? CurrentStateId() => ReadIntClaim("spic:state_id", "StateId");
         private int? CurrentRegionId() => ReadIntClaim("spic:region_id", "RegionId");
+        private int? CurrentZoneId() => ReadIntClaim("spic:zone_id", "ZoneId");
 
         private int? ReadIntClaim(params string[] names)
         {
@@ -521,6 +541,9 @@ namespace SpicAPI.Controllers
         private static bool IsStateRole(string role) =>
             role.Equals("SMM", StringComparison.OrdinalIgnoreCase) ||
             role.Equals("SMD", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsAvpRole(string role) =>
+            role.Equals("AVP", StringComparison.OrdinalIgnoreCase);
 
         private static bool IsUnrestrictedRole(string role) =>
             role.Equals("AVP", StringComparison.OrdinalIgnoreCase) ||
@@ -681,12 +704,15 @@ namespace SpicAPI.Controllers
     public class RackPointController : GenericCrudController<RackPoint>
     {
         private readonly IGenericRepository<LogisticsApprovalHistory> _historyRepo;
+        private readonly AppDbContext _db;
 
         public RackPointController(
             IGenericRepository<RackPoint> repo,
-            IGenericRepository<LogisticsApprovalHistory> historyRepo) : base(repo)
+            IGenericRepository<LogisticsApprovalHistory> historyRepo,
+            AppDbContext db) : base(repo)
         {
             _historyRepo = historyRepo;
+            _db = db;
         }
 
         [HttpGet("all")]
@@ -696,7 +722,22 @@ namespace SpicAPI.Controllers
             var role = CurrentRole();
             var userId = CurrentUserId();
 
-            if (IsUnrestrictedRole(role))
+            if (IsAvpRole(role))
+            {
+                // AVP sees only Rake Points belonging to the Zone assigned to the logged-in AVP.
+                var zoneId = CurrentZoneId();
+                if (!zoneId.HasValue || zoneId.Value <= 0)
+                    return Ok(new List<RackPoint>());
+
+                var stateIdsInZone = await _db.States
+                    .AsNoTracking()
+                    .Where(s => s.ZoneId == zoneId.Value)
+                    .Select(s => s.Id)
+                    .ToListAsync();
+
+                query = query.Where(x => x.BasicStateId.HasValue && stateIdsInZone.Contains(x.BasicStateId.Value));
+            }
+            else if (IsUnrestrictedRole(role))
                 return Ok(await query.OrderByDescending(x => x.CreatedAt).ToListAsync());
 
             if (IsStateRole(role))
@@ -1185,6 +1226,7 @@ namespace SpicAPI.Controllers
 
         private int? CurrentStateId() => ReadIntClaim("spic:state_id", "StateId");
         private int? CurrentRegionId() => ReadIntClaim("spic:region_id", "RegionId");
+        private int? CurrentZoneId() => ReadIntClaim("spic:zone_id", "ZoneId");
 
         private int? ReadIntClaim(params string[] names)
         {
@@ -1210,6 +1252,9 @@ namespace SpicAPI.Controllers
         private static bool IsStateRole(string role) =>
             role.Equals("SMM", StringComparison.OrdinalIgnoreCase) ||
             role.Equals("SMD", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsAvpRole(string role) =>
+            role.Equals("AVP", StringComparison.OrdinalIgnoreCase);
 
         private static bool IsUnrestrictedRole(string role) =>
             role.Equals("AVP", StringComparison.OrdinalIgnoreCase) ||

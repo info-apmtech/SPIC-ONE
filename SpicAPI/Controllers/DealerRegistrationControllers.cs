@@ -1232,7 +1232,12 @@ namespace SpicAPI.Controllers
 			var stateClaim = User.FindFirst("spic:state_id")?.Value;
 			var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
-			if (role != "Admin" && role != "CorporateAdmin" && role != "Director" && role != "AVP")
+			if (role == "AVP")
+			{
+				var zoneStateIds = await GetZoneStateIdsAsync();
+				query = query.Where(x => zoneStateIds.Contains(x.StateId));
+			}
+			else if (role != "Admin" && role != "CorporateAdmin" && role != "Director")
 			{
 				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
 					query = query.Where(x => x.StateId == stateId);
@@ -1276,7 +1281,12 @@ namespace SpicAPI.Controllers
 			var stateClaim = User.FindFirst("spic:state_id")?.Value;
 			var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
-			if (role != "Admin" && role != "CorporateAdmin" && role != "Director" && role != "AVP")
+			if (role == "AVP")
+			{
+				var zoneStateIds = await GetZoneStateIdsAsync();
+				query = query.Where(x => zoneStateIds.Contains(x.StateId));
+			}
+			else if (role != "Admin" && role != "CorporateAdmin" && role != "Director")
 			{
 				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
 					query = query.Where(x => x.StateId == stateId);
@@ -1370,9 +1380,14 @@ namespace SpicAPI.Controllers
 
 			var isUnrestrictedRole =
 				role == "Admin" || role == "CorporateAdmin" ||
-				role == "Director" || role == "AVP";
+				role == "Director";
 
-			if (!isUnrestrictedRole)
+			if (role == "AVP")
+			{
+				var zoneStateIds = await GetZoneStateIdsAsync();
+				query = query.Where(x => zoneStateIds.Contains(x.StateId));
+			}
+			else if (!isUnrestrictedRole)
 			{
 				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
 					query = query.Where(x => x.StateId == stateId);
@@ -1477,6 +1492,19 @@ namespace SpicAPI.Controllers
 				.ToListAsync();
 
 			return Ok(dashboardDealers);
+		}
+
+		private async Task<List<int>> GetZoneStateIdsAsync()
+		{
+			var zoneId = int.TryParse(User.FindFirst("spic:zone_id")?.Value, out var z) ? z : 0;
+			if (zoneId <= 0)
+				return new List<int>();
+
+			return await _db.States
+				.AsNoTracking()
+				.Where(s => s.ZoneId == zoneId)
+				.Select(s => s.Id)
+				.ToListAsync();
 		}
 	}
 	[Route("api/[controller]")]

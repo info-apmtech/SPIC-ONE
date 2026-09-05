@@ -110,6 +110,7 @@ namespace SpicAPI.Controllers
             claims.Add(new Claim("spic:state_id", empLogin?.StateId.ToString() ?? "0"));
             claims.Add(new Claim("spic:region_id", empLogin?.RegionId.ToString() ?? "0"));
             claims.Add(new Claim("spic:hq_id", empLogin?.HeadquartersId.ToString() ?? "0"));
+            claims.Add(new Claim("spic:zone_id", empLogin?.ZoneId.ToString() ?? "0"));
 
             var token = new JwtSecurityToken(
                 issuer: jwtConfig["Issuer"],
