@@ -361,7 +361,7 @@ namespace SpicAPI.Controllers
         // =====================================================================
 
         [HttpPost("document/{documentId:int}/replace")]
-        public async Task<IActionResult> ReplaceDocument(int documentId, [FromForm] IFormFile file, [FromForm] string documentType)
+        public async Task<IActionResult> ReplaceDocument(int documentId, IFormFile file, [FromForm] string documentType)
         {
             var (role, user) = await GetActorAsync();
             if (user == null)
@@ -443,7 +443,7 @@ namespace SpicAPI.Controllers
         // =====================================================================
 
         [HttpPost("applications/{id:int}/documents")]
-        public async Task<IActionResult> UploadDocument(int id, [FromForm] List<IFormFile> files, [FromForm] List<string> documentTypes)
+        public async Task<IActionResult> UploadDocument(int id, List<IFormFile> files, [FromForm] List<string> documentTypes)
         {
             var (role, user) = await GetActorAsync();
             if (user == null)
@@ -559,7 +559,7 @@ namespace SpicAPI.Controllers
             int id,
             [FromForm] string? chequeNumber,
             [FromForm] string? chequeAmount,
-            [FromForm] IFormFile? chequeImage,
+            IFormFile? chequeImage,
             [FromForm] string? comment,
             [FromForm] string? recommendation)
         {

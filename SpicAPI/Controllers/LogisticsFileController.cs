@@ -37,7 +37,7 @@ namespace SpicAPI.Controllers
 			string entityType,
 			int entityId,
 			string documentType,
-			[FromForm] IFormFile file)
+			IFormFile file)
 		{
 			if (entityId <= 0)
 				return BadRequest("A valid Logistics record id is required.");

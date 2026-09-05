@@ -66,7 +66,7 @@ namespace SpicAPI.Controllers
 		[RequestSizeLimit(MaxUploadBytes)]
 		[RequestFormLimits(MultipartBodyLengthLimit = MaxUploadBytes)]
 		public async Task<IActionResult> Import(
-			[FromForm] IFormFile? file,
+			IFormFile? file,
 			[FromForm] string? categoryId,
 			[FromForm] DateTime? reportDate,
 			CancellationToken cancellationToken)
