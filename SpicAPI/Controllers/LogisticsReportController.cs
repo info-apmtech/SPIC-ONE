@@ -31,16 +31,17 @@ namespace SpicAPI.Controllers
 
             var warehouses = await (await ApplyWarehouseRoleFilter(
                     _context.Warehouses
-                        .Where(w => w.IsActive && w.StateId.HasValue),
+                        .Where(w => w.StateId.HasValue),
                     role))
                 .Select(w => new
                 {
                     w.Id,
 
                     // StateId is nullable in entity,
-                    // but Active report only includes records having a State.
+                    // but report only includes records having a State.
                     StateId = w.StateId.Value,
 
+                    w.IsActive,
                     w.IsSubmittedForReview,
                     w.RMApproved,
                     w.SMApproved,
@@ -57,28 +58,34 @@ namespace SpicAPI.Controllers
                 {
                     StateId = g.Key,
                     TotalCount = g.Count(),
+                    Active = g.Count(w => w.IsActive),
+                    Inactive = g.Count(w => !w.IsActive),
                     AsPerSap = 0,
                     PendingWithMo = 0,
 
                     PendingRm = g.Count(w =>
+                        w.IsActive &&
                         w.IsSubmittedForReview &&
                         w.RMApproved == null &&
                         w.SMApproved == null &&
                         w.AVPApproved == null),
 
                     PendingSmm = g.Count(w =>
+                        w.IsActive &&
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
                         w.SMApproved == null &&
                         w.AVPApproved == null),
 
                     PendingWithAvp = g.Count(w =>
+                        w.IsActive &&
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
                         w.SMApproved == true &&
                         w.AVPApproved == null),
 
                     Completed = g.Count(w =>
+                        w.IsActive &&
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
                         w.SMApproved == true &&
@@ -109,16 +116,17 @@ namespace SpicAPI.Controllers
 
             var rakepoints = await (await ApplyRakepointRoleFilter(
                     _context.RackPoints
-                        .Where(r => r.IsActive && r.StateId.HasValue),
+                        .Where(r => r.StateId.HasValue),
                     role))
                 .Select(r => new
                 {
                     r.Id,
 
                     // StateId is nullable in entity,
-                    // but Active report only includes records having a State.
+                    // but report only includes records having a State.
                     StateId = r.StateId.Value,
 
+                    r.IsActive,
                     r.IsSubmittedForReview,
                     r.RMApproved,
                     r.SMApproved,
@@ -135,28 +143,34 @@ namespace SpicAPI.Controllers
                 {
                     StateId = g.Key,
                     TotalCount = g.Count(),
+                    Active = g.Count(r => r.IsActive),
+                    Inactive = g.Count(r => !r.IsActive),
                     AsPerSap = 0,
                     PendingWithMo = 0,
 
                     PendingRm = g.Count(r =>
+                        r.IsActive &&
                         r.IsSubmittedForReview &&
                         r.RMApproved == null &&
                         r.SMApproved == null &&
                         r.AVPApproved == null),
 
                     PendingSmm = g.Count(r =>
+                        r.IsActive &&
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
                         r.SMApproved == null &&
                         r.AVPApproved == null),
 
                     PendingWithAvp = g.Count(r =>
+                        r.IsActive &&
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
                         r.SMApproved == true &&
                         r.AVPApproved == null),
 
                     Completed = g.Count(r =>
+                        r.IsActive &&
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
                         r.SMApproved == true &&
@@ -202,6 +216,8 @@ namespace SpicAPI.Controllers
             return new LogisticsReportTotalDto
             {
                 TotalCount = rows.Sum(r => r.TotalCount),
+                Active = rows.Sum(r => r.Active),
+                Inactive = rows.Sum(r => r.Inactive),
                 AsPerSap = sapTotal,
                 PendingWithMo = Math.Max(0, sapTotal - (totalRm + totalSmm + totalAvp + totalCompleted)),
                 PendingRm = totalRm,
@@ -362,6 +378,8 @@ namespace SpicAPI.Controllers
         public int StateId { get; set; }
         public string State { get; set; } = string.Empty;
         public int TotalCount { get; set; }
+        public int Active { get; set; }
+        public int Inactive { get; set; }
         public int AsPerSap { get; set; }
         public int PendingWithMo { get; set; }
         public int PendingRm { get; set; }
@@ -373,6 +391,8 @@ namespace SpicAPI.Controllers
     public sealed class LogisticsReportTotalDto
     {
         public int TotalCount { get; set; }
+        public int Active { get; set; }
+        public int Inactive { get; set; }
         public int AsPerSap { get; set; }
         public int PendingWithMo { get; set; }
         public int PendingRm { get; set; }
