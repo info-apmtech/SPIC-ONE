@@ -112,6 +112,28 @@ namespace SpicAPI.Controllers
             claims.Add(new Claim("spic:hq_id", empLogin?.HeadquartersId.ToString() ?? "0"));
             claims.Add(new Claim("spic:zone_id", empLogin?.ZoneId.ToString() ?? "0"));
 
+            // SpecialAdmin-only: database-backed multi-location scope.
+            // For every other role these claims are omitted entirely, so existing
+            // single-location behavior (spic:state_id etc.) is unchanged.
+            if (user.Role == AppRole.SpecialAdmin && empLogin != null && empLogin.EmployeeInformationID > 0)
+            {
+                var specialAdminLocations = await _db.SpecialAdminLocations
+                    .AsNoTracking()
+                    .Where(l => l.EmployeeInformationID == empLogin.EmployeeInformationID)
+                    .ToListAsync();
+
+                var assignedStateIds = specialAdminLocations.Select(l => l.StateId).Where(s => s > 0).Distinct().ToList();
+                var assignedRegionIds = specialAdminLocations.Select(l => l.RegionId).Where(r => r > 0).Distinct().ToList();
+                var assignedHqIds = specialAdminLocations.Select(l => l.HeadquarterId).Where(h => h > 0).Distinct().ToList();
+
+                if (assignedStateIds.Count > 0)
+                    claims.Add(new Claim("spic:assigned_state_ids", string.Join(",", assignedStateIds)));
+                if (assignedRegionIds.Count > 0)
+                    claims.Add(new Claim("spic:assigned_region_ids", string.Join(",", assignedRegionIds)));
+                if (assignedHqIds.Count > 0)
+                    claims.Add(new Claim("spic:assigned_hq_ids", string.Join(",", assignedHqIds)));
+            }
+
             var token = new JwtSecurityToken(
                 issuer: jwtConfig["Issuer"],
                 audience: jwtConfig["Audience"],

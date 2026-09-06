@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using SpicAPI.Services;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using System.Linq.Expressions;
@@ -938,6 +939,7 @@ namespace SpicAPI.Controllers
         //    MO  -> only dealers of the officer's own HQ
         //    RM  -> only dealers of the officer's own Region
         //    SMM -> only dealers of the officer's own State
+        //    SpecialAdmin -> only dealers of the officer's assigned states
         //    AVP / Admin / CorporateAdmin / Director -> everything
         //  The approver's geography comes from the JWT claims minted at login
         //  (spic:hq_id / spic:region_id / spic:state_id). A geo-scoped role
@@ -945,7 +947,7 @@ namespace SpicAPI.Controllers
         //  than silently seeing every territory's applications.
         // -------------------------------------------------------------------
 
-        private static readonly AppRole[] GeoScopedApproverRoles = { AppRole.MO, AppRole.RM, AppRole.SMM };
+        private static readonly AppRole[] GeoScopedApproverRoles = { AppRole.MO, AppRole.RM, AppRole.SMM, AppRole.SpecialAdmin };
 
         private static bool IsGeoScoped(AppRole? role) =>
             role.HasValue && GeoScopedApproverRoles.Contains(role.Value);
@@ -961,6 +963,14 @@ namespace SpicAPI.Controllers
         // approval queue (composed as a correlated EXISTS on WelfareApplication.DealerId).
         private Expression<Func<DealerRegistration, bool>> BuildDealerGeoScope(AppRole? role)
         {
+            if (role == AppRole.SpecialAdmin)
+            {
+                var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+                if (assignedStates.Count == 0)
+                    return dealer => false;
+                return dealer => assignedStates.Contains(dealer.StateId);
+            }
+
             if (!IsGeoScoped(role))
                 return dealer => true;
 

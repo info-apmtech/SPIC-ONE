@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace SPIC.Core.DTOs
 {
-	public class ProductStockAvailabilityFilter
+	public class ProductStockAvailabilityFilter : ILocationScopeFilter
 	{
 		public DateTime? DateFrom { get; set; }
 		public DateTime? DateTo { get; set; }

@@ -34,7 +34,7 @@ namespace SPIC.Core.Entities
     }
     public enum AppRole
     {
-        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer
+        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer, SpecialAdmin
     }
     public enum PagePermission
     {

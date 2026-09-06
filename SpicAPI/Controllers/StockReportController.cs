@@ -5,6 +5,7 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
 using SPIC.Core.DTOs;
 using SPIC.Core.Interfaces;
+using SpicAPI.Services;
 
 namespace SpicAPI.Controllers
 {
@@ -30,8 +31,9 @@ namespace SpicAPI.Controllers
 		public async Task<ActionResult<StockDashboardDto>> Dashboard(
 			[FromBody] StockReportFilter? filter)
 		{
-			var data = await _service.GetDashboardAsync(
-				filter ?? new StockReportFilter());
+			filter ??= new StockReportFilter();
+			SpecialAdminScope.ApplyScope(User, filter);
+			var data = await _service.GetDashboardAsync(filter);
 
 			return Ok(data);
 		}
@@ -40,8 +42,9 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> ExportExcel(
 			[FromBody] StockReportFilter? filter)
 		{
-			var rows = await _service.GetAllRowsAsync(
-				filter ?? new StockReportFilter());
+			filter ??= new StockReportFilter();
+			SpecialAdminScope.ApplyScope(User, filter);
+			var rows = await _service.GetAllRowsAsync(filter);
 
 			using var workbook = new XLWorkbook();
 			var worksheet = workbook.Worksheets.Add("Stock Report");

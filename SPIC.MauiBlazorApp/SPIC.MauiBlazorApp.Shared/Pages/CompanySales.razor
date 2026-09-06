@@ -685,13 +685,20 @@
 
     private bool HasRestrictedStateScope =>
         LoginState != null &&
-        !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP) &&
-        LoginState.StateId > 0;
+        (LoginState.IsSpecialAdminWithAssignments || !(LoginState.IsAdmin || LoginState.IsDirectorOrAVP)) &&
+        (LoginState.IsSpecialAdminWithAssignments ? true : LoginState.StateId > 0);
 
     private void ApplyRoleScopeSelection()
     {
         if (!HasRestrictedStateScope)
             return;
+
+        // SpecialAdmin: mandatory scope = every assigned state.
+        if (LoginState.IsSpecialAdminWithAssignments)
+        {
+            _selectedStates = LoginState.AssignedStateIds.ToList();
+            return;
+        }
 
         var stateId = LoginState.StateId;
         _selectedStates = new List<int> { stateId };
@@ -710,6 +717,14 @@
 
     private void ApplyRoleRestrictionsToMasterLists()
     {
+        if (HasRestrictedStateScope && LoginState.IsSpecialAdminWithAssignments)
+        {
+            var assignedStates = LoginState.AssignedStateIds.ToHashSet();
+            _states = _allStates.Where(x => assignedStates.Contains(x.Id)).ToList();
+            _districts = _allDistricts.Where(x => assignedStates.Contains(x.StateId ?? 0)).ToList();
+            return;
+        }
+
         if (HasRestrictedStateScope)
         {
             var stateId = LoginState.StateId;

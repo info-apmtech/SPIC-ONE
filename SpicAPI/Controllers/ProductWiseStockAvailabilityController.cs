@@ -6,6 +6,7 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
 using SPIC.Core.DTOs;
 using SPIC.Core.Interfaces;
+using SpicAPI.Services;
 
 namespace SpicAPI.Controllers
 {
@@ -25,8 +26,10 @@ namespace SpicAPI.Controllers
 			[FromBody] ProductStockAvailabilityFilter? filter,
 			CancellationToken cancellationToken)
 		{
+			filter ??= new ProductStockAvailabilityFilter();
+			SpecialAdminScope.ApplyScope(User, filter);
 			var data = await _service.GetDashboardAsync(
-				filter ?? new ProductStockAvailabilityFilter(),
+				filter,
 				cancellationToken);
 
 			return Ok(data);
@@ -37,8 +40,9 @@ namespace SpicAPI.Controllers
 			[FromBody] ProductStockAvailabilityFilter? filter,
 			CancellationToken cancellationToken)
 		{
-			var exportFilter = CloneForExport(
-				filter ?? new ProductStockAvailabilityFilter());
+			filter ??= new ProductStockAvailabilityFilter();
+			SpecialAdminScope.ApplyScope(User, filter);
+			var exportFilter = CloneForExport(filter);
 
 			var data = await _service.GetDashboardAsync(exportFilter, cancellationToken);
 

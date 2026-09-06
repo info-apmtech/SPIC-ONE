@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using SpicAPI.Services;
 
 namespace SpicAPI.Controllers
 {
@@ -249,6 +250,16 @@ namespace SpicAPI.Controllers
             if (IsUnrestrictedRole(role))
                 return query;
 
+            // SpecialAdmin: multi-location scope. Data is restricted to every state
+            // assigned to this user (from the JWT). All other roles are untouched.
+            if (SpecialAdminScope.IsSpecialAdmin(User))
+            {
+                var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+                if (assignedStates.Count == 0)
+                    return query.Where(_ => false);
+                return query.Where(w => w.BasicStateId.HasValue && assignedStates.Contains(w.BasicStateId.Value));
+            }
+
             if (IsStateRole(role))
             {
                 var stateId = CurrentStateId();
@@ -297,6 +308,16 @@ namespace SpicAPI.Controllers
 
             if (IsUnrestrictedRole(role))
                 return query;
+
+            // SpecialAdmin: multi-location scope. Data is restricted to every state
+            // assigned to this user (from the JWT). All other roles are untouched.
+            if (SpecialAdminScope.IsSpecialAdmin(User))
+            {
+                var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+                if (assignedStates.Count == 0)
+                    return query.Where(_ => false);
+                return query.Where(r => r.BasicStateId.HasValue && assignedStates.Contains(r.BasicStateId.Value));
+            }
 
             if (IsStateRole(role))
             {

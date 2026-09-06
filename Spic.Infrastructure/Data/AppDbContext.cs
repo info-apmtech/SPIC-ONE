@@ -129,6 +129,9 @@ namespace Spic.Infrastructure.Data
 		public DbSet<SubDealerBeneficiary> SubDealerBeneficiaries { get; set; }
 		public DbSet<EmployeeBeneficiary> EmployeeBeneficiaries { get; set; }
 
+		//// SpecialAdmin multi-location assignments
+		public DbSet<SpecialAdminLocations> SpecialAdminLocations { get; set; }
+
 		//// Welfare Scheme
 		public DbSet<WelfareApplication> WelfareApplications { get; set; }
 		public DbSet<WelfareApplicationDocument> WelfareApplicationDocuments { get; set; }

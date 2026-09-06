@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace SPIC.Core.DTOs
 {
-	public class AgeingReportFilter
+	public class AgeingReportFilter : ILocationScopeFilter
 	{
 		// Optional report period. When both values are empty, the existing latest
 		// snapshot/current-date behaviour remains unchanged.

@@ -130,8 +130,58 @@
                 </div>
             }
 
+            @* SpecialAdmin → multiple States, each optionally narrowed to Regions/HQs *@
+            @if (SelectedRole == "SpecialAdmin")
+            {
+                <div class="col-md-4">
+                    <label class="form-lbl">States (select one or more)</label>
+                    <div class="multi-select-box">
+                        @foreach (var s in States)
+                        {
+                            <label class="multi-option">
+                                <input type="checkbox" value="@s.Id" checked="@(SelectedSpecialStates.Contains(s.Id))"
+                                       @onchange="(args) => ToggleState(s.Id, args.Value)">
+                                <span>@s.Name</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+                @if (SelectedSpecialStates.Count > 0)
+                {
+                    <div class="col-md-4">
+                        <label class="form-lbl">Regions (optional, for selected states)</label>
+                        <div class="multi-select-box">
+                            @foreach (var r in AvailableSpecialRegions)
+                            {
+                                <label class="multi-option">
+                                    <input type="checkbox" value="@r.Id" checked="@(SelectedSpecialRegions.Contains(r.Id))"
+                                           @onchange="(args) => ToggleRegion(r.Id, args.Value)">
+                                    <span>@r.Name</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                }
+                @if (SelectedSpecialRegions.Count > 0)
+                {
+                    <div class="col-md-4">
+                        <label class="form-lbl">Headquarters (optional, for selected regions)</label>
+                        <div class="multi-select-box">
+                            @foreach (var h in AvailableSpecialHeadquarters)
+                            {
+                                <label class="multi-option">
+                                    <input type="checkbox" value="@h.Id" checked="@(SelectedSpecialHQs.Contains(h.Id))"
+                                           @onchange="(args) => ToggleHQ(h.Id, args.Value)">
+                                    <span>@h.Name</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+
             @if (SelectedRole != "AVP" && SelectedRole != "SMD" && SelectedRole != "SMM" && SelectedRole != "RM" && SelectedRole != "RMD" &&
-                 SelectedRole != "MDO" && SelectedRole != "MO" && SelectedRole != "JMDO" && !string.IsNullOrEmpty(SelectedRole))
+                 SelectedRole != "MDO" && SelectedRole != "MO" && SelectedRole != "JMDO" && SelectedRole != "SpecialAdmin" && !string.IsNullOrEmpty(SelectedRole))
             {
                 <div class="col-12">
                     <p class="text-muted small"><i class="bi bi-info-circle me-1"></i>No location specification required for this role.</p>
@@ -229,6 +279,13 @@
     private int EditingEmployeeId = 0;
     private int EditingLoginId = 0;
 
+    // SpecialAdmin multi-location selection state
+    private HashSet<int> SelectedSpecialStates = new();
+    private HashSet<int> SelectedSpecialRegions = new();
+    private HashSet<int> SelectedSpecialHQs = new();
+    private List<LocationItemDto> AvailableSpecialRegions = new();
+    private List<LocationItemDto> AvailableSpecialHeadquarters = new();
+
     private static readonly AppRole[] AllowedRoles = new[]
     {
         AppRole.CorporateAdmin,
@@ -240,7 +297,8 @@
         AppRole.RMD,
         AppRole.MDO,
         AppRole.MO,
-        AppRole.JMDO
+        AppRole.JMDO,
+        AppRole.SpecialAdmin
     };
 
     protected override async Task OnInitializedAsync()
@@ -282,6 +340,13 @@
             // 0 in the dropdown means "no designation" -> send null to backend
             int? designationId = vm.SelectedDesignationId > 0 ? vm.SelectedDesignationId : null;
 
+            // SpecialAdmin validation: at least one state required
+            if (vm.Login.Role == AppRole.SpecialAdmin && SelectedSpecialStates.Count == 0)
+            {
+                throw new Exception("At least one State is required for SpecialAdmin.");
+            }
+            var specialLocations = BuildSpecialAdminLocations();
+
             if (!IsEditMode)
             {
                 var empResponse = await Http.PostAsJsonAsync("api/EmployeeRegistration", vm.Employee);
@@ -312,7 +377,8 @@
                     HeadquartersId = vm.Login.HeadquartersId,
                     IsActive = vm.Login.IsActive,
                     CreatedBy = currentUser,
-                    UpdatedBy = currentUser
+                    UpdatedBy = currentUser,
+                    SpecialAdminLocations = specialLocations
                 };
 
                 var loginResponse = await Http.PostAsJsonAsync("api/EmployeeLoginSetup", loginRequest);
@@ -347,7 +413,8 @@
                     RegionId = vm.Login.RegionId,
                     HeadquartersId = vm.Login.HeadquartersId,
                     IsActive = vm.Login.IsActive,
-                    UpdatedBy = currentUser
+                    UpdatedBy = currentUser,
+                    SpecialAdminLocations = specialLocations
                 };
 
                 var loginUpdateResponse = await Http.PutAsJsonAsync($"api/EmployeeLoginSetup/login/{EditingLoginId}", loginRequest);
@@ -406,6 +473,12 @@
 
             vm.SelectedDesignationId = loginData.DesignationId ?? 0;
 
+            // SpecialAdmin: load multi-location assignments
+            if (loginData.Role == AppRole.SpecialAdmin)
+            {
+                await LoadSpecialAdminForEdit(loginData.EmployeeInformationID, loginData.SpecialAdminLocations);
+            }
+
             EditingEmployeeId = employee.Id;
             EditingLoginId = loginId;
             IsEditMode = true;
@@ -425,6 +498,134 @@
         EditingEmployeeId = 0;
         EditingLoginId = 0;
         IsEditMode = false;
+        SelectedSpecialStates.Clear();
+        SelectedSpecialRegions.Clear();
+        SelectedSpecialHQs.Clear();
+        AvailableSpecialRegions = new();
+        AvailableSpecialHeadquarters = new();
+    }
+
+    private async Task ToggleState(int stateId, object? value)
+    {
+        var add = value is bool b && b;
+        if (add) SelectedSpecialStates.Add(stateId);
+        else SelectedSpecialStates.Remove(stateId);
+
+        // re-compute the region pool from the freshly selected states
+        await RefreshAvailableRegions();
+
+        // remove orphaned regions/HQs that no longer belong to the selected states
+        var validRegionIds = AvailableSpecialRegions.Select(r => r.Id).ToHashSet();
+        SelectedSpecialRegions.RemoveWhere(r => !validRegionIds.Contains(r));
+        await RefreshAvailableHeadquarters();
+        SelectedSpecialHQs.RemoveWhere(h => !AvailableSpecialHeadquarters.Any(x => x.Id == h));
+    }
+
+    private async Task ToggleRegion(int regionId, object? value)
+    {
+        var add = value is bool b && b;
+        if (add) SelectedSpecialRegions.Add(regionId);
+        else SelectedSpecialRegions.Remove(regionId);
+
+        await RefreshAvailableHeadquarters();
+        SelectedSpecialHQs.RemoveWhere(h => !AvailableSpecialHeadquarters.Any(x => x.Id == h));
+    }
+
+    private void ToggleHQ(int hqId, object? value)
+    {
+        var add = value is bool b && b;
+        if (add) SelectedSpecialHQs.Add(hqId);
+        else SelectedSpecialHQs.Remove(hqId);
+    }
+
+    private async Task RefreshAvailableRegions()
+    {
+        if (SelectedSpecialStates.Count == 0)
+        {
+            AvailableSpecialRegions = new();
+            return;
+        }
+        var stateIds = string.Join(",", SelectedSpecialStates);
+        AvailableSpecialRegions = await Http.GetFromJsonAsync<List<LocationItemDto>>($"api/Region/byStates?stateIds={stateIds}") ?? new();
+    }
+
+    private async Task RefreshAvailableHeadquarters()
+    {
+        if (SelectedSpecialRegions.Count == 0)
+        {
+            AvailableSpecialHeadquarters = new();
+            return;
+        }
+        var regionIds = string.Join(",", SelectedSpecialRegions);
+        AvailableSpecialHeadquarters = await Http.GetFromJsonAsync<List<LocationItemDto>>($"api/Headquarter/byRegions?regionIds={regionIds}") ?? new();
+    }
+
+    private List<SpecialAdminLocationItem>? BuildSpecialAdminLocations()
+    {
+        if (vm.Login.Role != AppRole.SpecialAdmin)
+            return null;
+
+        var list = new List<SpecialAdminLocationItem>();
+        foreach (var stateId in SelectedSpecialStates)
+        {
+            // no regions selected for this state -> a state-only assignment
+            var regionsForState = AvailableSpecialRegions
+                .Where(r => r.StateId == stateId && SelectedSpecialRegions.Contains(r.Id))
+                .Select(r => r.Id)
+                .ToList();
+
+            if (regionsForState.Count == 0)
+            {
+                list.Add(new SpecialAdminLocationItem { StateId = stateId, RegionId = 0, HeadquarterId = 0 });
+            }
+            else
+            {
+                foreach (var regionId in regionsForState)
+                {
+                    var hqForRegion = AvailableSpecialHeadquarters
+                        .Where(h => h.RegionId == regionId && SelectedSpecialHQs.Contains(h.Id))
+                        .Select(h => h.Id)
+                        .ToList();
+
+                    if (hqForRegion.Count == 0)
+                    {
+                        list.Add(new SpecialAdminLocationItem { StateId = stateId, RegionId = regionId, HeadquarterId = 0 });
+                    }
+                    else
+                    {
+                        foreach (var hqId in hqForRegion)
+                        {
+                            list.Add(new SpecialAdminLocationItem { StateId = stateId, RegionId = regionId, HeadquarterId = hqId });
+                        }
+                    }
+                }
+            }
+        }
+        return list;
+    }
+
+    private async Task LoadSpecialAdminForEdit(int employeeInfoId, List<SpecialAdminLocationItem>? locations)
+    {
+        SelectedSpecialStates.Clear();
+        SelectedSpecialRegions.Clear();
+        SelectedSpecialHQs.Clear();
+
+        if (locations == null || locations.Count == 0)
+        {
+            AvailableSpecialRegions = new();
+            AvailableSpecialHeadquarters = new();
+            return;
+        }
+
+        foreach (var loc in locations)
+        {
+            if (loc.StateId > 0) SelectedSpecialStates.Add(loc.StateId);
+            if (loc.RegionId > 0) SelectedSpecialRegions.Add(loc.RegionId);
+            if (loc.HeadquarterId > 0) SelectedSpecialHQs.Add(loc.HeadquarterId);
+        }
+
+        await RefreshAvailableRegions();
+        await RefreshAvailableHeadquarters();
     }
 
     private void Cancel()

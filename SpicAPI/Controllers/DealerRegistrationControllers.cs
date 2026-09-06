@@ -8,6 +8,7 @@ using System.Security.Claims;
 using System.Collections.Generic;
 using static System.Net.WebRequestMethods;
 using Microsoft.AspNetCore.Identity;
+using SpicAPI.Services;
 namespace SpicAPI.Controllers
 {
 
@@ -181,7 +182,9 @@ namespace SpicAPI.Controllers
 			// Admin / CorporateAdmin → full data
 			if (role == "Admin" || role == "CorporateAdmin")
 				return Ok(await query.ToListAsync());
-			if (role == "RM" && int.TryParse(regionClaim, out var regionId))
+			if (SpecialAdminScope.IsSpecialAdmin(User))
+				query = query.Where(x => SpecialAdminScope.AssignedStateIds(User).Contains(x.StateId));
+			else if (role == "RM" && int.TryParse(regionClaim, out var regionId))
 				query = query.Where(x => x.Region == regionId);
 			else if ((role == "SM") && int.TryParse(stateClaim, out var stateId))
 				query = query.Where(x => x.StateId == stateId);
@@ -204,7 +207,9 @@ namespace SpicAPI.Controllers
 
 			if (role != "Admin" && role != "CorporateAdmin")
 			{
-				if (role == "RM" && int.TryParse(regionClaim, out var regionId))
+				if (SpecialAdminScope.IsSpecialAdmin(User))
+					query = query.Where(x => SpecialAdminScope.AssignedStateIds(User).Contains(x.StateId));
+				else if (role == "RM" && int.TryParse(regionClaim, out var regionId))
 					query = query.Where(x => x.Region == regionId);
 				else if (role == "SM" && int.TryParse(stateClaim, out var stateId))
 					query = query.Where(x => x.StateId == stateId);
@@ -1237,6 +1242,11 @@ namespace SpicAPI.Controllers
 				var zoneStateIds = await GetZoneStateIdsAsync();
 				query = query.Where(x => zoneStateIds.Contains(x.StateId));
 			}
+			else if (SpecialAdminScope.IsSpecialAdmin(User))
+			{
+				var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+				query = query.Where(x => assignedStates.Contains(x.StateId));
+			}
 			else if (role != "Admin" && role != "CorporateAdmin" && role != "Director")
 			{
 				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
@@ -1285,6 +1295,11 @@ namespace SpicAPI.Controllers
 			{
 				var zoneStateIds = await GetZoneStateIdsAsync();
 				query = query.Where(x => zoneStateIds.Contains(x.StateId));
+			}
+			else if (SpecialAdminScope.IsSpecialAdmin(User))
+			{
+				var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+				query = query.Where(x => assignedStates.Contains(x.StateId));
 			}
 			else if (role != "Admin" && role != "CorporateAdmin" && role != "Director")
 			{
@@ -1386,6 +1401,11 @@ namespace SpicAPI.Controllers
 			{
 				var zoneStateIds = await GetZoneStateIdsAsync();
 				query = query.Where(x => zoneStateIds.Contains(x.StateId));
+			}
+			else if (SpecialAdminScope.IsSpecialAdmin(User))
+			{
+				var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+				query = query.Where(x => assignedStates.Contains(x.StateId));
 			}
 			else if (!isUnrestrictedRole)
 			{

@@ -100,15 +100,18 @@ namespace SpicAPI.Controllers
         private readonly UserManager<UserInfo> _userManager;
         private readonly IGenericRepository<Employeelogin> _employeeLoginRepo;
         private readonly IGenericRepository<EmployeeInformation> _employeeInfoRepo;
+        private readonly IGenericRepository<SpecialAdminLocations> _specialAdminLocationsRepo;
 
         public EmployeeLoginSetupController(
             UserManager<UserInfo> userManager,
             IGenericRepository<Employeelogin> employeeLoginRepo,
-            IGenericRepository<EmployeeInformation> employeeInfoRepo)
+            IGenericRepository<EmployeeInformation> employeeInfoRepo,
+            IGenericRepository<SpecialAdminLocations> specialAdminLocationsRepo)
         {
             _userManager = userManager;
             _employeeLoginRepo = employeeLoginRepo;
             _employeeInfoRepo = employeeInfoRepo;
+            _specialAdminLocationsRepo = specialAdminLocationsRepo;
         }
 
         [HttpPost]
@@ -169,6 +172,12 @@ namespace SpicAPI.Controllers
 
             var createdLogin = await _employeeLoginRepo.CreateAsync(login);
 
+            // SpecialAdmin: persist multi-location assignments (ignored for other roles)
+            if (request.Role == AppRole.SpecialAdmin && request.SpecialAdminLocations != null)
+            {
+                await SaveSpecialAdminLocationsAsync(request, currentUser: request.CreatedBy ?? "System");
+            }
+
             return Ok(new
             {
                 message = "Employeelogin created successfully",
@@ -225,7 +234,8 @@ namespace SpicAPI.Controllers
                 HeadquartersId = login.HeadquartersId,
                 IsActive = login.IsActive,
                 CreatedBy = employee.CreatedBy,
-                UpdatedBy = employee.UpdatedBy
+                UpdatedBy = employee.UpdatedBy,
+                SpecialAdminLocations = await LoadSpecialAdminLocationsAsync(employee.Id, login.Role)
             });
         }
 
@@ -301,6 +311,12 @@ namespace SpicAPI.Controllers
 
             await _employeeLoginRepo.PatchAsync(login.Id, login);
 
+            // SpecialAdmin: replace multi-location assignments
+            if (request.Role == AppRole.SpecialAdmin)
+            {
+                await ReplaceSpecialAdminLocationsAsync(request);
+            }
+
             return Ok(new
             {
                 message = "Employee details updated successfully"
@@ -332,6 +348,8 @@ namespace SpicAPI.Controllers
                 await _employeeLoginRepo.DeleteAsync(login.Id);
             }
 
+            await DeleteSpecialAdminLocationsForEmployeeAsync(employeeId);
+
             await _employeeInfoRepo.DeleteAsync(employeeId);
 
             return Ok(new
@@ -357,6 +375,9 @@ namespace SpicAPI.Controllers
 
             // 2. Delete the specific role/login
             await _employeeLoginRepo.DeleteAsync(loginId);
+
+            // SpecialAdmin: clean up any multi-location rows for this employee
+            await DeleteSpecialAdminLocationsForEmployeeAsync(empId);
 
             // 3. Check if this was the last remaining role for the employee. 
             // If they have no logins left, delete the main employee record.
@@ -396,7 +417,8 @@ namespace SpicAPI.Controllers
                 HeadquartersId = login.HeadquartersId,
                 IsActive = login.IsActive,
                 CreatedBy = employee.CreatedBy,
-                UpdatedBy = employee.UpdatedBy
+                UpdatedBy = employee.UpdatedBy,
+                SpecialAdminLocations = await LoadSpecialAdminLocationsAsync(login.EmployeeInformationID, login.Role)
             });
         }
 
@@ -446,7 +468,83 @@ namespace SpicAPI.Controllers
 
             await _employeeLoginRepo.PatchAsync(login.Id, login);
 
+            // SpecialAdmin: replace multi-location assignments
+            if (request.Role == AppRole.SpecialAdmin)
+            {
+                await ReplaceSpecialAdminLocationsAsync(request);
+            }
+
             return Ok(new { message = "Employee role details updated successfully" });
+        }
+
+        private async Task<List<SpecialAdminLocationItem>?> LoadSpecialAdminLocationsAsync(int employeeInfoId, AppRole role)
+        {
+            if (role != AppRole.SpecialAdmin)
+                return null;
+
+            var rows = await _specialAdminLocationsRepo
+                .GetWhere(x => x.EmployeeInformationID == employeeInfoId)
+                .ToListAsync();
+
+            return rows.Select(r => new SpecialAdminLocationItem
+            {
+                StateId = r.StateId,
+                RegionId = r.RegionId,
+                HeadquarterId = r.HeadquarterId
+            }).ToList();
+        }
+
+        // Only used on create (when there are no existing rows to remove).
+        private async Task SaveSpecialAdminLocationsAsync(EmployeeLoginCreateRequest request, string currentUser)
+        {
+            foreach (var loc in request.SpecialAdminLocations!)
+            {
+                if (loc.StateId <= 0)
+                    continue;
+
+                await _specialAdminLocationsRepo.CreateAsync(new SpecialAdminLocations
+                {
+                    EmployeeInformationID = request.EmployeeInformationID,
+                    StateId = loc.StateId,
+                    RegionId = Math.Max(0, loc.RegionId),
+                    HeadquarterId = Math.Max(0, loc.HeadquarterId),
+                    CreatedAt = DateTime.Now,
+                    CreatedBy = currentUser,
+                    UpdatedAt = DateTime.Now,
+                    UpdatedBy = currentUser
+                });
+            }
+        }
+
+        // Replaces all existing SpecialAdmin location rows for the employee with
+        // the set supplied in the request (deletes orphans, prevents duplicates).
+        private async Task ReplaceSpecialAdminLocationsAsync(EmployeeLoginCreateRequest request)
+        {
+            var existing = await _specialAdminLocationsRepo
+                .GetWhere(x => x.EmployeeInformationID == request.EmployeeInformationID)
+                .ToListAsync();
+
+            foreach (var row in existing)
+            {
+                await _specialAdminLocationsRepo.DeleteAsync(row.Id);
+            }
+
+            if (request.SpecialAdminLocations != null)
+            {
+                await SaveSpecialAdminLocationsAsync(request, request.UpdatedBy ?? "System");
+            }
+        }
+
+        private async Task DeleteSpecialAdminLocationsForEmployeeAsync(int employeeInfoId)
+        {
+            var rows = await _specialAdminLocationsRepo
+                .GetWhere(x => x.EmployeeInformationID == employeeInfoId)
+                .ToListAsync();
+
+            foreach (var row in rows)
+            {
+                await _specialAdminLocationsRepo.DeleteAsync(row.Id);
+            }
         }
     }
 

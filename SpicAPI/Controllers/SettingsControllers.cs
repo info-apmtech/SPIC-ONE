@@ -71,7 +71,10 @@ namespace SpicAPI.Controllers
                     .Select(s => s.Id)
                     .ToListAsync();
 
-                query = query.Where(x => x.BasicStateId.HasValue && stateIdsInZone.Contains(x.BasicStateId.Value));
+                return Ok(await query
+                    .Where(x => x.BasicStateId.HasValue && stateIdsInZone.Contains(x.BasicStateId.Value))
+                    .OrderByDescending(x => x.CreatedAt)
+                    .ToListAsync());
             }
             else if (IsUnrestrictedRole(role))
                 return Ok(await query.OrderByDescending(x => x.CreatedAt).ToListAsync());
@@ -735,7 +738,10 @@ namespace SpicAPI.Controllers
                     .Select(s => s.Id)
                     .ToListAsync();
 
-                query = query.Where(x => x.BasicStateId.HasValue && stateIdsInZone.Contains(x.BasicStateId.Value));
+                return Ok(await query
+                    .Where(x => x.BasicStateId.HasValue && stateIdsInZone.Contains(x.BasicStateId.Value))
+                    .OrderByDescending(x => x.CreatedAt)
+                    .ToListAsync());
             }
             else if (IsUnrestrictedRole(role))
                 return Ok(await query.OrderByDescending(x => x.CreatedAt).ToListAsync());

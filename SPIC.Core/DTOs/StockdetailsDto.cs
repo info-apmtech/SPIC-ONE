@@ -6,7 +6,7 @@ namespace SPIC.Core.DTOs
 	/// <summary>
 	/// Request used by the Stock Details dashboard, export and filter actions.
 	/// </summary>
-	public class StockDetailsFilter
+	public class StockDetailsFilter : ILocationScopeFilter
 	{
 		public DateTime? DateFrom { get; set; }
 		public DateTime? DateTo { get; set; }

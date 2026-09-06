@@ -7,6 +7,7 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
 using SPIC.Core.DTOs;
 using SPIC.Core.Interfaces;
+using SpicAPI.Services;
 
 namespace SpicAPI.Controllers
 {
@@ -26,8 +27,10 @@ namespace SpicAPI.Controllers
 			[FromBody] PendingAckFilter? filter,
 			CancellationToken cancellationToken)
 		{
+			filter ??= new PendingAckFilter();
+			SpecialAdminScope.ApplyScope(User, filter);
 			var data = await _service.GetDashboardAsync(
-				filter ?? new PendingAckFilter(),
+				filter,
 				cancellationToken);
 
 			return Ok(data);
@@ -59,8 +62,10 @@ namespace SpicAPI.Controllers
 			[FromBody] PendingAckFilter? filter,
 			CancellationToken cancellationToken)
 		{
+			filter ??= new PendingAckFilter();
+			SpecialAdminScope.ApplyScope(User, filter);
 			var rows = await _service.GetAllRowsAsync(
-				filter ?? new PendingAckFilter(),
+				filter,
 				cancellationToken);
 
 			using var workbook = new XLWorkbook();

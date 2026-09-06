@@ -35,6 +35,17 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public int RegionId { get; private set; }
         public int HQId { get; private set; }
 
+        // SpecialAdmin-only multi-location scope. Populated from the
+        // spic:assigned_* claims (database-backed at login). For every other role
+        // these stay empty and existing single-location properties are unchanged.
+        public List<int> AssignedStateIds { get; private set; } = new();
+        public List<int> AssignedRegionIds { get; private set; } = new();
+        public List<int> AssignedHeadquarterIds { get; private set; } = new();
+
+        // True when the user is a SpecialAdmin with at least one assigned state.
+        public bool IsSpecialAdminWithAssignments =>
+            UserRole == AppRole.SpecialAdmin && AssignedStateIds.Count > 0;
+
         // Current authenticated user id (from token claims)
         public string? UserId { get; private set; }
 
@@ -97,6 +108,18 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             return dot < 0 ? token : token.Substring(0, dot);
         }
 
+        private static List<int> ParseCsv(string? csv)
+        {
+            var result = new List<int>();
+            if (string.IsNullOrWhiteSpace(csv)) return result;
+            foreach (var part in csv.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (int.TryParse(part.Trim(), out var id) && id > 0 && !result.Contains(id))
+                    result.Add(id);
+            }
+            return result;
+        }
+
         public bool CanAccess(PagePermission page) => CanAccess(page.ToString());
 
         // Page-level: can the user REACH this page at all?
@@ -136,6 +159,9 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             StateId = 0;
             RegionId = 0;
             HQId = 0;
+            AssignedStateIds = new List<int>();
+            AssignedRegionIds = new List<int>();
+            AssignedHeadquarterIds = new List<int>();
 
             if (string.IsNullOrWhiteSpace(token)) return;
 
@@ -171,6 +197,14 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                     RegionId = rid;
                 if (root.TryGetProperty("spic:hq_id", out var hp) && int.TryParse(hp.GetString(), out var hid))
                     HQId = hid;
+
+                // SpecialAdmin multi-location scope (comma-separated claim values)
+                if (root.TryGetProperty("spic:assigned_state_ids", out var sasp))
+                    AssignedStateIds = ParseCsv(sasp.GetString());
+                if (root.TryGetProperty("spic:assigned_region_ids", out var rasp))
+                    AssignedRegionIds = ParseCsv(rasp.GetString());
+                if (root.TryGetProperty("spic:assigned_hq_ids", out var hasp))
+                    AssignedHeadquarterIds = ParseCsv(hasp.GetString());
 
                 // Try to parse user identifier from common claim names
                 string? uid = null;

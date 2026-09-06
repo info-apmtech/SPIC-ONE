@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace SPIC.Core.DTOs
 {
-	public class AckCycleFilter
+	public class AckCycleFilter : ILocationScopeFilter
 	{
 		public DateTime? DateFrom { get; set; }
 		public DateTime? DateTo { get; set; }
