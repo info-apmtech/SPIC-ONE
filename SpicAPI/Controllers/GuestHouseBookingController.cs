@@ -178,6 +178,7 @@ namespace SpicAPI.Controllers
 				availableRooms.Add(new AvailableRoomDto
 				{
 					RoomId = room.Id,
+					RoomTypeId = room.Id,
 					RoomType = room.RoomType ?? "Room",
 					RoomNumber = room.RoomNumber,
 					Description = room.Description,
@@ -214,6 +215,7 @@ namespace SpicAPI.Controllers
 			return Ok(new RoomDetailDto
 			{
 				RoomId = room.Id,
+				RoomTypeId = room.Id,
 				GuestHouseId = room.GuestHouseId,
 				GuestHouseName = room.GuestHouse?.Name ?? "",
 				RoomType = room.RoomType ?? "Room",
@@ -252,6 +254,7 @@ namespace SpicAPI.Controllers
 	public class AvailableRoomDto
 	{
 		public int RoomId { get; set; }
+		public int RoomTypeId { get; set; }
 		public string RoomType { get; set; } = "";
 		public string? RoomNumber { get; set; }
 		public string? Description { get; set; }
@@ -274,6 +277,7 @@ namespace SpicAPI.Controllers
 	public class RoomDetailDto
 	{
 		public int RoomId { get; set; }
+		public int RoomTypeId { get; set; }
 		public int GuestHouseId { get; set; }
 		public string GuestHouseName { get; set; } = "";
 		public string RoomType { get; set; } = "";

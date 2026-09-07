@@ -349,22 +349,32 @@
                         <span class="lbl">Room Type</span>
                         <span class="val">@_roomType</span>
                     </div>
-                    
+
                     <div class="summary-row bold-val">
-                        <span class="lbl">Room Price</span>
+                        <span class="lbl">Room Rate (per night)</span>
                         <span class="val">@_money(_roomPricePerNight)</span>
                     </div>
-                    
+
                     <div class="summary-row bold-val">
-                        <span class="lbl">Number of nights</span>
+                        <span class="lbl">Number of Rooms</span>
+                        <span class="val">@_numberOfRooms</span>
+                    </div>
+
+                    <div class="summary-row bold-val">
+                        <span class="lbl">Number of Nights</span>
                         <span class="val">@_numberOfNights</span>
                     </div>
 
-                    @if (_extraCotApplicable)
+                    <div class="summary-row bold-val">
+                        <span class="lbl">Room Cost</span>
+                        <span class="val">@_money(_roomCost)</span>
+                    </div>
+
+                    @if (_extraBeds > 0 && _extraCotPrice > 0)
                     {
                         <div class="summary-row bold-val">
-                            <span class="lbl">Extra Cot × @ExtraCotQuantity</span>
-                            <span class="val">@_money(_extraCotTotal)</span>
+                            <span class="lbl">Additional Bed (₹@_money(_extraCotPrice)/bed/night × @_extraBeds beds × @_numberOfNights nights)</span>
+                            <span class="val">@_money(_extraBedCost)</span>
                         </div>
                     }
 
@@ -376,7 +386,7 @@
                     </div>
                     
                     <div class="summary-row bold-val">
-                        <span class="lbl">Taxes (@(_taxRatePercent)%)</span>
+                        <span class="lbl">GST (5%)</span>
                         <span class="val">@_money(_tax)</span>
                     </div>
 
@@ -404,8 +414,14 @@
     [SupplyParameterFromQuery(Name = "guestHouseId")]
     public int? GuestHouseId { get; set; }
 
-    [SupplyParameterFromQuery(Name = "roomId")]
-    public int? RoomId { get; set; }
+    [SupplyParameterFromQuery(Name = "roomTypeId")]
+    public int? RoomTypeId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "numberOfRooms")]
+    public int? NumberOfRooms { get; set; }
+
+    [SupplyParameterFromQuery(Name = "extraBeds")]
+    public int? ExtraBeds { get; set; }
 
     [SupplyParameterFromQuery(Name = "checkIn")]
     public string? CheckIn { get; set; }
@@ -413,8 +429,7 @@
     [SupplyParameterFromQuery(Name = "checkOut")]
     public string? CheckOut { get; set; }
 
-    private const decimal TaxRate = 12m;
-    private const int ExtraCotQuantity = 1;
+    private const decimal TaxRate = 5m;
 
     private GuestForm _form = new GuestForm();
 
@@ -426,9 +441,11 @@
     private int _numberOfNights;
     private string _roomType = "";
     private decimal _roomPricePerNight;
-    private bool _extraCotApplicable;
     private decimal _extraCotPrice;
-    private decimal _extraCotTotal;
+    private int _numberOfRooms;
+    private int _extraBeds;
+    private decimal _roomCost;
+    private decimal _extraBedCost;
     private decimal _subtotal;
     private decimal _tax;
     private decimal _total;
@@ -436,7 +453,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (!RoomId.HasValue || string.IsNullOrWhiteSpace(CheckIn) || string.IsNullOrWhiteSpace(CheckOut))
+        if (!RoomTypeId.HasValue || string.IsNullOrWhiteSpace(CheckIn) || string.IsNullOrWhiteSpace(CheckOut))
         {
             Navigation.NavigateTo("/GuestHouse");
             return;
@@ -455,6 +472,9 @@
             return;
         }
 
+        _numberOfRooms = Math.Max(1, NumberOfRooms ?? 1);
+        _extraBeds = Math.Max(0, ExtraBeds ?? 0);
+
         await LoadRoomAsync();
     }
 
@@ -464,7 +484,7 @@
         _loadError = "";
         try
         {
-            var room = await Http.GetFromJsonAsync<RoomDetailDto>($"api/GuestHouseBooking/rooms/{RoomId}");
+            var room = await Http.GetFromJsonAsync<RoomDetailDto>($"api/GuestHouseBooking/rooms/{RoomTypeId}");
             if (room == null || room.RoomId == 0)
             {
                 _loadError = "Room information could not be loaded.";
@@ -474,11 +494,11 @@
 
             _roomType = room.RoomType;
             _roomPricePerNight = room.PricePerNight;
-            _extraCotApplicable = room.ExtraCotPrice.HasValue && room.ExtraCotPrice.Value > 0;
-            _extraCotPrice = _extraCotApplicable ? room.ExtraCotPrice.Value : 0m;
-            _extraCotTotal = _extraCotApplicable ? _extraCotPrice * ExtraCotQuantity : 0m;
+            _extraCotPrice = room.ExtraCotPrice ?? 0m;
 
-            _subtotal = (_roomPricePerNight * _numberOfNights) + _extraCotTotal;
+            _roomCost = _roomPricePerNight * _numberOfRooms * _numberOfNights;
+            _extraBedCost = _extraCotPrice * _extraBeds * _numberOfNights;
+            _subtotal = _roomCost + _extraBedCost;
             _tax = Math.Round(_subtotal * (TaxRate / 100m), 2, MidpointRounding.AwayFromZero);
             _total = _subtotal + _tax;
         }
@@ -513,6 +533,7 @@
     public class RoomDetailDto
     {
         public int RoomId { get; set; }
+        public int RoomTypeId { get; set; }
         public int GuestHouseId { get; set; }
         public string GuestHouseName { get; set; } = "";
         public string RoomType { get; set; } = "";
