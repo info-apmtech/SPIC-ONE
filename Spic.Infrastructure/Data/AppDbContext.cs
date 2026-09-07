@@ -141,7 +141,7 @@ namespace Spic.Infrastructure.Data
 		//// Guest House Master Data
 		public DbSet<GuestHouse> GuestHouses { get; set; }
 		public DbSet<GuestHouseRoom> GuestHouseRooms { get; set; }
-		//public DbSet<GuestHouseImage> GuestHouseImages { get; set; }
+		public DbSet<GuestHouseImage> GuestHouseImages { get; set; }
 		//public DbSet<GuestHouseRoomImage> GuestHouseRoomImages { get; set; }
 		//public DbSet<GuestHouseRoomAmenity> GuestHouseRoomAmenities { get; set; }
 		public DbSet<GuestHouseRoomAvailability> GuestHouseRoomAvailabilities { get; set; }

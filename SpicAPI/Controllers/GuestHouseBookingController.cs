@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
+using System.IO;
 
 namespace SpicAPI.Controllers
 {
@@ -20,10 +22,12 @@ namespace SpicAPI.Controllers
 	public class GuestHouseBookingController : ControllerBase
 	{
 		private readonly AppDbContext _db;
+		private readonly IWebHostEnvironment _env;
 
-		public GuestHouseBookingController(AppDbContext db)
+		public GuestHouseBookingController(AppDbContext db, IWebHostEnvironment env)
 		{
 			_db = db;
+			_env = env;
 		}
 
 		// GET /api/GuestHouseBooking/houses
@@ -40,11 +44,68 @@ namespace SpicAPI.Controllers
 					Id = h.Id,
 					Name = h.Name,
 					Address = h.Address,
-					PhoneNumber = h.PhoneNumber
+					PhoneNumber = h.PhoneNumber,
+					ImagePath = h.Images
+						.Where(i => i.IsActive)
+						.OrderBy(i => i.IsPrimary ? 0 : 1)
+						.ThenBy(i => i.DisplayOrder)
+						.Select(i => i.FilePath)
+						.FirstOrDefault()
 				})
 				.ToListAsync();
 
 			return Ok(items);
+		}
+
+		// GET /api/GuestHouseBooking/image/{*filePath}
+		// Serves an uploaded guest house image with path-traversal protection.
+		//
+		// The stored FilePath has historically been an uploads-root relative path
+		// (e.g. "/uploads/guesthouse/1/cover_....jpg") whose file physically lives
+		// under the web root (wwwroot/uploads/...), while newer uploads are stored
+		// as a ContentRoot-relative path (e.g. "GuestHouse/1/cover_....jpg") under
+		// the ContentRoot Uploads folder. Resolve against BOTH real storage roots so
+		// every historically stored value and every new upload is served correctly.
+		[Authorize]
+		[HttpGet("image/{*filePath}")]
+		public IActionResult ViewImage(string filePath)
+		{
+			if (string.IsNullOrWhiteSpace(filePath) ||
+				filePath.Contains("..", StringComparison.Ordinal) ||
+				filePath.IndexOf(':') >= 0)
+			{
+				return NotFound("Image not found.");
+			}
+
+			var normalized = filePath.TrimStart('\\', '/').Replace('/', Path.DirectorySeparatorChar);
+
+			var roots = new[] { GetUploadsRoot(), GetWebRoot() };
+
+			foreach (var root in roots)
+			{
+				var fullPath = Path.GetFullPath(Path.Combine(root, normalized));
+
+				var rootWithSep = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+					+ Path.DirectorySeparatorChar;
+				if (!fullPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+					continue;
+
+				if (!System.IO.File.Exists(fullPath))
+					continue;
+
+				var ext = Path.GetExtension(fullPath).ToLowerInvariant();
+				var contentType = ext switch
+				{
+					".jpg" or ".jpeg" => "image/jpeg",
+					".png" => "image/png",
+					".webp" => "image/webp",
+					_ => "application/octet-stream"
+				};
+
+				return PhysicalFile(fullPath, contentType);
+			}
+
+			return NotFound("Image not found.");
 		}
 
 		// GET /api/GuestHouseBooking/availability?guestHouseId=1&checkIn=2026-09-10T14:00&checkOut=2026-09-12T12:00
@@ -164,6 +225,19 @@ namespace SpicAPI.Controllers
 				NumberOfAdults = room.NumberOfAdults
 			});
 		}
+
+		private string GetUploadsRoot()
+		{
+			return Path.Combine(_env.ContentRootPath, "Uploads");
+		}
+
+		private string GetWebRoot()
+		{
+			var webRoot = _env.WebRootPath;
+			if (string.IsNullOrWhiteSpace(webRoot))
+				webRoot = Path.Combine(_env.ContentRootPath, "wwwroot");
+			return webRoot;
+		}
 	}
 
 	public class GuestHouseCardDto
@@ -172,6 +246,7 @@ namespace SpicAPI.Controllers
 		public string Name { get; set; } = "";
 		public string? Address { get; set; }
 		public string? PhoneNumber { get; set; }
+		public string? ImagePath { get; set; }
 	}
 
 	public class AvailableRoomDto

@@ -1,5 +1,6 @@
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
@@ -31,11 +32,13 @@ namespace SpicAPI.Controllers
 	{
 		private readonly AppDbContext _db;
 		private readonly ILogger<GuestHouseMasterController> _logger;
+		private readonly IWebHostEnvironment _env;
 
-		public GuestHouseMasterController(AppDbContext db, ILogger<GuestHouseMasterController> logger)
+		public GuestHouseMasterController(AppDbContext db, ILogger<GuestHouseMasterController> logger, IWebHostEnvironment env)
 		{
 			_db = db;
 			_logger = logger;
+			_env = env;
 		}
 
 		// =====================================================================
@@ -218,6 +221,12 @@ namespace SpicAPI.Controllers
 					Address = h.Address,
 					PhoneNumber = h.PhoneNumber,
 					Description = h.Description,
+					ImagePath = h.Images
+						.Where(i => i.IsActive)
+						.OrderBy(i => i.IsPrimary ? 0 : 1)
+						.ThenBy(i => i.DisplayOrder)
+						.Select(i => i.FilePath)
+						.FirstOrDefault(),
 					IsActive = h.IsActive,
 					RoomCount = h.Rooms.Count,
 					CreatedAt = h.CreatedAt,
@@ -341,6 +350,69 @@ namespace SpicAPI.Controllers
 			house.UpdatedAt = DateTime.UtcNow;
 			await _db.SaveChangesAsync();
 			return Ok(new { Success = true, Message = "Guest House status updated." });
+		}
+
+		// POST /api/GuestHouseMaster/houses/{id}/image
+		// Uploads/replaces the cover image of a guest house. Stored under Uploads/GuestHouse/{id}
+		// and linked through the existing GuestHouseImage table (no schema change needed).
+		[HttpPost("houses/{id:int}/image")]
+		[RequestSizeLimit(6 * 1024 * 1024)]
+		public async Task<IActionResult> UploadHouseImage(int id, IFormFile? file)
+		{
+			if (file == null || file.Length == 0)
+				return BadRequest(new { Success = false, Message = "No file uploaded." });
+
+			var house = await _db.GuestHouses.FindAsync(id);
+			if (house == null)
+				return NotFound(new { Success = false, Message = "Guest House not found." });
+
+			var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+			var allowedExts = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+			if (!allowedExts.Contains(ext))
+				return BadRequest(new { Success = false, Message = "Only JPG, PNG, or WEBP images are allowed." });
+
+			if (file.Length > 5 * 1024 * 1024)
+				return BadRequest(new { Success = false, Message = "Image must be 5 MB or less." });
+
+			var uploadsRoot = Path.Combine(_env.ContentRootPath, "Uploads");
+
+			var folder = Path.Combine(uploadsRoot, "GuestHouse", id.ToString());
+			Directory.CreateDirectory(folder);
+
+			var storedName = $"cover_{DateTime.UtcNow:yyyyMMddHHmmssfff}{ext}";
+			var physicalPath = Path.Combine(folder, storedName);
+
+			await using (var stream = new FileStream(physicalPath, FileMode.Create))
+			{
+				await file.CopyToAsync(stream);
+			}
+
+			var relativePath = $"GuestHouse/{id}/{storedName}";
+
+			// Demote any existing primary image, then store the new one as the active primary.
+			var existing = await _db.GuestHouseImages
+				.Where(i => i.GuestHouseId == id)
+				.ToListAsync();
+			foreach (var img in existing)
+			{
+				img.IsPrimary = false;
+				img.IsActive = false;
+			}
+
+			_db.GuestHouseImages.Add(new GuestHouseImage
+			{
+				GuestHouseId = id,
+				FileName = Path.GetFileName(file.FileName),
+				FilePath = relativePath,
+				IsPrimary = true,
+				DisplayOrder = 0,
+				IsActive = true,
+				CreatedBy = "current-user",
+				CreatedAt = DateTime.UtcNow
+			});
+			await _db.SaveChangesAsync();
+
+			return Ok(new { Success = true, Message = "Image uploaded successfully.", FilePath = relativePath });
 		}
 
 		// =====================================================================
@@ -690,6 +762,7 @@ namespace SpicAPI.Controllers
 		public string? Address { get; set; }
 		public string? PhoneNumber { get; set; }
 		public string? Description { get; set; }
+		public string? ImagePath { get; set; }
 		public bool IsActive { get; set; }
 		public int RoomCount { get; set; }
 		public DateTime CreatedAt { get; set; }
