@@ -71,8 +71,48 @@ namespace SpicAPI.Controllers
                         w.SMApproved == null &&
                         w.AVPApproved == null),
 
+                    PendingRmActive = g.Count(w =>
+                        w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == null &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
+                    PendingRmInactive = g.Count(w =>
+                        !w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == null &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
+                    PendingRmTotal = g.Count(w =>
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == null &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
                     PendingSmm = g.Count(w =>
                         w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
+                    PendingSmmActive = g.Count(w =>
+                        w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
+                    PendingSmmInactive = g.Count(w =>
+                        !w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
+                    PendingSmmTotal = g.Count(w =>
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
                         w.SMApproved == null &&
@@ -85,8 +125,48 @@ namespace SpicAPI.Controllers
                         w.SMApproved == true &&
                         w.AVPApproved == null),
 
+                    PendingWithAvpActive = g.Count(w =>
+                        w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == null),
+
+                    PendingWithAvpInactive = g.Count(w =>
+                        !w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == null),
+
+                    PendingWithAvpTotal = g.Count(w =>
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == null),
+
                     Completed = g.Count(w =>
                         w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == true),
+
+                    CompletedActive = g.Count(w =>
+                        w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == true),
+
+                    CompletedInactive = g.Count(w =>
+                        !w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == true),
+
+                    CompletedTotal = g.Count(w =>
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
                         w.SMApproved == true &&
@@ -156,8 +236,48 @@ namespace SpicAPI.Controllers
                         r.SMApproved == null &&
                         r.AVPApproved == null),
 
+                    PendingRmActive = g.Count(r =>
+                        r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == null &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
+                    PendingRmInactive = g.Count(r =>
+                        !r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == null &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
+                    PendingRmTotal = g.Count(r =>
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == null &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
                     PendingSmm = g.Count(r =>
                         r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
+                    PendingSmmActive = g.Count(r =>
+                        r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
+                    PendingSmmInactive = g.Count(r =>
+                        !r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
+                    PendingSmmTotal = g.Count(r =>
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
                         r.SMApproved == null &&
@@ -170,8 +290,48 @@ namespace SpicAPI.Controllers
                         r.SMApproved == true &&
                         r.AVPApproved == null),
 
+                    PendingWithAvpActive = g.Count(r =>
+                        r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == null),
+
+                    PendingWithAvpInactive = g.Count(r =>
+                        !r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == null),
+
+                    PendingWithAvpTotal = g.Count(r =>
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == null),
+
                     Completed = g.Count(r =>
                         r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == true),
+
+                    CompletedActive = g.Count(r =>
+                        r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == true),
+
+                    CompletedInactive = g.Count(r =>
+                        !r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == true),
+
+                    CompletedTotal = g.Count(r =>
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
                         r.SMApproved == true &&
@@ -222,9 +382,21 @@ namespace SpicAPI.Controllers
                 AsPerSap = sapTotal,
                 PendingWithMo = Math.Max(0, sapTotal - (totalRm + totalSmm + totalAvp + totalCompleted)),
                 PendingRm = totalRm,
+                PendingRmActive = rows.Sum(r => r.PendingRmActive),
+                PendingRmInactive = rows.Sum(r => r.PendingRmInactive),
+                PendingRmTotal = rows.Sum(r => r.PendingRmActive) + rows.Sum(r => r.PendingRmInactive),
                 PendingSmm = totalSmm,
+                PendingSmmActive = rows.Sum(r => r.PendingSmmActive),
+                PendingSmmInactive = rows.Sum(r => r.PendingSmmInactive),
+                PendingSmmTotal = rows.Sum(r => r.PendingSmmActive) + rows.Sum(r => r.PendingSmmInactive),
                 PendingWithAvp = totalAvp,
-                Completed = totalCompleted
+                PendingWithAvpActive = rows.Sum(r => r.PendingWithAvpActive),
+                PendingWithAvpInactive = rows.Sum(r => r.PendingWithAvpInactive),
+                PendingWithAvpTotal = rows.Sum(r => r.PendingWithAvpActive) + rows.Sum(r => r.PendingWithAvpInactive),
+                Completed = totalCompleted,
+                CompletedActive = rows.Sum(r => r.CompletedActive),
+                CompletedInactive = rows.Sum(r => r.CompletedInactive),
+                CompletedTotal = rows.Sum(r => r.CompletedActive) + rows.Sum(r => r.CompletedInactive)
             };
         }
 
@@ -404,9 +576,21 @@ namespace SpicAPI.Controllers
         public int AsPerSap { get; set; }
         public int PendingWithMo { get; set; }
         public int PendingRm { get; set; }
+        public int PendingRmActive { get; set; }
+        public int PendingRmInactive { get; set; }
+        public int PendingRmTotal { get; set; }
         public int PendingSmm { get; set; }
+        public int PendingSmmActive { get; set; }
+        public int PendingSmmInactive { get; set; }
+        public int PendingSmmTotal { get; set; }
         public int PendingWithAvp { get; set; }
+        public int PendingWithAvpActive { get; set; }
+        public int PendingWithAvpInactive { get; set; }
+        public int PendingWithAvpTotal { get; set; }
         public int Completed { get; set; }
+        public int CompletedActive { get; set; }
+        public int CompletedInactive { get; set; }
+        public int CompletedTotal { get; set; }
     }
 
     public sealed class LogisticsReportTotalDto
@@ -417,9 +601,21 @@ namespace SpicAPI.Controllers
         public int AsPerSap { get; set; }
         public int PendingWithMo { get; set; }
         public int PendingRm { get; set; }
+        public int PendingRmActive { get; set; }
+        public int PendingRmInactive { get; set; }
+        public int PendingRmTotal { get; set; }
         public int PendingSmm { get; set; }
+        public int PendingSmmActive { get; set; }
+        public int PendingSmmInactive { get; set; }
+        public int PendingSmmTotal { get; set; }
         public int PendingWithAvp { get; set; }
+        public int PendingWithAvpActive { get; set; }
+        public int PendingWithAvpInactive { get; set; }
+        public int PendingWithAvpTotal { get; set; }
         public int Completed { get; set; }
+        public int CompletedActive { get; set; }
+        public int CompletedInactive { get; set; }
+        public int CompletedTotal { get; set; }
     }
 
     public sealed class LogisticsReportResponseDto
