@@ -146,10 +146,18 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 			"/Investment"
 		};
 
-		public static List<FormStepModel> GetVisibleSteps(bool hasGreenStar, bool isRestricted = false)
+		public static List<FormStepModel> GetVisibleSteps(bool hasGreenStar, bool isRestricted = false, bool hasConsent = false)
 		{
 			if (isRestricted)
 				return Steps.Where(x => RestrictedRoutes.Contains(x.Route, StringComparer.OrdinalIgnoreCase)).ToList();
+
+			if (hasConsent)
+			{
+				return Steps
+					.Where(x => !x.Route.Equals("/CreditLimit", StringComparison.OrdinalIgnoreCase)
+					         && !x.Route.Equals("/CreditLimitForGreenStar", StringComparison.OrdinalIgnoreCase))
+					.ToList();
+			}
 
 			if (hasGreenStar)
 				return Steps;

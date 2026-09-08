@@ -51,6 +51,7 @@
     private List<FormStepModel> _visibleSteps = FormStepData.GetVisibleSteps(false);
     private bool _isRestrictedFlow;
     private bool _hasGreenStar;
+    private bool _hasConsent;
     private bool _isNewDealerFlow;
     private bool _isExistingMaintenanceFlow;
     private bool _isDashboardCreditLimitMode;
@@ -98,7 +99,8 @@
     {
         _visibleSteps = FormStepData.GetVisibleSteps(
             _hasGreenStar,
-            _isRestrictedFlow || IsRestrictedFlow);
+            _isRestrictedFlow || IsRestrictedFlow,
+            _hasConsent);
 
         SetCurrentStep();
     }
@@ -117,6 +119,7 @@
         {
             var dealer = await GetDealer(dealerId);
             _hasGreenStar = dealer?.InGreenStar ?? false;
+            _hasConsent = dealer?.IsCreditLimitConsentGiven ?? false;
 
             if (dealer != null)
             {
@@ -144,11 +147,13 @@
         else
         {
             _hasGreenStar = false;
+            _hasConsent = false;
         }
 
         _visibleSteps = FormStepData.GetVisibleSteps(
             _hasGreenStar,
-            _isRestrictedFlow || IsRestrictedFlow);
+            _isRestrictedFlow || IsRestrictedFlow,
+            _hasConsent);
 
         SetCurrentStep();
     }
