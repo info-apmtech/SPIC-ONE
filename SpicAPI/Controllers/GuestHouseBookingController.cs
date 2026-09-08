@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
+using System.Data;
 using System.IO;
 
 namespace SpicAPI.Controllers
@@ -142,6 +144,12 @@ namespace SpicAPI.Controllers
 				.Where(a => roomIds.Contains(a.GuestHouseRoomId) && a.Date >= checkIn.Date && a.Date < checkOut.Date)
 				.ToListAsync();
 
+			// Rooms already committed (Draft/PendingPayment/Confirmed/CheckedIn) by an existing
+			// booking whose stay window overlaps the requested period. The master inventory rows
+			// above are only ever the capacity ceiling (admin-maintained); this is what actually
+			// tracks live demand against that ceiling.
+			var committedByRoom = await GetCommittedRoomsByRoomAsync(roomIds, checkIn.Date, checkOut.Date);
+
 			var availableRooms = new List<AvailableRoomDto>();
 
 			foreach (var room in rooms)
@@ -170,6 +178,10 @@ namespace SpicAPI.Controllers
 					if (periodAvailability <= 0)
 						break;
 				}
+
+				// Subtract rooms already held by overlapping bookings for this room type.
+				var committed = committedByRoom.TryGetValue(room.Id, out var committedCount) ? committedCount : 0;
+				periodAvailability = Math.Max(0, periodAvailability - committed);
 
 				// Only include the room when it is available on every night of the stay.
 				if (hasAnyRows && periodAvailability <= 0)
@@ -278,15 +290,6 @@ namespace SpicAPI.Controllers
             if (string.IsNullOrWhiteSpace(request.PhoneNumber))
                 return BadRequest(new { Success = false, Message = "Phone Number is required." });
 
-            // Re-check availability for the whole stay period.
-            var available = await GetAvailableQuantityForPeriodAsync(room.Id, checkIn.Date, checkOut.Date);
-            if (available < numberOfRooms)
-                return Conflict(new
-                {
-                    Success = false,
-                    Message = $"Only {available} room(s) of this type are available for the selected dates. Please reduce the number of rooms or choose another room type."
-                });
-
             // Pricing (5% GST per the Guest House requirement).
             var roomPrice = room.PricePerNight;
             var extraCotPrice = room.ExtraCotPrice ?? 0m;
@@ -301,6 +304,38 @@ namespace SpicAPI.Controllers
             var isPayAfterStay = paymentMethod == GuestHousePaymentMethod.PayAfterStay;
             var bookingStatus = isPayAfterStay ? GuestHouseBookingStatus.Confirmed : GuestHouseBookingStatus.Draft;
             var paymentStatus = isPayAfterStay ? GuestHousePaymentStatus.Pending : GuestHousePaymentStatus.Pending;
+
+            // The availability re-check and the insert must happen atomically: without this,
+            // two nearly-simultaneous requests for the same room/overlapping dates could both
+            // read "room available" before either has saved, and both would then be allowed to
+            // book it. Serializable isolation makes Postgres detect that race at commit time
+            // (the second commit fails with SqlState 40001) instead of silently double-booking.
+            await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
+            int available;
+            try
+            {
+                available = await GetAvailableQuantityForPeriodAsync(room.Id, checkIn.Date, checkOut.Date);
+            }
+            catch (PostgresException ex) when (ex.SqlState == "40001")
+            {
+                await transaction.RollbackAsync();
+                return Conflict(new
+                {
+                    Success = false,
+                    Message = "This room was just booked by someone else for the selected dates. Please try again."
+                });
+            }
+
+            if (available < numberOfRooms)
+            {
+                await transaction.RollbackAsync();
+                return Conflict(new
+                {
+                    Success = false,
+                    Message = $"Only {available} room(s) of this type are available for the selected dates. Please reduce the number of rooms or choose another room type."
+                });
+            }
 
             var booking = new GuestHouseBooking
             {
@@ -360,7 +395,30 @@ namespace SpicAPI.Controllers
             };
 
             _db.GuestHouseBookings.Add(booking);
-            await _db.SaveChangesAsync();
+
+            try
+            {
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "40001" })
+            {
+                await transaction.RollbackAsync();
+                return Conflict(new
+                {
+                    Success = false,
+                    Message = "This room was just booked by someone else for the selected dates. Please try again."
+                });
+            }
+            catch (PostgresException ex) when (ex.SqlState == "40001")
+            {
+                await transaction.RollbackAsync();
+                return Conflict(new
+                {
+                    Success = false,
+                    Message = "This room was just booked by someone else for the selected dates. Please try again."
+                });
+            }
 
             return Ok(new BookingResultDto
             {
@@ -587,7 +645,8 @@ namespace SpicAPI.Controllers
 		}
 
         // Computes the minimum number of available rooms for this room type across every night
-        // of the stay, reusing the same logic as the availability endpoint.
+        // of the stay, reusing the same logic as the availability endpoint, and then subtracts
+        // whatever is already committed by overlapping bookings so the check reflects real demand.
         private async Task<int> GetAvailableQuantityForPeriodAsync(int roomId, DateTime checkInDate, DateTime checkOutDate)
         {
             var room = await _db.GuestHouseRooms.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roomId);
@@ -623,7 +682,42 @@ namespace SpicAPI.Controllers
                 if (periodAvailability <= 0) break;
             }
 
-            return periodAvailability > 0 ? periodAvailability : 0;
+            periodAvailability = periodAvailability > 0 ? periodAvailability : 0;
+
+            var committedByRoom = await GetCommittedRoomsByRoomAsync(new[] { roomId }, checkInDate, checkOutDate);
+            var committed = committedByRoom.TryGetValue(roomId, out var committedCount) ? committedCount : 0;
+
+            var remaining = periodAvailability - committed;
+            return remaining > 0 ? remaining : 0;
+        }
+
+        // Sum of NumberOfRooms already held (every status except Cancelled and Completed -
+        // i.e. Draft/PendingPayment/Confirmed/CheckedIn all still occupy inventory) by bookings
+        // of the given room(s) whose stay window overlaps [checkInDate, checkOutDate).
+        //
+        // This is the single, authoritative source of "how much of a room type's inventory is
+        // currently spoken for" by real bookings. GuestHouseRoom.AvailableQuantity and
+        // GuestHouseRoomAvailability remain exactly what they were: an admin-maintained capacity
+        // ceiling. Neither is written here or anywhere in the booking lifecycle - only read.
+        private async Task<Dictionary<int, int>> GetCommittedRoomsByRoomAsync(IReadOnlyCollection<int> roomIds, DateTime checkInDate, DateTime checkOutDate)
+        {
+            if (roomIds.Count == 0)
+                return new Dictionary<int, int>();
+
+            var rows = await _db.GuestHouseBookings
+                .AsNoTracking()
+                .Where(b => roomIds.Contains(b.GuestHouseRoomId)
+                    && b.BookingStatus != GuestHouseBookingStatus.Cancelled
+                    && b.BookingStatus != GuestHouseBookingStatus.Completed
+                    && b.CheckInDate.HasValue && b.CheckOutDate.HasValue
+                    && b.CheckInDate.Value.Date < checkOutDate.Date
+                    && b.CheckOutDate.Value.Date > checkInDate.Date)
+                .Select(b => new { b.GuestHouseRoomId, b.NumberOfRooms })
+                .ToListAsync();
+
+            return rows
+                .GroupBy(r => r.GuestHouseRoomId)
+                .ToDictionary(g => g.Key, g => g.Sum(r => r.NumberOfRooms ?? 1));
         }
 
         private static string GenerateBookingReference()
