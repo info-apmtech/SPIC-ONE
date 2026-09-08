@@ -125,16 +125,21 @@
 			Http.DefaultRequestHeaders.Authorization =
 				new AuthenticationHeaderValue("Bearer", rawToken);
 
+			// Persist to sessionStorage FIRST, then populate LoginState as one
+			// atomic synchronous batch. This way every LoginState.OnChange
+			// subscriber (NavMenu, PageGuard) and the authenticated layout only
+			// ever sees the complete authenticated state, never intermediate
+			// partial states during login.
+			await JS.InvokeVoidAsync("sessionStorage.setItem", "jwt_token", rawToken);
+			await JS.InvokeVoidAsync("sessionStorage.setItem", "jwt_expiration", result.Expiration.ToString("O"));
+			await JS.InvokeVoidAsync("sessionStorage.setItem", "spic_role_access", result.RoleAccess ?? "");
+			await JS.InvokeVoidAsync("sessionStorage.setItem", "spic_designation_name", result.DesignationName ?? "");
+
 			// Persist token + page permissions for refreshes and other pages
 			LoginState.Token = rawToken;
 			LoginState.Expiration = result.Expiration;
 			LoginState.SetAllowedPages(result.RoleAccess);
 			LoginState.SetDesignationName(result.DesignationName);
-
-			await JS.InvokeVoidAsync("sessionStorage.setItem", "jwt_token", rawToken);
-			await JS.InvokeVoidAsync("sessionStorage.setItem", "jwt_expiration", result.Expiration.ToString("O"));
-			await JS.InvokeVoidAsync("sessionStorage.setItem", "spic_role_access", result.RoleAccess ?? "");
-			await JS.InvokeVoidAsync("sessionStorage.setItem", "spic_designation_name", result.DesignationName ?? "");
 
 			var landingPage = LoginState.UserRole switch
 			{
