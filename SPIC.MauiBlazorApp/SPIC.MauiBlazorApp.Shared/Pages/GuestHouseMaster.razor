@@ -65,11 +65,39 @@
 						<input type="text" class="form-control-custom w-100" placeholder="Enter Phone Number"
 							   @bind="_houseForm.PhoneNumber" />
 					</div>
-					<div class="col-md-12 col-lg-8">
-						<label class="form-label-custom">Description</label>
-						<input type="text" class="form-control-custom w-100" placeholder="Short description"
-							   @bind="_houseForm.Description" />
+<div class="col-md-12 col-lg-8">
+					<label class="form-label-custom">Description</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Short description"
+						   @bind="_houseForm.Description" />
+				</div>
+				<div class="col-md-12">
+					<label class="form-label-custom">Guest House Image</label>
+					<div class="d-flex align-items-center gap-3">
+						@if (!string.IsNullOrEmpty(_houseImagePreview))
+						{
+							<img src="@_houseImagePreview" alt="Selected image preview"
+								 style="height:56px;width:96px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;" />
+						}
+						else if (!string.IsNullOrEmpty(_houseForm.ImagePath))
+						{
+							<img src="@GetImageUrl(_houseForm.ImagePath)" alt="Current image"
+								 style="height:56px;width:96px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;" />
+						}
+						<label class="btn-outline-green mb-0" style="cursor:pointer;position:relative;">
+							<i class="bi bi-upload"></i>
+							@((_houseImagePreview != null || !string.IsNullOrEmpty(_houseForm.ImagePath)) ? "Replace Image" : "Upload Image")
+							<InputFile hidden OnChange="OnHouseImageSelected" accept="image/*" />
+						</label>
+						@if (!string.IsNullOrEmpty(_imageUploadMsg))
+						{
+							<span class="text-muted small">@_imageUploadMsg</span>
+						}
 					</div>
+					@if (!_isEditing && !string.IsNullOrEmpty(_houseImagePreview))
+					{
+						<small class="text-muted">The selected image will be attached to the Guest House when you save it.</small>
+					}
+				</div>
 				}
 				else
 				{
@@ -183,6 +211,7 @@
 
 				<TableHeader>
 					<th>Name</th>
+					<th>Image</th>
 					<th>Address</th>
 					<th>Phone</th>
 					<th>Description</th>
@@ -194,6 +223,13 @@
 
 				<TableRow Context="item">
 					<td>@item.Name</td>
+					<td>
+						@if (!string.IsNullOrEmpty(item.ImagePath))
+						{
+							<img src="@GetImageUrl(item.ImagePath)" alt="@item.Name"
+								 style="height:36px;width:60px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;" />
+						}
+					</td>
 					<td>@(item.Address ?? "-")</td>
 					<td>@(item.PhoneNumber ?? "-")</td>
 					<td>@(item.Description ?? "-")</td>
@@ -434,6 +470,13 @@
 	private bool _showDeleteConfirm;
 	private bool _isDeleting;
 	private object? _deleteTarget;
+
+	// Image upload state
+	private string? _imageUploadMsg;
+	private byte[]? _pendingHouseImage;
+	private string? _pendingHouseImageName;
+	private string? _pendingHouseImageContentType;
+	private string? _houseImagePreview;
 
 	// Search & filter
 	private string _searchText = "";
@@ -686,6 +729,16 @@
 					return;
 				}
 				ShowMessage($"{singularName} created successfully.", false);
+
+				if (ActiveTab == TabHouse && _pendingHouseImage != null)
+				{
+					var createdId = ParseCreateId(await response.Content.ReadAsStringAsync());
+					if (createdId > 0)
+					{
+						var uploaded = await UploadHouseImageAsync(createdId);
+						_imageUploadMsg = uploaded ? "Image uploaded." : (_imageUploadMsg ?? "Image upload failed. Use Edit to retry.");
+					}
+				}
 			}
 
 			ResetForm();
@@ -714,8 +767,14 @@
 				Address = house.Address,
 				PhoneNumber = house.PhoneNumber,
 				Description = house.Description,
+				ImagePath = house.ImagePath,
 				IsActive = house.IsActive
 			};
+			_imageUploadMsg = null;
+			_pendingHouseImage = null;
+			_pendingHouseImageName = null;
+			_pendingHouseImageContentType = null;
+			_houseImagePreview = null;
 		}
 		else if (ActiveTab == TabRooms && item is GuestHouseRoomGridDto room)
 		{
@@ -828,6 +887,11 @@
 		_roomForm = new GuestHouseRoomFormModel();
 		_isEditing = false;
 		_editingId = null;
+		_imageUploadMsg = null;
+		_pendingHouseImage = null;
+		_pendingHouseImageName = null;
+		_pendingHouseImageContentType = null;
+		_houseImagePreview = null;
 	}
 
 	private void ShowMessage(string message, bool isError)
@@ -930,6 +994,126 @@
 		_errorsCopied = false;
 	}
 
+	private async Task OnHouseImageSelected(InputFileChangeEventArgs e)
+	{
+		var file = e.File;
+		if (file == null) return;
+
+		_imageUploadMsg = null;
+		try
+		{
+			if (file.Size > 5 * 1024 * 1024)
+			{
+				_imageUploadMsg = "Image must be 5 MB or less.";
+				return;
+			}
+
+			byte[] buffer;
+			await using (var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024))
+			{
+				using var ms = new MemoryStream();
+				await stream.CopyToAsync(ms);
+				buffer = ms.ToArray();
+			}
+
+			var contentType = file.ContentType ?? "image/jpeg";
+			_pendingHouseImage = buffer;
+			_pendingHouseImageName = file.Name;
+			_pendingHouseImageContentType = contentType;
+			_houseImagePreview = $"data:{contentType};base64,{Convert.ToBase64String(buffer)}";
+			StateHasChanged();
+
+			if (_isEditing && _editingId.HasValue)
+			{
+				if (await UploadHouseImageAsync(_editingId.Value))
+					_imageUploadMsg = "Image uploaded.";
+			}
+			else
+			{
+				_imageUploadMsg = "Image selected. It will be attached when you save this Guest House.";
+			}
+			StateHasChanged();
+		}
+		catch (Exception ex)
+		{
+			_imageUploadMsg = $"Error reading image: {ex.Message}";
+			StateHasChanged();
+		}
+	}
+
+	private async Task<bool> UploadHouseImageAsync(int houseId)
+	{
+		try
+		{
+			_imageUploadMsg = "Uploading image...";
+			StateHasChanged();
+
+			using var content = new MultipartFormDataContent();
+			using var ms = new MemoryStream(_pendingHouseImage ?? Array.Empty<byte>());
+			var streamContent = new StreamContent(ms);
+			streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(_pendingHouseImageContentType ?? "application/octet-stream");
+			content.Add(streamContent, "file", _pendingHouseImageName ?? "guesthouse.jpg");
+
+			var response = await Http.PostAsync($"api/GuestHouseMaster/houses/{houseId}/image", content);
+			var body = await response.Content.ReadAsStringAsync();
+
+			if (!response.IsSuccessStatusCode)
+			{
+				_imageUploadMsg = ParseErrorMessage(body);
+				return false;
+			}
+
+			await LoadTabData();
+			var updated = _housesAll.FirstOrDefault(h => h.Id == houseId);
+			if (updated != null) _houseForm.ImagePath = updated.ImagePath;
+			_pendingHouseImage = null;
+			_pendingHouseImageName = null;
+			_pendingHouseImageContentType = null;
+			return true;
+		}
+		catch (Exception ex)
+		{
+			_imageUploadMsg = $"Upload error: {ex.Message}";
+			return false;
+		}
+	}
+
+	private static int ParseCreateId(string body)
+	{
+		try
+		{
+			using var doc = JsonDocument.Parse(body);
+			if (doc.RootElement.TryGetProperty("Id", out var id)) return id.GetInt32();
+			if (doc.RootElement.TryGetProperty("id", out var id2)) return id2.GetInt32();
+		}
+		catch { }
+		return 0;
+	}
+
+	private string GetImageUrl(string? path)
+	{
+		if (string.IsNullOrWhiteSpace(path)) return "";
+
+		// Already a full URL or a static asset path — use as is.
+		if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+			path.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+			path.StartsWith("_content/", StringComparison.OrdinalIgnoreCase))
+		{
+			return path;
+		}
+
+		var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+		var relative = Uri.EscapeDataString(path).Replace("%2F", "/").TrimStart('/');
+		var token = LoginState.Token;
+		if (!string.IsNullOrEmpty(token))
+		{
+			var rawToken = token.StartsWith("Bearer ") ? token["Bearer ".Length..] : token;
+			return $"{baseUrl}/api/GuestHouseBooking/image/{relative}?access_token={Uri.EscapeDataString(rawToken)}";
+		}
+
+		return $"{baseUrl}/api/GuestHouseBooking/image/{relative}";
+	}
+
 	private async Task CopyUploadErrors()
 	{
 		if (_groupedErrors.Count == 0) return;
@@ -996,6 +1180,7 @@
 		public string? Address { get; set; }
 		public string? PhoneNumber { get; set; }
 		public string? Description { get; set; }
+		public string? ImagePath { get; set; }
 		public bool IsActive { get; set; }
 		public int RoomCount { get; set; }
 		public DateTime CreatedAt { get; set; }
@@ -1026,6 +1211,7 @@
 		public string? Address { get; set; }
 		public string? PhoneNumber { get; set; }
 		public string? Description { get; set; }
+		public string? ImagePath { get; set; }
 		public bool IsActive { get; set; } = true;
 	}
 

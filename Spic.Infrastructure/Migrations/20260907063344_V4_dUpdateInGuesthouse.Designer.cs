@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260907063344_V4_dUpdateInGuesthouse")]
+    partial class V4_dUpdateInGuesthouse
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2131,9 +2134,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("NumberOfPersons")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("NumberOfRooms")
-                        .HasColumnType("integer");
-
                     b.Property<int>("PaymentStatus")
                         .HasColumnType("integer");
 
@@ -2161,7 +2161,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("GuestHouseRoomId");
 
-                    b.ToTable("GuestHouseBookings");
+                    b.ToTable("GuestHouseBooking");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingCancellation", b =>
@@ -2312,7 +2312,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("GuestHouseBookingId");
 
-                    b.ToTable("GuestHouseBookingGuests");
+                    b.ToTable("GuestHouseBookingGuest");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingPayment", b =>
@@ -2357,7 +2357,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("GuestHouseBookingId");
 
-                    b.ToTable("GuestHouseBookingPayments");
+                    b.ToTable("GuestHouseBookingPayment");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingRefund", b =>

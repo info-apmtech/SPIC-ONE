@@ -70,8 +70,43 @@
                             }
                         </div>
 
+                        <div class="rm-selection-section">
+                            <div class="rm-selection-row">
+                                <label class="rm-selection-label">Number of Rooms</label>
+                                <select class="rm-select" value="@room.SelectedQuantity" @onchange="e => OnQuantityChanged(room, e)">
+                                    @for (int i = 1; i <= room.AvailableQuantity; i++)
+                                    {
+                                        <option value="@i">@i</option>
+                                    }
+                                </select>
+                            </div>
+
+                            @if (room.ExtraCotPrice.HasValue && room.ExtraCotPrice.Value > 0)
+                            {
+                                <div class="rm-selection-row">
+                                    <label class="rm-selection-label">
+                                        <input type="checkbox" checked="@room.ExtraBedSelected" @onchange="e => OnExtraBedToggle(room, e)" class="rm-checkbox" />
+                                        Additional Bed (₹@room.ExtraCotPrice.Value.ToString("N0")/night)
+                                    </label>
+                                </div>
+
+                                @if (room.ExtraBedSelected)
+                                {
+                                    <div class="rm-selection-row">
+                                        <label class="rm-selection-label">No. of Additional Beds</label>
+                                        <select class="rm-select" value="@room.SelectedExtraBeds" @onchange="e => OnExtraBedsChanged(room, e)">
+                                            @for (int i = 1; i <= Math.Min(room.SelectedQuantity, 5); i++)
+                                            {
+                                                <option value="@i">@i</option>
+                                            }
+                                        </select>
+                                    </div>
+                                }
+                            }
+                        </div>
+
                         <div class="rm-card-actions">
-                            <button class="rm-btn rm-btn-outline">View Details</button>
+                            <button class="rm-btn rm-btn-outline" disabled>View Details</button>
                             <button class="rm-btn rm-btn-solid" @onclick="() => GoToGuestDetails(room)">Book Now</button>
                         </div>
                     </div>
@@ -134,10 +169,46 @@
         _activeTab = tab;
     }
 
+    private void OnQuantityChanged(RoomCardModel room, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var qty))
+        {
+            room.SelectedQuantity = Math.Clamp(qty, 1, room.AvailableQuantity);
+            if (room.ExtraBedSelected)
+            {
+                room.SelectedExtraBeds = Math.Min(room.SelectedExtraBeds, room.SelectedQuantity);
+            }
+        }
+    }
+
+    private void OnExtraBedToggle(RoomCardModel room, ChangeEventArgs e)
+    {
+        room.ExtraBedSelected = e.Value is true;
+        if (!room.ExtraBedSelected)
+        {
+            room.SelectedExtraBeds = 0;
+        }
+        else
+        {
+            room.SelectedExtraBeds = 1;
+        }
+    }
+
+    private void OnExtraBedsChanged(RoomCardModel room, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var beds))
+        {
+            room.SelectedExtraBeds = Math.Clamp(beds, 0, room.SelectedQuantity);
+        }
+    }
+
     private void GoToGuestDetails(RoomCardModel room)
     {
+        var extraBeds = room.ExtraBedSelected ? room.SelectedExtraBeds : 0;
         var url = $"/GuestDetails?guestHouseId={_guestHouseId}" +
-                  $"&roomId={room.RoomId}" +
+                  $"&roomTypeId={room.RoomTypeId}" +
+                  $"&numberOfRooms={room.SelectedQuantity}" +
+                  $"&extraBeds={extraBeds}" +
                   $"&checkIn={Uri.EscapeDataString(_checkIn.ToString("yyyy-MM-ddTHH:mm:ss"))}" +
                   $"&checkOut={Uri.EscapeDataString(_checkOut.ToString("yyyy-MM-ddTHH:mm:ss"))}";
         Navigation.NavigateTo(url);
@@ -184,13 +255,17 @@
                 mapped.Add(new RoomCardModel
                 {
                     RoomId = room.RoomId,
+                    RoomTypeId = room.RoomTypeId,
                     RoomType = room.RoomType,
                     RoomNumber = room.RoomNumber,
                     ImageUrl = RoomImages[index % RoomImages.Length],
                     PricePerNight = room.PricePerNight,
                     ExtraCotPrice = room.ExtraCotPrice,
                     AvailableQuantity = room.AvailableQuantity,
-                    NumberOfAdults = room.NumberOfAdults ?? room.Capacity ?? 2
+                    NumberOfAdults = room.NumberOfAdults ?? room.Capacity ?? 2,
+                    SelectedQuantity = 1,
+                    ExtraBedSelected = false,
+                    SelectedExtraBeds = 0
                 });
                 index++;
             }
@@ -248,6 +323,7 @@
     public class RoomCardModel
     {
         public int RoomId { get; set; }
+        public int RoomTypeId { get; set; }
         public string RoomType { get; set; } = "";
         public string? RoomNumber { get; set; }
         public string ImageUrl { get; set; } = "";
@@ -255,6 +331,9 @@
         public decimal? ExtraCotPrice { get; set; }
         public int AvailableQuantity { get; set; }
         public int NumberOfAdults { get; set; }
+        public int SelectedQuantity { get; set; } = 1;
+        public bool ExtraBedSelected { get; set; }
+        public int SelectedExtraBeds { get; set; }
         public List<string> Amenities => SelectAmenities(RoomType);
         public string PriceDisplay => PricePerNight.ToString("N0");
         public string GuestLabel => NumberOfAdults == 1 ? "1 Guest were allowed" : $"{NumberOfAdults} Guests were allowed";
@@ -274,6 +353,7 @@
     public class AvailableRoomDto
     {
         public int RoomId { get; set; }
+        public int RoomTypeId { get; set; }
         public string RoomType { get; set; } = "";
         public string? RoomNumber { get; set; }
         public string? Description { get; set; }

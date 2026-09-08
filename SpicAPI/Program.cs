@@ -116,7 +116,8 @@ builder.Services.AddAuthentication(options =>
                  path.StartsWithSegments("/api/LogisticsFile/view") ||
                  path.StartsWithSegments("/api/LogisticsFile/download") ||
                  path.StartsWithSegments("/api/SDWAWelfareApplication/document") ||
-                 path.StartsWithSegments("/api/WelfareSchemeApproval/document")))
+                 path.StartsWithSegments("/api/WelfareSchemeApproval/document") ||
+                 path.StartsWithSegments("/api/GuestHouseBooking/image")))
             {
                 context.Token = accessToken;
             }
