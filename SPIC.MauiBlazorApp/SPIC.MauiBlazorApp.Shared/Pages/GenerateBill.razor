@@ -1,0 +1,684 @@
+@page "/GenerateBill"
+
+@inject HttpClient Http
+@inject LoginState LoginState
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@using System.Globalization
+
+<style>
+    .gb-container { max-width: 1400px; margin: auto; }
+    .gb-card {
+        background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02); margin-bottom: 1.5rem; overflow: hidden;
+    }
+    .gb-card-header { background-color: #eaf0e5; padding: 16px 20px; border-bottom: 1px solid #dce4d6; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+    .gb-card-title { font-size: 1.05rem; font-weight: 700; color: #3f4e42; margin: 0; }
+    .gb-card-body { padding: 20px; }
+    .gb-title { font-size: 1.5rem; font-weight: 700; color: #1f2937; }
+    .gb-subtitle { color: #6b7280; }
+    .gb-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .gb-table thead th { background: #f9fafb; color: #6b7280; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
+    .gb-table tbody td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .gb-table tbody tr:hover { background: #f8fafc; }
+    .gb-table tbody tr:last-child td { border-bottom: none; }
+    .gb-input { width: 100%; padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.85rem; }
+    .gb-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+    .gb-label { display: block; font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 5px; }
+    .gb-btn { font-weight: 600; font-size: 0.8rem; padding: 8px 16px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; transition: 0.2s; }
+    .gb-btn-primary { background: #2563eb; color: #fff; }
+    .gb-btn-primary:hover { background: #1d4ed8; }
+    .gb-btn-success { background: #059669; color: #fff; }
+    .gb-btn-success:hover { background: #047857; }
+    .gb-btn-secondary { background: #fff; border-color: #e5e7eb; color: #374151; }
+    .gb-btn-secondary:hover { background: #f9fafb; }
+    .gb-btn-danger { background: #dc2626; color: #fff; }
+    .gb-btn-danger:hover { background: #b91c1c; }
+    .gb-btn-view { background: #2563eb; color: #fff; }
+    .gb-btn-view:hover { background: #1d4ed8; }
+    .gb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .gb-filters { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+    .gb-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .gb-kv { display: flex; justify-content: space-between; padding: 6px 0; font-size: 0.85rem; }
+    .gb-kv-label { color: #6b7280; }
+    .gb-kv-value { font-weight: 600; color: #1f2937; }
+    .gb-divider { height: 1px; background: #e5e7eb; margin: 12px 0; }
+    .gb-total { color: #2563eb; font-size: 1.05rem; font-weight: 700; }
+    .gb-alert-success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; border-radius: 8px; padding: 12px 16px; font-size: 0.85rem; font-weight: 500; margin-bottom: 12px; }
+    .gb-alert-warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 12px 16px; font-size: 0.85rem; font-weight: 500; margin-bottom: 12px; }
+    .gb-muted { color: #9ca3af; }
+    .gb-empty { padding: 36px 20px; text-align: center; color: #64748b; font-size: 0.9rem; }
+    .gb-loading { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; color: #6b7280; margin-bottom: 1.5rem; }
+    .gb-badge { display: inline-block; padding: 4px 12px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; }
+    .gb-badge-paid { background: #D1FAE5; color: #059669; }
+    .gb-badge-pending { background: #FEF3C7; color: #B45309; }
+    .gb-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .gb-right-col {
+        display: flex; flex-direction: column; gap: 10px;
+        border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fafbfc;
+    }
+</style>
+
+<div class="container-fluid py-4 px-3 px-md-4 gb-container">
+
+    <div class="gb-row" style="justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem;">
+        <div>
+            <h1 class="gb-title">Generate Bill</h1>
+            <p class="gb-subtitle">View completed bookings and create their invoice</p>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="gb-btn gb-btn-secondary" @onclick="BackToList"><i class="bi bi-arrow-left"></i> Back to List</button>
+            <button class="gb-btn gb-btn-secondary" @onclick='() => Navigation.NavigateTo("/BillList")'><i class="bi bi-receipt"></i> Bill List</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error)) { <div class="gb-alert-warning">@_error</div> }
+    @if (!string.IsNullOrWhiteSpace(_success)) { <div class="gb-alert-success">@_success</div> }
+
+    @if (_draft == null)
+    {
+        @* ---- DEFAULT LIST: COMPLETED BOOKINGS FOR A SELECTED DATE (default today) ---- *@
+        <div class="gb-card">
+            <div class="gb-card-header">
+                <h3 class="gb-card-title"><i class="bi bi-calendar-check"></i> Completed Bookings</h3>
+            </div>
+            <div class="gb-card-body">
+                <div class="gb-filters">
+                    <div>
+                        <label class="gb-label">Completed Date</label>
+                        <input type="date" class="gb-input" style="width: 180px;" @bind="_selectedDate" />
+                    </div>
+                    <button class="gb-btn gb-btn-primary" @onclick="SearchAsync" disabled="@_loadingList">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                    <button class="gb-btn gb-btn-secondary" @onclick="ResetToTodayAsync">Today</button>
+                </div>
+                <div class="gb-muted" style="margin-top: 12px; font-size: 0.85rem;">
+                    Showing bookings completed on <strong>@FormatDateOnly(_listDate)</strong>.
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="gb-table">
+                    <thead>
+                        <tr>
+                            <th>Booking ID</th>
+                            <th>Guest Name</th>
+                            <th>Guest House</th>
+                            <th>Room</th>
+                            <th>Check-In</th>
+                            <th>Check-Out</th>
+                            <th>Amount</th>
+                            <th>Payment Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_completedBookings.Count > 0)
+                        {
+                            @foreach (var item in _completedBookings)
+                            {
+                                <tr>
+                                    <td><span style="font-weight:600; color:#1f2937;">@item.BookingReference</span></td>
+                                    <td>@(string.IsNullOrEmpty(item.GuestName) ? "-" : item.GuestName)</td>
+                                    <td>@item.GuestHouseName</td>
+                                    <td>@((string.IsNullOrEmpty(item.RoomNumber) ? "-" : item.RoomNumber) + " (" + item.RoomType + ")")</td>
+                                    <td>@FormatDateWithTime(item.CheckInDate)</td>
+                                    <td>@FormatDateWithTime(item.CheckOutDate)</td>
+                                    <td style="font-weight:600;">@FormatMoney(item.Amount)</td>
+                                    <td>
+                                        <span class="gb-badge @(item.PaymentStatus == 1 ? "gb-badge-paid" : "gb-badge-pending")">
+                                            @(item.PaymentStatus == 1 ? "Paid" : "Pending")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (item.HasBill)
+                                        {
+                                            <button class="gb-btn gb-btn-view" @onclick="() => GoToBillList()"><i class="bi bi-eye"></i> View Bill</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="gb-btn gb-btn-success" @onclick="() => OpenBillForm(item.BookingId)"><i class="bi bi-receipt-cutoff"></i> Generate Bill</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="9"><div class="gb-empty">No completed bookings for @FormatDateOnly(_listDate).</div></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    else
+    {
+        @* ---- BILL FORM FOR SELECTED BOOKING ---- *@
+        @if (_draft.ExistingBillId.HasValue)
+        {
+            <div class="gb-alert-warning">
+                A bill has already been generated for this booking
+                (<strong>@_draft.ExistingBillNumber</strong>). Duplicate bills are not allowed.
+            </div>
+        }
+
+        <div class="gb-card">
+            <div class="gb-card-header"><h3 class="gb-card-title"><i class="bi bi-card-heading"></i> Booking Summary</h3></div>
+            <div class="gb-card-body">
+                <div class="gb-kv"><span class="gb-kv-label">Booking</span><span class="gb-kv-value">@_draft.BookingReference</span></div>
+                <div class="gb-kv"><span class="gb-kv-label">Guest</span><span class="gb-kv-value">@(string.IsNullOrEmpty(_draft.GuestName) ? "-" : _draft.GuestName)</span></div>
+                <div class="gb-kv"><span class="gb-kv-label">Guest House</span><span class="gb-kv-value">@_draft.GuestHouseName</span></div>
+                <div class="gb-kv"><span class="gb-kv-label">Room</span><span class="gb-kv-value">@(_draft.RoomType + (string.IsNullOrEmpty(_draft.RoomNumber) ? "" : " (" + _draft.RoomNumber + ")"))</span></div>
+                <div class="gb-kv"><span class="gb-kv-label">Stay</span><span class="gb-kv-value">@(FormatDate(_draft.CheckInAt)) → @(FormatDate(_draft.CheckOutAt)) (@(_draft.NumberOfNights) night(s))</span></div>
+            </div>
+        </div>
+
+        <div class="gb-card">
+            <div class="gb-card-header"><h3 class="gb-card-title"><i class="bi bi-list-columns"></i> Bill Items</h3></div>
+            <div class="gb-card-body">
+                <div class="table-responsive">
+                    <table class="gb-table">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th style="width:90px;">Qty</th>
+                                <th style="width:110px;">Rate</th>
+                                <th style="width:100px;">Amount</th>
+                                <th style="width:100px;">CGST %</th>
+                                <th style="width:100px;">SGST %</th>
+                                <th style="width:110px;">Line Total</th>
+                                @if (!_allLinesLocked)
+                                {
+                                    <th style="width:40px;"></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < _draft.LineItems.Count; i++)
+                            {
+                                var line = _draft.LineItems[i];
+                                var amount = Math.Round(line.Quantity * line.Rate, 2, MidpointRounding.AwayFromZero);
+                                var cgst = Math.Round(amount * (line.CgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                                var sgst = Math.Round(amount * (line.SgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                                var total = amount + cgst + sgst;
+                                var idx = i;
+                                <tr>
+                                    <td>
+                                        @if (line.IsEditable)
+                                        {
+                                            <input class="gb-input" @bind="line.Description" placeholder="Description" />
+                                        }
+                                        else
+                                        {
+                                            <span style="font-weight:600; color:#1f2937;">@line.Description</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (line.IsEditable)
+                                        {
+                                            <input class="gb-input" type="number" step="0.01" @bind="line.Quantity" />
+                                        }
+                                        else
+                                        {
+                                            <span>@line.Quantity.ToString("0.##")</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (line.IsEditable)
+                                        {
+                                            <input class="gb-input" type="number" step="0.01" @bind="line.Rate" />
+                                        }
+                                        else
+                                        {
+                                            <span>@FormatMoney(line.Rate)</span>
+                                        }
+                                    </td>
+                                    <td>@FormatMoney(amount)</td>
+                                    <td>
+                                        @if (line.IsEditable)
+                                        {
+                                            <input class="gb-input" type="number" step="0.01" @bind="line.CgstPercent" />
+                                        }
+                                        else
+                                        {
+                                            <span>@line.CgstPercent.ToString("0.##")</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (line.IsEditable)
+                                        {
+                                            <input class="gb-input" type="number" step="0.01" @bind="line.SgstPercent" />
+                                        }
+                                        else
+                                        {
+                                            <span>@line.SgstPercent.ToString("0.##")</span>
+                                        }
+                                    </td>
+                                    <td style="font-weight:600;">@FormatMoney(total)</td>
+                                    @if (!_allLinesLocked)
+                                    {
+                                        <td>
+                                            @if (line.IsEditable)
+                                            {
+                                                <button class="gb-btn gb-btn-danger" style="padding:4px 10px;" @onclick="() => RemoveLine(idx)">Remove</button>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (!_allLinesLocked)
+                {
+                    <div style="margin-top: 12px;">
+                        <button class="gb-btn gb-btn-secondary" @onclick="AddLine"><i class="bi bi-plus-circle"></i> Add Line</button>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="gb-card">
+            <div class="gb-card-header"><h3 class="gb-card-title"><i class="bi bi-calculator"></i> Totals, Discount &amp; Payment</h3></div>
+            <div class="gb-card-body">
+                <div class="gb-summary-grid">
+                    <div>
+                        <div class="gb-kv"><span class="gb-kv-label">Subtotal</span><span class="gb-kv-value">@FormatMoney(Subtotal)</span></div>
+                        <div class="gb-kv"><span class="gb-kv-label">CGST</span><span class="gb-kv-value">@FormatMoney(CgstTotal)</span></div>
+                        <div class="gb-kv"><span class="gb-kv-label">SGST</span><span class="gb-kv-value">@FormatMoney(SgstTotal)</span></div>
+                        <div class="gb-kv"><span class="gb-kv-label">Grand Total</span><span class="gb-kv-value gb-total">@FormatMoney(GrandTotal)</span></div>
+                    </div>
+                    <div class="gb-right-col">
+                        <div>
+                            <label class="gb-label">Discount</label>
+                            <input class="gb-input" type="number" step="0.01" min="0" @bind="_discount" />
+                        </div>
+                        <div>
+                            <label class="gb-label">Advance Payment</label>
+                            <input class="gb-input" type="number" step="0.01" min="0" @bind="_advance" />
+                        </div>
+                        <div>
+                            <label class="gb-label">Round Off</label>
+                            <input class="gb-input" type="number" step="0.01" @bind="_roundOff" />
+                        </div>
+                        <div>
+                            <label class="gb-label">Payment Method</label>
+                            <select class="gb-input" @bind="_paymentMethod">
+                                <option value="0">Razorpay</option>
+                                <option value="1">UPI</option>
+                                <option value="2">Card</option>
+                                <option value="3">Net Banking</option>
+                                <option value="4">Pay After Stay</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="gbPaid" style="width:16px; height:16px;" @bind="_paymentReceived" />
+                            <label for="gbPaid" class="gb-label" style="margin:0;">Payment received</label>
+                        </div>
+                        <div>
+                            <label class="gb-label">Remarks</label>
+                            <input class="gb-input" @bind="_remarks" placeholder="Optional" />
+                        </div>
+                    </div>
+                </div>
+                <div class="gb-divider"></div>
+                <div class="gb-kv"><span class="gb-kv-label">Balance Payable</span><span class="gb-kv-value gb-total">@(Balance < 0 ? "—" : FormatMoney(Balance))</span></div>
+                @if (HasBillingValidationError)
+                {
+                    <div class="gb-alert-warning" style="margin-top:10px;">@BillingValidationMessage</div>
+                }
+
+                <div style="margin-top: 18px; display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="gb-btn gb-btn-success" @onclick="SaveBillAsync" disabled="@(_busy || _draft.ExistingBillId.HasValue)">
+                        <i class="bi bi-check-circle"></i> @(_busy ? "Saving..." : "Generate Bill")
+                    </button>
+                    <button class="gb-btn gb-btn-secondary" @onclick="BackToList">Cancel</button>
+                </div>
+                @if (_draft.ExistingBillId.HasValue)
+                {
+                    <div class="gb-muted" style="margin-top:10px; font-size:0.85rem;">This booking already has a bill and cannot be billed again.</div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly CultureInfo _ci = CultureInfo.InvariantCulture;
+    private DateTime? _selectedDate;
+    private DateTime _listDate = DateTime.Today;
+    private List<CompletedBookingForBillingDto> _completedBookings = new();
+    private bool _loadingList;
+    private bool _listLoaded;
+
+    private BillDraftDto? _draft;
+    private bool _busy;
+    private string? _error;
+    private string? _success;
+
+    private decimal? _discount;
+    private decimal? _advance;
+    private decimal? _roundOff;
+    private int _paymentMethod = 0;
+    private bool _paymentReceived = true;
+    private string _remarks = "";
+
+    private bool _allLinesLocked => _draft != null && _draft.LineItems.All(l => !l.IsEditable);
+
+    private decimal Subtotal => _draft?.LineItems.Sum(l => Math.Round(l.Quantity * l.Rate, 2, MidpointRounding.AwayFromZero)) ?? 0;
+    private decimal CgstTotal => _draft?.LineItems.Sum(l => Math.Round(Math.Round(l.Quantity * l.Rate, 2, MidpointRounding.AwayFromZero) * (l.CgstPercent / 100m), 2, MidpointRounding.AwayFromZero)) ?? 0;
+    private decimal SgstTotal => _draft?.LineItems.Sum(l => Math.Round(Math.Round(l.Quantity * l.Rate, 2, MidpointRounding.AwayFromZero) * (l.SgstPercent / 100m), 2, MidpointRounding.AwayFromZero)) ?? 0;
+    private decimal GrandTotal => Subtotal + CgstTotal + SgstTotal;
+    private decimal Balance => GrandTotal - (_discount ?? 0) - (_advance ?? 0) + (_roundOff ?? 0);
+
+    private decimal EffectiveDiscount => Math.Max(0, _discount ?? 0);
+    private decimal EffectiveAdvance => Math.Max(0, _advance ?? 0);
+    private decimal EffectiveRoundOff => _roundOff ?? 0;
+
+    private string? BillingValidationMessage
+    {
+        get
+        {
+            var gross = GrandTotal;
+            var discount = EffectiveDiscount;
+            var advance = EffectiveAdvance;
+            var roundOff = EffectiveRoundOff;
+            var balance = gross - discount - advance + roundOff;
+
+            if (discount > gross)
+                return "Discount cannot exceed Grand Total.";
+            if (advance > gross)
+                return "Advance Payment cannot exceed Grand Total.";
+            if (balance < 0)
+                return "Balance Payable cannot be negative. Check Discount, Advance Payment and Round Off values.";
+
+            return null;
+        }
+    }
+
+    private bool HasBillingValidationError => BillingValidationMessage != null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Default: today's completed bookings.
+        _selectedDate = DateTime.Today;
+        _listDate = DateTime.Today;
+        await LoadCompletedAsync();
+    }
+
+    private async Task LoadCompletedAsync(DateTime? targetDate = null)
+    {
+        var target = targetDate ?? _listDate;
+        _loadingList = true;
+        _error = null;
+        try
+        {
+            var url = $"api/GuestHouseFrontOffice/billing/completed?date={target.ToString("yyyy-MM-dd", _ci)}";
+            var response = await Http.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CompletedBookingListResult>();
+                _completedBookings = result?.Bookings ?? new();
+                _listDate = target;
+                _listLoaded = true;
+            }
+            else
+            {
+                _error = "Could not load completed bookings.";
+            }
+        }
+        catch (Exception)
+        {
+            _error = "Could not load completed bookings.";
+        }
+        finally
+        {
+            _loadingList = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        if (_selectedDate.HasValue)
+        {
+            await LoadCompletedAsync(_selectedDate.Value.Date);
+        }
+        else
+        {
+            _error = "Please select a valid date.";
+        }
+    }
+
+    private async Task ResetToTodayAsync()
+    {
+        _selectedDate = DateTime.Today;
+        await LoadCompletedAsync(DateTime.Today);
+    }
+
+    private void OpenBillForm(int bookingId)
+    {
+        ResetErrorAndSuccess();
+        _draft = null;
+        _busy = true;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var response = await Http.GetAsync($"api/GuestHouseFrontOffice/bills/booking/{bookingId}");
+                if (response.IsSuccessStatusCode)
+                {
+                    var dto = await response.Content.ReadFromJsonAsync<BillDraftDto>();
+                    InvokeAsync(() =>
+                    {
+                        _draft = dto;
+                        ResetBillInputs();
+                        _busy = false;
+                        StateHasChanged();
+                    });
+                }
+                else
+                {
+                    var body = await SafeReadMessage(response);
+                    InvokeAsync(() =>
+                    {
+                        _busy = false;
+                        _error = !string.IsNullOrWhiteSpace(body) ? body : "Could not load the booking for billing.";
+                        StateHasChanged();
+                    });
+                }
+            }
+            catch (Exception)
+            {
+                InvokeAsync(() =>
+                {
+                    _busy = false;
+                    _error = "Could not load the booking for billing.";
+                    StateHasChanged();
+                });
+            }
+        });
+    }
+
+    private void GoToBillList() => Navigation.NavigateTo("/BillList");
+
+    private void BackToList()
+    {
+        _draft = null;
+        ResetErrorAndSuccess();
+        _ = LoadCompletedAsync();
+    }
+
+    private void ResetBillInputs()
+    {
+        _discount = 0;
+        _advance = _draft?.AdvancePayment ?? 0;
+        _roundOff = 0;
+        _paymentMethod = 0;
+        _paymentReceived = true;
+        _remarks = "";
+    }
+
+    private void AddLine()
+    {
+        _draft?.LineItems.Add(new BillLineItemDto { Description = "Additional Charge", Rate = 0, Quantity = 1 });
+    }
+
+    private void RemoveLine(int index)
+    {
+        if (_draft == null || index < 0 || index >= _draft.LineItems.Count) return;
+        _draft.LineItems.RemoveAt(index);
+    }
+
+    private void ResetErrorAndSuccess()
+    {
+        _error = null;
+        _success = null;
+    }
+
+    private async Task SaveBillAsync()
+    {
+        if (_draft == null) return;
+        _busy = true;
+        _error = null;
+        _success = null;
+        try
+        {
+            var validationMessage = BillingValidationMessage;
+            if (validationMessage != null)
+            {
+                _error = validationMessage;
+                _busy = false;
+                return;
+            }
+
+            var payload = new
+            {
+                BookingId = _draft.BookingId,
+                LineItems = _draft.LineItems.Select(l => new
+                {
+                    Description = l.Description,
+                    Quantity = l.Quantity,
+                    Rate = l.Rate,
+                    CgstPercent = l.CgstPercent,
+                    SgstPercent = l.SgstPercent,
+                    IsEditable = l.IsEditable
+                }).ToList(),
+                Discount = _discount,
+                AdvancePayment = _advance,
+                RoundOff = _roundOff,
+                PaymentReceived = _paymentReceived,
+                PaymentMethod = _paymentMethod,
+                Remarks = string.IsNullOrWhiteSpace(_remarks) ? null : _remarks
+            };
+
+            var response = await Http.PostAsJsonAsync("api/GuestHouseFrontOffice/generate-bill", payload);
+            var result = await response.Content.ReadFromJsonAsync<GenerateBillResult>();
+            if (response.IsSuccessStatusCode && result?.Success == true)
+            {
+                _success = $"Bill {result.BillNumber} generated successfully.";
+                await Task.Delay(500);
+                Navigation.NavigateTo($"/BillList?highlight={result.BillId}");
+            }
+            else
+            {
+                _error = result?.Message ?? "Bill could not be generated.";
+            }
+        }
+        catch (Exception)
+        {
+            _error = "Bill could not be generated.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task<string> SafeReadMessage(HttpResponseMessage response)
+    {
+        try
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            try
+            {
+                var parsed = System.Text.Json.JsonSerializer.Deserialize<GenerateBillResult>(content, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (!string.IsNullOrWhiteSpace(parsed?.Message)) return parsed.Message;
+            }
+            catch { }
+            return "";
+        }
+        catch { return ""; }
+    }
+
+    private static string FormatDate(DateTime? value) => value?.ToString("dd MMM yyyy hh:mm tt") ?? "-";
+    private static string FormatDateWithTime(DateTime? value) => value?.ToString("dd MMM yyyy hh:mm tt") ?? "-";
+    private static string FormatDateOnly(DateTime value) => value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+    private string FormatMoney(decimal value) => "₹" + value.ToString("N2", _ci);
+
+    public class BillLineItemDto
+    {
+        public string? Description { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal Rate { get; set; }
+        public decimal CgstPercent { get; set; }
+        public decimal SgstPercent { get; set; }
+        public bool IsEditable { get; set; } = true;
+    }
+
+    public class BillDraftDto
+    {
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public string? GuestName { get; set; }
+        public string? Address { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public string RoomType { get; set; } = "";
+        public DateTime? CheckInAt { get; set; }
+        public DateTime? CheckOutAt { get; set; }
+        public int NumberOfNights { get; set; }
+        public int? NumberOfRooms { get; set; }
+        public int? NumberOfPersons { get; set; }
+        public int? ExtraBeds { get; set; }
+        public List<BillLineItemDto> LineItems { get; set; } = new();
+        public decimal? AdvancePayment { get; set; }
+        public int? ExistingBillId { get; set; }
+        public string? ExistingBillNumber { get; set; }
+    }
+
+    public class CompletedBookingForBillingDto
+    {
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public string? GuestName { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public string RoomType { get; set; } = "";
+        public DateTime? CheckInDate { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public decimal Amount { get; set; }
+        public int PaymentStatus { get; set; }
+        public bool HasBill { get; set; }
+    }
+
+    public class CompletedBookingListResult
+    {
+        public DateTime Date { get; set; }
+        public int Count { get; set; }
+        public List<CompletedBookingForBillingDto> Bookings { get; set; } = new();
+    }
+
+    public class GenerateBillResult
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public int BillId { get; set; }
+        public string? BillNumber { get; set; }
+    }
+}

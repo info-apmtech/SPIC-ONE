@@ -45,6 +45,8 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         public bool IsInitialized => _initialized;
 
+        public void MarkInitialized() => _initialized = true;
+
         public void Clear() => _initialized = false;
     }
 }

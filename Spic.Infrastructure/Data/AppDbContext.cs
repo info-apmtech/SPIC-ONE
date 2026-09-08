@@ -152,6 +152,8 @@ namespace Spic.Infrastructure.Data
 		//public DbSet<GuestHouseCancellationPolicy> GuestHouseCancellationPolicies { get; set; }
 		//public DbSet<GuestHouseBookingCancellation> GuestHouseBookingCancellations { get; set; }
 		//public DbSet<GuestHouseBookingRefund> GuestHouseBookingRefunds { get; set; }
+		public DbSet<GuestHouseBill> GuestHouseBills { get; set; }
+		public DbSet<GuestHouseBillLineItem> GuestHouseBillLineItems { get; set; }
 
 		//// Contact Us
 		//public DbSet<ContactUsMessage> ContactUsMessages { get; set; }

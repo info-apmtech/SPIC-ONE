@@ -1,0 +1,374 @@
+@page "/BillList"
+
+@inject HttpClient Http
+@inject LoginState LoginState
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@using System.Globalization
+
+<style>
+    .bl-container { max-width: 1400px; margin: auto; }
+    .bl-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 15px; }
+    .bl-title { font-size: 1.5rem; font-weight: 700; color: #1f2937; margin-bottom: 0.25rem; }
+    .bl-subtitle { color: #6b7280; }
+    .bl-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.02); margin-bottom: 1.5rem; overflow: hidden; }
+    .bl-card-body { padding: 0; }
+    .bl-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .bl-table thead th { background: #f9fafb; color: #6b7280; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
+    .bl-table tbody td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .bl-table tbody tr:hover { background: #f8fafc; }
+    .bl-table tbody tr:last-child td { border-bottom: none; }
+    .bl-badge { display: inline-block; padding: 4px 12px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; }
+    .bl-badge-paid { background: #D1FAE5; color: #059669; }
+    .bl-badge-pending { background: #FEF3C7; color: #B45309; }
+    .bl-strong { font-weight: 600; color: #1f2937; }
+    .bl-muted { color: #9ca3af; }
+    .bl-btn { font-weight: 600; font-size: 0.8rem; padding: 7px 12px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 5px; }
+    .bl-btn-view { background: #2563eb; color: #fff; }
+    .bl-btn-view:hover { background: #1d4ed8; }
+    .bl-btn-pdf { background: #fff; border-color: #e5e7eb; color: #374151; }
+    .bl-btn-pdf:hover { background: #f9fafb; }
+    .bl-btn-secondary { background: #fff; border-color: #e5e7eb; color: #374151; }
+    .bl-btn-secondary:hover { background: #f9fafb; }
+    .bl-empty { padding: 40px 20px; text-align: center; color: #64748b; font-size: 0.9rem; }
+    .bl-loading { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; color: #6b7280; }
+    .bl-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 12px; padding: 20px; font-weight: 500; }
+    .bl-row-highlight { background: #eff6ff !important; }
+</style>
+
+<div class="container-fluid py-4 px-3 px-md-4 bl-container">
+
+    <div class="bl-header">
+        <div>
+            <h1 class="bl-title">Bill List</h1>
+            <p class="bl-subtitle">Generated invoices, view and download</p>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="bl-btn bl-btn-secondary" @onclick='() => Navigation.NavigateTo("/GenerateBill")'><i class="bi bi-plus-circle"></i> Generate Bill</button>
+            <button class="bl-btn bl-btn-secondary" @onclick="LoadBillsAsync"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="bl-loading">Loading bills...</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="bl-error">@_error</div>
+    }
+    else
+    {
+        <div class="bl-card">
+            <div class="bl-card-body table-responsive">
+                <table class="bl-table">
+                    <thead>
+                        <tr>
+                            <th>Bill #</th>
+                            <th>Booking</th>
+                            <th>Guest</th>
+                            <th>Guest House</th>
+                            <th>Room</th>
+                            <th>Bill Date</th>
+                            <th>Check-in</th>
+                            <th>Check-out</th>
+                            <th>Total</th>
+                            <th>Balance</th>
+                            <th>Payment</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var bill in _bills)
+                        {
+                            var cls = bill.BillId == _highlightId ? "bl-row-highlight" : "";
+                            <tr class="@cls">
+                                <td><span class="bl-strong">@bill.BillNumber</span></td>
+                                <td>@bill.BookingReference</td>
+                                <td>@(string.IsNullOrEmpty(bill.GuestName) ? "-" : bill.GuestName)</td>
+                                <td>@bill.GuestHouseName</td>
+                                <td>@(string.IsNullOrEmpty(bill.RoomNumber) ? "-" : bill.RoomNumber)</td>
+                                <td>@FormatDate(bill.BillDate)</td>
+                                <td>@FormatDate(bill.CheckInDate)</td>
+                                <td>@FormatDate(bill.CheckOutDate)</td>
+                                <td class="bl-strong">@FormatMoney(bill.TotalAmount)</td>
+                                <td>@FormatMoney(bill.BalanceAmount)</td>
+                                <td>
+                                    <span class="bl-badge @(bill.PaymentStatus == 1 ? "bl-badge-paid" : "bl-badge-pending")">
+                                        @(bill.PaymentStatus == 1 ? "Paid" : "Pending")
+                                    </span>
+                                </td>
+                                <td style="white-space:nowrap;">
+                                    <button class="bl-btn bl-btn-view" @onclick="() => OpenBill(bill.BillId)"><i class="bi bi-eye"></i> View</button>
+                                    <button class="bl-btn bl-btn-pdf" @onclick="() => DownloadPdf(bill.BillId, bill.BillNumber)"><i class="bi bi-download"></i> PDF</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @if (_bills.Count == 0)
+                {
+                    <div class="bl-empty">No bills have been generated yet.</div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@* ------------------------- VIEW BILL MODAL ------------------------- *@
+@if (_viewBill != null)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
+                <div class="modal-header" style="border-bottom: 1px solid #e5e7eb;">
+                    <h5 class="modal-title" style="font-weight:700;"><i class="bi bi-receipt"></i> Invoice @_viewBill.BillNumber</h5>
+                    <button type="button" class="btn-close" @onclick="CloseBill"></button>
+                </div>
+                <div class="modal-body" style="padding: 24px; max-height: 75vh; overflow-y: auto;">
+                    <div style="display:flex; justify-content: space-between; margin-bottom: 8px;">
+                        <div>
+                            <div style="font-weight:700; color:#0B4A82; font-size:1.1rem;">SPIC</div>
+                            <div style="color:#6b7280; font-size:0.85rem;">@_viewBill.GuestHouseName</div>
+                            <div style="color:#6b7280; font-size:0.85rem;">Guest House Invoice / Bill</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-weight:700; color:#0B4A82; font-size:1rem;">@_viewBill.BillNumber</div>
+                            <div style="color:#6b7280; font-size:0.85rem;">Bill Date: @FormatDate(_viewBill.BillDate)</div>
+                            <div style="color:#6b7280; font-size:0.85rem;">Booking: @_viewBill.BookingReference</div>
+                            <span class="bl-badge @(_viewBill.PaymentStatus == 1 ? "bl-badge-paid" : "bl-badge-pending")" style="margin-top:6px;">
+                                @(_viewBill.PaymentStatus == 1 ? "Paid" : "Pending")
+                            </span>
+                        </div>
+                    </div>
+
+                    <div style="border:1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin-top: 12px;">
+                        <div class="bl-strong" style="color:#0B4A82;">Billed To</div>
+                        <div>@(string.IsNullOrEmpty(_viewBill.GuestName) ? "-" : _viewBill.GuestName)</div>
+                        @if (!string.IsNullOrEmpty(_viewBill.Address)) { <div>@_viewBill.Address</div> }
+                        @if (!string.IsNullOrEmpty(_viewBill.PhoneNumber)) { <div>Phone: @_viewBill.PhoneNumber</div> }
+                        @if (!string.IsNullOrEmpty(_viewBill.Email)) { <div>Email: @_viewBill.Email</div> }
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px;">
+                        <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Room Type</div><div class="bl-strong">@_viewBill.RoomType</div></div>
+                        @if (!string.IsNullOrEmpty(_viewBill.RoomNumber)) { <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Room</div><div class="bl-strong">@_viewBill.RoomNumber</div></div> }
+                        <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Check-In</div><div class="bl-strong">@FormatDate(_viewBill.CheckInAt)</div></div>
+                        <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Check-Out</div><div class="bl-strong">@FormatDate(_viewBill.CheckOutAt)</div></div>
+                        <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Nights</div><div class="bl-strong">@(_viewBill.NumberOfNights?.ToString() ?? "-")</div></div>
+                        <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Guests</div><div class="bl-strong">@(_viewBill.NumberOfPersons?.ToString() ?? "-")</div></div>
+                    </div>
+
+                    <div style="margin-top: 16px;">
+                        <div class="bl-strong" style="color:#0B4A82; margin-bottom: 8px;">Bill Items</div>
+                        <div class="table-responsive">
+                            <table class="bl-table" style="border:1px solid #e5e7eb; border-radius:10px;">
+                                <thead>
+                                    <tr>
+                                        <th>Description</th>
+                                        <th style="text-align:right;">Qty</th>
+                                        <th style="text-align:right;">Rate</th>
+                                        <th style="text-align:right;">CGST</th>
+                                        <th style="text-align:right;">SGST</th>
+                                        <th style="text-align:right;">Amount</th>
+                                        <th style="text-align:right;">Line Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var line in _viewBill.LineItems)
+                                    {
+                                        <tr>
+                                            <td>@(string.IsNullOrEmpty(line.Description) ? "-" : line.Description)</td>
+                                            <td style="text-align:right;">@line.Quantity.ToString("0.##", CultureInfo.InvariantCulture)</td>
+                                            <td style="text-align:right;">@FormatMoney(line.Rate)</td>
+                                            <td style="text-align:right;">@line.CgstPercent.ToString("0.##", CultureInfo.InvariantCulture)%</td>
+                                            <td style="text-align:right;">@line.SgstPercent.ToString("0.##", CultureInfo.InvariantCulture)%</td>
+                                            <td style="text-align:right;">@FormatMoney(line.Amount)</td>
+                                            <td class="bl-strong" style="text-align:right;">@FormatMoney(line.LineTotal)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content: flex-end; margin-top: 16px;">
+                        <div style="width:280px;">
+                            <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">Subtotal</span><span class="bl-strong">@FormatMoney(_viewBill.Subtotal)</span></div>
+                            <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">CGST</span><span>@FormatMoney(_viewBill.CgstAmount)</span></div>
+                            <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">SGST</span><span>@FormatMoney(_viewBill.SgstAmount)</span></div>
+                            <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-strong">Grand Total</span><span class="bl-strong">@FormatMoney(_viewBill.TotalAmount)</span></div>
+                            @if (_viewBill.Discount != 0) { <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">Discount</span><span>-@FormatMoney(_viewBill.Discount)</span></div> }
+                            @if (_viewBill.AdvancePayment != 0) { <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">Advance Payment</span><span>-@FormatMoney(_viewBill.AdvancePayment)</span></div> }
+                            @if (_viewBill.RoundOff != 0) { <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">Round Off</span><span>@FormatMoney(_viewBill.RoundOff)</span></div> }
+                            <div class="bl-kv" style="display:flex; justify-content:space-between; padding:6px 0; border-top: 1px solid #e5e7eb; margin-top: 4px;"><span class="bl-strong">Balance Payable</span><span class="bl-strong" style="color:#2563eb;">@FormatMoney(_viewBill.BalanceAmount)</span></div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(_viewBill.Remarks))
+                    {
+                        <div style="margin-top:14px;"><span class="bl-muted" style="font-size:0.8rem;">Remarks: </span><span>@_viewBill.Remarks</span></div>
+                    }
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid #e5e7eb;">
+                    <button class="bl-btn bl-btn-secondary" @onclick="CloseBill">Close</button>
+                    <button class="bl-btn bl-btn-pdf" @onclick="() => DownloadPdf(_viewBill!.BillId, _viewBill!.BillNumber)"><i class="bi bi-download"></i> Download PDF</button>
+                    <button class="bl-btn bl-btn-pdf" @onclick="() => PrintPdf(_viewBill!.BillId, _viewBill!.BillNumber)"><i class="bi bi-printer"></i> Print</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly CultureInfo _ci = CultureInfo.InvariantCulture;
+    private List<BillListItemDto> _bills = new();
+    private BillViewDto? _viewBill;
+    private bool _isLoading = true;
+    private string? _error;
+    private int _highlightId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var q = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(q.Query);
+        _ = int.TryParse(query["highlight"], out _highlightId);
+        await LoadBillsAsync();
+    }
+
+    private async Task LoadBillsAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        try
+        {
+            var response = await Http.GetAsync("api/GuestHouseFrontOffice/bills");
+            if (response.IsSuccessStatusCode)
+            {
+                _bills = await response.Content.ReadFromJsonAsync<List<BillListItemDto>>() ?? new();
+            }
+            else
+            {
+                _error = "Could not load bills.";
+            }
+        }
+        catch (Exception)
+        {
+            _error = "Could not load bills.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task OpenBill(int billId)
+    {
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseFrontOffice/bill/{billId}");
+            if (response.IsSuccessStatusCode)
+            {
+                _viewBill = await response.Content.ReadFromJsonAsync<BillViewDto>();
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private void CloseBill() => _viewBill = null;
+
+    private async Task DownloadPdf(int billId, string billNumber)
+    {
+        await FetchPdfAsync(billId, billNumber, false);
+    }
+
+    private async Task PrintPdf(int billId, string billNumber)
+    {
+        await FetchPdfAsync(billId, billNumber, true);
+    }
+
+    private async Task FetchPdfAsync(int billId, string billNumber, bool openNewWindow)
+    {
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync($"api/GuestHouseFrontOffice/bill/{billId}/pdf");
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"{billNumber}.pdf";
+            if (openNewWindow)
+                await JS.InvokeVoidAsync("openPdfInNewWindow", base64);
+            else
+                await JS.InvokeVoidAsync("downloadFileFromBytes", fileName, "application/pdf", base64);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static string FormatDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) : "-";
+    private static string FormatMoney(decimal value) => "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+
+    public class BillListItemDto
+    {
+        public int BillId { get; set; }
+        public string BillNumber { get; set; } = "";
+        public string BookingReference { get; set; } = "";
+        public int BookingId { get; set; }
+        public string? GuestName { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public DateTime BillDate { get; set; }
+        public DateTime? CheckInDate { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public decimal TotalAmount { get; set; }
+        public decimal BalanceAmount { get; set; }
+        public int PaymentStatus { get; set; }
+        public int PaymentMethod { get; set; }
+    }
+
+    public class BillViewLineItemDto
+    {
+        public string? Description { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal Rate { get; set; }
+        public decimal Amount { get; set; }
+        public decimal CgstPercent { get; set; }
+        public decimal SgstPercent { get; set; }
+        public decimal CgstAmount { get; set; }
+        public decimal SgstAmount { get; set; }
+        public decimal LineTotal { get; set; }
+    }
+
+    public class BillViewDto
+    {
+        public int BillId { get; set; }
+        public string BillNumber { get; set; } = "";
+        public string BookingReference { get; set; } = "";
+        public DateTime BillDate { get; set; }
+        public string? GuestName { get; set; }
+        public string? Address { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public string RoomType { get; set; } = "";
+        public DateTime? CheckInAt { get; set; }
+        public DateTime? CheckOutAt { get; set; }
+        public int? NumberOfNights { get; set; }
+        public int? NumberOfPersons { get; set; }
+        public List<BillViewLineItemDto> LineItems { get; set; } = new();
+        public decimal Subtotal { get; set; }
+        public decimal CgstAmount { get; set; }
+        public decimal SgstAmount { get; set; }
+        public decimal TotalAmount { get; set; }
+        public decimal Discount { get; set; }
+        public decimal AdvancePayment { get; set; }
+        public decimal RoundOff { get; set; }
+        public decimal BalanceAmount { get; set; }
+        public string? Remarks { get; set; }
+        public int PaymentStatus { get; set; }
+        public int PaymentMethod { get; set; }
+    }
+}
