@@ -136,7 +136,12 @@
 			await JS.InvokeVoidAsync("sessionStorage.setItem", "spic_role_access", result.RoleAccess ?? "");
 			await JS.InvokeVoidAsync("sessionStorage.setItem", "spic_designation_name", result.DesignationName ?? "");
 
-			var landingPage = LoginState.UserRole == AppRole.Dealer ? "/SDWADashboard" : "/Dashboard";
+			var landingPage = LoginState.UserRole switch
+			{
+				AppRole.Dealer => "/SDWADashboard",
+				AppRole.SpecialAdmin => LoginState.CanAccess("Logistics") ? "/Logistics" : "/Welcome",
+				_ => "/Dashboard"
+			};
 			Navigation.NavigateTo(landingPage);
 		}
 		catch (HttpRequestException)

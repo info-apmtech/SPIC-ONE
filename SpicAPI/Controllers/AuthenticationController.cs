@@ -115,12 +115,37 @@ namespace SpicAPI.Controllers
             // SpecialAdmin-only: database-backed multi-location scope.
             // For every other role these claims are omitted entirely, so existing
             // single-location behavior (spic:state_id etc.) is unchanged.
-            if (user.Role == AppRole.SpecialAdmin && empLogin != null && empLogin.EmployeeInformationID > 0)
+            if (user.Role == AppRole.SpecialAdmin)
             {
-                var specialAdminLocations = await _db.SpecialAdminLocations
-                    .AsNoTracking()
-                    .Where(l => l.EmployeeInformationID == empLogin.EmployeeInformationID)
-                    .ToListAsync();
+                var employeeInfoId = empLogin?.EmployeeInformationID ?? 0;
+
+                List<SpecialAdminLocations> specialAdminLocations;
+                if (employeeInfoId > 0)
+                {
+                    specialAdminLocations = await _db.SpecialAdminLocations
+                        .AsNoTracking()
+                        .Where(l => l.EmployeeInformationID == employeeInfoId)
+                        .ToListAsync();
+                }
+                else
+                {
+                    specialAdminLocations = new List<SpecialAdminLocations>();
+                }
+
+                // If the employeelogin row couldn't be resolved (or isn't linked to
+                // an EmployeeInformation >= 1), fall back to matching through any
+                // employeelogin row that maps back to this user so the assigned
+                // scope is never silently dropped from the token.
+                if (specialAdminLocations.Count == 0)
+                {
+                    specialAdminLocations = await (
+                        from loc in _db.SpecialAdminLocations
+                        join login in _db.Employeelogins
+                            on loc.EmployeeInformationID equals login.EmployeeInformationID
+                        where login.UserId == user.Id || login.UserId == user.UserName
+                        select loc
+                    ).AsNoTracking().ToListAsync();
+                }
 
                 var assignedStateIds = specialAdminLocations.Select(l => l.StateId).Where(s => s > 0).Distinct().ToList();
                 var assignedRegionIds = specialAdminLocations.Select(l => l.RegionId).Where(r => r > 0).Distinct().ToList();

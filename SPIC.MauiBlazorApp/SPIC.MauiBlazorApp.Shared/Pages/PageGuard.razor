@@ -135,7 +135,13 @@
         // is granted) as well as legacy bare page tokens.
         if (!LoginState.CanAccess(firstSegment) && !isDirectorSchemeApproval)
         {
-            var fallback = LoginState.UserRole == AppRole.Dealer ? "/SDWADashboard" : "/Dashboard";
+            string fallback;
+            if (LoginState.UserRole == AppRole.Dealer)
+                fallback = "/SDWADashboard";
+            else if (LoginState.UserRole == AppRole.SpecialAdmin)
+                fallback = LoginState.CanAccess("Logistics") ? "/Logistics" : "/Welcome";
+            else
+                fallback = "/Dashboard";
             Nav.NavigateTo(fallback, replace: true);
         }
     }

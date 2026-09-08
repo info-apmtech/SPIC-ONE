@@ -7,6 +7,7 @@ using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 using System.Security.Claims;
 using Spic.Infrastructure.Data;
+using SpicAPI.Services;
 
 namespace SpicAPI.Controllers
 {
@@ -57,6 +58,24 @@ namespace SpicAPI.Controllers
             var query = _repo.GetAllWithInactive();
             var role = CurrentRole();
             var userId = CurrentUserId();
+
+            if (SpecialAdminScope.IsSpecialAdmin(User))
+            {
+                // SpecialAdmin sees only Warehouses inside the locations assigned at login.
+                var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+                if (assignedStates.Count == 0)
+                    return Ok(new List<Warehouse>());
+
+                var assignedRegions = SpecialAdminScope.AssignedRegionIds(User);
+                var assignedHqs = SpecialAdminScope.AssignedHeadquarterIds(User);
+
+                return Ok(await query
+                    .Where(x => x.BasicStateId.HasValue && assignedStates.Contains(x.BasicStateId.Value))
+                    .Where(x => assignedRegions.Count == 0 || (x.RegionId.HasValue && assignedRegions.Contains(x.RegionId.Value)))
+                    .Where(x => assignedHqs.Count == 0 || (x.HeadquarterId.HasValue && assignedHqs.Contains(x.HeadquarterId.Value)))
+                    .OrderByDescending(x => x.CreatedAt)
+                    .ToListAsync());
+            }
 
             if (IsAvpRole(role))
             {
@@ -724,6 +743,24 @@ namespace SpicAPI.Controllers
             var query = _repo.GetAllWithInactive();
             var role = CurrentRole();
             var userId = CurrentUserId();
+
+            if (SpecialAdminScope.IsSpecialAdmin(User))
+            {
+                // SpecialAdmin sees only Rake Points inside the locations assigned at login.
+                var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+                if (assignedStates.Count == 0)
+                    return Ok(new List<RackPoint>());
+
+                var assignedRegions = SpecialAdminScope.AssignedRegionIds(User);
+                var assignedHqs = SpecialAdminScope.AssignedHeadquarterIds(User);
+
+                return Ok(await query
+                    .Where(x => x.BasicStateId.HasValue && assignedStates.Contains(x.BasicStateId.Value))
+                    .Where(x => assignedRegions.Count == 0 || (x.RegionId.HasValue && assignedRegions.Contains(x.RegionId.Value)))
+                    .Where(x => assignedHqs.Count == 0 || (x.HeadquarterId.HasValue && assignedHqs.Contains(x.HeadquarterId.Value)))
+                    .OrderByDescending(x => x.CreatedAt)
+                    .ToListAsync());
+            }
 
             if (IsAvpRole(role))
             {
