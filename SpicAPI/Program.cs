@@ -20,18 +20,16 @@ builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
-            b =>
-            {
-                b.MigrationsAssembly("Spic.Infrastructure");
-                b.CommandTimeout(600);
-            }
-    ));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        b =>
+        {
+            b.MigrationsAssembly("Spic.Infrastructure");
+            b.CommandTimeout(600);
+        }));
 
-// The IFMS automation keeps its tables in a database of its own. SpicAPI needs
-// to read them for the dashboard, the OTP relay and the login screen — but it
-// has no business creating them, and the automation has no business reaching
-// the portal's tables.
+// IFMS automation uses a separate database. The API reads the IFMS data but
+// the portal and automation retain separate ownership of their own tables.
 builder.Services.AddDbContext<IfmsDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("IfmsConnection")
@@ -50,13 +48,13 @@ builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequiredLength = 6;
     options.User.RequireUniqueEmail = false;
-    options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+& ";
+    options.User.AllowedUserNameCharacters =
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+& ";
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
 builder.Services.AddScoped<IUserService, UserService>();
-//builder.Services.AddScoped<ILocationService, LocationImplementation>();
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
@@ -69,17 +67,21 @@ builder.Services.AddScoped<ILiquidationCycleService, LiquidationCycleService>();
 builder.Services.AddScoped<IProductStockAvailabilityService, ProductStockAvailabilityService>();
 builder.Services.AddScoped<IStockDetailsService, StockDetailsService>();
 
-// Shares the IFMS portal-password encryption keys with the automation service.
-// The application name is part of the key derivation, so it must match the
-// automation exactly or neither can read what the other wrote.
+// Data-protection keys shared with IFMS automation.
 builder.Services
     .AddDataProtection()
     .SetApplicationName("SPIC.Ifms")
     .PersistKeysToDbContext<IfmsDbContext>();
 
-var jwtKey = builder.Configuration["Jwt:Key"];
-var jwtIssuer = builder.Configuration["Jwt:Issuer"];
-var jwtAudience = builder.Configuration["Jwt:Audience"];
+// Fail fast at startup when required JWT settings are missing.
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? throw new InvalidOperationException("Jwt:Key is not configured.");
+
+var jwtIssuer = builder.Configuration["Jwt:Issuer"]
+    ?? throw new InvalidOperationException("Jwt:Issuer is not configured.");
+
+var jwtAudience = builder.Configuration["Jwt:Audience"]
+    ?? throw new InvalidOperationException("Jwt:Audience is not configured.");
 
 builder.Services.AddAuthentication(options =>
 {
@@ -99,9 +101,12 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtIssuer,
         ValidAudience = jwtAudience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!)),
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(jwtKey)),
         RoleClaimType = ClaimTypes.Role,
         NameClaimType = ClaimTypes.Name,
+
+        // Expired JWTs are rejected immediately, with no default grace period.
         ClockSkew = TimeSpan.Zero
     };
 
@@ -111,6 +116,7 @@ builder.Services.AddAuthentication(options =>
         {
             var accessToken = context.Request.Query["access_token"];
             var path = context.HttpContext.Request.Path;
+
             if (!string.IsNullOrEmpty(accessToken) &&
                 (path.StartsWithSegments("/api/DealerFile/view") ||
                  path.StartsWithSegments("/api/LogisticsFile/view") ||
@@ -121,6 +127,7 @@ builder.Services.AddAuthentication(options =>
             {
                 context.Token = accessToken;
             }
+
             return Task.CompletedTask;
         }
     };
@@ -156,29 +163,31 @@ builder.Services.AddSwaggerGen(c =>
         };
     });
 });
+
+// Kept unchanged to avoid altering the current production flow.
+// For production hardening, replace AllowAll with explicit trusted origins.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.SetIsOriginAllowed(origin => true)
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
     });
 });
+
 var app = builder.Build();
 
-//if (app.Environment.IsDevelopment())
-//{
+// Kept unchanged from the existing application behavior.
 app.UseSwagger();
 app.UseSwaggerUI();
-//}
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
-// Test root endpoint
+
 app.MapGet("/", () => "SPIC API is running");
 app.MapControllers();
 

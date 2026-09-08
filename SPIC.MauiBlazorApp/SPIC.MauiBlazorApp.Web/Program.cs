@@ -15,6 +15,13 @@ builder.Services.AddRazorComponents()
     .AddHubOptions(options =>
     {
         options.MaximumReceiveMessageSize = 100 * 1024 * 1024; // 100 MB
+
+        // Keep the SignalR heartbeat in step with Blazor Server's default
+        // keep-alive and let the client/server tolerate short network or
+        // proxy interruptions, so a brief stall no longer tears the circuit
+        // down and forces the "Rejoining the server..." reconnect flow.
+        options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(100);
     });
 
 // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
@@ -37,8 +44,8 @@ builder.Services.AddScoped(sp =>
     var handler = sp.GetRequiredService<AuthHttpMessageHandler>();
     handler.InnerHandler = new HttpClientHandler();
     var config = sp.GetRequiredService<IConfiguration>();
-   // var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
-    var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
+    var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
+    //var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
     return new HttpClient(handler)
     {
         BaseAddress = new Uri(baseUrl),
@@ -59,6 +66,11 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 app.UseHttpsRedirection();
 
 app.UseAntiforgery();
+
+// Explicitly enable persistent WebSocket transport for interactive server
+// circuits, with a 15s ping keep-alive so the connection stays alive through
+// proxy/IIS idle timeouts instead of dropping and showing the reconnect UI.
+app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
 
 app.MapStaticAssets();
 
