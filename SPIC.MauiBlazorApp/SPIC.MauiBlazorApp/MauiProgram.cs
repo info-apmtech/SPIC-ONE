@@ -21,10 +21,11 @@ namespace SPIC.MauiBlazorApp
             builder.Services.AddSingleton<IIfmsRelayHost, IfmsRelayHost>();
 
             builder.Services.AddMauiBlazorWebView();
-            builder.Services.AddScoped<LoginState>();
-            builder.Services.AddScoped<LoadingService>();
-            builder.Services.AddScoped<AppSearchState>();
+			builder.Services.AddScoped<LoginState>();
+			builder.Services.AddScoped<LoadingService>();
+			builder.Services.AddScoped<AppSearchState>();
 			builder.Services.AddScoped<LookupCacheService>();
+			builder.Services.AddScoped<GuestHouseBookingState>();
 
 			// ADD THIS
 			builder.Services.AddSingleton(new PlatformService

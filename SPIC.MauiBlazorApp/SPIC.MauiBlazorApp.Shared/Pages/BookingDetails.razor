@@ -1,5 +1,11 @@
 ﻿@page "/BookingDetails"
 
+@inject HttpClient Http
+@inject LoginState LoginState
+@inject NavigationManager Navigation
+
+@using System.Globalization
+
 <style>
     :root {
         --bg-body: #f4f6f8;
@@ -102,6 +108,7 @@
         font-weight: 500;
         color: var(--text-muted);
         flex-shrink: 0;
+        padding-right: 16px;
     }
     .kv-value {
         font-size: 0.85rem;
@@ -110,6 +117,7 @@
         text-align: right;
         max-width: 60%;
         line-height: 1.4;
+        word-break: break-word;
     }
 
     /* --- Specific Card Layouts --- */
@@ -175,166 +183,450 @@
         font-weight: 700 !important;
         color: var(--text-main);
     }
+
+    /* --- Status --- */
+    .status-pill {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .status-pill-green { background-color: #D1FAE5; color: #059669; }
+    .status-pill-amber { background-color: #FEF3C7; color: #B45309; }
+    .status-pill-red { background-color: #FEE2E2; color: #DC2626; }
+    .status-pill-blue { background-color: #DBEAFE; color: #1D4ED8; }
+    .status-pill-gray { background-color: #E2E8F0; color: #475569; }
+
+    .field-help {
+        font-size: 0.72rem;
+        color: #9ca3af;
+        margin: 0;
+    }
+
+    /* --- Error / Loading --- */
+    .detail-error {
+        background-color: #FEF2F2;
+        border: 1px solid #FECACA;
+        color: #B91C1C;
+        border-radius: 12px;
+        padding: 20px;
+        font-weight: 500;
+        margin-bottom: 1.25rem;
+    }
+    .detail-loading {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        padding: 20px;
+        color: #6b7280;
+        margin-bottom: 1.25rem;
+    }
 </style>
 
 <div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1300px; margin: auto;">
     
-    <div class="page-header-container">
-        <div>
-            <h1 class="page-title">Booking Details</h1>
-            <p class="page-subtitle">Booking ID: <span class="text-blue">BK7A3K9XY</span></p>
+    @if (_isLoading)
+    {
+        <div class="detail-loading">Loading booking details...</div>
+    }
+    else if (_booking == null)
+    {
+        <div class="detail-error">
+            @(string.IsNullOrWhiteSpace(_loadError) ? "Booking not found." : _loadError)
         </div>
-        <button class="btn-outline-custom"><i class="bi bi-file-earmark-arrow-down"></i> Download Invoice</button>
-    </div>
+        <button class="btn-outline-custom" @onclick="GoBack"><i class="bi bi-arrow-left"></i> Back to My Bookings</button>
+    }
+    else
+    {
+        <div class="page-header-container">
+            <div>
+                <h1 class="page-title">Booking Details</h1>
+                <p class="page-subtitle">Booking ID: <span class="text-blue">@_booking.BookingReference</span></p>
+            </div>
+            <button class="btn-outline-custom"><i class="bi bi-file-earmark-arrow-down"></i> Download Invoice</button>
+        </div>
 
-    <div class="row g-4">
+        <div class="row g-4">
         
-        <div class="col-lg-6">
-            <div class="detail-card">
-                <div class="detail-card-header">
-                    <h3 class="detail-card-title">Room Details</h3>
-                </div>
-                <div class="detail-card-body h-100">
-                    <div class="room-details-container">
-                        <img src="https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=300&q=80" alt="Room Image" class="room-image">
-                        <div class="room-info">
-                            <div class="kv-row mb-0">
-                                <span class="kv-label">Guest House</span>
-                                <span class="kv-value">T-Nagar</span>
-                            </div>
-                            <div class="kv-row mb-0">
-                                <span class="kv-label">Room Type</span>
-                                <span class="kv-value">AC Deluxe Room</span>
-                            </div>
-                            <div class="kv-row mb-0">
-                                <span class="kv-label">Room Number</span>
-                                <span class="kv-value">211</span>
+            <div class="col-lg-6">
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h3 class="detail-card-title">Room Details</h3>
+                    </div>
+                    <div class="detail-card-body h-100">
+                        <div class="room-details-container">
+                            <img src="@(string.IsNullOrEmpty(_booking.RoomImagePath) ? FallbackImage : GetImageUrl(_booking.RoomImagePath))" alt="Room Image" class="room-image" onerror="this.style.backgroundColor='#e2e8f0';" />
+                            <div class="room-info">
+                                <div class="kv-row mb-0">
+                                    <span class="kv-label">Guest House</span>
+                                    <span class="kv-value">@_booking.GuestHouseName</span>
+                                </div>
+                                <div class="kv-row mb-0">
+                                    <span class="kv-label">Room Type</span>
+                                    <span class="kv-value">@_booking.RoomType</span>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(_booking.RoomNumber))
+                                {
+                                    <div class="kv-row mb-0">
+                                        <span class="kv-label">Room Number</span>
+                                        <span class="kv-value">@_booking.RoomNumber</span>
+                                    </div>
+                                }
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="col-lg-6">
-            <div class="detail-card">
-                <div class="detail-card-header">
-                    <h3 class="detail-card-title">Check-in & Check-out</h3>
-                </div>
-                <div class="detail-card-body h-100">
-                    <div class="row">
-                        <div class="col-6 check-box-col">
-                            <div class="check-lbl">Check-in</div>
-                            <div class="check-val"><i class="bi bi-calendar"></i> May 26, 2026</div>
-                            <div class="check-val"><i class="bi bi-clock"></i> 2 PM</div>
+            <div class="col-lg-6">
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h3 class="detail-card-title">Check-in & Check-out</h3>
+                    </div>
+                    <div class="detail-card-body h-100">
+                        <div class="row">
+                            <div class="col-6 check-box-col">
+                                <div class="check-lbl">Check-in</div>
+                                <div class="check-val"><i class="bi bi-calendar"></i> @FormatDate(_booking.CheckInDate)</div>
+                                <div class="check-val"><i class="bi bi-clock"></i> @FormatTime(_booking.CheckInTime)</div>
+                            </div>
+                            <div class="col-6 check-box-col">
+                                <div class="check-lbl">Check-out</div>
+                                <div class="check-val"><i class="bi bi-calendar"></i> @FormatDate(_booking.CheckOutDate)</div>
+                                <div class="check-val"><i class="bi bi-clock"></i> @FormatTime(_booking.CheckOutTime)</div>
+                            </div>
                         </div>
-                        <div class="col-6 check-box-col">
-                            <div class="check-lbl">Check-out</div>
-                            <div class="check-val"><i class="bi bi-calendar"></i> May 29, 2026</div>
-                            <div class="check-val"><i class="bi bi-clock"></i> 12 AM</div>
+                        <div class="summary-divider"></div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Nights</span>
+                            <span class="kv-value">@(_booking.NumberOfNights ?? 0)</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Rooms</span>
+                            <span class="kv-value">@(_booking.NumberOfRooms ?? 0)</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Additional Bed(s)</span>
+                            <span class="kv-value">@(_booking.ExtraBeds ?? 0)</span>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="col-lg-6">
-            <div class="detail-card">
-                <div class="detail-card-header">
-                    <h3 class="detail-card-title">Booking Summary</h3>
-                </div>
-                <div class="detail-card-body">
-                    <div class="kv-row">
-                        <span class="kv-label">Room Type</span>
-                        <span class="kv-value">AC Deluxe Room</span>
+            <div class="col-lg-6">
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h3 class="detail-card-title">Payment Details</h3>
                     </div>
-                    
-                    <div class="summary-divider"></div>
-                    
-                    <div class="kv-row">
-                        <span class="kv-label">Room Price</span>
-                        <span class="kv-value">₹999.00</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Number of nights</span>
-                        <span class="kv-value">3</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Extra Cot × 1</span>
-                        <span class="kv-value">₹250.00</span>
-                    </div>
+                    <div class="detail-card-body">
+                        <div class="kv-row">
+                            <span class="kv-label">Room Cost</span>
+                            <span class="kv-value">@_money(_booking.RoomCost)</span>
+                        </div>
+                        @if (_booking.ExtraBeds > 0)
+                        {
+                            <div class="kv-row">
+                                <span class="kv-label">Additional Bed Charges</span>
+                                <span class="kv-value">@_money(_booking.ExtraBedCharges)</span>
+                            </div>
+                        }
 
-                    <div class="summary-divider"></div>
+                        <div class="summary-divider"></div>
 
-                    <div class="kv-row">
-                        <span class="kv-label">Subtotal</span>
-                        <span class="kv-value">₹3247.00</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Taxes (12%)</span>
-                        <span class="kv-value">₹120.00</span>
-                    </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Subtotal</span>
+                            <span class="kv-value">@_money(_booking.SubTotal ?? 0)</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">GST (5%)</span>
+                            <span class="kv-value">@_money(_booking.TaxAmount ?? 0)</span>
+                        </div>
 
-                    <div class="summary-divider"></div>
+                        <div class="summary-divider"></div>
 
-                    <div class="kv-row mt-3">
-                        <span class="kv-label total-lbl">Total</span>
-                        <span class="kv-value total-val">₹3367.00</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-lg-6">
-            <div class="detail-card">
-                <div class="detail-card-header">
-                    <h3 class="detail-card-title">Guest Information</h3>
-                </div>
-                <div class="detail-card-body">
-                    <div class="kv-row">
-                        <span class="kv-label">Employee ID / Dealer Code</span>
-                        <span class="kv-value">DL-1234</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Guest Name</span>
-                        <span class="kv-value">Rajesh</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Company Name</span>
-                        <span class="kv-value">SPIC Pvt. ltd.,</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Phone Number</span>
-                        <span class="kv-value">9876543210</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Email ID</span>
-                        <span class="kv-value">hi@gmail.com</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Number of Persons</span>
-                        <span class="kv-value">2 persons</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Nationality</span>
-                        <span class="kv-value">Indian</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Aadhaar / Passport Number</span>
-                        <span class="kv-value">098 765 432 109</span>
-                    </div>
-                    <div class="kv-row">
-                        <span class="kv-label">Address</span>
-                        <span class="kv-value text-wrap">No.5, SPIC House, Guindy,<br/>Chennai-600022.</span>
+                        <div class="kv-row mt-3">
+                            <span class="kv-label total-lbl">Total Amount</span>
+                            <span class="kv-value total-val">@_money(_booking.TotalAmount ?? 0)</span>
+                        </div>
+                        <div class="summary-divider"></div>
+                        <div class="kv-row">
+                            <span class="kv-label">Payment Method</span>
+                            <span class="kv-value">@_booking.PaymentMethod</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Payment Status</span>
+                            <span class="kv-value"><span class="status-pill @PaymentBadgeClass(_booking.PaymentStatus)">@_booking.PaymentStatus</span></span>
+                        </div>
+                        @if (_booking.PaymentDate.HasValue)
+                        {
+                            <div class="kv-row">
+                                <span class="kv-label">Payment Date</span>
+                                <span class="kv-value">@FormatDateTime(_booking.PaymentDate)</span>
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
+
+            <div class="col-lg-6">
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h3 class="detail-card-title">Booking Status</h3>
+                    </div>
+                    <div class="detail-card-body">
+                        <div class="kv-row">
+                            <span class="kv-label">Booking Status</span>
+                            <span class="kv-value"><span class="status-pill @BookingBadgeClass(_booking.BookingStatus)">@_booking.BookingStatus</span></span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Created Date/Time</span>
+                            <span class="kv-value">@FormatDateTime(_booking.CreatedAt)</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_booking.CancellationStatus))
+                        {
+                            <div class="kv-row">
+                                <span class="kv-label">Cancellation Status</span>
+                                <span class="kv-value"><span class="status-pill status-pill-red">@_booking.CancellationStatus</span></span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h3 class="detail-card-title">Guest Details</h3>
+                    </div>
+                    <div class="detail-card-body">
+                        <div class="kv-row">
+                            <span class="kv-label">Employee ID / Dealer Code</span>
+                            <span class="kv-value">@(_booking.EmployeeOrDealerCode ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Guest Name</span>
+                            <span class="kv-value">@(_booking.GuestName ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Company Name</span>
+                            <span class="kv-value">@(_booking.CompanyName ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Phone Number</span>
+                            <span class="kv-value">@(_booking.PhoneNumber ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Email ID</span>
+                            <span class="kv-value">@(_booking.Email ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Aadhaar / Passport Number</span>
+                            <span class="kv-value">@(_booking.AadhaarOrPassportNumber ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Nationality</span>
+                            <span class="kv-value">@(_booking.Nationality ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Persons</span>
+                            <span class="kv-value">@(_booking.NumberOfPersons?.ToString() ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Adults</span>
+                            <span class="kv-value">@(_booking.NumberOfAdults?.ToString() ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Children</span>
+                            <span class="kv-value">@(_booking.NumberOfChildren?.ToString() ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Address</span>
+                            <span class="kv-value text-wrap">@(_booking.Address ?? "-")</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
-    </div>
+        <div style="margin-top: 1.5rem;">
+            <button class="btn-outline-custom" @onclick="GoBack"><i class="bi bi-arrow-left"></i> Back to My Bookings</button>
+        </div>
+    }
 
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "bookingId")]
+    public int? BookingId { get; set; }
 
+    private BookingDetailsDto? _booking;
+    private bool _isLoading = true;
+    private string? _loadError;
+
+    private static readonly string FallbackImage =
+        "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/image20.png";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!BookingId.HasValue)
+        {
+            _loadError = "No booking selected.";
+            _isLoading = false;
+            return;
+        }
+
+        await LoadBookingAsync();
+    }
+
+    private async Task LoadBookingAsync()
+    {
+        _isLoading = true;
+        _loadError = null;
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/bookings/{BookingId}");
+            if (response.IsSuccessStatusCode)
+            {
+                _booking = await response.Content.ReadFromJsonAsync<BookingDetailsDto>();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _loadError = "Booking not found.";
+            }
+            else
+            {
+                _loadError = "We could not load the booking details. Please try again.";
+            }
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not load the booking details. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/MyBookings");
+    }
+
+    private string GetImageUrl(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return FallbackImage;
+
+        if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("_content/", StringComparison.OrdinalIgnoreCase))
+        {
+            return path;
+        }
+
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        var relative = Uri.EscapeDataString(path).Replace("%2F", "/").TrimStart('/');
+        var token = LoginState.Token;
+        if (!string.IsNullOrEmpty(token))
+        {
+            var rawToken = token.StartsWith("Bearer ") ? token["Bearer ".Length..] : token;
+            return $"{baseUrl}/api/GuestHouseBooking/image/{relative}?access_token={Uri.EscapeDataString(rawToken)}";
+        }
+
+        return $"{baseUrl}/api/GuestHouseBooking/image/{relative}";
+    }
+
+    private static string FormatDate(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string FormatTime(TimeSpan? value)
+    {
+        if (!value.HasValue) return "-";
+        return DateTime.Today.Add(value.Value).ToString("hh:mm tt", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatDateTime(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("dd MMM yyyy, hh:mm tt", CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string _money(decimal value)
+    {
+        return "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+    }
+
+    private static string BookingBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Confirmed" => "status-pill-green",
+            "Cancelled" => "status-pill-red",
+            "Completed" => "status-pill-green",
+            "Pending Payment" => "status-pill-amber",
+            "Draft" => "status-pill-gray",
+            _ => "status-pill-gray"
+        };
+    }
+
+    private static string PaymentBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Paid" => "status-pill-green",
+            "Pending" => "status-pill-amber",
+            "Failed" => "status-pill-red",
+            "Refunded" => "status-pill-blue",
+            "Partially Refunded" => "status-pill-blue",
+            _ => "status-pill-gray"
+        };
+    }
+
+    public class BookingDetailsDto
+    {
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public string GuestHouseName { get; set; } = "";
+        public string? RoomImagePath { get; set; }
+        public string RoomType { get; set; } = "";
+        public string? RoomNumber { get; set; }
+
+        public DateTime? CheckInDate { get; set; }
+        public TimeSpan? CheckInTime { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public TimeSpan? CheckOutTime { get; set; }
+        public int? NumberOfNights { get; set; }
+        public int? NumberOfRooms { get; set; }
+        public int? NumberOfPersons { get; set; }
+        public int? NumberOfAdults { get; set; }
+        public int? NumberOfChildren { get; set; }
+        public int? ExtraBeds { get; set; }
+
+        public decimal RoomPrice { get; set; }
+        public decimal? ExtraCotPrice { get; set; }
+        public decimal RoomCost { get; set; }
+        public decimal ExtraBedCharges { get; set; }
+        public decimal? SubTotal { get; set; }
+        public decimal? TaxAmount { get; set; }
+        public decimal? TotalAmount { get; set; }
+
+        public string BookingStatus { get; set; } = "";
+        public string PaymentStatus { get; set; } = "";
+        public string PaymentMethod { get; set; } = "";
+        public DateTime? PaymentDate { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string? CancellationStatus { get; set; }
+
+        public string? EmployeeOrDealerCode { get; set; }
+        public string? GuestName { get; set; }
+        public string? CompanyName { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+        public string? AadhaarOrPassportNumber { get; set; }
+        public string? Nationality { get; set; }
+        public string? Address { get; set; }
+    }
 }

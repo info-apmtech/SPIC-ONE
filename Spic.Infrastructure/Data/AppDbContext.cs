@@ -145,10 +145,10 @@ namespace Spic.Infrastructure.Data
 		//public DbSet<GuestHouseRoomImage> GuestHouseRoomImages { get; set; }
 		//public DbSet<GuestHouseRoomAmenity> GuestHouseRoomAmenities { get; set; }
 		public DbSet<GuestHouseRoomAvailability> GuestHouseRoomAvailabilities { get; set; }
-		//public DbSet<GuestHouseBooking> GuestHouseBookings { get; set; }
-		//public DbSet<GuestHouseBookingGuest> GuestHouseBookingGuests { get; set; }
+		public DbSet<GuestHouseBooking> GuestHouseBookings { get; set; }
+		public DbSet<GuestHouseBookingGuest> GuestHouseBookingGuests { get; set; }
 		//public DbSet<GuestHouseBookingDocument> GuestHouseBookingDocuments { get; set; }
-		//public DbSet<GuestHouseBookingPayment> GuestHouseBookingPayments { get; set; }
+		public DbSet<GuestHouseBookingPayment> GuestHouseBookingPayments { get; set; }
 		//public DbSet<GuestHouseCancellationPolicy> GuestHouseCancellationPolicies { get; set; }
 		//public DbSet<GuestHouseBookingCancellation> GuestHouseBookingCancellations { get; set; }
 		//public DbSet<GuestHouseBookingRefund> GuestHouseBookingRefunds { get; set; }

@@ -29,10 +29,11 @@ public enum GuestHousePaymentStatus
 /// </summary>
 public enum GuestHousePaymentMethod
 {
-	Razorpay = 0,   // Razorpay gateway
-	UPI = 1,        // UPI ID / QR code
-	Card = 2,       // Credit / Debit Card
-	NetBanking = 3  // Net Banking
+	Razorpay = 0,     // Razorpay gateway
+	UPI = 1,          // UPI ID / QR code
+	Card = 2,         // Credit / Debit Card
+	NetBanking = 3,   // Net Banking
+	PayAfterStay = 4  // Pay at the guest house after the stay
 }
 
 /// <summary>
@@ -203,6 +204,7 @@ public class GuestHouseBooking
 
 	// Booking Quantity
 	public int? NumberOfNights { get; set; }                             // Stay length in nights
+	public int? NumberOfRooms { get; set; }                              // Number of rooms of the selected room type booked
 	public int? NumberOfPersons { get; set; }                            // Total number of guests
 	public int? NumberOfAdults { get; set; }                             // Number of adult guests
 	public int? NumberOfChildren { get; set; }                           // Number of children (below 12 years)

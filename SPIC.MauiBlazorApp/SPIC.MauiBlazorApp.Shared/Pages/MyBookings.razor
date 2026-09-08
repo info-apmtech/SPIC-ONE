@@ -1,5 +1,53 @@
 ﻿@page "/MyBookings"
 
+@inject HttpClient Http
+@inject LoginState LoginState
+@inject NavigationManager Navigation
+
+@using System.Globalization
+
+<style>
+    .bk-badge-amber {
+        background-color: #FEF3C7;
+        color: #B45309;
+    }
+
+    .bk-badge-red {
+        background-color: #FEE2E2;
+        color: #DC2626;
+    }
+
+    .bk-badge-blue {
+        background-color: #DBEAFE;
+        color: #1D4ED8;
+    }
+
+    .bk-badge-gray {
+        background-color: #E2E8F0;
+        color: #475569;
+    }
+
+    .mb-error-card {
+        background-color: #FEF2F2;
+        border: 1px solid #FECACA;
+        color: #B91C1C;
+        border-radius: 8px;
+        padding: 16px 20px;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .mb-empty-card {
+        background-color: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
+        padding: 40px 20px;
+        text-align: center;
+        color: #64748B;
+        font-size: 14px;
+    }
+</style>
+
 <div class="container-fluid py-4 px-0">
     <div class="mb-header-row">
         <div class="mb-header-text">
@@ -7,7 +55,7 @@
             <p>View and manage your room reservations</p>
         </div>
         
-        <button class="mb-btn-new">
+        <button class="mb-btn-new" @onclick="NewBooking">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
@@ -15,186 +63,352 @@
         </button>
     </div>
 
-    <div class="mb-stats-grid">
+    @if (_isLoading)
+    {
+        <div class="mb-empty-card">Loading your bookings...</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <div class="mb-error-card">@_loadError</div>
+    }
+    else
+    {
+        <div class="mb-stats-grid">
         
-        <div class="mb-stat-card mb-card-total">
-            <div class="mb-card-title">Total Bookings</div>
-            <div class="mb-card-value">12</div>
-            <div class="mb-card-subtext">
-                <svg class="mb-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                    <polyline points="17 6 23 6 23 12"></polyline>
-                </svg>
-                3 this month
+            <div class="mb-stat-card mb-card-total">
+                <div class="mb-card-title">Total Bookings</div>
+                <div class="mb-card-value">@_summary.Total</div>
+                <div class="mb-card-subtext">
+                    <svg class="mb-trend-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                        <polyline points="17 6 23 6 23 12"></polyline>
+                    </svg>
+                    @_thisMonthCount this month
+                </div>
+                <div class="mb-card-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 21h18"></path>
+                        <path d="M5 21V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v14"></path>
+                        <path d="M9 9h6"></path>
+                        <path d="M9 13h6"></path>
+                        <path d="M9 17h6"></path>
+                    </svg>
+                </div>
             </div>
-            <div class="mb-card-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 21h18"></path>
-                    <path d="M5 21V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v14"></path>
-                    <path d="M9 9h6"></path>
-                    <path d="M9 13h6"></path>
-                    <path d="M9 17h6"></path>
-                </svg>
-            </div>
-        </div>
 
-        <div class="mb-stat-card mb-card-upcoming">
-            <div class="mb-card-title">Upcoming</div>
-            <div class="mb-card-value">3</div>
-            <div class="mb-card-subtext">
-                Next: 22 Jan 2025
+            <div class="mb-stat-card mb-card-upcoming">
+                <div class="mb-card-title">Upcoming</div>
+                <div class="mb-card-value">@_summary.Upcoming</div>
+                <div class="mb-card-subtext">
+                    @(_nextUpcomingDate.HasValue ? $"Next: {FormatDate(_nextUpcomingDate)}" : _summary.Upcoming == 0 ? "No upcoming stays" : "")
+                </div>
+                <div class="mb-card-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                        <polyline points="11 14 14 17 11 20"></polyline>
+                        <polyline points="15 14 18 17 15 20"></polyline>
+                    </svg>
+                </div>
             </div>
-            <div class="mb-card-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="16" y1="2" x2="16" y2="6"></line>
-                    <line x1="8" y1="2" x2="8" y2="6"></line>
-                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                    <polyline points="11 14 14 17 11 20"></polyline>
-                    <polyline points="15 14 18 17 15 20"></polyline>
-                </svg>
-            </div>
-        </div>
 
-        <div class="mb-stat-card mb-card-completed">
-            <div class="mb-card-title">Completed</div>
-            <div class="mb-card-value">7</div>
-            <div class="mb-card-subtext">
-                Total: ₹84,200
+            <div class="mb-stat-card mb-card-completed">
+                <div class="mb-card-title">Completed</div>
+                <div class="mb-card-value">@_summary.Completed</div>
+                <div class="mb-card-subtext">
+                    Total: @_money(_completedTotal)
+                </div>
+                <div class="mb-card-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        <circle cx="12" cy="12" r="10" stroke-dasharray="2 2"></circle>
+                    </svg>
+                </div>
             </div>
-            <div class="mb-card-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                    <circle cx="12" cy="12" r="10" stroke-dasharray="2 2"></circle>
-                </svg>
-            </div>
-        </div>
 
-        <div class="mb-stat-card mb-card-cancelled">
-            <div class="mb-card-title">Cancelled</div>
-            <div class="mb-card-value">2</div>
-            <div class="mb-card-subtext">
-                Refund: ₹8,400
+            <div class="mb-stat-card mb-card-cancelled">
+                <div class="mb-card-title">Cancelled</div>
+                <div class="mb-card-value">@_summary.Cancelled</div>
+                <div class="mb-card-subtext">
+                    Total: @_money(_cancelledTotal)
+                </div>
+                <div class="mb-card-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                        <path d="M16 8l-8 8" stroke-dasharray="2 2"></path>
+                    </svg>
+                </div>
             </div>
-            <div class="mb-card-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
-                    <path d="M16 8l-8 8" stroke-dasharray="2 2"></path>
-                </svg>
-            </div>
-        </div>
 
-    </div>
-    <div class="bk-wrapper mt-4">
+        </div>
+        <div class="bk-wrapper mt-4">
         
-        <div class="bk-tabs-container">
-            <button class="bk-tab active">Upcoming</button>
-            <button class="bk-tab">Completed</button>
-            <button class="bk-tab">Cancelled</button>
-        </div>
-
-        <div class="bk-list">
-            
-            <div class="bk-card">
-                <div class="bk-image-wrap">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/image12.png" alt="AC Deluxe Room" onerror="this.style.backgroundColor='#e2e8f0';" />
-                </div>
-                
-                <div class="bk-content">
-                    <div class="bk-header">
-                        <div class="bk-title-group">
-                            <h2>AC Deluxe Room</h2>
-                            <span class="bk-badge">Confirmed</span>
-                        </div>
-                        <span class="bk-badge">Paid</span>
-                    </div>
-
-                    <div class="bk-details-grid">
-                        <div class="bk-detail-box">
-                            <span class="bk-label">Booking ID</span>
-                            <span class="bk-value text-green">BK12345678</span>
-                        </div>
-                        <div class="bk-detail-box">
-                            <span class="bk-label">Guest House</span>
-                            <span class="bk-value">T. Nagar</span>
-                        </div>
-                        <div class="bk-detail-box">
-                            <span class="bk-label">Check-in</span>
-                            <span class="bk-value">2026-05-15</span>
-                        </div>
-                        <div class="bk-detail-box">
-                            <span class="bk-label">Check-out</span>
-                            <span class="bk-value">2026-05-17</span>
-                        </div>
-                        <div class="bk-detail-box">
-                            <span class="bk-label">Guests</span>
-                            <span class="bk-value">2</span>
-                        </div>
-                        <div class="bk-detail-box box-purple">
-                            <span class="bk-label text-purple">Total Amount</span>
-                            <span class="bk-value text-purple">₹1119</span>
-                        </div>
-                    </div>
-
-                    <div class="bk-actions">
-                        <button class="bk-btn bk-btn-default">View Details</button>
-                        <button class="bk-btn bk-btn-default">Download Receipt</button>
-                        <button class="bk-btn bk-btn-danger">Cancel Booking</button>
-                    </div>
-                </div>
+            <div class="bk-tabs-container">
+                <button class="bk-tab @(SelectedTab == "Upcoming" ? "active" : "")" @onclick='() => SelectTab("Upcoming")'>Upcoming</button>
+                <button class="bk-tab @(SelectedTab == "Completed" ? "active" : "")" @onclick='() => SelectTab("Completed")'>Completed</button>
+                <button class="bk-tab @(SelectedTab == "Cancelled" ? "active" : "")" @onclick='() => SelectTab("Cancelled")'>Cancelled</button>
             </div>
 
-            <div class="bk-card">
-                <div class="bk-image-wrap">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/image13.png" alt="AC Deluxe Room" onerror="this.style.backgroundColor='#e2e8f0';" />
-                </div>
+            @if (VisibleBookings.Count == 0)
+            {
+                <div class="mb-empty-card">No @SelectedTab.ToLowerInvariant() bookings found.</div>
+            }
+            else
+            {
+                <div class="bk-list">
                 
-                <div class="bk-content">
-                    <div class="bk-header">
-                        <div class="bk-title-group">
-                            <h2>AC Deluxe Room</h2>
-                            <span class="bk-badge">Confirmed</span>
-                        </div>
-                        <span class="bk-badge">Paid</span>
-                    </div>
+                    @foreach (var booking in VisibleBookings)
+                    {
+                        <div class="bk-card">
+                            <div class="bk-image-wrap">
+                                <img src="@(string.IsNullOrEmpty(booking.RoomImagePath) ? FallbackImage : GetImageUrl(booking.RoomImagePath))" alt="@booking.RoomType" onerror="this.style.backgroundColor='#e2e8f0';" />
+                            </div>
+                            
+                            <div class="bk-content">
+                                <div class="bk-header">
+                                    <div class="bk-title-group">
+                                        <h2>@booking.RoomType</h2>
+                                        <span class="bk-badge @BookingStatusBadgeClass(booking.BookingStatus)">@booking.BookingStatus</span>
+                                    </div>
+                                    <span class="bk-badge @PaymentStatusBadgeClass(booking.PaymentStatus)">@booking.PaymentStatus</span>
+                                </div>
 
-                    <div class="bk-details-grid">
-                        <div class="bk-detail-box">
-                            <span class="bk-label">Booking ID</span>
-                            <span class="bk-value text-green">BK12345678</span>
-                        </div>
-                        <div class="bk-detail-box">
-                            <span class="bk-label">Guest House</span>
-                            <span class="bk-value">T. Nagar</span>
-                        </div>
-                        <div class="bk-detail-box">
-                            <span class="bk-label">Check-in</span>
-                            <span class="bk-value">2026-05-15</span>
-                        </div>
-                        <div class="bk-detail-box">
-                            <span class="bk-label">Check-out</span>
-                            <span class="bk-value">2026-05-17</span>
-                        </div>
-                        <div class="bk-detail-box">
-                            <span class="bk-label">Guests</span>
-                            <span class="bk-value">2</span>
-                        </div>
-                        <div class="bk-detail-box box-purple">
-                            <span class="bk-label text-purple">Total Amount</span>
-                            <span class="bk-value text-purple">₹1119</span>
-                        </div>
-                    </div>
+                                <div class="bk-details-grid">
+                                    <div class="bk-detail-box">
+                                        <span class="bk-label">Booking ID</span>
+                                        <span class="bk-value text-green">@booking.BookingReference</span>
+                                    </div>
+                                    <div class="bk-detail-box">
+                                        <span class="bk-label">Guest House</span>
+                                        <span class="bk-value">@booking.GuestHouseName</span>
+                                    </div>
+                                    <div class="bk-detail-box">
+                                        <span class="bk-label">Check-in</span>
+                                        <span class="bk-value">@FormatDate(booking.CheckInDate)</span>
+                                    </div>
+                                    <div class="bk-detail-box">
+                                        <span class="bk-label">Check-out</span>
+                                        <span class="bk-value">@FormatDate(booking.CheckOutDate)</span>
+                                    </div>
+                                    <div class="bk-detail-box">
+                                        <span class="bk-label">Guests</span>
+                                        <span class="bk-value">@booking.NumberOfGuests</span>
+                                    </div>
+                                    <div class="bk-detail-box">
+                                        <span class="bk-label">Rooms</span>
+                                        <span class="bk-value">@booking.NumberOfRooms</span>
+                                    </div>
+                                    <div class="bk-detail-box box-purple">
+                                        <span class="bk-label text-purple">Total Amount</span>
+                                        <span class="bk-value text-purple">@_money(booking.TotalAmount ?? 0)</span>
+                                    </div>
+                                </div>
 
-                    <div class="bk-actions">
-                        <button class="bk-btn bk-btn-default">View Details</button>
-                        <button class="bk-btn bk-btn-default">Download Receipt</button>
-                        <button class="bk-btn bk-btn-danger">Cancel Booking</button>
-                    </div>
+                                <div class="bk-actions">
+                                    <button class="bk-btn bk-btn-default" @onclick="() => ViewDetails(booking.BookingId)">View Details</button>
+                                    <button class="bk-btn bk-btn-default">Cancel Booking</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
                 </div>
-            </div>
-
+            }
         </div>
-    </div>
+    }
 </div>
+
+@code {
+    private List<MyBookingDto> _bookings = new();
+    private BookingSummaryDto _summary = new();
+    private bool _isLoading = true;
+    private string? _loadError;
+    private string SelectedTab { get; set; } = "Upcoming";
+
+    private int _thisMonthCount;
+    private DateTime? _nextUpcomingDate;
+    private decimal _completedTotal;
+    private decimal _cancelledTotal;
+
+    private List<MyBookingDto> VisibleBookings
+    {
+        get
+        {
+            return SelectedTab switch
+            {
+                "Completed" => _bookings.Where(b => IsCompleted(b.BookingStatus)).ToList(),
+                "Cancelled" => _bookings.Where(b => IsCancelled(b.BookingStatus)).ToList(),
+                _ => _bookings.Where(b => IsUpcoming(b)).ToList()
+            };
+        }
+    }
+
+    private static readonly string FallbackImage =
+        "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/image20.png";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBookingsAsync();
+    }
+
+    private async Task LoadBookingsAsync()
+    {
+        _isLoading = true;
+        _loadError = null;
+        try
+        {
+            var response = await Http.GetFromJsonAsync<MyBookingsResponse>("api/GuestHouseBooking/my-bookings");
+            if (response == null)
+            {
+                _loadError = "We could not load your bookings. Please try again.";
+                return;
+            }
+
+            _bookings = response.Bookings ?? new();
+            _summary = response.Summary ?? new();
+
+            var now = DateTime.Now;
+            _thisMonthCount = _bookings.Count(b => b.CreatedAt.Year == now.Year && b.CreatedAt.Month == now.Month);
+            _nextUpcomingDate = _bookings
+                .Where(b => IsUpcoming(b) && b.CheckInDate.HasValue)
+                .OrderBy(b => b.CheckInDate)
+                .Select(b => b.CheckInDate)
+                .FirstOrDefault();
+            _completedTotal = _bookings.Where(b => IsCompleted(b.BookingStatus)).Sum(b => b.TotalAmount ?? 0);
+            _cancelledTotal = _bookings.Where(b => IsCancelled(b.BookingStatus)).Sum(b => b.TotalAmount ?? 0);
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not load your bookings. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void SelectTab(string tab)
+    {
+        SelectedTab = tab;
+    }
+
+    private void NewBooking()
+    {
+        Navigation.NavigateTo("/GuestHouse");
+    }
+
+    private void ViewDetails(int bookingId)
+    {
+        Navigation.NavigateTo($"/BookingDetails?bookingId={bookingId}");
+    }
+
+    private static bool IsUpcoming(MyBookingDto booking)
+    {
+        if (IsCancelled(booking.BookingStatus) || IsCompleted(booking.BookingStatus)) return false;
+        if (!booking.CheckInDate.HasValue) return true;
+        return booking.CheckInDate.Value.Date >= DateTime.Today;
+    }
+
+    private static bool IsCompleted(string status) =>
+        string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCancelled(string status) =>
+        string.Equals(status, "Cancelled", StringComparison.OrdinalIgnoreCase);
+
+    private static string BookingStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Confirmed" => "bk-badge",
+            "Cancelled" => "bk-badge bk-badge-red",
+            "Completed" => "bk-badge",
+            "Pending Payment" => "bk-badge bk-badge-amber",
+            _ => "bk-badge bk-badge-gray"
+        };
+    }
+
+    private static string PaymentStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Paid" => "bk-badge",
+            "Pending" => "bk-badge bk-badge-amber",
+            "Failed" => "bk-badge bk-badge-red",
+            "Refunded" => "bk-badge bk-badge-blue",
+            _ => "bk-badge bk-badge-gray"
+        };
+    }
+
+    private string GetImageUrl(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return FallbackImage;
+
+        if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("_content/", StringComparison.OrdinalIgnoreCase))
+        {
+            return path;
+        }
+
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        var relative = Uri.EscapeDataString(path).Replace("%2F", "/").TrimStart('/');
+        var token = LoginState.Token;
+        if (!string.IsNullOrEmpty(token))
+        {
+            var rawToken = token.StartsWith("Bearer ") ? token["Bearer ".Length..] : token;
+            return $"{baseUrl}/api/GuestHouseBooking/image/{relative}?access_token={Uri.EscapeDataString(rawToken)}";
+        }
+
+        return $"{baseUrl}/api/GuestHouseBooking/image/{relative}";
+    }
+
+    private static string FormatDate(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string _money(decimal value)
+    {
+        return "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+    }
+
+    public class MyBookingsResponse
+    {
+        public List<MyBookingDto> Bookings { get; set; } = new();
+        public BookingSummaryDto Summary { get; set; } = new();
+    }
+
+    public class MyBookingDto
+    {
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public int GuestHouseId { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public string? RoomImagePath { get; set; }
+        public string RoomType { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public string BookingStatus { get; set; } = "";
+        public string PaymentStatus { get; set; } = "";
+        public DateTime? CheckInDate { get; set; }
+        public TimeSpan? CheckInTime { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public TimeSpan? CheckOutTime { get; set; }
+        public int? NumberOfNights { get; set; }
+        public int? NumberOfRooms { get; set; }
+        public int? NumberOfGuests { get; set; }
+        public decimal? TotalAmount { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class BookingSummaryDto
+    {
+        public int Total { get; set; }
+        public int Upcoming { get; set; }
+        public int Completed { get; set; }
+        public int Cancelled { get; set; }
+    }
+}
