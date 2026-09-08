@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -181,7 +181,7 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 				x.Route.Equals(route, StringComparison.OrdinalIgnoreCase));
 		}
 
-		public static string GetNextRoute(string currentRoute, bool hasGreenStar, bool isRestricted = false)
+		public static string GetNextRoute(string currentRoute, bool hasGreenStar, bool isRestricted = false, bool hasConsent = false)
 		{
 			if (isRestricted)
 			{
@@ -195,13 +195,17 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 				return GetStepByRoute(currentRoute)?.NextRoute ?? "/Dashboard";
 			}
 
+			// Consent path: Investment goes directly to Enclosures, skipping CreditLimit steps.
+			if (hasConsent && currentRoute.Equals("/Investment", StringComparison.OrdinalIgnoreCase))
+				return "/Enclosures";
+
 			if (currentRoute.Equals("/CreditLimit", StringComparison.OrdinalIgnoreCase))
 				return hasGreenStar ? "/CreditLimitForGreenStar" : "/Enclosures";
 
 			return GetStepByRoute(currentRoute)?.NextRoute ?? "/Dashboard";
 		}
 
-		public static string GetPreviousRoute(string currentRoute, bool hasGreenStar, bool isRestricted = false)
+		public static string GetPreviousRoute(string currentRoute, bool hasGreenStar, bool isRestricted = false, bool hasConsent = false)
 		{
 			if (isRestricted)
 			{
@@ -214,6 +218,10 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 
 				return GetStepByRoute(currentRoute)?.PreviousRoute ?? "/Dashboard";
 			}
+
+			// Consent path: Enclosures goes back to Investment, skipping CreditLimit steps.
+			if (hasConsent && currentRoute.Equals("/Enclosures", StringComparison.OrdinalIgnoreCase))
+				return "/Investment";
 
 			if (currentRoute.Equals("/Enclosures", StringComparison.OrdinalIgnoreCase))
 				return hasGreenStar ? "/CreditLimitForGreenStar" : "/CreditLimit";

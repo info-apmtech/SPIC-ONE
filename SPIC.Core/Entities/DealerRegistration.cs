@@ -193,6 +193,12 @@ namespace SPIC.Core.Entities
         // New dealers have no DealerCode until the final approval generates one.
         public bool IsNewDealerRegistration { get; set; }
 
+        // True when the dealer has consented to skip the Credit Limit pages.
+        // When true, Steps 10 and 11 (CreditLimit / CreditLimitForGreenStar) are bypassed
+        // and the dealer navigates directly from Investment (Step 9) to Enclosures (Step 12).
+        // Credit limit values for consent dealers are entered by the approver in the approval popup.
+        public bool IsCreditLimitConsentGiven { get; set; }
+
         // Dealership Application Fee (New Dealer flow — SPIC)
         public int? DealershipApplicationFeeBankId { get; set; }
         public string? DealershipApplicationFeeDDNumber { get; set; }

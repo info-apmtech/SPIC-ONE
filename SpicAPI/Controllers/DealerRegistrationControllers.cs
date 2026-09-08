@@ -288,6 +288,7 @@ namespace SpicAPI.Controllers
 
 			// Step 10: Credit limit proposal (SPIC). New-dealer flow instead records
 			// the SPIC Trade Deposit Details (Dealership Application Fee + Trade Deposit DD).
+			// Consent dealers are marked complete here — they skip the CreditLimit pages.
 			bool credit = _creditRepo != null && await _creditRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
 			bool step10 = credit;
 			if (dealer?.IsNewDealerRegistration == true)
@@ -300,10 +301,14 @@ namespace SpicAPI.Controllers
 						|| dealer.DealershipApplicationFeeBankId > 0
 						|| (dealer.DealershipApplicationFeeAmount ?? 0) > 0);
 			}
+			// Consent path: skip credit limit pages — mark as complete.
+			if (dealer?.IsCreditLimitConsentGiven == true)
+				step10 = true;
 			result.Add(new { StepNo = 10, IsComplete = step10 });
 
 			// Step 11: Credit limit for GreenStar (same check as step 10).
 			// New-dealer flow instead records the GFL Trade Deposit Details.
+			// Consent dealers are marked complete here — they skip the CreditLimitForGreenStar page.
 			bool step11 = credit;
 			if (dealer?.IsNewDealerRegistration == true)
 			{
@@ -312,7 +317,11 @@ namespace SpicAPI.Controllers
 						|| dealer.GflTradeDepositDDBankId > 0
 						|| (dealer.GflTradeDepositDDAmount ?? 0) > 0);
 			}
+			// Consent path: skip credit limit pages — mark as complete.
+			if (dealer?.IsCreditLimitConsentGiven == true)
+				step11 = true;
 			result.Add(new { StepNo = 11, IsComplete = step11 });
+
 
 			// Step 12: Documents
 			bool step12 = _docsRepo != null && await _docsRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
