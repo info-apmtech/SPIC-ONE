@@ -60,78 +60,71 @@
             <button class="fo-tab @(_statusFilter == "CheckedIn" ? "active" : "")" @onclick='() => SetFilter("CheckedIn")'>Checked-In</button>
         </div>
 
-        @foreach (var house in _houses)
-        {
-            var visibleRooms = house.Rooms.Where(r => _statusFilter == "All" || r.StatusKey == _statusFilter).ToList();
-            if (visibleRooms.Count == 0) continue;
+        <SpicDataTable Items="FilteredRooms"
+                       Title="Rooms"
+                       FileName="FrontOffice_Rooms"
+                       ExportColumns="GetExportColumns()"
+                       SearchText="@_searchText">
 
-            <div class="main-card">
-                <div class="section-header">
-                    <h3 class="section-title"><i class="bi bi-building"></i> @house.GuestHouseName</h3>
-                    <span class="fo-room-count-pill">@house.Rooms.Count Room@(house.Rooms.Count == 1 ? "" : "s")</span>
+            <FilterControls>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text" placeholder="Search rooms..."
+                           @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
                 </div>
-                <div class="table-wrapper">
-                    <div class="table-responsive">
-                        <table class="spic-table">
-                            <thead>
-                                <tr>
-                                    <th>Room No</th>
-                                    <th>Room Type</th>
-                                    <th>Status</th>
-                                    <th>Booking / Guest</th>
-                                    <th>Check-in</th>
-                                    <th>Check-out</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var room in visibleRooms)
-                                {
-                                    <tr>
-                                        <td><span class="fo-room-no">@(string.IsNullOrEmpty(room.RoomNumber) ? "-" : room.RoomNumber)</span></td>
-                                        <td>
-                                            <span class="fo-room-type">@room.RoomType</span>
-                                            <div class="fo-room-capacity">Capacity: @(room.Capacity?.ToString() ?? "-")</div>
-                                        </td>
-                                        <td><span class="fo-badge @StatusBadge(room.StatusKey)">@room.StatusText</span></td>
-                                        <td>
-                                            @if (room.CurrentBookingId.HasValue)
-                                            {
-                                                <div class="fo-guest-strong">@room.BookingReference</div>
-                                                <div class="fo-guest-muted">@(string.IsNullOrEmpty(room.GuestName) ? "-" : room.GuestName)</div>
-                                            }
-                                            else
-                                            {
-                                                <span class="fo-muted">-</span>
-                                            }
-                                        </td>
-                                        <td><span class="fo-date-value">@FormatDate(room.CheckInDate)</span></td>
-                                        <td><span class="fo-date-value">@FormatDate(room.CheckOutDate)</span></td>
-                                        <td>
-                                            @if (room.StatusKey == "Reserved")
-                                            {
-                                                <button class="fo-btn fo-btn-checkin" @onclick="() => OpenCheckIn(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-in-right"></i> Check-In</button>
-                                            }
-                                            else if (room.StatusKey == "CheckedIn")
-                                            {
-                                                <button class="fo-btn fo-btn-checkout" @onclick="() => OpenCheckOut(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-right"></i> Check-Out</button>
-                                            }
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        }
+                <select class="filter-select" @bind="_guestHouseFilter">
+                    <option value="All">All Guest Houses</option>
+                    @foreach (var gh in _houses.Select(h => h.GuestHouseName).Distinct())
+                    {
+                        <option value="@gh">@gh</option>
+                    }
+                </select>
+            </FilterControls>
 
-        @if (_houses.SelectMany(h => h.Rooms).Count() == 0)
-        {
-            <div class="main-card">
-                <div class="fo-empty">No rooms found.</div>
-            </div>
-        }
+            <TableHeader>
+                <th>Guest House</th>
+                <th>Room No</th>
+                <th>Room Type</th>
+                <th>Status</th>
+                <th>Booking / Guest</th>
+                <th>Check-in</th>
+                <th>Check-out</th>
+                <th>Actions</th>
+            </TableHeader>
+
+            <TableRow Context="room">
+                <td>@room.GuestHouseName</td>
+                <td><span class="fo-room-no">@(string.IsNullOrEmpty(room.RoomNumber) ? "-" : room.RoomNumber)</span></td>
+                <td>
+                    <span class="fo-room-type">@room.RoomType</span>
+                    <div class="fo-room-capacity">Capacity: @(room.Capacity?.ToString() ?? "-")</div>
+                </td>
+                <td><span class="fo-badge @StatusBadge(room.StatusKey)">@room.StatusText</span></td>
+                <td>
+                    @if (room.CurrentBookingId.HasValue)
+                    {
+                        <div class="fo-guest-strong">@room.BookingReference</div>
+                        <div class="fo-guest-muted">@(string.IsNullOrEmpty(room.GuestName) ? "-" : room.GuestName)</div>
+                    }
+                    else
+                    {
+                        <span class="fo-muted">-</span>
+                    }
+                </td>
+                <td><span class="fo-date-value">@FormatDate(room.CheckInDate)</span></td>
+                <td><span class="fo-date-value">@FormatDate(room.CheckOutDate)</span></td>
+                <td style="white-space:nowrap;">
+                    @if (room.StatusKey == "Reserved")
+                    {
+                        <button class="fo-btn fo-btn-checkin" @onclick="() => OpenCheckIn(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-in-right"></i> Check-In</button>
+                    }
+                    else if (room.StatusKey == "CheckedIn")
+                    {
+                        <button class="fo-btn fo-btn-checkout" @onclick="() => OpenCheckOut(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-right"></i> Check-Out</button>
+                    }
+                </td>
+            </TableRow>
+        </SpicDataTable>
     }
 </div>
 
@@ -312,6 +305,8 @@
     private bool _isLoading = true;
     private string? _loadError;
     private string _statusFilter = "All";
+    private string _guestHouseFilter = "All";
+    private string _searchText = "";
 
     // Check-in modal state
     private bool _showCheckIn;
@@ -336,6 +331,30 @@
     private int AvailableCount => _houses.SelectMany(h => h.Rooms).Count(r => r.StatusKey == "Available");
     private int ReservedCount => _houses.SelectMany(h => h.Rooms).Count(r => r.StatusKey == "Reserved");
     private int CheckedInCount => _houses.SelectMany(h => h.Rooms).Count(r => r.StatusKey == "CheckedIn");
+
+    // Flattened room list (across every Guest House) feeding the single LocationMaster-style
+    // DataTable. Guest House is preserved as its own column/filter rather than a section
+    // grouping. Same underlying _houses data - no API/query change.
+    private List<FrontOfficeRoomDto> FilteredRooms => _houses
+        .SelectMany(h => h.Rooms)
+        .Where(r => _statusFilter == "All" || r.StatusKey == _statusFilter)
+        .Where(r => _guestHouseFilter == "All" || r.GuestHouseName == _guestHouseFilter)
+        .ToList();
+
+    private List<ExportColumn<FrontOfficeRoomDto>> GetExportColumns()
+    {
+        return new List<ExportColumn<FrontOfficeRoomDto>>
+        {
+            new() { Header = "Guest House", ValueSelector = r => r.GuestHouseName },
+            new() { Header = "Room No", ValueSelector = r => r.RoomNumber ?? "-" },
+            new() { Header = "Room Type", ValueSelector = r => r.RoomType },
+            new() { Header = "Status", ValueSelector = r => r.StatusText },
+            new() { Header = "Booking Ref", ValueSelector = r => r.BookingReference ?? "-" },
+            new() { Header = "Guest Name", ValueSelector = r => r.GuestName ?? "-" },
+            new() { Header = "Check-in", ValueSelector = r => FormatDate(r.CheckInDate) },
+            new() { Header = "Check-out", ValueSelector = r => FormatDate(r.CheckOutDate) },
+        };
+    }
 
     protected override async Task OnInitializedAsync()
     {
