@@ -46,6 +46,34 @@ namespace Spic.Infrastructure.Data
                 new LyingWithMaster { Id = 4, Name = "Warehouse", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" }
             );
 
+            // Guest House physical room allocation. The no-double-allocation overlap rule
+            // (same physical RoomNumber cannot be shared by two active stays) is enforced by
+            // a PostgreSQL EXCLUDE constraint on (GuestHouseRoomId, RoomNumber, date range)
+            // that must be created with the required migration + btree_gist extension.
+            // EF cannot express EXCLUDE constraints, so at runtime the invariant is also
+            // re-verified inside a serializable transaction before allocation rows are saved.
+            builder.Entity<GuestHouseRoomAllocation>(entity =>
+            {
+                entity.HasKey(a => a.Id);
+
+                entity.HasOne(a => a.GuestHouseBooking)
+                    .WithMany(b => b.RoomAllocations)
+                    .HasForeignKey(a => a.GuestHouseBookingId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(a => a.GuestHouseRoom)
+                    .WithMany(r => r.Allocations)
+                    .HasForeignKey(a => a.GuestHouseRoomId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(a => a.GuestHouse)
+                    .WithMany()
+                    .HasForeignKey(a => a.GuestHouseId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.Property(a => a.RoomNumber).IsRequired().HasMaxLength(50);
+                entity.HasIndex(a => a.GuestHouseBookingId);
+                entity.HasIndex(a => new { a.GuestHouseRoomId, a.RoomNumber });
+            });
+
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.
         }
@@ -154,6 +182,7 @@ namespace Spic.Infrastructure.Data
 		//public DbSet<GuestHouseBookingRefund> GuestHouseBookingRefunds { get; set; }
 		public DbSet<GuestHouseBill> GuestHouseBills { get; set; }
 		public DbSet<GuestHouseBillLineItem> GuestHouseBillLineItems { get; set; }
+		public DbSet<GuestHouseRoomAllocation> GuestHouseRoomAllocations { get; set; }
 
 		//// Contact Us
 		//public DbSet<ContactUsMessage> ContactUsMessages { get; set; }

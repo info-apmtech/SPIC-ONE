@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Spic.Infrastructure.Data;
 using SpicAPI.Services;
 using SPIC.Core.Entities;
+using System.Data;
+using System.Globalization;
 
 namespace SpicAPI.Controllers
 {
@@ -39,6 +42,15 @@ namespace SpicAPI.Controllers
 		// GET /api/GuestHouseFrontOffice/rooms
 		// Returns every active guest house and its rooms with a dynamically computed
 		// current status plus the occupying booking's details (if any).
+		//
+		// A GuestHouseRoom row is a ROOM TYPE with an inventory quantity (e.g. "AC" with
+		// AvailableQuantity 4 starting at RoomNumber 111 => physical rooms 111, 112, 113,
+		// 114). The grid therefore lists one row PER PHYSICAL ROOM so the Front Office can
+		// see exactly which room numbers are Available, Reserved or Checked-In today.
+		// A room is treated as occupied while ANY active booking (Draft/PendingPayment/
+		// Confirmed/CheckedIn - the same statuses the availability engine counts) with a
+		// stay overlapping today holds it, either via an exact GuestHouseRoomAllocation or
+		// via the deterministic lowest-free-number assumption for yet-unallocated bookings.
 		[HttpGet("rooms")]
 		public async Task<IActionResult> GetRooms()
 		{
@@ -57,11 +69,31 @@ namespace SpicAPI.Controllers
 				.AsNoTracking()
 				.Where(r => r.IsActive)
 				.Include(r => r.GuestHouse)
-				.Include(r => r.Bookings)
-					.ThenInclude(b => b.Guests)
 				.OrderBy(r => r.GuestHouseId)
 				.ThenBy(r => r.RoomNumber)
 				.ToListAsync();
+
+			var todayStart = DateTime.Today;
+			var todayEnd = todayStart.AddDays(1);
+
+			// Every inventory-holding booking (not Cancelled/Completed) overlapping today.
+			var activeBookings = await _db.GuestHouseBookings
+				.AsNoTracking()
+				.Where(b => b.BookingStatus != GuestHouseBookingStatus.Cancelled
+					&& b.BookingStatus != GuestHouseBookingStatus.Completed
+					&& b.CheckInDate.HasValue && b.CheckOutDate.HasValue
+					&& b.CheckInDate.Value.Date < todayEnd
+					&& b.CheckOutDate.Value.Date > todayStart)
+				.Include(b => b.Guests)
+				.ToListAsync();
+
+			var activeBookingIds = activeBookings.Select(b => b.Id).ToList();
+			var allocations = activeBookingIds.Count > 0
+				? await _db.GuestHouseRoomAllocations
+					.AsNoTracking()
+					.Where(a => activeBookingIds.Contains(a.GuestHouseBookingId))
+					.ToListAsync()
+				: new List<GuestHouseRoomAllocation>();
 
 			var housesById = houses.ToDictionary(h => h.GuestHouseId);
 			foreach (var house in houses)
@@ -69,62 +101,109 @@ namespace SpicAPI.Controllers
 				house.Rooms ??= new List<FrontOfficeRoomDto>();
 			}
 
-			var now = DateTime.Now;
-
 			foreach (var room in rooms)
 			{
 				if (room.GuestHouse == null || !housesById.TryGetValue(room.GuestHouse!.Id, out var house))
 					continue;
 
-				// Find the occupying booking.
-				// 1. A booking that has actually been checked in takes priority.
-				// 2. Otherwise the nearest valid (Confirmed) booking.
-				var activeBookings = room.Bookings
-					.Where(b => b.BookingStatus == GuestHouseBookingStatus.Confirmed
-						|| b.BookingStatus == GuestHouseBookingStatus.CheckedIn)
+				var numbers = EnumeratePhysicalRoomNumbers(room, room.AvailableQuantity);
+				var roomAllocations = allocations.Where(a => a.GuestHouseRoomId == room.Id).ToList();
+
+				// Build per-booking unallocated room counts for this room type.
+				// Each booking's remaining = max(0, NumberOfRooms - already-allocated rows).
+				var activeForType = activeBookings
+					.Where(b => b.GuestHouseRoomId == room.Id)
 					.OrderBy(b => b.CheckInDate)
+					.ThenBy(b => b.Id)
 					.ToList();
 
-				GuestHouseBooking? occupant = activeBookings
-					.FirstOrDefault(b => b.BookingStatus == GuestHouseBookingStatus.CheckedIn)
-					?? activeBookings.FirstOrDefault();
-
-				var roomDto = new FrontOfficeRoomDto
+				var unallocatedRemaining = new Dictionary<int, int>();
+				foreach (var b in activeForType)
 				{
-					RoomId = room.Id,
-					RoomNumber = room.RoomNumber,
-					RoomType = room.RoomType ?? "Room",
-					GuestHouseId = room.GuestHouseId,
-					GuestHouseName = house.GuestHouseName,
-					Capacity = room.Capacity,
-					PricePerNight = room.PricePerNight,
-					AvailableQuantity = room.AvailableQuantity
-				};
-
-				if (occupant != null)
-				{
-					var status = occupant.BookingStatus == GuestHouseBookingStatus.CheckedIn
-						? FrontOfficeRoomStatus.CheckedIn
-						: FrontOfficeRoomStatus.Reserved;
-
-					roomDto.RoomStatus = status;
-					roomDto.StatusText = StatusText(status);
-					roomDto.CurrentBookingId = occupant.Id;
-					roomDto.BookingReference = occupant.BookingReference ?? $"BK{occupant.Id}";
-					roomDto.GuestName = occupant.Guests.FirstOrDefault()?.GuestName;
-					roomDto.CheckInDate = occupant.CheckInDate;
-					roomDto.CheckOutDate = occupant.CheckOutDate;
-					roomDto.BookingStatus = occupant.BookingStatus;
-					roomDto.PaymentStatus = occupant.PaymentStatus;
-					roomDto.PaymentMethod = occupant.Payments.FirstOrDefault()?.PaymentMethod;
-				}
-				else
-				{
-					roomDto.RoomStatus = FrontOfficeRoomStatus.Available;
-					roomDto.StatusText = StatusText(FrontOfficeRoomStatus.Available);
+					var allocated = roomAllocations
+						.Count(a => a.GuestHouseBookingId == b.Id && ContainsNumber(numbers, a.RoomNumber));
+					var remaining = Math.Max(0, (b.NumberOfRooms ?? 1) - allocated);
+					if (remaining > 0)
+						unallocatedRemaining[b.Id] = remaining;
 				}
 
-				house.Rooms.Add(roomDto);
+				// Pre-build deterministic room-to-booking assignment for unallocated rooms.
+				// Assigns the lowest free room numbers to bookings in CheckInDate then Id order.
+				var roomToBooking = new Dictionary<string, GuestHouseBooking>();
+				foreach (var b in activeForType)
+				{
+					if (!unallocatedRemaining.TryGetValue(b.Id, out var slotsNeeded) || slotsNeeded <= 0)
+						continue;
+					var assigned = 0;
+					foreach (var n in numbers)
+					{
+						if (assigned >= slotsNeeded) break;
+						if (roomToBooking.ContainsKey(n)) continue;
+						roomToBooking[n] = b;
+						assigned++;
+					}
+				}
+
+				foreach (var number in numbers)
+				{
+					GuestHouseBooking? occupant = null;
+
+					// 1. Exact room already allocated to an active booking.
+					var exactBooking = roomAllocations
+						.Where(a => string.Equals(a.RoomNumber, number, StringComparison.OrdinalIgnoreCase))
+						.Select(a => activeBookings.FirstOrDefault(b => b.Id == a.GuestHouseBookingId))
+						.Where(b => b != null)
+						.OrderByDescending(b => b!.BookingStatus == GuestHouseBookingStatus.CheckedIn)
+						.ThenBy(b => b!.CheckInDate)
+						.FirstOrDefault();
+					if (exactBooking != null)
+					{
+						occupant = exactBooking;
+					}
+					// 2. Deterministic per-booking assignment: each unallocated booking
+					//    gets its own distinct physical room(s), not the same first booking.
+					else if (roomToBooking.TryGetValue(number, out var assignedBooking))
+					{
+						occupant = assignedBooking;
+					}
+
+					var roomDto = new FrontOfficeRoomDto
+					{
+						RoomId = room.Id,
+						RoomNumber = number,
+						RoomType = room.RoomType ?? "Room",
+						GuestHouseId = room.GuestHouseId,
+						GuestHouseName = house.GuestHouseName,
+						Capacity = room.Capacity,
+						PricePerNight = room.PricePerNight,
+						AvailableQuantity = room.AvailableQuantity
+					};
+
+					if (occupant != null)
+					{
+						var status = occupant.BookingStatus == GuestHouseBookingStatus.CheckedIn
+							? FrontOfficeRoomStatus.CheckedIn
+							: FrontOfficeRoomStatus.Reserved;
+
+						roomDto.RoomStatus = status;
+						roomDto.StatusText = StatusText(status);
+						roomDto.CurrentBookingId = occupant.Id;
+						roomDto.BookingReference = occupant.BookingReference ?? $"BK{occupant.Id}";
+						roomDto.GuestName = occupant.Guests.FirstOrDefault()?.GuestName;
+						roomDto.CheckInDate = occupant.CheckInDate;
+						roomDto.CheckOutDate = occupant.CheckOutDate;
+						roomDto.BookingStatus = occupant.BookingStatus;
+						roomDto.PaymentStatus = occupant.PaymentStatus;
+						roomDto.PaymentMethod = occupant.Payments.FirstOrDefault()?.PaymentMethod;
+					}
+					else
+					{
+						roomDto.RoomStatus = FrontOfficeRoomStatus.Available;
+						roomDto.StatusText = StatusText(FrontOfficeRoomStatus.Available);
+					}
+
+					house.Rooms.Add(roomDto);
+				}
 			}
 
 			return Ok(houses);
@@ -144,13 +223,24 @@ namespace SpicAPI.Controllers
 			var guest = booking.Guests.FirstOrDefault();
 			var payment = booking.Payments.FirstOrDefault();
 
+			// The exact physical room numbers the Front Office may allocate for this stay:
+			// everything free for the booked type over the booked dates (excluding any room
+			// this same booking holds). "Occupied" are the rooms already taken by other
+			// overlapping active stays (allocated or deterministically count-held).
+			var eligible = checkInState.CanCheckIn
+				&& booking.GuestHouseRoomId > 0
+				&& booking.CheckInDate.HasValue && booking.CheckOutDate.HasValue;
+			var freeRooms = eligible
+				? await GetFreePhysicalRoomsAsync(booking.GuestHouseRoomId, booking.CheckInDate!.Value.Date, booking.CheckOutDate!.Value.Date, booking.Id)
+				: new FreeRoomsResult(new List<string>(), new List<string>());
+
 			return Ok(new FrontOfficeBookingDto
 			{
 				BookingId = booking.Id,
 				BookingReference = booking.BookingReference ?? $"BK{booking.Id}",
 				GuestHouseName = booking.GuestHouse?.Name ?? "",
 				RoomType = booking.GuestHouseRoom?.RoomType ?? "Room",
-				RoomNumber = booking.GuestHouseRoom?.RoomNumber,
+				RoomNumber = AllocatedRoomNumber(booking),
 				GuestName = guest?.GuestName,
 				NumberOfPersons = booking.NumberOfPersons ?? guest?.NumberOfPersons,
 				ExtraBeds = booking.ExtraCotQuantity ?? 0,
@@ -166,13 +256,22 @@ namespace SpicAPI.Controllers
 				CheckInMessage = checkInState.Message,
 				CanCheckOut = booking.BookingStatus == GuestHouseBookingStatus.CheckedIn,
 				TotalAmount = booking.TotalAmount,
-				ActualCheckInAt = booking.ActualCheckInAt
+				ActualCheckInAt = booking.ActualCheckInAt,
+				AvailableRoomNumbers = freeRooms.Free,
+				AllocatedRoomNumbers = freeRooms.Occupied,
+				RequiredRoomNumbers = Math.Max(1, booking.NumberOfRooms ?? 1)
 			});
 		}
 
 		// POST /api/GuestHouseFrontOffice/checkin
 		// Marks a valid, confirmed booking as Checked-In. Also allows the Front Office
 		// to update the number of persons and extra beds on the existing booking record.
+		//
+		// The Front Office MUST explicitly select the exact physical RoomNumber(s) to
+		// assign (SelectedRoomNumbers - one per booked room). The assignment is persistecd
+		// as a GuestHouseRoomAllocation row per room and is validated atomically: the final
+		// free-room check and the allocation insert run inside a serializable transaction,
+		// so two desks can never assign the same physical room to overlapping stays.
 		[HttpPost("checkin")]
 		public async Task<IActionResult> CheckIn([FromBody] CheckInRequest request)
 		{
@@ -193,6 +292,52 @@ namespace SpicAPI.Controllers
 			if (booking.ActualCheckInAt.HasValue)
 				return BadRequest(new { Success = false, Message = "This booking has already been checked in." });
 
+			if (booking.GuestHouseRoomId <= 0 || !booking.CheckInDate.HasValue || !booking.CheckOutDate.HasValue)
+				return BadRequest(new { Success = false, Message = "This booking's stay details are incomplete." });
+
+			// Require one explicit physical room number per booked room.
+			var requiredRooms = Math.Max(1, booking.NumberOfRooms ?? 1);
+			var selected = (request.SelectedRoomNumbers ?? new List<string>())
+				.Select(s => s?.Trim())
+				.Where(s => !string.IsNullOrWhiteSpace(s))
+				.Select(s => s!)
+				.ToList();
+			if (selected.Count != requiredRooms)
+				return BadRequest(new { Success = false, Message = $"Please select exactly {requiredRooms} free physical room(s) for this booking." });
+			if (selected.Distinct(StringComparer.OrdinalIgnoreCase).Count() != selected.Count)
+				return BadRequest(new { Success = false, Message = "Duplicate room numbers cannot be assigned." });
+
+			// The free-room re-check and the allocation insert must happen atomically. An
+			// EXCLUDE constraint on the allocation table (added with the required schema
+			// migration) makes PostgreSQL reject the same physical room number being assigned
+			// to two overlapping active stays; serializable isolation turns the resulting
+			// race into SqlState 40001 at commit time, which we surface as a friendly message.
+			await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
+			FreeRoomsResult freeRooms;
+			try
+			{
+				freeRooms = await GetFreePhysicalRoomsAsync(booking.GuestHouseRoomId, booking.CheckInDate.Value.Date, booking.CheckOutDate.Value.Date, booking.Id);
+			}
+			catch (PostgresException ex) when (ex.SqlState == "40001")
+			{
+				await transaction.RollbackAsync();
+				return Conflict(new { Success = false, Message = "The room list changed. Please refresh and try again." });
+			}
+
+			var noLongerFree = selected
+				.Where(s => !freeRooms.Free.Contains(s, StringComparer.OrdinalIgnoreCase))
+				.ToList();
+			if (noLongerFree.Count > 0)
+			{
+				await transaction.RollbackAsync();
+				return Conflict(new
+				{
+					Success = false,
+					Message = $"Room(s) {string.Join(", ", noLongerFree)} are no longer free for the selected dates. Please choose another room."
+				});
+			}
+
 			// Persist the Front Office updates onto the existing booking record.
 			var guest = booking.Guests.FirstOrDefault();
 			if (request.NumberOfPersons.HasValue && request.NumberOfPersons.Value >= 1)
@@ -211,13 +356,53 @@ namespace SpicAPI.Controllers
 			booking.UpdatedAt = DateTime.Now;
 			booking.UpdatedBy = User.Identity?.Name;
 
-			await _db.SaveChangesAsync();
+			// Make the check-in idempotent: replace any earlier allocations of this booking
+			// with the freshly selected room numbers.
+			var existingAllocations = await _db.GuestHouseRoomAllocations
+				.Where(a => a.GuestHouseBookingId == booking.Id)
+				.ToListAsync();
+			_db.GuestHouseRoomAllocations.RemoveRange(existingAllocations);
+
+			var assignedBy = User.Identity?.Name;
+			var checkInDate = booking.CheckInDate.Value.Date;
+			var checkOutDate = booking.CheckOutDate.Value.Date;
+			foreach (var number in selected)
+			{
+				_db.GuestHouseRoomAllocations.Add(new GuestHouseRoomAllocation
+				{
+					GuestHouseBookingId = booking.Id,
+					GuestHouseId = booking.GuestHouseId,
+					GuestHouseRoomId = booking.GuestHouseRoomId,
+					RoomNumber = number,
+					CheckInDate = checkInDate,
+					CheckOutDate = checkOutDate,
+					AssignedBy = assignedBy,
+					AssignedAt = DateTime.Now
+				});
+			}
+
+			try
+			{
+				await _db.SaveChangesAsync();
+				await transaction.CommitAsync();
+			}
+			catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "40001" })
+			{
+				await transaction.RollbackAsync();
+				return Conflict(new { Success = false, Message = "These rooms were just assigned to another overlapping stay. Please refresh and try again." });
+			}
+			catch (PostgresException ex) when (ex.SqlState == "40001")
+			{
+				await transaction.RollbackAsync();
+				return Conflict(new { Success = false, Message = "These rooms were just assigned to another overlapping stay. Please refresh and try again." });
+			}
 
 			return Ok(new
 			{
 				Success = true,
 				BookingId = booking.Id,
 				BookingReference = booking.BookingReference,
+				RoomNumbers = selected,
 				Message = "Guest checked in successfully."
 			});
 		}
@@ -247,7 +432,7 @@ namespace SpicAPI.Controllers
 				BookingReference = booking.BookingReference ?? $"BK{booking.Id}",
 				GuestHouseName = booking.GuestHouse?.Name ?? "",
 				GuestName = guest?.GuestName,
-				RoomNumber = booking.GuestHouseRoom?.RoomNumber,
+				RoomNumber = AllocatedRoomNumber(booking),
 				RoomType = booking.GuestHouseRoom?.RoomType ?? "Room",
 				CheckInDate = booking.CheckInDate,
 				ActualCheckInAt = booking.ActualCheckInAt,
@@ -337,6 +522,12 @@ namespace SpicAPI.Controllers
 			booking.ActualCheckOutAt = DateTime.Now;
 			booking.UpdatedAt = DateTime.Now;
 			booking.UpdatedBy = User.Identity?.Name;
+
+			// Release the physical room(s) back to the pool so they can be assigned again.
+			var allocatedRooms = await _db.GuestHouseRoomAllocations
+				.Where(a => a.GuestHouseBookingId == booking.Id)
+				.ToListAsync();
+			_db.GuestHouseRoomAllocations.RemoveRange(allocatedRooms);
 
 			await _db.SaveChangesAsync();
 
@@ -517,8 +708,8 @@ namespace SpicAPI.Controllers
 			if (request.LineItems == null || request.LineItems.Count == 0)
 				return BadRequest(new { Success = false, Message = "At least one billing line item is required." });
 
-			if (request.LineItems.Any(i => i.Quantity < 0 || i.Rate < 0))
-				return BadRequest(new { Success = false, Message = "Quantities and rates must not be negative." });
+			if (request.LineItems.Any(i => i.Quantity < 0 || i.Rate < 0 || i.CgstPercent < 0 || i.SgstPercent < 0))
+				return BadRequest(new { Success = false, Message = "Quantities, rates and GST percentages must not be negative." });
 
 			// Build line items and compute taxes dynamically per line.
 			var lineItems = new List<GuestHouseBillLineItem>();
@@ -806,7 +997,131 @@ namespace SpicAPI.Controllers
 				.Include(b => b.GuestHouseRoom)
 				.Include(b => b.Guests)
 				.Include(b => b.Payments)
+				.Include(b => b.RoomAllocations)
 				.FirstOrDefaultAsync(b => b.Id == bookingId);
+		}
+
+		// ---- Physical room helpers ----
+		//
+		// GuestHouseRoom.RoomNumber is the FIRST physical room number of the type and
+		// GuestHouseRoom.AvailableQuantity is how many such rooms exist. Physical rooms are
+		// derived, never stored or hardcoded: a numeric base (e.g. "111" qty 4) yields 111,
+		// 112, 113, 114; a non numeric base (e.g. "D1") yields D1-1, D1-2, ...; a missing
+		// base yields "Room 1", "Room 2", ...
+
+		private static string DeriveRoomNumber(string? baseNumber, int offset)
+		{
+			var baseText = (baseNumber ?? string.Empty).Trim();
+			if (int.TryParse(baseText, out var baseValue))
+			{
+				var raw = baseText.TrimStart('-');
+				var width = raw.Length > 1 ? raw.Length : 0;
+				var number = (baseValue + offset).ToString(CultureInfo.InvariantCulture);
+				return width > number.Length ? number.PadLeft(width, '0') : number;
+			}
+			return string.IsNullOrWhiteSpace(baseText) ? $"Room {offset + 1}" : $"{baseText}-{offset + 1}";
+		}
+
+		private static List<string> EnumeratePhysicalRoomNumbers(GuestHouseRoom room, int quantity)
+		{
+			var count = Math.Max(1, quantity);
+			var numbers = new List<string>(count);
+			for (var i = 0; i < count; i++)
+				numbers.Add(DeriveRoomNumber(room.RoomNumber, i));
+			return numbers;
+		}
+
+		private static bool ContainsNumber(IReadOnlyCollection<string> numbers, string roomNumber)
+		{
+			return numbers.Contains(roomNumber, StringComparer.OrdinalIgnoreCase);
+		}
+
+		// The exact physical room number(s) actually allocated to a checked-in booking.
+		// Returns null when the stay is not yet allocated (the authoritative room number
+		// only exists after the Front Office assigns it at check-in).
+		private static string? AllocatedRoomNumber(GuestHouseBooking booking)
+		{
+			var allocated = booking.RoomAllocations?
+				.Select(a => a.RoomNumber)
+				.Where(n => !string.IsNullOrWhiteSpace(n))
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.OrderBy(n => n)
+				.ToList();
+			return allocated == null || allocated.Count == 0 ? null : string.Join(", ", allocated);
+		}
+
+		// Computes the exact physical room numbers currently free for a room type over
+		// [checkInDate, checkOutDate) - the authoritative set shown at check-in.
+		//
+		// A room is NOT free when:
+		//   1. an active overlapping booking (Draft/PendingPayment/Confirmed/CheckedIn)
+		//      has an EXACT allocation for that number (GuestHouseRoomAllocation), or
+		//   2. it falls inside the deterministic lowest-number block still owed by
+		//      overlapping bookings that have (for now) no exact allocation yet
+		//      (Σ NumberOfRooms − allocated rows). This matches the "reserved by booker"
+		//      assumption used by the availability engine, so two check-ins can never pick
+		//      the same silently-unassigned room.
+		private async Task<FreeRoomsResult> GetFreePhysicalRoomsAsync(
+			int roomId, DateTime checkInDate, DateTime checkOutDate, int excludeBookingId = 0)
+		{
+			var room = await _db.GuestHouseRooms
+				.AsNoTracking()
+				.FirstOrDefaultAsync(r => r.Id == roomId && r.IsActive);
+			if (room == null || room.AvailableQuantity <= 0)
+				return new FreeRoomsResult(new List<string>(), new List<string>());
+
+			var numbers = EnumeratePhysicalRoomNumbers(room, room.AvailableQuantity);
+
+			var overlapQuery = _db.GuestHouseBookings
+				.AsNoTracking()
+				.Where(b => b.GuestHouseRoomId == roomId
+					&& b.BookingStatus != GuestHouseBookingStatus.Cancelled
+					&& b.BookingStatus != GuestHouseBookingStatus.Completed
+					&& b.CheckInDate.HasValue && b.CheckOutDate.HasValue
+					&& b.CheckInDate.Value.Date < checkOutDate.Date
+					&& b.CheckOutDate.Value.Date > checkInDate.Date);
+			if (excludeBookingId > 0)
+				overlapQuery = overlapQuery.Where(b => b.Id != excludeBookingId);
+
+			var bookings = await overlapQuery
+				.Select(b => new { b.Id, b.NumberOfRooms })
+				.ToListAsync();
+			var bookingIds = bookings.Select(b => b.Id).ToList();
+
+			// Exact allocations of those overlapping bookings for this room type.
+			var allocationRows = bookingIds.Count > 0
+				? await _db.GuestHouseRoomAllocations
+					.AsNoTracking()
+					.Where(a => bookingIds.Contains(a.GuestHouseBookingId) && a.GuestHouseRoomId == roomId)
+					.ToListAsync()
+				: new List<GuestHouseRoomAllocation>();
+
+			var allocatedCountByBooking = allocationRows
+				.Where(a => ContainsNumber(numbers, a.RoomNumber))
+				.GroupBy(a => a.GuestHouseBookingId)
+				.ToDictionary(g => g.Key, g => g.Count());
+
+			// Rooms still owed (not yet exactly allocated) by the overlapping bookings.
+			var unallocatedCommitted = bookings.Sum(b =>
+				Math.Max(0, (b.NumberOfRooms ?? 1) - allocatedCountByBooking.GetValueOrDefault(b.Id)));
+
+			var occupiedExact = allocationRows
+				.Where(a => ContainsNumber(numbers, a.RoomNumber))
+				.Select(a => a.RoomNumber)
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
+
+			var remaining = numbers
+				.Where(n => !ContainsNumber(occupiedExact, n))
+				.ToList();
+			var countBlocked = Math.Min(Math.Max(0, unallocatedCommitted), remaining.Count);
+
+			var occupied = occupiedExact
+				.Union(remaining.Take(countBlocked), StringComparer.OrdinalIgnoreCase)
+				.ToList();
+			var free = remaining.Skip(countBlocked).ToList();
+
+			return new FreeRoomsResult(free, occupied);
 		}
 
 		private static CheckInEligibilityResult CheckInEligibility(GuestHouseBooking booking)
@@ -845,6 +1160,8 @@ namespace SpicAPI.Controllers
 		};
 
 		private sealed record CheckInEligibilityResult(bool CanCheckIn, string Message);
+
+		private sealed record FreeRoomsResult(List<string> Free, List<string> Occupied);
 	}
 
 	public enum FrontOfficeRoomStatus
@@ -908,6 +1225,11 @@ namespace SpicAPI.Controllers
 		public bool CanCheckOut { get; set; }
 		public decimal? TotalAmount { get; set; }
 		public DateTime? ActualCheckInAt { get; set; }
+
+		// Exact physical room numbers for the Front Office to choose at check-in.
+		public List<string> AvailableRoomNumbers { get; set; } = new List<string>();
+		public List<string> AllocatedRoomNumbers { get; set; } = new List<string>();
+		public int RequiredRoomNumbers { get; set; }
 	}
 
 	public class CheckOutSummaryDto
@@ -934,6 +1256,7 @@ namespace SpicAPI.Controllers
 		public int BookingId { get; set; }
 		public int? NumberOfPersons { get; set; }
 		public int? ExtraBeds { get; set; }
+		public List<string>? SelectedRoomNumbers { get; set; }    // Exact physical room numbers assigned at check-in (one per booked room)
 	}
 
 	public class RecordPaymentRequest

@@ -58,6 +58,10 @@
         display: flex; flex-direction: column; gap: 10px;
         border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fafbfc;
     }
+    .gb-band { background: #f3f6f0; }
+    .gb-band td { padding: 6px 12px; border-bottom: 1px solid #dce4d6; }
+    .gb-band-title { font-weight: 700; font-size: 0.78rem; color: #3f4e42; text-transform: uppercase; letter-spacing: 0.03em; }
+    .gb-band:hover { background: #f3f6f0; }
 </style>
 
 <div class="container-fluid py-4 px-3 px-md-4 gb-container">
@@ -198,77 +202,82 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @for (var i = 0; i < _draft.LineItems.Count; i++)
+                            @foreach (var category in _billCategories)
                             {
-                                var line = _draft.LineItems[i];
-                                var amount = Math.Round(line.Quantity * line.Rate, 2, MidpointRounding.AwayFromZero);
-                                var cgst = Math.Round(amount * (line.CgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
-                                var sgst = Math.Round(amount * (line.SgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
-                                var total = amount + cgst + sgst;
-                                var idx = i;
-                                <tr>
-                                    <td>
-                                        @if (line.IsEditable)
-                                        {
-                                            <input class="gb-input" @bind="line.Description" placeholder="Description" />
-                                        }
-                                        else
-                                        {
-                                            <span style="font-weight:600; color:#1f2937;">@line.Description</span>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (line.IsEditable)
-                                        {
-                                            <input class="gb-input" type="number" step="0.01" @bind="line.Quantity" />
-                                        }
-                                        else
-                                        {
-                                            <span>@line.Quantity.ToString("0.##")</span>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (line.IsEditable)
-                                        {
-                                            <input class="gb-input" type="number" step="0.01" @bind="line.Rate" />
-                                        }
-                                        else
-                                        {
-                                            <span>@FormatMoney(line.Rate)</span>
-                                        }
-                                    </td>
-                                    <td>@FormatMoney(amount)</td>
-                                    <td>
-                                        @if (line.IsEditable)
-                                        {
-                                            <input class="gb-input" type="number" step="0.01" @bind="line.CgstPercent" />
-                                        }
-                                        else
-                                        {
-                                            <span>@line.CgstPercent.ToString("0.##")</span>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (line.IsEditable)
-                                        {
-                                            <input class="gb-input" type="number" step="0.01" @bind="line.SgstPercent" />
-                                        }
-                                        else
-                                        {
-                                            <span>@line.SgstPercent.ToString("0.##")</span>
-                                        }
-                                    </td>
-                                    <td style="font-weight:600;">@FormatMoney(total)</td>
-                                    @if (!_allLinesLocked)
+                                var rows = _billItems.Where(i => i.Category == category).ToList();
+                                if (rows.Count > 0)
+                                {
+                                    <tr class="gb-band">
+                                        <td colspan="@(_allLinesLocked ? 7 : 8)" class="gb-band-title">@CategoryLabel(category)</td>
+                                    </tr>
+                                    @foreach (var line in rows)
                                     {
-                                        <td>
-                                            @if (line.IsEditable)
+                                        var idx = _billItems.IndexOf(line);
+                                        <tr>
+                                            <td>
+                                                @if (line.IsEditable)
+                                                {
+                                                    <input class="gb-input" placeholder="Description" @bind="line.Description" @bind:event="oninput" />
+                                                }
+                                                else
+                                                {
+                                                    <span style="font-weight:600; color:#1f2937;">@line.Description</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (line.IsEditable)
+                                                {
+                                                    <input class="gb-input" type="number" step="0.01" min="0" @bind="line.Quantity" @bind:event="oninput" />
+                                                }
+                                                else
+                                                {
+                                                    <span>@line.Quantity.ToString("0.##")</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (line.IsEditable)
+                                                {
+                                                    <input class="gb-input" type="number" step="0.01" min="0" @bind="line.Rate" @bind:event="oninput" />
+                                                }
+                                                else
+                                                {
+                                                    <span>@FormatMoney(line.Rate)</span>
+                                                }
+                                            </td>
+                                            <td>@FormatMoney(line.Amount)</td>
+                                            <td>
+                                                @if (line.IsEditable)
+                                                {
+                                                    <input class="gb-input" type="number" step="0.01" min="0" @bind="line.CgstPercent" @bind:event="oninput" />
+                                                }
+                                                else
+                                                {
+                                                    <span>@line.CgstPercent.ToString("0.##")</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (line.IsEditable)
+                                                {
+                                                    <input class="gb-input" type="number" step="0.01" min="0" @bind="line.SgstPercent" @bind:event="oninput" />
+                                                }
+                                                else
+                                                {
+                                                    <span>@line.SgstPercent.ToString("0.##")</span>
+                                                }
+                                            </td>
+                                            <td style="font-weight:600;">@FormatMoney(line.LineTotal)</td>
+                                            @if (!_allLinesLocked)
                                             {
-                                                <button class="gb-btn gb-btn-danger" style="padding:4px 10px;" @onclick="() => RemoveLine(idx)">Remove</button>
+                                                <td>
+                                                    @if (line.CanRemove)
+                                                    {
+                                                        <button class="gb-btn gb-btn-danger" style="padding:4px 10px;" @onclick="() => RemoveLine(idx)">Remove</button>
+                                                    }
+                                                </td>
                                             }
-                                        </td>
+                                        </tr>
                                     }
-                                </tr>
+                                }
                             }
                         </tbody>
                     </table>
@@ -276,7 +285,7 @@
                 @if (!_allLinesLocked)
                 {
                     <div style="margin-top: 12px;">
-                        <button class="gb-btn gb-btn-secondary" @onclick="AddLine"><i class="bi bi-plus-circle"></i> Add Line</button>
+                        <button class="gb-btn gb-btn-secondary" @onclick="AddLine"><i class="bi bi-plus-circle"></i> Add Charge</button>
                     </div>
                 }
             </div>
@@ -356,6 +365,7 @@
     private bool _listLoaded;
 
     private BillDraftDto? _draft;
+    private List<BillItemRow> _billItems = new();
     private bool _busy;
     private string? _error;
     private string? _success;
@@ -367,11 +377,11 @@
     private bool _paymentReceived = true;
     private string _remarks = "";
 
-    private bool _allLinesLocked => _draft != null && _draft.LineItems.All(l => !l.IsEditable);
+    private bool _allLinesLocked => _draft != null && _draft.ExistingBillId.HasValue;
 
-    private decimal Subtotal => _draft?.LineItems.Sum(l => Math.Round(l.Quantity * l.Rate, 2, MidpointRounding.AwayFromZero)) ?? 0;
-    private decimal CgstTotal => _draft?.LineItems.Sum(l => Math.Round(Math.Round(l.Quantity * l.Rate, 2, MidpointRounding.AwayFromZero) * (l.CgstPercent / 100m), 2, MidpointRounding.AwayFromZero)) ?? 0;
-    private decimal SgstTotal => _draft?.LineItems.Sum(l => Math.Round(Math.Round(l.Quantity * l.Rate, 2, MidpointRounding.AwayFromZero) * (l.SgstPercent / 100m), 2, MidpointRounding.AwayFromZero)) ?? 0;
+    private decimal Subtotal => _billItems.Sum(l => l.Amount);
+    private decimal CgstTotal => _billItems.Sum(l => l.CgstAmount);
+    private decimal SgstTotal => _billItems.Sum(l => l.SgstAmount);
     private decimal GrandTotal => Subtotal + CgstTotal + SgstTotal;
     private decimal Balance => GrandTotal - (_discount ?? 0) - (_advance ?? 0) + (_roundOff ?? 0);
 
@@ -388,6 +398,9 @@
             var advance = EffectiveAdvance;
             var roundOff = EffectiveRoundOff;
             var balance = gross - discount - advance + roundOff;
+
+            if (_billItems.Any(i => i.Quantity < 0 || i.Rate < 0 || i.CgstPercent < 0 || i.SgstPercent < 0))
+                return "Quantities, rates and GST percentages must not be negative.";
 
             if (discount > gross)
                 return "Discount cannot exceed Grand Total.";
@@ -476,6 +489,7 @@
                     {
                         _draft = dto;
                         ResetBillInputs();
+                        BuildBillRows();
                         _busy = false;
                         StateHasChanged();
                     });
@@ -524,13 +538,102 @@
 
     private void AddLine()
     {
-        _draft?.LineItems.Add(new BillLineItemDto { Description = "Additional Charge", Rate = 0, Quantity = 1 });
+        _billItems.Add(new BillItemRow
+        {
+            Category = BillItemCategory.LaundryOther,
+            Description = "Additional Charge",
+            Quantity = 1,
+            Rate = 0,
+            IsEditable = true,
+            CanRemove = true
+        });
     }
 
     private void RemoveLine(int index)
     {
-        if (_draft == null || index < 0 || index >= _draft.LineItems.Count) return;
-        _draft.LineItems.RemoveAt(index);
+        if (index < 0 || index >= _billItems.Count) return;
+        _billItems.RemoveAt(index);
+    }
+
+    private void BuildBillRows()
+    {
+        _billItems = new List<BillItemRow>();
+        if (_draft == null) return;
+
+        var existingBill = _draft.ExistingBillId.HasValue;
+
+        var room = new BillItemRow
+        {
+            Category = BillItemCategory.Room,
+            Description = $"{(string.IsNullOrWhiteSpace(_draft.RoomType) ? "Room" : _draft.RoomType)} - Room Charge",
+            Quantity = (_draft.NumberOfRooms ?? 1) * Math.Max(1, _draft.NumberOfNights),
+            IsEditable = false
+        };
+        BillItemRow? bedsRow = null;
+
+        foreach (var serverLine in _draft.LineItems)
+        {
+            var desc = serverLine.Description ?? "";
+            if (IsRoomLine(desc))
+            {
+                room = FromServerLine(serverLine, BillItemCategory.Room, editable: false);
+            }
+            else if (IsBedsLine(desc))
+            {
+                bedsRow = FromServerLine(serverLine, BillItemCategory.AdditionalBeds, editable: !existingBill);
+            }
+        }
+
+        if (existingBill)
+        {
+            _billItems.Add(room);
+            if (bedsRow != null) _billItems.Add(bedsRow);
+            return;
+        }
+
+        var extraOthers = new List<BillItemRow>();
+        foreach (var serverLine in _draft.LineItems)
+        {
+            var desc = serverLine.Description ?? "";
+            if (IsRoomLine(desc) || IsBedsLine(desc)) continue;
+            extraOthers.Add(FromServerLine(serverLine, BillItemCategory.LaundryOther, editable: false));
+        }
+
+        _billItems.Add(room);
+
+        _billItems.Add(new BillItemRow { Category = BillItemCategory.Food, Description = "Food Bill", Quantity = 1, Rate = 0, IsEditable = true });
+
+        if (bedsRow != null)
+        {
+            _billItems.Add(bedsRow);
+        }
+        else
+        {
+            _billItems.Add(new BillItemRow { Category = BillItemCategory.AdditionalBeds, Description = "Additional Beds", Quantity = 0, Rate = 0, IsEditable = true });
+        }
+
+        _billItems.Add(new BillItemRow { Category = BillItemCategory.LaundryOther, Description = "Laundry / Others", Quantity = 1, Rate = 0, IsEditable = true });
+
+        _billItems.AddRange(extraOthers);
+    }
+
+    private static bool IsRoomLine(string description) => description.Contains("Room Charge", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsBedsLine(string description) => description.Contains("Additional Beds", StringComparison.OrdinalIgnoreCase) || description.Contains("Extra Cot", StringComparison.OrdinalIgnoreCase);
+
+    private static BillItemRow FromServerLine(BillLineItemDto serverLine, BillItemCategory category, bool editable)
+    {
+        return new BillItemRow
+        {
+            Category = category,
+            Description = serverLine.Description ?? "",
+            Quantity = serverLine.Quantity,
+            Rate = serverLine.Rate,
+            CgstPercent = serverLine.CgstPercent,
+            SgstPercent = serverLine.SgstPercent,
+            IsEditable = editable,
+            CanRemove = false
+        };
     }
 
     private void ResetErrorAndSuccess()
@@ -558,15 +661,17 @@
             var payload = new
             {
                 BookingId = _draft.BookingId,
-                LineItems = _draft.LineItems.Select(l => new
-                {
-                    Description = l.Description,
-                    Quantity = l.Quantity,
-                    Rate = l.Rate,
-                    CgstPercent = l.CgstPercent,
-                    SgstPercent = l.SgstPercent,
-                    IsEditable = l.IsEditable
-                }).ToList(),
+                LineItems = _billItems
+                    .Where(l => l.Amount != 0)
+                    .Select(l => new
+                    {
+                        Description = l.Description,
+                        Quantity = l.Quantity,
+                        Rate = l.Rate,
+                        CgstPercent = l.CgstPercent,
+                        SgstPercent = l.SgstPercent,
+                        IsEditable = l.IsEditable
+                    }).ToList(),
                 Discount = _discount,
                 AdvancePayment = _advance,
                 RoundOff = _roundOff,
@@ -618,6 +723,47 @@
     private static string FormatDateWithTime(DateTime? value) => value?.ToString("dd MMM yyyy hh:mm tt") ?? "-";
     private static string FormatDateOnly(DateTime value) => value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
     private string FormatMoney(decimal value) => "₹" + value.ToString("N2", _ci);
+
+    public enum BillItemCategory
+    {
+        Room,
+        Food,
+        AdditionalBeds,
+        LaundryOther
+    }
+
+    private static readonly BillItemCategory[] _billCategories =
+    {
+        BillItemCategory.Room,
+        BillItemCategory.Food,
+        BillItemCategory.AdditionalBeds,
+        BillItemCategory.LaundryOther
+    };
+
+    private static string CategoryLabel(BillItemCategory category) => category switch
+    {
+        BillItemCategory.Room => "Room / Dormitory",
+        BillItemCategory.Food => "Food Bill",
+        BillItemCategory.AdditionalBeds => "Additional Beds",
+        _ => "Laundry / Others"
+    };
+
+    public class BillItemRow
+    {
+        public BillItemCategory Category { get; set; }
+        public string Description { get; set; } = "";
+        public decimal Quantity { get; set; } = 1;
+        public decimal Rate { get; set; }
+        public decimal CgstPercent { get; set; }
+        public decimal SgstPercent { get; set; }
+        public bool IsEditable { get; set; } = true;
+        public bool CanRemove { get; set; }
+
+        public decimal Amount => Math.Round(Quantity * Rate, 2, MidpointRounding.AwayFromZero);
+        public decimal CgstAmount => Math.Round(Amount * (CgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
+        public decimal SgstAmount => Math.Round(Amount * (SgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
+        public decimal LineTotal => Amount + CgstAmount + SgstAmount;
+    }
 
     public class BillLineItemDto
     {

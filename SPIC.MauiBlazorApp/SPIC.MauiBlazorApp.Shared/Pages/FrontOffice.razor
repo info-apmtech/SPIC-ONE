@@ -144,8 +144,6 @@
     .fo-btn-checkin:hover { background-color: #1d4ed8; }
     .fo-btn-checkout { background-color: #7c3aed; color: #ffffff; }
     .fo-btn-checkout:hover { background-color: #6d28d9; }
-    .fo-btn-pay      { background-color: #059669; color: #ffffff; }
-    .fo-btn-pay:hover { background-color: #047857; }
     .fo-btn-secondary { background-color: #ffffff; border-color: #e5e7eb; color: #374151; }
     .fo-btn-secondary:hover { background-color: #f9fafb; }
     .fo-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -230,6 +228,28 @@
         cursor: pointer;
     }
     .fo-filter.active { background: #2563eb; color: #ffffff; border-color: #2563eb; }
+
+    .fo-room-pick {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+    }
+    .fo-room-chip {
+        min-width: 56px;
+        text-align: center;
+        background: #f1f5f9;
+        color: #334155;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .fo-room-chip:hover { border-color: #2563eb; color: #2563eb; }
+    .fo-room-chip.selected { background: #2563eb; color: #ffffff; border-color: #2563eb; }
 </style>
 
 <div class="container-fluid py-4 px-3 px-md-4 fo-container">
@@ -358,7 +378,6 @@
                     {
                         <div class="fo-kv"><span class="fo-kv-label">Booking ID</span><span class="fo-kv-value">@_checkInBooking.BookingReference</span></div>
                         <div class="fo-kv"><span class="fo-kv-label">Guest Name</span><span class="fo-kv-value">@(string.IsNullOrEmpty(_checkInBooking.GuestName) ? "-" : _checkInBooking.GuestName)</span></div>
-                        <div class="fo-kv"><span class="fo-kv-label">Room Number</span><span class="fo-kv-value">@(string.IsNullOrEmpty(_checkInBooking.RoomNumber) ? "-" : _checkInBooking.RoomNumber)</span></div>
                         <div class="fo-kv"><span class="fo-kv-label">Room Type</span><span class="fo-kv-value">@_checkInBooking.RoomType</span></div>
                         <div class="fo-kv"><span class="fo-kv-label">Guest House</span><span class="fo-kv-value">@_checkInBooking.GuestHouseName</span></div>
                         <div class="fo-divider"></div>
@@ -381,6 +400,33 @@
                             </div>
                             <div class="fo-kv"><span class="fo-kv-label">Scheduled Check-in</span><span class="fo-kv-value">@FormatDate(_checkInBooking.CheckInDate)</span></div>
                             <div class="fo-kv"><span class="fo-kv-label">Scheduled Check-out</span><span class="fo-kv-value">@FormatDate(_checkInBooking.CheckOutDate)</span></div>
+
+                            @* Exact physical room assignment - the Front Office explicitly
+                               selects one room number per booked room at check-in. *@
+                            <div style="margin-top:16px;">
+                                <label class="fo-field-label">Assign Physical Room(s) &mdash; select @_checkInBooking.RequiredRoomNumbers room(s)</label>
+                                @if (_checkInBooking.AvailableRoomNumbers.Count > 0)
+                                {
+                                    <div class="fo-room-pick">
+                                        @foreach (var num in _checkInBooking.AvailableRoomNumbers)
+                                        {
+                                            var selected = _checkInSelectedRooms.Contains(num);
+                                            <button type="button"
+                                                    class="fo-room-chip @(selected ? "selected" : "")"
+                                                    @onclick="() => ToggleCheckInRoom(num)">
+                                                @num
+                                            </button>
+                                        }
+                                    </div>
+                                    <div class="fo-muted" style="font-size:0.75rem; margin-top:6px;">
+                                        Selected: @_checkInSelectedRooms.Count / @_checkInBooking.RequiredRoomNumbers
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="fo-alert-warning fo-modal-message">No physical rooms are currently free for the booked stay period. Please contact the booker or choose another room type.</div>
+                                }
+                            </div>
                         }
                     }
                 </div>
@@ -439,19 +485,6 @@
                             </span>
                         </div>
 
-                        @if (!_checkOutBooking.PaymentReceived)
-                        {
-                            <div class="fo-alert-warning fo-modal-message" style="margin-top:16px;">
-                                Payment is required before check-out. Confirm payment received below.
-                            </div>
-                            <div style="margin: 12px 0;">
-                                <label class="fo-field-label">Transaction / Reference ID (optional)</label>
-                                <input type="text" class="fo-input" placeholder="e.g. UPI / Cash reference" @bind="_paymentTransactionId" />
-                            </div>
-                            <button class="fo-btn fo-btn-pay" @onclick="RecordPayment" disabled="@_isSubmitting">
-                                <i class="bi bi-check-circle"></i> Confirm Payment Received
-                            </button>
-                        }
                     }
                 </div>
                 <div class="modal-footer" style="border-top: 1px solid #e5e7eb;">
@@ -479,13 +512,13 @@
     private FrontOfficeBookingDto? _checkInBooking;
     private int _checkInPersons = 1;
     private int _checkInExtraBeds = 0;
+    private List<string> _checkInSelectedRooms = new();
     private string? _checkInMessage;
     private string? _checkInError;
 
     // Check-out modal state
     private bool _showCheckOut;
     private CheckOutSummaryDto? _checkOutBooking;
-    private string _paymentTransactionId = "";
     private string? _checkOutMessage;
     private string? _checkOutError;
 
@@ -559,6 +592,14 @@
 
     private async Task ConfirmCheckIn()
     {
+        if (_checkInBooking == null) return;
+
+        if (_checkInSelectedRooms.Count != _checkInBooking.RequiredRoomNumbers)
+        {
+            _checkInError = $"Please select exactly {_checkInBooking.RequiredRoomNumbers} physical room(s) before confirming check-in.";
+            return;
+        }
+
         _isSubmitting = true;
         _checkInError = null;
         _checkInMessage = null;
@@ -566,9 +607,10 @@
         {
             var payload = new
             {
-                BookingId = _checkInBooking!.BookingId,
+                BookingId = _checkInBooking.BookingId,
                 NumberOfPersons = _checkInPersons,
-                ExtraBeds = _checkInExtraBeds
+                ExtraBeds = _checkInExtraBeds,
+                SelectedRoomNumbers = _checkInSelectedRooms
             };
             var response = await Http.PostAsJsonAsync("api/GuestHouseFrontOffice/checkin", payload);
             var result = await response.Content.ReadFromJsonAsync<SimpleResult>();
@@ -594,6 +636,14 @@
         }
     }
 
+    private void ToggleCheckInRoom(string roomNumber)
+    {
+        if (_checkInSelectedRooms.Contains(roomNumber))
+            _checkInSelectedRooms.Remove(roomNumber);
+        else
+            _checkInSelectedRooms.Add(roomNumber);
+    }
+
     private void CloseCheckIn()
     {
         _showCheckIn = false;
@@ -605,6 +655,7 @@
         _checkInBooking = null;
         _checkInPersons = 1;
         _checkInExtraBeds = 0;
+        _checkInSelectedRooms = new();
         _checkInMessage = null;
         _checkInError = null;
     }
@@ -630,49 +681,6 @@
         {
             _loadError = "Could not load booking for check-out.";
         }
-    }
-
-    private async Task RecordPayment()
-    {
-        _isSubmitting = true;
-        _checkOutError = null;
-        _checkOutMessage = null;
-        try
-        {
-            var payload = new
-            {
-                BookingId = _checkOutBooking!.BookingId,
-                TransactionId = string.IsNullOrWhiteSpace(_paymentTransactionId) ? null : _paymentTransactionId
-            };
-            var response = await Http.PostAsJsonAsync("api/GuestHouseFrontOffice/pay", payload);
-            var result = await response.Content.ReadFromJsonAsync<SimpleResult>();
-            if (response.IsSuccessStatusCode && result?.Success == true)
-            {
-                _checkOutMessage = result.Message ?? "Payment confirmed.";
-                // Refresh the summary so the payment status + Check-Out button update.
-                _checkOutBooking = await RefreshCheckOutSummary(_checkOutBooking.BookingId);
-            }
-            else
-            {
-                _checkOutError = result?.Message ?? "Payment could not be recorded.";
-            }
-        }
-        catch (Exception)
-        {
-            _checkOutError = "Payment could not be recorded.";
-        }
-        finally
-        {
-            _isSubmitting = false;
-        }
-    }
-
-    private async Task<CheckOutSummaryDto?> RefreshCheckOutSummary(int bookingId)
-    {
-        var response = await Http.GetAsync($"api/GuestHouseFrontOffice/checkout/{bookingId}");
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<CheckOutSummaryDto>()
-            : null;
     }
 
     private async Task ConfirmCheckOut()
@@ -716,7 +724,6 @@
     private void ResetCheckOut()
     {
         _checkOutBooking = null;
-        _paymentTransactionId = "";
         _checkOutMessage = null;
         _checkOutError = null;
     }
@@ -809,6 +816,9 @@
         public int BookingStatus { get; set; }
         public bool CanCheckIn { get; set; }
         public string CheckInMessage { get; set; } = "";
+        public int RequiredRoomNumbers { get; set; }
+        public List<string> AvailableRoomNumbers { get; set; } = new();
+        public List<string> AllocatedRoomNumbers { get; set; } = new();
     }
 
     public class CheckOutSummaryDto
