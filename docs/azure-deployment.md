@@ -110,9 +110,9 @@ Edit `infra/azure/<env>.parameters.json` to change sizes; the next `deploy.ps1` 
 
 ## Custom domains
 
-Bind `api.<domain>` and `app.<domain>` to the container apps from the portal (Container App →
-Custom domains → Add, managed certificate). Then redeploy with
-`-WebApiBaseUrl https://api.<domain>/` so browser links to files use the public name.
+`spicone.in` → web app, `api.spicone.in` and `spicapi.apmiot.com` → API app, bound from the portal
+(Container App → Custom domains → Add, managed certificate). Then redeploy with
+`-WebApiBaseUrl https://api.spicone.in/` so browser links to files use the public name.
 
 ## Cut-over plan: VPS to Azure (single live environment)
 
@@ -131,14 +131,19 @@ Azure serves nobody until DNS moves, so steps 1–5 are risk-free and can be rep
    report PDFs, IFMS screens. Compare row counts of key tables VPS vs Azure.
 
 ### Phase 2 — domains (still no user impact until the records change)
-6. In the API container app → Custom domains → Add: enter `spicapi.apmiot.com`. Azure shows a
-   CNAME target and a TXT verification value. Same for the web hostname.
-7. A day before cut-over, lower the TTL of the two DNS records to 300 s.
-8. At cut-over, set: `spicapi` CNAME → `<api fqdn>`, `asuid.spicapi` TXT → verification id;
-   same pair for the web host. Azure validates and issues managed certificates (5–15 min).
-9. `deploy.ps1 -Environment prod -Quick -SkipBuild -Tag <tag> -WebApiBaseUrl https://spicapi.apmiot.com/`
-   so browser links to files use the public name. The MAUI app already points at
-   `spicapi.apmiot.com`, so phones follow the DNS change with no app update.
+Public names agreed 2026-09-09: web **spicone.in** (apex), API **api.spicone.in**.
+The old API name **spicapi.apmiot.com** is bound to the API app as well, because the MAUI app
+in the field still uses it; both names serve the same container app.
+
+6. API container app → Custom domains → Add `api.spicone.in`, then Add `spicapi.apmiot.com`.
+   Web container app → Custom domains → Add `spicone.in`. Azure shows, per name, the record to
+   create (CNAME for sub-domains, A record to the environment's static IP for the apex) and a
+   TXT verification value (`asuid.<name>`).
+7. A day before cut-over, lower the TTL of the affected DNS records to 300 s.
+8. At cut-over, create/change the records. Azure validates and issues managed certificates (5–15 min).
+9. `deploy.ps1 -Environment prod -Quick -SkipBuild -Tag <tag> -WebApiBaseUrl https://api.spicone.in/`
+   so browser links to files use the public API name. Phones keep working through
+   `spicapi.apmiot.com`; a later app release can move them to `api.spicone.in`.
 
 ### Phase 3 — cut-over night (15–30 minutes of write freeze)
 10. Stop the API and web on the VPS (or block writes). Users see the VPS site down briefly.
