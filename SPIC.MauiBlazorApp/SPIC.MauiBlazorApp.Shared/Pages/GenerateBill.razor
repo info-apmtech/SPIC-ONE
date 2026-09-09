@@ -6,6 +6,7 @@
 @inject IJSRuntime JS
 
 @using System.Globalization
+@using SPIC.MauiBlazorApp.Shared.Services
 
 <style>
     .gb-container { max-width: 1400px; margin: auto; }
@@ -37,6 +38,8 @@
     .gb-btn-danger:hover { background: #b91c1c; }
     .gb-btn-view { background: #2563eb; color: #fff; }
     .gb-btn-view:hover { background: #1d4ed8; }
+    .gb-btn-pdf { background: #fff; border-color: #e5e7eb; color: #374151; }
+    .gb-btn-pdf:hover { background: #f9fafb; }
     .gb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .gb-filters { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
     .gb-row { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -62,6 +65,50 @@
     .gb-band td { padding: 6px 12px; border-bottom: 1px solid #dce4d6; }
     .gb-band-title { font-weight: 700; font-size: 0.78rem; color: #3f4e42; text-transform: uppercase; letter-spacing: 0.03em; }
     .gb-band:hover { background: #f3f6f0; }
+
+    /* Tabs */
+    .gb-tabs { display: flex; gap: 0; border-bottom: 2px solid #e5e7eb; margin-bottom: 1.5rem; }
+    .gb-tab { padding: 10px 20px; font-weight: 600; font-size: 0.85rem; color: #6b7280; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: 0.2s; background: none; border-top: none; border-left: none; border-right: none; }
+    .gb-tab:hover { color: #374151; }
+    .gb-tab.active { color: #2563eb; border-bottom-color: #2563eb; }
+
+    /* Bill List */
+    .bl-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.02); margin-bottom: 1.5rem; overflow: hidden; }
+    .bl-card-body { padding: 0; }
+    .bl-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .bl-table thead th { background: #f9fafb; color: #6b7280; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
+    .bl-table tbody td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .bl-table tbody tr:hover { background: #f8fafc; }
+    .bl-table tbody tr:last-child td { border-bottom: none; }
+    .bl-strong { font-weight: 600; color: #1f2937; }
+    .bl-row-highlight { background: #eff6ff !important; }
+
+    /* Tax Invoice sheet (View Bill modal) - mirrors GuestHouseInvoicePdfBuilder */
+    .invoice-sheet { max-width: 880px; margin: 0 auto; }
+    .inv-wrap { display: flex; background: #fff; border: 1px solid #d9d9d9; box-shadow: 0 8px 28px rgba(0,0,0,0.10); }
+    .inv-band { width: 7px; flex: 0 0 7px; background: #D7604A; }
+    .inv-doc { flex: 1; min-width: 0; padding: 8px 20px 16px; background: #fff; color: #111111; font-size: 11.5px; line-height: 1.45; }
+    .inv-header { display: flex; align-items: center; gap: 12px; background: #F0F0F0; padding: 10px 14px; }
+    .inv-logo { width: 58px; height: 58px; object-fit: contain; flex: 0 0 auto; }
+    .inv-orgtext { flex: 1; min-width: 0; }
+    .inv-org { text-align: center; color: #1E3255; font-weight: 700; font-size: 15.5px; }
+    .inv-orgline { text-align: center; color: #1E3255; font-size: 10.5px; margin-top: 2px; }
+    .inv-title { text-align: center; font-weight: 700; font-size: 14px; color: #111111; padding: 9px 0 7px; letter-spacing: 1px; }
+    .inv-table { width: 100%; border-collapse: collapse; }
+    .inv-table td, .inv-table th { border: 1px solid #333333; padding: 4px 6px; vertical-align: top; font-size: 11px; }
+    .inv-table .inv-head { vertical-align: middle; }
+    .inv-lbl { background: #FAFAFA; font-weight: 600; }
+    .inv-head { background: #EFEFEF; font-weight: 700; text-align: center; font-size: 10.5px; }
+    .inv-c { text-align: center; }
+    .inv-r { text-align: right; }
+    .inv-strong { font-weight: 700; }
+    .inv-navy { color: #1E3255; }
+    .inv-footer { margin-top: 14px; }
+    .inv-key { text-align: center; font-weight: 700; font-size: 12px; }
+    .inv-decl { color: #1E3255; font-size: 10.5px; margin-top: 9px; text-align: center; }
+    .inv-sigs { display: flex; justify-content: space-between; padding-top: 24px; font-weight: 700; font-size: 11px; }
+    .inv-thanks { text-align: center; font-weight: 700; font-size: 12px; padding-top: 9px; }
+    @@media (max-width: 640px) { .inv-header { flex-direction: column; align-items: flex-start; } .inv-band { width: 5px; flex-basis: 5px; } .inv-doc { padding: 6px 10px 14px; } }
 </style>
 
 <div class="container-fluid py-4 px-3 px-md-4 gb-container">
@@ -69,11 +116,10 @@
     <div class="gb-row" style="justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem;">
         <div>
             <h1 class="gb-title">Generate Bill</h1>
-            <p class="gb-subtitle">View completed bookings and create their invoice</p>
+            <p class="gb-subtitle">View completed bookings, create invoices, and manage bills</p>
         </div>
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
             <button class="gb-btn gb-btn-secondary" @onclick="BackToList"><i class="bi bi-arrow-left"></i> Back to List</button>
-            <button class="gb-btn gb-btn-secondary" @onclick='() => Navigation.NavigateTo("/BillList")'><i class="bi bi-receipt"></i> Bill List</button>
         </div>
     </div>
 
@@ -82,82 +128,177 @@
 
     @if (_draft == null)
     {
-        @* ---- DEFAULT LIST: COMPLETED BOOKINGS FOR A SELECTED DATE (default today) ---- *@
+        @* ---- DATE FILTERS ---- *@
         <div class="gb-card">
             <div class="gb-card-header">
-                <h3 class="gb-card-title"><i class="bi bi-calendar-check"></i> Completed Bookings</h3>
+                <h3 class="gb-card-title"><i class="bi bi-calendar-check"></i> Filters</h3>
             </div>
             <div class="gb-card-body">
                 <div class="gb-filters">
                     <div>
-                        <label class="gb-label">Completed Date</label>
-                        <input type="date" class="gb-input" style="width: 180px;" @bind="_selectedDate" />
+                        <label class="gb-label">From Date</label>
+                        <input type="date" class="gb-input" style="width: 180px;" @bind="_fromDate" />
+                    </div>
+                    <div>
+                        <label class="gb-label">To Date</label>
+                        <input type="date" class="gb-input" style="width: 180px;" @bind="_toDate" />
                     </div>
                     <button class="gb-btn gb-btn-primary" @onclick="SearchAsync" disabled="@_loadingList">
                         <i class="bi bi-search"></i> Search
                     </button>
                     <button class="gb-btn gb-btn-secondary" @onclick="ResetToTodayAsync">Today</button>
+                    <button class="gb-btn gb-btn-secondary" @onclick="RefreshAsync"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
                 </div>
                 <div class="gb-muted" style="margin-top: 12px; font-size: 0.85rem;">
-                    Showing bookings completed on <strong>@FormatDateOnly(_listDate)</strong>.
+                    Showing data from <strong>@FormatDateOnly(_fromDate)</strong> to <strong>@FormatDateOnly(_toDate)</strong>.
                 </div>
             </div>
-            <div class="table-responsive">
-                <table class="gb-table">
-                    <thead>
-                        <tr>
-                            <th>Booking ID</th>
-                            <th>Guest Name</th>
-                            <th>Guest House</th>
-                            <th>Room</th>
-                            <th>Check-In</th>
-                            <th>Check-Out</th>
-                            <th>Amount</th>
-                            <th>Payment Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (_completedBookings.Count > 0)
-                        {
-                            @foreach (var item in _completedBookings)
-                            {
-                                <tr>
-                                    <td><span style="font-weight:600; color:#1f2937;">@item.BookingReference</span></td>
-                                    <td>@(string.IsNullOrEmpty(item.GuestName) ? "-" : item.GuestName)</td>
-                                    <td>@item.GuestHouseName</td>
-                                    <td>@((string.IsNullOrEmpty(item.RoomNumber) ? "-" : item.RoomNumber) + " (" + item.RoomType + ")")</td>
-                                    <td>@FormatDateWithTime(item.CheckInDate)</td>
-                                    <td>@FormatDateWithTime(item.CheckOutDate)</td>
-                                    <td style="font-weight:600;">@FormatMoney(item.Amount)</td>
-                                    <td>
-                                        <span class="gb-badge @(item.PaymentStatus == 1 ? "gb-badge-paid" : "gb-badge-pending")">
-                                            @(item.PaymentStatus == 1 ? "Paid" : "Pending")
-                                        </span>
-                                    </td>
-                                    <td>
-                                        @if (item.HasBill)
-                                        {
-                                            <button class="gb-btn gb-btn-view" @onclick="() => GoToBillList()"><i class="bi bi-eye"></i> View Bill</button>
-                                        }
-                                        else
-                                        {
-                                            <button class="gb-btn gb-btn-success" @onclick="() => OpenBillForm(item.BookingId)"><i class="bi bi-receipt-cutoff"></i> Generate Bill</button>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        }
-                        else
-                        {
-                            <tr>
-                                <td colspan="9"><div class="gb-empty">No completed bookings for @FormatDateOnly(_listDate).</div></td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
         </div>
+
+        @* ---- TABS ---- *@
+        <div class="gb-tabs">
+            <button class="gb-tab @(_activeTab == "bookings" ? "active" : "")" @onclick='() => SwitchTab("bookings")'>
+                <i class="bi bi-calendar-check"></i> Completed Bookings
+            </button>
+            <button class="gb-tab @(_activeTab == "bills" ? "active" : "")" @onclick='() => SwitchTab("bills")'>
+                <i class="bi bi-receipt"></i> Generated Bills
+            </button>
+        </div>
+
+        @if (_activeTab == "bookings")
+        {
+            @* ---- COMPLETED BOOKINGS LIST ---- *@
+            <div class="bl-card">
+                <div class="bl-card-body table-responsive">
+                    @if (_loadingList)
+                    {
+                        <div class="gb-loading">Loading completed bookings...</div>
+                    }
+                    else
+                    {
+                        <table class="gb-table">
+                            <thead>
+                                <tr>
+                                    <th>Booking ID</th>
+                                    <th>Guest Name</th>
+                                    <th>Guest House</th>
+                                    <th>Room</th>
+                                    <th>Check-In</th>
+                                    <th>Check-Out</th>
+                                    <th>Amount</th>
+                                    <th>Payment Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (_completedBookings.Count > 0)
+                                {
+                                    @foreach (var item in _completedBookings)
+                                    {
+                                        <tr>
+                                            <td><span style="font-weight:600; color:#1f2937;">@item.BookingReference</span></td>
+                                            <td>@(string.IsNullOrEmpty(item.GuestName) ? "-" : item.GuestName)</td>
+                                            <td>@item.GuestHouseName</td>
+                                            <td>@((string.IsNullOrEmpty(item.RoomNumber) ? "-" : item.RoomNumber) + " (" + item.RoomType + ")")</td>
+                                            <td>@FormatDateWithTime(item.CheckInDate)</td>
+                                            <td>@FormatDateWithTime(item.CheckOutDate)</td>
+                                            <td style="font-weight:600;">@FormatMoney(item.Amount)</td>
+                                            <td>
+                                                <span class="gb-badge @(item.PaymentStatus == 1 ? "gb-badge-paid" : "gb-badge-pending")">
+                                                    @(item.PaymentStatus == 1 ? "Paid" : "Pending")
+                                                </span>
+                                            </td>
+                                            <td style="white-space:nowrap;">
+                                                @if (item.HasBill)
+                                                {
+                                                    <button class="gb-btn gb-btn-view" style="padding:6px 12px;" @onclick="() => OpenBillByBookingId(item.BookingId)"><i class="bi bi-eye"></i> View Bill</button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="gb-btn gb-btn-success" @onclick="() => OpenBillForm(item.BookingId)"><i class="bi bi-receipt-cutoff"></i> Generate Bill</button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="9"><div class="gb-empty">No completed bookings found for the selected date range.</div></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            @* ---- GENERATED BILLS LIST ---- *@
+            <div class="bl-card">
+                <div class="bl-card-body table-responsive">
+                    @if (_loadingBills)
+                    {
+                        <div class="gb-loading">Loading bills...</div>
+                    }
+                    else
+                    {
+                        <table class="bl-table">
+                            <thead>
+                                <tr>
+                                    <th>Bill #</th>
+                                    <th>Booking</th>
+                                    <th>Guest</th>
+                                    <th>Guest House</th>
+                                    <th>Room</th>
+                                    <th>Bill Date</th>
+                                    <th>Check-in</th>
+                                    <th>Check-out</th>
+                                    <th>Total</th>
+                                    <th>Balance</th>
+                                    <th>Payment</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var bill in _bills)
+                                {
+                                    var cls = bill.BillId == _highlightId ? "bl-row-highlight" : "";
+                                    <tr class="@cls">
+                                        <td><span class="bl-strong">@bill.BillNumber</span></td>
+                                        <td>@bill.BookingReference</td>
+                                        <td>@(string.IsNullOrEmpty(bill.GuestName) ? "-" : bill.GuestName)</td>
+                                        <td>@bill.GuestHouseName</td>
+                                        <td>@(string.IsNullOrEmpty(bill.RoomNumber) ? "-" : bill.RoomNumber)</td>
+                                        <td>@FormatBillDate(bill.BillDate)</td>
+                                        <td>@FormatBillDate(bill.CheckInDate)</td>
+                                        <td>@FormatBillDate(bill.CheckOutDate)</td>
+                                        <td class="bl-strong">@FormatMoney(bill.TotalAmount)</td>
+                                        <td>@FormatMoney(bill.BalanceAmount)</td>
+                                        <td>
+                                            <span class="gb-badge @(bill.PaymentStatus == 1 ? "gb-badge-paid" : "gb-badge-pending")">
+                                                @(bill.PaymentStatus == 1 ? "Paid" : "Pending")
+                                            </span>
+                                        </td>
+                                        <td style="white-space:nowrap;">
+                                            <button class="gb-btn gb-btn-view" style="padding:6px 12px;" @onclick="() => OpenBill(bill.BillId)"><i class="bi bi-eye"></i> View</button>
+                                            <button class="gb-btn gb-btn-pdf" style="padding:6px 12px;" @onclick="() => DownloadPdf(bill.BillId, bill.BillNumber)"><i class="bi bi-download"></i> PDF</button>
+                                        </td>
+                                    </tr>
+                                }
+                                @if (_bills.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="12"><div class="gb-empty">No bills found for the selected date range.</div></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        }
     }
     else
     {
@@ -356,14 +497,217 @@
     }
 </div>
 
+@* ------------------------- VIEW BILL MODAL ------------------------- *@
+@if (_viewBill != null)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
+                <div class="modal-header" style="border-bottom: 1px solid #e5e7eb;">
+                    <h5 class="modal-title" style="font-weight:700;"><i class="bi bi-receipt"></i> Invoice @_viewBill.BillNumber</h5>
+                    <button type="button" class="btn-close" @onclick="CloseBill"></button>
+                </div>
+                <div class="modal-body" style="padding: 18px; max-height: 75vh; overflow: auto;">
+                    <div class="invoice-sheet inv-wrap">
+                        <div class="inv-band"></div>
+                        <div class="inv-doc">
+
+                            <div class="inv-header">
+                                <img class="inv-logo" src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/GuestHouseInvoiceLogo.png" alt="SPIC" />
+                                <div class="inv-orgtext">
+                                    <div class="inv-org">SPIC DEALERS' WELFARE ASSOCIATION</div>
+                                    <div class="inv-orgline"># 100, BAZULLAH ROAD, T.NAGAR, CHENNAI - 600017</div>
+                                    <div class="inv-orgline">Phone: 044-2814 1474 / 2814 2398 / 4860 3839</div>
+                                    <div class="inv-orgline">GSTIN : 33AAMCS2846K1Z0</div>
+                                </div>
+                            </div>
+
+                            <div class="inv-title">TAX INVOICE</div>
+
+                            <table class="inv-table inv-grid">
+                                <colgroup>
+                                    <col style="width:13%;" />
+                                    <col style="width:37%;" />
+                                    <col style="width:13%;" />
+                                    <col style="width:37%;" />
+                                </colgroup>
+                                <tr>
+                                    <td class="inv-lbl">Bill No</td>
+                                    <td>@(string.IsNullOrWhiteSpace(_viewBill.BillNumber) ? "-" : _viewBill.BillNumber)</td>
+                                    <td class="inv-lbl">Booking ID</td>
+                                    <td>@_viewBill.BookingId</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Guest Name</td>
+                                    <td>@(string.IsNullOrWhiteSpace(_viewBill.GuestName) ? "-" : _viewBill.GuestName)</td>
+                                    <td class="inv-lbl">Room No</td>
+                                    <td>@(string.IsNullOrWhiteSpace(_viewBill.RoomNumber) ? "-" : _viewBill.RoomNumber)</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Company Name</td>
+                                    <td colspan="3">@(string.IsNullOrWhiteSpace(_viewBill.CompanyName) ? "-" : _viewBill.CompanyName)</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Address</td>
+                                    <td colspan="3">@(string.IsNullOrWhiteSpace(_viewBill.Address) ? "-" : _viewBill.Address)</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">GST No</td>
+                                    <td>@(string.IsNullOrWhiteSpace(_viewBill.GstNumber) ? "-" : _viewBill.GstNumber)</td>
+                                    <td class="inv-lbl">PAX (No of Persons)</td>
+                                    <td>@(_viewBill.NumberOfPersons?.ToString() ?? "-")</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Check In</td>
+                                    <td>@InvDateTime(_viewBill.CheckInAt)</td>
+                                    <td class="inv-lbl">Check Out</td>
+                                    <td>@InvDateTime(_viewBill.CheckOutAt)</td>
+                                </tr>
+                            </table>
+
+                            <table class="inv-table inv-lines" style="margin-top:10px;">
+                                <colgroup>
+                                    <col />
+                                    <col style="width:52px;" />
+                                    <col style="width:60px;" />
+                                    <col style="width:66px;" />
+                                    <col style="width:56px;" />
+                                    <col style="width:64px;" />
+                                </colgroup>
+                                <tr>
+                                    <th class="inv-head">Description<br/>(Room/ Food/ Other)</th>
+                                    <th class="inv-head">SAC<br/>Code</th>
+                                    <th class="inv-head">Days (Nos.)/<br/>Voucher</th>
+                                    <th class="inv-head">Charges/day<br/>(in Rs.)</th>
+                                    <th class="inv-head">Tax<br/>(in Rs.)</th>
+                                    <th class="inv-head">Total<br/>(in Rs.)</th>
+                                </tr>
+                                @foreach (var line in _viewBill.LineItems)
+                                {
+                                    <tr>
+                                        <td>@(string.IsNullOrWhiteSpace(line.Description) ? "-" : line.Description)</td>
+                                        <td class="inv-c">@SACode(line.Description)</td>
+                                        <td class="inv-c">@InvQty(line.Quantity)</td>
+                                        <td class="inv-r">@InvAmt(line.Rate)</td>
+                                        <td class="inv-r">@InvAmt(line.CgstAmount + line.SgstAmount)</td>
+                                        <td class="inv-r">@InvAmt(line.LineTotal)</td>
+                                    </tr>
+                                }
+                            </table>
+
+                            <table class="inv-table inv-totals" style="margin-top:10px;">
+                                <colgroup>
+                                    <col style="width:58%;" />
+                                    <col style="width:42%;" />
+                                </colgroup>
+                                <tr>
+                                    <td class="inv-lbl">Total Amount (in Rs.)</td>
+                                    <td class="inv-r inv-strong">@InvAmt(_viewBill.TotalAmount)</td>
+                                </tr>
+                                @if (_viewBill.Discount != 0) { <tr><td class="inv-lbl">Discount (in Rs.)</td><td class="inv-r">@InvAmt(_viewBill.Discount)</td></tr> }
+                                @if (_viewBill.AdvancePayment != 0) { <tr><td class="inv-lbl">Advance Payment (in Rs.)</td><td class="inv-r">@InvAmt(_viewBill.AdvancePayment)</td></tr> }
+                                @if (_viewBill.RoundOff != 0) { <tr><td class="inv-lbl">Round Off (in Rs.)</td><td class="inv-r">@InvAmt(_viewBill.RoundOff)</td></tr> }
+                                <tr>
+                                    <td class="inv-lbl">Balance Amount (in Rs.)</td>
+                                    <td class="inv-r inv-strong inv-navy">@InvAmt(_viewBill.BalanceAmount)</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Payment Method</td>
+                                    <td class="inv-r">@PaymentMethodLabel(_viewBill.PaymentMethod)</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Remarks</td>
+                                    <td class="inv-r">@(string.IsNullOrWhiteSpace(_viewBill.Remarks) ? "-" : _viewBill.Remarks)</td>
+                                </tr>
+                            </table>
+
+                            <table class="inv-table inv-gst" style="margin-top:10px;">
+                                <colgroup>
+                                    <col style="width:52px;" />
+                                    <col />
+                                    <col style="width:52px;" />
+                                    <col style="width:56px;" />
+                                    <col style="width:52px;" />
+                                    <col style="width:56px;" />
+                                    <col style="width:56px;" />
+                                </colgroup>
+                                <tr>
+                                    <th class="inv-head" rowspan="2">SAC<br/>Code</th>
+                                    <th class="inv-head" rowspan="2">Taxable<br/>Value</th>
+                                    <th class="inv-head" colspan="2">CGST</th>
+                                    <th class="inv-head" colspan="2">SGST</th>
+                                    <th class="inv-head" rowspan="2">Total<br/>Tax</th>
+                                </tr>
+                                <tr>
+                                    <th class="inv-head">Rate (%)</th>
+                                    <th class="inv-head">Amount</th>
+                                    <th class="inv-head">Rate (%)</th>
+                                    <th class="inv-head">Amount</th>
+                                </tr>
+                                @foreach (var g in GstGroups())
+                                {
+                                    <tr>
+                                        <td class="inv-c">@g.Sac</td>
+                                        <td class="inv-r">@InvAmt(g.TaxableValue)</td>
+                                        <td class="inv-c">@InvPct(g.CgstPercent)</td>
+                                        <td class="inv-r">@InvAmt(g.CgstAmount)</td>
+                                        <td class="inv-c">@InvPct(g.SgstPercent)</td>
+                                        <td class="inv-r">@InvAmt(g.SgstAmount)</td>
+                                        <td class="inv-r">@InvAmt(g.CgstAmount + g.SgstAmount)</td>
+                                    </tr>
+                                }
+                                <tr>
+                                    <td colspan="6" class="inv-head inv-r inv-strong">Total</td>
+                                    <td class="inv-head inv-r inv-strong">@InvAmt(_viewBill.CgstAmount + _viewBill.SgstAmount)</td>
+                                </tr>
+                            </table>
+
+                            <div class="inv-footer">
+                                <div class="inv-key">*Please Return Your Key on Departure*</div>
+                                <div class="inv-decl">
+                                    I Agree that I am responsible for the full payment of this bill in the event<br/>
+                                    it is not paid by the Company, Organisation or Person indicated.
+                                </div>
+                                <div class="inv-sigs">
+                                    <span>AUTHORISED SIGNATURE</span>
+                                    <span>GUEST SIGNATURE</span>
+                                </div>
+                                <div class="inv-thanks">***THANK YOU VISIT AGAIN***</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid #e5e7eb;">
+                    <button class="gb-btn gb-btn-secondary" @onclick="CloseBill">Close</button>
+                    <button class="gb-btn gb-btn-pdf" @onclick="() => DownloadPdf(_viewBill!.BillId, _viewBill!.BillNumber)"><i class="bi bi-download"></i> Download PDF</button>
+                    <button class="gb-btn gb-btn-pdf" @onclick="() => PrintPdf(_viewBill!.BillId, _viewBill!.BillNumber)"><i class="bi bi-printer"></i> Print</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private readonly CultureInfo _ci = CultureInfo.InvariantCulture;
-    private DateTime? _selectedDate;
-    private DateTime _listDate = DateTime.Today;
+
+    // ---- Tabs ----
+    private string _activeTab = "bookings";
+
+    // ---- Date range filters ----
+    private DateTime _fromDate = DateTime.Today;
+    private DateTime _toDate = DateTime.Today;
+
+    // ---- Completed bookings ----
     private List<CompletedBookingForBillingDto> _completedBookings = new();
     private bool _loadingList;
-    private bool _listLoaded;
 
+    // ---- Generated bills ----
+    private List<BillListItemDto> _bills = new();
+    private BillViewDto? _viewBill;
+    private bool _loadingBills;
+    private int _highlightId;
+
+    // ---- Bill form ----
     private BillDraftDto? _draft;
     private List<BillItemRow> _billItems = new();
     private bool _busy;
@@ -417,27 +761,45 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Default: today's completed bookings.
-        _selectedDate = DateTime.Today;
-        _listDate = DateTime.Today;
+        _fromDate = DateTime.Today;
+        _toDate = DateTime.Today;
+
+        var q = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(q.Query);
+        _ = int.TryParse(query["highlight"], out _highlightId);
+        if (_highlightId > 0) _activeTab = "bills";
+
         await LoadCompletedAsync();
+        await LoadBillsAsync();
     }
 
-    private async Task LoadCompletedAsync(DateTime? targetDate = null)
+    // ---- Tab switching ----
+
+    private async Task SwitchTab(string tab)
     {
-        var target = targetDate ?? _listDate;
+        _activeTab = tab;
+        if (tab == "bookings")
+            await LoadCompletedAsync();
+        else
+            await LoadBillsAsync();
+    }
+
+    // ---- Completed bookings ----
+
+    private async Task LoadCompletedAsync()
+    {
         _loadingList = true;
         _error = null;
         try
         {
-            var url = $"api/GuestHouseFrontOffice/billing/completed?date={target.ToString("yyyy-MM-dd", _ci)}";
+            var fromStr = _fromDate.ToString("yyyy-MM-dd", _ci);
+            var toStr = _toDate.ToString("yyyy-MM-dd", _ci);
+            var url = $"api/GuestHouseFrontOffice/billing/completed?from={fromStr}&to={toStr}";
             var response = await Http.GetAsync(url);
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CompletedBookingListResult>();
                 _completedBookings = result?.Bookings ?? new();
-                _listDate = target;
-                _listLoaded = true;
             }
             else
             {
@@ -454,23 +816,132 @@
         }
     }
 
+    // ---- Generated bills ----
+
+    private async Task LoadBillsAsync()
+    {
+        _loadingBills = true;
+        _error = null;
+        try
+        {
+            var fromStr = _fromDate.ToString("yyyy-MM-dd", _ci);
+            var toStr = _toDate.ToString("yyyy-MM-dd", _ci);
+            var url = $"api/GuestHouseFrontOffice/bills?from={fromStr}&to={toStr}";
+            var response = await Http.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                _bills = await response.Content.ReadFromJsonAsync<List<BillListItemDto>>() ?? new();
+            }
+            else
+            {
+                _error = "Could not load bills.";
+            }
+        }
+        catch (Exception)
+        {
+            _error = "Could not load bills.";
+        }
+        finally
+        {
+            _loadingBills = false;
+        }
+    }
+
+    private async Task OpenBill(int billId)
+    {
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseFrontOffice/bill/{billId}");
+            if (response.IsSuccessStatusCode)
+            {
+                _viewBill = await response.Content.ReadFromJsonAsync<BillViewDto>();
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private async Task OpenBillByBookingId(int bookingId)
+    {
+        try
+        {
+            var bills = await Http.GetFromJsonAsync<List<BillListItemDto>>("api/GuestHouseFrontOffice/bills");
+            var bill = bills?.FirstOrDefault(b => b.BookingId == bookingId);
+            if (bill != null)
+                await OpenBill(bill.BillId);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private void CloseBill() => _viewBill = null;
+
+    private async Task DownloadPdf(int billId, string billNumber)
+    {
+        await FetchPdfAsync(billId, billNumber, false);
+    }
+
+    private async Task PrintPdf(int billId, string billNumber)
+    {
+        await FetchPdfAsync(billId, billNumber, true);
+    }
+
+    private async Task FetchPdfAsync(int billId, string billNumber, bool openNewWindow)
+    {
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync($"api/GuestHouseFrontOffice/bill/{billId}/pdf");
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"{billNumber}.pdf";
+            if (openNewWindow)
+                await JS.InvokeVoidAsync("openPdfInNewWindow", base64);
+            else
+                await JS.InvokeVoidAsync("downloadFileFromBytes", fileName, "application/pdf", base64);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    // ---- Search / Filter ----
+
     private async Task SearchAsync()
     {
-        if (_selectedDate.HasValue)
+        if (_fromDate > _toDate)
         {
-            await LoadCompletedAsync(_selectedDate.Value.Date);
+            _error = "From Date cannot be after To Date.";
+            return;
         }
+        _error = null;
+        if (_activeTab == "bookings")
+            await LoadCompletedAsync();
         else
-        {
-            _error = "Please select a valid date.";
-        }
+            await LoadBillsAsync();
     }
 
     private async Task ResetToTodayAsync()
     {
-        _selectedDate = DateTime.Today;
-        await LoadCompletedAsync(DateTime.Today);
+        _fromDate = DateTime.Today;
+        _toDate = DateTime.Today;
+        _error = null;
+        if (_activeTab == "bookings")
+            await LoadCompletedAsync();
+        else
+            await LoadBillsAsync();
     }
+
+    private async Task RefreshAsync()
+    {
+        _error = null;
+        if (_activeTab == "bookings")
+            await LoadCompletedAsync();
+        else
+            await LoadBillsAsync();
+    }
+
+    // ---- Bill form navigation ----
 
     private void OpenBillForm(int bookingId)
     {
@@ -517,13 +988,12 @@
         });
     }
 
-    private void GoToBillList() => Navigation.NavigateTo("/BillList");
-
     private void BackToList()
     {
         _draft = null;
         ResetErrorAndSuccess();
         _ = LoadCompletedAsync();
+        _ = LoadBillsAsync();
     }
 
     private void ResetBillInputs()
@@ -685,8 +1155,12 @@
             if (response.IsSuccessStatusCode && result?.Success == true)
             {
                 _success = $"Bill {result.BillNumber} generated successfully.";
+                _draft = null;
                 await Task.Delay(500);
-                Navigation.NavigateTo($"/BillList?highlight={result.BillId}");
+                await LoadCompletedAsync();
+                await LoadBillsAsync();
+                _activeTab = "bills";
+                _highlightId = result.BillId;
             }
             else
             {
@@ -719,10 +1193,68 @@
         catch { return ""; }
     }
 
+    // ---- Formatting helpers ----
+
     private static string FormatDate(DateTime? value) => value?.ToString("dd MMM yyyy hh:mm tt") ?? "-";
     private static string FormatDateWithTime(DateTime? value) => value?.ToString("dd MMM yyyy hh:mm tt") ?? "-";
     private static string FormatDateOnly(DateTime value) => value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
     private string FormatMoney(decimal value) => "₹" + value.ToString("N2", _ci);
+    private static string FormatBillDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) : "-";
+
+    // ---- Tax Invoice rendering helpers - mirror the PDF builder (no recalculation) ----
+
+    private static string InvAmt(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
+    private static string InvQty(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    private static string InvPct(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    private static string InvDateTime(DateTime? value) => value.HasValue ? value.Value.ToString("dd-MM-yy hh:mm tt", CultureInfo.InvariantCulture) : "-";
+
+    private static string PaymentMethodLabel(int method) => method switch
+    {
+        4 => "Credit",
+        0 => "Razorpay",
+        1 => "UPI",
+        2 => "Card",
+        3 => "Net Banking",
+        _ => method.ToString()
+    };
+
+    private static string SACode(string? description)
+    {
+        var d = (description ?? string.Empty).ToLowerInvariant();
+        if (d.Contains("food")) return "996332";
+        if (d.Contains("laundry")) return "999721";
+        return "996311";
+    }
+
+    private List<GstGroupRow> GstGroups() => _viewBill is null
+        ? new List<GstGroupRow>()
+        : _viewBill.LineItems
+            .Select(li => new { Sac = SACode(li.Description), li.Amount, li.CgstPercent, li.CgstAmount, li.SgstPercent, li.SgstAmount })
+            .GroupBy(x => new { x.Sac, x.CgstPercent, x.SgstPercent })
+            .Select(g => new GstGroupRow
+            {
+                Sac = g.Key.Sac,
+                CgstPercent = g.Key.CgstPercent,
+                SgstPercent = g.Key.SgstPercent,
+                TaxableValue = g.Sum(x => x.Amount),
+                CgstAmount = g.Sum(x => x.CgstAmount),
+                SgstAmount = g.Sum(x => x.SgstAmount)
+            })
+            .OrderBy(x => x.Sac)
+            .ThenBy(x => x.CgstPercent)
+            .ToList();
+
+    private sealed class GstGroupRow
+    {
+        public string Sac { get; set; } = "";
+        public decimal CgstPercent { get; set; }
+        public decimal SgstPercent { get; set; }
+        public decimal TaxableValue { get; set; }
+        public decimal CgstAmount { get; set; }
+        public decimal SgstAmount { get; set; }
+    }
+
+    // ---- Enums / categories ----
 
     public enum BillItemCategory
     {
@@ -747,6 +1279,8 @@
         BillItemCategory.AdditionalBeds => "Additional Beds",
         _ => "Laundry / Others"
     };
+
+    // ---- DTOs (client-side mirrors) ----
 
     public class BillItemRow
     {
@@ -826,5 +1360,72 @@
         public string? Message { get; set; }
         public int BillId { get; set; }
         public string? BillNumber { get; set; }
+    }
+
+    // ---- Bill List DTOs (from BillList.razor) ----
+
+    public class BillListItemDto
+    {
+        public int BillId { get; set; }
+        public string BillNumber { get; set; } = "";
+        public string BookingReference { get; set; } = "";
+        public int BookingId { get; set; }
+        public string? GuestName { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public DateTime BillDate { get; set; }
+        public DateTime? CheckInDate { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public decimal TotalAmount { get; set; }
+        public decimal BalanceAmount { get; set; }
+        public int PaymentStatus { get; set; }
+        public int PaymentMethod { get; set; }
+    }
+
+    public class BillViewLineItemDto
+    {
+        public string? Description { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal Rate { get; set; }
+        public decimal Amount { get; set; }
+        public decimal CgstPercent { get; set; }
+        public decimal SgstPercent { get; set; }
+        public decimal CgstAmount { get; set; }
+        public decimal SgstAmount { get; set; }
+        public decimal LineTotal { get; set; }
+    }
+
+    public class BillViewDto
+    {
+        public int BillId { get; set; }
+        public string BillNumber { get; set; } = "";
+        public string BookingReference { get; set; } = "";
+        public int BookingId { get; set; }
+        public DateTime BillDate { get; set; }
+        public string? GuestName { get; set; }
+        public string? CompanyName { get; set; }
+        public string? GstNumber { get; set; }
+        public string? Address { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public string RoomType { get; set; } = "";
+        public DateTime? CheckInAt { get; set; }
+        public DateTime? CheckOutAt { get; set; }
+        public int? NumberOfNights { get; set; }
+        public int? NumberOfPersons { get; set; }
+        public List<BillViewLineItemDto> LineItems { get; set; } = new();
+        public decimal Subtotal { get; set; }
+        public decimal CgstAmount { get; set; }
+        public decimal SgstAmount { get; set; }
+        public decimal TotalAmount { get; set; }
+        public decimal Discount { get; set; }
+        public decimal AdvancePayment { get; set; }
+        public decimal RoundOff { get; set; }
+        public decimal BalanceAmount { get; set; }
+        public string? Remarks { get; set; }
+        public int PaymentStatus { get; set; }
+        public int PaymentMethod { get; set; }
     }
 }

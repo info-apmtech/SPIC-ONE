@@ -586,18 +586,30 @@ namespace SpicAPI.Controllers
 			return await BuildBillDraftAsync(booking);
 		}
 
-		// GET /api/GuestHouseFrontOffice/billing/completed?date=yyyy-MM-dd
-		// Returns the bookings that are eligible for bill generation for a given date
-		// (the date is matched against the actual check-out / completion date). When no
-		// date is supplied, defaults to today. Only COMPLETED bookings whose payment has
-		// been received are returned, so cancelled / pending / active / upcoming bookings
-		// never appear. Each row also reports whether a bill already exists for the booking.
+		// GET /api/GuestHouseFrontOffice/billing/completed?date=yyyy-MM-dd  (single-day, backward-compatible)
+		// GET /api/GuestHouseFrontOffice/billing/completed?from=yyyy-MM-dd&to=yyyy-MM-dd  (date range)
+		// Returns the bookings that are eligible for bill generation within the specified
+		// date window (matched against the actual check-out / completion date). When no
+		// date parameters are supplied, defaults to today. Only COMPLETED bookings whose
+		// payment has been received are returned. Each row also reports whether a bill
+		// already exists for the booking.
 		[HttpGet("billing/completed")]
-		public async Task<IActionResult> GetCompletedBookingsForBilling([FromQuery] DateTime? date)
+		public async Task<IActionResult> GetCompletedBookingsForBilling([FromQuery] DateTime? date, [FromQuery] DateTime? from, [FromQuery] DateTime? to)
 		{
-			var target = date?.Date ?? DateTime.Today;
-			var from = target;
-			var to = target.AddDays(1);
+			DateTime rangeFrom;
+			DateTime rangeTo;
+
+			if (from.HasValue || to.HasValue)
+			{
+				rangeFrom = (from ?? DateTime.Today).Date;
+				rangeTo = (to ?? DateTime.Today).Date.AddDays(1);
+			}
+			else
+			{
+				var target = date?.Date ?? DateTime.Today;
+				rangeFrom = target;
+				rangeTo = target.AddDays(1);
+			}
 
 			var bookings = await _db.GuestHouseBookings
 				.AsNoTracking()
@@ -606,8 +618,8 @@ namespace SpicAPI.Controllers
 					&& (b.PaymentStatus == GuestHousePaymentStatus.Paid
 						|| b.Payments.Any(p => p.PaymentStatus == GuestHousePaymentStatus.Paid))
 					&& b.ActualCheckOutAt != null
-					&& b.ActualCheckOutAt.Value >= from
-					&& b.ActualCheckOutAt.Value < to)
+					&& b.ActualCheckOutAt.Value >= rangeFrom
+					&& b.ActualCheckOutAt.Value < rangeTo)
 				.Include(b => b.GuestHouse)
 				.Include(b => b.GuestHouseRoom)
 				.Include(b => b.Guests)
@@ -641,21 +653,27 @@ namespace SpicAPI.Controllers
 
 			return Ok(new
 			{
-				Date = target,
+				Date = rangeFrom,
 				Count = list.Count,
 				Bookings = list
 			});
 		}
 
 		// GET /api/GuestHouseFrontOffice/bills
-		// Returns all generated bills (Bill List page), most recent first.
+		// GET /api/GuestHouseFrontOffice/bills?from=yyyy-MM-dd&to=yyyy-MM-dd
+		// Returns generated bills (Bill List page), most recent first.
+		// Optional from/to filter by BillDate.
 		[HttpGet("bills")]
-		public async Task<IActionResult> GetBills()
+		public async Task<IActionResult> GetBills([FromQuery] DateTime? from, [FromQuery] DateTime? to)
 		{
-			var bills = await _db.GuestHouseBills
-				.AsNoTracking()
-				.OrderByDescending(b => b.BillDate)
-				.ToListAsync();
+			var query = _db.GuestHouseBills.AsNoTracking().AsQueryable();
+
+			if (from.HasValue)
+				query = query.Where(b => b.BillDate >= from.Value.Date);
+			if (to.HasValue)
+				query = query.Where(b => b.BillDate < to.Value.Date.AddDays(1));
+
+			var bills = await query.OrderByDescending(b => b.BillDate).ToListAsync();
 
 			var items = bills.Select(b => new BillListItemDto
 			{
