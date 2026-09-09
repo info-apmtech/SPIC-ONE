@@ -114,6 +114,45 @@ Bind `api.<domain>` and `app.<domain>` to the container apps from the portal (Co
 Custom domains → Add, managed certificate). Then redeploy with
 `-WebApiBaseUrl https://api.<domain>/` so browser links to files use the public name.
 
+## Cut-over plan: VPS to Azure (single live environment)
+
+Azure serves nobody until DNS moves, so steps 1–5 are risk-free and can be repeated.
+
+### Phase 1 — build the live environment (no user impact)
+1. `provision.ps1 -Environment prod -AllowMyIp` — platform + both apps on Azure URLs.
+2. Copy the database once as a rehearsal: `copy-db.ps1 -Environment prod -SourceHost <vps> -SourcePort 30001 -SourcePasswordFile <file>`.
+   Full `pg_dump` (custom format) from the VPS PostgreSQL → `pg_restore --clean` into Azure. Runs from
+   the PC through the `postgres:16` Docker image. Re-runnable; each run replaces the Azure copy.
+3. Copy the uploaded files from the VPS API folders (`Uploads/`, `wwwroot/uploads/`) into the
+   `api-uploads` and `api-webuploads` shares (`az storage file upload-batch`).
+4. Pass the IFMS keys and the IFMS connection string (still pointing at the VPS database) once via
+   `provision.ps1 -PlatformOnly -Ifms*File ...`, then `deploy.ps1 -Environment prod`.
+5. Test on the Azure URLs with real data: login, dealer registration with PDF upload (OCR on Linux),
+   report PDFs, IFMS screens. Compare row counts of key tables VPS vs Azure.
+
+### Phase 2 — domains (still no user impact until the records change)
+6. In the API container app → Custom domains → Add: enter `spicapi.apmiot.com`. Azure shows a
+   CNAME target and a TXT verification value. Same for the web hostname.
+7. A day before cut-over, lower the TTL of the two DNS records to 300 s.
+8. At cut-over, set: `spicapi` CNAME → `<api fqdn>`, `asuid.spicapi` TXT → verification id;
+   same pair for the web host. Azure validates and issues managed certificates (5–15 min).
+9. `deploy.ps1 -Environment prod -Quick -SkipBuild -Tag <tag> -WebApiBaseUrl https://spicapi.apmiot.com/`
+   so browser links to files use the public name. The MAUI app already points at
+   `spicapi.apmiot.com`, so phones follow the DNS change with no app update.
+
+### Phase 3 — cut-over night (15–30 minutes of write freeze)
+10. Stop the API and web on the VPS (or block writes). Users see the VPS site down briefly.
+11. Final `copy-db.ps1` run and final file sync (only files newer than the rehearsal).
+12. Switch the DNS records (step 8). Verify login and one write on the Azure site.
+13. Keep the VPS services stopped but intact for two weeks. Rollback = point DNS back.
+14. Afterwards: rotate the JWT key and IFMS keys committed in `appsettings.json`; remove the dealer
+    documents from the repository; set the Docker Desktop disk limit.
+
+### What stays on the VPS
+- The IFMS automation and its `spiconeifms` database. The Azure API reads it over the internet
+  through `ConnectionStrings__IfmsConnection`; the automation posts uploads to
+  `spicapi.apmiot.com`, which becomes Azure after the DNS switch (same device/automation keys).
+
 ## Useful commands
 
 ```powershell
