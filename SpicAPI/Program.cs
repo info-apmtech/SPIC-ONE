@@ -18,6 +18,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHealthChecks();
+
+// In Azure the API runs as several replicas. Data-protection keys (Identity
+// tokens) must be shared between them, so when DataProtection:KeysPath is
+// configured the key ring is persisted to that (mounted) folder. Without the
+// setting the default per-machine key ring is used, exactly as before.
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
@@ -194,6 +207,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/", () => "SPIC API is running");
+app.MapHealthChecks("/health");
 app.MapControllers();
 
 app.Run();
