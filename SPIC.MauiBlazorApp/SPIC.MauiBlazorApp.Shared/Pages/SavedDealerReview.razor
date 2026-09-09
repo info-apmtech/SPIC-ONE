@@ -1772,6 +1772,20 @@ private async Task ApproveDealer()
         <div class="page-subtitle">Review and approve dealer registration</div>
     </div>
 
+    @if (_dealer?.IsCreditLimitConsentGiven == true)
+    {
+        <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-left:5px solid #059669; border-radius:10px; padding:14px 18px; margin-bottom:22px; display:flex; align-items:center; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <div>
+                <div style="color:#065F46; font-weight:700; font-size:0.95rem; margin-bottom:4px;">Credit Limit Consent</div>
+                <div style="color:#374151; font-size:0.875rem; font-weight:500; line-height:1.5;">Disclaimer: The form has been submitted with consent (i.e.,) without credit limit details. Hence the dealer's credit limit is <strong>0</strong>.</div>
+            </div>
+        </div>
+    }
+
     @if (_dealer?.AVPApproved == true)
     {
         <div class="banner">
@@ -1930,7 +1944,7 @@ private async Task ApproveDealer()
                                     {
                                         <div class="cp-summary-item" style="grid-column: 1 / -1;">
                                             <span class="cp-summary-label">Credit Limit Consent</span>
-                                            <span class="cp-summary-value" style="color:#059669; font-weight:600;">Dealer has given consent and has not provided Credit Limit details.</span>
+                                            <span class="cp-summary-value" style="color:#059669; font-weight:600;">Disclaimer: The form has been submitted with consent (i.e.,) without credit limit details. Hence the dealer's credit limit is 0.</span>
                                         </div>
                                     }
                                     else
@@ -2019,12 +2033,8 @@ private async Task ApproveDealer()
                                    </svg>
                                    Credit Limit Consent
                                </div>
-                               <p style="margin:0; color:#374151; font-size:0.875rem; font-weight:500;">Dealer has given consent and has not provided Credit Limit details.</p>
-                               <div style="margin-top:8px; font-size:0.85rem; color:#4B5563; display:flex; gap:20px;">
-                                   <span>Credit Limit: <strong style="color:#1F2937;">₹0.00</strong></span>
-                                   <span>Credit Limit for Green Star: <strong style="color:#1F2937;">₹0.00</strong></span>
-                               </div>
-                           </section>
+<p style="margin:0; color:#374151; font-size:0.875rem; font-weight:500;">Disclaimer: The form has been submitted with consent (i.e.,) without credit limit details. Hence the dealer's credit limit is <strong>0</strong>.</p>
+                            </section>
                        }
                        else if (_dealer?.Status != DR.DealerStatus.InActive && _showBusinessInfo && !_isNewDealer)
                        {
@@ -2367,7 +2377,7 @@ private async Task ApproveDealer()
                 <div class="info-row"><span>Role</span><strong>@SubmittedByRoleDisplay</strong></div>
                 <div class="info-row"><span>Date & Time</span><strong>@(_dealer != null ? (_dealer.UpdatedAt.Year > 2000 ? _dealer.UpdatedAt.ToString("dd-MMM-yyyy, hh:mm tt") : _dealer.CreatedAt.ToString("dd-MMM-yyyy, hh:mm tt")) : "-")</strong></div>
                 <div class="info-row"><span>Stage</span><strong>MO Review</strong></div>
-                @if (_showBusinessInfo && !_isNewDealer)
+                @if (_showBusinessInfo && !_isNewDealer && _dealer?.IsCreditLimitConsentGiven != true)
                 {
                     <div class="info-row"><span>MO Recommended Credit Limit (SPIC)</span><strong>₹ @GetSpicMoRecommendedLimit().ToString("N2")</strong></div>
                     <div class="info-row"><span>MO Recommended Credit Limit (GFL)</span><strong>₹ @GetGflMoRecommendedLimit().ToString("N2")</strong></div>
@@ -3448,7 +3458,7 @@ private async Task ApproveDealer()
     </div>
 
     }
-    @if (_showBusinessInfo && !_isNewDealer)
+    @if (_showBusinessInfo && !_isNewDealer && _dealer?.IsCreditLimitConsentGiven != true)
     {
     <div class="custom-accordion @(IsCreditLimitOpen ? "active" : "")">
         <div class="accordion-header" @onclick="() => IsCreditLimitOpen = !IsCreditLimitOpen">
