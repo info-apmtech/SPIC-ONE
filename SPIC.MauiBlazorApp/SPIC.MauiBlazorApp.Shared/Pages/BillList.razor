@@ -6,6 +6,7 @@
 @inject IJSRuntime JS
 
 @using System.Globalization
+@using System.Linq
 
 <style>
     .bl-container { max-width: 1400px; margin: auto; }
@@ -35,6 +36,33 @@
     .bl-loading { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; color: #6b7280; }
     .bl-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 12px; padding: 20px; font-weight: 500; }
     .bl-row-highlight { background: #eff6ff !important; }
+
+    /* ---- Tax Invoice sheet (View Bill modal) - mirrors GuestHouseInvoicePdfBuilder ---- */
+    .invoice-sheet { max-width: 880px; margin: 0 auto; }
+    .inv-wrap { display: flex; background: #fff; border: 1px solid #d9d9d9; box-shadow: 0 8px 28px rgba(0,0,0,0.10); }
+    .inv-band { width: 7px; flex: 0 0 7px; background: #D7604A; }
+    .inv-doc { flex: 1; min-width: 0; padding: 8px 20px 16px; background: #fff; color: #111111; font-size: 11.5px; line-height: 1.45; }
+    .inv-header { display: flex; align-items: center; gap: 12px; background: #F0F0F0; padding: 10px 14px; }
+    .inv-logo { width: 58px; height: 58px; object-fit: contain; flex: 0 0 auto; }
+    .inv-orgtext { flex: 1; min-width: 0; }
+    .inv-org { text-align: center; color: #1E3255; font-weight: 700; font-size: 15.5px; }
+    .inv-orgline { text-align: center; color: #1E3255; font-size: 10.5px; margin-top: 2px; }
+    .inv-title { text-align: center; font-weight: 700; font-size: 14px; color: #111111; padding: 9px 0 7px; letter-spacing: 1px; }
+    .inv-table { width: 100%; border-collapse: collapse; }
+    .inv-table td, .inv-table th { border: 1px solid #333333; padding: 4px 6px; vertical-align: top; font-size: 11px; }
+    .inv-table .inv-head { vertical-align: middle; }
+    .inv-lbl { background: #FAFAFA; font-weight: 600; }
+    .inv-head { background: #EFEFEF; font-weight: 700; text-align: center; font-size: 10.5px; }
+    .inv-c { text-align: center; }
+    .inv-r { text-align: right; }
+    .inv-strong { font-weight: 700; }
+    .inv-navy { color: #1E3255; }
+    .inv-footer { margin-top: 14px; }
+    .inv-key { text-align: center; font-weight: 700; font-size: 12px; }
+    .inv-decl { color: #1E3255; font-size: 10.5px; margin-top: 9px; text-align: center; }
+    .inv-sigs { display: flex; justify-content: space-between; padding-top: 24px; font-weight: 700; font-size: 11px; }
+    .inv-thanks { text-align: center; font-weight: 700; font-size: 12px; padding-top: 9px; }
+    @@media (max-width: 640px) { .inv-header { flex-direction: column; align-items: flex-start; } .inv-band { width: 5px; flex-basis: 5px; } .inv-doc { padding: 6px 10px 14px; } }
 </style>
 
 <div class="container-fluid py-4 px-3 px-md-4 bl-container">
@@ -126,90 +154,175 @@
                     <h5 class="modal-title" style="font-weight:700;"><i class="bi bi-receipt"></i> Invoice @_viewBill.BillNumber</h5>
                     <button type="button" class="btn-close" @onclick="CloseBill"></button>
                 </div>
-                <div class="modal-body" style="padding: 24px; max-height: 75vh; overflow-y: auto;">
-                    <div style="display:flex; justify-content: space-between; margin-bottom: 8px;">
-                        <div>
-                            <div style="font-weight:700; color:#0B4A82; font-size:1.1rem;">SPIC</div>
-                            <div style="color:#6b7280; font-size:0.85rem;">@_viewBill.GuestHouseName</div>
-                            <div style="color:#6b7280; font-size:0.85rem;">Guest House Invoice / Bill</div>
-                        </div>
-                        <div style="text-align:right;">
-                            <div style="font-weight:700; color:#0B4A82; font-size:1rem;">@_viewBill.BillNumber</div>
-                            <div style="color:#6b7280; font-size:0.85rem;">Bill Date: @FormatDate(_viewBill.BillDate)</div>
-                            <div style="color:#6b7280; font-size:0.85rem;">Booking: @_viewBill.BookingReference</div>
-                            <span class="bl-badge @(_viewBill.PaymentStatus == 1 ? "bl-badge-paid" : "bl-badge-pending")" style="margin-top:6px;">
-                                @(_viewBill.PaymentStatus == 1 ? "Paid" : "Pending")
-                            </span>
-                        </div>
-                    </div>
+                <div class="modal-body" style="padding: 18px; max-height: 75vh; overflow: auto;">
+                    <div class="invoice-sheet inv-wrap">
+                        <div class="inv-band"></div>
+                        <div class="inv-doc">
 
-                    <div style="border:1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin-top: 12px;">
-                        <div class="bl-strong" style="color:#0B4A82;">Billed To</div>
-                        <div>@(string.IsNullOrEmpty(_viewBill.GuestName) ? "-" : _viewBill.GuestName)</div>
-                        @if (!string.IsNullOrEmpty(_viewBill.Address)) { <div>@_viewBill.Address</div> }
-                        @if (!string.IsNullOrEmpty(_viewBill.PhoneNumber)) { <div>Phone: @_viewBill.PhoneNumber</div> }
-                        @if (!string.IsNullOrEmpty(_viewBill.Email)) { <div>Email: @_viewBill.Email</div> }
-                    </div>
+                            <div class="inv-header">
+                                <img class="inv-logo" src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/GuestHouseInvoiceLogo.png" alt="SPIC" />
+                                <div class="inv-orgtext">
+                                    <div class="inv-org">SPIC DEALERS' WELFARE ASSOCIATION</div>
+                                    <div class="inv-orgline"># 100, BAZULLAH ROAD, T.NAGAR, CHENNAI - 600017</div>
+                                    <div class="inv-orgline">Phone: 044-2814 1474 / 2814 2398 / 4860 3839</div>
+                                    <div class="inv-orgline">GSTIN : 33AAMCS2846K1Z0</div>
+                                </div>
+                            </div>
 
-                    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px;">
-                        <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Room Type</div><div class="bl-strong">@_viewBill.RoomType</div></div>
-                        @if (!string.IsNullOrEmpty(_viewBill.RoomNumber)) { <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Room</div><div class="bl-strong">@_viewBill.RoomNumber</div></div> }
-                        <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Check-In</div><div class="bl-strong">@FormatDate(_viewBill.CheckInAt)</div></div>
-                        <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Check-Out</div><div class="bl-strong">@FormatDate(_viewBill.CheckOutAt)</div></div>
-                        <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Nights</div><div class="bl-strong">@(_viewBill.NumberOfNights?.ToString() ?? "-")</div></div>
-                        <div style="border:1px solid #e5e7eb; border-radius:10px; padding:12px;"><div class="bl-muted" style="font-size:0.75rem;">Guests</div><div class="bl-strong">@(_viewBill.NumberOfPersons?.ToString() ?? "-")</div></div>
-                    </div>
+                            <div class="inv-title">TAX INVOICE</div>
 
-                    <div style="margin-top: 16px;">
-                        <div class="bl-strong" style="color:#0B4A82; margin-bottom: 8px;">Bill Items</div>
-                        <div class="table-responsive">
-                            <table class="bl-table" style="border:1px solid #e5e7eb; border-radius:10px;">
-                                <thead>
-                                    <tr>
-                                        <th>Description</th>
-                                        <th style="text-align:right;">Qty</th>
-                                        <th style="text-align:right;">Rate</th>
-                                        <th style="text-align:right;">CGST</th>
-                                        <th style="text-align:right;">SGST</th>
-                                        <th style="text-align:right;">Amount</th>
-                                        <th style="text-align:right;">Line Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var line in _viewBill.LineItems)
-                                    {
-                                        <tr>
-                                            <td>@(string.IsNullOrEmpty(line.Description) ? "-" : line.Description)</td>
-                                            <td style="text-align:right;">@line.Quantity.ToString("0.##", CultureInfo.InvariantCulture)</td>
-                                            <td style="text-align:right;">@FormatMoney(line.Rate)</td>
-                                            <td style="text-align:right;">@line.CgstPercent.ToString("0.##", CultureInfo.InvariantCulture)%</td>
-                                            <td style="text-align:right;">@line.SgstPercent.ToString("0.##", CultureInfo.InvariantCulture)%</td>
-                                            <td style="text-align:right;">@FormatMoney(line.Amount)</td>
-                                            <td class="bl-strong" style="text-align:right;">@FormatMoney(line.LineTotal)</td>
-                                        </tr>
-                                    }
-                                </tbody>
+                            <table class="inv-table inv-grid">
+                                <colgroup>
+                                    <col style="width:13%;" />
+                                    <col style="width:37%;" />
+                                    <col style="width:13%;" />
+                                    <col style="width:37%;" />
+                                </colgroup>
+                                <tr>
+                                    <td class="inv-lbl">Bill No</td>
+                                    <td>@(string.IsNullOrWhiteSpace(_viewBill.BillNumber) ? "-" : _viewBill.BillNumber)</td>
+                                    <td class="inv-lbl">Booking ID</td>
+                                    <td>@_viewBill.BookingId</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Guest Name</td>
+                                    <td>@(string.IsNullOrWhiteSpace(_viewBill.GuestName) ? "-" : _viewBill.GuestName)</td>
+                                    <td class="inv-lbl">Room No</td>
+                                    <td>@(string.IsNullOrWhiteSpace(_viewBill.RoomNumber) ? "-" : _viewBill.RoomNumber)</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Company Name</td>
+                                    <td colspan="3">@(string.IsNullOrWhiteSpace(_viewBill.CompanyName) ? "-" : _viewBill.CompanyName)</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Address</td>
+                                    <td colspan="3">@(string.IsNullOrWhiteSpace(_viewBill.Address) ? "-" : _viewBill.Address)</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">GST No</td>
+                                    <td>@(string.IsNullOrWhiteSpace(_viewBill.GstNumber) ? "-" : _viewBill.GstNumber)</td>
+                                    <td class="inv-lbl">PAX (No of Persons)</td>
+                                    <td>@(_viewBill.NumberOfPersons?.ToString() ?? "-")</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Check In</td>
+                                    <td>@InvDateTime(_viewBill.CheckInAt)</td>
+                                    <td class="inv-lbl">Check Out</td>
+                                    <td>@InvDateTime(_viewBill.CheckOutAt)</td>
+                                </tr>
                             </table>
+
+                            <table class="inv-table inv-lines" style="margin-top:10px;">
+                                <colgroup>
+                                    <col />
+                                    <col style="width:52px;" />
+                                    <col style="width:60px;" />
+                                    <col style="width:66px;" />
+                                    <col style="width:56px;" />
+                                    <col style="width:64px;" />
+                                </colgroup>
+                                <tr>
+                                    <th class="inv-head">Description<br/>(Room/ Food/ Other)</th>
+                                    <th class="inv-head">SAC<br/>Code</th>
+                                    <th class="inv-head">Days (Nos.)/<br/>Voucher</th>
+                                    <th class="inv-head">Charges/day<br/>(in Rs.)</th>
+                                    <th class="inv-head">Tax<br/>(in Rs.)</th>
+                                    <th class="inv-head">Total<br/>(in Rs.)</th>
+                                </tr>
+                                @foreach (var line in _viewBill.LineItems)
+                                {
+                                    <tr>
+                                        <td>@(string.IsNullOrWhiteSpace(line.Description) ? "-" : line.Description)</td>
+                                        <td class="inv-c">@SACode(line.Description)</td>
+                                        <td class="inv-c">@InvQty(line.Quantity)</td>
+                                        <td class="inv-r">@InvAmt(line.Rate)</td>
+                                        <td class="inv-r">@InvAmt(line.CgstAmount + line.SgstAmount)</td>
+                                        <td class="inv-r">@InvAmt(line.LineTotal)</td>
+                                    </tr>
+                                }
+                            </table>
+
+                            <table class="inv-table inv-totals" style="margin-top:10px;">
+                                <colgroup>
+                                    <col style="width:58%;" />
+                                    <col style="width:42%;" />
+                                </colgroup>
+                                <tr>
+                                    <td class="inv-lbl">Total Amount (in Rs.)</td>
+                                    <td class="inv-r inv-strong">@InvAmt(_viewBill.TotalAmount)</td>
+                                </tr>
+                                @if (_viewBill.Discount != 0) { <tr><td class="inv-lbl">Discount (in Rs.)</td><td class="inv-r">@InvAmt(_viewBill.Discount)</td></tr> }
+                                @if (_viewBill.AdvancePayment != 0) { <tr><td class="inv-lbl">Advance Payment (in Rs.)</td><td class="inv-r">@InvAmt(_viewBill.AdvancePayment)</td></tr> }
+                                @if (_viewBill.RoundOff != 0) { <tr><td class="inv-lbl">Round Off (in Rs.)</td><td class="inv-r">@InvAmt(_viewBill.RoundOff)</td></tr> }
+                                <tr>
+                                    <td class="inv-lbl">Balance Amount (in Rs.)</td>
+                                    <td class="inv-r inv-strong inv-navy">@InvAmt(_viewBill.BalanceAmount)</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Payment Method</td>
+                                    <td class="inv-r">@PaymentMethodLabel(_viewBill.PaymentMethod)</td>
+                                </tr>
+                                <tr>
+                                    <td class="inv-lbl">Remarks</td>
+                                    <td class="inv-r">@(string.IsNullOrWhiteSpace(_viewBill.Remarks) ? "-" : _viewBill.Remarks)</td>
+                                </tr>
+                            </table>
+
+                            <table class="inv-table inv-gst" style="margin-top:10px;">
+                                <colgroup>
+                                    <col style="width:52px;" />
+                                    <col />
+                                    <col style="width:52px;" />
+                                    <col style="width:56px;" />
+                                    <col style="width:52px;" />
+                                    <col style="width:56px;" />
+                                    <col style="width:56px;" />
+                                </colgroup>
+                                <tr>
+                                    <th class="inv-head" rowspan="2">SAC<br/>Code</th>
+                                    <th class="inv-head" rowspan="2">Taxable<br/>Value</th>
+                                    <th class="inv-head" colspan="2">CGST</th>
+                                    <th class="inv-head" colspan="2">SGST</th>
+                                    <th class="inv-head" rowspan="2">Total<br/>Tax</th>
+                                </tr>
+                                <tr>
+                                    <th class="inv-head">Rate (%)</th>
+                                    <th class="inv-head">Amount</th>
+                                    <th class="inv-head">Rate (%)</th>
+                                    <th class="inv-head">Amount</th>
+                                </tr>
+                                @foreach (var g in GstGroups())
+                                {
+                                    <tr>
+                                        <td class="inv-c">@g.Sac</td>
+                                        <td class="inv-r">@InvAmt(g.TaxableValue)</td>
+                                        <td class="inv-c">@InvPct(g.CgstPercent)</td>
+                                        <td class="inv-r">@InvAmt(g.CgstAmount)</td>
+                                        <td class="inv-c">@InvPct(g.SgstPercent)</td>
+                                        <td class="inv-r">@InvAmt(g.SgstAmount)</td>
+                                        <td class="inv-r">@InvAmt(g.CgstAmount + g.SgstAmount)</td>
+                                    </tr>
+                                }
+                                <tr>
+                                    <td colspan="6" class="inv-head inv-r inv-strong">Total</td>
+                                    <td class="inv-head inv-r inv-strong">@InvAmt(_viewBill.CgstAmount + _viewBill.SgstAmount)</td>
+                                </tr>
+                            </table>
+
+                            <div class="inv-footer">
+                                <div class="inv-key">*Please Return Your Key on Departure*</div>
+                                <div class="inv-decl">
+                                    I Agree that I am responsible for the full payment of this bill in the event<br/>
+                                    it is not paid by the Company, Organisation or Person indicated.
+                                </div>
+                                <div class="inv-sigs">
+                                    <span>AUTHORISED SIGNATURE</span>
+                                    <span>GUEST SIGNATURE</span>
+                                </div>
+                                <div class="inv-thanks">***THANK YOU VISIT AGAIN***</div>
+                            </div>
                         </div>
                     </div>
-
-                    <div style="display:flex; justify-content: flex-end; margin-top: 16px;">
-                        <div style="width:280px;">
-                            <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">Subtotal</span><span class="bl-strong">@FormatMoney(_viewBill.Subtotal)</span></div>
-                            <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">CGST</span><span>@FormatMoney(_viewBill.CgstAmount)</span></div>
-                            <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">SGST</span><span>@FormatMoney(_viewBill.SgstAmount)</span></div>
-                            <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-strong">Grand Total</span><span class="bl-strong">@FormatMoney(_viewBill.TotalAmount)</span></div>
-                            @if (_viewBill.Discount != 0) { <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">Discount</span><span>-@FormatMoney(_viewBill.Discount)</span></div> }
-                            @if (_viewBill.AdvancePayment != 0) { <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">Advance Payment</span><span>-@FormatMoney(_viewBill.AdvancePayment)</span></div> }
-                            @if (_viewBill.RoundOff != 0) { <div class="bl-kv" style="display:flex; justify-content:space-between; padding:5px 0;"><span class="bl-muted">Round Off</span><span>@FormatMoney(_viewBill.RoundOff)</span></div> }
-                            <div class="bl-kv" style="display:flex; justify-content:space-between; padding:6px 0; border-top: 1px solid #e5e7eb; margin-top: 4px;"><span class="bl-strong">Balance Payable</span><span class="bl-strong" style="color:#2563eb;">@FormatMoney(_viewBill.BalanceAmount)</span></div>
-                        </div>
-                    </div>
-
-                    @if (!string.IsNullOrEmpty(_viewBill.Remarks))
-                    {
-                        <div style="margin-top:14px;"><span class="bl-muted" style="font-size:0.8rem;">Remarks: </span><span>@_viewBill.Remarks</span></div>
-                    }
                 </div>
                 <div class="modal-footer" style="border-top: 1px solid #e5e7eb;">
                     <button class="bl-btn bl-btn-secondary" @onclick="CloseBill">Close</button>
@@ -310,6 +423,62 @@
     private static string FormatDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) : "-";
     private static string FormatMoney(decimal value) => "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
 
+    // ---- Tax Invoice rendering helpers - mirror the PDF builder (no recalculation) ----
+
+    private static string InvAmt(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
+    private static string InvQty(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    private static string InvPct(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    private static string InvDateTime(DateTime? value) => value.HasValue ? value.Value.ToString("dd-MM-yy hh:mm tt", CultureInfo.InvariantCulture) : "-";
+
+    // Same method labels as GuestHouseInvoicePdfBuilder: PayAfterStay renders as "Credit".
+    private static string PaymentMethodLabel(int method) => method switch
+    {
+        4 => "Credit",
+        0 => "Razorpay",
+        1 => "UPI",
+        2 => "Card",
+        3 => "Net Banking",
+        _ => method.ToString()
+    };
+
+    // Same SAC derivation as GuestHouseInvoicePdfBuilder.ResolveSacCode.
+    private static string SACode(string? description)
+    {
+        var d = (description ?? string.Empty).ToLowerInvariant();
+        if (d.Contains("food")) return "996332";
+        if (d.Contains("laundry")) return "999721";
+        return "996311";
+    }
+
+    // Same SAC-wise GST regrouping as the PDF builder, over the persisted bill GST values.
+    private List<GstGroupRow> GstGroups() => _viewBill is null
+        ? new List<GstGroupRow>()
+        : _viewBill.LineItems
+            .Select(li => new { Sac = SACode(li.Description), li.Amount, li.CgstPercent, li.CgstAmount, li.SgstPercent, li.SgstAmount })
+            .GroupBy(x => new { x.Sac, x.CgstPercent, x.SgstPercent })
+            .Select(g => new GstGroupRow
+            {
+                Sac = g.Key.Sac,
+                CgstPercent = g.Key.CgstPercent,
+                SgstPercent = g.Key.SgstPercent,
+                TaxableValue = g.Sum(x => x.Amount),
+                CgstAmount = g.Sum(x => x.CgstAmount),
+                SgstAmount = g.Sum(x => x.SgstAmount)
+            })
+            .OrderBy(x => x.Sac)
+            .ThenBy(x => x.CgstPercent)
+            .ToList();
+
+    private sealed class GstGroupRow
+    {
+        public string Sac { get; set; } = "";
+        public decimal CgstPercent { get; set; }
+        public decimal SgstPercent { get; set; }
+        public decimal TaxableValue { get; set; }
+        public decimal CgstAmount { get; set; }
+        public decimal SgstAmount { get; set; }
+    }
+
     public class BillListItemDto
     {
         public int BillId { get; set; }
@@ -346,8 +515,11 @@
         public int BillId { get; set; }
         public string BillNumber { get; set; } = "";
         public string BookingReference { get; set; } = "";
+        public int BookingId { get; set; }
         public DateTime BillDate { get; set; }
         public string? GuestName { get; set; }
+        public string? CompanyName { get; set; }
+        public string? GstNumber { get; set; }
         public string? Address { get; set; }
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
