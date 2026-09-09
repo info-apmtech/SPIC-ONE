@@ -20,6 +20,9 @@ products deploy.
 
 Not deployed: `SPIC.Ifms.Automation` (stays on the VPS), `SPICBlazorApp`, `SPIC.Worker`, the MAUI app.
 
+Only one environment is used: **prod** (`rg-spicone-prod`). The `staging` parameter file is kept
+for a future test environment but nothing is provisioned for it.
+
 ## One-time prerequisites on the PC
 
 1. Docker Desktop running (Linux containers).
