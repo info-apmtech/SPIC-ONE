@@ -41,6 +41,9 @@ namespace SPIC.Ifms.Automation.Portal
 		public required string FilePath { get; init; }
 		public required long Bytes { get; init; }
 		public required string Extension { get; init; }
+
+		/// <summary>The portal said there is nothing to export (e.g. "No Record Found").</summary>
+		public bool IsEmpty { get; init; }
 	}
 
 	/// <summary>
@@ -970,7 +973,19 @@ namespace SPIC.Ifms.Automation.Portal
 			}
 
 			_activeFrame = null;
-			await ExecuteStepAsync(entry, tokens, cancellationToken);
+
+			// Dropdowns on this portal are filled in cascade (state -> district,
+			// plant -> product), so run every step up to the one that would use
+			// this loop's value, with the earlier loops' values already in place.
+			var placeholder = "{{" + loop.TokenName + "}}";
+			var consumer = job.Steps.FindIndex(s =>
+				(s.Value?.Contains(placeholder, StringComparison.OrdinalIgnoreCase) ?? false));
+			var preceding = consumer < 0
+				? new List<PortalStep> { entry }
+				: job.Steps.Take(consumer).ToList();
+
+			foreach (var step in preceding)
+				await ExecuteStepAsync(step, tokens, cancellationToken);
 
 			var options = await Frame.Locator($"{loop.DiscoverFromSelector} option").AllInnerTextsAsync();
 
@@ -1017,6 +1032,22 @@ namespace SPIC.Ifms.Automation.Portal
 					$"Report job '{job.Key}' has neither a DownloadStep nor a DirectDownloadUrl.");
 			}
 
+			// "No Record Found !" is the portal's answer for an empty combination
+			// (a state a company does not trade in). There is no export control to
+			// click then; say so instead of waiting thirty seconds for one.
+			if (await PageSaysEmptyAsync())
+			{
+				_logger.LogInformation("The portal reports no records for {JobKey}; nothing to download.", job.Key);
+				return new DownloadedReport
+				{
+					FileName = "(no records)",
+					FilePath = string.Empty,
+					Bytes = 0,
+					Extension = job.ExpectedExtension,
+					IsEmpty = true
+				};
+			}
+
 			var waitForDownload = Page.WaitForDownloadAsync(new PageWaitForDownloadOptions
 			{
 				Timeout = _options.Browser.DownloadTimeoutMs
@@ -1058,6 +1089,21 @@ namespace SPIC.Ifms.Automation.Portal
 		/// Pulls a file straight from a URL using the browser's own session, for
 		/// portals that expose the export as a plain link once filters are set.
 		/// </summary>
+		private async Task<bool> PageSaysEmptyAsync()
+		{
+			if (_options.EmptyResultMarkers.Count == 0)
+				return false;
+			try
+			{
+				var text = await Frame.Locator("body").InnerTextAsync(new LocatorInnerTextOptions { Timeout = 3_000 });
+				return _options.EmptyResultMarkers.Any(m => text.Contains(m, StringComparison.OrdinalIgnoreCase));
+			}
+			catch (TimeoutException)
+			{
+				return false;
+			}
+		}
+
 		private async Task<DownloadedReport> FetchDirectAsync(
 			ReportJob job,
 			RunTokens tokens,
