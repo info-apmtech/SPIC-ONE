@@ -980,11 +980,27 @@ namespace SpicAPI.Controllers
 			var numberOfRooms = booking.NumberOfRooms ?? 1;
 			var extraBeds = booking.ExtraCotQuantity ?? 0;
 
+			// Carry the booking's existing GST (as already calculated and persisted at
+			// booking time) into the bill line-item CGST/SGST rates, so the pre-filled
+			// Generate Bill form and the resulting Tax Invoice PDF show the same GST the
+			// Booking Summary calculated. The effective rate is derived from the booking's
+			// own persisted TaxAmount/SubTotal - never recomputed and never hard-coded. A
+			// flat total rate (e.g. 5%) is split equally into CGST + SGST to match the
+			// existing per-line CGST/SGST billing model.
+			var subTotalForTax = booking.SubTotal ?? 0m;
+			var totalGstPercent = subTotalForTax > 0m
+				? Math.Round(((booking.TaxAmount ?? 0m) / subTotalForTax) * 100m, 2)
+				: 0m;
+			var cgstPercent = Math.Round(totalGstPercent / 2m, 2);
+			var sgstPercent = Math.Round(totalGstPercent / 2m, 2);
+
 			var roomLine = new BillLineItemDto
 			{
 				Description = $"{booking.GuestHouseRoom?.RoomType ?? "Room"} - Room Charge",
 				Quantity = numberOfRooms * nights,
 				Rate = booking.RoomPrice,
+				CgstPercent = cgstPercent,
+				SgstPercent = sgstPercent,
 				IsEditable = false
 			};
 
@@ -997,6 +1013,8 @@ namespace SpicAPI.Controllers
 					Description = "Additional Beds / Extra Cot",
 					Quantity = extraBeds * nights,
 					Rate = booking.ExtraCotPrice ?? 0,
+					CgstPercent = cgstPercent,
+					SgstPercent = sgstPercent,
 					IsEditable = false
 				});
 			}
