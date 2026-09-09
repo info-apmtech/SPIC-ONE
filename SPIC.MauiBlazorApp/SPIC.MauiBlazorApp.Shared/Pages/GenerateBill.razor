@@ -51,11 +51,13 @@
     .gb-alert-success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; border-radius: 8px; padding: 12px 16px; font-size: 0.85rem; font-weight: 500; margin-bottom: 12px; }
     .gb-alert-warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 12px 16px; font-size: 0.85rem; font-weight: 500; margin-bottom: 12px; }
     .gb-muted { color: #9ca3af; }
-    .gb-empty { padding: 36px 20px; text-align: center; color: #64748b; font-size: 0.9rem; }
-    .gb-loading { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; color: #6b7280; margin-bottom: 1.5rem; }
-    .gb-badge { display: inline-block; padding: 4px 12px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; }
+    .gb-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
     .gb-badge-paid { background: #D1FAE5; color: #059669; }
     .gb-badge-pending { background: #FEF3C7; color: #B45309; }
+    .gb-badge-billed { background: #D1FAE5; color: #059669; }
+    .gb-badge-notbilled { background: #F3F4F6; color: #6B7280; }
+    /* Highlighted bill row inside the shared .spic-table (td backgrounds must be overridden, not just the tr) */
+    .spic-table tbody tr.bl-row-highlight td { background: #eff6ff !important; }
     .gb-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .gb-right-col {
         display: flex; flex-direction: column; gap: 10px;
@@ -72,14 +74,7 @@
     .gb-tab:hover { color: #374151; }
     .gb-tab.active { color: #2563eb; border-bottom-color: #2563eb; }
 
-    /* Bill List */
-    .bl-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.02); margin-bottom: 1.5rem; overflow: hidden; }
-    .bl-card-body { padding: 0; }
-    .bl-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    .bl-table thead th { background: #f9fafb; color: #6b7280; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
-    .bl-table tbody td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-    .bl-table tbody tr:hover { background: #f8fafc; }
-    .bl-table tbody tr:last-child td { border-bottom: none; }
+    /* Bill List (row content styling — table shell now uses the shared .spic-table) */
     .bl-strong { font-weight: 600; color: #1f2937; }
     .bl-row-highlight { background: #eff6ff !important; }
 
@@ -167,16 +162,14 @@
 
         @if (_activeTab == "bookings")
         {
-            @* ---- COMPLETED BOOKINGS LIST ---- *@
-            <div class="bl-card">
-                <div class="bl-card-body table-responsive">
-                    @if (_loadingList)
-                    {
-                        <div class="gb-loading">Loading completed bookings...</div>
-                    }
-                    else
-                    {
-                        <table class="gb-table">
+            @* ---- COMPLETED BOOKINGS LIST (LocationMaster-style data table) ---- *@
+            <div class="main-card">
+                <div class="section-header">
+                    <h3 class="section-title"><i class="bi bi-calendar-check"></i> Completed Bookings</h3>
+                </div>
+                <div class="table-wrapper">
+                    <div class="table-responsive">
+                        <table class="spic-table">
                             <thead>
                                 <tr>
                                     <th>Booking ID</th>
@@ -187,25 +180,37 @@
                                     <th>Check-Out</th>
                                     <th>Amount</th>
                                     <th>Payment Status</th>
+                                    <th>Bill Status</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @if (_completedBookings.Count > 0)
+                                @if (_loadingList)
+                                {
+                                    <tr>
+                                        <td colspan="10" class="text-center text-muted">Loading completed bookings...</td>
+                                    </tr>
+                                }
+                                else if (_completedBookings.Count > 0)
                                 {
                                     @foreach (var item in _completedBookings)
                                     {
                                         <tr>
-                                            <td><span style="font-weight:600; color:#1f2937;">@item.BookingReference</span></td>
+                                            <td><span class="bl-strong">@item.BookingReference</span></td>
                                             <td>@(string.IsNullOrEmpty(item.GuestName) ? "-" : item.GuestName)</td>
                                             <td>@item.GuestHouseName</td>
                                             <td>@((string.IsNullOrEmpty(item.RoomNumber) ? "-" : item.RoomNumber) + " (" + item.RoomType + ")")</td>
                                             <td>@FormatDateWithTime(item.CheckInDate)</td>
                                             <td>@FormatDateWithTime(item.CheckOutDate)</td>
-                                            <td style="font-weight:600;">@FormatMoney(item.Amount)</td>
+                                            <td class="bl-strong">@FormatMoney(item.Amount)</td>
                                             <td>
                                                 <span class="gb-badge @(item.PaymentStatus == 1 ? "gb-badge-paid" : "gb-badge-pending")">
                                                     @(item.PaymentStatus == 1 ? "Paid" : "Pending")
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="gb-badge @(item.HasBill ? "gb-badge-billed" : "gb-badge-notbilled")">
+                                                    @(item.HasBill ? "Billed" : "Not Billed")
                                                 </span>
                                             </td>
                                             <td style="white-space:nowrap;">
@@ -224,27 +229,25 @@
                                 else
                                 {
                                     <tr>
-                                        <td colspan="9"><div class="gb-empty">No completed bookings found for the selected date range.</div></td>
+                                        <td colspan="10" class="text-center text-muted">No completed bookings found for the selected date range.</td>
                                     </tr>
                                 }
                             </tbody>
                         </table>
-                    }
+                    </div>
                 </div>
             </div>
         }
         else
         {
-            @* ---- GENERATED BILLS LIST ---- *@
-            <div class="bl-card">
-                <div class="bl-card-body table-responsive">
-                    @if (_loadingBills)
-                    {
-                        <div class="gb-loading">Loading bills...</div>
-                    }
-                    else
-                    {
-                        <table class="bl-table">
+            @* ---- GENERATED BILLS LIST (LocationMaster-style data table) ---- *@
+            <div class="main-card">
+                <div class="section-header">
+                    <h3 class="section-title"><i class="bi bi-receipt"></i> Generated Bills</h3>
+                </div>
+                <div class="table-wrapper">
+                    <div class="table-responsive">
+                        <table class="spic-table">
                             <thead>
                                 <tr>
                                     <th>Bill #</th>
@@ -262,40 +265,49 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var bill in _bills)
-                                {
-                                    var cls = bill.BillId == _highlightId ? "bl-row-highlight" : "";
-                                    <tr class="@cls">
-                                        <td><span class="bl-strong">@bill.BillNumber</span></td>
-                                        <td>@bill.BookingReference</td>
-                                        <td>@(string.IsNullOrEmpty(bill.GuestName) ? "-" : bill.GuestName)</td>
-                                        <td>@bill.GuestHouseName</td>
-                                        <td>@(string.IsNullOrEmpty(bill.RoomNumber) ? "-" : bill.RoomNumber)</td>
-                                        <td>@FormatBillDate(bill.BillDate)</td>
-                                        <td>@FormatBillDate(bill.CheckInDate)</td>
-                                        <td>@FormatBillDate(bill.CheckOutDate)</td>
-                                        <td class="bl-strong">@FormatMoney(bill.TotalAmount)</td>
-                                        <td>@FormatMoney(bill.BalanceAmount)</td>
-                                        <td>
-                                            <span class="gb-badge @(bill.PaymentStatus == 1 ? "gb-badge-paid" : "gb-badge-pending")">
-                                                @(bill.PaymentStatus == 1 ? "Paid" : "Pending")
-                                            </span>
-                                        </td>
-                                        <td style="white-space:nowrap;">
-                                            <button class="gb-btn gb-btn-view" style="padding:6px 12px;" @onclick="() => OpenBill(bill.BillId)"><i class="bi bi-eye"></i> View</button>
-                                            <button class="gb-btn gb-btn-pdf" style="padding:6px 12px;" @onclick="() => DownloadPdf(bill.BillId, bill.BillNumber)"><i class="bi bi-download"></i> PDF</button>
-                                        </td>
-                                    </tr>
-                                }
-                                @if (_bills.Count == 0)
+                                @if (_loadingBills)
                                 {
                                     <tr>
-                                        <td colspan="12"><div class="gb-empty">No bills found for the selected date range.</div></td>
+                                        <td colspan="12" class="text-center text-muted">Loading bills...</td>
                                     </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var bill in _bills)
+                                    {
+                                        var cls = bill.BillId == _highlightId ? "bl-row-highlight" : "";
+                                        <tr class="@cls">
+                                            <td><span class="bl-strong">@bill.BillNumber</span></td>
+                                            <td>@bill.BookingReference</td>
+                                            <td>@(string.IsNullOrEmpty(bill.GuestName) ? "-" : bill.GuestName)</td>
+                                            <td>@bill.GuestHouseName</td>
+                                            <td>@(string.IsNullOrEmpty(bill.RoomNumber) ? "-" : bill.RoomNumber)</td>
+                                            <td>@FormatBillDate(bill.BillDate)</td>
+                                            <td>@FormatBillDate(bill.CheckInDate)</td>
+                                            <td>@FormatBillDate(bill.CheckOutDate)</td>
+                                            <td class="bl-strong">@FormatMoney(bill.TotalAmount)</td>
+                                            <td>@FormatMoney(bill.BalanceAmount)</td>
+                                            <td>
+                                                <span class="gb-badge @(bill.PaymentStatus == 1 ? "gb-badge-paid" : "gb-badge-pending")">
+                                                    @(bill.PaymentStatus == 1 ? "Paid" : "Pending")
+                                                </span>
+                                            </td>
+                                            <td style="white-space:nowrap;">
+                                                <button class="gb-btn gb-btn-view" style="padding:6px 12px;" @onclick="() => OpenBill(bill.BillId)"><i class="bi bi-eye"></i> View</button>
+                                                <button class="gb-btn gb-btn-pdf" style="padding:6px 12px;" @onclick="() => DownloadPdf(bill.BillId, bill.BillNumber)"><i class="bi bi-download"></i> PDF</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                    @if (_bills.Count == 0)
+                                    {
+                                        <tr>
+                                            <td colspan="12" class="text-center text-muted">No bills found for the selected date range.</td>
+                                        </tr>
+                                    }
                                 }
                             </tbody>
                         </table>
-                    }
+                    </div>
                 </div>
             </div>
         }
