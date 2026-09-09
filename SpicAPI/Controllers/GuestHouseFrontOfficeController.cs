@@ -259,7 +259,17 @@ namespace SpicAPI.Controllers
 				ActualCheckInAt = booking.ActualCheckInAt,
 				AvailableRoomNumbers = freeRooms.Free,
 				AllocatedRoomNumbers = freeRooms.Occupied,
-				RequiredRoomNumbers = Math.Max(1, booking.NumberOfRooms ?? 1)
+				RequiredRoomNumbers = Math.Max(1, booking.NumberOfRooms ?? 1),
+				Documents = booking.Documents
+					.Select(d => new FrontOfficeBookingDocumentDto
+					{
+						DocumentId = d.Id,
+						DocumentType = d.DocumentType,
+						FileName = d.FileName,
+						ContentType = d.ContentType,
+						FileSize = d.FileSize
+					})
+					.ToList()
 			});
 		}
 
@@ -1004,6 +1014,7 @@ namespace SpicAPI.Controllers
 				.Include(b => b.Guests)
 				.Include(b => b.Payments)
 				.Include(b => b.RoomAllocations)
+				.Include(b => b.Documents)
 				.FirstOrDefaultAsync(b => b.Id == bookingId);
 		}
 
@@ -1246,6 +1257,18 @@ namespace SpicAPI.Controllers
 		public List<string> AvailableRoomNumbers { get; set; } = new List<string>();
 		public List<string> AllocatedRoomNumbers { get; set; } = new List<string>();
 		public int RequiredRoomNumbers { get; set; }
+
+		// ID Proof document(s) uploaded by the guest, for Front Office reference only.
+		public List<FrontOfficeBookingDocumentDto> Documents { get; set; } = new List<FrontOfficeBookingDocumentDto>();
+	}
+
+	public class FrontOfficeBookingDocumentDto
+	{
+		public int DocumentId { get; set; }
+		public string? DocumentType { get; set; }
+		public string? FileName { get; set; }
+		public string? ContentType { get; set; }
+		public long? FileSize { get; set; }
 	}
 
 	public class CheckOutSummaryDto

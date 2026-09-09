@@ -161,6 +161,22 @@
                         <div class="fo-kv"><span class="fo-kv-label">Guest Name</span><span class="fo-kv-value">@(string.IsNullOrEmpty(_checkInBooking.GuestName) ? "-" : _checkInBooking.GuestName)</span></div>
                         <div class="fo-kv"><span class="fo-kv-label">Room Type</span><span class="fo-kv-value">@_checkInBooking.RoomType</span></div>
                         <div class="fo-kv"><span class="fo-kv-label">Guest House</span><span class="fo-kv-value">@_checkInBooking.GuestHouseName</span></div>
+                        @if (_checkInBooking.Documents.Count > 0)
+                        {
+                            var idProof = _checkInBooking.Documents[0];
+                            <div class="fo-kv">
+                                <span class="fo-kv-label">ID Proof</span>
+                                <span class="fo-kv-value d-flex align-items-center gap-2 justify-content-end flex-wrap">
+                                    <span class="text-truncate" style="max-width:120px;" title="@idProof.FileName">@idProof.FileName</span>
+                                    <button type="button" class="fo-btn fo-btn-secondary" style="padding:4px 10px; font-size:0.72rem;" @onclick="() => ViewDocumentAsync(idProof.DocumentId, idProof.ContentType)" disabled="@_isDocumentBusy">
+                                        <i class="bi bi-eye"></i> View
+                                    </button>
+                                    <button type="button" class="fo-btn fo-btn-secondary" style="padding:4px 10px; font-size:0.72rem;" @onclick="() => DownloadDocumentAsync(idProof.DocumentId, idProof.FileName)" disabled="@_isDocumentBusy">
+                                        <i class="bi bi-download"></i> Download
+                                    </button>
+                                </span>
+                            </div>
+                        }
                         <div class="fo-divider"></div>
 
                         @if (!_checkInBooking.CanCheckIn)
@@ -313,6 +329,7 @@
     private string? _checkOutError;
 
     private bool _isSubmitting;
+    private bool _isDocumentBusy;
 
     // Summary counts derived purely from the loaded room data (no hardcoding, no extra API calls)
     private int TotalRoomsCount => _houses.SelectMany(h => h.Rooms).Count();
@@ -559,6 +576,64 @@
         _checkOutError = null;
     }
 
+    // ---------------------------- ID PROOF VIEW / DOWNLOAD ----------------------------
+    // Same authenticated-fetch + JS-interop pattern used elsewhere (GenerateBill.razor's
+    // View/Print, BookingDetails.razor's Download Invoice). Authorization for Front Office
+    // access is enforced server-side (Admin/CorporateAdmin role check in the shared
+    // GuestHouseBooking documents endpoints).
+    private async Task ViewDocumentAsync(int documentId, string? contentType)
+    {
+        if (_isDocumentBusy) return;
+        _isDocumentBusy = true;
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/documents/{documentId}/view");
+            if (!response.IsSuccessStatusCode)
+            {
+                _loadError = "Could not open the ID proof document.";
+                return;
+            }
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("openFileInNewWindow", base64, contentType ?? "application/octet-stream");
+        }
+        catch (Exception)
+        {
+            _loadError = "Could not open the ID proof document.";
+        }
+        finally
+        {
+            _isDocumentBusy = false;
+        }
+    }
+
+    private async Task DownloadDocumentAsync(int documentId, string? fileName)
+    {
+        if (_isDocumentBusy) return;
+        _isDocumentBusy = true;
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/documents/{documentId}/download");
+            if (!response.IsSuccessStatusCode)
+            {
+                _loadError = "Could not download the ID proof document.";
+                return;
+            }
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", string.IsNullOrWhiteSpace(fileName) ? "document" : fileName, contentType, base64);
+        }
+        catch (Exception)
+        {
+            _loadError = "Could not download the ID proof document.";
+        }
+        finally
+        {
+            _isDocumentBusy = false;
+        }
+    }
+
     // ---------------------------- Helpers ----------------------------
     private static string StatusBadge(string statusKey) => statusKey switch
     {
@@ -650,6 +725,16 @@
         public int RequiredRoomNumbers { get; set; }
         public List<string> AvailableRoomNumbers { get; set; } = new();
         public List<string> AllocatedRoomNumbers { get; set; } = new();
+        public List<FrontOfficeBookingDocumentDto> Documents { get; set; } = new();
+    }
+
+    public class FrontOfficeBookingDocumentDto
+    {
+        public int DocumentId { get; set; }
+        public string? DocumentType { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? FileSize { get; set; }
     }
 
     public class CheckOutSummaryDto

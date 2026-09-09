@@ -457,6 +457,22 @@
                             <span class="kv-label">Address</span>
                             <span class="kv-value text-wrap">@(_booking.Address ?? "-")</span>
                         </div>
+                        @if (_booking.Documents.Count > 0)
+                        {
+                            var idProof = _booking.Documents[0];
+                            <div class="kv-row">
+                                <span class="kv-label">ID Proof</span>
+                                <span class="kv-value d-flex align-items-center gap-2 justify-content-end flex-wrap">
+                                    <span class="text-truncate" style="max-width:140px;" title="@idProof.FileName">@idProof.FileName</span>
+                                    <button class="btn-outline-custom" style="padding:4px 10px; font-size:0.75rem;" @onclick="() => ViewDocumentAsync(idProof.DocumentId, idProof.ContentType)" disabled="@_isDocumentBusy">
+                                        <i class="bi bi-eye"></i> View
+                                    </button>
+                                    <button class="btn-outline-custom" style="padding:4px 10px; font-size:0.75rem;" @onclick="() => DownloadDocumentAsync(idProof.DocumentId, idProof.FileName)" disabled="@_isDocumentBusy">
+                                        <i class="bi bi-download"></i> Download
+                                    </button>
+                                </span>
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
@@ -477,6 +493,7 @@
     private BookingDetailsDto? _booking;
     private bool _isLoading = true;
     private bool _isDownloading;
+    private bool _isDocumentBusy;
     private string? _loadError;
 
     private static readonly string FallbackImage =
@@ -549,6 +566,64 @@
         finally
         {
             _isDownloading = false;
+        }
+    }
+
+    // ---------------------------- ID PROOF VIEW / DOWNLOAD ----------------------------
+    // Reuses the same authenticated-fetch + JS-interop pattern already used for Download
+    // Invoice above: the file is fetched through the authenticated HttpClient (so it works
+    // whether the document is a PDF or an image, and without needing a token in the URL),
+    // then handed to the browser via the shared JS helpers in App.razor/index.html.
+    private async Task ViewDocumentAsync(int documentId, string? contentType)
+    {
+        if (_isDocumentBusy) return;
+        _isDocumentBusy = true;
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/documents/{documentId}/view");
+            if (!response.IsSuccessStatusCode)
+            {
+                _loadError = "We could not open the ID proof document. Please try again.";
+                return;
+            }
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("openFileInNewWindow", base64, contentType ?? "application/octet-stream");
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not open the ID proof document. Please try again.";
+        }
+        finally
+        {
+            _isDocumentBusy = false;
+        }
+    }
+
+    private async Task DownloadDocumentAsync(int documentId, string? fileName)
+    {
+        if (_isDocumentBusy) return;
+        _isDocumentBusy = true;
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/documents/{documentId}/download");
+            if (!response.IsSuccessStatusCode)
+            {
+                _loadError = "We could not download the ID proof document. Please try again.";
+                return;
+            }
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", string.IsNullOrWhiteSpace(fileName) ? "document" : fileName, contentType, base64);
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not download the ID proof document. Please try again.";
+        }
+        finally
+        {
+            _isDocumentBusy = false;
         }
     }
 
@@ -667,5 +742,16 @@
         public string? AadhaarOrPassportNumber { get; set; }
         public string? Nationality { get; set; }
         public string? Address { get; set; }
+
+        public List<BookingDocumentDto> Documents { get; set; } = new List<BookingDocumentDto>();
+    }
+
+    public class BookingDocumentDto
+    {
+        public int DocumentId { get; set; }
+        public string? DocumentType { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? FileSize { get; set; }
     }
 }
