@@ -138,7 +138,7 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 
 			foreach (var message in candidates)
 			{
-				if (!SenderAccepted(message.Sender))
+				if (!SenderAccepted(message.Sender) && !BodyLooksLikeIfms(message.Body))
 				{
 					_logger.LogWarning(
 						"OTP message {Id} from '{Sender}' ignored: not in Ifms:Otp:AcceptedSenders.",
@@ -169,6 +169,15 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 
 			return null;
 		}
+
+		/// <summary>
+		/// The live portal sends its OTP from an ordinary mobile number
+		/// (+91 73054 30555 on 2026-09-09), not a sender ID, so the body is the
+		/// reliable signal: "Dear user, your OTP for iFMS login is 221034".
+		/// </summary>
+		private static bool BodyLooksLikeIfms(string? body) =>
+			!string.IsNullOrWhiteSpace(body) &&
+			body.Contains("ifms", StringComparison.OrdinalIgnoreCase);
 
 		private bool SenderAccepted(string? sender)
 		{
