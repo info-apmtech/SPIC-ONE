@@ -10,17 +10,22 @@
   Default mode re-runs infra/azure/main.bicep with deployApps=true so the app definitions
   (replicas, secrets, mounts) stay in sync with the repository.
   -Quick only swaps the image on the existing apps (faster, no template run).
+  -RemoteBuild builds the images inside Azure Container Registry (ACR Tasks) instead of
+  local Docker: the source tree is uploaded and built there. Use it when Docker Desktop is
+  unavailable or unreliable; it costs a few rupees per build and needs no Docker on the PC.
 
 .EXAMPLE
   .\deploy\azure\deploy.ps1 -Environment staging
   .\deploy\azure\deploy.ps1 -Environment prod -Quick
   .\deploy\azure\deploy.ps1 -Environment staging -SkipBuild -Tag 3f2a1c9-202609091530
+  .\deploy\azure\deploy.ps1 -Environment staging -RemoteBuild
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][ValidateSet('staging', 'prod')][string]$Environment,
     [switch]$Quick,
     [switch]$SkipBuild,
+    [switch]$RemoteBuild,
     [string]$Tag,
     [string]$WebApiBaseUrl = ''
 )
@@ -43,7 +48,22 @@ if (-not $Tag) {
 $apiImage = "$acr/spicone-api:$Tag"
 $webImage = "$acr/spicone-web:$Tag"
 
-if (-not $SkipBuild) {
+if (-not $SkipBuild -and $RemoteBuild) {
+    # ACR Tasks: the repository (minus .dockerignore exclusions) is uploaded and built in Azure.
+    $az = Get-AzCli
+    Push-Location $script:RepoRoot
+    try {
+        foreach ($b in @(
+            @{ Name = 'spicone-api'; File = 'SpicAPI/Dockerfile' },
+            @{ Name = 'spicone-web'; File = 'SPIC.MauiBlazorApp/SPIC.MauiBlazorApp.Web/Dockerfile' })) {
+            Write-Host "Building $($b.Name):$Tag in registry $($outputs.acrName) ..." -ForegroundColor Cyan
+            & $az acr build --registry $outputs.acrName --image "$($b.Name):$Tag" --image "$($b.Name):latest" `
+                --file $b.File --platform linux/amd64 .
+            if ($LASTEXITCODE -ne 0) { throw "Remote build failed: $($b.Name)" }
+        }
+    } finally { Pop-Location }
+}
+elseif (-not $SkipBuild) {
     Write-Host "Building images with tag $Tag ..." -ForegroundColor Cyan
     Push-Location $script:RepoRoot
     try {

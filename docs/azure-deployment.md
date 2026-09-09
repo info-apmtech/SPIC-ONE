@@ -64,7 +64,11 @@ Values land in Key Vault and are reused on every later run.
 .\deploy\azure\deploy.ps1 -Environment staging          # build, push, roll out, health check
 .\deploy\azure\deploy.ps1 -Environment prod             # same for production
 .\deploy\azure\deploy.ps1 -Environment prod -Quick      # image swap only, no template run
+.\deploy\azure\deploy.ps1 -Environment staging -RemoteBuild   # build inside the registry, no local Docker
 ```
+
+`-RemoteBuild` uploads the source tree to Azure Container Registry and builds there (ACR Tasks,
+a few rupees per build). Use it when Docker Desktop is not available or keeps hanging.
 
 Images are tagged `<git-sha>-<timestamp>`; `-dirty` is appended when the working tree has
 uncommitted changes. To roll back, redeploy an earlier tag:
