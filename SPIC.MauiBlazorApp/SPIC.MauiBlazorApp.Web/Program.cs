@@ -14,46 +14,39 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddHubOptions(options =>
     {
-        options.MaximumReceiveMessageSize = 100 * 1024 * 1024;
+        options.MaximumReceiveMessageSize = 100 * 1024 * 1024; // 100 MB
 
+        // Keep the SignalR heartbeat in step with Blazor Server's default
+        // keep-alive and let the client/server tolerate short network or
+        // proxy interruptions, so a brief stall no longer tears the circuit
+        // down and forces the "Rejoining the server..." reconnect flow.
         options.KeepAliveInterval = TimeSpan.FromSeconds(15);
         options.ClientTimeoutInterval = TimeSpan.FromSeconds(100);
     });
 
-// Device-specific services
+// Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
-
-builder.Services.AddSingleton<IIfmsRelayHost,
-    SPIC.MauiBlazorApp.Web.Services.IfmsRelayHost>();
-
+builder.Services.AddSingleton<IIfmsRelayHost, SPIC.MauiBlazorApp.Web.Services.IfmsRelayHost>();
 builder.Services.AddScoped<LoginState>();
 builder.Services.AddScoped<LoadingService>();
 builder.Services.AddScoped<AppSearchState>();
 builder.Services.AddScoped<LookupCacheService>();
 builder.Services.AddScoped<GuestHouseBookingState>();
 
+// ADD THIS
 builder.Services.AddSingleton(new PlatformService
 {
     IsWeb = true
 });
-
 builder.Services.AddTransient<AuthHttpMessageHandler>();
-
 builder.Services.AddScoped(sp =>
 {
-    var handler =
-        sp.GetRequiredService<AuthHttpMessageHandler>();
-
-    handler.InnerHandler =
-        new HttpClientHandler();
-
-    var config =
-        sp.GetRequiredService<IConfiguration>();
-
-    var baseUrl =
-        config["ApiBaseUrl"]
-        ?? "https://spicapi.apmiot.com/";
-
+    var handler = sp.GetRequiredService<AuthHttpMessageHandler>();
+    handler.InnerHandler = new HttpClientHandler();
+    var config = sp.GetRequiredService<IConfiguration>();
+    var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
+    //var baseUrl = config["ApiBaseUrl"] ?? "https://previewspicapi.apmiot.com/";
+    // var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
     return new HttpClient(handler)
     {
         BaseAddress = new Uri(baseUrl),
@@ -61,27 +54,17 @@ builder.Services.AddScoped(sp =>
     };
 });
 
-
 var app = builder.Build();
 
-
-// ============================================================
-// PRODUCTION CONFIGURATION
-// ============================================================
-
+// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler(
-        "/Error",
-        createScopeForErrors: true);
-
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
 
-
+app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
-
-
 // ============================================================
 // MAINTENANCE MODE
 // ============================================================
@@ -89,8 +72,7 @@ app.UseHttpsRedirection();
 app.Use(async (context, next) =>
 {
     var maintenanceEnabled =
-        app.Configuration.GetValue<bool>(
-            "MaintenanceMode:Enabled");
+        app.Configuration.GetValue<bool>("MaintenanceMode:Enabled");
 
     if (maintenanceEnabled)
     {
@@ -110,22 +92,14 @@ app.Use(async (context, next) =>
             context.Response.ContentType =
                 "text/html; charset=utf-8";
 
-            context.Response.Headers.RetryAfter =
-                "300";
+            context.Response.Headers.RetryAfter = "300";
 
-            await context.Response.SendFileAsync(
-                filePath);
-
+            await context.Response.SendFileAsync(filePath);
             return;
         }
 
-        // Fallback if maintenance HTML
-        // is accidentally missing.
         context.Response.StatusCode =
             StatusCodes.Status503ServiceUnavailable;
-
-        context.Response.ContentType =
-            "text/plain; charset=utf-8";
 
         await context.Response.WriteAsync(
             "Service temporarily unavailable.");
@@ -133,34 +107,22 @@ app.Use(async (context, next) =>
         return;
     }
 
+    // Maintenance OFF means continue previous application normally
     await next();
 });
 
-
-// ============================================================
-// NORMAL APPLICATION
-// ============================================================
-
-app.UseStatusCodePagesWithReExecute(
-    "/not-found",
-    createScopeForStatusCodePages: true);
-
 app.UseAntiforgery();
 
-app.UseWebSockets(
-    new WebSocketOptions
-    {
-        KeepAliveInterval =
-            TimeSpan.FromSeconds(15)
-    });
+// Explicitly enable persistent WebSocket transport for interactive server
+// circuits, with a 15s ping keep-alive so the connection stays alive through
+// proxy/IIS idle timeouts instead of dropping and showing the reconnect UI.
+app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
 
 app.MapStaticAssets();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddAdditionalAssemblies(
-        typeof(
-            SPIC.MauiBlazorApp.Shared._Imports
-        ).Assembly);
+        typeof(SPIC.MauiBlazorApp.Shared._Imports).Assembly);
 
 app.Run();
