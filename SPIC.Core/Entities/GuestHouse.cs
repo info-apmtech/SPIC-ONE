@@ -215,6 +215,7 @@ public class GuestHouseBooking
 	// Front Office / Stay Tracking
 	public DateTime? ActualCheckInAt { get; set; }                       // When the guest physically checked in (set by Front Office)
 	public DateTime? ActualCheckOutAt { get; set; }                      // When the guest checked out (set by Front Office)
+	public string? AllocatedRoomNumber { get; set; }                     // Snapshot of the exact physical room number(s) (from GuestHouseRoomAllocation) taken at Check-Out, just before the allocation rows are released back to the pool. This is the authoritative Room No for billing/invoicing once the stay is complete.
 
 	// Pricing
 	public decimal RoomPrice { get; set; }                               // Room price per night snapshot (₹)

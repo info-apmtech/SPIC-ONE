@@ -523,6 +523,13 @@ namespace SpicAPI.Controllers
 			booking.UpdatedAt = DateTime.Now;
 			booking.UpdatedBy = User.Identity?.Name;
 
+			// Snapshot the exact physical room number(s) BEFORE the allocation rows are
+			// removed below - this is the only place the true assigned room is recorded,
+			// and billing/invoicing (which only runs after check-out) needs it.
+			var allocatedRoomNumber = AllocatedRoomNumber(booking);
+			if (!string.IsNullOrWhiteSpace(allocatedRoomNumber))
+				booking.AllocatedRoomNumber = allocatedRoomNumber;
+
 			// Release the physical room(s) back to the pool so they can be assigned again.
 			var allocatedRooms = await _db.GuestHouseRoomAllocations
 				.Where(a => a.GuestHouseBookingId == booking.Id)
@@ -622,7 +629,7 @@ namespace SpicAPI.Controllers
 					BookingReference = b.BookingReference ?? $"BK{b.Id}",
 					GuestName = guest?.GuestName,
 					GuestHouseName = b.GuestHouse?.Name ?? "",
-					RoomNumber = b.GuestHouseRoom?.RoomNumber,
+					RoomNumber = ResolveBillRoomNumber(b),
 					RoomType = b.GuestHouseRoom?.RoomType ?? "Room",
 					CheckInDate = b.ActualCheckInAt ?? (b.CheckInDate.HasValue ? b.CheckInDate.Value.Date.Add(b.CheckInTime ?? TimeSpan.Zero) : (DateTime?)null),
 					CheckOutDate = b.ActualCheckOutAt,
@@ -683,7 +690,8 @@ namespace SpicAPI.Controllers
 			if (bill == null)
 				return NotFound(new { Success = false, Message = "Bill not found." });
 
-			return Ok(ToBillViewDto(bill));
+			var (companyName, gstNumber) = await ResolveGuestCompanyAndGstAsync(bill.GuestHouseBookingId);
+			return Ok(ToBillViewDto(bill, companyName, gstNumber));
 		}
 
 		// POST /api/GuestHouseFrontOffice/generate-bill
@@ -774,7 +782,7 @@ namespace SpicAPI.Controllers
 				Email = guest?.Email,
 				PhoneNumber = guest?.PhoneNumber,
 				GuestHouseName = booking.GuestHouse?.Name ?? "",
-				RoomNumber = booking.GuestHouseRoom?.RoomNumber,
+				RoomNumber = ResolveBillRoomNumber(booking),
 				RoomType = booking.GuestHouseRoom?.RoomType ?? "Room",
 				CheckInAt = booking.ActualCheckInAt ?? (booking.CheckInDate.HasValue ? booking.CheckInDate.Value.Date.Add(booking.CheckInTime ?? TimeSpan.Zero) : (DateTime?)null),
 				CheckOutAt = booking.ActualCheckOutAt ?? (booking.CheckOutDate.HasValue ? booking.CheckOutDate.Value.Date.Add(booking.CheckOutTime ?? TimeSpan.Zero) : (DateTime?)null),
@@ -841,7 +849,8 @@ namespace SpicAPI.Controllers
 
 			try
 			{
-				var bytes = GuestHouseInvoicePdfBuilder.Build(ToBillViewDto(bill));
+				var (companyName, gstNumber) = await ResolveGuestCompanyAndGstAsync(bill.GuestHouseBookingId);
+				var bytes = GuestHouseInvoicePdfBuilder.Build(ToBillViewDto(bill, companyName, gstNumber));
 				var fileName = $"{bill.BillNumber ?? $"BILL-{bill.Id:000000}"}.pdf";
 				return File(bytes, "application/pdf", fileName);
 			}
@@ -863,7 +872,34 @@ namespace SpicAPI.Controllers
 			return $"BILL-{datePart}-{(last + 1):0000}";
 		}
 
-		private static BillViewDto ToBillViewDto(GuestHouseBill bill)
+		// The guest's Company Name (captured on the booking's guest record) and GST No
+		// (looked up from the Dealer master by the Employee/Dealer Code entered for the
+		// stay, when it resolves to a registered dealer) shown on the Tax Invoice. Neither
+		// is persisted on GuestHouseBill, so it is resolved live from the still-intact
+		// booking/guest/dealer data every time the bill is viewed or printed.
+		private async Task<(string? CompanyName, string? GstNumber)> ResolveGuestCompanyAndGstAsync(int guestHouseBookingId)
+		{
+			var guest = await _db.GuestHouseBookingGuests
+				.AsNoTracking()
+				.Where(g => g.GuestHouseBookingId == guestHouseBookingId)
+				.FirstOrDefaultAsync();
+			if (guest == null)
+				return (null, null);
+
+			string? gstNumber = null;
+			if (!string.IsNullOrWhiteSpace(guest.EmployeeOrDealerCode))
+			{
+				gstNumber = await _db.DealerRegistrations
+					.AsNoTracking()
+					.Where(d => d.DealerCode == guest.EmployeeOrDealerCode)
+					.Select(d => d.GSTNumber)
+					.FirstOrDefaultAsync();
+			}
+
+			return (guest.CompanyName, gstNumber);
+		}
+
+		private static BillViewDto ToBillViewDto(GuestHouseBill bill, string? companyName = null, string? gstNumber = null)
 		{
 			var lines = bill.LineItems
 				.OrderBy(i => i.Id)
@@ -888,6 +924,8 @@ namespace SpicAPI.Controllers
 				BookingId = bill.GuestHouseBookingId,
 				BillDate = bill.BillDate,
 				GuestName = bill.GuestName,
+				CompanyName = companyName,
+				GstNumber = gstNumber,
 				Address = bill.Address,
 				Email = bill.Email,
 				PhoneNumber = bill.PhoneNumber,
@@ -972,7 +1010,7 @@ namespace SpicAPI.Controllers
 				Email = guest?.Email,
 				PhoneNumber = guest?.PhoneNumber,
 				GuestHouseName = booking.GuestHouse?.Name ?? "",
-				RoomNumber = booking.GuestHouseRoom?.RoomNumber,
+				RoomNumber = ResolveBillRoomNumber(booking),
 				RoomType = booking.GuestHouseRoom?.RoomType ?? "Room",
 				CheckInAt = booking.ActualCheckInAt ?? (booking.CheckInDate.HasValue ? booking.CheckInDate.Value.Date.Add(booking.CheckInTime ?? TimeSpan.Zero) : (DateTime?)null),
 				CheckOutAt = booking.ActualCheckOutAt ?? (booking.CheckOutDate.HasValue ? booking.CheckOutDate.Value.Date.Add(booking.CheckOutTime ?? TimeSpan.Zero) : (DateTime?)null),
@@ -1049,6 +1087,16 @@ namespace SpicAPI.Controllers
 				.ToList();
 			return allocated == null || allocated.Count == 0 ? null : string.Join(", ", allocated);
 		}
+
+		// The Room No to print on a bill/invoice: prefer the physical room(s) actually
+		// assigned by the Front Office (snapshotted onto the booking at Check-Out, since
+		// GuestHouseRoomAllocation rows are released at that point). Falls back to the
+		// room type's base RoomNumber only for legacy bookings checked out before this
+		// snapshot existed.
+		private static string? ResolveBillRoomNumber(GuestHouseBooking booking) =>
+			!string.IsNullOrWhiteSpace(booking.AllocatedRoomNumber)
+				? booking.AllocatedRoomNumber
+				: booking.GuestHouseRoom?.RoomNumber;
 
 		// Computes the exact physical room numbers currently free for a room type over
 		// [checkInDate, checkOutDate) - the authoritative set shown at check-in.
@@ -1356,6 +1404,8 @@ namespace SpicAPI.Controllers
 		public int BookingId { get; set; }
 		public DateTime BillDate { get; set; }
 		public string? GuestName { get; set; }
+		public string? CompanyName { get; set; }
+		public string? GstNumber { get; set; }
 		public string? Address { get; set; }
 		public string? Email { get; set; }
 		public string? PhoneNumber { get; set; }

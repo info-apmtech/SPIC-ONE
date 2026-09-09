@@ -489,11 +489,20 @@
                 </div>
                 <div class="modal-footer" style="border-top: 1px solid #e5e7eb;">
                     <button class="fo-btn fo-btn-secondary" @onclick="CloseCheckOut">Cancel</button>
-                    @if (_checkOutBooking != null && _checkOutBooking.PaymentReceived)
+                    @if (_checkOutBooking != null)
                     {
-                        <button class="fo-btn fo-btn-checkout" @onclick="ConfirmCheckOut" disabled="@_isSubmitting">
-                            @(_isSubmitting ? "Checking out..." : "Confirm Check-Out")
-                        </button>
+                        @if (!_checkOutBooking.PaymentReceived)
+                        {
+                            <button class="fo-btn fo-btn-checkin" @onclick="ConfirmPayment" disabled="@_isSubmitting">
+                                @(_isSubmitting ? "Recording payment..." : "Confirm Payment Received")
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="fo-btn fo-btn-checkout" @onclick="ConfirmCheckOut" disabled="@_isSubmitting">
+                                @(_isSubmitting ? "Checking out..." : "Confirm Check-Out")
+                            </button>
+                        }
                     }
                 </div>
             </div>
@@ -680,6 +689,41 @@
         catch (Exception)
         {
             _loadError = "Could not load booking for check-out.";
+        }
+    }
+
+    private async Task ConfirmPayment()
+    {
+        if (_checkOutBooking == null) return;
+        _isSubmitting = true;
+        _checkOutError = null;
+        _checkOutMessage = null;
+        try
+        {
+            var payload = new { BookingId = _checkOutBooking.BookingId };
+            var response = await Http.PostAsJsonAsync("api/GuestHouseFrontOffice/pay", payload);
+            var result = await response.Content.ReadFromJsonAsync<SimpleResult>();
+            if (response.IsSuccessStatusCode && result?.Success == true)
+            {
+                _checkOutMessage = result.Message ?? "Payment received and confirmed.";
+                var summaryResponse = await Http.GetAsync($"api/GuestHouseFrontOffice/checkout/{_checkOutBooking.BookingId}");
+                if (summaryResponse.IsSuccessStatusCode)
+                {
+                    _checkOutBooking = await summaryResponse.Content.ReadFromJsonAsync<CheckOutSummaryDto>();
+                }
+            }
+            else
+            {
+                _checkOutError = result?.Message ?? "Payment could not be recorded.";
+            }
+        }
+        catch (Exception)
+        {
+            _checkOutError = "Payment could not be recorded.";
+        }
+        finally
+        {
+            _isSubmitting = false;
         }
     }
 
