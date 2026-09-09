@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Spic.Infrastructure.Data;
+using SpicAPI.Services;
 using SPIC.Core.Entities;
 using System.Data;
 using System.IO;
@@ -562,6 +563,7 @@ namespace SpicAPI.Controllers
 			var numberOfNights = booking.NumberOfNights ?? 1;
 			var roomCost = booking.RoomPrice * numberOfRooms * numberOfNights;
 			var extraBedCharges = (booking.ExtraCotPrice ?? 0m) * (booking.ExtraCotQuantity ?? 0) * numberOfNights;
+			var hasInvoice = await _db.GuestHouseBills.AnyAsync(b => b.GuestHouseBookingId == id);
 
 			return Ok(new BookingDetailsDto
 			{
@@ -571,6 +573,7 @@ namespace SpicAPI.Controllers
 				RoomImagePath = cover,
 				RoomType = booking.GuestHouseRoom?.RoomType ?? "Room",
 				RoomNumber = booking.GuestHouseRoom?.RoomNumber,
+				HasInvoice = hasInvoice,
 				CheckInDate = booking.CheckInDate,
 				CheckInTime = booking.CheckInTime,
 				CheckOutDate = booking.CheckOutDate,
@@ -603,6 +606,60 @@ namespace SpicAPI.Controllers
 				Nationality = guest?.Nationality,
 				Address = guest?.Address
 			});
+		}
+
+		// GET /api/GuestHouseBooking/bookings/{id}/invoice
+		// Customer-side Download Invoice. Reuses the SAME generated GuestHouseBill data and the
+		// SAME Tax Invoice PDF builder (GuestHouseInvoicePdfBuilder) as the Front Office / Admin
+		// download, so the customer's invoice is byte-identical to the admin invoice. It is a thin
+		// authorization wrapper ONLY: it does NOT create a bill, does NOT recalculate GST/billing,
+		// and does NOT change the existing Generate Bill flow.
+		//
+		// Server-side authorization chain:
+		//   authenticated customer -> owns/has access to booking -> payment is Paid ->
+		//   existing bill belongs to booking -> allow PDF download
+		[Authorize]
+		[HttpGet("bookings/{id:int}/invoice")]
+		public async Task<IActionResult> DownloadInvoice(int id)
+		{
+			var userName = User.Identity?.Name;
+			if (string.IsNullOrWhiteSpace(userName))
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
+			var booking = await _db.GuestHouseBookings
+				.AsNoTracking()
+				.FirstOrDefaultAsync(b => b.Id == id);
+
+			// Ownership: only the user who created the booking may download its invoice. We
+			// return NotFound (same as GetBookingDetails) so a bookingId belonging to another
+			// customer never reveals that the booking/invoice exists.
+			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+				return NotFound(new { Success = false, Message = "Booking not found." });
+
+			// Payment: a final Tax Invoice is only downloadable once the payment is actually
+			// completed (existing backend PaymentStatus).
+			if (booking.PaymentStatus != GuestHousePaymentStatus.Paid)
+				return BadRequest(new { Success = false, Message = "The invoice is available only after payment has been completed." });
+
+			// Bill: reuse the existing generated bill for this booking. We never create one here.
+			var bill = await _db.GuestHouseBills
+				.AsNoTracking()
+				.Include(b => b.LineItems)
+				.FirstOrDefaultAsync(b => b.GuestHouseBookingId == id);
+			if (bill == null)
+				return NotFound(new { Success = false, Message = "No invoice has been generated for this booking yet." });
+
+			try
+			{
+				var (companyName, gstNumber) = await GuestHouseBillPdfHelper.ResolveGuestCompanyAndGstAsync(_db, bill.GuestHouseBookingId);
+				var bytes = GuestHouseInvoicePdfBuilder.Build(GuestHouseBillPdfHelper.ToBillViewDto(bill, companyName, gstNumber));
+				var fileName = $"{bill.BillNumber ?? $"BILL-{bill.Id:000000}"}.pdf";
+				return File(bytes, "application/pdf", fileName);
+			}
+			catch (Exception)
+			{
+				return StatusCode(500, new { Success = false, Message = "Failed to generate the invoice PDF. Please try again." });
+			}
 		}
 
 		private static string BookingStatusName(GuestHouseBookingStatus status)
@@ -899,6 +956,10 @@ namespace SpicAPI.Controllers
 		public decimal? SubTotal { get; set; }
 		public decimal? TaxAmount { get; set; }
 		public decimal? TotalAmount { get; set; }
+
+		// True when a Tax Invoice (GuestHouseBill) has already been generated for this
+		// booking, i.e. the customer may download it from Booking Details.
+		public bool HasInvoice { get; set; }
 
 		public string BookingStatus { get; set; } = "";
 		public string PaymentStatus { get; set; } = "";

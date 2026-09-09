@@ -3,6 +3,7 @@
 @inject HttpClient Http
 @inject LoginState LoginState
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 @using System.Globalization
 
@@ -244,7 +245,19 @@
                 <h1 class="page-title">Booking Details</h1>
                 <p class="page-subtitle">Booking ID: <span class="text-blue">@_booking.BookingReference</span></p>
             </div>
-            <button class="btn-outline-custom"><i class="bi bi-file-earmark-arrow-down"></i> Download Invoice</button>
+            @if (_booking.HasInvoice && string.Equals(_booking.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+            {
+                <button class="btn-outline-custom" @onclick="DownloadInvoiceAsync" disabled="@(_isDownloading)">
+                    @if (_isDownloading)
+                    {
+                        <span>Downloading...</span>
+                    }
+                    else
+                    {
+                        <text><i class="bi bi-file-earmark-arrow-down"></i> Download Invoice</text>
+                    }
+                </button>
+            }
         </div>
 
         <div class="row g-4">
@@ -463,6 +476,7 @@
 
     private BookingDetailsDto? _booking;
     private bool _isLoading = true;
+    private bool _isDownloading;
     private string? _loadError;
 
     private static readonly string FallbackImage =
@@ -513,6 +527,29 @@
     private void GoBack()
     {
         Navigation.NavigateTo("/MyBookings");
+    }
+
+    private async Task DownloadInvoiceAsync()
+    {
+        if (!BookingId.HasValue || _isDownloading)
+            return;
+
+        _isDownloading = true;
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync($"api/GuestHouseBooking/bookings/{BookingId}/invoice");
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"{_booking?.BookingReference}.pdf";
+            await JS.InvokeVoidAsync("downloadFileFromBytes", fileName, "application/pdf", base64);
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not download the invoice. Please try again.";
+        }
+        finally
+        {
+            _isDownloading = false;
+        }
     }
 
     private string GetImageUrl(string? path)
@@ -612,6 +649,8 @@
         public decimal? SubTotal { get; set; }
         public decimal? TaxAmount { get; set; }
         public decimal? TotalAmount { get; set; }
+
+        public bool HasInvoice { get; set; }
 
         public string BookingStatus { get; set; } = "";
         public string PaymentStatus { get; set; } = "";
