@@ -253,9 +253,16 @@ else
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
+    [SupplyParameterFromQuery(Name = "appId")]
+    private int? AppId { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         await LoadApplications();
+        if (AppId.HasValue && _applications.Any(a => a.Id == AppId.Value))
+        {
+            OpenDetails(AppId.Value);
+        }
     }
 
     private async Task LoadApplications()
@@ -317,7 +324,7 @@ else
         _applications.Count(a => a.Status == status);
 
     private int CountPending() =>
-        _applications.Count(a => a.Status is >= 1 and <= 4 || a.Status == 8);
+        _applications.Count(a => a.Status is >= 1 and <= 4 || a.Status == 8 || a.Status == 10);
 
     // Rejected includes applications returned to the dealer for resubmission (status 9)
     private int CountRejected() =>
@@ -332,7 +339,7 @@ else
 
         query = _statusFilter switch
         {
-            "Pending" => query.Where(a => a.Status is >= 1 and <= 4 || a.Status == 8),
+            "Pending" => query.Where(a => a.Status is >= 1 and <= 4 || a.Status == 8 || a.Status == 10),
             "Approved" => query.Where(a => a.Status == 5),
             "Rejected" => query.Where(a => a.Status == 6 || a.Status == 9),
             "Drafts" => query.Where(a => a.Status == 0),
@@ -403,7 +410,7 @@ else
     private static string GetCardBadgeClass(int status) => status switch
     {
         0 => "apln-status-badge draft",
-        1 or 2 or 3 or 4 => "apln-status-badge review",
+        1 or 2 or 3 or 4 or 8 or 10 => "apln-status-badge review",
         5 => "apln-status-badge approved",
         6 or 9 => "apln-status-badge rejected",
         7 => "apln-status-badge cancelled",
@@ -429,18 +436,21 @@ else
     private static List<TrailStep> BuildTrail(int status)
     {
         // States: done (green), active (orange), idle (grey)
-        // Workflow: Dealer -> MO -> RM -> SM -> AVP
+        // Workflow: Dealer -> MO -> RM -> SM/SMM -> SDWA -> SDWA Admin -> Approved
         var returnedToDealer = status == 9;   // Rejected by MO - back with the dealer for correction/resubmission
         var dealerActive = returnedToDealer;
         var dealerDone = status != 0 && !returnedToDealer;
         var moActive = status == 1 || status == 2;
-        var moDone = status is 3 or 4 or 8 or 5;
+        var moDone = status is 3 or 4 or 8 or 10 or 5;
         var rmActive = status == 3;
-        var rmDone = status is 4 or 8 or 5;
+        var rmDone = status is 4 or 8 or 10 or 5;
         var smActive = status == 4;
-        var smDone = status is 8 or 5;
-        var avpActive = status == 8;
-        var avpDone = status == 5;
+        var smDone = status is 8 or 10 or 5;
+        var sdwaActive = status == 8;
+        var sdwaDone = status is 10 or 5;
+        var sdwaAdminActive = status == 10;
+        var sdwaAdminDone = status == 5;
+        var finalDone = status == 5;
 
         string B(bool done, bool active) => done ? "state-done" : active ? "state-orange" : "state-idle";
         string N(bool done, bool active) => done ? "done" : active ? "orange" : "idle";
@@ -462,10 +472,16 @@ else
                 "RM", "RM", rmDone ? "Approved" : rmActive ? "Review" : "Pending", ""),
             new TrailStep(
                 B(smDone, smActive), N(smDone, smActive), S(smDone, smActive, "Approved", "Review"),
-                "SM", "SM", smDone ? "Approved" : smActive ? "Review" : "Pending", "font-size:10px"),
+                "SM", "SM/SMM", smDone ? "Approved" : smActive ? "Review" : "Pending", "font-size:10px"),
             new TrailStep(
-                B(avpDone, avpActive), N(avpDone, avpActive), S(avpDone, avpActive, "Approved", "Review"),
-                "AVP", "AVP", avpDone ? "Approved" : avpActive ? "Review" : "Approval", "")
+                B(sdwaDone, sdwaActive), N(sdwaDone, sdwaActive), S(sdwaDone, sdwaActive, "Approved", "Review"),
+                "SDWA", "SDWA", sdwaDone ? "Approved" : sdwaActive ? "Review" : "Pending", "font-size:10px"),
+            new TrailStep(
+                B(sdwaAdminDone, sdwaAdminActive), N(sdwaAdminDone, sdwaAdminActive), S(sdwaAdminDone, sdwaAdminActive, "Approved", "Review"),
+                "SA", "SDWA Admin", sdwaAdminDone ? "Approved" : sdwaAdminActive ? "Review" : "Pending", "font-size:10px"),
+            new TrailStep(
+                B(finalDone, false), N(finalDone, false), S(finalDone, false, "Approved", "Review"),
+                "OK", "Final", finalDone ? "Approved" : "Pending", "")
         };
     }
 

@@ -332,7 +332,11 @@
 
     private void ApplyRoleFilter()
     {
-        if (LoginState.IsStateRole)
+        // SpecialAdmin: multi-location scope (all assigned states). Every other
+        // role keeps its exact existing single-location filter below.
+        if (LoginState.IsSpecialAdminWithAssignments)
+            _allDealers = _allDealers.Where(d => LoginState.AssignedStateIds.Contains(d.StateId)).ToList();
+        else if (LoginState.IsStateRole)
             _allDealers = _allDealers.Where(d => d.StateId == LoginState.StateId).ToList();
         else if (LoginState.IsRegionRole)
             _allDealers = _allDealers.Where(d => d.Region == LoginState.RegionId).ToList();

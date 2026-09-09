@@ -176,7 +176,7 @@ namespace SpicAPI.Controllers
 
 		[HttpPost("bulk-upload")]
 		[RequestSizeLimit(10 * 1024 * 1024)]
-		public async Task<IActionResult> BulkUpload([FromForm] IFormFile file)
+		public async Task<IActionResult> BulkUpload(IFormFile file)
 		{
 			// --------------------------------------------------------
 			// Validate file

@@ -228,6 +228,10 @@ namespace SpicAPI.Controllers
                 ResubmissionCount = application.ResubmissionCount,
                 LastResubmittedAt = application.LastResubmittedAt,
 
+                ChequeNumber = application.ChequeNumber,
+                ChequeAmount = application.ChequeAmount,
+                ChequeImagePath = application.ChequeImagePath,
+
                 Documents = application.Documents
                     .OrderBy(d => d.UploadedAt)
                     .Select(d => new WelfareApplicationDocumentDto
@@ -375,6 +379,7 @@ namespace SpicAPI.Controllers
             WelfareApplicationStatus.RMReview => "Pending RM",
             WelfareApplicationStatus.SMReview => "Pending SM",
             WelfareApplicationStatus.AVPReview => "Pending SDWA",
+            WelfareApplicationStatus.SDWAAdminReview => "Pending SDWA Admin",
             WelfareApplicationStatus.Approved => "Approved",
             WelfareApplicationStatus.Rejected => "Rejected",
             WelfareApplicationStatus.Cancelled => "Cancelled",
@@ -382,12 +387,16 @@ namespace SpicAPI.Controllers
             _ => status.ToString()
         };
 
+        // AppRole.AVP / AppRole.RMD are internal storage markers reused for the
+        // SDWA / SDWA Admin stages (see WelfareSchemeApprovalController) - there is
+        // no AppRole.SDWAAdmin.
         private static string GetApprovalLevelDisplayName(AppRole role) => role switch
         {
             AppRole.MO => "Marketing Officer (MO)",
             AppRole.RM => "Regional Manager (RM)",
             AppRole.SMM => "Senior Manager (SM)",
             AppRole.AVP => "SDWA",
+            AppRole.RMD => "SDWA Admin",
             _ => role.ToString()
         };
 

@@ -129,26 +129,31 @@ namespace Spic.Infrastructure.Data
 		public DbSet<SubDealerBeneficiary> SubDealerBeneficiaries { get; set; }
 		public DbSet<EmployeeBeneficiary> EmployeeBeneficiaries { get; set; }
 
+		//// SpecialAdmin multi-location assignments
+		public DbSet<SpecialAdminLocations> SpecialAdminLocations { get; set; }
+
 		//// Welfare Scheme
 		public DbSet<WelfareApplication> WelfareApplications { get; set; }
 		public DbSet<WelfareApplicationDocument> WelfareApplicationDocuments { get; set; }
 		public DbSet<WelfareApplicationApproval> WelfareApplicationApprovals { get; set; }
 		public DbSet<WelfareApplicationActionLog> WelfareApplicationActionLogs { get; set; }
 
-		//// Guest House Booking
-		//public DbSet<GuestHouse> GuestHouses { get; set; }
-		//public DbSet<GuestHouseImage> GuestHouseImages { get; set; }
-		//public DbSet<GuestHouseRoom> GuestHouseRooms { get; set; }
+		//// Guest House Master Data
+		public DbSet<GuestHouse> GuestHouses { get; set; }
+		public DbSet<GuestHouseRoom> GuestHouseRooms { get; set; }
+		public DbSet<GuestHouseImage> GuestHouseImages { get; set; }
 		//public DbSet<GuestHouseRoomImage> GuestHouseRoomImages { get; set; }
 		//public DbSet<GuestHouseRoomAmenity> GuestHouseRoomAmenities { get; set; }
-		//public DbSet<GuestHouseRoomAvailability> GuestHouseRoomAvailabilities { get; set; }
-		//public DbSet<GuestHouseBooking> GuestHouseBookings { get; set; }
-		//public DbSet<GuestHouseBookingGuest> GuestHouseBookingGuests { get; set; }
+		public DbSet<GuestHouseRoomAvailability> GuestHouseRoomAvailabilities { get; set; }
+		public DbSet<GuestHouseBooking> GuestHouseBookings { get; set; }
+		public DbSet<GuestHouseBookingGuest> GuestHouseBookingGuests { get; set; }
 		//public DbSet<GuestHouseBookingDocument> GuestHouseBookingDocuments { get; set; }
-		//public DbSet<GuestHouseBookingPayment> GuestHouseBookingPayments { get; set; }
+		public DbSet<GuestHouseBookingPayment> GuestHouseBookingPayments { get; set; }
 		//public DbSet<GuestHouseCancellationPolicy> GuestHouseCancellationPolicies { get; set; }
 		//public DbSet<GuestHouseBookingCancellation> GuestHouseBookingCancellations { get; set; }
 		//public DbSet<GuestHouseBookingRefund> GuestHouseBookingRefunds { get; set; }
+		public DbSet<GuestHouseBill> GuestHouseBills { get; set; }
+		public DbSet<GuestHouseBillLineItem> GuestHouseBillLineItems { get; set; }
 
 		//// Contact Us
 		//public DbSet<ContactUsMessage> ContactUsMessages { get; set; }

@@ -2,7 +2,7 @@
 
 namespace SPIC.Core.DTOs
 {
-	public class StockReportFilter
+	public class StockReportFilter : ILocationScopeFilter
 	{
 		public List<int> StateIds { get; set; } = new();
 		public List<int> RegionIds { get; set; } = new();

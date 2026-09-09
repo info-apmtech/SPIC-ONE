@@ -12,12 +12,14 @@ namespace SPIC.Core.DTOs
 		public const string ConsentOfBuyer = "Consent of Buyer";
 	}
 
-	public class PendingAckFilter
+	public class PendingAckFilter : ILocationScopeFilter
 	{
 		public DateTime? DateFrom { get; set; }
 		public DateTime? DateTo { get; set; }
 
 		public List<int> StateIds { get; set; } = new();
+		public List<int> RegionIds { get; set; } = new();
+		public List<int> HeadQuarterIds { get; set; } = new();
 		public List<int> DistrictIds { get; set; } = new();
 		public List<int> DealerTypeIds { get; set; } = new();
 

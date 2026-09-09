@@ -34,7 +34,7 @@ namespace SPIC.Core.Entities
     }
     public enum AppRole
     {
-        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer
+        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer, SpecialAdmin
     }
     public enum PagePermission
     {
@@ -60,7 +60,7 @@ namespace SPIC.Core.Entities
         dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
         CompanySales, SalesReport, AgeingReport, Acknowledgement, LiquidationCycle, BudgetSubmissions, WelfareSchemes, SDWADashboard, Purchases, Rewards, CropAdvice, YieldPrediction, DiseaseDetection,
         Community, Notifications, Profile, CSR1Create, CSR1Management, TopRankingDistrict, TopRankingRetailers, TopRankingWholesalers, ProductWiseStockAvailability, StockDetails, SubDealerRegistration, SubDealerList , SchemeApproval,
-        SubDealerEmployeeMaster,SDWA,SDWAAdmin
+        SubDealerEmployeeMaster,SDWA,SDWAAdmin,GuestHouse,GuestHouseBooking,Rooms,RoomDetails,GuestDetails,Payment, MyBookings,BookingPreview,BookingDetails,FrontOffice,GenerateBill,BillList
 
     }
 }

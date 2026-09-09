@@ -5,6 +5,7 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
 using SPIC.Core.DTOs;
 using SPIC.Core.Interfaces;
+using SpicAPI.Services;
 
 namespace SpicAPI.Controllers
 {
@@ -38,8 +39,10 @@ namespace SpicAPI.Controllers
 			[FromBody] LiqCycleFilter? filter,
 			CancellationToken cancellationToken)
 		{
+			filter ??= new LiqCycleFilter();
+			SpecialAdminScope.ApplyScope(User, filter);
 			var result = await _svc.GetDashboardAsync(
-				filter ?? new LiqCycleFilter(),
+				filter,
 				cancellationToken);
 
 			return Ok(result);
@@ -50,8 +53,10 @@ namespace SpicAPI.Controllers
 			[FromBody] LiqCycleFilter? filter,
 			CancellationToken cancellationToken)
 		{
+			filter ??= new LiqCycleFilter();
+			SpecialAdminScope.ApplyScope(User, filter);
 			var rows = await _svc.GetAllRowsAsync(
-				filter ?? new LiqCycleFilter(),
+				filter,
 				cancellationToken);
 
 			using var workbook = new XLWorkbook();

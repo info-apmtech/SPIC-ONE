@@ -1,4 +1,6 @@
-﻿@page "/ "
+﻿@page "/GuestHouseBooking"
+@using System.Globalization
+@inject NavigationManager Navigation
 
 <div class="container-fluid py-4 px-0">
     <div class="ghb-wrapper">
@@ -10,14 +12,14 @@
 
         <div class="ghb-card">
 
-            <div class="ghb-badge">T-Nagar Guest House</div>
+            <div class="ghb-badge">@_houseName</div>
 
             <div class="ghb-form-grid">
 
                 <div class="ghb-form-group">
                     <label class="ghb-form-label">Check-in Date</label>
                     <div class="ghb-input-with-icon">
-                        <input type="text" class="ghb-form-control" placeholder="dd-mm-yyyy">
+                        <input type="date" class="ghb-form-control" placeholder="dd-mm-yyyy" value="@_checkInDate?.ToString("yyyy-MM-dd")" @onchange="e => _checkInDate = ParseDate(e.Value?.ToString())">
                         <svg class="ghb-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                             <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -30,7 +32,7 @@
                 <div class="ghb-form-group">
                     <label class="ghb-form-label">Check-in Time</label>
                     <div class="ghb-input-with-icon">
-                        <input type="text" class="ghb-form-control" placeholder="--:-- AM">
+                        <input type="time" class="ghb-form-control" value="@_checkInTime?.ToString(@"hh\:mm")" @onchange="e => _checkInTime = ParseTime(e.Value?.ToString())">
                         <svg class="ghb-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
                             <polyline points="12 6 12 12 16 14"></polyline>
@@ -41,7 +43,7 @@
                 <div class="ghb-form-group">
                     <label class="ghb-form-label">Check-out Date</label>
                     <div class="ghb-input-with-icon">
-                        <input type="text" class="ghb-form-control" placeholder="dd-mm-yyyy">
+                        <input type="date" class="ghb-form-control" placeholder="dd-mm-yyyy" value="@_checkOutDate?.ToString("yyyy-MM-dd")" @onchange="e => _checkOutDate = ParseDate(e.Value?.ToString())">
                         <svg class="ghb-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                             <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -54,7 +56,7 @@
                 <div class="ghb-form-group">
                     <label class="ghb-form-label">Check-out Time</label>
                     <div class="ghb-input-with-icon">
-                        <input type="text" class="ghb-form-control" placeholder="--:-- AM">
+                        <input type="time" class="ghb-form-control" value="@_checkOutTime?.ToString(@"hh\:mm")" @onchange="e => _checkOutTime = ParseTime(e.Value?.ToString())">
                         <svg class="ghb-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
                             <polyline points="12 6 12 12 16 14"></polyline>
@@ -63,6 +65,15 @@
                 </div>
 
             </div>
+
+            <div style="margin-top: 24px; text-align: center;">
+                <button class="gh-btn-select" @onclick="CheckAvailability">Check Availability</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_message))
+            {
+                <div style="margin-top: 12px; text-align: center; font-size: 0.85rem; color: #b91c1c;">@_message</div>
+            }
         </div>
 
         <div class="ghb-info-box">
@@ -83,3 +94,88 @@
 
     </div>
 </div>
+
+@code {
+    [SupplyParameterFromQuery] public int? guestHouseId { get; set; }
+    [SupplyParameterFromQuery] public string? name { get; set; }
+
+    private int _houseId;
+    private string _houseName = "";
+    private DateTime? _checkInDate;
+    private TimeSpan? _checkInTime = TimeSpan.Zero;
+    private DateTime? _checkOutDate;
+    private TimeSpan? _checkOutTime = TimeSpan.Zero;
+    private string? _message;
+
+    protected override void OnInitialized()
+    {
+        _houseId = guestHouseId ?? 0;
+        _houseName = name ?? "";
+
+        if (_houseId <= 0)
+        {
+            _message = "Please select a Guest House first.";
+            Navigation.NavigateTo("/GuestHouse");
+            return;
+        }
+
+        _checkInDate = DateTime.Today.AddDays(1);
+        _checkOutDate = DateTime.Today.AddDays(2);
+    }
+
+    private async Task CheckAvailability()
+    {
+        _message = null;
+
+        if (!_checkInDate.HasValue)
+        {
+            _message = "Please select a valid Check-in Date.";
+            return;
+        }
+        if (!_checkInTime.HasValue)
+        {
+            _message = "Please select a valid Check-in Time.";
+            return;
+        }
+        if (!_checkOutDate.HasValue)
+        {
+            _message = "Please select a valid Check-out Date.";
+            return;
+        }
+        if (!_checkOutTime.HasValue)
+        {
+            _message = "Please select a valid Check-out Time.";
+            return;
+        }
+
+        var checkIn = _checkInDate.Value.Date.Add(_checkInTime.Value);
+        var checkOut = _checkOutDate.Value.Date.Add(_checkOutTime.Value);
+
+        if (checkOut <= checkIn)
+        {
+            _message = "Check-out must be after Check-in.";
+            return;
+        }
+
+        var query = $"/Rooms?guestHouseId={_houseId}" +
+                    $"&checkIn={Uri.EscapeDataString(checkIn.ToString("yyyy-MM-ddTHH:mm:ss"))}" +
+                    $"&checkOut={Uri.EscapeDataString(checkOut.ToString("yyyy-MM-ddTHH:mm:ss"))}";
+        Navigation.NavigateTo(query);
+    }
+
+    private static DateTime? ParseDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (DateTime.TryParse(value.Trim(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
+            return d.Date;
+        return null;
+    }
+
+    private static TimeSpan? ParseTime(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (TimeSpan.TryParse(value.Trim(), CultureInfo.InvariantCulture, out var t))
+            return t;
+        return null;
+    }
+}

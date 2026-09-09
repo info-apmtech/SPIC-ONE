@@ -180,9 +180,9 @@ namespace SPIC.Core.Entities
 		public string? Village { get; set; }
 		public string? Block { get; set; }
 		public string? Taluk { get; set; }
-		public int StateId { get; set; } = 0;
-		public int DistrictId { get; set; } = 0;
-		public string? ContactNumber { get; set; }
+        public int? StateId { get; set; }
+        public int? DistrictId { get; set; }
+        public string? ContactNumber { get; set; }
 		public string? AdditionalPhoneNo { get; set; }
 
 		// PVT WH content. Also used when category = Both.
@@ -272,13 +272,14 @@ namespace SPIC.Core.Entities
 		public string? Block { get; set; }
 		public string? Taluk { get; set; }
 		public string? ContactNumber { get; set; }
+		public string? AdditionalContactNumber { get; set; }
 
 		public string? OtherDocumentPathsJson { get; set; }
 
-		public int StateId { get; set; } = 0;
-		public State? State { get; set; }
+        public int? StateId { get; set; }
+        public State? State { get; set; }
 
-		public int DistrictId { get; set; } = 0;
+		public int? DistrictId { get; set; }
 		public District? District { get; set; }
 
 		// ---------------------------------------------------------

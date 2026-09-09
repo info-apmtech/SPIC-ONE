@@ -17,7 +17,7 @@ namespace Spic.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.5")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -181,7 +181,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AckThroughs", (string)null);
+                    b.ToTable("AckThroughs");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.AnnualSaleDataLastFYofDealerRegistration", b =>
@@ -215,7 +215,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AnnualSaleDataLastFY", (string)null);
+                    b.ToTable("AnnualSaleDataLastFY");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Bank", b =>
@@ -252,7 +252,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Banks", (string)null);
+                    b.ToTable("Banks");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
@@ -290,7 +290,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("UnitId");
 
-                    b.ToTable("Categories", (string)null);
+                    b.ToTable("Categories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Company", b =>
@@ -320,7 +320,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Companies", (string)null);
+                    b.ToTable("Companies");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Competitor", b =>
@@ -350,7 +350,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Competitors", (string)null);
+                    b.ToTable("Competitors");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CreditLimitHistory", b =>
@@ -399,7 +399,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("CreditLimitHistories", (string)null);
+                    b.ToTable("CreditLimitHistories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Crop", b =>
@@ -429,7 +429,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Crops", (string)null);
+                    b.ToTable("Crops");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerApprovalHistory", b =>
@@ -481,7 +481,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerApprovalHistories", (string)null);
+                    b.ToTable("DealerApprovalHistories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerAssetBank", b =>
@@ -512,7 +512,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerAssetBanks", (string)null);
+                    b.ToTable("DealerAssetBanks");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerAssetBuilding", b =>
@@ -582,7 +582,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerAssetBuildings", (string)null);
+                    b.ToTable("DealerAssetBuildings");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerAssetLand", b =>
@@ -619,7 +619,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerAssetLands", (string)null);
+                    b.ToTable("DealerAssetLands");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerCompaniesOperatingInArea", b =>
@@ -638,7 +638,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerCompaniesOperatingInAreas", (string)null);
+                    b.ToTable("DealerCompaniesOperatingInAreas");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerCreditLimitProposal", b =>
@@ -834,7 +834,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerCreditLimitProposals", (string)null);
+                    b.ToTable("DealerCreditLimitProposals");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerCreditLimitSales", b =>
@@ -875,7 +875,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerCreditLimitSalesData", (string)null);
+                    b.ToTable("DealerCreditLimitSalesData");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerCreditLimitSalesPerformance", b =>
@@ -915,7 +915,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerCreditLimitSalesPerformances", (string)null);
+                    b.ToTable("DealerCreditLimitSalesPerformances");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerExperience", b =>
@@ -947,7 +947,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerExperiences", (string)null);
+                    b.ToTable("DealerExperiences");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerLoanLiabilities", b =>
@@ -972,7 +972,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerLoanLiabilities", (string)null);
+                    b.ToTable("DealerLoanLiabilities");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerMarketDetail", b =>
@@ -1019,7 +1019,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerMarketDetails", (string)null);
+                    b.ToTable("DealerMarketDetails");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerOwnershipInfo", b =>
@@ -1108,7 +1108,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerOwnershipInfos", (string)null);
+                    b.ToTable("DealerOwnershipInfos");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerPortFacilities", b =>
@@ -1133,7 +1133,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerPortFacilities", (string)null);
+                    b.ToTable("DealerPortFacilities");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerRailFacilities", b =>
@@ -1158,7 +1158,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerRailFacilities", (string)null);
+                    b.ToTable("DealerRailFacilities");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerRegistration", b =>
@@ -1342,6 +1342,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<int?>("InactiveProposal")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("IsCreditLimitConsentGiven")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsDealer")
                         .HasColumnType("boolean");
@@ -1528,7 +1531,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerRegistrations", (string)null);
+                    b.ToTable("DealerRegistrations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerRegistrationDocuments", b =>
@@ -1605,7 +1608,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerRegistrationDocuments", (string)null);
+                    b.ToTable("DealerRegistrationDocuments");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerType", b =>
@@ -1635,7 +1638,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerTypes", (string)null);
+                    b.ToTable("DealerTypes");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealerWarehouseFacilities", b =>
@@ -1660,7 +1663,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealerWarehouseFacilities", (string)null);
+                    b.ToTable("DealerWarehouseFacilities");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DealershipNature", b =>
@@ -1690,7 +1693,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DealershipNatures", (string)null);
+                    b.ToTable("DealershipNatures");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Designation", b =>
@@ -1725,7 +1728,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Designations", (string)null);
+                    b.ToTable("Designations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.District", b =>
@@ -1760,7 +1763,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("StateId");
 
-                    b.ToTable("Districts", (string)null);
+                    b.ToTable("Districts");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.DptReport", b =>
@@ -1834,7 +1837,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DptReports", (string)null);
+                    b.ToTable("DptReports");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.EmployeeBeneficiary", b =>
@@ -1911,7 +1914,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("EmployeeBeneficiaries", (string)null);
+                    b.ToTable("EmployeeBeneficiaries");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.EmployeeRegistration+EmployeeInformation", b =>
@@ -1957,7 +1960,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("EmployeeInformation", (string)null);
+                    b.ToTable("EmployeeInformation");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.EmployeeRegistration+Employeelogin", b =>
@@ -1995,7 +1998,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Employeelogins", (string)null);
+                    b.ToTable("Employeelogins");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.FinancialYear", b =>
@@ -2031,7 +2034,807 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("FinancialYears", (string)null);
+                    b.ToTable("FinancialYears");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouse", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("GuestHouses");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBill", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("AdvancePayment")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("BalanceAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("BillDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("BillNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("BookingReference")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("CgstAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("CheckInAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("CheckOutAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Discount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ExtraBeds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GuestHouseBookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("GuestHouseName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GuestName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("NumberOfNights")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NumberOfPersons")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NumberOfRooms")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PaymentStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RoomNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RoomType")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("RoundOff")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SgstAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseBookingId");
+
+                    b.ToTable("GuestHouseBills");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBillLineItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CgstAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CgstPercent")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GuestHouseBillId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("LineTotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Rate")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SgstAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SgstPercent")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseBillId");
+
+                    b.ToTable("GuestHouseBillLineItems");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBooking", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ActualCheckInAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("ActualCheckOutAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("BookingReference")
+                        .HasColumnType("text");
+
+                    b.Property<int>("BookingStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CheckInDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<TimeSpan?>("CheckInTime")
+                        .HasColumnType("interval");
+
+                    b.Property<DateTime?>("CheckOutDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<TimeSpan?>("CheckOutTime")
+                        .HasColumnType("interval");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("ExtraCotPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("ExtraCotQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GuestHouseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GuestHouseRoomId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NumberOfAdults")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NumberOfChildren")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NumberOfNights")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NumberOfPersons")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NumberOfRooms")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PaymentStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RoomPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("SubTotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("TaxAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("TotalAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseId");
+
+                    b.HasIndex("GuestHouseRoomId");
+
+                    b.ToTable("GuestHouseBookings");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingCancellation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("CancellationCharge")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("CancellationReason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CancellationReference")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CancelledAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CancelledBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("EstimatedRefundDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("GuestHouseBookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("RefundAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("RefundMethod")
+                        .HasColumnType("text");
+
+                    b.Property<int>("RefundStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("TaxAdjustment")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseBookingId")
+                        .IsUnique();
+
+                    b.ToTable("GuestHouseBookingCancellation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DocumentType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("text");
+
+                    b.Property<long?>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("GuestHouseBookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UploadedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseBookingId");
+
+                    b.ToTable("GuestHouseBookingDocument");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingGuest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AadhaarOrPassportNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Address")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CompanyName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EmployeeOrDealerCode")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GuestHouseBookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("GuestName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Nationality")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("NumberOfAdults")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NumberOfChildren")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NumberOfPersons")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseBookingId");
+
+                    b.ToTable("GuestHouseBookingGuests");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingPayment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("GatewayResponse")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GuestHouseBookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("PaymentDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PaymentReference")
+                        .HasColumnType("text");
+
+                    b.Property<int>("PaymentStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TransactionId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseBookingId");
+
+                    b.ToTable("GuestHouseBookingPayments");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingRefund", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("CancellationCharge")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("GuestHouseBookingCancellationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GuestHouseBookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("OriginalAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal?>("RefundAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("RefundMethod")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RefundReference")
+                        .HasColumnType("text");
+
+                    b.Property<int>("RefundStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TaxAdjustment")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseBookingCancellationId");
+
+                    b.HasIndex("GuestHouseBookingId")
+                        .IsUnique();
+
+                    b.ToTable("GuestHouseBookingRefund");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseCancellationPolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("CancellationChargePercentage")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GuestHouseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HoursBeforeCheckIn")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PolicyName")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("RefundPercentage")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseId");
+
+                    b.ToTable("GuestHouseCancellationPolicy");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseImage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GuestHouseId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseId");
+
+                    b.ToTable("GuestHouseImages");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoom", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AvailableQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Capacity")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("ExtraCotPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("GuestHouseId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("NumberOfAdults")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NumberOfChildren")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("PricePerNight")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("RoomNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RoomType")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseId");
+
+                    b.ToTable("GuestHouseRooms");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoomAmenity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AmenityName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GuestHouseRoomId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseRoomId");
+
+                    b.ToTable("GuestHouseRoomAmenity");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoomAvailability", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AvailableRooms")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BookedRooms")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("GuestHouseRoomId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsBlocked")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("TotalRooms")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseRoomId");
+
+                    b.ToTable("GuestHouseRoomAvailabilities");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoomImage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GuestHouseRoomId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseRoomId");
+
+                    b.ToTable("GuestHouseRoomImage");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Headquarter", b =>
@@ -2066,7 +2869,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("RegionId");
 
-                    b.ToTable("Headquarters", (string)null);
+                    b.ToTable("Headquarters");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.IfmsDealer", b =>
@@ -2106,7 +2909,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("IfmsDealers", (string)null);
+                    b.ToTable("IfmsDealers");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.IfmsProduct", b =>
@@ -2137,7 +2940,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("IfmsProducts", (string)null);
+                    b.ToTable("IfmsProducts");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LogisticsApprovalHistory", b =>
@@ -2174,7 +2977,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("LogisticsHistory", (string)null);
+                    b.ToTable("LogisticsHistory");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LyingWithMaster", b =>
@@ -2204,7 +3007,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("LyingWithMasters", (string)null);
+                    b.ToTable("LyingWithMasters");
 
                     b.HasData(
                         new
@@ -2282,7 +3085,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PVTMasters", (string)null);
+                    b.ToTable("PVTMasters");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.PartnerFamilyDetails", b =>
@@ -2320,7 +3123,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PartnerFamilyDetails", (string)null);
+                    b.ToTable("PartnerFamilyDetails");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.PartnerOccupation", b =>
@@ -2346,7 +3149,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PartnerOccupations", (string)null);
+                    b.ToTable("PartnerOccupations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Plant", b =>
@@ -2376,7 +3179,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Plants", (string)null);
+                    b.ToTable("Plants");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Port", b =>
@@ -2419,7 +3222,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("StateId");
 
-                    b.ToTable("Ports", (string)null);
+                    b.ToTable("Ports");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Product", b =>
@@ -2462,7 +3265,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("ProductGroupId");
 
-                    b.ToTable("Products", (string)null);
+                    b.ToTable("Products");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.ProductGroup", b =>
@@ -2492,7 +3295,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ProductGroups", (string)null);
+                    b.ToTable("ProductGroups");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.RackPoint", b =>
@@ -2510,6 +3313,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("AVPApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AdditionalContactNumber")
                         .HasColumnType("text");
 
                     b.Property<string>("ApprovalRemarks")
@@ -2533,7 +3339,7 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("CreatedByName")
                         .HasColumnType("text");
 
-                    b.Property<int>("DistrictId")
+                    b.Property<int?>("DistrictId")
                         .HasColumnType("integer");
 
                     b.Property<string>("GoogleURL")
@@ -2600,7 +3406,7 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("SMApprovedBy")
                         .HasColumnType("text");
 
-                    b.Property<int>("StateId")
+                    b.Property<int?>("StateId")
                         .HasColumnType("integer");
 
                     b.Property<string>("SubVillage")
@@ -2625,7 +3431,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("StateId");
 
-                    b.ToTable("RackPoints", (string)null);
+                    b.ToTable("RackPoints");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.RakePointMaster", b =>
@@ -2665,7 +3471,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("RakePointMasters", (string)null);
+                    b.ToTable("RakePointMasters");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Region", b =>
@@ -2700,7 +3506,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("StateId");
 
-                    b.ToTable("Regions", (string)null);
+                    b.ToTable("Regions");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Relationship", b =>
@@ -2730,7 +3536,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Relationships", (string)null);
+                    b.ToTable("Relationships");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SalesAndReceipt", b =>
@@ -2825,7 +3631,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SalesAndReceipts", (string)null);
+                    b.ToTable("SalesAndReceipts");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SalesCompanySale", b =>
@@ -2956,7 +3762,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SalesCompanySales", (string)null);
+                    b.ToTable("SalesCompanySales");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SalesPlanningInDealerRegistration", b =>
@@ -3050,7 +3856,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SalesPlannings", (string)null);
+                    b.ToTable("SalesPlannings");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SalesWholesaler", b =>
@@ -3199,7 +4005,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SalesWholesalers", (string)null);
+                    b.ToTable("SalesWholesalers");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Sector", b =>
@@ -3229,7 +4035,44 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Sectors", (string)null);
+                    b.ToTable("Sectors");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SpecialAdminLocations", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("EmployeeInformationID")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SpecialAdminLocations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.State", b =>
@@ -3264,7 +4107,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("ZoneId");
 
-                    b.ToTable("States", (string)null);
+                    b.ToTable("States");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.StateGlobalStockReconciliation", b =>
@@ -3329,7 +4172,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("StateGlobalStockReconciliations", (string)null);
+                    b.ToTable("StateGlobalStockReconciliations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Status", b =>
@@ -3359,7 +4202,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Statuses", (string)null);
+                    b.ToTable("Statuses");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SubDealerBeneficiary", b =>
@@ -3450,7 +4293,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SubDealerBeneficiaries", (string)null);
+                    b.ToTable("SubDealerBeneficiaries");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SubDealerRegistration", b =>
@@ -3568,7 +4411,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SubDealerRegistrations", (string)null);
+                    b.ToTable("SubDealerRegistrations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SubDistrict", b =>
@@ -3603,7 +4446,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("DistrictId");
 
-                    b.ToTable("SubDistricts", (string)null);
+                    b.ToTable("SubDistricts");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.TxnType", b =>
@@ -3633,7 +4476,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TxnTypes", (string)null);
+                    b.ToTable("TxnTypes");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Unit", b =>
@@ -3663,7 +4506,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Units", (string)null);
+                    b.ToTable("Units");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.UserInfo", b =>
@@ -3802,7 +4645,7 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("CreatedByName")
                         .HasColumnType("text");
 
-                    b.Property<int>("DistrictId")
+                    b.Property<int?>("DistrictId")
                         .HasColumnType("integer");
 
                     b.Property<string>("DoorNo")
@@ -3893,7 +4736,7 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal?>("SpicApprovedReservationQuantityMT")
                         .HasColumnType("numeric");
 
-                    b.Property<int>("StateId")
+                    b.Property<int?>("StateId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Street")
@@ -3927,7 +4770,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Warehouses", (string)null);
+                    b.ToTable("Warehouses");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.WarehouseDistrictGlobalStockReconciliation", b =>
@@ -3998,7 +4841,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("WarehouseDistrictGlobalStockReconciliations", (string)null);
+                    b.ToTable("WarehouseDistrictGlobalStockReconciliations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.WelfareApplication", b =>
@@ -4031,6 +4874,15 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("BoardName")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("ChequeAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ChequeImagePath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ChequeNumber")
                         .HasColumnType("text");
 
                     b.Property<string>("CollegeName")
@@ -4202,7 +5054,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("DealerId");
 
-                    b.ToTable("WelfareApplications", (string)null);
+                    b.ToTable("WelfareApplications");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.WelfareApplicationActionLog", b =>
@@ -4239,7 +5091,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("WelfareApplicationId");
 
-                    b.ToTable("WelfareApplicationActionLogs", (string)null);
+                    b.ToTable("WelfareApplicationActionLogs");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.WelfareApplicationApproval", b =>
@@ -4290,7 +5142,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("WelfareApplicationId");
 
-                    b.ToTable("WelfareApplicationApprovals", (string)null);
+                    b.ToTable("WelfareApplicationApprovals");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.WelfareApplicationDocument", b =>
@@ -4335,7 +5187,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("WelfareApplicationId");
 
-                    b.ToTable("WelfareApplicationDocuments", (string)null);
+                    b.ToTable("WelfareApplicationDocuments");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.WholesalerStockAsOnToday", b =>
@@ -4397,7 +5249,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("WholesalerStockAsOnTodays", (string)null);
+                    b.ToTable("WholesalerStockAsOnTodays");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Zone", b =>
@@ -4433,7 +5285,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Zones", (string)null);
+                    b.ToTable("Zones");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -4509,6 +5361,174 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("State");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBill", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouseBooking", "GuestHouseBooking")
+                        .WithMany()
+                        .HasForeignKey("GuestHouseBookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouseBooking");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBillLineItem", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouseBill", "GuestHouseBill")
+                        .WithMany("LineItems")
+                        .HasForeignKey("GuestHouseBillId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouseBill");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBooking", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouse", "GuestHouse")
+                        .WithMany("Bookings")
+                        .HasForeignKey("GuestHouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.GuestHouseRoom", "GuestHouseRoom")
+                        .WithMany("Bookings")
+                        .HasForeignKey("GuestHouseRoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouse");
+
+                    b.Navigation("GuestHouseRoom");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingCancellation", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouseBooking", "GuestHouseBooking")
+                        .WithOne("Cancellation")
+                        .HasForeignKey("SPIC.Core.Entities.GuestHouseBookingCancellation", "GuestHouseBookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouseBooking");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingDocument", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouseBooking", "GuestHouseBooking")
+                        .WithMany("Documents")
+                        .HasForeignKey("GuestHouseBookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouseBooking");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingGuest", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouseBooking", "GuestHouseBooking")
+                        .WithMany("Guests")
+                        .HasForeignKey("GuestHouseBookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouseBooking");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingPayment", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouseBooking", "GuestHouseBooking")
+                        .WithMany("Payments")
+                        .HasForeignKey("GuestHouseBookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouseBooking");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingRefund", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouseBookingCancellation", "GuestHouseBookingCancellation")
+                        .WithMany()
+                        .HasForeignKey("GuestHouseBookingCancellationId");
+
+                    b.HasOne("SPIC.Core.Entities.GuestHouseBooking", "GuestHouseBooking")
+                        .WithOne("Refund")
+                        .HasForeignKey("SPIC.Core.Entities.GuestHouseBookingRefund", "GuestHouseBookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouseBooking");
+
+                    b.Navigation("GuestHouseBookingCancellation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseCancellationPolicy", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouse", "GuestHouse")
+                        .WithMany("CancellationPolicies")
+                        .HasForeignKey("GuestHouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouse");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseImage", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouse", "GuestHouse")
+                        .WithMany("Images")
+                        .HasForeignKey("GuestHouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouse");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoom", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouse", "GuestHouse")
+                        .WithMany("Rooms")
+                        .HasForeignKey("GuestHouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouse");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoomAmenity", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouseRoom", "GuestHouseRoom")
+                        .WithMany("Amenities")
+                        .HasForeignKey("GuestHouseRoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouseRoom");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoomAvailability", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouseRoom", "GuestHouseRoom")
+                        .WithMany("Availabilities")
+                        .HasForeignKey("GuestHouseRoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouseRoom");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoomImage", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouseRoom", "GuestHouseRoom")
+                        .WithMany("Images")
+                        .HasForeignKey("GuestHouseRoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouseRoom");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Headquarter", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.Region", "Region")
@@ -4560,15 +5580,11 @@ namespace Spic.Infrastructure.Migrations
                 {
                     b.HasOne("SPIC.Core.Entities.District", "District")
                         .WithMany()
-                        .HasForeignKey("DistrictId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("DistrictId");
 
                     b.HasOne("SPIC.Core.Entities.State", "State")
                         .WithMany()
-                        .HasForeignKey("StateId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("StateId");
 
                     b.Navigation("District");
 
@@ -4660,6 +5676,46 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("WelfareApplication");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouse", b =>
+                {
+                    b.Navigation("Bookings");
+
+                    b.Navigation("CancellationPolicies");
+
+                    b.Navigation("Images");
+
+                    b.Navigation("Rooms");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBill", b =>
+                {
+                    b.Navigation("LineItems");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBooking", b =>
+                {
+                    b.Navigation("Cancellation");
+
+                    b.Navigation("Documents");
+
+                    b.Navigation("Guests");
+
+                    b.Navigation("Payments");
+
+                    b.Navigation("Refund");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoom", b =>
+                {
+                    b.Navigation("Amenities");
+
+                    b.Navigation("Availabilities");
+
+                    b.Navigation("Bookings");
+
+                    b.Navigation("Images");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.WelfareApplication", b =>

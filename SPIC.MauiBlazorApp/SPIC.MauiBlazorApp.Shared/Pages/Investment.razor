@@ -55,6 +55,105 @@
         background-color: #DCFCE7;
         color: #059669;
     }
+
+    /* ── Consent Banner Styles ── */
+    .consent-offer-banner,
+    .consent-active-banner {
+        border-radius: 12px;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .consent-offer-banner {
+        border: 1.5px solid #bfdbfe;
+        background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+    }
+
+    .consent-active-banner {
+        border: 1.5px solid #bbf7d0;
+        background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+    }
+
+    .consent-offer-inner,
+    .consent-active-inner {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        flex-wrap: wrap;
+    }
+
+    .consent-offer-icon {
+        font-size: 1.6rem;
+        color: #3b82f6;
+        flex-shrink: 0;
+    }
+
+    .consent-active-icon {
+        font-size: 1.6rem;
+        color: #22c55e;
+        flex-shrink: 0;
+    }
+
+    .consent-offer-text,
+    .consent-active-text {
+        flex: 1;
+        min-width: 200px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .consent-offer-text strong,
+    .consent-active-text strong {
+        font-size: 0.92rem;
+        font-weight: 600;
+        color: #1e3a5f;
+    }
+
+    .consent-offer-text span,
+    .consent-active-text span {
+        font-size: 0.82rem;
+        color: #475569;
+        line-height: 1.4;
+    }
+
+    .consent-give-btn {
+        background: #2563eb;
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 18px;
+        font-size: 0.84rem;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.15s;
+        flex-shrink: 0;
+    }
+
+    .consent-give-btn:hover:not(:disabled) { background: #1d4ed8; }
+    .consent-give-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .consent-remove-btn {
+        background: transparent;
+        color: #dc2626;
+        border: 1.5px solid #dc2626;
+        border-radius: 8px;
+        padding: 7px 16px;
+        font-size: 0.84rem;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.15s, color 0.15s;
+        flex-shrink: 0;
+    }
+
+    .consent-remove-btn:hover:not(:disabled) { background: #fee2e2; }
+    .consent-remove-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
@@ -72,7 +171,44 @@
         <h3 class="fw-bold m-0 company-title">Investment</h3>
     </div>
 
-    <!-- Assets (Banking & Properties) Section -->
+    @* ── Consent Banner ── *@
+    @if (!IsViewOnly && !string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase))
+    {
+        @if (_dealer.IsCreditLimitConsentGiven)
+        {
+            <div class="consent-active-banner mb-4">
+                <div class="consent-active-inner">
+                    <span class="consent-active-icon"><i class="bi bi-check-circle-fill"></i></span>
+                    <div class="consent-active-text">
+                        <strong>Consent Provided</strong>
+                        <span>You have opted to skip Credit Limit details. All Credit Limit values are recorded as zero. You will proceed directly to Enclosures.</span>
+                    </div>
+                    <button type="button" class="consent-remove-btn" @onclick="HandleRemoveConsent" disabled="@_isConsentSaving">
+                        @if (_isConsentSaving) { <span class="spinner-border spinner-border-sm"></span> }
+                        else { <text>Remove Consent</text> }
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="consent-offer-banner mb-4">
+                <div class="consent-offer-inner">
+                    <span class="consent-offer-icon"><i class="bi bi-info-circle-fill"></i></span>
+                    <div class="consent-offer-text">
+                        <strong>Consent Option</strong>
+                        <span>If you are not providing Credit Limit details, you may give consent. The Credit Limit pages will be skipped and Credit Limit values will be recorded as zero.</span>
+                    </div>
+                    <button type="button" class="consent-give-btn" @onclick="HandleConsent" disabled="@_isConsentSaving">
+                        @if (_isConsentSaving) { <span class="spinner-border spinner-border-sm"></span> }
+                        else { <text><i class="bi bi-hand-thumbs-up"></i> Give Consent</text> }
+                    </button>
+                </div>
+            </div>
+        }
+    }
+
+
     <div class="main-section">
         <div class="section-header inv-section-header">
             <h3 class="section-title">
@@ -754,6 +890,7 @@
     private bool _buildingPincodeSuccess;
 
     private bool _isSaving;
+    private bool _isConsentSaving;
     private string? _message;
     private bool _isError;
 
@@ -855,6 +992,16 @@
 
     private async Task SaveBankAsset()
     {
+        if (_bankForm.BankId > 0
+            || !string.IsNullOrWhiteSpace(_bankForm.BankBranch)
+            || !string.IsNullOrWhiteSpace(_bankForm.Remarks))
+        {
+            if (_bankForm.Value == 0)
+            {
+                ShowMessage("OD Value is required when Banking details are provided.", true);
+                return;
+            }
+        }
         _bankForm.DealerId = DealerId ?? 0;
         if (_bankForm.Id > 0)
         {
@@ -891,6 +1038,19 @@
 
     private async Task SaveLandAsset()
     {
+        if (!string.IsNullOrWhiteSpace(_landForm.LandName)
+            || !string.IsNullOrWhiteSpace(_landForm.SurvayNumber)
+            || _landForm.LandSize != 0
+            || !string.IsNullOrWhiteSpace(_landForm.UploadedECDocumentPath)
+            || !string.IsNullOrWhiteSpace(_landForm.UploadedLandDocumentPath)
+            || !string.IsNullOrWhiteSpace(_landForm.UploadedValuationCertificatePath))
+        {
+            if (_landForm.PropertyValue == 0)
+            {
+                ShowMessage("Market Value is required when Land details are provided.", true);
+                return;
+            }
+        }
         _landForm.DealerId = DealerId ?? 0;
         if (_landForm.Id > 0)
         {
@@ -928,6 +1088,29 @@
 
     private async Task SaveBuildingAsset()
     {
+        if (!string.IsNullOrWhiteSpace(_buildingForm.BuildingName)
+            || !string.IsNullOrWhiteSpace(_buildingForm.SurveyNumber)
+            || (_buildingForm.LandSize ?? 0) != 0
+            || !string.IsNullOrWhiteSpace(_buildingForm.Remarks)
+            || !string.IsNullOrWhiteSpace(_buildingForm.ShopNoORRoomNoOrBlockNo)
+            || !string.IsNullOrWhiteSpace(_buildingForm.Street)
+            || !string.IsNullOrWhiteSpace(_buildingForm.SubVillage)
+            || !string.IsNullOrWhiteSpace(_buildingForm.Village)
+            || !string.IsNullOrWhiteSpace(_buildingForm.PinCode)
+            || !string.IsNullOrWhiteSpace(_buildingForm.Block)
+            || !string.IsNullOrWhiteSpace(_buildingForm.Taluk)
+            || _buildingForm.DistrictId > 0
+            || _buildingForm.StateId > 0
+            || !string.IsNullOrWhiteSpace(_buildingForm.UploadedECDocumentPath)
+            || !string.IsNullOrWhiteSpace(_buildingForm.UploadedBuildingDocumentPath)
+            || !string.IsNullOrWhiteSpace(_buildingForm.UploadedValuationCertificatePath))
+        {
+            if (_buildingForm.PropertyValue == 0)
+            {
+                ShowMessage("Market Value is required when Building details are provided.", true);
+                return;
+            }
+        }
         _buildingForm.DealerId = DealerId ?? 0;
         if (_buildingForm.Id > 0)
         {
@@ -1082,6 +1265,8 @@
 
             if (isRestricted)
                 Nav.NavigateTo($"/Dashboard?dealerId={DealerId}");
+            else if (_dealer.IsCreditLimitConsentGiven)
+                Nav.NavigateTo($"/Enclosures?dealerId={DealerId}{FlowParam}");
             else
                 Nav.NavigateTo($"/CreditLimit?dealerId={DealerId}{FlowParam}");
         }
@@ -1092,6 +1277,53 @@
         finally
         {
             _isSaving = false;
+        }
+    }
+
+    // Consent: save flag, zero credit limit fields, navigate directly to Enclosures.
+    private async Task HandleConsent()
+    {
+        if (!DealerId.HasValue || DealerId.Value <= 0) return;
+        _isConsentSaving = true;
+        try
+        {
+            _dealer.IsCreditLimitConsentGiven = true;
+            // Zero out the credit limit values stored on the dealer record.
+            _dealer.CashCreditLimit = 0;
+            _dealer.CapitalInvestment = 0;
+            var response = await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", _dealer);
+            response.EnsureSuccessStatusCode();
+            FormStepData.MarkStepError(9, false);
+            Nav.NavigateTo($"/Enclosures?dealerId={DealerId}{FlowParam}");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to save consent: {ex.Message}", true);
+        }
+        finally
+        {
+            _isConsentSaving = false;
+        }
+    }
+
+    // Remove consent: clear the flag, stay on this page for normal data entry.
+    private async Task HandleRemoveConsent()
+    {
+        if (!DealerId.HasValue || DealerId.Value <= 0) return;
+        _isConsentSaving = true;
+        try
+        {
+            _dealer.IsCreditLimitConsentGiven = false;
+            var response = await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", _dealer);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to remove consent: {ex.Message}", true);
+        }
+        finally
+        {
+            _isConsentSaving = false;
         }
     }
 

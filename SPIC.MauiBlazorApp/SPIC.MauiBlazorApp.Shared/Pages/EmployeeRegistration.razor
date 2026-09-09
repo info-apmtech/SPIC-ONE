@@ -60,6 +60,21 @@
         </div>
         <div class="row g-4 align-items-end">
 
+            @* AVP → Zone only *@
+            @if (SelectedRole == "AVP")
+            {
+                <div class="col-md-3">
+                    <label class="form-lbl">Zone</label>
+                    <select class="form-inp" @bind="vm.Login.ZoneId">
+                        <option value="0">Select Zone</option>
+                        @foreach (var z in Zones)
+                        {
+                            <option value="@z.Id">@z.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+
             @* SMD, SMM → State only *@
             @if (SelectedRole == "SMD" || SelectedRole == "SMM")
             {
@@ -115,8 +130,209 @@
                 </div>
             }
 
-            @if (SelectedRole != "SMD" && SelectedRole != "SMM" && SelectedRole != "RM" && SelectedRole != "RMD" &&
-                 SelectedRole != "MDO" && SelectedRole != "MO" && SelectedRole != "JMDO" && !string.IsNullOrEmpty(SelectedRole))
+            @* SpecialAdmin → multi-select dropdowns (States → Regions → HQs cascade) *@
+            @if (SelectedRole == "SpecialAdmin")
+            {
+                <div class="col-md-4">
+                    <label class="form-lbl">States</label>
+                    <div class="samulti">
+                        <div class="samulti-box @(IsSpecialStateOpen ? "open" : "")" @onclick="ToggleSpecialStateDropdown">
+                            <div class="samulti-selected">
+                                @if (SelectedSpecialStates.Count == 0)
+                                {
+                                    <span class="samulti-placeholder">Select States</span>
+                                }
+                                else
+                                {
+                                    @foreach (var s in States.Where(x => SelectedSpecialStates.Contains(x.Id)))
+                                    {
+                                        <span class="samulti-tag">
+                                            @s.StateName
+                                            <i class="bi bi-x" @onclick="() => ToggleState(s.Id, false)" @onclick:stopPropagation="true"></i>
+                                        </span>
+                                    }
+                                }
+                            </div>
+                            <div class="samulti-actions">
+                                @if (SelectedSpecialStates.Count > 0)
+                                {
+                                    <i class="bi bi-x-circle-fill samulti-clear" title="Clear all states"
+                                       @onclick="ClearSpecialStates" @onclick:stopPropagation="true"></i>
+                                }
+                                <i class="bi @(IsSpecialStateOpen ? "bi-chevron-up" : "bi-chevron-down") samulti-chevron"></i>
+                            </div>
+                        </div>
+                        @if (IsSpecialStateOpen)
+                        {
+                            <div class="samulti-overlay" @onclick="CloseSpecialDropdowns"></div>
+                            <div class="samulti-panel" @onclick:stopPropagation="true">
+                                <div class="samulti-search">
+                                    <i class="bi bi-search samulti-search-icon"></i>
+                                    <input type="text" class="samulti-search-input" placeholder="Search states..."
+                                           @bind="SpecialStateSearch" @bind:event="oninput" />
+                                </div>
+                                <div class="samulti-select-all" @onclick="SelectAllSpecialStates">Select All States</div>
+                                <div class="samulti-list">
+                                    @if (!FilteredSpecialStates.Any())
+                                    {
+                                        <div class="samulti-empty">No states found</div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var s in FilteredSpecialStates)
+                                        {
+                                            var isSel = SelectedSpecialStates.Contains(s.Id);
+                                                <div class="samulti-option @(isSel ? "selected" : "")"
+                                                     @onclick="() => ToggleState(s.Id, !isSel)">
+                                                <span>@s.StateName</span>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-lbl">Regions</label>
+                    <div class="samulti">
+                        <div class="samulti-box @(IsSpecialRegionOpen ? "open" : "")" @onclick="ToggleSpecialRegionDropdown">
+                            <div class="samulti-selected">
+                                @if (SelectedSpecialRegions.Count == 0)
+                                {
+                                    <span class="samulti-placeholder">Select Regions</span>
+                                }
+                                else
+                                {
+                                    @foreach (var r in AvailableSpecialRegions.Where(x => SelectedSpecialRegions.Contains(x.Id)))
+                                    {
+                                        <span class="samulti-tag">
+                                            @r.RegionName
+                                            <i class="bi bi-x" @onclick="() => ToggleRegion(r.Id, false)" @onclick:stopPropagation="true"></i>
+                                        </span>
+                                    }
+                                }
+                            </div>
+                            <div class="samulti-actions">
+                                @if (SelectedSpecialRegions.Count > 0)
+                                {
+                                    <i class="bi bi-x-circle-fill samulti-clear" title="Clear all regions"
+                                       @onclick="ClearSpecialRegions" @onclick:stopPropagation="true"></i>
+                                }
+                                <i class="bi @(IsSpecialRegionOpen ? "bi-chevron-up" : "bi-chevron-down") samulti-chevron"></i>
+                            </div>
+                        </div>
+                        @if (IsSpecialRegionOpen)
+                        {
+                            <div class="samulti-overlay" @onclick="CloseSpecialDropdowns"></div>
+                            <div class="samulti-panel" @onclick:stopPropagation="true">
+                                @if (AvailableSpecialRegions.Count == 0)
+                                {
+                                    <div class="samulti-empty">Select States first to load Regions.</div>
+                                }
+                                else
+                                {
+                                    <div class="samulti-search">
+                                        <i class="bi bi-search samulti-search-icon"></i>
+                                        <input type="text" class="samulti-search-input" placeholder="Search regions..."
+                                               @bind="SpecialRegionSearch" @bind:event="oninput" />
+                                    </div>
+                                    <div class="samulti-select-all" @onclick="SelectAllSpecialRegions">Select All Regions</div>
+                                    <div class="samulti-list">
+                                        @if (!FilteredSpecialRegions.Any())
+                                        {
+                                            <div class="samulti-empty">No regions found</div>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var r in FilteredSpecialRegions)
+                                            {
+                                                var rSel = SelectedSpecialRegions.Contains(r.Id);
+                                                <div class="samulti-option @(rSel ? "selected" : "")"
+                                                     @onclick="() => ToggleRegion(r.Id, !rSel)">
+                                                <span>@r.RegionName</span>
+                                            </div>
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-lbl">Headquarters</label>
+                    <div class="samulti">
+                        <div class="samulti-box @(IsSpecialHqOpen ? "open" : "")" @onclick="ToggleSpecialHqDropdown">
+                            <div class="samulti-selected">
+                                @if (SelectedSpecialHQs.Count == 0)
+                                {
+                                    <span class="samulti-placeholder">Select Headquarters</span>
+                                }
+                                else
+                                {
+                                    @foreach (var h in AvailableSpecialHeadquarters.Where(x => SelectedSpecialHQs.Contains(x.Id)))
+                                    {
+                                        <span class="samulti-tag">
+                                            @h.HeadquarterName
+                                            <i class="bi bi-x" @onclick="() => ToggleHQ(h.Id, false)" @onclick:stopPropagation="true"></i>
+                                        </span>
+                                    }
+                                }
+                            </div>
+                            <div class="samulti-actions">
+                                @if (SelectedSpecialHQs.Count > 0)
+                                {
+                                    <i class="bi bi-x-circle-fill samulti-clear" title="Clear all headquarters"
+                                       @onclick="ClearSpecialHQs" @onclick:stopPropagation="true"></i>
+                                }
+                                <i class="bi @(IsSpecialHqOpen ? "bi-chevron-up" : "bi-chevron-down") samulti-chevron"></i>
+                            </div>
+                        </div>
+                        @if (IsSpecialHqOpen)
+                        {
+                            <div class="samulti-overlay" @onclick="CloseSpecialDropdowns"></div>
+                            <div class="samulti-panel" @onclick:stopPropagation="true">
+                                @if (AvailableSpecialHeadquarters.Count == 0)
+                                {
+                                    <div class="samulti-empty">Select Regions first to load Headquarters.</div>
+                                }
+                                else
+                                {
+                                    <div class="samulti-search">
+                                        <i class="bi bi-search samulti-search-icon"></i>
+                                        <input type="text" class="samulti-search-input" placeholder="Search headquarters..."
+                                               @bind="SpecialHqSearch" @bind:event="oninput" />
+                                    </div>
+                                    <div class="samulti-select-all" @onclick="SelectAllSpecialHQs">Select All Headquarters</div>
+                                    <div class="samulti-list">
+                                        @if (!FilteredSpecialHQs.Any())
+                                        {
+                                            <div class="samulti-empty">No headquarters found</div>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var h in FilteredSpecialHQs)
+                                            {
+                                                var hSel = SelectedSpecialHQs.Contains(h.Id);
+                                                <div class="samulti-option @(hSel ? "selected" : "")"
+                                                     @onclick="() => ToggleHQ(h.Id, !hSel)">
+                                                <span>@h.HeadquarterName</span>
+                                            </div>
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (SelectedRole != "AVP" && SelectedRole != "SMD" && SelectedRole != "SMM" && SelectedRole != "RM" && SelectedRole != "RMD" &&
+                 SelectedRole != "MDO" && SelectedRole != "MO" && SelectedRole != "JMDO" && SelectedRole != "SpecialAdmin" && !string.IsNullOrEmpty(SelectedRole))
             {
                 <div class="col-12">
                     <p class="text-muted small"><i class="bi bi-info-circle me-1"></i>No location specification required for this role.</p>
@@ -214,6 +430,32 @@
     private int EditingEmployeeId = 0;
     private int EditingLoginId = 0;
 
+    // SpecialAdmin multi-location selection state
+    private HashSet<int> SelectedSpecialStates = new();
+    private HashSet<int> SelectedSpecialRegions = new();
+    private HashSet<int> SelectedSpecialHQs = new();
+    private List<LocationItemDto> AvailableSpecialRegions = new();
+    private List<LocationItemDto> AvailableSpecialHeadquarters = new();
+
+    // Full-access intent: set ONLY by an explicit "Select All" action (or restored
+    // from a compact row when editing). A State in SpecialFullAccessStates saves as
+    // {State,0,0} (State -> All Regions -> All HQs); a Region in
+    // SpecialFullAccessRegions saves as {State,Region,0} (Region -> All HQs).
+    // Merely selecting a State/Region/RQ never adds these, so no access is granted
+    // beyond what the user explicitly narrowed.
+    private HashSet<int> SpecialFullAccessStates = new();
+    private HashSet<int> SpecialFullAccessRegions = new();
+
+    // SpecialAdmin multi-select dropdown open/close state
+    private bool IsSpecialStateOpen = false;
+    private bool IsSpecialRegionOpen = false;
+    private bool IsSpecialHqOpen = false;
+
+    // SpecialAdmin search queries (filters only the already-loaded options)
+    private string SpecialStateSearch = "";
+    private string SpecialRegionSearch = "";
+    private string SpecialHqSearch = "";
+
     private static readonly AppRole[] AllowedRoles = new[]
     {
         AppRole.CorporateAdmin,
@@ -225,7 +467,8 @@
         AppRole.RMD,
         AppRole.MDO,
         AppRole.MO,
-        AppRole.JMDO
+        AppRole.JMDO,
+        AppRole.SpecialAdmin
     };
 
     protected override async Task OnInitializedAsync()
@@ -267,6 +510,31 @@
             // 0 in the dropdown means "no designation" -> send null to backend
             int? designationId = vm.SelectedDesignationId > 0 ? vm.SelectedDesignationId : null;
 
+            var specialLocations = BuildSpecialAdminLocations();
+
+            // SpecialAdmin validation: at least one state required, and every state
+            // must narrow SOMETHING (selecting a State alone grants nothing now).
+            if (vm.Login.Role == AppRole.SpecialAdmin)
+            {
+                if (SelectedSpecialStates.Count == 0)
+                    throw new Exception("At least one State is required for SpecialAdmin.");
+
+                foreach (var stateId in SelectedSpecialStates)
+                {
+                    if (SpecialFullAccessStates.Contains(stateId))
+                        continue;
+                    var hasCoverage = AvailableSpecialRegions
+                        .Where(r => r.StateId == stateId && SelectedSpecialRegions.Contains(r.Id))
+                        .Any(r => SpecialFullAccessRegions.Contains(r.Id) ||
+                                  AvailableSpecialHeadquarters.Any(h => h.RegionId == r.Id && SelectedSpecialHQs.Contains(h.Id)));
+                    if (!hasCoverage)
+                    {
+                        var stateName = States.FirstOrDefault(s => s.Id == stateId)?.StateName ?? $"State {stateId}";
+                        throw new Exception($"For {stateName}, select at least one Region + one Headquarters, or use \"Select All Regions\" / \"Select All Headquarters\" to grant access.");
+                    }
+                }
+            }
+
             if (!IsEditMode)
             {
                 var empResponse = await Http.PostAsJsonAsync("api/EmployeeRegistration", vm.Employee);
@@ -297,7 +565,8 @@
                     HeadquartersId = vm.Login.HeadquartersId,
                     IsActive = vm.Login.IsActive,
                     CreatedBy = currentUser,
-                    UpdatedBy = currentUser
+                    UpdatedBy = currentUser,
+                    SpecialAdminLocations = specialLocations
                 };
 
                 var loginResponse = await Http.PostAsJsonAsync("api/EmployeeLoginSetup", loginRequest);
@@ -332,7 +601,8 @@
                     RegionId = vm.Login.RegionId,
                     HeadquartersId = vm.Login.HeadquartersId,
                     IsActive = vm.Login.IsActive,
-                    UpdatedBy = currentUser
+                    UpdatedBy = currentUser,
+                    SpecialAdminLocations = specialLocations
                 };
 
                 var loginUpdateResponse = await Http.PutAsJsonAsync($"api/EmployeeLoginSetup/login/{EditingLoginId}", loginRequest);
@@ -391,6 +661,12 @@
 
             vm.SelectedDesignationId = loginData.DesignationId ?? 0;
 
+            // SpecialAdmin: load multi-location assignments
+            if (loginData.Role == AppRole.SpecialAdmin)
+            {
+                await LoadSpecialAdminForEdit(loginData.EmployeeInformationID, loginData.SpecialAdminLocations);
+            }
+
             EditingEmployeeId = employee.Id;
             EditingLoginId = loginId;
             IsEditMode = true;
@@ -410,6 +686,340 @@
         EditingEmployeeId = 0;
         EditingLoginId = 0;
         IsEditMode = false;
+        SelectedSpecialStates.Clear();
+        SelectedSpecialRegions.Clear();
+        SelectedSpecialHQs.Clear();
+        SpecialFullAccessStates.Clear();
+        SpecialFullAccessRegions.Clear();
+        AvailableSpecialRegions = new();
+        AvailableSpecialHeadquarters = new();
+        IsSpecialStateOpen = false;
+        IsSpecialRegionOpen = false;
+        IsSpecialHqOpen = false;
+        SpecialStateSearch = "";
+        SpecialRegionSearch = "";
+        SpecialHqSearch = "";
+    }
+
+    private void ToggleSpecialStateDropdown()
+    {
+        IsSpecialStateOpen = !IsSpecialStateOpen;
+        if (!IsSpecialStateOpen) SpecialStateSearch = "";
+    }
+
+    private void ToggleSpecialRegionDropdown()
+    {
+        IsSpecialRegionOpen = !IsSpecialRegionOpen;
+        if (!IsSpecialRegionOpen) SpecialRegionSearch = "";
+    }
+
+    private void ToggleSpecialHqDropdown()
+    {
+        IsSpecialHqOpen = !IsSpecialHqOpen;
+        if (!IsSpecialHqOpen) SpecialHqSearch = "";
+    }
+
+    private void CloseSpecialDropdowns()
+    {
+        IsSpecialStateOpen = false;
+        IsSpecialRegionOpen = false;
+        IsSpecialHqOpen = false;
+        SpecialStateSearch = "";
+        SpecialRegionSearch = "";
+        SpecialHqSearch = "";
+    }
+
+    private IEnumerable<LocationItemDto> FilteredSpecialStates =>
+        string.IsNullOrWhiteSpace(SpecialStateSearch)
+            ? States
+            : States.Where(s => s.Name.Contains(SpecialStateSearch, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<LocationItemDto> FilteredSpecialRegions =>
+        string.IsNullOrWhiteSpace(SpecialRegionSearch)
+            ? AvailableSpecialRegions
+            : AvailableSpecialRegions.Where(r => r.Name.Contains(SpecialRegionSearch, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<LocationItemDto> FilteredSpecialHQs =>
+        string.IsNullOrWhiteSpace(SpecialHqSearch)
+            ? AvailableSpecialHeadquarters
+            : AvailableSpecialHeadquarters.Where(h => h.Name.Contains(SpecialHqSearch, StringComparison.OrdinalIgnoreCase));
+
+    private void ClearSpecialStates()
+    {
+        SelectedSpecialStates.Clear();
+        SelectedSpecialRegions.Clear();
+        SelectedSpecialHQs.Clear();
+        SpecialFullAccessStates.Clear();
+        SpecialFullAccessRegions.Clear();
+        AvailableSpecialRegions = new();
+        AvailableSpecialHeadquarters = new();
+    }
+
+    private void ClearSpecialRegions()
+    {
+        SelectedSpecialRegions.Clear();
+        SelectedSpecialHQs.Clear();
+        SpecialFullAccessStates.Clear();
+        SpecialFullAccessRegions.Clear();
+        AvailableSpecialHeadquarters = new();
+    }
+
+    private void ClearSpecialHQs()
+    {
+        SelectedSpecialHQs.Clear();
+        SpecialFullAccessStates.Clear();
+        SpecialFullAccessRegions.Clear();
+    }
+
+    // Removes an (already) selected State so that it no longer grants anything,
+    // including any full-access grant it may have had.
+    private async Task ToggleState(int stateId, object? value)
+    {
+        var add = value is bool b && b;
+        if (add) SelectedSpecialStates.Add(stateId);
+        else
+        {
+            SelectedSpecialStates.Remove(stateId);
+            SpecialFullAccessStates.Remove(stateId);
+            foreach (var r in AvailableSpecialRegions.Where(x => x.StateId == stateId))
+                SpecialFullAccessRegions.Remove(r.Id);
+        }
+
+        // re-compute the region pool from the freshly selected states
+        await RefreshAvailableRegions();
+
+        // remove orphaned regions/HQs that no longer belong to the selected states
+        var validRegionIds = AvailableSpecialRegions.Select(r => r.Id).ToHashSet();
+        SelectedSpecialRegions.RemoveWhere(r => !validRegionIds.Contains(r));
+        await RefreshAvailableHeadquarters();
+        SelectedSpecialHQs.RemoveWhere(h => !AvailableSpecialHeadquarters.Any(x => x.Id == h));
+    }
+
+    private async Task ToggleRegion(int regionId, object? value)
+    {
+        var add = value is bool b && b;
+        if (add) SelectedSpecialRegions.Add(regionId);
+        else
+        {
+            SelectedSpecialRegions.Remove(regionId);
+
+            // The region itself is no longer "Region -> All HQs"...
+            SpecialFullAccessRegions.Remove(regionId);
+
+            // ...and its State is no longer "All Regions" either, so it must fall
+            // back to partial access (full access is granted only via Select All).
+            var stateId = AvailableSpecialRegions.FirstOrDefault(r => r.Id == regionId)?.StateId;
+            if (stateId != null)
+            {
+                SpecialFullAccessStates.Remove(stateId.Value);
+                foreach (var r in AvailableSpecialRegions.Where(x => x.StateId == stateId.Value))
+                    SpecialFullAccessRegions.Remove(r.Id);
+            }
+        }
+
+        await RefreshAvailableHeadquarters();
+        SelectedSpecialHQs.RemoveWhere(h => !AvailableSpecialHeadquarters.Any(x => x.Id == h));
+    }
+
+    private void ToggleHQ(int hqId, object? value)
+    {
+        var add = value is bool b && b;
+        if (add) SelectedSpecialHQs.Add(hqId);
+        else
+        {
+            SelectedSpecialHQs.Remove(hqId);
+
+            // Removing an HQ narrows access, so its Region is no longer
+            // "Region -> All HQs" and, if that region belonged to a full State,
+            // the State is no longer "All Regions -> All HQs" either.
+            var regionId = AvailableSpecialHeadquarters.FirstOrDefault(h => h.Id == hqId)?.RegionId;
+            if (regionId != null)
+            {
+                SpecialFullAccessRegions.Remove(regionId.Value);
+                var stateId = AvailableSpecialRegions.FirstOrDefault(r => r.Id == regionId.Value)?.StateId;
+                if (stateId != null) SpecialFullAccessStates.Remove(stateId.Value);
+            }
+        }
+    }
+
+    private async Task SelectAllSpecialStates()
+    {
+        var allIds = States.Select(s => s.Id).ToHashSet();
+        SelectedSpecialStates = new HashSet<int>(allIds);
+
+        // Global "Select All States" = full access for every State; on save this
+        // enumerates one {State,0,0} row per State (no schema change required).
+        SpecialFullAccessStates = new HashSet<int>(allIds);
+
+        await RefreshAvailableRegions();
+        SelectedSpecialRegions.RemoveWhere(r => !AvailableSpecialRegions.Any(x => x.Id == r));
+        SpecialFullAccessRegions = new HashSet<int>(AvailableSpecialRegions.Select(r => r.Id));
+        await RefreshAvailableHeadquarters();
+        SelectedSpecialHQs.RemoveWhere(h => !AvailableSpecialHeadquarters.Any(x => x.Id == h));
+        SelectedSpecialHQs = new HashSet<int>(AvailableSpecialHeadquarters.Select(h => h.Id));
+    }
+
+    private async Task SelectAllSpecialRegions()
+    {
+        // "Select All Regions" for the currently selected State(s) = full access
+        // for those States -> State -> All Regions -> All HQs.
+        SpecialFullAccessStates.UnionWith(SelectedSpecialStates);
+        SelectedSpecialRegions = new HashSet<int>(AvailableSpecialRegions.Select(r => r.Id));
+        SpecialFullAccessRegions.UnionWith(AvailableSpecialRegions.Select(r => r.Id));
+
+        await RefreshAvailableHeadquarters();
+        SelectedSpecialHQs.RemoveWhere(h => !AvailableSpecialHeadquarters.Any(x => x.Id == h));
+        SelectedSpecialHQs = new HashSet<int>(AvailableSpecialHeadquarters.Select(h => h.Id));
+    }
+
+    private void SelectAllSpecialHQs()
+    {
+        // "Select All Headquarters" for the loaded Regions = Region -> All HQs.
+        SpecialFullAccessRegions.UnionWith(AvailableSpecialRegions.Select(r => r.Id));
+        SelectedSpecialHQs = new HashSet<int>(AvailableSpecialHeadquarters.Select(h => h.Id));
+    }
+
+    // Mirrors the Register page's State -> Region -> HQ cascade: the full
+    // Regions/Headquarters master lists (api/Region/all, api/Headquarter/all)
+    // are filtered in-memory by StateId/RegionId, exactly like Register.razor.
+    private Task RefreshAvailableRegions()
+    {
+        if (SelectedSpecialStates.Count == 0)
+        {
+            AvailableSpecialRegions = new();
+            return Task.CompletedTask;
+        }
+        AvailableSpecialRegions = Regions
+            .Where(r => SelectedSpecialStates.Contains(r.StateId))
+            .ToList();
+        return Task.CompletedTask;
+    }
+
+    private Task RefreshAvailableHeadquarters()
+    {
+        if (SelectedSpecialRegions.Count == 0)
+        {
+            AvailableSpecialHeadquarters = new();
+            return Task.CompletedTask;
+        }
+        AvailableSpecialHeadquarters = Headquarters
+            .Where(h => SelectedSpecialRegions.Contains(h.RegionId))
+            .ToList();
+        return Task.CompletedTask;
+    }
+
+    private List<SpecialAdminLocationItem>? BuildSpecialAdminLocations()
+    {
+        if (vm.Login.Role != AppRole.SpecialAdmin)
+            return null;
+
+        // Compact-row encoding matching the existing SpecialAdminLocations schema:
+        //   {State, 0, 0}        -> State -> All Regions -> All HQs
+        //   {State, Region, 0}   -> State -> Region -> All HQs
+        //   {State, Region, HQ}  -> specific HQ under a Region
+        // RegionId/HeadquarterId = 0 is exactly how reports already interpret
+        // "not narrowed / all".
+        //
+        // The full-access rows are emitted ONLY for explicit "Select All" intent
+        // (tracked in SpecialFullAccessStates / SpecialFullAccessRegions). A State
+        // merely selected, or a Region merely selected, produces individual rows
+        // and is never widened to "all" automatically.
+        var list = new List<SpecialAdminLocationItem>();
+        foreach (var stateId in SelectedSpecialStates)
+        {
+            if (SpecialFullAccessStates.Contains(stateId))
+            {
+                list.Add(new SpecialAdminLocationItem { StateId = stateId, RegionId = 0, HeadquarterId = 0 });
+                continue;
+            }
+
+            var selectedRegions = AvailableSpecialRegions
+                .Where(r => r.StateId == stateId && SelectedSpecialRegions.Contains(r.Id));
+            foreach (var region in selectedRegions)
+            {
+                if (SpecialFullAccessRegions.Contains(region.Id))
+                {
+                    list.Add(new SpecialAdminLocationItem { StateId = stateId, RegionId = region.Id, HeadquarterId = 0 });
+                    continue;
+                }
+
+                foreach (var hq in AvailableSpecialHeadquarters.Where(h => h.RegionId == region.Id && SelectedSpecialHQs.Contains(h.Id)))
+                {
+                    list.Add(new SpecialAdminLocationItem { StateId = stateId, RegionId = region.Id, HeadquarterId = hq.Id });
+                }
+            }
+        }
+        return list;
+    }
+
+    private async Task LoadSpecialAdminForEdit(int employeeInfoId, List<SpecialAdminLocationItem>? locations)
+    {
+        SelectedSpecialStates.Clear();
+        SelectedSpecialRegions.Clear();
+        SelectedSpecialHQs.Clear();
+        SpecialFullAccessStates.Clear();
+        SpecialFullAccessRegions.Clear();
+
+        if (locations == null || locations.Count == 0)
+        {
+            AvailableSpecialRegions = new();
+            AvailableSpecialHeadquarters = new();
+            return;
+        }
+
+        // 1. Restore exact State selections, then load the State->Region pool.
+        foreach (var loc in locations)
+        {
+            if (loc.StateId > 0) SelectedSpecialStates.Add(loc.StateId);
+        }
+        await RefreshAvailableRegions();
+
+        // 2. Restore exact Region selections; a State-level ALL row ({State,0,0})
+        //    means every Region of that State, so select the full Region pool and
+        //    restore its full-access intent. A Region-level ALL row ({State,Region,0})
+        //    likewise restores that Region's full-access intent.
+        foreach (var loc in locations)
+        {
+            if (loc.StateId > 0 && loc.RegionId == 0 && loc.HeadquarterId == 0)
+            {
+                SpecialFullAccessStates.Add(loc.StateId);
+                foreach (var r in AvailableSpecialRegions.Where(x => x.StateId == loc.StateId))
+                    SelectedSpecialRegions.Add(r.Id);
+            }
+            else if (loc.StateId > 0 && loc.RegionId > 0)
+            {
+                if (loc.HeadquarterId == 0)
+                    SpecialFullAccessRegions.Add(loc.RegionId);
+                SelectedSpecialRegions.Add(loc.RegionId);
+            }
+        }
+        await RefreshAvailableHeadquarters();
+
+        // 3. Restore exact HQ selections; Region-level ALL ({State,Region,0}) or
+        //    State-level ALL ({State,0,0}) select the full matching HQ pool.
+        //    A State-level ALL row only selects HQs belonging to that State's own
+        //    Regions, so selections never leak into other States' regions.
+        foreach (var loc in locations)
+        {
+            if (loc.StateId > 0 && loc.RegionId == 0 && loc.HeadquarterId == 0)
+            {
+                var stateRegionIds = AvailableSpecialRegions
+                    .Where(x => x.StateId == loc.StateId)
+                    .Select(x => x.Id)
+                    .ToHashSet();
+                foreach (var h in AvailableSpecialHeadquarters.Where(x => stateRegionIds.Contains(x.RegionId)))
+                    SelectedSpecialHQs.Add(h.Id);
+            }
+            else if (loc.StateId > 0 && loc.RegionId > 0 && loc.HeadquarterId == 0)
+            {
+                foreach (var h in AvailableSpecialHeadquarters.Where(x => x.RegionId == loc.RegionId))
+                    SelectedSpecialHQs.Add(h.Id);
+            }
+            else if (loc.StateId > 0 && loc.RegionId > 0 && loc.HeadquarterId > 0)
+            {
+                SelectedSpecialHQs.Add(loc.HeadquarterId);
+            }
+        }
     }
 
     private void Cancel()

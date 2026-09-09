@@ -603,7 +603,11 @@
                 new SectionItem("Investment", "/Investment", "bi bi-currency-dollar", () => _stepStatus[8]),
             };
 
-            if (IsNewDealerFlow)
+            if (_dealer.IsCreditLimitConsentGiven)
+            {
+                // Credit Limit pages are skipped when consent is given.
+            }
+            else if (IsNewDealerFlow)
             {
                 if (_dealer.InSpic)
                 {
@@ -923,10 +927,16 @@
         // All other types (Dealer) keep the real check (any bank/land/building asset).
         _stepStatus[8] = !_showProprietorAndInvestment
             || _isInstitution
+            || _dealer.IsCreditLimitConsentGiven
             || _assetBanks.Count > 0
             || _assetLands.Count > 0
             || _assetBuildings.Count > 0;
-        if (!_showBusinessInfo)
+        if (_dealer.IsCreditLimitConsentGiven)
+        {
+            _spicCommercialComplete = true;
+            _gflCommercialComplete = true;
+        }
+        else if (!_showBusinessInfo)
         {
             _spicCommercialComplete = true;
             _gflCommercialComplete = true;
@@ -981,10 +991,13 @@
             new("GST Certificate", !string.IsNullOrEmpty(_dealer.GSTFilePath)),
             new("PAN Copy", !string.IsNullOrEmpty(_dealer.PANFilePath)),
             new("Aadhaar Copy", !string.IsNullOrEmpty(_dealer.AadhaarFilePath)),
-            new("Bank Guarantee Certificate", _docs != null && !string.IsNullOrEmpty(_docs.BankGauranteeFilePath)),
             new("IT Returns (FY1)", _docs != null && !string.IsNullOrEmpty(_docs.FY1ITReturnFilePath)),
             new("IT Returns (FY2)", _docs != null && !string.IsNullOrEmpty(_docs.FY2ITReturnFilePath)),
         };
+
+        // Bank Guarantee Certificate is optional; it is only listed here when uploaded.
+        if (_docs != null && !string.IsNullOrEmpty(_docs.BankGauranteeFilePath))
+            _enclosureItems.Add(new("Bank Guarantee Certificate", true));
 
         if (_dealer.InSpic)
             _enclosureItems.Add(new("SPIC Specimen Signature", _docs != null && !string.IsNullOrEmpty(_docs.SpecimanFilePath)));

@@ -721,6 +721,15 @@
     {
         if (HasUnrestrictedRole || LoginState is null) return;
 
+        // SpecialAdmin: mandatory multi-location scope = all assigned locations.
+        if (LoginState.IsSpecialAdminWithAssignments)
+        {
+            _selStates = LoginState.AssignedStateIds.ToList();
+            _selRegions = LoginState.AssignedRegionIds.ToList();
+            _selHqs = LoginState.AssignedHeadquarterIds.ToList();
+            return;
+        }
+
         if (LoginState.IsHQRole && LoginState.HQId > 0)
         {
             _selHqs = new List<int> { LoginState.HQId };
@@ -763,6 +772,27 @@
         {
             _states = _allStates; _regions = _allRegions; _hq = _allHqs;
             _districts = _allDistricts; _subDistricts = _allSubDistricts;
+            return;
+        }
+
+        if (LoginState.IsSpecialAdminWithAssignments)
+        {
+            var allowedStates = LoginState.AssignedStateIds.ToHashSet();
+            var allowedRegions = LoginState.AssignedRegionIds.ToHashSet();
+            var allowedHqs = LoginState.AssignedHeadquarterIds.ToHashSet();
+
+            _states = _allStates.Where(x => allowedStates.Contains(x.Id)).ToList();
+            _regions = _allRegions
+                .Where(r => allowedStates.Contains(r.StateId ?? 0))
+                .Where(r => allowedRegions.Count == 0 || allowedRegions.Contains(r.Id))
+                .ToList();
+            _hq = _allHqs
+                .Where(h => allowedStates.Contains(h.StateId ?? 0))
+                .Where(h => allowedRegions.Count == 0 || allowedRegions.Contains(h.RegionId ?? 0))
+                .Where(h => allowedHqs.Count == 0 || allowedHqs.Contains(h.Id))
+                .ToList();
+            _districts = _allDistricts.Where(x => allowedStates.Contains(x.StateId ?? 0)).ToList();
+            _subDistricts = _allSubDistricts.Where(x => allowedStates.Contains(x.StateId ?? 0)).ToList();
             return;
         }
 

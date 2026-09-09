@@ -117,6 +117,11 @@
     [Parameter] public IEnumerable<TItem> Items { get; set; } = Enumerable.Empty<TItem>();
     [Parameter] public List<ExportColumn<TItem>> ExportColumns { get; set; } = new();
 
+    // Optional Excel-only columns. When supplied, Excel export uses these; otherwise it falls
+    // back to ExportColumns (same as CSV). This is backward compatible - existing callers that
+    // do not set this parameter keep their previous Excel behavior.
+    [Parameter] public List<ExportColumn<TItem>>? ExcelExportColumns { get; set; }
+
     // UI Templates
     [Parameter] public RenderFragment? FilterControls { get; set; }
     [Parameter] public RenderFragment? TableHeader { get; set; }
@@ -222,11 +227,12 @@
     {
         var data = SearchedItems.ToList();
         if (!data.Any()) return;
+        var columns = ExcelExportColumns ?? ExportColumns;
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add(FileName.Length > 31 ? FileName.Substring(0, 31) : FileName);
-        for (int c = 0; c < ExportColumns.Count; c++) worksheet.Cell(1, c + 1).Value = ExportColumns[c].Header;
+        for (int c = 0; c < columns.Count; c++) worksheet.Cell(1, c + 1).Value = columns[c].Header;
         for (int r = 0; r < data.Count; r++)
-            for (int c = 0; c < ExportColumns.Count; c++) worksheet.Cell(r + 2, c + 1).Value = ExportColumns[c].ValueSelector(data[r]);
+            for (int c = 0; c < columns.Count; c++) worksheet.Cell(r + 2, c + 1).Value = columns[c].ValueSelector(data[r]);
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         await DownloadFile($"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{Convert.ToBase64String(stream.ToArray())}", $"{FileName}_{DateTime.Now:yyyyMMdd}.xlsx");

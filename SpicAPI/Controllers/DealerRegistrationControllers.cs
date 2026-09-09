@@ -8,6 +8,7 @@ using System.Security.Claims;
 using System.Collections.Generic;
 using static System.Net.WebRequestMethods;
 using Microsoft.AspNetCore.Identity;
+using SpicAPI.Services;
 namespace SpicAPI.Controllers
 {
 
@@ -181,7 +182,9 @@ namespace SpicAPI.Controllers
 			// Admin / CorporateAdmin → full data
 			if (role == "Admin" || role == "CorporateAdmin")
 				return Ok(await query.ToListAsync());
-			if (role == "RM" && int.TryParse(regionClaim, out var regionId))
+			if (SpecialAdminScope.IsSpecialAdmin(User))
+				query = query.Where(x => SpecialAdminScope.AssignedStateIds(User).Contains(x.StateId));
+			else if (role == "RM" && int.TryParse(regionClaim, out var regionId))
 				query = query.Where(x => x.Region == regionId);
 			else if ((role == "SM") && int.TryParse(stateClaim, out var stateId))
 				query = query.Where(x => x.StateId == stateId);
@@ -204,7 +207,9 @@ namespace SpicAPI.Controllers
 
 			if (role != "Admin" && role != "CorporateAdmin")
 			{
-				if (role == "RM" && int.TryParse(regionClaim, out var regionId))
+				if (SpecialAdminScope.IsSpecialAdmin(User))
+					query = query.Where(x => SpecialAdminScope.AssignedStateIds(User).Contains(x.StateId));
+				else if (role == "RM" && int.TryParse(regionClaim, out var regionId))
 					query = query.Where(x => x.Region == regionId);
 				else if (role == "SM" && int.TryParse(stateClaim, out var stateId))
 					query = query.Where(x => x.StateId == stateId);
@@ -278,11 +283,12 @@ namespace SpicAPI.Controllers
 			bool bank = _bankRepo != null && await _bankRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
 			bool land = _landRepo != null && await _landRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
 			bool building = _buildingRepo != null && await _buildingRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
-			bool step9 = bank || land || building;
+			bool step9 = bank || land || building || dealer?.IsCreditLimitConsentGiven == true;
 			result.Add(new { StepNo = 9, IsComplete = step9 });
 
 			// Step 10: Credit limit proposal (SPIC). New-dealer flow instead records
 			// the SPIC Trade Deposit Details (Dealership Application Fee + Trade Deposit DD).
+			// Consent dealers are marked complete here — they skip the CreditLimit pages.
 			bool credit = _creditRepo != null && await _creditRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
 			bool step10 = credit;
 			if (dealer?.IsNewDealerRegistration == true)
@@ -295,10 +301,14 @@ namespace SpicAPI.Controllers
 						|| dealer.DealershipApplicationFeeBankId > 0
 						|| (dealer.DealershipApplicationFeeAmount ?? 0) > 0);
 			}
+			// Consent path: skip credit limit pages — mark as complete.
+			if (dealer?.IsCreditLimitConsentGiven == true)
+				step10 = true;
 			result.Add(new { StepNo = 10, IsComplete = step10 });
 
 			// Step 11: Credit limit for GreenStar (same check as step 10).
 			// New-dealer flow instead records the GFL Trade Deposit Details.
+			// Consent dealers are marked complete here — they skip the CreditLimitForGreenStar page.
 			bool step11 = credit;
 			if (dealer?.IsNewDealerRegistration == true)
 			{
@@ -307,7 +317,11 @@ namespace SpicAPI.Controllers
 						|| dealer.GflTradeDepositDDBankId > 0
 						|| (dealer.GflTradeDepositDDAmount ?? 0) > 0);
 			}
+			// Consent path: skip credit limit pages — mark as complete.
+			if (dealer?.IsCreditLimitConsentGiven == true)
+				step11 = true;
 			result.Add(new { StepNo = 11, IsComplete = step11 });
+
 
 			// Step 12: Documents
 			bool step12 = _docsRepo != null && await _docsRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
@@ -506,7 +520,7 @@ namespace SpicAPI.Controllers
 					};
 				}
 
-				if (dealer.InSpic)
+				if (dealer.InSpic && dealer.IsCreditLimitConsentGiven != true)
 				{
 					if (dealer.DealershipApplicationFeeBankId is null or <= 0)
 						errors[nameof(dealer.DealershipApplicationFeeBankId)] = new[] { "Application Fee Bank is required." };
@@ -529,7 +543,7 @@ namespace SpicAPI.Controllers
 						errors[nameof(dealer.SpicTradeDepositDDAmount)] = new[] { "SPIC Trade Deposit Amount must be greater than zero." };
 				}
 
-				if (dealer.InGreenStar)
+				if (dealer.InGreenStar && dealer.IsCreditLimitConsentGiven != true)
 				{
 					if (dealer.GflTradeDepositDDBankId is null or <= 0)
 						errors[nameof(dealer.GflTradeDepositDDBankId)] = new[] { "GFL Trade Deposit Bank is required." };
@@ -1232,7 +1246,17 @@ namespace SpicAPI.Controllers
 			var stateClaim = User.FindFirst("spic:state_id")?.Value;
 			var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
-			if (role != "Admin" && role != "CorporateAdmin" && role != "Director" && role != "AVP")
+			if (role == "AVP")
+			{
+				var zoneStateIds = await GetZoneStateIdsAsync();
+				query = query.Where(x => zoneStateIds.Contains(x.StateId));
+			}
+			else if (SpecialAdminScope.IsSpecialAdmin(User))
+			{
+				var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+				query = query.Where(x => assignedStates.Contains(x.StateId));
+			}
+			else if (role != "Admin" && role != "CorporateAdmin" && role != "Director")
 			{
 				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
 					query = query.Where(x => x.StateId == stateId);
@@ -1276,7 +1300,17 @@ namespace SpicAPI.Controllers
 			var stateClaim = User.FindFirst("spic:state_id")?.Value;
 			var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
-			if (role != "Admin" && role != "CorporateAdmin" && role != "Director" && role != "AVP")
+			if (role == "AVP")
+			{
+				var zoneStateIds = await GetZoneStateIdsAsync();
+				query = query.Where(x => zoneStateIds.Contains(x.StateId));
+			}
+			else if (SpecialAdminScope.IsSpecialAdmin(User))
+			{
+				var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+				query = query.Where(x => assignedStates.Contains(x.StateId));
+			}
+			else if (role != "Admin" && role != "CorporateAdmin" && role != "Director")
 			{
 				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
 					query = query.Where(x => x.StateId == stateId);
@@ -1370,9 +1404,19 @@ namespace SpicAPI.Controllers
 
 			var isUnrestrictedRole =
 				role == "Admin" || role == "CorporateAdmin" ||
-				role == "Director" || role == "AVP";
+				role == "Director";
 
-			if (!isUnrestrictedRole)
+			if (role == "AVP")
+			{
+				var zoneStateIds = await GetZoneStateIdsAsync();
+				query = query.Where(x => zoneStateIds.Contains(x.StateId));
+			}
+			else if (SpecialAdminScope.IsSpecialAdmin(User))
+			{
+				var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+				query = query.Where(x => assignedStates.Contains(x.StateId));
+			}
+			else if (!isUnrestrictedRole)
 			{
 				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
 					query = query.Where(x => x.StateId == stateId);
@@ -1477,6 +1521,19 @@ namespace SpicAPI.Controllers
 				.ToListAsync();
 
 			return Ok(dashboardDealers);
+		}
+
+		private async Task<List<int>> GetZoneStateIdsAsync()
+		{
+			var zoneId = int.TryParse(User.FindFirst("spic:zone_id")?.Value, out var z) ? z : 0;
+			if (zoneId <= 0)
+				return new List<int>();
+
+			return await _db.States
+				.AsNoTracking()
+				.Where(s => s.ZoneId == zoneId)
+				.Select(s => s.Id)
+				.ToListAsync();
 		}
 	}
 	[Route("api/[controller]")]

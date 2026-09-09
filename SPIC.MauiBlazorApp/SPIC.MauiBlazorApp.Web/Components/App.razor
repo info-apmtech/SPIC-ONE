@@ -174,7 +174,18 @@
         });
         };
     </script>
-    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+    <script>
+        Blazor.start({
+            circuit: {
+                configureSignalR: function (builder) {
+                    builder
+                        .withServerTimeout(100000)
+                        .withKeepAliveInterval(15000);
+                }
+            }
+        });
+    </script>
     <script>
         const addBtn = document.getElementById('addExperienceBtn');
         if (addBtn) {
@@ -231,6 +242,18 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        };
+        window.openPdfInNewWindow = (base64Data) => {
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
         };
     </script>
     <script src="_content/SPIC.MauiBlazorApp.Shared/js/location.js"></script>

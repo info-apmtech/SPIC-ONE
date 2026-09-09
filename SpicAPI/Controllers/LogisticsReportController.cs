@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using SpicAPI.Services;
 
 namespace SpicAPI.Controllers
 {
@@ -29,13 +30,28 @@ namespace SpicAPI.Controllers
         {
             var role = CurrentRole();
 
-            var warehouses = await ApplyWarehouseRoleFilter(
-                    _context.Warehouses.Where(w => w.IsActive), role)
-                .Select(w => new { w.Id, w.StateId,
-                    w.IsSubmittedForReview, w.RMApproved, w.SMApproved, w.AVPApproved })
+            var warehouses = await (await ApplyWarehouseRoleFilter(
+                    _context.Warehouses
+                        .Where(w => w.StateId.HasValue),
+                    role))
+                .Select(w => new
+                {
+                    w.Id,
+
+                    // StateId is nullable in entity,
+                    // but report only includes records having a State.
+                    StateId = w.StateId.Value,
+
+                    w.IsActive,
+                    w.IsSubmittedForReview,
+                    w.RMApproved,
+                    w.SMApproved,
+                    w.AVPApproved
+                })
                 .ToListAsync();
 
-            var sapTotal = await _context.PVTMasters.CountAsync(p => p.IsActive);
+            var sapTotal = await _context.PVTMasters
+                .CountAsync(p => p.IsActive);
 
             var rows = warehouses
                 .GroupBy(w => w.StateId)
@@ -43,24 +59,114 @@ namespace SpicAPI.Controllers
                 {
                     StateId = g.Key,
                     TotalCount = g.Count(),
+                    Active = g.Count(w => w.IsActive),
+                    Inactive = g.Count(w => !w.IsActive),
                     AsPerSap = 0,
                     PendingWithMo = 0,
+
                     PendingRm = g.Count(w =>
+                        w.IsActive &&
                         w.IsSubmittedForReview &&
                         w.RMApproved == null &&
                         w.SMApproved == null &&
                         w.AVPApproved == null),
+
+                    PendingRmActive = g.Count(w =>
+                        w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == null &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
+                    PendingRmInactive = g.Count(w =>
+                        !w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == null &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
+                    PendingRmTotal = g.Count(w =>
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == null &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
                     PendingSmm = g.Count(w =>
+                        w.IsActive &&
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
                         w.SMApproved == null &&
                         w.AVPApproved == null),
+
+                    PendingSmmActive = g.Count(w =>
+                        w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
+                    PendingSmmInactive = g.Count(w =>
+                        !w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
+                    PendingSmmTotal = g.Count(w =>
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == null &&
+                        w.AVPApproved == null),
+
                     PendingWithAvp = g.Count(w =>
+                        w.IsActive &&
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
                         w.SMApproved == true &&
                         w.AVPApproved == null),
+
+                    PendingWithAvpActive = g.Count(w =>
+                        w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == null),
+
+                    PendingWithAvpInactive = g.Count(w =>
+                        !w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == null),
+
+                    PendingWithAvpTotal = g.Count(w =>
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == null),
+
                     Completed = g.Count(w =>
+                        w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == true),
+
+                    CompletedActive = g.Count(w =>
+                        w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == true),
+
+                    CompletedInactive = g.Count(w =>
+                        !w.IsActive &&
+                        w.IsSubmittedForReview &&
+                        w.RMApproved == true &&
+                        w.SMApproved == true &&
+                        w.AVPApproved == true),
+
+                    CompletedTotal = g.Count(w =>
                         w.IsSubmittedForReview &&
                         w.RMApproved == true &&
                         w.SMApproved == true &&
@@ -89,13 +195,28 @@ namespace SpicAPI.Controllers
         {
             var role = CurrentRole();
 
-            var rakepoints = await ApplyRakepointRoleFilter(
-                    _context.RackPoints.Where(r => r.IsActive), role)
-                .Select(r => new { r.Id, r.StateId,
-                    r.IsSubmittedForReview, r.RMApproved, r.SMApproved, r.AVPApproved })
+            var rakepoints = await (await ApplyRakepointRoleFilter(
+                    _context.RackPoints
+                        .Where(r => r.StateId.HasValue),
+                    role))
+                .Select(r => new
+                {
+                    r.Id,
+
+                    // StateId is nullable in entity,
+                    // but report only includes records having a State.
+                    StateId = r.StateId.Value,
+
+                    r.IsActive,
+                    r.IsSubmittedForReview,
+                    r.RMApproved,
+                    r.SMApproved,
+                    r.AVPApproved
+                })
                 .ToListAsync();
 
-            var sapTotal = await _context.RakePointMasters.CountAsync(rp => rp.IsActive);
+            var sapTotal = await _context.RakePointMasters
+                .CountAsync(rp => rp.IsActive);
 
             var rows = rakepoints
                 .GroupBy(r => r.StateId)
@@ -103,24 +224,114 @@ namespace SpicAPI.Controllers
                 {
                     StateId = g.Key,
                     TotalCount = g.Count(),
+                    Active = g.Count(r => r.IsActive),
+                    Inactive = g.Count(r => !r.IsActive),
                     AsPerSap = 0,
                     PendingWithMo = 0,
+
                     PendingRm = g.Count(r =>
+                        r.IsActive &&
                         r.IsSubmittedForReview &&
                         r.RMApproved == null &&
                         r.SMApproved == null &&
                         r.AVPApproved == null),
+
+                    PendingRmActive = g.Count(r =>
+                        r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == null &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
+                    PendingRmInactive = g.Count(r =>
+                        !r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == null &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
+                    PendingRmTotal = g.Count(r =>
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == null &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
                     PendingSmm = g.Count(r =>
+                        r.IsActive &&
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
                         r.SMApproved == null &&
                         r.AVPApproved == null),
+
+                    PendingSmmActive = g.Count(r =>
+                        r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
+                    PendingSmmInactive = g.Count(r =>
+                        !r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
+                    PendingSmmTotal = g.Count(r =>
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == null &&
+                        r.AVPApproved == null),
+
                     PendingWithAvp = g.Count(r =>
+                        r.IsActive &&
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
                         r.SMApproved == true &&
                         r.AVPApproved == null),
+
+                    PendingWithAvpActive = g.Count(r =>
+                        r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == null),
+
+                    PendingWithAvpInactive = g.Count(r =>
+                        !r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == null),
+
+                    PendingWithAvpTotal = g.Count(r =>
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == null),
+
                     Completed = g.Count(r =>
+                        r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == true),
+
+                    CompletedActive = g.Count(r =>
+                        r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == true),
+
+                    CompletedInactive = g.Count(r =>
+                        !r.IsActive &&
+                        r.IsSubmittedForReview &&
+                        r.RMApproved == true &&
+                        r.SMApproved == true &&
+                        r.AVPApproved == true),
+
+                    CompletedTotal = g.Count(r =>
                         r.IsSubmittedForReview &&
                         r.RMApproved == true &&
                         r.SMApproved == true &&
@@ -166,20 +377,60 @@ namespace SpicAPI.Controllers
             return new LogisticsReportTotalDto
             {
                 TotalCount = rows.Sum(r => r.TotalCount),
+                Active = rows.Sum(r => r.Active),
+                Inactive = rows.Sum(r => r.Inactive),
                 AsPerSap = sapTotal,
                 PendingWithMo = Math.Max(0, sapTotal - (totalRm + totalSmm + totalAvp + totalCompleted)),
                 PendingRm = totalRm,
+                PendingRmActive = rows.Sum(r => r.PendingRmActive),
+                PendingRmInactive = rows.Sum(r => r.PendingRmInactive),
+                PendingRmTotal = rows.Sum(r => r.PendingRmActive) + rows.Sum(r => r.PendingRmInactive),
                 PendingSmm = totalSmm,
+                PendingSmmActive = rows.Sum(r => r.PendingSmmActive),
+                PendingSmmInactive = rows.Sum(r => r.PendingSmmInactive),
+                PendingSmmTotal = rows.Sum(r => r.PendingSmmActive) + rows.Sum(r => r.PendingSmmInactive),
                 PendingWithAvp = totalAvp,
-                Completed = totalCompleted
+                PendingWithAvpActive = rows.Sum(r => r.PendingWithAvpActive),
+                PendingWithAvpInactive = rows.Sum(r => r.PendingWithAvpInactive),
+                PendingWithAvpTotal = rows.Sum(r => r.PendingWithAvpActive) + rows.Sum(r => r.PendingWithAvpInactive),
+                Completed = totalCompleted,
+                CompletedActive = rows.Sum(r => r.CompletedActive),
+                CompletedInactive = rows.Sum(r => r.CompletedInactive),
+                CompletedTotal = rows.Sum(r => r.CompletedActive) + rows.Sum(r => r.CompletedInactive)
             };
         }
 
-        private IQueryable<SPIC.Core.Entities.Warehouse> ApplyWarehouseRoleFilter(
+        private async Task<IQueryable<SPIC.Core.Entities.Warehouse>> ApplyWarehouseRoleFilter(
             IQueryable<SPIC.Core.Entities.Warehouse> query, string role)
         {
+            if (IsAvpRole(role))
+            {
+                // AVP sees only Warehouses belonging to the Zone assigned to the logged-in AVP.
+                var zoneId = CurrentZoneId();
+                if (!zoneId.HasValue || zoneId.Value <= 0)
+                    return query.Where(_ => false);
+
+                var stateIdsInZone = await _context.States
+                    .AsNoTracking()
+                    .Where(s => s.ZoneId == zoneId.Value)
+                    .Select(s => s.Id)
+                    .ToListAsync();
+
+                return query.Where(w => w.BasicStateId.HasValue && stateIdsInZone.Contains(w.BasicStateId.Value));
+            }
+
             if (IsUnrestrictedRole(role))
                 return query;
+
+            // SpecialAdmin: multi-location scope. Data is restricted to every state
+            // assigned to this user (from the JWT). All other roles are untouched.
+            if (SpecialAdminScope.IsSpecialAdmin(User))
+            {
+                var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+                if (assignedStates.Count == 0)
+                    return query.Where(_ => false);
+                return query.Where(w => w.BasicStateId.HasValue && assignedStates.Contains(w.BasicStateId.Value));
+            }
 
             if (IsStateRole(role))
             {
@@ -208,11 +459,37 @@ namespace SpicAPI.Controllers
             return query.Where(_ => false);
         }
 
-        private IQueryable<SPIC.Core.Entities.RackPoint> ApplyRakepointRoleFilter(
+        private async Task<IQueryable<SPIC.Core.Entities.RackPoint>> ApplyRakepointRoleFilter(
             IQueryable<SPIC.Core.Entities.RackPoint> query, string role)
         {
+            if (IsAvpRole(role))
+            {
+                // AVP sees only Rake Points belonging to the Zone assigned to the logged-in AVP.
+                var zoneId = CurrentZoneId();
+                if (!zoneId.HasValue || zoneId.Value <= 0)
+                    return query.Where(_ => false);
+
+                var stateIdsInZone = await _context.States
+                    .AsNoTracking()
+                    .Where(s => s.ZoneId == zoneId.Value)
+                    .Select(s => s.Id)
+                    .ToListAsync();
+
+                return query.Where(r => r.BasicStateId.HasValue && stateIdsInZone.Contains(r.BasicStateId.Value));
+            }
+
             if (IsUnrestrictedRole(role))
                 return query;
+
+            // SpecialAdmin: multi-location scope. Data is restricted to every state
+            // assigned to this user (from the JWT). All other roles are untouched.
+            if (SpecialAdminScope.IsSpecialAdmin(User))
+            {
+                var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+                if (assignedStates.Count == 0)
+                    return query.Where(_ => false);
+                return query.Where(r => r.BasicStateId.HasValue && assignedStates.Contains(r.BasicStateId.Value));
+            }
 
             if (IsStateRole(role))
             {
@@ -253,6 +530,7 @@ namespace SpicAPI.Controllers
 
         private int? CurrentStateId() => ReadIntClaim("spic:state_id", "StateId");
         private int? CurrentRegionId() => ReadIntClaim("spic:region_id", "RegionId");
+        private int? CurrentZoneId() => ReadIntClaim("spic:zone_id", "ZoneId");
 
         private int? ReadIntClaim(params string[] names)
         {
@@ -278,6 +556,9 @@ namespace SpicAPI.Controllers
             role.Equals("SMM", StringComparison.OrdinalIgnoreCase) ||
             role.Equals("SMD", StringComparison.OrdinalIgnoreCase);
 
+        private static bool IsAvpRole(string role) =>
+            role.Equals("AVP", StringComparison.OrdinalIgnoreCase);
+
         private static bool IsUnrestrictedRole(string role) =>
             role.Equals("AVP", StringComparison.OrdinalIgnoreCase) ||
             role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
@@ -290,23 +571,51 @@ namespace SpicAPI.Controllers
         public int StateId { get; set; }
         public string State { get; set; } = string.Empty;
         public int TotalCount { get; set; }
+        public int Active { get; set; }
+        public int Inactive { get; set; }
         public int AsPerSap { get; set; }
         public int PendingWithMo { get; set; }
         public int PendingRm { get; set; }
+        public int PendingRmActive { get; set; }
+        public int PendingRmInactive { get; set; }
+        public int PendingRmTotal { get; set; }
         public int PendingSmm { get; set; }
+        public int PendingSmmActive { get; set; }
+        public int PendingSmmInactive { get; set; }
+        public int PendingSmmTotal { get; set; }
         public int PendingWithAvp { get; set; }
+        public int PendingWithAvpActive { get; set; }
+        public int PendingWithAvpInactive { get; set; }
+        public int PendingWithAvpTotal { get; set; }
         public int Completed { get; set; }
+        public int CompletedActive { get; set; }
+        public int CompletedInactive { get; set; }
+        public int CompletedTotal { get; set; }
     }
 
     public sealed class LogisticsReportTotalDto
     {
         public int TotalCount { get; set; }
+        public int Active { get; set; }
+        public int Inactive { get; set; }
         public int AsPerSap { get; set; }
         public int PendingWithMo { get; set; }
         public int PendingRm { get; set; }
+        public int PendingRmActive { get; set; }
+        public int PendingRmInactive { get; set; }
+        public int PendingRmTotal { get; set; }
         public int PendingSmm { get; set; }
+        public int PendingSmmActive { get; set; }
+        public int PendingSmmInactive { get; set; }
+        public int PendingSmmTotal { get; set; }
         public int PendingWithAvp { get; set; }
+        public int PendingWithAvpActive { get; set; }
+        public int PendingWithAvpInactive { get; set; }
+        public int PendingWithAvpTotal { get; set; }
         public int Completed { get; set; }
+        public int CompletedActive { get; set; }
+        public int CompletedInactive { get; set; }
+        public int CompletedTotal { get; set; }
     }
 
     public sealed class LogisticsReportResponseDto

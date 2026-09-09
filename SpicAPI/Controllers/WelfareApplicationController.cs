@@ -25,14 +25,14 @@ namespace SpicAPI.Controllers
         [HttpPost("submit")]
         public Task<IActionResult> SubmitApplication(
             [FromForm] WelfareApplicationSubmitDto dto,
-            [FromForm] List<IFormFile> files,
+            List<IFormFile> files,
             [FromForm] List<string> documentTypes)
             => SaveApplication(dto, files, documentTypes, isDraft: false);
 
         [HttpPost("draft")]
         public Task<IActionResult> SaveDraftApplication(
             [FromForm] WelfareApplicationSubmitDto dto,
-            [FromForm] List<IFormFile> files,
+            List<IFormFile> files,
             [FromForm] List<string> documentTypes)
             => SaveApplication(dto, files, documentTypes, isDraft: true);
 
@@ -148,7 +148,7 @@ namespace SpicAPI.Controllers
         public async Task<IActionResult> ResubmitApplication(
             int id,
             [FromForm] WelfareApplicationSubmitDto dto,
-            [FromForm] List<IFormFile> files,
+            List<IFormFile> files,
             [FromForm] List<string> documentTypes,
             [FromForm] string? removedDocumentIds)
         {

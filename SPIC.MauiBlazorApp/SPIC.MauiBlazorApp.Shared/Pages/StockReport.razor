@@ -703,6 +703,15 @@
 		if (LoginState is null || LoginState.IsAdmin || LoginState.IsDirectorOrAVP)
 			return;
 
+		// SpecialAdmin: mandatory multi-location scope = all assigned locations.
+		if (LoginState.IsSpecialAdminWithAssignments)
+		{
+			_selectedStates = LoginState.AssignedStateIds.ToList();
+			_selectedRegions = LoginState.AssignedRegionIds.ToList();
+			_selectedHqs = LoginState.AssignedHeadquarterIds.ToList();
+			return;
+		}
+
 		if (LoginState.StateId > 0 && !_selectedStates.Contains(LoginState.StateId))
 			_selectedStates.Add(LoginState.StateId);
 
@@ -728,6 +737,28 @@
 				_states = _allStates;
 				_regions = _allRegions;
 				_hq = _allHqs;
+				return;
+			}
+
+			// SpecialAdmin: only the assigned states/regions/HQs are visible.
+			if (LoginState.IsSpecialAdminWithAssignments)
+			{
+				var allowedStateIds = LoginState.AssignedStateIds.ToHashSet();
+				var allowedRegionIds = LoginState.AssignedRegionIds.ToHashSet();
+				var allowedHqIds = LoginState.AssignedHeadquarterIds.ToHashSet();
+
+				_states = _allStates.Where(s => allowedStateIds.Contains(s.Id)).ToList();
+				_regions = _allRegions
+					.Where(r => allowedStateIds.Contains(r.StateId ?? 0))
+					.Where(r => allowedRegionIds.Count == 0 || allowedRegionIds.Contains(r.Id))
+					.ToList();
+				_hq = _allHqs
+					.Where(h => allowedStateIds.Contains(h.StateId ?? 0))
+					.Where(h => allowedRegionIds.Count == 0 || allowedRegionIds.Contains(h.RegionId ?? 0))
+					.Where(h => allowedHqIds.Count == 0 || allowedHqIds.Contains(h.Id))
+					.ToList();
+				_districts = _allDistricts.Where(d => allowedStateIds.Contains(d.StateId ?? 0)).ToList();
+				_subDistricts = _allSubDistricts.Where(sd => allowedStateIds.Contains(sd.StateId ?? 0)).ToList();
 				return;
 			}
 

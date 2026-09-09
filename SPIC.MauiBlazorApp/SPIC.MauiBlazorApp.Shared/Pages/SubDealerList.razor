@@ -1385,7 +1385,13 @@
         // New export fields
         public string Latitude { get; init; } = string.Empty;
         public string Longitude { get; init; } = string.Empty;
-        public string Address { get; init; } = string.Empty;
+        public string ShopNoRoomBlockNo { get; init; } = string.Empty;
+        public string Street { get; init; } = string.Empty;
+        public string SubVillage { get; init; } = string.Empty;
+        public string Village { get; init; } = string.Empty;
+        public string Block { get; init; } = string.Empty;
+        public string Taluk { get; init; } = string.Empty;
+        public string PinCode { get; init; } = string.Empty;
     }
 
     private SubDealerPagedListResponse _response = new()
@@ -2157,18 +2163,26 @@
 
                         // New location columns
                         Latitude = item.Latitude.HasValue
-         ? item.Latitude.Value.ToString(
+                         ? item.Latitude.Value.ToString(
              "0.000000",
              System.Globalization.CultureInfo.InvariantCulture)
          : string.Empty,
 
                         Longitude = item.Longitude.HasValue
-         ? item.Longitude.Value.ToString(
-             "0.000000",
-             System.Globalization.CultureInfo.InvariantCulture)
-         : string.Empty,
+                          ? item.Longitude.Value.ToString(
+              "0.000000",
+              System.Globalization.CultureInfo.InvariantCulture)
+          : string.Empty,
 
-                        Address = BuildSubDealerExportAddress(item)
+                        ShopNoRoomBlockNo =
+                         item.ShopNoORRoomNoOrBlockNo ?? string.Empty,
+
+                        Street = item.Street ?? string.Empty,
+                        SubVillage = item.SubVillage ?? string.Empty,
+                        Village = item.Village ?? string.Empty,
+                        Block = item.Block ?? string.Empty,
+                        Taluk = item.Taluk ?? string.Empty,
+                        PinCode = item.PinCode ?? string.Empty
                     });
                 }
 
@@ -2404,34 +2418,48 @@
             "Status",
             "Latitude",
             "Longitude",
-            "Address"
+            "Address Line",
+            "Street/Area",
+            "Sub Village",
+            "Village",
+            "Block",
+            "Taluk/City",
+            "Pincode"
         };
 
         var columnLetters = new[]
- {
-    "A", "B", "C", "D", "E", "F",
-    "G", "H", "I", "J", "K", "L",
-    "M", "N"
-};
+        {
+            "A", "B", "C", "D", "E", "F",
+            "G", "H", "I", "J", "K", "L",
+            "M", "N", "O", "P", "Q", "R",
+            "S", "T"
+        };
 
         var columnWidths = new[]
- {
-    8d,     // S.No
-    20d,    // Sub Dealer Code
-    32d,    // Firm Name
-    20d,    // State
-    22d,    // Region
-    22d,    // HQ
-    20d,    // GST
-    16d,    // PAN
-    23d,    // Official Contact
-    21d,    // WhatsApp
-    14d,    // Status
+        {
+            8d,     // S.No
+            20d,    // Sub Dealer Code
+            32d,    // Firm Name
+            20d,    // State
+            22d,    // Region
+            22d,    // HQ
+            20d,    // GST
+            16d,    // PAN
+            23d,    // Official Contact
+            21d,    // WhatsApp
+            14d,    // Status
 
-    16d,    // Latitude
-    16d,    // Longitude
-    55d     // Address
-};
+            16d,    // Latitude
+            16d,    // Longitude
+
+            25d,    // Address Line
+            22d,    // Street/Area
+            20d,    // Sub Village
+            20d,    // Village
+            18d,    // Block
+            18d,    // Taluk/City
+            15d     // Pincode
+        };
 
         writer.WriteStartDocument(standalone: true);
         writer.WriteStartElement(
@@ -2443,7 +2471,7 @@
             ExcelSpreadsheetNamespace);
         writer.WriteAttributeString(
             "ref",
-           $"A1:N{Math.Max(1, rows.Count + 1)}");
+           $"A1:T{Math.Max(1, rows.Count + 1)}");
         writer.WriteEndElement();
 
         writer.WriteStartElement(
@@ -2535,10 +2563,18 @@
     row.WhatsAppNumber,
     row.Status,
 
-    // New values
+    // New location values
     row.Latitude,
     row.Longitude,
-    row.Address
+
+    // Address fields
+    row.ShopNoRoomBlockNo,
+    row.Street,
+    row.SubVillage,
+    row.Village,
+    row.Block,
+    row.Taluk,
+    row.PinCode
 };
 
             writer.WriteStartElement(
@@ -2574,7 +2610,7 @@
             ExcelSpreadsheetNamespace);
         writer.WriteAttributeString(
             "ref",
-           $"A1:N{Math.Max(1, rows.Count + 1)}");
+           $"A1:T{Math.Max(1, rows.Count + 1)}");
         writer.WriteEndElement();
 
         writer.WriteEndElement();
@@ -3273,27 +3309,5 @@
 
         _exportCts?.Cancel();
         _exportCts = null;
-    }
-    private static string BuildSubDealerExportAddress(
-    SubDealerListItemDto item)
-    {
-        var addressParts = new[]
-        {
-        item.ShopNoORRoomNoOrBlockNo,
-        item.Street,
-        item.SubVillage,
-        item.Village,
-        item.Block,
-        item.Taluk,
-        !string.IsNullOrWhiteSpace(item.PinCode)
-            ? $"Pincode - {item.PinCode}"
-            : null
-    };
-
-        return string.Join(
-            ", ",
-            addressParts
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Select(x => x!.Trim()));
     }
 }

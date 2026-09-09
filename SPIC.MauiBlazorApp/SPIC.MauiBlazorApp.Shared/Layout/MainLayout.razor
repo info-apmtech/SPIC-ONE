@@ -14,9 +14,16 @@
 
 <PageGuard />
 
-<div class="app-shell">
+@* The fully authenticated shell (sidebar, topbar/profile, page body) is gated by
+   a single readiness flag. During login/refresh it becomes true only after
+   LoginState is fully populated; during logout it flips off immediately so the
+   whole authenticated UI (menu + profile icon + content) is hidden as ONE
+   consistent state. No part of the shell is ever rendered from partial state. *@
+@if (_isReady)
+{
+    <div class="app-shell">
 
-    <LoadingOverlay />
+        <LoadingOverlay />
 
     <aside class="sidebar">
         <NavMenu />
@@ -257,26 +264,7 @@
         @* ================= MAIN CONTENT ================= *@
         <div class="main-content">
 
-            @if (_isReady)
-            {
-                @Body
-            }
-            else
-            {
-                <div class="d-flex justify-content-center align-items-center"
-                     style="height: 60vh;">
-
-                    <div class="spinner-border text-success"
-                         role="status">
-
-                        <span class="visually-hidden">
-                            Loading...
-                        </span>
-
-                    </div>
-
-                </div>
-            }
+            @Body
 
         </div>
 
@@ -631,6 +619,68 @@
                             }
 
 
+                            @if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/GuestHouseMaster"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Guest House
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+
+                            @if (LoginState.CanAccess(PagePermission.FrontOffice))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/FrontOffice"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Front Office
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.GenerateBill))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/GenerateBill"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Generate Bill
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.BillList))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/BillList"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Bill List
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+
                         </ul>
 
                     }
@@ -645,8 +695,46 @@
 
 </div>
 
+}
+else
+{
+    <div class="auth-transition">
+
+        <LoadingOverlay />
+
+        <div class="auth-transition-inner">
+
+            <div class="spinner-border text-success"
+                 role="status">
+
+                <span class="visually-hidden">
+                    Loading...
+                </span>
+
+            </div>
+
+        </div>
+
+    </div>
+}
 
 <style>
+
+    /* ================= AUTH TRANSITION ================= */
+
+    .auth-transition {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f3f5f7;
+    }
+
+    .auth-transition-inner {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
 
     /* ================= SEARCH ================= */
 
@@ -1259,7 +1347,8 @@
             || uri == "logistics"
             || uri == "financial"
             || uri == "relationship"
-            || uri == "subdealeremployeemaster";
+            || uri == "subdealeremployeemaster"
+            || uri == "guesthousemaster";
     }
 
 
@@ -1636,6 +1725,13 @@
     {
         _showUserMenu = false;
 
+        // Enter the single logout transition FIRST: hide the entire
+        // authenticated shell (menu, profile icon, page content) as one state
+        // BEFORE any authentication state is cleared, so no intermediate
+        // authenticated/unauthenticated UI can ever be rendered.
+        _isReady = false;
+        StateHasChanged();
+
         try
         {
             await Http.PostAsync(
@@ -1708,11 +1804,9 @@
 
 
         Navigation.NavigateTo(
-            "/login",
-            forceLoad: true
+            "/login"
         );
     }
-
 
     /* =========================================================
        TOKEN EXPIRY CHECK
@@ -1748,6 +1842,10 @@
 
     private async Task AutoLogout()
     {
+        // Hide the authenticated shell as one state before clearing anything.
+        _isReady = false;
+        StateHasChanged();
+
         _tokenExpiryTimer?.Dispose();
 
         _tokenExpiryTimer = null;
@@ -1802,8 +1900,7 @@
 
 
         Navigation.NavigateTo(
-            "/login",
-            forceLoad: true
+            "/login"
         );
     }
 

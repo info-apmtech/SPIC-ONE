@@ -293,7 +293,7 @@
                         <th>Beneficiary</th>
                         <th>Submitted Date</th>
                         <th>Status</th>
-                        <th>Approval Flow (MO → RM → SM → SDWA)</th>
+                        <th>Approval Flow (MO → RM → SM → SDWA → SDWA Admin)</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -407,19 +407,21 @@
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [SupplyParameterFromQuery] public string? Tab { get; set; }
 
-    // Stage label for the stat card, e.g. MO / RM / SM / SDWA.
-    // SDWA is resolved from the user's EXISTING RoleAccess permission
-    // (PagePermission.SDWA), not AppRole, so it takes precedence when present
-    // (a user can also be MO/RM/SM at the same time).
-    private string StageLabel => loginState.CanAccess(PagePermission.SDWA)
-        ? "SDWA"
-        : loginState.UserRole switch
-        {
-            AppRole.MO => "MO",
-            AppRole.RM => "RM",
-            AppRole.SMM => "SM",
-            _ => ""
-        };
+    // Stage label for the stat card, e.g. MO / RM / SM / SDWA / SDWA Admin.
+    // SDWA / SDWA Admin are resolved from the user's EXISTING RoleAccess permissions
+    // (PagePermission.SDWA / PagePermission.SDWAAdmin), not AppRole, so they take
+    // precedence when present (a user can also be MO/RM/SM at the same time).
+    private string StageLabel => loginState.CanAccess(PagePermission.SDWAAdmin)
+        ? "SDWA Admin"
+        : loginState.CanAccess(PagePermission.SDWA)
+            ? "SDWA"
+            : loginState.UserRole switch
+            {
+                AppRole.MO => "MO",
+                AppRole.RM => "RM",
+                AppRole.SMM => "SM",
+                _ => ""
+            };
 
     protected override async Task OnInitializedAsync()
     {
@@ -531,7 +533,7 @@
     private sealed record ApprovalFlowStep(string Code, FlowState State);
 
     private static readonly (string Code, int Index)[] FlowStageOrder =
-        { ("MO", 0), ("RM", 1), ("SM", 2), ("SDWA", 3) };
+        { ("MO", 0), ("RM", 1), ("SM", 2), ("SDWA", 3), ("SDWA Admin", 4) };
 
     private List<ApprovalFlowStep> BuildFlowSteps(WelfareApprovalApplicationDto app)
     {
@@ -540,8 +542,9 @@
             1 or 2 => 0,   // Pending MO
             3 => 1,        // Pending RM
             4 => 2,        // Pending SM
-            8 => 3,        // Pending AVP
-            5 => 4,        // Fully approved
+            8 => 3,        // Pending SDWA
+            10 => 4,       // Pending SDWA Admin
+            5 => 5,        // Fully approved
             _ => -1        // Rejected / returned / cancelled
         };
 
@@ -569,7 +572,7 @@
     private string GetFlowSummary(WelfareApprovalApplicationDto app)
     {
         if (app.Status == 5)
-            return "Approved by all levels (MO → RM → SM → SDWA)";
+            return "Approved by all levels (MO → RM → SM → SDWA → SDWA Admin)";
 
         var rejection = app.Approvals?
             .Where(a => string.Equals(a.ApprovalStatus, "Rejected", StringComparison.OrdinalIgnoreCase))
@@ -589,6 +592,7 @@
             3 => "Pending at RM",
             4 => "Pending at SM",
             8 => "Pending at SDWA",
+            10 => "Pending at SDWA Admin",
             _ => "Approval flow"
         };
     }

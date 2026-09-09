@@ -413,7 +413,12 @@ namespace SpicAPI.Controllers
 			}
 			else if (role == "AVP")
 			{
-				// AVP sees all sub dealers/employees (no zone assignment in this app)
+				// AVP sees only sub dealers belonging to the Zone assigned to the logged-in AVP.
+				var zoneDealerCodes = await GetZoneDealerCodesAsync();
+				if (zoneDealerCodes == null)
+					return Ok(new List<SubDealerEmployeeItemDto>());
+
+				query = query.Where(sd => zoneDealerCodes.Contains(sd.DealerCode.Trim()));
 			}
 
 			var items = await query
@@ -477,7 +482,12 @@ namespace SpicAPI.Controllers
 			}
 			else if (role == "AVP")
 			{
-				// AVP sees all employees (no zone assignment in this app)
+				// AVP sees only employees belonging to the Zone assigned to the logged-in AVP.
+				var zoneDealerCodes = await GetZoneDealerCodesAsync();
+				if (zoneDealerCodes == null)
+					return Ok(new List<SubDealerEmployeeItemDto>());
+
+				query = query.Where(e => zoneDealerCodes.Contains(e.DealerCode.Trim()));
 			}
 			// Admin/CorporateAdmin: no geographic filter
 
@@ -646,14 +656,20 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET /api/subdealeremployee/pending-avp-approvals
-		// AVP sees all records where SMApproved == true and AVPApproved == null (across all states).
+		// AVP sees records where SMApproved == true and AVPApproved == null,
+		// scoped to the Zone assigned to the logged-in AVP.
 		[Authorize(Roles = "AVP")]
 		[HttpGet("pending-avp-approvals")]
 		public async Task<ActionResult<List<PendingApprovalItemDto>>> GetPendingAVPApprovals()
 		{
+			var zoneDealerCodes = await GetZoneDealerCodesAsync();
+			if (zoneDealerCodes == null)
+				return Ok(new List<PendingApprovalItemDto>());
+
 			var pendingSubDealers = await _db.SubDealerBeneficiaries
 				.AsNoTracking()
-				.Where(sd => sd.IsActive && sd.SMApproved == true && sd.AVPApproved == null)
+				.Where(sd => sd.IsActive && sd.SMApproved == true && sd.AVPApproved == null
+					&& zoneDealerCodes.Contains(sd.DealerCode.Trim()))
 				.OrderBy(sd => sd.CreatedAt)
 				.Select(sd => new PendingApprovalItemDto
 				{
@@ -669,7 +685,8 @@ namespace SpicAPI.Controllers
 
 			var pendingEmployees = await _db.EmployeeBeneficiaries
 				.AsNoTracking()
-				.Where(e => e.IsActive && e.SMApproved == true && e.AVPApproved == null)
+				.Where(e => e.IsActive && e.SMApproved == true && e.AVPApproved == null
+					&& zoneDealerCodes.Contains(e.DealerCode.Trim()))
 				.OrderBy(e => e.CreatedAt)
 				.Select(e => new PendingApprovalItemDto
 				{
@@ -828,6 +845,35 @@ namespace SpicAPI.Controllers
 
 			var code = dealer?.DealerCode;
 			return string.IsNullOrWhiteSpace(code) ? null : code.Trim();
+		}
+
+		// Resolves the dealer codes that belong to the logged-in AVP's Zone
+		// (Dealer -> State -> Zone). Returns null when the AVP has no Zone
+		// assigned, which callers treat as an empty result set.
+		private async Task<HashSet<string>?> GetZoneDealerCodesAsync()
+		{
+			var zoneId = int.TryParse(User.FindFirst("spic:zone_id")?.Value, out var z) ? z : 0;
+			if (zoneId <= 0)
+				return null;
+
+			var stateIdsInZone = await _db.States
+				.AsNoTracking()
+				.Where(s => s.ZoneId == zoneId)
+				.Select(s => s.Id)
+				.ToListAsync();
+
+			var dealers = await _db.DealerRegistrations
+				.AsNoTracking()
+				.Where(d => d.StateId != 0 && stateIdsInZone.Contains(d.StateId))
+				.Select(d => new { d.DealerCode, d.SPICCode })
+				.ToListAsync();
+
+			return dealers
+				.SelectMany(d => new[] { d.DealerCode, d.SPICCode })
+				.Where(c => c != null)
+				.Select(c => c!.Trim())
+				.Distinct()
+				.ToHashSet(StringComparer.OrdinalIgnoreCase);
 		}
 
 		// =====================================================================
