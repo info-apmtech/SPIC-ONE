@@ -19,14 +19,27 @@ function Get-AzCli {
 }
 
 function Invoke-Az {
-    # Runs az with the given arguments and returns stdout as text. Throws on failure.
+    # Runs az with the given arguments and returns stdout as text. Throws on a non-zero exit.
+    # Windows PowerShell 5.1 turns every stderr line of a native command into an ErrorRecord,
+    # which is fatal under ErrorActionPreference=Stop even for a plain WARNING. So stderr is
+    # collected with the preference relaxed and only the exit code decides success.
     param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
     $az = Get-AzCli
-    $out = & $az @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "az $($Arguments -join ' ') failed:`n$($out -join "`n")"
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $az @Arguments 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
     }
-    return ($out | Where-Object { $_ -is [string] }) -join "`n"
+    $stdout = @($out | Where-Object { $_ -is [string] })
+    $stderr = @($out | Where-Object { $_ -isnot [string] } | ForEach-Object { $_.ToString() })
+    if ($code -ne 0) {
+        throw "az $($Arguments -join ' ') failed (exit $code):`n$(($stdout + $stderr) -join "`n")"
+    }
+    $stderr | Where-Object { $_ -match 'WARNING' -and $_ -notmatch 'Bicep release|preview|under development' } | ForEach-Object { Write-Warning $_ }
+    return $stdout -join "`n"
 }
 
 function Invoke-AzJson {
