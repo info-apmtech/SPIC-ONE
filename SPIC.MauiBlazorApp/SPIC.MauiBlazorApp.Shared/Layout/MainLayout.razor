@@ -457,21 +457,6 @@
             }
 
 
-            @* ================= SDWA DASHBOARD (Dealer only) ================= *@
-            @if (LoginState.UserRole == AppRole.Dealer)
-            {
-                <NavLink class="nav-link"
-                         href="/SDWADashboard">
-
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg"
-                         class="SideBariconimg" />
-
-                    SDWA Dashboard
-
-                </NavLink>
-            }
-
-
             @* ================= DEALER APPLICATION REVIEW ================= *@
             @if (LoginState.CanAccess(PagePermission.dealerreviewlist))
             {
@@ -494,7 +479,6 @@
                                                     || LoginState.CanAccess(PagePermission.Logistics)
                                                     || LoginState.CanAccess(PagePermission.Financial)
                                                     || LoginState.CanAccess(PagePermission.Relationship)
-                                                    || LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin
                                                 )
             {
 
@@ -603,6 +587,80 @@
                             }
 
 
+                        </ul>
+
+                    }
+
+                </div>
+
+            }
+
+
+            @* ================= SDWA ================= *@
+            @if (
+                                                    LoginState.CanAccess(PagePermission.SDWADashboard)
+                                                    || (LoginState.UserRole != AppRole.Dealer && (LoginState.CanAccess(PagePermission.SchemeApproval) || LoginState.UserRole == AppRole.Director))
+                                                    || LoginState.CanAccess(PagePermission.SubDealerEmployeeMaster)
+                                                    || LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+                                                    || LoginState.CanAccess(PagePermission.FrontOffice)
+                                                    || LoginState.CanAccess(PagePermission.GenerateBill)
+                                                )
+            {
+
+                <div class="settings-menu-wrapper">
+
+                    <a href="javascript:void(0);"
+                       class="nav-link mt-2 @(isSdwaOpen ? "active" : "")"
+                       @onclick="ToggleSdwaMenu">
+
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg"
+                             class="SideBariconimg" />
+
+                        SDWA
+
+                        <i class="bi @(isSdwaOpen
+                                                                                                                                                                             ? "bi-chevron-up"
+                                                                                                                                                                             : "bi-chevron-down") chevron-icon">
+                        </i>
+
+                    </a>
+
+
+                    @if (isSdwaOpen)
+                    {
+
+                        <ul class="submenu-list">
+
+                            @if (LoginState.CanAccess(PagePermission.SDWADashboard))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/SDWADashboard"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        SDWA Dashboard
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.UserRole != AppRole.Dealer && (LoginState.CanAccess(PagePermission.SchemeApproval) || LoginState.UserRole == AppRole.Director))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/SchemeApproval"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Scheme Approval
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
                             @if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
                             {
                                 <li class="submenu-item">
@@ -618,7 +676,6 @@
                                 </li>
                             }
 
-
                             @if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
                             {
                                 <li class="submenu-item">
@@ -633,7 +690,6 @@
 
                                 </li>
                             }
-
 
                             @if (LoginState.CanAccess(PagePermission.FrontOffice))
                             {
@@ -664,7 +720,6 @@
 
                                 </li>
                             }
-
 
                         </ul>
 
@@ -1195,6 +1250,8 @@ else
 
     private bool isSettingsOpen = false;
 
+    private bool isSdwaOpen = false;
+
     private bool _showUserMenu = false;
 
     private Timer? _tokenExpiryTimer;
@@ -1217,6 +1274,7 @@ else
     protected override void OnInitialized()
     {
         isSettingsOpen = IsSettingsSectionActive();
+        isSdwaOpen = IsSdwaSectionActive();
 
         StartExpiryCheck();
 
@@ -1294,6 +1352,12 @@ else
     }
 
 
+    private void ToggleSdwaMenu()
+    {
+        isSdwaOpen = !isSdwaOpen;
+    }
+
+
     private void ToggleUserMenu()
     {
         _showUserMenu = !_showUserMenu;
@@ -1331,9 +1395,23 @@ else
             || uri == "agriculture"
             || uri == "logistics"
             || uri == "financial"
-            || uri == "relationship"
+            || uri == "relationship";
+    }
+
+
+    private bool IsSdwaSectionActive()
+    {
+        var uri =
+            Navigation
+                .ToBaseRelativePath(Navigation.Uri)
+                .ToLower();
+
+        return uri == "sdwadashboard"
+            || uri == "schemeapproval"
             || uri == "subdealeremployeemaster"
-            || uri == "guesthousemaster";
+            || uri == "guesthousemaster"
+            || uri == "frontoffice"
+            || uri == "generatebill";
     }
 
 
