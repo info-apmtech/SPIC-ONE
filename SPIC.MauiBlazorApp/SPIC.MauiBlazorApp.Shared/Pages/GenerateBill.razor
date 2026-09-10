@@ -334,7 +334,7 @@
                                         var idx = _billItems.IndexOf(line);
                                         <tr>
                                             <td>
-                                                @if (line.IsEditable)
+                                                @if (!line.IsSystemLine)
                                                 {
                                                     <input class="gb-input" placeholder="Description" @bind="line.Description" @bind:event="oninput" />
                                                 }
@@ -365,7 +365,7 @@
                                             </td>
                                             <td>@FormatMoney(line.Amount)</td>
                                             <td>
-                                                @if (line.IsEditable)
+                                                @if (line.IsGstEditable)
                                                 {
                                                     <input class="gb-input" type="number" step="0.01" min="0" @bind="line.CgstPercent" @bind:event="oninput" />
                                                 }
@@ -375,7 +375,7 @@
                                                 }
                                             </td>
                                             <td>
-                                                @if (line.IsEditable)
+                                                @if (line.IsGstEditable)
                                                 {
                                                     <input class="gb-input" type="number" step="0.01" min="0" @bind="line.SgstPercent" @bind:event="oninput" />
                                                 }
@@ -995,7 +995,9 @@
             Quantity = 1,
             Rate = 0,
             IsEditable = true,
-            CanRemove = true
+            CanRemove = true,
+            IsSystemLine = false,
+            IsGstEditable = true
         });
     }
 
@@ -1017,7 +1019,9 @@
             Category = BillItemCategory.Room,
             Description = $"{(string.IsNullOrWhiteSpace(_draft.RoomType) ? "Room" : _draft.RoomType)} - Room Charge",
             Quantity = (_draft.NumberOfRooms ?? 1) * Math.Max(1, _draft.NumberOfNights),
-            IsEditable = false
+            IsEditable = false,
+            IsSystemLine = true,
+            IsGstEditable = false
         };
         BillItemRow? bedsRow = null;
 
@@ -1051,7 +1055,7 @@
 
         _billItems.Add(room);
 
-        _billItems.Add(new BillItemRow { Category = BillItemCategory.Food, Description = "Food Bill", Quantity = 1, Rate = 0, IsEditable = true });
+        _billItems.Add(new BillItemRow { Category = BillItemCategory.Food, Description = "Food Bill", Quantity = 1, Rate = 0, IsEditable = true, IsSystemLine = true, IsGstEditable = false });
 
         if (bedsRow != null)
         {
@@ -1059,10 +1063,10 @@
         }
         else
         {
-            _billItems.Add(new BillItemRow { Category = BillItemCategory.AdditionalBeds, Description = "Additional Beds", Quantity = 0, Rate = 0, IsEditable = true });
+            _billItems.Add(new BillItemRow { Category = BillItemCategory.AdditionalBeds, Description = "Additional Beds", Quantity = 0, Rate = 0, IsEditable = true, IsSystemLine = true, IsGstEditable = false });
         }
 
-        _billItems.Add(new BillItemRow { Category = BillItemCategory.LaundryOther, Description = "Laundry / Others", Quantity = 1, Rate = 0, IsEditable = true });
+        _billItems.Add(new BillItemRow { Category = BillItemCategory.LaundryOther, Description = "Laundry / Others", Quantity = 1, Rate = 0, IsEditable = true, IsSystemLine = true, IsGstEditable = false });
 
         _billItems.AddRange(extraOthers);
     }
@@ -1082,7 +1086,9 @@
             CgstPercent = serverLine.CgstPercent,
             SgstPercent = serverLine.SgstPercent,
             IsEditable = editable,
-            CanRemove = false
+            CanRemove = false,
+            IsSystemLine = true,
+            IsGstEditable = false
         };
     }
 
@@ -1308,6 +1314,8 @@
         public decimal SgstPercent { get; set; }
         public bool IsEditable { get; set; } = true;
         public bool CanRemove { get; set; }
+        public bool IsSystemLine { get; set; }
+        public bool IsGstEditable { get; set; }
 
         public decimal Amount => Math.Round(Quantity * Rate, 2, MidpointRounding.AwayFromZero);
         public decimal CgstAmount => Math.Round(Amount * (CgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
