@@ -46,7 +46,7 @@ builder.Services.AddScoped(sp =>
     var config = sp.GetRequiredService<IConfiguration>();
     var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
     //var baseUrl = config["ApiBaseUrl"] ?? "https://previewspicapi.apmiot.com/";
-   // var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
+    // var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
     return new HttpClient(handler)
     {
         BaseAddress = new Uri(baseUrl),
@@ -65,6 +65,51 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
+// ============================================================
+// MAINTENANCE MODE
+// ============================================================
+
+app.Use(async (context, next) =>
+{
+    var maintenanceEnabled =
+        app.Configuration.GetValue<bool>("MaintenanceMode:Enabled");
+
+    if (maintenanceEnabled)
+    {
+        var maintenancePage =
+            app.Configuration["MaintenanceMode:Page"]
+            ?? "unavailable.html";
+
+        var filePath = Path.Combine(
+            app.Environment.WebRootPath,
+            maintenancePage);
+
+        if (File.Exists(filePath))
+        {
+            context.Response.StatusCode =
+                StatusCodes.Status503ServiceUnavailable;
+
+            context.Response.ContentType =
+                "text/html; charset=utf-8";
+
+            context.Response.Headers.RetryAfter = "300";
+
+            await context.Response.SendFileAsync(filePath);
+            return;
+        }
+
+        context.Response.StatusCode =
+            StatusCodes.Status503ServiceUnavailable;
+
+        await context.Response.WriteAsync(
+            "Service temporarily unavailable.");
+
+        return;
+    }
+
+    // Maintenance OFF means continue previous application normally
+    await next();
+});
 
 app.UseAntiforgery();
 

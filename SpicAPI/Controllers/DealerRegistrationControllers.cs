@@ -283,7 +283,7 @@ namespace SpicAPI.Controllers
 			bool bank = _bankRepo != null && await _bankRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
 			bool land = _landRepo != null && await _landRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
 			bool building = _buildingRepo != null && await _buildingRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
-			bool step9 = bank || land || building;
+			bool step9 = bank || land || building || dealer?.IsCreditLimitConsentGiven == true;
 			result.Add(new { StepNo = 9, IsComplete = step9 });
 
 			// Step 10: Credit limit proposal (SPIC). New-dealer flow instead records
@@ -520,7 +520,7 @@ namespace SpicAPI.Controllers
 					};
 				}
 
-				if (dealer.InSpic)
+				if (dealer.InSpic && dealer.IsCreditLimitConsentGiven != true)
 				{
 					if (dealer.DealershipApplicationFeeBankId is null or <= 0)
 						errors[nameof(dealer.DealershipApplicationFeeBankId)] = new[] { "Application Fee Bank is required." };
@@ -543,7 +543,7 @@ namespace SpicAPI.Controllers
 						errors[nameof(dealer.SpicTradeDepositDDAmount)] = new[] { "SPIC Trade Deposit Amount must be greater than zero." };
 				}
 
-				if (dealer.InGreenStar)
+				if (dealer.InGreenStar && dealer.IsCreditLimitConsentGiven != true)
 				{
 					if (dealer.GflTradeDepositDDBankId is null or <= 0)
 						errors[nameof(dealer.GflTradeDepositDDBankId)] = new[] { "GFL Trade Deposit Bank is required." };
