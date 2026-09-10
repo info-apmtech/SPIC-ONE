@@ -747,6 +747,16 @@ namespace SpicAPI.Controllers
 			if (request.LineItems.Any(i => i.Quantity < 0 || i.Rate < 0 || i.CgstPercent < 0 || i.SgstPercent < 0))
 				return BadRequest(new { Success = false, Message = "Quantities, rates and GST percentages must not be negative." });
 
+			// The effective GST for the predefined room / additional-beds lines is the
+			// booking's own persisted tax rate (same derivation as the bill draft), so the
+			// server never trusts a client-supplied CGST/SGST percentage for them.
+			var subTotalForTax = booking.SubTotal ?? 0m;
+			var totalGstPercent = subTotalForTax > 0m
+				? Math.Round(((booking.TaxAmount ?? 0m) / subTotalForTax) * 100m, 2)
+				: 0m;
+			var bookingCgstPercent = Math.Round(totalGstPercent / 2m, 2);
+			var bookingSgstPercent = Math.Round(totalGstPercent / 2m, 2);
+
 			// Build line items and compute taxes dynamically per line.
 			var lineItems = new List<GuestHouseBillLineItem>();
 			decimal subtotal = 0m;
@@ -755,9 +765,41 @@ namespace SpicAPI.Controllers
 
 			foreach (var li in request.LineItems)
 			{
+				var desc = li.Description ?? "";
+				var description = desc;
+				var cgstPercent = li.CgstPercent;
+				var sgstPercent = li.SgstPercent;
+
+				if (desc.Contains("Room Charge", StringComparison.OrdinalIgnoreCase))
+				{
+					// System line: description and GST come from the booking, never the client.
+					description = $"{booking.GuestHouseRoom?.RoomType ?? "Room"} - Room Charge";
+					cgstPercent = bookingCgstPercent;
+					sgstPercent = bookingSgstPercent;
+				}
+				else if (desc.Contains("Additional Beds", StringComparison.OrdinalIgnoreCase)
+					|| desc.Contains("Extra Cot", StringComparison.OrdinalIgnoreCase))
+				{
+					description = "Additional Beds / Extra Cot";
+					cgstPercent = bookingCgstPercent;
+					sgstPercent = bookingSgstPercent;
+				}
+				else if (desc.Equals("Food Bill", StringComparison.OrdinalIgnoreCase))
+				{
+					description = "Food Bill";
+					cgstPercent = 0m;
+					sgstPercent = 0m;
+				}
+				else if (desc.Equals("Laundry / Others", StringComparison.OrdinalIgnoreCase))
+				{
+					description = "Laundry / Others";
+					cgstPercent = 0m;
+					sgstPercent = 0m;
+				}
+
 				var amount = Math.Round(li.Quantity * li.Rate, 2, MidpointRounding.AwayFromZero);
-				var cgst = Math.Round(amount * (li.CgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
-				var sgst = Math.Round(amount * (li.SgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
+				var cgst = Math.Round(amount * (cgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
+				var sgst = Math.Round(amount * (sgstPercent / 100m), 2, MidpointRounding.AwayFromZero);
 
 				subtotal += amount;
 				cgstTotal += cgst;
@@ -765,12 +807,12 @@ namespace SpicAPI.Controllers
 
 				lineItems.Add(new GuestHouseBillLineItem
 				{
-					Description = li.Description,
+					Description = description,
 					Quantity = li.Quantity,
 					Rate = li.Rate,
 					Amount = amount,
-					CgstPercent = li.CgstPercent,
-					SgstPercent = li.SgstPercent,
+					CgstPercent = cgstPercent,
+					SgstPercent = sgstPercent,
 					CgstAmount = cgst,
 					SgstAmount = sgst,
 					LineTotal = amount + cgst + sgst,

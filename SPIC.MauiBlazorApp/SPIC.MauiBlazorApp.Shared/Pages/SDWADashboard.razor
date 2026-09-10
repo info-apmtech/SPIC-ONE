@@ -1,6 +1,7 @@
 ﻿@page "/SDWADashboard"
 @inject NavigationManager NavigationManager
 @inject HttpClient Http
+@inject IJSRuntime JS
 @using SPIC.Core.DTOs
 
 
@@ -398,35 +399,62 @@
 
     <div class="wht-panel-split">
       <h2 class="wht-panel-ttl" style="margin-bottom: 20px;">Guest House Booking</h2>
-      <div class="ghb-card">
-        <div class="ghb-head">
-          <div class="ghb-title">Upcoming Booking</div>
-          <span class="ghb-tag">Paid</span>
-        </div>
-        <div class="ghb-ref">SDWA-ROOM-2026-0188</div>
-        
-        <div class="ghb-grid">
-          <div class="ghb-lbl">Room Type</div>
-          <div class="ghb-val">AC Deluxe Room</div>
-          
-          <div class="ghb-lbl">Check-in</div>
-          <div class="ghb-val">15 May 2026</div>
-          
-          <div class="ghb-lbl">Check-out</div>
-          <div class="ghb-val">17 May 2026</div>
-          
-          <div class="ghb-lbl">Guests</div>
-          <div class="ghb-val">2</div>
-        </div>
 
-        <div class="ghb-btn-row">
-          <button class="ghb-outline-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-            Download Receipt
-          </button>
-          <button class="ghb-fill-btn">View Booking</button>
+      @if (_isLoadingBooking)
+      {
+          <div class="appl-empty">Loading your booking…</div>
+      }
+      else if (_bookingLoadError != null)
+      {
+          <div class="appl-empty">
+              @_bookingLoadError
+              <div style="margin-top:10px;"><button class="dark-view-btn" @onclick="LoadDashboardBooking">Retry</button></div>
+          </div>
+      }
+      else if (_dashBooking == null)
+      {
+          <div class="appl-empty">No upcoming guest house booking</div>
+          <div class="ghb-btn-row" style="margin-top: 14px;">
+            <button class="ghb-fill-btn" @onclick="NavigateToBookRoom">Book a Room</button>
+          </div>
+      }
+      else
+      {
+        <div class="ghb-card">
+          <div class="ghb-head">
+            <div class="ghb-title">@BookingCategoryTitle()</div>
+            <span class="ghb-tag">@_dashBooking.PaymentStatus</span>
+          </div>
+          <div class="ghb-ref">@_dashBooking.BookingReference</div>
+
+          <div class="ghb-grid">
+            <div class="ghb-lbl">Room Type</div>
+            <div class="ghb-val">@_dashBooking.RoomType</div>
+
+            <div class="ghb-lbl">Check-in</div>
+            <div class="ghb-val">@FormatBookingDate(_dashBooking.CheckInDate)</div>
+
+            <div class="ghb-lbl">Check-out</div>
+            <div class="ghb-val">@FormatBookingDate(_dashBooking.CheckOutDate)</div>
+
+            <div class="ghb-lbl">Guests</div>
+            <div class="ghb-val">@(_dashBooking.NumberOfGuests?.ToString() ?? "-")</div>
+          </div>
+
+          @if (!string.IsNullOrWhiteSpace(_receiptError))
+          {
+              <div class="wlc-sub text-danger" style="margin-bottom: 14px;">@_receiptError</div>
+          }
+
+          <div class="ghb-btn-row">
+            <button class="ghb-outline-btn" @onclick="DownloadReceiptAsync" disabled="@_isDownloadingReceipt">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+              @(_isDownloadingReceipt ? "Downloading..." : "Download Receipt")
+            </button>
+            <button class="ghb-fill-btn" @onclick="ViewBooking">View Booking</button>
+          </div>
         </div>
-      </div>
+      }
     </div>
 
     <div class="wht-panel-split">
@@ -623,9 +651,15 @@
     private EligibilityResultDto? _eligibilityResult;
     private string? _eligibilityError;
 
+    private MyBookingDto? _dashBooking;
+    private bool _isLoadingBooking = true;
+    private string? _bookingLoadError;
+    private bool _isDownloadingReceipt;
+    private string? _receiptError;
+
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(LoadDealerAsync(), LoadApplications());
+        await Task.WhenAll(LoadDealerAsync(), LoadApplications(), LoadDashboardBooking());
     }
 
     private async Task LoadDealerAsync()
@@ -672,6 +706,89 @@
             _isLoadingApps = false;
         }
     }
+
+    private async Task LoadDashboardBooking()
+    {
+        _isLoadingBooking = true;
+        _bookingLoadError = null;
+        _receiptError = null;
+        try
+        {
+            var response = await Http.GetFromJsonAsync<MyBookingsResponse>("api/GuestHouseBooking/my-bookings");
+            _dashBooking = (response?.Bookings ?? new List<MyBookingDto>())
+                .Where(IsRelevantBooking)
+                .OrderBy(b => b.CheckInDate)
+                .FirstOrDefault();
+        }
+        catch (Exception)
+        {
+            _dashBooking = null;
+            _bookingLoadError = "Unable to load your guest house booking right now.";
+        }
+        finally
+        {
+            _isLoadingBooking = false;
+        }
+    }
+
+    private string BookingCategoryTitle()
+    {
+        if (_dashBooking == null) return "Booking";
+        return IsCheckedIn(_dashBooking.BookingStatus) ? "Current Booking" : "Upcoming Booking";
+    }
+
+    private static bool IsRelevantBooking(MyBookingDto booking)
+    {
+        if (IsCancelledBooking(booking.BookingStatus) || IsCompletedBooking(booking.BookingStatus))
+            return false;
+        if (!booking.CheckInDate.HasValue)
+            return true;
+        return booking.CheckInDate.Value.Date >= DateTime.Today;
+    }
+
+    private static bool IsCancelledBooking(string status) =>
+        string.Equals(status, "Cancelled", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCompletedBooking(string status) =>
+        string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCheckedIn(string status) =>
+        string.Equals(status, "CheckedIn", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "Checked In", StringComparison.OrdinalIgnoreCase);
+
+    private async Task DownloadReceiptAsync()
+    {
+        if (_dashBooking == null || _isDownloadingReceipt)
+            return;
+
+        _isDownloadingReceipt = true;
+        _receiptError = null;
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync($"api/GuestHouseBooking/bookings/{_dashBooking.BookingId}/invoice");
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"{_dashBooking.BookingReference}.pdf";
+            await JS.InvokeVoidAsync("downloadFileFromBytes", fileName, "application/pdf", base64);
+        }
+        catch (Exception)
+        {
+            _receiptError = "Receipt is available only after the stay is paid and the invoice is generated.";
+        }
+        finally
+        {
+            _isDownloadingReceipt = false;
+        }
+    }
+
+    private void ViewBooking()
+    {
+        if (_dashBooking == null)
+            return;
+        NavigationManager.NavigateTo($"/BookingDetails?bookingId={_dashBooking.BookingId}");
+    }
+
+    private static string FormatBookingDate(DateTime? date) =>
+        date.HasValue ? date.Value.ToString("dd MMM yyyy") : "-";
 
     private void BuildDerivedSections()
     {
@@ -839,5 +956,41 @@
     private void NavigateToMyBookings()
     {
         NavigationManager.NavigateTo("/MyBookings", forceLoad: true);
+    }
+
+    private sealed class MyBookingsResponse
+    {
+        public List<MyBookingDto> Bookings { get; set; } = new();
+        public BookingSummaryDto Summary { get; set; } = new();
+    }
+
+    private sealed class MyBookingDto
+    {
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public int GuestHouseId { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public string? RoomImagePath { get; set; }
+        public string RoomType { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public string BookingStatus { get; set; } = "";
+        public string PaymentStatus { get; set; } = "";
+        public DateTime? CheckInDate { get; set; }
+        public TimeSpan? CheckInTime { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public TimeSpan? CheckOutTime { get; set; }
+        public int? NumberOfNights { get; set; }
+        public int? NumberOfRooms { get; set; }
+        public int? NumberOfGuests { get; set; }
+        public decimal? TotalAmount { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private sealed class BookingSummaryDto
+    {
+        public int Total { get; set; }
+        public int Upcoming { get; set; }
+        public int Completed { get; set; }
+        public int Cancelled { get; set; }
     }
 }
