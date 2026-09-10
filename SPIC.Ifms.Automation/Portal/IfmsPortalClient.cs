@@ -1217,7 +1217,7 @@ namespace SPIC.Ifms.Automation.Portal
 						// times out while the option sits right there in the DOM.
 						await Frame.WaitForSelectorAsync(selector!, new FrameWaitForSelectorOptions
 						{
-							State = Regex.IsMatch(selector!, @"option", RegexOptions.IgnoreCase)
+							State = Regex.IsMatch(selector!, "option", RegexOptions.IgnoreCase)
 								? WaitForSelectorState.Attached
 								: WaitForSelectorState.Visible,
 							Timeout = timeout
