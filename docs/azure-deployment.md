@@ -145,9 +145,11 @@ DNS records (environment static IP 4.224.119.18; verification id from
 | CNAME | api        | ca-spicone-api-prd.ashysmoke-4be6f3e0.centralindia.azurecontainerapps.io (an A record to the static IP also works) |
 | TXT   | asuid.api  | <verification id> |
 
-6. Create the two TXT records first (no user impact). Web container app → Custom domains → Add
-   `spicone.in`; API container app → Custom domains → Add `api.spicone.in`. Azure validates
-   against the TXT records.
+6. Bind from the CLI: `az containerapp hostname add` + `hostname bind` on each app. Use
+   `--validation-method CNAME` for `api.spicone.in` and **`--validation-method HTTP` for the apex
+   `spicone.in`** (TXT validation on an apex waits for an extra `_dnsauth` record and stays Pending).
+   Done 2026-09-10: both certificates Succeeded, https://spicone.in and https://api.spicone.in live.
+   `www.spicone.in` still needs its `asuid.www` TXT fixed (value was entered with a trailing space).
 7. A day before cut-over, lower the TTL of the affected DNS records to 300 s.
 8. At cut-over, create/change the records. Azure validates and issues managed certificates (5–15 min).
 9. `deploy.ps1 -Environment prod -Quick -SkipBuild -Tag <tag> -WebApiBaseUrl https://api.spicone.in/`
