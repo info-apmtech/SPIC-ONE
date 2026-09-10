@@ -997,7 +997,7 @@
             IsEditable = true,
             CanRemove = true,
             IsSystemLine = false,
-            IsGstEditable = true
+            IsGstEditable = false
         });
     }
 
@@ -1038,10 +1038,22 @@
             }
         }
 
+        // Billing GST for the room and additional-beds system lines comes from the
+        // booking via the draft (same booking-derived source the server uses at save
+        // time). Additional Beds must apply the exact same CGST/SGST as the Room line,
+        // never a hard-coded value, so the two system lines always tax identically.
+        var billingCgstPercent = room.CgstPercent;
+        var billingSgstPercent = room.SgstPercent;
+
         if (existingBill)
         {
             _billItems.Add(room);
-            if (bedsRow != null) _billItems.Add(bedsRow);
+            if (bedsRow != null)
+            {
+                bedsRow.CgstPercent = billingCgstPercent;
+                bedsRow.SgstPercent = billingSgstPercent;
+                _billItems.Add(bedsRow);
+            }
             return;
         }
 
@@ -1059,14 +1071,25 @@
 
         if (bedsRow != null)
         {
+            bedsRow.CgstPercent = billingCgstPercent;
+            bedsRow.SgstPercent = billingSgstPercent;
             _billItems.Add(bedsRow);
         }
         else
         {
-            _billItems.Add(new BillItemRow { Category = BillItemCategory.AdditionalBeds, Description = "Additional Beds", Quantity = 0, Rate = 0, IsEditable = true, IsSystemLine = true, IsGstEditable = false });
+            _billItems.Add(new BillItemRow
+            {
+                Category = BillItemCategory.AdditionalBeds,
+                Description = "Additional Beds",
+                Quantity = 0,
+                Rate = 0,
+                CgstPercent = billingCgstPercent,
+                SgstPercent = billingSgstPercent,
+                IsEditable = true,
+                IsSystemLine = true,
+                IsGstEditable = false
+            });
         }
-
-        _billItems.Add(new BillItemRow { Category = BillItemCategory.LaundryOther, Description = "Laundry / Others", Quantity = 1, Rate = 0, IsEditable = true, IsSystemLine = true, IsGstEditable = false });
 
         _billItems.AddRange(extraOthers);
     }

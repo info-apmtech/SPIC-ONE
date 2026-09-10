@@ -2,6 +2,7 @@
 
 @inject HttpClient Http
 @inject NavigationManager Navigation
+@inject LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.GuestHouseBookingState BookingState
 
 @using System.Globalization
@@ -311,10 +312,6 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Address</label>
-                        <textarea class="form-control-custom" placeholder="Enter Address" @bind="_form.Address"></textarea>
-                    </div>
-                    <div class="col-md-6">
                         <label class="form-label">Upload ID Proof (Optional)</label>
                         @if (string.IsNullOrEmpty(_idProofFileName))
                         {
@@ -525,6 +522,44 @@
         _extraBeds = Math.Max(0, ExtraBeds ?? 0);
 
         await LoadRoomAsync();
+
+        // Dealer-only: automatically bind the dealer's Phone Number and Email from
+        // the same Dealer/proprietor data source used by the Proprietor page.
+        // Non-Dealer roles keep the existing manual entry behavior untouched.
+        if (LoginState.UserRole == SPIC.Core.Entities.AppRole.Dealer)
+        {
+            await LoadDealerContactAsync();
+        }
+    }
+
+    // Resolves the logged-in Dealer's registration (via UserTableId) and reuses
+    // the same DealerOwnershipInfo lookup the Proprietor page uses to obtain
+    // the dealer's Phone Number and Email ID. Fails gracefully: on any error the
+    // fields stay empty and the existing form validation handles missing data.
+    private async Task LoadDealerContactAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LoginState.UserId)) return;
+
+        try
+        {
+            var dealer = await Http.GetFromJsonAsync<DealerLookupDto>(
+                $"api/DealerRegistration/by-user/{Uri.EscapeDataString(LoginState.UserId)}");
+            if (dealer == null || dealer.Id <= 0) return;
+
+            var owners = await Http.GetFromJsonAsync<List<DealerOwnershipInfoDto>>(
+                $"api/DealerOwnershipInfo/byDealer/{dealer.Id}");
+            if (owners == null || owners.Count == 0) return;
+
+            var owner = owners.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o.PhoneNumber)) ?? owners[0];
+            if (!string.IsNullOrWhiteSpace(owner.PhoneNumber))
+                _form.PhoneNumber = owner.PhoneNumber;
+            if (!string.IsNullOrWhiteSpace(owner.Email))
+                _form.Email = owner.Email;
+        }
+        catch (Exception)
+        {
+            // Graceful: never break the Guest Details page or populate wrong data.
+        }
     }
 
     private async Task LoadRoomAsync()
@@ -752,7 +787,6 @@
         BookingState.NumberOfPersons = int.TryParse(_form.NumberOfPersons, out var persons) ? persons : null;
         BookingState.NumberOfAdults = int.TryParse(_form.NumberOfAdults, out var adults) ? adults : null;
         BookingState.NumberOfChildren = int.TryParse(_form.NumberOfChildren, out var children) ? children : null;
-        BookingState.Address = _form.Address?.Trim();
 
         BookingState.MarkInitialized();
 
@@ -786,7 +820,19 @@
         public string? NumberOfPersons { get; set; }
         public string? NumberOfAdults { get; set; }
         public string? NumberOfChildren { get; set; }
-        public string? Address { get; set; }
+    }
+
+    public class DealerLookupDto
+    {
+        public int Id { get; set; }
+        public string? DealerCode { get; set; }
+    }
+
+    public class DealerOwnershipInfoDto
+    {
+        public int Id { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
     }
 
     public class TempUploadResult
