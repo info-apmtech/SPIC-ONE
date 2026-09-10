@@ -1,3 +1,6 @@
+/* =====================================================================
+   CSS CUSTOM PROPERTIES (Design Tokens)
+   ===================================================================== */
 :root {
     --primary: #0b6b3a;
     --primary-dark: #08572f;
@@ -8,7 +11,6 @@
     --border: #e5e7eb;
     --bg: #f6f7f8;
     --card: #ffffff;
-    --sidebar: #fbfbfb;
     --sidebar: #fff;
     --header-bg: #fff;
     --warning-soft: #fff4cc;
@@ -16,9 +18,13 @@
     --blue-btn: #3b82f6;
 }
 
+/* =====================================================================
+   GLOBAL RESET
+   ===================================================================== */
 * {
     box-sizing: border-box;
 }
+
 html, body {
     height: 100%;
     margin: 0;
@@ -31,13 +37,21 @@ body {
     font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* =====================================================================
+   APP SHELL (Desktop – always flex-row)
+   ===================================================================== */
 .app-shell {
     height: 100vh;
     display: flex;
+    flex-direction: row;
     align-items: stretch;
     overflow: hidden;
 }
 
+/* =====================================================================
+   DESKTOP SIDEBAR
+   Exact same design as before – do not touch these values.
+   ===================================================================== */
 .sidebar {
     width: 210px !important;
     background: var(--sidebar) !important;
@@ -49,25 +63,17 @@ body {
     box-shadow: 3px 0 6px rgba(0, 0, 0, 0.03);
     scrollbar-width: thin;
     scrollbar-color: #c4c4c4 transparent;
+    flex-shrink: 0;
 }
 
-    .sidebar::-webkit-scrollbar {
-        width: 5px;
-    }
+    .sidebar::-webkit-scrollbar { width: 5px; }
+    .sidebar::-webkit-scrollbar-track { background: transparent; }
+    .sidebar::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius: 4px; }
+    .sidebar::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
 
-    .sidebar::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .sidebar::-webkit-scrollbar-thumb {
-        background: #c4c4c4;
-        border-radius: 4px;
-    }
-
-        .sidebar::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8;
-        }
-
+/* =====================================================================
+   BRAND LOGO
+   ===================================================================== */
 .brand {
     display: flex;
     justify-content: center;
@@ -81,37 +87,167 @@ body {
     letter-spacing: 1px;
 }
 
+/* =====================================================================
+   NAV SECTION – BASE STYLES (Desktop + all sizes)
+
+   KEY FIXES:
+   1. Force flex-column on the Bootstrap nav-pills container so items
+      NEVER flow horizontally at any viewport width.
+   2. Give every .nav-link width:100% so it stretches across the sidebar.
+   3. Use align-items:stretch on the nav container (not center/start)
+      so children fill the available width automatically.
+   ===================================================================== */
+.nav-section {
+    /* Override Bootstrap nav-pills which can allow horizontal item flow */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;  /* children stretch to full width */
+    width: 100%;
+}
+
 .nav-section .nav-link {
-    color: #687281;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
+    /* Layout */
+    display: flex !important;          /* always flex – never inline-flex */
+    flex-direction: row !important;    /* icon | label | chevron in a row */
+    align-items: center !important;
+    width: 100% !important;            /* stretch across full sidebar width */
+    flex-shrink: 0;
+
+    /* Spacing */
     gap: 10px;
     padding: 10px 12px;
     margin-bottom: 4px;
+
+    /* Typography */
+    color: #687281;
     font-size: 13px;
     font-weight: 500;
+    line-height: 1.35;
+    text-decoration: none;
+
+    /* Shape */
+    border-radius: 8px;
+
+    /* Prevent text overflow */
+    overflow: hidden;
+    word-break: break-word;
+    white-space: normal;
+    box-sizing: border-box;
 }
 
-    .nav-section .nav-link i {
+    /* Chevron <i> inside nav-link – always pinned right, never squished */
+    .nav-section .nav-link i,
+    .nav-section .nav-link .chevron-icon {
         font-size: 14px;
+        flex-shrink: 0;
+        margin-left: auto;
+        /* Override NavMenu.razor.css scoped .bi margin-right which
+           conflicts with margin-left:auto chevron alignment */
+        margin-right: 0 !important;
     }
 
+    /* Active state */
     .nav-section .nav-link.active {
         background: var(--primary);
         color: #fff;
         box-shadow: 0 4px 12px rgba(11, 107, 58, 0.15);
     }
-/* Default → black */
+
+    /* Hover state */
+    .nav-section .nav-link:hover:not(.active) {
+        background-color: #f3f4f6;
+        color: var(--text-main);
+    }
+
+/* =====================================================================
+   SIDEBAR ICON  (.SideBariconimg)
+   Fixed pixel size – consistent at ALL viewport widths.
+   ===================================================================== */
 .SideBariconimg {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px;
+    flex-shrink: 0;
+    object-fit: contain;
     filter: brightness(0);
+    display: block;
 }
 
-/* Active → white */
+/* Active → white icon */
 .nav-link.active .SideBariconimg {
     filter: brightness(0) invert(1);
 }
 
+/* =====================================================================
+   CHEVRON ICON  (Bootstrap .bi inside parent menus)
+   Override the NavMenu.razor.css scoped `.bi` rule which sets
+   margin-right: 0.75rem – this would push the chevron left of the
+   right edge, breaking the "pinned right" alignment.
+   ===================================================================== */
+.chevron-icon {
+    margin-left: auto !important;
+    margin-right: 0 !important;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    transition: transform 0.3s;
+    /* Reset NavMenu.razor.css .bi overrides */
+    position: static !important;
+    top: auto !important;
+    width: auto !important;
+    height: auto !important;
+    background-size: auto !important;
+}
+
+/* =====================================================================
+   SETTINGS-MENU-WRAPPER (parent of expandable menus)
+   Must be full width so inner nav-link stretches correctly.
+   ===================================================================== */
+.settings-menu-wrapper {
+    width: 100%;
+    display: block;
+}
+
+/* =====================================================================
+   SUBMENU – Tree layout (desktop + responsive)
+   ===================================================================== */
+.submenu-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px 28px; /* 28px aligns vertical line with icon center */
+    width: 100%;
+}
+
+.submenu-item {
+    position: relative;
+}
+
+.submenu-link {
+    display: flex;
+    align-items: center;
+    padding: 10px 0 10px 24px;
+    color: #6b7280;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: color 0.2s;
+    width: 100%;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.3;
+}
+
+    .submenu-link:hover {
+        color: #1f2937;
+    }
+
+    .submenu-link.active {
+        color: #059669;
+        font-weight: 600;
+    }
+
+/* =====================================================================
+   CONTENT AREA
+   ===================================================================== */
 .content-wrap {
     flex: 1;
     min-width: 0;
@@ -125,7 +261,7 @@ body {
 
 .mobile-topbar {
     display: none;
-    margin-bottom: 12px;
+    margin-bottom: 0;
     flex-shrink: 0;
 }
 
@@ -142,7 +278,6 @@ body {
     flex-shrink: 0;
 }
 
-
 .search-box {
     max-width: 420px;
     width: 100%;
@@ -153,10 +288,9 @@ body {
         padding-left: 34px;
         height: 38px;
         border-radius: 8px;
-        border: none; /* remove border */
+        border: none;
         background: #ffffff;
         font-size: 13px;
-        /* add light shadow */
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1) !important;
     }
 
@@ -197,11 +331,6 @@ body {
     height: 100%;
 }
 
-.SideBariconimg {
-    width: 10%;
-    height: 10%;
-}
-
 .profile {
     width: 34px;
     height: 34px;
@@ -222,19 +351,61 @@ body {
     background-color: #f9fff92e;
 }
 
+/* =====================================================================
+   RESPONSIVE – Grid helpers (page content)
+   ===================================================================== */
 @media (max-width: 1199.98px) {
     .saved-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
-@media (max-width: 768.98px) {
+/* =====================================================================
+   RESPONSIVE – Tablet / small-laptop  (769 px … 1024 px)
+   Desktop sidebar stays visible; tighten width & spacing only.
+   ===================================================================== */
+@media (min-width: 769px) and (max-width: 1024px) {
+
+    .sidebar {
+        width: 185px !important;
+        padding: 8px 8px 16px;
+    }
+
+    .nav-section .nav-link {
+        gap: 8px;
+        padding: 8px 8px;
+        font-size: 12px;
+        min-height: 42px;
+    }
+
+    .submenu-list {
+        margin: 0 0 12px 20px;
+    }
+
+    .submenu-link {
+        padding: 8px 0 8px 14px;
+        font-size: 0.78rem;
+        min-height: 38px;
+    }
+
+    .brand {
+        font-size: 1.3rem;
+    }
+}
+
+/* =====================================================================
+   RESPONSIVE – Mobile  (≤ 768 px)
+   Desktop sidebar hidden; nav uses Bootstrap offcanvas (#mobileSidebar).
+   ===================================================================== */
+@media (max-width: 768px) {
+
     .app-shell {
-        display: block;
+        display: flex;
+        flex-direction: column;
     }
 
     .sidebar {
-        display: none;
+        display: none !important;
     }
 
     .mobile-topbar {
@@ -242,17 +413,26 @@ body {
         align-items: center;
         justify-content: space-between;
         gap: 10px;
-        padding: 14px;
+        padding: 12px 14px;
         background: var(--header-bg);
         border-bottom: 1px solid #dfe3e8;
-        margin-bottom: 0;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        flex-shrink: 0;
+    }
+
+    .content-wrap {
+        height: auto;
+        flex: 1;
+        overflow: visible;
     }
 
     .topbar {
-        padding: 12px 14px;
+        padding: 10px 14px;
         height: auto;
-        /*  flex-direction: column;*/
-        align-items: stretch;
+        align-items: center;
+        flex-shrink: 0;
     }
 
     .top-actions {
@@ -262,9 +442,188 @@ body {
     .main-content {
         flex: 1;
         overflow-y: auto;
-        padding: 14px;
+        padding: 12px;
     }
 }
 
+/* =====================================================================
+   OFFCANVAS MOBILE SIDEBAR
+   Applied when nav renders inside Bootstrap's .offcanvas (#mobileSidebar).
 
+   CRITICAL FIXES that solve the two-column layout problem:
+   1. Force .nav-section to be a single-column flex container.
+   2. Force every .nav-link to width:100% so nothing sits beside another item.
+   3. Override Bootstrap nav-pills which allows horizontal item wrapping.
+   4. Fix .bi scoped margin-right that breaks chevron alignment.
+   ===================================================================== */
 
+/* Offcanvas panel sizing – works on all phones from 320px to 414px+ */
+.offcanvas.offcanvas-start {
+    width: min(280px, 85vw) !important;
+    max-width: 320px;
+}
+
+/* Header inside offcanvas */
+.offcanvas-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+}
+
+/* Scrollable body */
+.offcanvas-body {
+    padding: 8px 12px 16px;
+    overflow-y: auto;
+    overflow-x: hidden;  /* prevent horizontal scroll inside offcanvas */
+}
+
+/* ── Nav container inside offcanvas ──────────────────────────────────── */
+.offcanvas-body .nav-section,
+.offcanvas-body .nav.nav-pills,
+.offcanvas-body .nav.flex-column {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;  /* items fill the full width */
+    width: 100% !important;
+    flex-wrap: nowrap !important;
+}
+
+/* ── Every nav-link inside offcanvas ─────────────────────────────────── */
+.offcanvas-body .nav-section .nav-link,
+.offcanvas-body .nav-link {
+    /* Single-row layout: [icon] [label text] [chevron] */
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+
+    /* Full width – prevents two items per row */
+    width: 100% !important;
+    box-sizing: border-box;
+
+    /* Touch-friendly sizing */
+    min-height: 46px;
+    padding: 10px 12px;
+    gap: 10px;
+    margin-bottom: 4px;
+
+    /* Typography */
+    font-size: 13px;
+    font-weight: 500;
+    color: #687281;
+    line-height: 1.4;
+    text-decoration: none;
+
+    /* Text overflow handling */
+    overflow: hidden;
+    white-space: normal;
+    word-break: break-word;
+
+    /* Shape */
+    border-radius: 8px;
+}
+
+/* Active state */
+.offcanvas-body .nav-section .nav-link.active,
+.offcanvas-body .nav-link.active {
+    background: var(--primary) !important;
+    color: #fff !important;
+    box-shadow: 0 4px 12px rgba(11, 107, 58, 0.15);
+}
+
+/* Active icon (white) */
+.offcanvas-body .nav-link.active .SideBariconimg {
+    filter: brightness(0) invert(1) !important;
+}
+
+/* Hover state */
+.offcanvas-body .nav-link:hover:not(.active) {
+    background-color: #f3f4f6;
+    color: var(--text-main);
+}
+
+/* ── Icon inside offcanvas nav-link ──────────────────────────────────── */
+.offcanvas-body .nav-link .SideBariconimg,
+.offcanvas-body .SideBariconimg {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px;
+    flex-shrink: 0;
+    object-fit: contain;
+    filter: brightness(0);
+    display: block;
+}
+
+/* ── Chevron inside offcanvas nav-link ───────────────────────────────── */
+.offcanvas-body .nav-link i,
+.offcanvas-body .nav-link .chevron-icon {
+    /* Pin to right edge */
+    margin-left: auto !important;
+    margin-right: 0 !important;
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    /* Reset scoped NavMenu.razor.css .bi overrides */
+    position: static !important;
+    top: auto !important;
+    width: auto !important;
+    height: auto !important;
+    background-size: auto !important;
+    background-image: none !important;
+}
+
+/* Exception: the hamburger .bi-list icon in the mobile topbar must keep its style */
+.mobile-topbar .bi {
+    margin-right: 0 !important;
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+/* ── Settings-menu-wrapper inside offcanvas ──────────────────────────── */
+.offcanvas-body .settings-menu-wrapper {
+    width: 100%;
+    display: block;
+}
+
+/* ── Submenu inside offcanvas ────────────────────────────────────────── */
+.offcanvas-body .submenu-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 10px 22px;
+    width: 100%;
+}
+
+.offcanvas-body .submenu-item {
+    position: relative;
+    width: 100%;
+}
+
+.offcanvas-body .submenu-link {
+    display: flex !important;
+    align-items: center;
+    width: 100% !important;
+    padding: 9px 4px 9px 18px;
+    color: #6b7280;
+    text-decoration: none;
+    font-size: 0.83rem;
+    font-weight: 500;
+    min-height: 40px;       /* touch-friendly */
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.3;
+    transition: color 0.2s;
+}
+
+    .offcanvas-body .submenu-link:hover {
+        color: #1f2937;
+    }
+
+    .offcanvas-body .submenu-link.active {
+        color: #059669;
+        font-weight: 600;
+    }
+
+/* Scrollbar inside offcanvas body */
+.offcanvas-body::-webkit-scrollbar { width: 4px; }
+.offcanvas-body::-webkit-scrollbar-track { background: transparent; }
+.offcanvas-body::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius: 4px; }
