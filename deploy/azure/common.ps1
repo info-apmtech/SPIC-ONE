@@ -76,10 +76,19 @@ function Find-KeyVault {
 
 function Get-KeyVaultSecretValue {
     param([Parameter(Mandatory)][string]$VaultName, [Parameter(Mandatory)][string]$Name)
+    # Optional secrets are allowed to be absent: a non-zero exit returns $null, and the
+    # error preference is relaxed so PowerShell 5.1 does not turn stderr into a fatal error.
     $az = Get-AzCli
-    $out = & $az keyvault secret show --vault-name $VaultName --name $Name --query value --output tsv 2>$null
-    if ($LASTEXITCODE -ne 0) { return $null }
-    return ($out | Where-Object { $_ -is [string] }) -join ''
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $az keyvault secret show --vault-name $VaultName --name $Name --query value --output tsv 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    if ($code -ne 0) { return $null }
+    return (@($out | Where-Object { $_ -is [string] }) -join '')
 }
 
 function New-SecretParametersFile {
