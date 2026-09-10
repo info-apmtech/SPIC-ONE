@@ -1053,7 +1053,22 @@ namespace SPIC.Ifms.Automation.Portal
 				Timeout = _options.Browser.DownloadTimeoutMs
 			});
 
-			await ExecuteStepAsync(job.DownloadStep, tokens, cancellationToken);
+			if (job.DownloadStep.Action.Equals("click", StringComparison.OrdinalIgnoreCase) &&
+				!string.IsNullOrWhiteSpace(job.DownloadStep.Selector))
+			{
+				// An export that submits a form starts a navigation which becomes a
+				// download and never "completes"; a normal click waits for it and
+				// times out while the file is already arriving. Click and let go.
+				await Frame.ClickAsync(tokens.Resolve(job.DownloadStep.Selector)!, new FrameClickOptions
+				{
+					NoWaitAfter = true,
+					Timeout = job.DownloadStep.TimeoutMs ?? _options.Otp.StepTimeoutMs
+				});
+			}
+			else
+			{
+				await ExecuteStepAsync(job.DownloadStep, tokens, cancellationToken);
+			}
 
 			var download = await waitForDownload;
 
