@@ -1197,9 +1197,14 @@ namespace SPIC.Ifms.Automation.Portal
 						break;
 
 					case "waitfor":
+						// An <option> inside a closed <select> is never "visible" to
+						// Playwright, so a wait on one must be for attachment, or it
+						// times out while the option sits right there in the DOM.
 						await Frame.WaitForSelectorAsync(selector!, new FrameWaitForSelectorOptions
 						{
-							State = WaitForSelectorState.Visible,
+							State = Regex.IsMatch(selector!, @"option", RegexOptions.IgnoreCase)
+								? WaitForSelectorState.Attached
+								: WaitForSelectorState.Visible,
 							Timeout = timeout
 						});
 						break;
