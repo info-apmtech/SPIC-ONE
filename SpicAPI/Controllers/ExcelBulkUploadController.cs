@@ -138,14 +138,39 @@ namespace SpicAPI.Controllers
 				(automated ? "IFMS-Automation" : "System");
 
 			await using var stream = file.OpenReadStream();
-			var result = await _uploadService.ImportAsync(
-				stream,
-				currentUserId,
-				extension,
-				normalizedCategoryId,
-				safeFileName,
-				reportDate,
-				cancellationToken);
+			SPIC.Core.DTOs.ExcelBulkUploadResult result;
+			try
+			{
+				result = await _uploadService.ImportAsync(
+					stream,
+					currentUserId,
+					extension,
+					normalizedCategoryId,
+					safeFileName,
+					reportDate,
+					cancellationToken);
+			}
+			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+			{
+				throw;
+			}
+			catch (Exception ex)
+			{
+				// The parse phase catches its own errors; anything that escapes comes
+				// from the database phase. Hosting swallows it into a bare 500, which
+				// tells the automation nothing, so name the root cause in the reply.
+				var root = ex;
+				while (root.InnerException is not null) root = root.InnerException;
+
+				return StatusCode(500, new
+				{
+					Success = false,
+					Message = $"Import failed inside SpicAPI ({normalizedCategoryId}, {safeFileName}): " +
+						$"{root.GetType().Name}: {root.Message}",
+					CategoryId = normalizedCategoryId,
+					FileName = safeFileName
+				});
+			}
 
 			return result.Success ? Ok(result) : BadRequest(result);
 		}
