@@ -1070,7 +1070,21 @@ namespace SPIC.Ifms.Automation.Portal
 				await ExecuteStepAsync(job.DownloadStep, tokens, cancellationToken);
 			}
 
-			var download = await waitForDownload;
+			var download = await WaitForDownloadOrEmptyAsync(waitForDownload, cancellationToken);
+
+			if (download is null)
+			{
+				_logger.LogInformation(
+					"The export for {JobKey} came back as a no-records page; nothing to download.", job.Key);
+				return new DownloadedReport
+				{
+					FileName = "(no records)",
+					FilePath = string.Empty,
+					Bytes = 0,
+					Extension = job.ExpectedExtension,
+					IsEmpty = true
+				};
+			}
 
 			var suggested = download.SuggestedFilename;
 			var extension = Path.GetExtension(suggested);
@@ -1113,9 +1127,42 @@ namespace SPIC.Ifms.Automation.Portal
 				var text = await Frame.Locator("body").InnerTextAsync(new LocatorInnerTextOptions { Timeout = 3_000 });
 				return _options.EmptyResultMarkers.Any(m => text.Contains(m, StringComparison.OrdinalIgnoreCase));
 			}
-			catch (TimeoutException)
+			catch (PlaywrightException)
 			{
+				// Includes the timeout, and the frame being replaced mid-read by
+				// the export's own navigation.
 				return false;
+			}
+		}
+
+		/// <summary>
+		/// An export for a combination with no rows downloads nothing: the portal
+		/// renders "No Record Found" in the page instead, and the download event
+		/// never fires. Watch for that while the download is awaited, so an empty
+		/// state costs a few seconds rather than the download timeout twice over.
+		/// Null means the page said empty.
+		/// </summary>
+		private async Task<IDownload?> WaitForDownloadOrEmptyAsync(
+			Task<IDownload> waitForDownload,
+			CancellationToken cancellationToken)
+		{
+			while (true)
+			{
+				var tick = Task.Delay(2_000, cancellationToken);
+				var first = await Task.WhenAny(waitForDownload, tick);
+
+				if (first == waitForDownload)
+					return await waitForDownload;
+
+				if (await PageSaysEmptyAsync())
+				{
+					// The abandoned wait times out on its own later; observe it so
+					// it does not surface as an unobserved task exception.
+					_ = waitForDownload.ContinueWith(
+						t => _ = t.Exception,
+						TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
+					return null;
+				}
 			}
 		}
 
