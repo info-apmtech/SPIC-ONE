@@ -36,5 +36,14 @@ namespace SPIC.Ifms.Automation.Options
 
 		/// <summary>Retries for a network failure. The import itself is not retried.</summary>
 		public int MaxAttempts { get; set; } = 3;
+
+		/// <summary>
+		/// False downloads everything and uploads nothing: each file stays in the
+		/// downloads folder for the day SpicAPI's import is broken. Push them
+		/// afterwards with
+		///   dotnet SPIC.Ifms.Automation.dll upload-saved yyyy-MM-dd [jobKey ...|all]
+		/// Set on the server as Upload__Enabled=false in secrets.env.
+		/// </summary>
+		public bool Enabled { get; set; } = true;
 	}
 }

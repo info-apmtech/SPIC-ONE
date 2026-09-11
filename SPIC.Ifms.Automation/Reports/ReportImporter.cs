@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -16,7 +17,15 @@ namespace SPIC.Ifms.Automation.Reports
 {
 	public interface IReportImporter
 	{
+		/// <summary>Upload, or keep the file when Upload:Enabled is false.</summary>
 		Task<ExcelBulkUploadResult> ImportAsync(
+			ReportJob job,
+			DownloadedReport download,
+			DateTime? reportDate,
+			CancellationToken cancellationToken);
+
+		/// <summary>Upload regardless of Upload:Enabled — the upload-saved path.</summary>
+		Task<ExcelBulkUploadResult> UploadSavedAsync(
 			ReportJob job,
 			DownloadedReport download,
 			DateTime? reportDate,
@@ -55,6 +64,71 @@ namespace SPIC.Ifms.Automation.Reports
 		}
 
 		public async Task<ExcelBulkUploadResult> ImportAsync(
+			ReportJob job,
+			DownloadedReport download,
+			DateTime? reportDate,
+			CancellationToken cancellationToken)
+		{
+			EnsureUsable(job, download);
+
+			if (!_options.Enabled)
+			{
+				var rows = CountDataRows(download);
+
+				_logger.LogInformation(
+					"Upload:Enabled is false, so {File} ({Rows} data rows) stays at {Path} for upload-saved later.",
+					Path.GetFileName(download.FilePath), rows, download.FilePath);
+
+				return new ExcelBulkUploadResult
+				{
+					Success = true,
+					Message = "Upload deferred: Upload:Enabled is false. The file is kept in the downloads folder.",
+					FileName = Path.GetFileName(download.FilePath),
+					CategoryId = job.CategoryId,
+					ReportDate = reportDate,
+					TotalRows = rows,
+					Warnings =
+					{
+						"Not uploaded (Upload:Enabled is false). Run upload-saved for this date once SpicAPI accepts imports again."
+					}
+				};
+			}
+
+			return await UploadSavedAsync(job, download, reportDate, cancellationToken);
+		}
+
+		/// <summary>
+		/// Data rows in a portal CSV: every non-blank line, less the header and the
+		/// title line the portal puts above it (",,,,Retailer Weekly Stock(In MT.)").
+		/// Only used to report a count when nothing is uploaded.
+		/// </summary>
+		private static int CountDataRows(DownloadedReport download)
+		{
+			if (!string.Equals(download.Extension, ".csv", StringComparison.OrdinalIgnoreCase))
+				return 1;
+
+			try
+			{
+				var lines = File.ReadLines(download.FilePath)
+					.Where(l => l.Trim(',', ' ', '\t', '"').Length > 0)
+					.ToList();
+
+				if (lines.Count == 0)
+					return 0;
+
+				var overhead = 1; // header
+				if (!lines[0].Trim(',', ' ', '"').Contains(','))
+					overhead++;   // a title line has its commas only at the edges
+
+				return Math.Max(0, lines.Count - overhead);
+			}
+			catch (IOException)
+			{
+				return 1;
+			}
+		}
+
+		public async Task<ExcelBulkUploadResult> UploadSavedAsync(
 			ReportJob job,
 			DownloadedReport download,
 			DateTime? reportDate,

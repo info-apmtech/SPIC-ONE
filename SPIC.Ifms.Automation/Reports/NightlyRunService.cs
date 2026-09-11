@@ -649,7 +649,7 @@ namespace SPIC.Ifms.Automation.Reports
 		}
 
 		/// <summary>Matches ExcelBulkUploadController.RequiresReportDate.</summary>
-		private static bool RequiresReportDate(string categoryId) =>
+		internal static bool RequiresReportDate(string categoryId) =>
 			categoryId is "One" or "Three" or "Six" or "Seven";
 
 		private string ArchiveFolder(DateTime reportDate)
