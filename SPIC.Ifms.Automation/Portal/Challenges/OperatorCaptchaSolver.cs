@@ -116,14 +116,25 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 				cancellationToken.ThrowIfCancellationRequested();
 				await Task.Delay(poll, cancellationToken);
 
-				await using var scope = _scopeFactory.CreateAsyncScope();
-				var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
+				string? answer;
+				try
+				{
+					await using var scope = _scopeFactory.CreateAsyncScope();
+					var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
 
-				var answer = await db.IfmsChallengeRequests
-					.AsNoTracking()
-					.Where(c => c.Id == requestId && c.AnsweredAt != null)
-					.Select(c => c.Answer)
-					.FirstOrDefaultAsync(cancellationToken);
+					answer = await db.IfmsChallengeRequests
+						.AsNoTracking()
+						.Where(c => c.Id == requestId && c.AnsweredAt != null)
+						.Select(c => c.Answer)
+						.FirstOrDefaultAsync(cancellationToken);
+				}
+				catch (Exception ex) when (ex is not OperationCanceledException)
+				{
+					// A dropped database connection during a wait of up to five
+					// hours must not abandon the login; the next poll reconnects.
+					_logger.LogWarning("Challenge poll hit a database error, retrying: {Message}", ex.Message);
+					continue;
+				}
 
 				if (!string.IsNullOrWhiteSpace(answer))
 				{

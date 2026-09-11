@@ -83,7 +83,19 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 			{
 				cancellationToken.ThrowIfCancellationRequested();
 
-				var otp = await TryClaimAsync(floor, runId, accountKey, cancellationToken);
+				string? otp;
+				try
+				{
+					otp = await TryClaimAsync(floor, runId, accountKey, cancellationToken);
+				}
+				catch (Exception ex) when (ex is not OperationCanceledException)
+				{
+					// The window is short; a dropped database connection must not
+					// end it. The next poll reconnects.
+					_logger.LogWarning("OTP poll hit a database error, retrying: {Message}", ex.Message);
+					otp = null;
+				}
+
 				if (otp is not null)
 				{
 					_logger.LogInformation("OTP received from the Android relay.");
@@ -126,7 +138,7 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 
 			foreach (var message in candidates)
 			{
-				if (!SenderAccepted(message.Sender))
+				if (!SenderAccepted(message.Sender) && !BodyLooksLikeIfms(message.Body))
 				{
 					_logger.LogWarning(
 						"OTP message {Id} from '{Sender}' ignored: not in Ifms:Otp:AcceptedSenders.",
@@ -157,6 +169,15 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 
 			return null;
 		}
+
+		/// <summary>
+		/// The live portal sends its OTP from an ordinary mobile number
+		/// (+91 73054 30555 on 2026-09-09), not a sender ID, so the body is the
+		/// reliable signal: "Dear user, your OTP for iFMS login is 221034".
+		/// </summary>
+		private static bool BodyLooksLikeIfms(string? body) =>
+			!string.IsNullOrWhiteSpace(body) &&
+			body.Contains("ifms", StringComparison.OrdinalIgnoreCase);
 
 		private bool SenderAccepted(string? sender)
 		{

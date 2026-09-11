@@ -39,6 +39,12 @@ namespace SPIC.Ifms.Automation.Options
 		public string Password { get; set; } = string.Empty;
 
 		public IfmsSelectorOptions Selectors { get; set; } = new();
+
+		/// <summary>
+		/// Page text that means "nothing to export" for a filter combination.
+		/// Matched case-insensitively before the download step is attempted.
+		/// </summary>
+		public List<string> EmptyResultMarkers { get; set; } = new() { "No Record Found", "No Records Found", "No data found" };
 		public IfmsBrowserOptions Browser { get; set; } = new();
 		public IfmsCaptchaOptions Captcha { get; set; } = new();
 		public IfmsOtpOptions Otp { get; set; } = new();
@@ -202,6 +208,21 @@ namespace SPIC.Ifms.Automation.Options
 		/// <summary>Path to Tesseract language data. Defaults to ./tessdata.</summary>
 		public string TessDataPath { get; set; } = "tessdata";
 		public string TessLanguage { get; set; } = "eng";
+
+		/// <summary>
+		/// A second Tesseract model (e.g. "eng.fast" beside "eng.best") read on
+		/// every image. When both models produce the same six characters the read
+		/// is trusted; when they differ, the primary read is used only if it is
+		/// confident. Empty disables the second opinion.
+		/// </summary>
+		public string SecondaryTessLanguage { get; set; } = "";
+
+		/// <summary>
+		/// Below this mean confidence a read that the second model does not
+		/// confirm is not submitted: a fresh image costs nothing, a wrong submit
+		/// costs an attempt and, repeated, the portal's "invalid access" refusal.
+		/// </summary>
+		public float MinimumConfidence { get; set; } = 0.60f;
 
 		/// <summary>
 		/// Characters the CAPTCHA can contain. Restricting this lifts OCR accuracy
