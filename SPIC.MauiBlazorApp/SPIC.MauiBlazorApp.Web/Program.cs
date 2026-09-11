@@ -6,8 +6,20 @@ using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDataProtection()
+var dataProtection = builder.Services.AddDataProtection()
     .SetApplicationName("SPIC");
+
+// Several replicas run behind the Azure load balancer; they must share the
+// data-protection key ring or antiforgery tokens issued by one replica are
+// rejected by another. DataProtection:KeysPath points at a mounted share.
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
+
+builder.Services.AddHealthChecks();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -119,6 +131,7 @@ app.UseAntiforgery();
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
 
 app.MapStaticAssets();
+app.MapHealthChecks("/health");
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()

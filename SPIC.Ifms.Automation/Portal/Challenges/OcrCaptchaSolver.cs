@@ -44,12 +44,16 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 		private readonly IfmsCaptchaOptions _options;
 		private readonly ILogger<OcrCaptchaSolver> _logger;
 		private readonly Lazy<TesseractEngine?> _engine;
+		private readonly Lazy<TesseractEngine?> _secondEngine;
 
 		public OcrCaptchaSolver(IOptions<IfmsOptions> options, ILogger<OcrCaptchaSolver> logger)
 		{
 			_options = options.Value.Captcha;
 			_logger = logger;
-			_engine = new Lazy<TesseractEngine?>(CreateEngine, LazyThreadSafetyMode.ExecutionAndPublication);
+			_engine = new Lazy<TesseractEngine?>(() => CreateEngine(_options.TessLanguage), LazyThreadSafetyMode.ExecutionAndPublication);
+			_secondEngine = new Lazy<TesseractEngine?>(
+				() => string.IsNullOrWhiteSpace(_options.SecondaryTessLanguage) ? null : CreateEngine(_options.SecondaryTessLanguage),
+				LazyThreadSafetyMode.ExecutionAndPublication);
 		}
 
 		public Task<CaptchaAnswer?> SolveAsync(CaptchaChallenge challenge, CancellationToken cancellationToken)
@@ -67,9 +71,45 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 					? Preprocess(challenge.ImagePng)
 					: challenge.ImagePng;
 
-				var (cleaned, confidence) = _options.SegmentCharacters
-					? ReadSegmented(engine, bytes)
-					: ReadWholeLine(engine, bytes);
+				var (cleaned, confidence) = ReadWithFallback(engine, bytes);
+
+				// Second opinion. Two different models agreeing on six characters is
+				// strong evidence; a lone low-confidence read is a coin toss that
+				// costs an attempt when wrong.
+				var second = _secondEngine.Value;
+				if (second is not null && cleaned.Length > 0)
+				{
+					var (other, otherConfidence) = ReadWithFallback(second, bytes);
+					if (other == cleaned)
+					{
+						confidence = Math.Max(confidence, otherConfidence);
+						_logger.LogInformation("Both OCR models read {Value}.", cleaned);
+					}
+					else if (confidence < _options.MinimumConfidence)
+					{
+						if (other.Length == _options.ExpectedLength && otherConfidence >= _options.MinimumConfidence && otherConfidence > confidence)
+						{
+							_logger.LogInformation(
+								"OCR models differ ({Primary} {PrimaryConfidence:P0} vs {Other} {OtherConfidence:P0}); taking the confident one.",
+								cleaned, confidence, other, otherConfidence);
+							(cleaned, confidence) = (other, otherConfidence);
+						}
+						else
+						{
+							_logger.LogWarning(
+								"OCR models differ ({Primary} {PrimaryConfidence:P0} vs {Other} {OtherConfidence:P0}) and neither is confident; not submitting, a fresh image is free.",
+								cleaned, confidence, other, otherConfidence);
+							return Task.FromResult<CaptchaAnswer?>(null);
+						}
+					}
+				}
+				else if (second is null && cleaned.Length > 0 && confidence < _options.MinimumConfidence && _options.MinimumConfidence > 0)
+				{
+					_logger.LogWarning(
+						"OCR read {Value} at only {Confidence:P0}; not submitting, a fresh image is free.",
+						cleaned, confidence);
+					return Task.FromResult<CaptchaAnswer?>(null);
+				}
 
 				if (cleaned.Length == 0)
 				{
@@ -124,6 +164,25 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 		/// separates them exactly, and every glyph is then a clean single-character
 		/// recognition with no layout analysis left to get wrong.
 		/// </summary>
+		/// <summary>
+		/// Glyph segmentation is the accurate path, but on about a third of the
+		/// images it finds fewer glyphs than there are (touching characters) and
+		/// gives up. The whole-line read is worse on average yet often fine on
+		/// exactly those images, so it is the fallback rather than the default.
+		/// </summary>
+		private (string Text, float Confidence) ReadWithFallback(TesseractEngine engine, byte[] png)
+		{
+			if (!_options.SegmentCharacters)
+				return ReadWholeLine(engine, png);
+
+			var segmented = ReadSegmented(engine, png);
+			if (_options.ExpectedLength == 0 || segmented.Text.Length == _options.ExpectedLength)
+				return segmented;
+
+			var whole = ReadWholeLine(engine, png);
+			return whole.Text.Length == _options.ExpectedLength ? whole : segmented;
+		}
+
 		private (string Text, float Confidence) ReadSegmented(TesseractEngine engine, byte[] png)
 		{
 			using var image = Image.Load<Rgba32>(png);
@@ -495,26 +554,25 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 			return new string(kept);
 		}
 
-		private TesseractEngine? CreateEngine()
-		{
+		private TesseractEngine? CreateEngine(string language){
 			var path = _options.TessDataPath;
 			if (!Path.IsPathRooted(path))
 				path = Path.Combine(AppContext.BaseDirectory, path);
 
-			var trainedData = Path.Combine(path, $"{_options.TessLanguage}.traineddata");
+			var trainedData = Path.Combine(path, $"{language}.traineddata");
 			if (!File.Exists(trainedData))
 			{
 				_logger.LogError(
 					"Tesseract data not found at {Path}. Download {Language}.traineddata from " +
 					"https://github.com/tesseract-ocr/tessdata_fast and place it there, or drop " +
 					"Ocr from Ifms:Captcha:Strategies.",
-					trainedData, _options.TessLanguage);
+					trainedData, language);
 				return null;
 			}
 
 			try
 			{
-				var engine = new TesseractEngine(path, _options.TessLanguage, EngineMode.LstmOnly);
+				var engine = new TesseractEngine(path, language, EngineMode.LstmOnly);
 
 				if (_options.CharacterWhitelist.Length > 0)
 					engine.SetVariable("tessedit_char_whitelist", _options.CharacterWhitelist);

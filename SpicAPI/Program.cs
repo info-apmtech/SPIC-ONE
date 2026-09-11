@@ -18,6 +18,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHealthChecks();
+
+// In Azure the API runs as several replicas. Data-protection keys (Identity
+// tokens) must be shared between them, so when DataProtection:KeysPath is
+// configured the key ring is persisted to that (mounted) folder. Without the
+// setting the default per-machine key ring is used, exactly as before.
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
@@ -67,11 +80,16 @@ builder.Services.AddScoped<ILiquidationCycleService, LiquidationCycleService>();
 builder.Services.AddScoped<IProductStockAvailabilityService, ProductStockAvailabilityService>();
 builder.Services.AddScoped<IStockDetailsService, StockDetailsService>();
 
-// Data-protection keys shared with IFMS automation.
-builder.Services
-    .AddDataProtection()
-    .SetApplicationName("SPIC.Ifms")
-    .PersistKeysToDbContext<IfmsDbContext>();
+// Shares the IFMS portal-password encryption keys with the automation service.
+// The application name is part of the key derivation, so it must match the
+// automation exactly or neither can read what the other wrote.
+// The IFMS credential protector has its OWN key ring (spiconeifms). The API's
+// Data Protection stays on its default key ring, as production ran before.
+builder.Services.AddSingleton<IIfmsDataProtection>(_ =>
+    new IfmsDataProtection(
+        builder.Configuration.GetConnectionString("IfmsConnection")
+        ?? builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? string.Empty));
 
 // Fail fast at startup when required JWT settings are missing.
 var jwtKey = builder.Configuration["Jwt:Key"]
@@ -189,6 +207,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/", () => "SPIC API is running");
+app.MapHealthChecks("/health");
 app.MapControllers();
 
 app.Run();

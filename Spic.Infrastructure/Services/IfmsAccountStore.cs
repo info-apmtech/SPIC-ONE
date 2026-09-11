@@ -41,13 +41,13 @@ namespace Spic.Infrastructure.Services
 
 		public IfmsAccountStore(
 			IfmsDbContext db,
-			IDataProtectionProvider dataProtection,
+			IIfmsDataProtection dataProtection,
 			IConfiguration config,
 			ILogger<IfmsAccountStore> logger)
 		{
 			_db = db;
 			_config = config;
-			_protector = dataProtection.CreateProtector(ProtectorPurpose);
+			_protector = dataProtection.Provider.CreateProtector(ProtectorPurpose);
 			_logger = logger;
 		}
 
