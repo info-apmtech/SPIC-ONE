@@ -1127,10 +1127,11 @@ namespace SPIC.Ifms.Automation.Portal
 				var text = await Frame.Locator("body").InnerTextAsync(new LocatorInnerTextOptions { Timeout = 3_000 });
 				return _options.EmptyResultMarkers.Any(m => text.Contains(m, StringComparison.OrdinalIgnoreCase));
 			}
-			catch (PlaywrightException)
+			catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
 			{
-				// Includes the timeout, and the frame being replaced mid-read by
-				// the export's own navigation.
+				// Playwright raises System.TimeoutException for the 3 s read on a
+				// busy page (Kerala's grid mid-render), and a PlaywrightException
+				// when the export's own navigation replaces the frame mid-read.
 				return false;
 			}
 		}
