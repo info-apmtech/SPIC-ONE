@@ -880,6 +880,39 @@ namespace SPIC.Ifms.Automation.Portal
 			IsLoggedInAsync(cancellationToken);
 
 		/// <summary>
+		/// Whether the portal still honours this browser's session. Opens the page
+		/// behind the login (SessionProbePath) and looks for the signed-in marker
+		/// there. The page a failed job left behind is no evidence either way: a
+		/// "404 Error Found" or a no-records page carries no marker while the
+		/// session may be perfectly fine, and the reverse.
+		/// </summary>
+		public async Task<bool> ProbeSessionAsync(CancellationToken cancellationToken)
+		{
+			try
+			{
+				_activeFrame = null;
+				await Page.GotoAsync(Absolute(_options.SessionProbePath), new PageGotoOptions
+				{
+					Referer = Absolute("/mFMS/"),
+					Timeout = _options.Browser.NavigationTimeoutMs,
+					WaitUntil = WaitUntilState.DOMContentLoaded
+				});
+				await WaitForSettleAsync(cancellationToken);
+
+				if (Page.Url.Contains("login", StringComparison.OrdinalIgnoreCase))
+					return false;
+
+				return await IsLoggedInAsync(cancellationToken);
+			}
+			catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
+			{
+				_logger.LogWarning("The session probe could not load {Path}: {Message}",
+					_options.SessionProbePath, ex.Message);
+				return false;
+			}
+		}
+
+		/// <summary>
 		/// The portal answers an unknown action with its own "404 Error Found"
 		/// page. That is a wrong job URL, and must not be read as a dead session.
 		/// </summary>
