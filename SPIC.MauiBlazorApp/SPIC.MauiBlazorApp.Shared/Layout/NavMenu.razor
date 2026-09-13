@@ -32,7 +32,12 @@
         </NavLink>
     }
 
-    @if (loginState.UserRole == AppRole.Admin)
+    @* Dynamically registered page. The gate key is the page's URL segment
+       ("IfmsRelaySetup"); the Admin must register an ApplicationPage with the
+       SAME Key in Page Management so it appears in the Designation grid.
+       CanAccess(string) is fully generic — no enum member, constant, or
+       route mapping required (Admin/CorporateAdmin bypass via CanAccess). *@
+    @if (loginState.CanAccess("IfmsRelaySetup"))
     {
         <NavLink class="@NavLinkClass("IFMS OTP Relay")" href="/IfmsRelaySetup">
             <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
@@ -351,6 +356,12 @@
                             <NavLink href="/Designation" class="@SubmenuLinkClass("Designation")" Match="NavLinkMatch.All">Designation</NavLink>
                         </li>
                     }
+                    @if (loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/PageManagement" class="@SubmenuLinkClass("Page Management")" Match="NavLinkMatch.All">Page Management</NavLink>
+                        </li>
+                    }
                 </ul>
             }
         </div>
@@ -435,7 +446,8 @@
         || loginState.CanAccess(PagePermission.Logistics)
         || loginState.CanAccess(PagePermission.Financial)
         || loginState.CanAccess(PagePermission.Relationship)
-        || loginState.CanAccess(PagePermission.Designation);
+        || loginState.CanAccess(PagePermission.Designation)
+        || loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
 
 
     private bool AnySettingsItemMatches =>
@@ -445,6 +457,7 @@
         || SearchState.Matches("Financial Master")
         || SearchState.Matches("Relationship Master")
         || SearchState.Matches("Designation")
+        || SearchState.Matches("Page Management")
         || SearchState.Matches("Settings");
 
     private bool ShowSettingsExpanded => isSettingsOpen || AnySettingsItemMatches;
@@ -458,7 +471,7 @@
     private bool IsSettingsSectionActive()
     {
         var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
-        return uri == "locationmaster" || uri == "agriculture" || uri == "logistics" || uri == "financial" || uri == "relationship" || uri == "designation";
+        return uri == "locationmaster" || uri == "agriculture" || uri == "logistics" || uri == "financial" || uri == "relationship" || uri == "designation" || uri == "pagemanagement";
     }
 
     private bool AnySubsidyAccessible =>

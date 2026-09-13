@@ -6,6 +6,7 @@ using SPIC.Core.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using static SPIC.Core.Entities.EmployeeRegistration;
@@ -74,12 +75,95 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(a => new { a.GuestHouseRoomId, a.RoomNumber });
             });
 
+        // =====================================================================
+        //  Permission System Phase 1 - page catalog tables (ADDITIVE ONLY).
+        //
+        //  These two tables are a normalized compatibility mirror of the existing
+        //  PagePermission enum + Designation.RoleAccess. Nothing at runtime reads
+        //  them yet - login, LoginState, NavMenu, PageGuard, Designation.razor
+        //  and the server-side SDWA checks all continue to use RoleAccess exactly
+        //  as before. They exist only so a future Phase 2+ can become database
+        //  driven without a destructive rewrite.
+        // =====================================================================
+
+        builder.Entity<ApplicationPage>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.Key).IsRequired();
+            entity.HasIndex(p => p.Key).IsUnique();
+        });
+
+        builder.Entity<DesignationPermission>(entity =>
+        {
+            entity.HasKey(dp => new { dp.DesignationId, dp.PageId });
+
+            entity.HasOne(dp => dp.Designation)
+                .WithMany()
+                .HasForeignKey(dp => dp.DesignationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(dp => dp.Page)
+                .WithMany()
+                .HasForeignKey(dp => dp.PageId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(dp => dp.PageId);
+        });
+
+        // Seed the catalog from the existing PagePermission enum + its
+        // PageModuleAttribute metadata, preserving every exact existing key and
+        // the existing display/grouping behavior. Future enum changes surface
+        // as model diffs in later EF migrations.
+        builder.Entity<ApplicationPage>().HasData(
+            Enum.GetNames(typeof(PagePermission))
+                .Select((key, index) => new ApplicationPage
+                {
+                    Id = index + 1,
+                    Key = key,
+                    Name = PageDisplayName(key),
+                    Module = PageModuleName(key),
+                    SortOrder = index,
+                    HasActions = true,
+                    IsActive = true,
+                    CreatedBy = "System",
+                    CreatedAt = staticDate,
+                    UpdatedBy = "System",
+                    UpdatedAt = staticDate
+                })
+                .ToArray());
+
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.
         }
 
+        // Same prettification the existing Designation UI uses (Designation.razor
+        // DisplayFor): "AnnualSales" -> "Annual Sales". Lower-case keys such as
+        // "dealerreviewlist" are left as-is, matching that UI exactly.
+        private static string PageDisplayName(string key)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < key.Length; i++)
+            {
+                if (i > 0 && char.IsUpper(key[i]) && !char.IsUpper(key[i - 1]))
+                    sb.Append(' ');
+                sb.Append(key[i]);
+            }
+            return sb.ToString();
+        }
+
+        // Module grouping from PageModuleAttribute (null = standalone page).
+        private static string? PageModuleName(string key)
+        {
+            var field = typeof(PagePermission).GetField(key);
+            return field?.GetCustomAttribute<PageModuleAttribute>()?.Module;
+        }
+
         // User related
         public DbSet<Designation> Designations { get; set; }
+
+        // Permission System Phase 1 (additive - not read by any runtime flow yet)
+        public DbSet<ApplicationPage> Pages { get; set; }
+        public DbSet<DesignationPermission> DesignationPermissions { get; set; }
 
         // Location
         public DbSet<Zone> Zones { get; set; }
