@@ -290,9 +290,40 @@ namespace SPIC.Ifms.Automation.Reports
 
 			foreach (var loop in job.ForEach)
 			{
-				var values = loop.Values.Count > 0
-					? loop.Values.ToList()
-					: (await portal.DiscoverLoopValuesAsync(job, loop, tokens, cancellationToken)).ToList();
+				List<string> values;
+				try
+				{
+					values = loop.Values.Count > 0
+						? loop.Values.ToList()
+						: (await portal.DiscoverLoopValuesAsync(job, loop, tokens, cancellationToken)).ToList();
+				}
+				catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+				{
+					throw;
+				}
+				catch (Exception ex)
+				{
+					// Reading the dropdown is portal work like any other step, and a
+					// slow page here must cost this job alone, not the whole run.
+					// Run 49 lost its record of 24 downloaded files to exactly that.
+					_logger.LogError(ex,
+						"{Title}: could not read the {Token} values from the report page.",
+						job.Title, loop.TokenName);
+
+					return new List<ReportSummary>
+					{
+						new()
+						{
+							JobKey = job.Key,
+							AccountKey = account.AccountKey,
+							CompanyName = account.CompanyName,
+							Title = job.Title,
+							CategoryId = job.CategoryId,
+							Status = IfmsRunStatus.Failed,
+							ErrorMessage = $"Could not read the '{loop.TokenName}' list from the report page: {ex.Message}"
+						}
+					};
+				}
 
 				if (values.Count == 0)
 				{
