@@ -93,6 +93,7 @@ builder.Services.AddSingleton<IIfmsDataProtection>(_ =>
 // and this service never needs to know the SPIC schema at all.
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
+builder.Services.AddScoped<IIfmsAlertSettingsStore, IfmsAlertSettingsStore>();
 
 // ---------------------------------------------------------------- automation
 
@@ -118,7 +119,10 @@ builder.Services.AddSingleton<INightlyRunService, NightlyRunService>();
 // -------------------------------------------------------------------- alerts
 
 builder.Services.AddSingleton<PushAlertSink>();
-builder.Services.AddSingleton<IAlertSink, EmailAlertSink>();
+// Registered by concrete type as well, because AlertTestWorker needs the email
+// sink specifically — a test email has no business going to WhatsApp.
+builder.Services.AddSingleton<EmailAlertSink>();
+builder.Services.AddSingleton<IAlertSink>(sp => sp.GetRequiredService<EmailAlertSink>());
 builder.Services.AddSingleton<IAlertSink>(sp => sp.GetRequiredService<PushAlertSink>());
 builder.Services.AddSingleton<IAlertSink, WhatsAppAlertSink>();
 
@@ -147,6 +151,7 @@ if (!isTool)
 	builder.Services.AddHostedService<DailyScheduleWorker>();
 	builder.Services.AddHostedService<ManualTriggerWorker>();
 	builder.Services.AddHostedService<RelayPresenceWorker>();
+	builder.Services.AddHostedService<AlertTestWorker>();
 }
 
 var host = builder.Build();
@@ -859,62 +864,43 @@ static async Task<int> RunNowCommandAsync(IServiceProvider services, string[] ar
 }
 
 /// <summary>
-/// Sends one message through the configured SMTP settings and reports exactly
-/// what the server said, rather than leaving it buried in a run's alert failure.
+/// Sends one message through whichever SMTP settings are in effect — the
+/// database row when it is switched on, otherwise configuration — and reports
+/// exactly what the server said, rather than leaving it buried in a run's
+/// alert failure.
 /// </summary>
 static async Task<int> RunTestEmailAsync(IServiceProvider services)
 {
-	var options = services.GetRequiredService<IOptions<AlertOptions>>().Value.Email;
-
-	Console.WriteLine($"Host      : {options.Host}:{options.Port}");
-	Console.WriteLine($"StartTls  : {options.UseStartTls}");
-	Console.WriteLine($"From      : {options.FromAddress}");
-	Console.WriteLine($"To        : {string.Join(", ", options.To)}");
-	Console.WriteLine($"Password  : {(string.IsNullOrEmpty(options.Password) ? "NOT SET" : "set")}");
-	Console.WriteLine();
-
-	if (!options.Enabled)
-	{
-		Console.WriteLine("Alerts:Email:Enabled is false; nothing to test.");
-		return 1;
-	}
-
-	var sink = services.GetServices<IAlertSink>().FirstOrDefault(s => s.Name == "Email");
-
-	if (sink is null)
-	{
-		Console.WriteLine("The email sink is not registered.");
-		return 1;
-	}
+	var sink = services.GetRequiredService<EmailAlertSink>();
 
 	try
 	{
-		await sink.SendNoticeAsync(
-			"IFMS automation test message",
-			"If you are reading this, the alert email is working.\n\n" +
-			"Sent by: dotnet SPIC.Ifms.Automation.dll test-email",
-			urgent: false,
-			CancellationToken.None);
-
-		Console.WriteLine("SENT. Check the inbox.");
-		return 0;
+		Console.WriteLine(await sink.DescribeAsync(CancellationToken.None));
 	}
 	catch (Exception ex)
 	{
-		Console.WriteLine($"FAILED: {ex.GetType().Name}");
-		Console.WriteLine($"        {ex.Message}");
-
-		if (ex.InnerException is not null)
-			Console.WriteLine($"        inner: {ex.InnerException.Message}");
-
-		Console.WriteLine();
-		Console.WriteLine("Common causes:");
-		Console.WriteLine("  does not support STARTTLS  -> set Alerts:Email:UseStartTls false");
-		Console.WriteLine("  timed out                  -> that host/port is not reachable from here");
-		Console.WriteLine("  authentication failed      -> wrong Alerts__Email__Password in secrets.env");
-
+		Console.WriteLine($"Could not read the alert settings from the database: {ex.Message}");
 		return 1;
 	}
+
+	Console.WriteLine();
+
+	var result = await sink.SendTestAsync(CancellationToken.None);
+
+	if (result.StartsWith("Sent to", StringComparison.Ordinal))
+	{
+		Console.WriteLine($"{result}. Check the inbox.");
+		return 0;
+	}
+
+	Console.WriteLine($"FAILED: {result}");
+	Console.WriteLine();
+	Console.WriteLine("Common causes:");
+	Console.WriteLine("  does not support STARTTLS  -> switch STARTTLS off (phone app, or Alerts:Email:UseStartTls)");
+	Console.WriteLine("  timed out                  -> that host/port is not reachable from here");
+	Console.WriteLine("  authentication failed      -> wrong password (phone app, or Alerts__Email__Password in secrets.env)");
+
+	return 1;
 }
 
 /// <summary>

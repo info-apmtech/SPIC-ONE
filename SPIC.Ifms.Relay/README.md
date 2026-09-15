@@ -91,6 +91,37 @@ whether the message was forwarded.
 - **Recent activity**: the last 30 events (forwarded, skipped, poll failures,
   CAPTCHA shown, answer sent, server unreachable/reachable again).
 
+## Alerts tab
+
+Who the nightly automation emails, and through which mail server. The
+settings live on the server (`IfmsAutomation` alert settings); the phone only
+reads them, edits them and asks for a test. The email itself is sent by the
+server, never by the phone.
+
+- **Email alerts on**, then **Mail server** (SMTP host, port, STARTTLS, user
+  name, password), **Sender** (from address and name), **Recipients** (To and
+  Cc, one per line or separated by `;` / `,`) and **When** (failures only,
+  attach the downloaded reports).
+- **Save** sends the whole form in one `PUT`. The password is sent only in
+  that call, only if the field is not blank (blank = keep the one the server
+  has), and the field is cleared afterwards. Nothing about it is stored or
+  logged on the phone; "Password saved" / "No password saved" under the field
+  is the server's `HasPassword` flag.
+- **Send test email** (enabled once the saved settings have alerts on) queues
+  a test on the server, then the page polls every 5 s for up to a minute until
+  `LastTestAt` changes and shows `LastTestResult` — green when it starts with
+  "Sent", red otherwise.
+- Below the buttons: "Last test", "Last alert" and "Updated ... by ..." from
+  the server, in local time.
+- Not paired: the form is disabled and the tab shows the same "Not paired.
+  Open the Pair tab" note as Home.
+
+| Call | Auth | Purpose |
+|---|---|---|
+| `GET api/IfmsAutomation/alerts/email` | token | The settings, without the password (`HasPassword` only), plus `LastTestAt/LastTestResult`, `LastSentAt/LastSendResult`, `UpdatedAt/UpdatedBy`. |
+| `PUT api/IfmsAutomation/alerts/email` | token | Same shape as the GET, minus the read-only fields, plus `Password` (null or empty = keep). 200 returns the saved state; 400 is `{Success, Message}` and the message is shown as-is. |
+| `POST api/IfmsAutomation/alerts/email/test` | token | 202 `{Success, Message}`; the automation sends within ~20 s and records the outcome for the next GET. |
+
 ## Building the APK
 
 ```
@@ -156,11 +187,12 @@ justification for that type; a sideloaded app needs none.
 ```
 SPIC.Ifms.Relay.csproj              net10.0-android, MAUI, source-generated XAML
 MauiProgram.cs / App.xaml(.cs)      fonts, merged styles, Shell window
-AppShell.xaml(.cs)                  two tabs: Home, Pair
+AppShell.xaml(.cs)                  three tabs: Home, Pair, Alerts
 Pages/HomePage.xaml(.cs)            status, CAPTCHA card, buttons, activity log
 Pages/PairPage.xaml(.cs)            pairing form, filter switch, accepted senders
+Pages/AlertsPage.xaml(.cs)          email-alert settings, save, send test
 Services/RelaySettings.cs           Preferences-backed settings (no pairing key)
-Services/RelayClient.cs             the six HTTP calls + TestConnection
+Services/RelayClient.cs             the HTTP calls (relay, CAPTCHA, status, alerts) + TestConnection
 Services/RelayDtos.cs               wire shapes + source-generated JSON context
 Services/RelayLog.cs                30-entry persisted activity ring (no SMS bodies)
 Services/RelayEvents.cs             static events between service/activity and page

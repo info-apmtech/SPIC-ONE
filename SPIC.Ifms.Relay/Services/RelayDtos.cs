@@ -91,6 +91,55 @@ namespace SPIC.Ifms.Relay.Services
 	}
 
 	/// <summary>
+	/// GET api/IfmsAutomation/alerts/email: how the nightly automation reports
+	/// by email. The stored password never comes back; only
+	/// <see cref="HasPassword"/> says whether one is on file.
+	/// </summary>
+	public sealed class AlertSettings
+	{
+		public bool EmailEnabled { get; set; }
+		public string? SmtpHost { get; set; }
+		public int SmtpPort { get; set; }
+		public bool UseStartTls { get; set; }
+		public string? UserName { get; set; }
+		public bool HasPassword { get; set; }
+		public string? FromAddress { get; set; }
+		public string? FromName { get; set; }
+		public string? ToAddresses { get; set; }
+		public string? CcAddresses { get; set; }
+		public bool FailuresOnly { get; set; }
+		public bool AttachReports { get; set; }
+		public DateTime? TestRequestedAt { get; set; }
+		public DateTime? LastTestAt { get; set; }
+		public string? LastTestResult { get; set; }
+		public DateTime? LastSentAt { get; set; }
+		public string? LastSendResult { get; set; }
+		public DateTime UpdatedAt { get; set; }
+		public string? UpdatedBy { get; set; }
+	}
+
+	/// <summary>
+	/// PUT api/IfmsAutomation/alerts/email. <see cref="Password"/> is null when
+	/// the person left the field blank, which tells the server to keep the one
+	/// it already has; it is sent once and never kept on the phone.
+	/// </summary>
+	public sealed class AlertSettingsUpdate
+	{
+		public bool EmailEnabled { get; set; }
+		public string SmtpHost { get; set; } = string.Empty;
+		public int SmtpPort { get; set; }
+		public bool UseStartTls { get; set; }
+		public string UserName { get; set; } = string.Empty;
+		public string? Password { get; set; }
+		public string FromAddress { get; set; } = string.Empty;
+		public string FromName { get; set; } = string.Empty;
+		public string ToAddresses { get; set; } = string.Empty;
+		public string CcAddresses { get; set; } = string.Empty;
+		public bool FailuresOnly { get; set; }
+		public bool AttachReports { get; set; }
+	}
+
+	/// <summary>
 	/// Source-generated serializer for every wire shape above. Reflection-based
 	/// serialization would work, but it earns trimming warnings in the Release
 	/// build and this is cheaper on a phone that wakes for one request.
@@ -103,6 +152,8 @@ namespace SPIC.Ifms.Relay.Services
 	[JsonSerializable(typeof(RegisterRequest))]
 	[JsonSerializable(typeof(RegisterResult))]
 	[JsonSerializable(typeof(ServerMessage))]
+	[JsonSerializable(typeof(AlertSettings))]
+	[JsonSerializable(typeof(AlertSettingsUpdate))]
 	internal sealed partial class RelayJson : JsonSerializerContext
 	{
 	}

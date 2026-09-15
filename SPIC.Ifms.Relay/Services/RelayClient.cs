@@ -5,8 +5,8 @@ using System.Text.Json;
 namespace SPIC.Ifms.Relay.Services
 {
 	/// <summary>
-	/// The six calls this app makes to SpicAPI's IfmsAutomation controller, and
-	/// nothing else. Every call swallows its own exceptions into a
+	/// The calls this app makes to SpicAPI's IfmsAutomation controller (relay,
+	/// CAPTCHA, status and the email-alert settings), and nothing else. Every call swallows its own exceptions into a
 	/// <see cref="RelayResult"/> with a sentence a person can read, because the
 	/// callers are a broadcast receiver, a foreground service and a page — none
 	/// of which should ever be taken down by a flaky mobile connection.
@@ -233,6 +233,126 @@ namespace SPIC.Ifms.Relay.Services
 				: status.Value.Headline;
 
 			return new RelayResult(true, $"Connected. {headline}");
+		}
+
+		// ------------------------------------------------------------- alerts
+
+		/// <summary>
+		/// The nightly automation's email-alert settings. The password is never
+		/// part of the answer; <see cref="AlertSettings.HasPassword"/> is all the
+		/// phone gets to know.
+		/// </summary>
+		public static async Task<RelayResult<AlertSettings>> GetAlertSettingsAsync(
+			CancellationToken cancellationToken = default)
+		{
+			if (!RelaySettings.IsConfigured)
+				return RelayResult<AlertSettings>.NotPaired;
+
+			try
+			{
+				using var request = Build(HttpMethod.Get, "api/IfmsAutomation/alerts/email");
+				using var response = await Http.SendAsync(request, cancellationToken);
+				return await ToAlertSettingsAsync(response, cancellationToken);
+			}
+			catch (Exception ex)
+			{
+				return new RelayResult<AlertSettings>(false, RelayResult.From(ex).Message, null);
+			}
+		}
+
+		/// <summary>
+		/// Replaces the alert settings. The password inside <paramref name="update"/>
+		/// goes over the wire once and is not logged or kept here; a null one
+		/// tells the server to leave the stored password alone. The answer is the
+		/// saved state, so the page can redraw from it.
+		/// </summary>
+		public static async Task<RelayResult<AlertSettings>> SaveAlertSettingsAsync(
+			AlertSettingsUpdate update,
+			CancellationToken cancellationToken = default)
+		{
+			if (!RelaySettings.IsConfigured)
+				return RelayResult<AlertSettings>.NotPaired;
+
+			try
+			{
+				using var request = Build(HttpMethod.Put, "api/IfmsAutomation/alerts/email");
+				request.Content = JsonContent.Create(update, RelayJson.Default.AlertSettingsUpdate);
+
+				using var response = await Http.SendAsync(request, cancellationToken);
+				return await ToAlertSettingsAsync(response, cancellationToken);
+			}
+			catch (Exception ex)
+			{
+				return new RelayResult<AlertSettings>(false, RelayResult.From(ex).Message, null);
+			}
+		}
+
+		/// <summary>
+		/// Asks the automation to send a test email. It answers 202 straight
+		/// away and sends within about twenty seconds; the outcome shows up as
+		/// LastTestAt / LastTestResult on the next <see cref="GetAlertSettingsAsync"/>.
+		/// </summary>
+		public static async Task<RelayResult> RequestTestEmailAsync(CancellationToken cancellationToken = default)
+		{
+			if (!RelaySettings.IsConfigured)
+				return RelayResult.NotPaired;
+
+			try
+			{
+				using var request = Build(HttpMethod.Post, "api/IfmsAutomation/alerts/email/test");
+				using var response = await Http.SendAsync(request, cancellationToken);
+				var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+				if (!response.IsSuccessStatusCode)
+					return new RelayResult(false, Describe(response.StatusCode, body));
+
+				Touch();
+
+				// The 202 body carries the server's own sentence; prefer it.
+				var message = ServerMessageOf(body);
+				return new RelayResult(true, string.IsNullOrWhiteSpace(message) ? "Test queued." : message);
+			}
+			catch (Exception ex)
+			{
+				return RelayResult.From(ex);
+			}
+		}
+
+		/// <summary>GET and PUT both answer with the full settings shape.</summary>
+		private static async Task<RelayResult<AlertSettings>> ToAlertSettingsAsync(
+			HttpResponseMessage response,
+			CancellationToken cancellationToken)
+		{
+			var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+			if (!response.IsSuccessStatusCode)
+				return new RelayResult<AlertSettings>(false, Describe(response.StatusCode, json), null);
+
+			Touch();
+
+			var settings = string.IsNullOrWhiteSpace(json) || json == "null"
+				? null
+				: JsonSerializer.Deserialize(json, RelayJson.Default.AlertSettings);
+
+			return settings is null
+				? new RelayResult<AlertSettings>(false, "The server returned no alert settings.", null)
+				: new RelayResult<AlertSettings>(true, "OK", settings);
+		}
+
+		/// <summary>The Message of a <c>{ Success, Message }</c> body, or null if it is not one.</summary>
+		private static string? ServerMessageOf(string body)
+		{
+			if (string.IsNullOrWhiteSpace(body))
+				return null;
+
+			try
+			{
+				return JsonSerializer.Deserialize(body, RelayJson.Default.ServerMessage)?.Message;
+			}
+			catch (JsonException)
+			{
+				return null;
+			}
 		}
 
 		private static HttpRequestMessage Build(HttpMethod method, string path)
