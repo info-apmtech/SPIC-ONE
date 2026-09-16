@@ -355,14 +355,14 @@
                 </select>
             </div>
             <div class="col-12 col-md-6 col-lg-4 col-xxl">
-                <select class="filter-select w-100 h-100" @bind="_filterEntityType" @bind:after="ApplyFilters" style="min-height: 38px;">
-                    <option value="">All Entities</option>
-                    <option value="soleProprietor">Sole Proprietor</option>
-                    <option value="Partnership">Partnership</option>
-                    <option value="LLP">LLP</option>
-                    <option value="PvtLtd">Pvt Ltd</option>
-                    <option value="PubLtd">Pub Ltd</option>
-                    <option value="Society">Society</option>
+                <select class="filter-select w-100 h-100" @bind="_filterWorkflowStatus" @bind:after="ApplyFilters" style="min-height: 38px;">
+                    <option value="All">All Approval Status</option>
+                    <option value="Pending Draft">Pending Draft</option>
+                    <option value="Pending RM">Pending RM</option>
+                    <option value="Pending SMM">Pending SMM</option>
+                    <option value="Pending AVP">Pending AVP</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected/Returned">Rejected/Returned</option>
                 </select>
             </div>
             <div class="col-12 col-md-6 col-lg-4 col-xxl">
@@ -916,7 +916,7 @@
     private string _filterDealerRegistrationType = "";
     private int _filterStatus = -1;
     private int _filterRegionId;
-    private string _filterEntityType = "";
+    private string _filterWorkflowStatus = "All";
     private string _sortOrder = "recent";
 
     // Delete confirmation
@@ -1382,7 +1382,19 @@
 
         if (_filterStatus >= 0) query = query.Where(d => d.Status == _filterStatus);
         if (_filterRegionId > 0) query = query.Where(d => d.Region == _filterRegionId);
-        if (!string.IsNullOrEmpty(_filterEntityType)) query = query.Where(d => string.Equals(d.BusinessEntityType, _filterEntityType, StringComparison.OrdinalIgnoreCase));
+        if (_filterWorkflowStatus != "All")
+        {
+            query = _filterWorkflowStatus switch
+            {
+                "Pending Draft" => query.Where(d => GetApprovalStatus(d) == "Draft"),
+                "Pending RM" => query.Where(d => GetApprovalStatus(d) == "In RM"),
+                "Pending SMM" => query.Where(d => GetApprovalStatus(d) == "In SMM"),
+                "Pending AVP" => query.Where(d => GetApprovalStatus(d) == "In AVP"),
+                "Approved" => query.Where(d => GetApprovalStatus(d) == "Approved"),
+                "Rejected/Returned" => query.Where(d => GetApprovalStatus(d).StartsWith("Rejected")),
+                _ => query
+            };
+        }
 
         query = _sortOrder switch
         {

@@ -39,6 +39,12 @@ namespace SPIC.Ifms.Automation.Options
 		public string Password { get; set; } = string.Empty;
 
 		public IfmsSelectorOptions Selectors { get; set; } = new();
+
+		/// <summary>
+		/// Page text that means "nothing to export" for a filter combination.
+		/// Matched case-insensitively before the download step is attempted.
+		/// </summary>
+		public List<string> EmptyResultMarkers { get; set; } = new() { "No Record Found", "No Records Found", "No data found" };
 		public IfmsBrowserOptions Browser { get; set; } = new();
 		public IfmsCaptchaOptions Captcha { get; set; } = new();
 		public IfmsOtpOptions Otp { get; set; } = new();

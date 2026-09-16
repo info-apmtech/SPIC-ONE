@@ -1,50 +1,27 @@
-/*.sidebar {
-    width: 280px;
-    background-color: #ffffff;
-    height: 100vh;
-    border-right: 1px solid #E5E7EB;
-    padding: 24px 20px;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-}*/
+/* =====================================================================
+   SettingTreeLayout.css
+   Styles for expandable parent menus (Settings, Subsidy, SDWA)
+   and their submenu tree decorators.
+   ===================================================================== */
 
-/* --- Main Navigation Items --- */
-/*.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 10px 16px;
-    color: #6B7280;
-    text-decoration: none;
-    font-size: 0.9rem;
-    font-weight: 500;
-    border-radius: 8px;
-    margin-bottom: 6px;
-    transition: all 0.2s ease;
-}
-
-    .nav-item:hover:not(.active) {
-        background-color: #F3F4F6;
-        color: #374151;
-    }*/
-
+/* --- Nav icon wrapper (optional icon class) --- */
 .nav-icon {
     font-size: 1.25rem;
-    color: #9CA3AF;
+    color: #9ca3af;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 24px;
+    flex-shrink: 0;
 }
 
 .nav-item:hover:not(.active) .nav-icon {
-    color: #6B7280;
+    color: #6b7280;
 }
 
-/* --- Active Parent Item (Settings) --- */
+/* --- Active Parent Item --- */
 .nav-item.active {
-    background-color: #065F46; /* Dark Green */
+    background-color: #065f46;
     color: #ffffff;
     font-weight: 600;
     box-shadow: 0 4px 6px -1px rgba(6, 95, 70, 0.2);
@@ -54,18 +31,23 @@
         color: #ffffff;
     }
 
+/* --- Chevron (shared base) --- */
+/* Note: Layout.css .chevron-icon already handles positioning.
+   Only animation/transition is set here to avoid duplication. */
 .chevron-icon {
-    margin-left: auto;
-    font-size: 0.85rem;
-    transition: transform 0.3s;
+    transition: transform 0.25s ease;
 }
 
-/* --- Submenu Tree Styling --- */
+/* =====================================================================
+   SUBMENU TREE STYLING  (Desktop)
+   ===================================================================== */
+
 .submenu-list {
     list-style: none;
     padding: 0;
-    /* 28px perfectly aligns the vertical line with the center of the icons above it */
+    /* 28px aligns vertical tree-line with center of parent icon */
     margin: 0 0 16px 28px;
+    width: 100%;
 }
 
 .submenu-item {
@@ -73,46 +55,109 @@
 }
 
 .submenu-link {
-    display: block;
+    display: flex;
+    align-items: center;
     padding: 10px 0 10px 24px;
-    color: #6B7280;
+    color: #6b7280;
     text-decoration: none;
     font-size: 0.85rem;
     font-weight: 500;
     transition: color 0.2s;
+    width: 100%;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.3;
+    min-height: 38px;
 }
 
     .submenu-link:hover {
-        color: #1F2937;
+        color: #1f2937;
     }
 
-    /* Active Submenu Item (Location Master) */
+    /* Active Submenu Item */
     .submenu-link.active {
-        color: #059669; /* Green text */
+        color: #059669;
         font-weight: 600;
     }
 
-/* --- CSS Magic for the Curved Tree Lines --- */
+/* =====================================================================
+   CSS TREE LINES (Curved branch decorators)
+   ===================================================================== */
 
-/* 1. The curved horizontal branch for EVERY item */
+/* 1. Curved horizontal branch for EVERY item */
 .submenu-item::before {
     content: "";
     position: absolute;
     top: 0;
     left: 0;
-    width: 16px; /* Width of the horizontal branch */
-    height: 20px; /* How far down it drops before curving */
-    border-left: 2px solid #CBD5E1;
-    border-bottom: 2px solid #CBD5E1;
-    border-bottom-left-radius: 8px; /* The curve */
+    width: 16px;
+    height: 20px;
+    border-left: 2px solid #cbd5e1;
+    border-bottom: 2px solid #cbd5e1;
+    border-bottom-left-radius: 8px;
 }
 
-/* 2. The continuous vertical line dropping down for all items EXCEPT the last one */
+/* 2. Vertical line for all items EXCEPT the last */
 .submenu-item:not(:last-child)::after {
     content: "";
     position: absolute;
-    top: 20px; /* Starts exactly where the curve ends */
+    top: 20px;
     left: 0;
     bottom: 0;
-    border-left: 2px solid #CBD5E1;
+    border-left: 2px solid #cbd5e1;
+}
+
+/* =====================================================================
+   RESPONSIVE – Tablet / small-laptop  (769 px … 1024 px)
+   ===================================================================== */
+@media (min-width: 769px) and (max-width: 1024px) {
+
+    .submenu-list {
+        margin: 0 0 12px 20px;
+    }
+
+    .submenu-link {
+        padding: 8px 0 8px 14px;
+        font-size: 0.78rem;
+        min-height: 36px;
+    }
+
+    /* Slightly narrower branch line */
+    .submenu-item::before {
+        width: 12px;
+        height: 18px;
+    }
+
+    .submenu-item:not(:last-child)::after {
+        top: 18px;
+    }
+}
+
+/* =====================================================================
+   RESPONSIVE – Inside offcanvas (mobile sidebar)
+   Adjusted tree-line dimensions for the reduced margin (22px in Layout.css).
+   ===================================================================== */
+.offcanvas-body .submenu-list {
+    margin: 0 0 10px 22px;
+}
+
+.offcanvas-body .submenu-link {
+    padding: 9px 4px 9px 18px;
+    font-size: 0.83rem;
+    min-height: 40px;
+}
+
+/* Horizontal branch – proportional to 22px margin */
+.offcanvas-body .submenu-item::before {
+    width: 14px;
+    height: 18px;
+    border-left: 2px solid #cbd5e1;
+    border-bottom: 2px solid #cbd5e1;
+    border-bottom-left-radius: 7px;
+}
+
+/* Vertical line */
+.offcanvas-body .submenu-item:not(:last-child)::after {
+    top: 18px;
+    border-left: 2px solid #cbd5e1;
 }

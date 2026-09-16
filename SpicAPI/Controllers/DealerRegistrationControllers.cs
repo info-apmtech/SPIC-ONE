@@ -227,6 +227,30 @@ namespace SpicAPI.Controllers
 		}
 
 		/// <summary>
+		/// Returns the dealer record linked to the given application user
+		/// (DealerRegistration.UserTableId == UserInfo.Id). Small lookup used by
+		/// the Guest Details page to auto-fill dealer contact details, mirroring
+		/// the existing server-side user-to-dealer resolution used elsewhere.
+		/// </summary>
+		[HttpGet("by-user/{userId}")]
+		public async Task<IActionResult> GetByUser(string userId)
+		{
+			if (string.IsNullOrWhiteSpace(userId))
+				return BadRequest(new { Success = false, Message = "User id is required." });
+
+			var dealer = await _repo.GetAllWithInactive()
+				.AsNoTracking()
+				.Where(d => d.UserTableId == userId)
+				.Select(d => new { d.Id, d.DealerCode })
+				.FirstOrDefaultAsync();
+
+			if (dealer == null)
+				return NotFound(new { Success = false, Message = "Dealer record not found." });
+
+			return Ok(dealer);
+		}
+
+		/// <summary>
 		/// Returns a per-step completion summary for the given dealer.
 		/// This consolidates multiple client calls into a single API.
 		/// The response is an array of objects with StepNo (1-based) and IsComplete boolean.

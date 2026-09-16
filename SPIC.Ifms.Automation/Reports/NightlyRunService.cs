@@ -437,11 +437,15 @@ namespace SPIC.Ifms.Automation.Reports
 
 					var needsDate = RequiresReportDate(job.CategoryId);
 
-					var import = await _importer.ImportAsync(
-						job,
-						download,
-						needsDate ? reportDate : null,
-						cancellationToken);
+					// "No Record Found" on the portal: nothing to upload, and not a failure
+					// when the job or loop allows an empty combination.
+					var import = download.IsEmpty
+						? new SPIC.Core.DTOs.ExcelBulkUploadResult { Success = true, TotalRows = 0 }
+						: await _importer.ImportAsync(
+							job,
+							download,
+							needsDate ? reportDate : null,
+							cancellationToken);
 
 					if (!import.Success)
 						throw new InvalidOperationException(import.Message);
