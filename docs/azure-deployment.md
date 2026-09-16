@@ -23,6 +23,26 @@ Not deployed: `SPIC.Ifms.Automation` (stays on the VPS), `SPICBlazorApp`, `SPIC.
 Only one environment is used: **prod** (`rg-spicone-prod`). The `staging` parameter file is kept
 for a future test environment but nothing is provisioned for it.
 
+## Deploying into the client's own subscription (SPIC-owned Azure)
+
+The kit is subscription-agnostic. To deploy into a subscription that belongs to SPIC:
+
+1. SPIC creates a pay-as-you-go subscription in **their** Microsoft directory and gives the person
+   who will deploy the **Owner** role on it (Subscriptions → Access control (IAM) → Add role
+   assignment → Privileged administrator roles → Owner). A guest user from another directory works.
+2. On the PC: `az login --tenant <their tenant id or domain>` (browser sign-in; device-code may be
+   blocked by security defaults), then `az account list -o table` to see the subscription.
+3. `.\deployzure\provision.ps1 -Environment prod -Subscription "<name or id>" -AllowMyIp -WebApiBaseUrl https://api.spicone.in/`
+   Registers the resource providers, creates everything, builds and deploys both apps (~15 min).
+4. `.\deployzureind-domains.ps1 -Environment prod` prints the four DNS records (new static IP and
+   verification id). Send them to the DNS administrator.
+5. When the records resolve: `.\deployzureind-domains.ps1 -Environment prod -Bind` binds both
+   hostnames with managed certificates and checks `/health` on the public names.
+6. Then copy the database and uploads (Phase 1 of the cut-over plan below).
+
+History: the first deployment (10 Sep 2026) was in APM's subscription and was deleted on 16 Sep 2026
+at SPIC's request; SPIC hosts under their own Azure account.
+
 ## One-time prerequisites on the PC
 
 1. Docker Desktop running (Linux containers).
