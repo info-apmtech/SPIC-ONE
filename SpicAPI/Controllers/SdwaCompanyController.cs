@@ -63,6 +63,7 @@ namespace SpicAPI.Controllers
 				{
 					Id = cgh.SdwaCompany!.Id,
 					CompanyName = cgh.SdwaCompany.CompanyName,
+					ShortCode = cgh.SdwaCompany.ShortCode,
 					GSTIN = cgh.SdwaCompany.GSTIN
 				})
 				.Distinct()
@@ -268,6 +269,7 @@ namespace SpicAPI.Controllers
 	{
 		public int Id { get; set; }
 		public string CompanyName { get; set; } = "";
+		public string? ShortCode { get; set; }
 		public string? GSTIN { get; set; }
 	}
 }
