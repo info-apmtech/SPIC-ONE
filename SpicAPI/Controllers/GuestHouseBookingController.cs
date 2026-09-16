@@ -494,6 +494,8 @@ namespace SpicAPI.Controllers
                         EmployeeOrDealerCode = request.EmployeeOrDealerCode,
                         GuestName = request.GuestName,
                         CompanyName = request.CompanyName,
+                        SdwaCompanyId = request.SdwaCompanyId,
+                        GstinNumber = request.GstinNumber,
                         PhoneNumber = request.PhoneNumber,
                         Email = request.Email,
                         AadhaarOrPassportNumber = request.AadhaarOrPassportNumber,
@@ -1111,6 +1113,8 @@ namespace SpicAPI.Controllers
 		public string? EmployeeOrDealerCode { get; set; }
 		public string? GuestName { get; set; }
 		public string? CompanyName { get; set; }
+		public int? SdwaCompanyId { get; set; }
+		public string? GstinNumber { get; set; }
 		public string? PhoneNumber { get; set; }
 		public string? Email { get; set; }
 		public string? AadhaarOrPassportNumber { get; set; }

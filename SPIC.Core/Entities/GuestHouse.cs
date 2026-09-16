@@ -265,6 +265,11 @@ public class GuestHouseBookingGuest
 	public int? NumberOfChildren { get; set; }                           // Number of children (below 12 years)
 	public string? Address { get; set; }                                 // Guest address
 
+	// Company Master (optional — populated from SDWA Company Details Master)
+	public int? SdwaCompanyId { get; set; }                              // FK to the selected company master
+	public SdwaCompany? SdwaCompany { get; set; }                       // Navigation to the selected company
+	public string? GstinNumber { get; set; }                             // GSTIN snapshot from selected company
+
 	// Audit
 	public DateTime CreatedAt { get; set; } = DateTime.Now;              // When the guest record was created
 	public DateTime UpdatedAt { get; set; } = DateTime.Now;              // When the guest record was last updated
@@ -399,6 +404,8 @@ public class GuestHouseBill
 	// Booking / guest snapshot (for a stable printable invoice)
 	public string? BookingReference { get; set; }                        // Booking reference snapshot
 	public string? GuestName { get; set; }                               // Guest name snapshot
+	public string? CompanyName { get; set; }                             // Company name snapshot (from SDWA Company Details Master)
+	public string? GstinNumber { get; set; }                             // GSTIN snapshot (from SDWA Company Details Master)
 	public string? Address { get; set; }                                 // Guest address snapshot
 	public string? Email { get; set; }                                   // Guest email snapshot
 	public string? PhoneNumber { get; set; }                             // Guest phone snapshot

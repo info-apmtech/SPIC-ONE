@@ -848,6 +848,8 @@ namespace SpicAPI.Controllers
 				BillDate = DateTime.Now,
 				BookingReference = booking.BookingReference ?? $"BK{booking.Id}",
 				GuestName = guest?.GuestName,
+				CompanyName = guest?.CompanyName,
+				GstinNumber = guest?.GstinNumber,
 				Address = guest?.Address,
 				Email = guest?.Email,
 				PhoneNumber = guest?.PhoneNumber,
@@ -1026,6 +1028,8 @@ namespace SpicAPI.Controllers
 				BookingId = booking.Id,
 				BookingReference = booking.BookingReference ?? $"BK{booking.Id}",
 				GuestName = guest?.GuestName,
+				CompanyName = guest?.CompanyName,
+				GstinNumber = guest?.GstinNumber,
 				Address = guest?.Address,
 				Email = guest?.Email,
 				PhoneNumber = guest?.PhoneNumber,
@@ -1368,6 +1372,8 @@ namespace SpicAPI.Controllers
 		public int BookingId { get; set; }
 		public string BookingReference { get; set; } = "";
 		public string? GuestName { get; set; }
+		public string? CompanyName { get; set; }
+		public string? GstinNumber { get; set; }
 		public string? Address { get; set; }
 		public string? Email { get; set; }
 		public string? PhoneNumber { get; set; }
