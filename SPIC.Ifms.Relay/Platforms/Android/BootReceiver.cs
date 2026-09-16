@@ -1,12 +1,13 @@
 using Android.App;
 using Android.Content;
+using SPIC.Ifms.Relay.Services;
 
-namespace SPIC.MauiBlazorApp.Platforms.Android
+namespace SPIC.Ifms.Relay.Platforms.Android
 {
 	/// <summary>
-	/// Restarts the CAPTCHA watcher after a reboot. Without this, a phone that
-	/// restarted overnight would silently stop watching, and the first anyone
-	/// would know is a missing morning import.
+	/// Restarts the watcher after a reboot. Without this, a phone that restarted
+	/// overnight would silently stop watching, and the first anyone would know
+	/// is a missing morning import.
 	/// </summary>
 	[BroadcastReceiver(Enabled = true, Exported = true, DirectBootAware = false)]
 	[IntentFilter(new[]
@@ -14,7 +15,7 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
 		Intent.ActionBootCompleted,
 		"android.intent.action.QUICKBOOT_POWERON"
 	})]
-	public sealed class IfmsBootReceiver : BroadcastReceiver
+	public sealed class BootReceiver : BroadcastReceiver
 	{
 		public override void OnReceive(Context? context, Intent? intent)
 		{
@@ -26,7 +27,8 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
 
 			try
 			{
-				IfmsWatchService.EnsureRunning(context);
+				RelayLog.Info("Phone restarted; starting the watcher");
+				RelayForegroundService.EnsureRunning(context);
 			}
 			catch
 			{

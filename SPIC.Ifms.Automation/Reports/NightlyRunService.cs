@@ -270,6 +270,7 @@ namespace SPIC.Ifms.Automation.Reports
 			IfmsAccountCredentials account,
 			ReportJob job,
 			DateTime reportDate,
+			SessionBudget budget,
 			CancellationToken cancellationToken)
 		{
 			if (job.ForEach.Count == 0)
@@ -289,9 +290,40 @@ namespace SPIC.Ifms.Automation.Reports
 
 			foreach (var loop in job.ForEach)
 			{
-				var values = loop.Values.Count > 0
-					? loop.Values.ToList()
-					: (await portal.DiscoverLoopValuesAsync(job, loop, tokens, cancellationToken)).ToList();
+				List<string> values;
+				try
+				{
+					values = loop.Values.Count > 0
+						? loop.Values.ToList()
+						: (await portal.DiscoverLoopValuesAsync(job, loop, tokens, cancellationToken)).ToList();
+				}
+				catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+				{
+					throw;
+				}
+				catch (Exception ex)
+				{
+					// Reading the dropdown is portal work like any other step, and a
+					// slow page here must cost this job alone, not the whole run.
+					// Run 49 lost its record of 24 downloaded files to exactly that.
+					_logger.LogError(ex,
+						"{Title}: could not read the {Token} values from the report page.",
+						job.Title, loop.TokenName);
+
+					return new List<ReportSummary>
+					{
+						new()
+						{
+							JobKey = job.Key,
+							AccountKey = account.AccountKey,
+							CompanyName = account.CompanyName,
+							Title = job.Title,
+							CategoryId = job.CategoryId,
+							Status = IfmsRunStatus.Failed,
+							ErrorMessage = $"Could not read the '{loop.TokenName}' list from the report page: {ex.Message}"
+						}
+					};
+				}
 
 				if (values.Count == 0)
 				{
@@ -323,6 +355,16 @@ namespace SPIC.Ifms.Automation.Reports
 					portal, runId, account, job, reportDate, combination, cancellationToken);
 
 				summaries.Add(summary);
+
+				// One lapsed session used to fail every remaining state of a
+				// 36-state loop before the between-jobs check noticed. Check here.
+				if (summary.Status != IfmsRunStatus.Succeeded &&
+					!await RecoverSessionAsync(portal, account, runId, budget, cancellationToken))
+				{
+					_logger.LogWarning(
+						"Stopping {Title}: the session is gone and could not be recovered.", job.Title);
+					break;
+				}
 
 				if (summary.Status != IfmsRunStatus.Succeeded && !continueOnFailure)
 				{
@@ -541,7 +583,7 @@ namespace SPIC.Ifms.Automation.Reports
 			CancellationToken cancellationToken)
 		{
 			var reports = new List<ReportSummary>();
-			var reLogins = 0;
+			var budget = new SessionBudget();
 
 			await using var scope = _scopeFactory.CreateAsyncScope();
 			await using var portal = scope.ServiceProvider.GetRequiredService<IfmsPortalClient>();
@@ -568,42 +610,73 @@ namespace SPIC.Ifms.Automation.Reports
 				cancellationToken.ThrowIfCancellationRequested();
 
 				var summaries = await RunJobWithLoopAsync(
-					portal, runId, account, job, reportDate, cancellationToken);
+					portal, runId, account, job, reportDate, budget, cancellationToken);
 
 				reports.AddRange(summaries);
 
-				// Between jobs is the cheap place to notice a lapsed session: the
-				// check costs nothing when it passes, and catching it here means at
-				// most one job's worth of work is lost rather than every remaining one.
+				// A failed job is the moment to check the session is still alive;
+				// the check is one page load and costs nothing when it passes.
 				if (summaries.Any(r => r.Status != IfmsRunStatus.Succeeded) &&
-					reLogins < MaxReLoginsPerAccount &&
-					!await portal.IsPortalNotFoundPageAsync() &&
-					!await portal.IsSignedInAsync(cancellationToken))
+					!await RecoverSessionAsync(portal, account, runId, budget, cancellationToken))
 				{
-					reLogins++;
-
-					_logger.LogWarning(
-						"The {Company} session has lapsed part-way through the run; signing in again " +
-						"(attempt {Attempt} of {Max}).",
-						account.CompanyName, reLogins, MaxReLoginsPerAccount);
-
-					var again = await portal.LoginAsync(account, runId, cancellationToken);
-
-					if (!again.Success)
-					{
-						_logger.LogError(
-							"Could not sign back in as {Company}; abandoning its remaining reports. {Reason}",
-							account.CompanyName, again.FailureReason);
-						break;
-					}
-
-					_logger.LogInformation("Signed back in as {Company}; carrying on.", account.CompanyName);
+					break;
 				}
 			}
 
 			return new AccountOutcome(
 				true, null, reports,
 				login.CaptchaMethod, login.CaptchaAttempts, login.OtpMethod);
+		}
+
+		/// <summary>Re-logins are precious: each one costs a CAPTCHA and an OTP.</summary>
+		private sealed class SessionBudget
+		{
+			public int ReLogins;
+		}
+
+		/// <summary>
+		/// True when the portal session is alive, or was brought back with a fresh
+		/// login. False means stop this account: the session lapsed and the
+		/// re-login budget is spent, or the fresh login itself failed.
+		/// </summary>
+		private async Task<bool> RecoverSessionAsync(
+			IfmsPortalClient portal,
+			IfmsAccountCredentials account,
+			int runId,
+			SessionBudget budget,
+			CancellationToken cancellationToken)
+		{
+			if (await portal.ProbeSessionAsync(cancellationToken))
+				return true;
+
+			if (budget.ReLogins >= MaxReLoginsPerAccount)
+			{
+				_logger.LogError(
+					"The {Company} session has lapsed again and this run's {Max} re-logins are used up; " +
+					"abandoning its remaining reports.",
+					account.CompanyName, MaxReLoginsPerAccount);
+				return false;
+			}
+
+			budget.ReLogins++;
+
+			_logger.LogWarning(
+				"The {Company} session has lapsed part-way through the run; signing in again " +
+				"(attempt {Attempt} of {Max}).",
+				account.CompanyName, budget.ReLogins, MaxReLoginsPerAccount);
+
+			var again = await portal.LoginAsync(account, runId, cancellationToken);
+
+			if (!again.Success)
+			{
+				_logger.LogError(
+					"Could not sign back in as {Company}; abandoning its remaining reports. {Reason}",
+					account.CompanyName, again.FailureReason);
+				return false;
+			}
+
+			_logger.LogInformation("Signed back in as {Company}; carrying on.", account.CompanyName);
+			return true;
 		}
 
 		/// <summary>
@@ -649,7 +722,7 @@ namespace SPIC.Ifms.Automation.Reports
 		}
 
 		/// <summary>Matches ExcelBulkUploadController.RequiresReportDate.</summary>
-		private static bool RequiresReportDate(string categoryId) =>
+		internal static bool RequiresReportDate(string categoryId) =>
 			categoryId is "One" or "Three" or "Six" or "Seven";
 
 		private string ArchiveFolder(DateTime reportDate)
