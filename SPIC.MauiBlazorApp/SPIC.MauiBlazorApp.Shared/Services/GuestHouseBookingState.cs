@@ -34,6 +34,8 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public string? EmployeeOrDealerCode { get; set; }
         public string? GuestName { get; set; }
         public string? CompanyName { get; set; }
+        public int? SdwaCompanyId { get; set; }
+        public string? GstinNumber { get; set; }
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string? AadhaarOrPassport { get; set; }

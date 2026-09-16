@@ -268,6 +268,10 @@ namespace Spic.Infrastructure.Data
 		public DbSet<GuestHouseBillLineItem> GuestHouseBillLineItems { get; set; }
 		public DbSet<GuestHouseRoomAllocation> GuestHouseRoomAllocations { get; set; }
 
+		//// SDWA Company Details Master
+		public DbSet<SdwaCompany> SdwaCompanies { get; set; }
+		public DbSet<SdwaCompanyGuestHouse> SdwaCompanyGuestHouses { get; set; }
+
 		//// Contact Us
 		//public DbSet<ContactUsMessage> ContactUsMessages { get; set; }
 
