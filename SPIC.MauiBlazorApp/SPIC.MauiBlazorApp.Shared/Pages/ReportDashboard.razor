@@ -2,7 +2,9 @@
 @page "/ReportDashboard"
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
+@using System.Globalization
 @inject HttpClient Http
+@inject NavigationManager Navigation
 
 
 <div class="container-fluid py-4 px-0">
@@ -258,9 +260,36 @@
 
         <div class="dsh-card">
             <h3 class="dsh-card-title">Monthly Application Trend</h3>
-            <div style="display:flex; align-items:center; justify-content:center; min-height:220px; color:var(--dsh-text-muted); font-size:0.9rem;">
-                No data available
-            </div>
+            @if (_loading)
+            {
+                <div style="display:flex; align-items:center; justify-content:center; min-height:220px; color:var(--dsh-text-muted); font-size:0.9rem;">…</div>
+            }
+            else if (!_approvalOk || MonthlyApplicationTrend.Count == 0)
+            {
+                <div style="display:flex; align-items:center; justify-content:center; min-height:220px; color:var(--dsh-text-muted); font-size:0.9rem;">
+                    No data available
+                </div>
+            }
+            else
+            {
+                <div style="display:flex; flex-direction:column; min-height:220px;">
+                    <div style="display:flex; align-items:flex-end; gap:9px; flex:1; padding-top:8px;">
+                        @foreach (var m in MonthlyApplicationTrend)
+                        {
+                            <div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;">
+                                <span style="font-size:0.72rem; font-weight:700; color:var(--dsh-text-main); margin-bottom:4px;">@m.Count</span>
+                                <div style="width:100%; max-width:36px; height:@m.HeightPct; background:var(--dsh-blue); border-radius:4px 4px 0 0;"></div>
+                            </div>
+                        }
+                    </div>
+                    <div style="display:flex; gap:9px; margin-top:8px; border-top:1px solid #e2e8f0; padding-top:8px;">
+                        @foreach (var m in MonthlyApplicationTrend)
+                        {
+                            <span style="flex:1; min-width:0; text-align:center; font-size:0.7rem; color:var(--dsh-text-muted); white-space:nowrap;">@m.MonthLabel</span>
+                        }
+                    </div>
+                </div>
+            }
         </div>
     </div>
 
@@ -337,22 +366,42 @@
         <div class="dsh-card">
             <h3 class="dsh-card-title">Guest House Overview</h3>
             <div class="dsh-gh-box-grid">
-                <div class="dsh-gh-box" style="background:#f1f5f9;"><span class="lbl">Total Bookings</span><span class="val">@Val(_billsOk, GuestHouseBookings)</span></div>
+                <div class="dsh-gh-box" style="background:#f1f5f9;"><span class="lbl">Active Bookings</span><span class="val">@Val(_roomsOk, ActiveBookings)</span></div>
                 <div class="dsh-gh-box" style="background:#fff7ed;"><span class="lbl">Upcoming Check-ins</span><span class="val">—</span></div>
                 <div class="dsh-gh-box" style="background:#dcfce7;"><span class="lbl">Completed Stays</span><span class="val">@Val(_billsOk, GuestHouseBookings)</span></div>
                 <div class="dsh-gh-box" style="background:#fee2e2;"><span class="lbl">Cancelled</span><span class="val">—</span></div>
-                <div class="dsh-gh-box" style="background:#f3e8ff;"><span class="lbl">Occupancy Rate</span><span class="val">—</span></div>
+                <div class="dsh-gh-box" style="background:#f3e8ff;"><span class="lbl">Occupancy Rate</span><span class="val">@OccupancyRateText</span></div>
                 <div class="dsh-gh-box" style="background:#fce7f3;"><span class="lbl">Revenue Collected</span><span class="val">@RevenueText</span></div>
             </div>
 
             <div style="margin-top:20px;">
                 <h4 style="font-size:0.9rem; font-weight:700; margin-bottom:12px;">Occupancy by property</h4>
-                <div style="color:var(--dsh-text-muted); font-size:0.9rem;">No data available</div>
+                @if (_roomsOk && OccupancyByProperty.Count > 0)
+                {
+                    <div style="display:flex; flex-direction:column; gap:12px;">
+                        @foreach (var prop in OccupancyByProperty)
+                        {
+                            <div>
+                                <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
+                                    <span style="font-weight:600;">@prop.GuestHouseName</span>
+                                    <span style="color:var(--dsh-text-muted);">@prop.OccupiedRooms/@prop.TotalRooms occupied · @prop.PercentText</span>
+                                </div>
+                                <div style="height:6px; background:#f1f5f9; border-radius:4px; margin-top:4px; overflow:hidden;">
+                                    <div style="height:100%; width:@prop.PercentWidth; background:var(--dsh-blue); border-radius:4px;"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div style="color:var(--dsh-text-muted); font-size:0.9rem;">No data available</div>
+                }
             </div>
 
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
                 <span style="font-size:0.85rem; font-weight:600;">Refund Pending: <span style="color:var(--dsh-text-main);">—</span></span>
-                <button style="background:var(--dsh-blue); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; font-size:0.8rem; cursor:pointer;">View All Bookings</button>
+                <button @onclick="GoToFrontOffice" style="background:var(--dsh-blue); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; font-size:0.8rem; cursor:pointer;">View All Bookings</button>
             </div>
         </div>
 
@@ -383,14 +432,37 @@
 
         <div class="dsh-card">
             <h3 class="dsh-card-title" style="margin-bottom: 20px;">Recent Activities</h3>
-            <div style="color:var(--dsh-text-muted); font-size:0.9rem;">No recent activity data available</div>
+            @if (RecentActivities.Count == 0)
+            {
+                <div style="color:var(--dsh-text-muted); font-size:0.9rem;">No recent activity data available</div>
+            }
+            else
+            {
+                <div style="display:flex; flex-direction:column; gap:16px; margin-top:2px;">
+                    @foreach (var item in RecentActivities)
+                    {
+                        <div style="display:flex; align-items:flex-start; gap:12px;">
+                            <div style="width:36px; height:36px; min-width:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; background:@item.Accent; font-size:0.95rem;">
+                                <i class="bi @item.Icon"></i>
+                            </div>
+                            <div style="flex:1; min-width:0;">
+                                <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;">
+                                    <span style="font-weight:600; font-size:0.88rem; color:var(--dsh-text-main);">@item.Title</span>
+                                    <span style="font-size:0.75rem; color:var(--dsh-text-muted); white-space:nowrap;">@WhenText(item.When)</span>
+                                </div>
+                                <div style="font-size:0.8rem; color:var(--dsh-text-muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@item.Detail</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
         </div>
 
         <div class="dsh-card">
             <h3 class="dsh-card-title" style="margin-bottom: 20px;">Quick actions</h3>
             <div class="dsh-qa-grid">
                 
-                <div class="dsh-qa-card" style="background:#fff7ed; border-color:#ffedd5;">
+                <div class="dsh-qa-card" style="background:#fff7ed; border-color:#ffedd5; cursor:pointer;" @onclick="GoToSchemeApproval">
                     <div class="dsh-qa-icon" style="background:#ffedd5; color:#c2410c;"><i class="bi bi-file-earmark-check"></i></div>
                     <div>
                         <h4 class="dsh-qa-title">Review Pending Approvals</h4>
@@ -398,7 +470,7 @@
                     </div>
                 </div>
 
-                <div class="dsh-qa-card" style="background:#eff6ff; border-color:#dbeafe;">
+                <div class="dsh-qa-card" style="background:#eff6ff; border-color:#dbeafe; cursor:pointer;" @onclick="GoToDealerDashboard">
                     <div class="dsh-qa-icon" style="background:#dbeafe; color:#2563eb;"><i class="bi bi-people"></i></div>
                     <div>
                         <h4 class="dsh-qa-title">Dealer Directory</h4>
@@ -406,7 +478,7 @@
                     </div>
                 </div>
 
-                <div class="dsh-qa-card" style="background:#f3e8ff; border-color:#e9d5ff;">
+                <div class="dsh-qa-card" style="background:#f3e8ff; border-color:#e9d5ff; cursor:pointer;" @onclick="GoToWelfareSchemes">
                     <div class="dsh-qa-icon" style="background:#e9d5ff; color:#9333ea;"><i class="bi bi-card-checklist"></i></div>
                     <div>
                         <h4 class="dsh-qa-title">Manage Schemes</h4>
@@ -414,7 +486,7 @@
                     </div>
                 </div>
 
-                <div class="dsh-qa-card" style="background:#f0fdf4; border-color:#dcfce7;">
+                <div class="dsh-qa-card" style="background:#f0fdf4; border-color:#dcfce7; cursor:pointer;" @onclick="GoToFrontOffice">
                     <div class="dsh-qa-icon" style="background:#dcfce7; color:#16a34a;"><i class="bi bi-building"></i></div>
                     <div>
                         <h4 class="dsh-qa-title">Guest House Bookings</h4>
@@ -448,14 +520,19 @@
 @code {
     private bool _loading = true;
     private bool _approvalOk = false;
+    private bool _approvalValidatedOk = false;
+    private bool _approvalRejectedOk = false;
+    private bool _approvalCompletedOk = false;
     private bool _dealersOk = false;
     private bool _billsOk = false;
+    private bool _roomsOk = false;
     private string _error = "";
 
     private WelfareApprovalPageDto _approval = new();
     private List<WelfareApprovalApplicationDto> _pipeline = new();
     private List<DealerRegistration> _dealers = new();
     private List<BillListItemDto> _bills = new();
+    private List<FrontOfficeHouseDto> _rooms = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -465,22 +542,36 @@
         var tCompleted = SafeGetAsync<WelfareApprovalPageDto>("api/WelfareSchemeApproval/applications?tab=completed");
         var tDealers = SafeGetAsync<List<DealerRegistration>>("api/DealerRegistration/all");
         var tBills = SafeGetAsync<List<BillListItemDto>>("api/GuestHouseFrontOffice/bills");
+        var tRooms = SafeGetAsync<List<FrontOfficeHouseDto>>("api/GuestHouseFrontOffice/rooms");
 
-        await Task.WhenAll(tApproval, tValidated, tRejected, tCompleted, tDealers, tBills);
+        await Task.WhenAll(tApproval, tValidated, tRejected, tCompleted, tDealers, tBills, tRooms);
 
         _approvalOk = tApproval.Result.Ok;
+        _approvalValidatedOk = tValidated.Result.Ok;
+        _approvalRejectedOk = tRejected.Result.Ok;
+        _approvalCompletedOk = tCompleted.Result.Ok;
         _dealersOk = tDealers.Result.Ok;
         _billsOk = tBills.Result.Ok;
+        _roomsOk = tRooms.Result.Ok;
 
         _approval = tApproval.Result.Value ?? new();
         _pipeline = Merge(tApproval.Result.Value, tValidated.Result.Value, tRejected.Result.Value, tCompleted.Result.Value);
         _dealers = tDealers.Result.Value ?? new();
         _bills = tBills.Result.Value ?? new();
+        _rooms = tRooms.Result.Value ?? new();
+
+        // Welfare KPIs / donut / workflow / trend / regional / activities depend on ALL four
+        // approval-tab calls succeeding. If any one is unavailable, the merged pipeline would
+        // be silently incomplete, so the entire welfare section is marked unavailable rather
+        // than showing partial data as valid.
+        if (!_approvalValidatedOk || !_approvalRejectedOk || !_approvalCompletedOk)
+            _approvalOk = false;
 
         var failed = new List<string>();
         if (!_approvalOk) failed.Add("welfare approvals");
         if (!_dealersOk) failed.Add("dealers");
         if (!_billsOk) failed.Add("guest house bills");
+        if (!_roomsOk) failed.Add("guest house room availability");
         if (failed.Count > 0)
             _error = $"Could not load: {string.Join(", ", failed)}. Affected sections are shown as — (their real values are unavailable).";
 
@@ -491,7 +582,9 @@
     {
         try
         {
-            return (await Http.GetFromJsonAsync<T>(url), true);
+            var value = await Http.GetFromJsonAsync<T>(url);
+            if (value is null) return (default, false);
+            return (value, true);
         }
         catch
         {
@@ -536,10 +629,205 @@
 
     // ---- Guest house (real data from api/GuestHouseFrontOffice/bills - completed/billed stays) ----
     private int GuestHouseBookings => _bills.Count;
-    private decimal RevenueCollected => _bills.Sum(b => b.TotalAmount);
-    private string RevenueText =>
-        !_billsOk ? (_loading ? "…" : "—") :
-        RevenueCollected >= 100000 ? $"₹{RevenueCollected / 100000m:0.0}L" : $"₹{RevenueCollected:N0}";
+
+    // Revenue Collected: NO reliable existing field represents actually-collected revenue.
+    // A bill's PaymentStatus is only a snapshot taken when the bill is generated and is not
+    // updated when the stay is settled later, and TotalAmount is the gross billed amount,
+    // so neither sums to cash actually collected. Not available -> "—" (never a real-looking 0).
+    private string RevenueText => _loading ? "…" : "—";
+
+    // ---- Guest House Overview (real data from api/GuestHouseFrontOffice/rooms + bills) ----
+    // Occupancy uses ONLY valid existing records from the rooms payload:
+    // - skips phantom room rows the server emits for room types with AvailableQuantity = 0;
+    // - de-duplicates the same physical room number across room types per property;
+    // - counts a room as occupied only when its occupying booking is Confirmed(2) or
+    //   CheckedIn(5) (Draft(0)/PendingPayment(1) holds are not treated as occupancy).
+    // The rooms endpoint already excludes Cancelled/Completed bookings from its payload.
+    // "Active Bookings" stays the live availability flag count from the same payload.
+    private List<FrontOfficeRoomDto> AllRooms => _rooms.SelectMany(h => h.Rooms).ToList();
+    private int ActiveBookings => AllRooms.Count(r => r.RoomStatus == 1 || r.RoomStatus == 2);
+
+    private List<FrontOfficeRoomDto> ValidOccupancyRooms => AllRooms
+        .Where(r => r.AvailableQuantity > 0 && !string.IsNullOrWhiteSpace(r.RoomNumber))
+        .GroupBy(r => new { r.GuestHouseId, Room = r.RoomNumber!.Trim().ToUpperInvariant() })
+        .Select(g => g.OrderByDescending(r => r.CurrentBookingId.HasValue ? 1 : 0).First())
+        .ToList();
+
+    private List<FrontOfficeRoomDto> OccupiedRooms =>
+        ValidOccupancyRooms.Where(r => r.CurrentBookingId.HasValue && (r.BookingStatus == 2 || r.BookingStatus == 5)).ToList();
+
+    private string OccupancyRateText
+    {
+        get
+        {
+            if (!_roomsOk) return _loading ? "…" : "—";
+            if (ValidOccupancyRooms.Count <= 0) return "—";
+            return $"{(OccupiedRooms.Count * 100.0 / ValidOccupancyRooms.Count):0.0}%";
+        }
+    }
+
+    private List<GuestHouseOccupancyItem> OccupancyByProperty => ValidOccupancyRooms
+        .GroupBy(r => r.GuestHouseId)
+        .Select(g => new GuestHouseOccupancyItem
+        {
+            GuestHouseName = _rooms.FirstOrDefault(h => h.GuestHouseId == g.Key)?.GuestHouseName ?? "",
+            TotalRooms = g.Count(),
+            OccupiedRooms = g.Count(r => r.CurrentBookingId.HasValue && (r.BookingStatus == 2 || r.BookingStatus == 5))
+        })
+        .Where(p => p.TotalRooms > 0)
+        .OrderByDescending(p => p.OccupiedRooms)
+        .ToList();
+
+    // ---- Recent Activities (latest 5, merged from SDWA Scheme + Guest House real sources) ----
+    // Scheme activities use the real event timestamps already returned by
+    // api/WelfareSchemeApproval/applications: ApplicationDate for the submission
+    // and each approval step's ApprovedAt for the MO/RM/SM/AVP/Director decision.
+    // Guest House activities use api/GuestHouseFrontOffice/bills (completed/billed
+    // stays): the real check-in date when recorded and the bill date as the
+    // booking-completed event. Nothing is hardcoded and no timestamps are invented.
+    private List<RecentActivityItem> RecentActivities
+    {
+        get
+        {
+            var items = new List<RecentActivityItem>();
+
+            if (_approvalOk)
+            {
+                // In-progress applications (validated by MO) and invalid (rejected)
+                // applications carry no sub-status text, so use the plain status.
+                foreach (var app in _pipeline)
+                {
+                    var ctx = $"{app.SchemeName} · {app.DealerName}";
+                    var refText = string.IsNullOrWhiteSpace(app.ApplicationNumber) ? $"App #{app.Id}" : app.ApplicationNumber;
+
+                    items.Add(new RecentActivityItem
+                    {
+                        When = app.ApplicationDate,
+                        Icon = "bi-file-earmark-arrow-up",
+                        Accent = "#2563eb",
+                        Title = "Scheme application submitted",
+                        Detail = $"{ctx} ({refText})"
+                    });
+
+                    var lastStep = app.Approvals
+                        .Where(s => s.ApprovedAt.HasValue)
+                        .OrderByDescending(s => s.ApprovedAt)
+                        .FirstOrDefault();
+
+                    if (lastStep != null)
+                    {
+                        var approved = string.Equals(lastStep.ApprovalStatus, "Approved", StringComparison.OrdinalIgnoreCase);
+                        items.Add(new RecentActivityItem
+                        {
+                            When = lastStep.ApprovedAt!.Value,
+                            Icon = approved ? "bi-patch-check" : "bi-x-octagon",
+                            Accent = approved ? "#16a34a" : "#dc2626",
+                            Title = approved ? "Scheme approved" : "Scheme rejected",
+                            Detail = $"{ctx} · {lastStep.ApprovalLevel} ({refText})"
+                        });
+                    }
+                }
+            }
+
+            if (_billsOk)
+            {
+                foreach (var bill in _bills)
+                {
+                    if (bill.CheckInDate.HasValue)
+                    {
+                        items.Add(new RecentActivityItem
+                        {
+                            When = bill.CheckInDate.Value,
+                            Icon = "bi-box-arrow-in-right",
+                            Accent = "#0d9488",
+                            Title = "Guest booked & checked in",
+                            Detail = $"{bill.GuestName} · {bill.GuestHouseName} · {bill.RoomNumber}"
+                        });
+                    }
+
+                    items.Add(new RecentActivityItem
+                    {
+                        When = bill.BillDate,
+                        Icon = "bi-receipt",
+                        Accent = "#7c3aed",
+                        Title = "Guest house stay billed",
+                        Detail = bill.TotalAmount == 0
+                            ? $"{bill.GuestName} · {bill.GuestHouseName} · {bill.BookingReference}"
+                            : $"{bill.GuestName} · {bill.GuestHouseName} · {bill.BookingReference} · ₹{bill.TotalAmount:N0}"
+                    });
+                }
+            }
+
+            return items
+                .OrderByDescending(i => i.When)
+                .Take(5)
+                .ToList();
+        }
+    }
+
+    // ---- Recent Activities display-only model (no DB entity, no API) ----
+    private class RecentActivityItem
+    {
+        public DateTime When { get; set; }
+        public string Icon { get; set; } = string.Empty;
+        public string Accent { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Detail { get; set; } = string.Empty;
+    }
+
+    private static string WhenText(DateTime when)
+    {
+        var diff = DateTime.Now - when;
+        if (diff < TimeSpan.FromMinutes(1)) return "just now";
+        if (diff < TimeSpan.FromHours(1)) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff < TimeSpan.FromHours(24)) return $"{(int)diff.TotalHours}h ago";
+        if (diff < TimeSpan.FromDays(7)) return $"{(int)diff.TotalDays}d ago";
+        return when.ToString("dd MMM yyyy");
+    }
+
+    // ---- Monthly Application Trend (real counts from the loaded SDWA application rows) ----
+    // Groups the real applications by their application (creation) month. The merged _pipeline
+    // list is already deduplicated by application Id, so the same application can never be
+    // counted twice even if it appears under more than one workflow tab. Only months that have
+    // actual applications are emitted; nothing is invented or estimated.
+    private List<MonthlyAppTrendItem> MonthlyApplicationTrend
+    {
+        get
+        {
+            var groups = _pipeline
+                .Where(a => a.ApplicationDate != default)
+                .GroupBy(a => new { a.ApplicationDate.Year, a.ApplicationDate.Month })
+                .Select(g => new { g.Key.Year, g.Key.Month, Count = g.Count() })
+                .OrderBy(g => g.Year)
+                .ThenBy(g => g.Month)
+                .ToList();
+
+            if (groups.Count == 0) return new List<MonthlyAppTrendItem>();
+
+            var maxCount = groups.Max(g => g.Count);
+            var singleYear = groups.Select(g => g.Year).Distinct().Count() <= 1;
+
+            return groups
+                .Select(g => new MonthlyAppTrendItem(g.Year, g.Month, g.Count, maxCount, singleYear))
+                .ToList();
+        }
+    }
+
+    // ---- Monthly Application Trend display model (chart-only, no DB entity, no API) ----
+    private class MonthlyAppTrendItem
+    {
+        public MonthlyAppTrendItem(int year, int month, int count, int maxCount, bool singleYear)
+        {
+            Count = count;
+            MonthLabel = new DateTime(year, month, 1).ToString(singleYear ? "MMM" : "MMM yy", CultureInfo.InvariantCulture);
+            var pct = maxCount <= 0 ? 0 : count * 100d / maxCount;
+            HeightPct = $"{Math.Max(4, (int)Math.Round(pct))}%";
+        }
+
+        public int Count { get; }
+        public string MonthLabel { get; }
+        public string HeightPct { get; }
+    }
 
     // ---- Scheme distribution (real counts computed from the loaded application rows) ----
     private List<SchemeLegendItem> SchemeLegend => _pipeline
@@ -612,6 +900,15 @@
         return string.IsNullOrWhiteSpace(rec.ApprovedBy) ? rec.ApprovalLevel : rec.ApprovedBy;
     }
 
+    // ---- Quick action navigation ----
+    private void GoToSchemeApproval() => Navigation.NavigateTo("/SchemeApproval");
+
+    private void GoToDealerDashboard() => Navigation.NavigateTo("/Dashboard");
+
+    private void GoToWelfareSchemes() => Navigation.NavigateTo("/WelfareSchemes");
+
+    private void GoToFrontOffice() => Navigation.NavigateTo("/FrontOffice");
+
     // Value shown only when the real source actually loaded; "…" while loading;
     // "—" when the source failed (never a fake 0). Genuine 0 from a loaded source shows as 0.
     private string Val(bool ok, int value) => _loading ? "…" : ok ? value.ToString("N0") : "—";
@@ -650,6 +947,51 @@
 
     private class BillListItemDto
     {
+        public int BillId { get; set; }
+        public string? BillNumber { get; set; }
+        public string? BookingReference { get; set; }
+        public int BookingId { get; set; }
+        public string? GuestName { get; set; }
+        public string? GuestHouseName { get; set; }
+        public string? RoomNumber { get; set; }
+        public DateTime BillDate { get; set; }
+        public DateTime? CheckInDate { get; set; }
+        public DateTime? CheckOutDate { get; set; }
         public decimal TotalAmount { get; set; }
+        public decimal BalanceAmount { get; set; }
+        public int PaymentStatus { get; set; }
+        public int PaymentMethod { get; set; }
+    }
+
+    // ---- Guest House Overview display DTOs (mirrors api/GuestHouseFrontOffice/rooms payload) ----
+    // RoomStatus: 0 = Available, 1 = Reserved, 2 = CheckedIn (same values Front Office uses).
+    // BookingStatus is the occupying booking's status (absent for Available rooms -> 0/Draft),
+    // so it is only meaningful when CurrentBookingId != null.
+    private class FrontOfficeHouseDto
+    {
+        public int GuestHouseId { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public List<FrontOfficeRoomDto> Rooms { get; set; } = new();
+    }
+
+    private class FrontOfficeRoomDto
+    {
+        public string? RoomNumber { get; set; }
+        public int GuestHouseId { get; set; }
+        public int AvailableQuantity { get; set; }
+        public int RoomStatus { get; set; }
+        public int? CurrentBookingId { get; set; }
+        public int BookingStatus { get; set; }
+    }
+
+    private class GuestHouseOccupancyItem
+    {
+        public string GuestHouseName { get; set; } = "";
+        public int TotalRooms { get; set; }
+        public int OccupiedRooms { get; set; }
+        public string PercentText =>
+            TotalRooms <= 0 ? "—" : $"{OccupiedRooms * 100.0 / TotalRooms:0.0}%";
+        public string PercentWidth =>
+            TotalRooms <= 0 ? "0%" : $"{Math.Min(100, (int)Math.Round(OccupiedRooms * 100.0 / TotalRooms)):0}%";
     }
 }
