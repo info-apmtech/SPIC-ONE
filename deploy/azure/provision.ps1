@@ -67,7 +67,7 @@ if ($DatabaseConnectionStringFile) { $overrides.databaseConnectionString = (Get-
 # straight from SpicAPI/appsettings.json (comments stripped), so the Azure API can use the same
 # database and IFMS setup without anyone typing a secret. Values are never printed.
 if ($SecretsFromAppSettings) {
-    $raw = Get-Content (Join-Path $script:RepoRoot 'SpicAPIppsettings.json') -Raw
+    $raw = Get-Content (Join-Path $script:RepoRoot 'SpicAPI' | Join-Path -ChildPath 'appsettings.json') -Raw
     $raw = ($raw -split "`n" | Where-Object { $_ -notmatch '^\s*//' }) -join "`n"
     $cfg = $raw | ConvertFrom-Json
     if ($cfg.ConnectionStrings.DefaultConnection) { $overrides.databaseConnectionString = $cfg.ConnectionStrings.DefaultConnection }
