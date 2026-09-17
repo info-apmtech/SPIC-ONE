@@ -96,6 +96,19 @@ if ($Quick) {
 $vault = Find-KeyVault -ResourceGroup $names.ResourceGroup
 if (-not $vault) { throw 'Key Vault not found; run provision.ps1 first.' }
 $deployer = Invoke-AzJson ad signed-in-user show --query id
+
+# Custom domains are bound outside the template (bind-domains.ps1). Read the current bindings
+# and pass them back in, otherwise the template run would remove them.
+function Get-CustomDomainsJson([string]$app) {
+    $exists = Invoke-AzJson containerapp list -g $names.ResourceGroup --query "[?name=='$app'].name"
+    if (-not $exists) { return '[]' }
+    $d = Invoke-AzJson containerapp hostname list -n $app -g $names.ResourceGroup --query "[].{name:name, certificateId:certificateId, bindingType:bindingType}"
+    if (-not $d) { return '[]' }
+    return (ConvertTo-Json @($d) -Compress)
+}
+$apiDomains = Get-CustomDomainsJson $outputs.apiAppName
+$webDomains = Get-CustomDomainsJson $outputs.webAppName
+
 $secretsFile = New-SecretParametersFile -VaultName $vault
 try {
     $extra = @(
@@ -103,7 +116,9 @@ try {
         "apiImage=$apiImage",
         "webImage=$webImage",
         "deployerObjectId=$deployer",
-        "webApiBaseUrl=$WebApiBaseUrl"
+        "webApiBaseUrl=$WebApiBaseUrl",
+        "apiCustomDomains=$apiDomains",
+        "webCustomDomains=$webDomains"
     )
     $outputs = Invoke-PlatformDeployment -Names $names -SecretsFile $secretsFile -ExtraParameters $extra -Label "$Environment-apps"
 }

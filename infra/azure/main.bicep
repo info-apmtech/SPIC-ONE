@@ -64,6 +64,9 @@ param ifmsAutomationKey string = ''
 param ifmsConnectionString string = ''
 @description('Public URL the browser uses to reach the API. Empty = the API container app FQDN.')
 param webApiBaseUrl string = ''
+@description('Custom domain bindings already on the apps (name, certificateId, bindingType). Passed by deploy.ps1 so a template run does not remove them.')
+param apiCustomDomains array = []
+param webCustomDomains array = []
 @description('Use an external PostgreSQL (e.g. the VPS) instead of the Azure server. Empty = Azure server.')
 @secure()
 param databaseConnectionString string = ''
@@ -397,6 +400,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
         targetPort: 8080
         transport: 'auto'
         allowInsecure: false
+        customDomains: apiCustomDomains
       }
       registries: [
         { server: acr.properties.loginServer, identity: uai.id }
@@ -458,6 +462,7 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
         // Blazor Server keeps a live circuit per browser tab; the same replica must
         // serve every request of that circuit.
         stickySessions: { affinity: 'sticky' }
+        customDomains: webCustomDomains
       }
       registries: [
         { server: acr.properties.loginServer, identity: uai.id }
