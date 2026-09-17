@@ -32,11 +32,11 @@ The kit is subscription-agnostic. To deploy into a subscription that belongs to 
    assignment → Privileged administrator roles → Owner). A guest user from another directory works.
 2. On the PC: `az login --tenant <their tenant id or domain>` (browser sign-in; device-code may be
    blocked by security defaults), then `az account list -o table` to see the subscription.
-3. `.\deployzure\provision.ps1 -Environment prod -Subscription "<name or id>" -AllowMyIp -WebApiBaseUrl https://api.spicone.in/`
+3. `.\deployzure\provision.ps1 -Environment prod -Subscription "<name or id>" -AllowMyIp -WebApiBaseUrl https://api.spicone.in/`
    Registers the resource providers, creates everything, builds and deploys both apps (~15 min).
-4. `.\deployzureind-domains.ps1 -Environment prod` prints the four DNS records (new static IP and
+4. `.\deployzureind-domains.ps1 -Environment prod` prints the four DNS records (new static IP and
    verification id). Send them to the DNS administrator.
-5. When the records resolve: `.\deployzureind-domains.ps1 -Environment prod -Bind` binds both
+5. When the records resolve: `.\deployzureind-domains.ps1 -Environment prod -Bind` binds both
    hostnames with managed certificates and checks `/health` on the public names.
 6. Then copy the database and uploads (Phase 1 of the cut-over plan below).
 
