@@ -94,10 +94,16 @@ function Bind-Host([string]$app, [string]$hostName, [string]$method) {
     if ($bound -eq 'SniEnabled') { Write-Host "  $hostName already bound to $app" -ForegroundColor DarkGray; return }
     Write-Host "  binding $hostName to $app ($method validation) ..." -ForegroundColor Cyan
     $az = Get-AzCli
-    & $az containerapp hostname add -n $app -g $rg --hostname $hostName --only-show-errors -o none 2>$null
-    & $az containerapp hostname bind -n $app -g $rg --hostname $hostName --environment $outputs.environmentName `
-        --validation-method $method --only-show-errors -o none
-    if ($LASTEXITCODE -ne 0) { throw "Binding $hostName failed. Check: az containerapp env certificate list -g $rg -n $($outputs.environmentName)" }
+    # Native stderr (progress spinner) must not become a terminating error under PS 5.1.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $az containerapp hostname add -n $app -g $rg --hostname $hostName --only-show-errors -o none 2>&1 | Out-Null
+        & $az containerapp hostname bind -n $app -g $rg --hostname $hostName --environment $outputs.environmentName `
+            --validation-method $method --only-show-errors -o none 2>&1 | Where-Object { "$_" -match 'ERROR' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $previous }
+    if ($code -ne 0) { throw "Binding $hostName failed. Check: az containerapp env certificate list -g $rg -n $($outputs.environmentName)" }
 }
 
 Bind-Host $outputs.apiAppName $ApiHost 'CNAME'
