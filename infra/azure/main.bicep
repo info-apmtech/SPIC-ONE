@@ -64,6 +64,9 @@ param ifmsAutomationKey string = ''
 param ifmsConnectionString string = ''
 @description('Public URL the browser uses to reach the API. Empty = the API container app FQDN.')
 param webApiBaseUrl string = ''
+@description('Use an external PostgreSQL (e.g. the VPS) instead of the Azure server. Empty = Azure server.')
+@secure()
+param databaseConnectionString string = ''
 
 // ---------------------------------------------------------------- names
 var envShort = envName == 'prod' ? 'prd' : 'stg'
@@ -252,7 +255,8 @@ resource pgFwClient 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@202
   properties: { startIpAddress: clientIp, endIpAddress: clientIp }
 }
 
-var dbConnectionString = 'Host=${pg.properties.fullyQualifiedDomainName};Port=5432;Database=${pgDatabaseName};Username=${pgAdminLogin};Password=${postgresAdminPassword};SSL Mode=Require;Trust Server Certificate=true;Include Error Detail=true'
+var azureDbConnectionString = 'Host=${pg.properties.fullyQualifiedDomainName};Port=5432;Database=${pgDatabaseName};Username=${pgAdminLogin};Password=${postgresAdminPassword};SSL Mode=Require;Trust Server Certificate=true;Include Error Detail=true'
+var dbConnectionString = empty(databaseConnectionString) ? azureDbConnectionString : databaseConnectionString
 
 // ---------------------------------------------------------------- secrets
 resource secretPgPassword 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
@@ -265,6 +269,19 @@ resource secretDbConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: kv
   name: 'db-connection'
   properties: { value: dbConnectionString }
+}
+
+// Kept separately so later deployments keep using the override until it is cleared.
+resource secretDbOverride 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(databaseConnectionString)) {
+  parent: kv
+  name: 'db-connection-override'
+  properties: { value: databaseConnectionString }
+}
+
+resource secretAzureDbConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'db-connection-azure'
+  properties: { value: azureDbConnectionString }
 }
 
 resource secretJwtKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {

@@ -24,6 +24,9 @@ param(
     [string]$IfmsConnectionStringFile,
     [string]$IfmsDeviceKeyFile,
     [string]$IfmsAutomationKeyFile,
+    [string]$DatabaseConnectionStringFile,
+    [switch]$SecretsFromAppSettings,
+    [switch]$ClearDatabaseOverride,
     [string]$WebApiBaseUrl = ''
 )
 
@@ -58,8 +61,31 @@ if ($IfmsConnectionStringFile) { $overrides.ifmsConnectionString = (Get-Content 
 if ($IfmsDeviceKeyFile)        { $overrides.ifmsDeviceKey        = (Get-Content $IfmsDeviceKeyFile -Raw).Trim() }
 if ($IfmsAutomationKeyFile)    { $overrides.ifmsAutomationKey    = (Get-Content $IfmsAutomationKeyFile -Raw).Trim() }
 
+if ($DatabaseConnectionStringFile) { $overrides.databaseConnectionString = (Get-Content $DatabaseConnectionStringFile -Raw).Trim() }
+
+# -SecretsFromAppSettings takes the connection strings and IFMS keys the VPS deployment runs with
+# straight from SpicAPI/appsettings.json (comments stripped), so the Azure API can use the same
+# database and IFMS setup without anyone typing a secret. Values are never printed.
+if ($SecretsFromAppSettings) {
+    $raw = Get-Content (Join-Path $script:RepoRoot 'SpicAPIppsettings.json') -Raw
+    $raw = ($raw -split "`n" | Where-Object { $_ -notmatch '^\s*//' }) -join "`n"
+    $cfg = $raw | ConvertFrom-Json
+    if ($cfg.ConnectionStrings.DefaultConnection) { $overrides.databaseConnectionString = $cfg.ConnectionStrings.DefaultConnection }
+    if ($cfg.ConnectionStrings.IfmsConnection)    { $overrides.ifmsConnectionString     = $cfg.ConnectionStrings.IfmsConnection }
+    if ($cfg.IfmsAutomation.DeviceKey)            { $overrides.ifmsDeviceKey            = $cfg.IfmsAutomation.DeviceKey }
+    if ($cfg.IfmsAutomation.AutomationKey)        { $overrides.ifmsAutomationKey        = $cfg.IfmsAutomation.AutomationKey }
+    Write-Host "Secrets taken from appsettings.json: $($overrides.Keys -join ', ')" -ForegroundColor DarkGray
+}
+
 $vault = Find-KeyVault -ResourceGroup $names.ResourceGroup
 if ($vault) { Write-Host "Existing Key Vault $vault found; reusing its secrets." -ForegroundColor DarkGray }
+if ($vault -and $ClearDatabaseOverride) {
+    Write-Host 'Clearing db-connection-override: the API will use the Azure PostgreSQL server.' -ForegroundColor Yellow
+    $az = Get-AzCli
+    & $az keyvault secret delete --vault-name $vault --name db-connection-override --only-show-errors -o none 2>$null
+    & $az keyvault secret purge  --vault-name $vault --name db-connection-override --only-show-errors -o none 2>$null
+    $overrides.Remove('databaseConnectionString')
+}
 $secretsFile = New-SecretParametersFile -VaultName $vault -Overrides $overrides
 try {
     $extra = @(
