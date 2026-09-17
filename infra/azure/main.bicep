@@ -90,13 +90,20 @@ var webAppName = 'ca-spicone-web-${envShort}'
 var pgAdminLogin = 'spicadmin'
 var pgDatabaseName = 'spicone'
 
-// Azure Files shares mounted into the apps.
+// Azure Files shares mounted into the apps. Quota is a ceiling, not reserved space;
+// standard shares bill on used capacity only.
 var shares = [
   'api-uploads'      // SpicAPI/Uploads       (dealer registration documents, sample downloads)
   'api-webuploads'   // SpicAPI/wwwroot/uploads (logistics files)
   'api-keys'         // API data-protection key ring
   'web-keys'         // Web data-protection key ring
 ]
+var shareQuotaGb = {
+  'api-uploads': 100
+  'api-webuploads': 100
+  'api-keys': 1
+  'web-keys': 1
+}
 
 // ---------------------------------------------------------------- logs
 resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -153,7 +160,7 @@ resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2023-05-01'
 resource fileShares 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-05-01' = [for share in shares: {
   parent: fileService
   name: share
-  properties: { shareQuota: 100, accessTier: 'TransactionOptimized' }
+  properties: { shareQuota: shareQuotaGb[share], accessTier: 'TransactionOptimized' }
 }]
 
 // ---------------------------------------------------------------- registry + identity
