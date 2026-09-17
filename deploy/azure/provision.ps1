@@ -55,13 +55,19 @@ $deployer = Invoke-AzJson ad signed-in-user show --query id
 $clientIp = if ($AllowMyIp) { Get-MyPublicIp } else { '' }
 if ($AllowMyIp -and -not $clientIp) { Write-Warning 'Could not determine public IP; no admin firewall rule added.' }
 
-# Secret overrides come from files so values never appear on a command line.
+# Secret overrides come from files so values never appear on a command line. A file may hold
+# the bare value or a JSON line copied from appsettings ("Key": "value",); both are accepted.
+function Read-SecretFile([string]$path) {
+    $v = (Get-Content $path -Raw).Trim()
+    if ($v -match '^\s*"[^"]+"\s*:\s*"(.*)"\s*,?\s*$') { $v = $Matches[1] }
+    return $v.Trim().Trim('"')
+}
 $overrides = @{}
-if ($IfmsConnectionStringFile) { $overrides.ifmsConnectionString = (Get-Content $IfmsConnectionStringFile -Raw).Trim() }
-if ($IfmsDeviceKeyFile)        { $overrides.ifmsDeviceKey        = (Get-Content $IfmsDeviceKeyFile -Raw).Trim() }
-if ($IfmsAutomationKeyFile)    { $overrides.ifmsAutomationKey    = (Get-Content $IfmsAutomationKeyFile -Raw).Trim() }
+if ($IfmsConnectionStringFile) { $overrides.ifmsConnectionString = Read-SecretFile $IfmsConnectionStringFile }
+if ($IfmsDeviceKeyFile)        { $overrides.ifmsDeviceKey        = Read-SecretFile $IfmsDeviceKeyFile }
+if ($IfmsAutomationKeyFile)    { $overrides.ifmsAutomationKey    = Read-SecretFile $IfmsAutomationKeyFile }
 
-if ($DatabaseConnectionStringFile) { $overrides.databaseConnectionString = (Get-Content $DatabaseConnectionStringFile -Raw).Trim() }
+if ($DatabaseConnectionStringFile) { $overrides.databaseConnectionString = Read-SecretFile $DatabaseConnectionStringFile }
 
 # -SecretsFromAppSettings takes the connection strings and IFMS keys the VPS deployment runs with
 # straight from SpicAPI/appsettings.json (comments stripped), so the Azure API can use the same
