@@ -67,8 +67,27 @@ namespace SpicAPI.Controllers
                 var desig = await _db.Designations
                     .AsNoTracking()
                     .FirstOrDefaultAsync(d => d.Id == user.DesignationId.Value && d.IsActive);
-                roleAccess = desig?.RoleAccess;
                 designationName = desig?.Name;
+
+                // G1 runtime enforcement: only the runtime ticket handed to the
+                // client excludes tokens of pages that are registered in
+                // ApplicationPage but deactivated (IsActive = false). The Designation
+                // permission itself is NOT removed from the database, so nothing is
+                // unassigned and RoleAccess/DesignationPermission stay intact. On the
+                // next login (and any hard-refresh restore, which replays this CSV) a
+                // deactivated page is therefore no longer visible or directly
+                // reachable, regardless of an old View token in the designation.
+                if (desig != null && !string.IsNullOrWhiteSpace(desig.RoleAccess))
+                {
+                    var pages = await _db.Pages.AsNoTracking()
+                        .Select(p => new { p.Key, p.IsActive })
+                        .ToListAsync();
+
+                    roleAccess = RoleAccessPermissions.RestrictToActivePages(
+                        desig.RoleAccess,
+                        pages.Select(p => p.Key),
+                        pages.Where(p => p.IsActive).Select(p => p.Key));
+                }
             }
 
             var responseData = new LoginResponseModel

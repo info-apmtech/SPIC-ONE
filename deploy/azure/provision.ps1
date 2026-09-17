@@ -17,6 +17,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][ValidateSet('staging', 'prod')][string]$Environment,
+    [string]$Subscription = '',
     [string]$Location = 'centralindia',
     [switch]$PlatformOnly,
     [switch]$AllowMyIp,
@@ -29,7 +30,20 @@ param(
 . (Join-Path $PSScriptRoot 'common.ps1')
 
 $names = Get-EnvNames -Environment $Environment
+if ($Subscription) { Invoke-Az account set --subscription $Subscription | Out-Null }
 $account = Assert-AzLogin
+Invoke-Az config set bicep.check_version=false --only-show-errors | Out-Null
+
+# Resource providers are registered once per subscription; harmless when already registered.
+foreach ($provider in 'Microsoft.App', 'Microsoft.OperationalInsights', 'Microsoft.DBforPostgreSQL',
+                      'Microsoft.ContainerRegistry', 'Microsoft.KeyVault', 'Microsoft.Storage',
+                      'Microsoft.ManagedIdentity', 'Microsoft.Insights', 'Microsoft.Network') {
+    $state = Invoke-Az provider show -n $provider --query registrationState --output tsv
+    if ($state -ne 'Registered') {
+        Write-Host "Registering provider $provider ..." -ForegroundColor DarkGray
+        Invoke-Az provider register -n $provider --wait | Out-Null
+    }
+}
 
 Write-Host "Resource group $($names.ResourceGroup) in $Location" -ForegroundColor Cyan
 Invoke-Az group create --name $names.ResourceGroup --location $Location --tags app=spicone env=$Environment client=SPIC | Out-Null

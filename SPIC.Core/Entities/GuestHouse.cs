@@ -126,6 +126,7 @@ public class GuestHouseRoom
 	public ICollection<GuestHouseRoomAmenity> Amenities { get; set; } = new List<GuestHouseRoomAmenity>();    // Amenities (AC, WiFi, TV, Hot Water, etc.)
 	public ICollection<GuestHouseRoomAvailability> Availabilities { get; set; } = new List<GuestHouseRoomAvailability>(); // Per-date availability records
 	public ICollection<GuestHouseBooking> Bookings { get; set; } = new List<GuestHouseBooking>();             // Bookings made for this room type
+	public ICollection<GuestHouseRoomAllocation> Allocations { get; set; } = new List<GuestHouseRoomAllocation>();  // Exact physical room(s) assigned by the Front Office at check-in
 }
 
 /// <summary>
@@ -214,6 +215,7 @@ public class GuestHouseBooking
 	// Front Office / Stay Tracking
 	public DateTime? ActualCheckInAt { get; set; }                       // When the guest physically checked in (set by Front Office)
 	public DateTime? ActualCheckOutAt { get; set; }                      // When the guest checked out (set by Front Office)
+	public string? AllocatedRoomNumber { get; set; }                     // Snapshot of the exact physical room number(s) (from GuestHouseRoomAllocation) taken at Check-Out, just before the allocation rows are released back to the pool. This is the authoritative Room No for billing/invoicing once the stay is complete.
 
 	// Pricing
 	public decimal RoomPrice { get; set; }                               // Room price per night snapshot (₹)
@@ -238,6 +240,7 @@ public class GuestHouseBooking
 	public ICollection<GuestHouseBookingPayment> Payments { get; set; } = new List<GuestHouseBookingPayment>();       // Payments made for this booking
 	public GuestHouseBookingCancellation? Cancellation { get; set; }     // Cancellation record (if the booking was cancelled)
 	public GuestHouseBookingRefund? Refund { get; set; }                 // Refund record (if a refund was raised)
+	public ICollection<GuestHouseRoomAllocation> RoomAllocations { get; set; } = new List<GuestHouseRoomAllocation>(); // Exact physical room(s) assigned by the Front Office at check-in
 }
 
 /// <summary>
@@ -456,4 +459,35 @@ public class GuestHouseBillLineItem
 
 	// Audit
 	public DateTime CreatedAt { get; set; } = DateTime.Now;              // When the line item was recorded
+}
+
+/// <summary>
+/// The exact physical room(s) actually assigned to a booking by the Front Office at check-in.
+/// This is the ONLY place the specific room number a guest occupies is recorded.
+/// Guests never select a room during online booking (the booking is count-based);
+/// the Front Office picks the physical RoomNumber(s) from the free rooms of the booked
+/// type and stay period, and one allocation row is created per room.
+/// Non-active stays (Cancelled / Completed) release their rooms, so an allocation only
+/// exists while the stay is active and resets automatically when the stay ends.
+/// </summary>
+public class GuestHouseRoomAllocation
+{
+	public int Id { get; set; }                                          // Primary key
+	public int GuestHouseBookingId { get; set; }                         // FK to the booking being checked in
+	public GuestHouseBooking? GuestHouseBooking { get; set; }            // Navigation to the parent booking
+
+	public int GuestHouseId { get; set; }                                // FK to the guest house (denormalized for fast availability queries)
+	public GuestHouse? GuestHouse { get; set; }                          // Navigation to the guest house
+
+	public int GuestHouseRoomId { get; set; }                            // FK to the room TYPE row (not a physical room)
+	public GuestHouseRoom? GuestHouseRoom { get; set; }                  // Navigation to the room type
+
+	public string RoomNumber { get; set; } = string.Empty;               // The exact physical room number (e.g. "103")
+
+	public DateTime CheckInDate { get; set; }                            // Copy of the booking stay window, so the no-double-allocation
+	public DateTime CheckOutDate { get; set; }                           // overlap rule can be enforced purely against this table.
+
+	// Audit
+	public string? AssignedBy { get; set; }                              // Front Office user who assigned the room
+	public DateTime AssignedAt { get; set; } = DateTime.Now;             // When the room was assigned
 }

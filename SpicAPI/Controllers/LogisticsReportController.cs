@@ -369,10 +369,10 @@ namespace SpicAPI.Controllers
 
         private static LogisticsReportTotalDto BuildTotal(List<LogisticsReportRowDto> rows, int sapTotal)
         {
-            var totalRm = rows.Sum(r => r.PendingRm);
-            var totalSmm = rows.Sum(r => r.PendingSmm);
-            var totalAvp = rows.Sum(r => r.PendingWithAvp);
-            var totalCompleted = rows.Sum(r => r.Completed);
+            var totalRm = rows.Sum(r => r.PendingRmTotal);
+            var totalSmm = rows.Sum(r => r.PendingSmmTotal);
+            var totalAvp = rows.Sum(r => r.PendingWithAvpTotal);
+            var totalCompleted = rows.Sum(r => r.CompletedTotal);
 
             return new LogisticsReportTotalDto
             {

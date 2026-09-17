@@ -2,7 +2,6 @@
 @rendermode InteractiveServer
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components
-@using System.Reflection
 @using DR = SPIC.Core.Entities
 @inject HttpClient Http
 @inject LoadingService Loading
@@ -16,6 +15,19 @@
 
     // Selected permission tokens in "Page.Action" form, e.g. "Register.View"
     private HashSet<string> _selectedTokens = new(StringComparer.OrdinalIgnoreCase);
+
+    // Page catalog loaded from the ApplicationPage table — the source of the
+    // Role Access grid (replaces the old static PagePermission enum list).
+    private List<DR.ApplicationPage> _catalogPages = new();
+
+    // Page order for stable RoleAccess serialization = catalog SortOrder.
+    private List<string> _allCatalogKeys = new();
+
+    // Module grouping built from ApplicationPage.Module (first page per module
+    // renders as the parent row, exactly like the old enum module grouping).
+    private HashSet<string> _parentPages = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string[]> _childMap = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _childSet = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _isEditMode;
     private bool _isSaving;
@@ -31,48 +43,21 @@
 
     private ElementReference _firstInputRef;
 
-    private static readonly string[] _allPages = Enum.GetNames(typeof(DR.PagePermission));
     private static readonly string[] _actions = { "View", "Entry", "Update", "Delete" };
 
-    private static bool IsParent(string page) => _parentPages.Contains(page);
-    private static bool IsChild(string page) => _childSet.Contains(page);
-    private static string[] GetChildren(string page) => _childMap.TryGetValue(page, out var c) ? c : Array.Empty<string>();
+    private bool IsParent(string page) => _parentPages.Contains(page);
+    private bool IsChild(string page) => _childSet.Contains(page);
+    private string[] GetChildren(string page) => _childMap.TryGetValue(page, out var c) ? c : Array.Empty<string>();
 
-    private static readonly HashSet<string> _parentPages;
-    private static readonly Dictionary<string, string[]> _childMap = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> _childSet = new(StringComparer.OrdinalIgnoreCase);
-
-    static Designation()
+    private IEnumerable<(string Page, string DisplayName, bool IsParent, int Indent)> GetDisplayPages()
     {
-        var groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in _allPages)
+        foreach (var page in _catalogPages)
         {
-            var field = typeof(DR.PagePermission).GetField(name);
-            var attr = field?.GetCustomAttribute<DR.PageModuleAttribute>();
-            if (attr != null)
-            {
-                if (!groups.ContainsKey(attr.Module))
-                    groups[attr.Module] = new List<string>();
-                groups[attr.Module].Add(name);
-            }
-        }
-        _parentPages = new(groups.Select(g => g.Value[0]), StringComparer.OrdinalIgnoreCase);
-        foreach (var kv in groups)
-        {
-            var children = kv.Value.Skip(1).ToArray();
-            _childMap[kv.Value[0]] = children;
-            foreach (var c in children) _childSet.Add(c);
-        }
-    }
-
-    private IEnumerable<(string Page, bool IsParent, int Indent)> GetDisplayPages()
-    {
-        foreach (var page in _allPages)
-        {
-            if (IsParent(page))
-                yield return (page, true, 0);
-            else if (!IsChild(page))
-                yield return (page, false, 0);
+            var displayName = string.IsNullOrWhiteSpace(page.Name) ? DisplayFor(page.Key) : page.Name;
+            if (IsParent(page.Key))
+                yield return (page.Key, displayName, true, 0);
+            else if (!IsChild(page.Key))
+                yield return (page.Key, displayName, false, 0);
         }
     }
 
@@ -160,7 +145,7 @@
         }
     }
 
-    private bool IsAllSelected => _allPages.All(IsRowAll);
+    private bool IsAllSelected => _allCatalogKeys.All(IsRowAll);
 
     private void ToggleAllRoles()
     {
@@ -171,7 +156,7 @@
         else
         {
             _selectedTokens.Clear();
-            foreach (var p in _allPages)
+            foreach (var p in _allCatalogKeys)
                 foreach (var a in _actions)
                     _selectedTokens.Add($"{p}.{a}");
         }
@@ -186,11 +171,55 @@
         Loading.Show();
         try
         {
+            await LoadCatalog();
             await LoadDesignations();
         }
         finally
         {
             Loading.Hide();
+        }
+    }
+
+    // Loads the active ApplicationPage catalog that drives the Role Access grid.
+    private async Task LoadCatalog()
+    {
+        try
+        {
+            _catalogPages = await Http.GetFromJsonAsync<List<DR.ApplicationPage>>("api/Designation/pagecatalog") ?? new();
+            _allCatalogKeys = _catalogPages.Select(p => p.Key).ToList();
+            RebuildModuleGroups();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load page catalog: {ex.Message}", true);
+        }
+    }
+
+    // First page of each Module group becomes the parent row (children collapse
+    // under it) — identical to the old enum PageModuleAttribute grouping.
+    private void RebuildModuleGroups()
+    {
+        _parentPages.Clear();
+        _childMap.Clear();
+        _childSet.Clear();
+
+        var groups = new Dictionary<string, List<DR.ApplicationPage>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var page in _catalogPages)
+        {
+            if (string.IsNullOrWhiteSpace(page.Module))
+                continue;
+            if (!groups.TryGetValue(page.Module!, out var list))
+                groups[page.Module!] = list = new List<DR.ApplicationPage>();
+            list.Add(page);
+        }
+
+        foreach (var kv in groups)
+        {
+            var first = kv.Value[0];
+            _parentPages.Add(first.Key);
+            var children = kv.Value.Skip(1).Select(p => p.Key).ToArray();
+            _childMap[first.Key] = children;
+            foreach (var c in children) _childSet.Add(c);
         }
     }
 
@@ -295,11 +324,22 @@
         {
             _model.Name = _model.Name.Trim();
 
-            // Build RoleAccess in a stable order: page order, then action order.
-            _model.RoleAccess = string.Join(",",
-                _allPages.SelectMany(p => _actions
-                    .Where(a => _selectedTokens.Contains($"{p}.{a}"))
-                    .Select(a => $"{p}.{a}")));
+            // Build RoleAccess in a stable order: page order (SortOrder), then action order.
+            var selectedTokens = _allCatalogKeys.SelectMany(p => _actions
+                .Where(a => _selectedTokens.Contains($"{p}.{a}"))
+                .Select(a => $"{p}.{a}"));
+
+            // Preserve tokens for pages NOT in the current catalog (deactivated or
+            // removed) so existing permissions are never dropped on edit-save.
+            var catalogKeys = new HashSet<string>(_allCatalogKeys, StringComparer.OrdinalIgnoreCase);
+            var preservedTokens = Enumerable.Empty<string>();
+            if (!string.IsNullOrWhiteSpace(_model.RoleAccess))
+            {
+                preservedTokens = DR.RoleAccessPermissions.ParseTokens(_model.RoleAccess)
+                    .Where(t => !catalogKeys.Contains(DR.RoleAccessPermissions.PagePart(t)));
+            }
+
+            _model.RoleAccess = string.Join(",", selectedTokens.Concat(preservedTokens).Distinct(StringComparer.OrdinalIgnoreCase));
 
             _model.UpdatedBy = LoginState.UserId ?? "System";
             _model.UpdatedAt = DateTime.Now;
@@ -467,7 +507,7 @@
 
         // Pass 1: collapse a module to its parent row when every child holds the
         // same actions (mirrors the single parent row shown in the grid).
-        foreach (var page in _allPages)
+        foreach (var page in _allCatalogKeys)
         {
             if (displayed.Contains(page) || !map.ContainsKey(page)) continue;
 
@@ -495,7 +535,7 @@
         }
 
         // Pass 2: any child pages left over (non-uniform module) listed individually.
-        foreach (var page in _allPages)
+        foreach (var page in _allCatalogKeys)
         {
             if (displayed.Contains(page) || !map.ContainsKey(page)) continue;
             var self = Format(page, map[page]);
@@ -661,12 +701,12 @@
                     </thead>
                     <tbody>
                         @{ var pno = 1; }
-                        @foreach (var (page, _, _) in GetDisplayPages())
+                        @foreach (var (page, displayName, _, _) in GetDisplayPages())
                         {
                             <tr>
                                 <td>@pno</td>
                                 <td class="desig-perm-page">
-                                    @DisplayFor(page)
+                                    @displayName
                                 </td>
                                 <td>
                                     <input type="checkbox" checked="@IsRowAll(page)"

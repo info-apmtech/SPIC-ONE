@@ -1,4 +1,4 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @implements IDisposable
 
 @using System.Net.Http.Headers
@@ -75,6 +75,60 @@
                     </i>
                 }
 
+<script>
+    window.spic = window.spic || {};
+
+    // Move the user profile menu into document.body on small viewports so
+    // it is independent from the offcanvas/sidebar stacking context.
+    // When open === true, the element is appended to body and styled as fixed.
+    // When open === false the element is moved back to its original parent.
+    window.spic.reparentUserMenu = function (menuId, open) {
+        try {
+            var menu = document.getElementById(menuId);
+            if (!menu) return;
+
+            if (open && window.innerWidth <= 768) {
+                // store original parent & next sibling for restoration
+                if (!menu.__originalParent) {
+                    menu.__originalParent = menu.parentNode;
+                    menu.__originalNext = menu.nextSibling;
+                }
+
+                document.body.appendChild(menu);
+
+                // Inline styles ensure the menu is anchored to viewport top-right
+                menu.style.position = 'fixed';
+                // place just below the topbar (approx 62px) with small inset
+                menu.style.top = '62px';
+                menu.style.right = '8px';
+                menu.style.left = 'auto';
+                menu.style.bottom = 'auto';
+                menu.style.width = 'min(340px, calc(100vw - 16px))';
+                menu.style.maxHeight = 'calc(100vh - 72px)';
+                menu.style.overflowY = 'auto';
+            }
+            else {
+                // restore original placement
+                if (menu.__originalParent) {
+                    if (menu.__originalNext) menu.__originalParent.insertBefore(menu, menu.__originalNext);
+                    else menu.__originalParent.appendChild(menu);
+                }
+
+                // remove inline styles we set earlier
+                menu.style.position = '';
+                menu.style.top = '';
+                menu.style.right = '';
+                menu.style.left = '';
+                menu.style.bottom = '';
+                menu.style.width = '';
+                menu.style.maxHeight = '';
+                menu.style.overflowY = '';
+            }
+        } catch (e) {
+            // swallow errors
+        }
+    };
+</script>
             </div>
 
 
@@ -118,7 +172,7 @@
                              @onclick="CloseUserMenu">
                         </div>
 
-                        <div class="user-profile-menu">
+                        <div id="userProfileMenu" class="user-profile-menu">
 
                             @* ===== Reference-style green profile header ===== *@
                             <div class="reference-profile-header">
@@ -457,21 +511,6 @@
             }
 
 
-            @* ================= SDWA DASHBOARD (Dealer only) ================= *@
-            @if (LoginState.UserRole == AppRole.Dealer)
-            {
-                <NavLink class="nav-link"
-                         href="/SDWADashboard">
-
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg"
-                         class="SideBariconimg" />
-
-                    SDWA Dashboard
-
-                </NavLink>
-            }
-
-
             @* ================= DEALER APPLICATION REVIEW ================= *@
             @if (LoginState.CanAccess(PagePermission.dealerreviewlist))
             {
@@ -487,7 +526,25 @@
             }
 
 
-            @* ================= IFMS AUTOMATION ================= *@
+            @* ================= IFMS AUTOMATION (phone) ================= *@
+            @* IFMS OTP Relay is a dynamically registered page (ApplicationPage
+               Key must equal this page's URL segment "IfmsRelaySetup", registered
+               by Admin in Page Management). Generic CanAccess string check. *@
+            @if (LoginState.CanAccess("IfmsRelaySetup"))
+            {
+                <NavLink class="nav-link"
+                         href="/IfmsRelaySetup">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg"
+                         class="SideBariconimg" />
+
+                    IFMS OTP Relay
+
+                </NavLink>
+            }
+
+            @* IsAdmin = Admin, CorporateAdmin, Director, AVP: the people who hold the
+               IFMS SIM are senior staff, not necessarily the admin login. *@
             @if (LoginState.IsAdmin)
             {
                 <NavLink class="nav-link"
@@ -509,7 +566,6 @@
                                                     || LoginState.CanAccess(PagePermission.Logistics)
                                                     || LoginState.CanAccess(PagePermission.Financial)
                                                     || LoginState.CanAccess(PagePermission.Relationship)
-                                                    || LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin
                                                 )
             {
 
@@ -618,6 +674,96 @@
                             }
 
 
+                        </ul>
+
+                    }
+
+                </div>
+
+            }
+
+
+            @* ================= SDWA ================= *@
+            @if (
+                                                    LoginState.CanAccess(PagePermission.SDWADashboard)
+                                                    || (LoginState.UserRole != AppRole.Dealer && (LoginState.CanAccess(PagePermission.SchemeApproval) || LoginState.UserRole == AppRole.Director))
+                                                    || LoginState.CanAccess(PagePermission.SubDealerEmployeeMaster)
+                                                    || LoginState.CanAccess(PagePermission.WelfareSchemes)
+                                                    || LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+                                                    || LoginState.CanAccess(PagePermission.FrontOffice)
+                                                    || LoginState.CanAccess(PagePermission.GenerateBill)
+                                                )
+            {
+
+                <div class="settings-menu-wrapper">
+
+                    <a href="javascript:void(0);"
+                       class="nav-link mt-2 @(isSdwaOpen ? "active" : "")"
+                       @onclick="ToggleSdwaMenu">
+
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg"
+                             class="SideBariconimg" />
+
+                        SDWA
+
+                        <i class="bi @(isSdwaOpen
+                                                                                                                                                                             ? "bi-chevron-up"
+                                                                                                                                                                             : "bi-chevron-down") chevron-icon">
+                        </i>
+
+                    </a>
+
+
+                    @if (isSdwaOpen)
+                    {
+
+                        <ul class="submenu-list">
+
+                            @if (LoginState.CanAccess(PagePermission.SDWADashboard))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/SDWADashboard"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        SDWA Dashboard
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.UserRole != AppRole.Dealer && (LoginState.CanAccess(PagePermission.SchemeApproval) || LoginState.UserRole == AppRole.Director))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/SchemeApproval"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Scheme Approval
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.WelfareSchemes))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/WelfareSchemes"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Welfare Schemes
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
                             @if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
                             {
                                 <li class="submenu-item">
@@ -633,7 +779,6 @@
                                 </li>
                             }
 
-
                             @if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
                             {
                                 <li class="submenu-item">
@@ -648,7 +793,6 @@
 
                                 </li>
                             }
-
 
                             @if (LoginState.CanAccess(PagePermission.FrontOffice))
                             {
@@ -679,22 +823,6 @@
 
                                 </li>
                             }
-
-                            @if (LoginState.CanAccess(PagePermission.BillList))
-                            {
-                                <li class="submenu-item">
-
-                                    <NavLink href="/BillList"
-                                             class="submenu-link"
-                                             Match="NavLinkMatch.All">
-
-                                        Bill List
-
-                                    </NavLink>
-
-                                </li>
-                            }
-
 
                         </ul>
 
@@ -1127,89 +1255,180 @@ else
     }
 
 
-    /* ================= RESPONSIVE ================= */
+    /* ================================================================
+       RESPONSIVE – Mobile / Tablet  (≤ 768 px)
+
+       ROOT CAUSE OF OVERLAP:
+       On mobile the .user-profile-menu is position:absolute relative
+       to .user-profile-wrapper (at the far-right of the topbar).
+       With right:-2px and a card that is nearly as wide as the screen,
+       the card extends far to the LEFT, overlapping the SPIC brand,
+       hamburger button, and (when open) the mobile sidebar/offcanvas.
+
+       FIX:
+       On mobile we switch the card to position:FIXED so it breaks out
+       of every stacking context (sidebar, topbar, content-wrap) and
+       anchors itself to the viewport top-right corner.  This guarantees
+       the card is:
+         • Always fully visible inside the viewport.
+         • Never hidden behind / overlapping the sidebar.
+         • Correctly aligned regardless of which topbar is visible.
+         • Responsive from 320 px to any tablet width.
+       The backdrop (.user-menu-backdrop) is already position:fixed/inset:0
+       so it continues to work correctly.
+       The desktop behaviour (position:absolute, right:0) is UNCHANGED.
+       ================================================================ */
     @@media (max-width: 768px) {
 
+        /* Give the avatar toggle comfortable touch size */
         .user-menu-toggle {
-            min-height: 34px;
+            min-height: 36px;
             padding: 2px 4px;
+  /* Allow Bootstrap mobile offcanvas to stay above profile button */
+        z-index: auto;
         }
 
         .topbar-user-text {
             max-width: 120px;
         }
 
-        .topbar-user-name,
+        /*
+         * KEY FIX: Switch the profile card from position:absolute
+         * (relative to .user-profile-wrapper) to position:FIXED
+         * (relative to the viewport).
+         *
+         * Placement: anchored to the top-right corner of the viewport,
+         * just below the topbar area (~60 px from top) with 8 px inset
+         * from the right edge.  The width is clamped so it always fits
+         * within the viewport even on 320 px devices.
+         *
+         * z-index 1102 keeps it above the offcanvas sidebar (1045)
+         * and the backdrop (1099) and the mobile-topbar (100).
+         */
         .user-profile-menu {
-            width: min(330px, calc(100vw - 24px));
-            right: -2px;
-            top: calc(100% + 8px);
+            position: fixed !important;
+            top: 62px !important;              /* just below the header area */
+            right: 8px !important;
+            left: auto !important;
+            bottom: auto !important;
+            width: min(340px, calc(100vw - 16px)) !important;
+            max-width: calc(100vw - 16px) !important;
+            z-index: 1102;
+            /* Prevent the card from overflowing the bottom of the viewport */
+            max-height: calc(100vh - 72px);
+            overflow-y: auto;
         }
 
+        /* Profile card header section – compact on mobile */
         .reference-profile-header,
         .reference-profile-user {
-            min-height: 126px;
+            min-height: 120px;
         }
 
         .reference-profile-user {
-            gap: 16px;
-            padding: 22px;
+            gap: 14px;
+            padding: 18px 16px;
         }
 
         .reference-avatar {
-            width: 66px;
-            height: 66px;
-            font-size: 22px;
+            width: 60px;
+            height: 60px;
+            font-size: 20px;
         }
 
         .reference-edit-button {
-            width: 26px;
-            height: 26px;
+            width: 24px;
+            height: 24px;
         }
 
         .reference-user-name {
-            max-width: 180px;
-            font-size: 19px;
+            max-width: 100%;
+            font-size: 16px;
         }
 
         .reference-user-role {
-            max-width: 180px;
-            font-size: 14px;
+            max-width: 100%;
+            font-size: 13px;
         }
 
         .reference-profile-body {
-            gap: 14px;
-            padding: 22px;
+            gap: 12px;
+            padding: 16px;
         }
 
         .reference-menu-action {
-            height: 52px;
-            gap: 14px;
-            padding: 0 18px;
+            height: 48px;
+            gap: 12px;
+            padding: 0 16px;
         }
 
         .reference-logout {
             height: auto !important;
-            padding: 18px !important;
-            gap: 14px !important;
+            padding: 16px !important;
+            gap: 12px !important;
         }
 
         .reference-logout .reference-action-label {
-            font-size: 15.5px;
+            font-size: 15px;
         }
 
         .reference-logout .reference-action-icon svg {
-            width: 22px;
-            height: 22px;
+            width: 20px;
+            height: 20px;
         }
 
         .reference-action-icon svg {
-            width: 22px;
-            height: 22px;
+            width: 20px;
+            height: 20px;
         }
 
         .reference-action-label {
-            font-size: 15.5px;
+            font-size: 15px;
+        }
+    }
+
+    /* Extra-small phones – 320 px … 390 px */
+    @@media (max-width: 390px) {
+        .user-profile-menu {
+            top: 58px !important;
+            right: 6px !important;
+            width: calc(100vw - 12px) !important;
+            max-width: calc(100vw - 12px) !important;
+        }
+
+        .reference-profile-user {
+            gap: 12px;
+            padding: 14px 12px;
+        }
+
+        .reference-avatar {
+            width: 52px;
+            height: 52px;
+            font-size: 18px;
+        }
+
+        .reference-user-name {
+            font-size: 14px;
+        }
+
+        .reference-user-role {
+            font-size: 12px;
+        }
+
+        .reference-profile-body {
+            gap: 10px;
+            padding: 12px;
+        }
+
+        .reference-menu-action {
+            height: 44px;
+            gap: 10px;
+            padding: 0 12px;
+        }
+
+        .reference-logout {
+            padding: 12px !important;
+            gap: 10px !important;
         }
     }
 </style>
@@ -1224,6 +1443,8 @@ else
     private bool _isReady;
 
     private bool isSettingsOpen = false;
+
+    private bool isSdwaOpen = false;
 
     private bool _showUserMenu = false;
 
@@ -1247,6 +1468,7 @@ else
     protected override void OnInitialized()
     {
         isSettingsOpen = IsSettingsSectionActive();
+        isSdwaOpen = IsSdwaSectionActive();
 
         StartExpiryCheck();
 
@@ -1320,19 +1542,45 @@ else
 
     private void ToggleSettingsMenu()
     {
-        isSettingsOpen = !isSettingsOpen;
+        if (!isSettingsOpen) { isSettingsOpen = true; isSdwaOpen = false; }
+        else isSettingsOpen = false;
     }
 
 
-    private void ToggleUserMenu()
+    private void ToggleSdwaMenu()
+    {
+        if (!isSdwaOpen) { isSdwaOpen = true; isSettingsOpen = false; }
+        else isSdwaOpen = false;
+    }
+
+
+    private async Task ToggleUserMenu()
     {
         _showUserMenu = !_showUserMenu;
+
+        try
+        {
+            await JS.InvokeVoidAsync("spic.reparentUserMenu", "userProfileMenu", _showUserMenu);
+        }
+        catch
+        {
+            // ignore JS errors - fallback to CSS-only behavior
+        }
     }
 
 
-    private void CloseUserMenu()
+    private async Task CloseUserMenu()
     {
         _showUserMenu = false;
+
+        try
+        {
+            await JS.InvokeVoidAsync("spic.reparentUserMenu", "userProfileMenu", false);
+        }
+        catch
+        {
+            // ignore JS errors
+        }
     }
 
 
@@ -1361,9 +1609,24 @@ else
             || uri == "agriculture"
             || uri == "logistics"
             || uri == "financial"
-            || uri == "relationship"
+            || uri == "relationship";
+    }
+
+
+    private bool IsSdwaSectionActive()
+    {
+        var uri =
+            Navigation
+                .ToBaseRelativePath(Navigation.Uri)
+                .ToLower();
+
+        return uri == "sdwadashboard"
+            || uri == "schemeapproval"
+            || uri == "welfareschemes"
             || uri == "subdealeremployeemaster"
-            || uri == "guesthousemaster";
+            || uri == "guesthousemaster"
+            || uri == "frontoffice"
+            || uri == "generatebill";
     }
 
 

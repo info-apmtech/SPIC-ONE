@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Spic.Infrastructure.Data;
+using SpicAPI.Services;
 using SPIC.Core.Entities;
 using System.Data;
 using System.IO;
@@ -108,6 +109,129 @@ namespace SpicAPI.Controllers
 			}
 
 			return NotFound("Image not found.");
+		}
+
+		// POST /api/GuestHouseBooking/documents/upload-temp
+		// Stage 1 of the ID Proof upload flow: the customer selects a file on the Guest
+		// Details page, BEFORE a booking exists. The file is validated and stored under a
+		// temporary holding folder (same Uploads root used by every other upload in the
+		// app - no new storage architecture); a TempToken is returned so it can be linked
+		// to the real booking once CreateBooking succeeds. No database row is created yet
+		// (GuestHouseBookingDocument.GuestHouseBookingId is a required FK - there is no
+		// booking to point at until the booking is actually created).
+		[Authorize]
+		[HttpPost("documents/upload-temp")]
+		[RequestSizeLimit(6 * 1024 * 1024)]
+		public async Task<IActionResult> UploadTempDocument(IFormFile? file)
+		{
+			if (file == null || file.Length == 0)
+				return BadRequest(new { Success = false, Message = "No file uploaded." });
+
+			var validationError = ValidateIdProofFile(file);
+			if (validationError != null)
+				return BadRequest(new { Success = false, Message = validationError });
+
+			try
+			{
+				var tempRoot = Path.Combine(GetUploadsRoot(), "GuestHouseBookingDocuments", "_temp");
+				Directory.CreateDirectory(tempRoot);
+				CleanupOldTempFiles(tempRoot);
+
+				var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+				var token = Guid.NewGuid().ToString("N");
+				var physicalPath = Path.Combine(tempRoot, token + ext);
+
+				await using (var stream = new FileStream(physicalPath, FileMode.Create))
+				{
+					await file.CopyToAsync(stream);
+				}
+
+				return Ok(new
+				{
+					Success = true,
+					TempToken = token,
+					FileName = Path.GetFileName(file.FileName),
+					ContentType = ResolveContentType(ext),
+					FileSize = file.Length
+				});
+			}
+			catch (Exception)
+			{
+				return StatusCode(500, new { Success = false, Message = "The file could not be uploaded. Please try again." });
+			}
+		}
+
+		// DELETE /api/GuestHouseBooking/documents/upload-temp/{token}
+		// Lets the customer remove a not-yet-submitted ID Proof from the Guest Details page
+		// before continuing. Safe no-op if the token does not resolve to a temp file.
+		[Authorize]
+		[HttpDelete("documents/upload-temp/{token}")]
+		public IActionResult RemoveTempDocument(string token)
+		{
+			if (!IsValidToken(token))
+				return BadRequest(new { Success = false, Message = "Invalid document reference." });
+
+			var tempRoot = Path.Combine(GetUploadsRoot(), "GuestHouseBookingDocuments", "_temp");
+			if (Directory.Exists(tempRoot))
+			{
+				foreach (var f in Directory.GetFiles(tempRoot, token + ".*"))
+				{
+					try { System.IO.File.Delete(f); } catch (Exception) { /* best effort */ }
+				}
+			}
+
+			return Ok(new { Success = true });
+		}
+
+		// GET /api/GuestHouseBooking/documents/{documentId}/view
+		// Opens the document inline (PDF viewer / image) - no Content-Disposition header.
+		[Authorize]
+		[HttpGet("documents/{documentId:int}/view")]
+		public async Task<IActionResult> ViewDocument(int documentId) => await ServeDocumentAsync(documentId, download: false);
+
+		// GET /api/GuestHouseBooking/documents/{documentId}/download
+		// Forces a download of the actual stored file (never Base64-in-JSON).
+		[Authorize]
+		[HttpGet("documents/{documentId:int}/download")]
+		public async Task<IActionResult> DownloadDocument(int documentId) => await ServeDocumentAsync(documentId, download: true);
+
+		// Shared authorization + file-serving for both View and Download.
+		// Authorization: the booking's owner (CreatedBy) OR Admin/CorporateAdmin (Front Office).
+		// A mismatch returns 404 (not 403) so a guessed BookingId/DocumentId cannot even
+		// reveal that the document exists - the same anti-enumeration pattern already used
+		// by GetBookingDetails/DownloadInvoice.
+		private async Task<IActionResult> ServeDocumentAsync(int documentId, bool download)
+		{
+			var userName = User.Identity?.Name;
+			if (string.IsNullOrWhiteSpace(userName))
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
+			var doc = await _db.Set<GuestHouseBookingDocument>()
+				.AsNoTracking()
+				.Include(d => d.GuestHouseBooking)
+				.FirstOrDefaultAsync(d => d.Id == documentId);
+
+			if (doc?.GuestHouseBooking == null || string.IsNullOrWhiteSpace(doc.FilePath))
+				return NotFound(new { Success = false, Message = "Document not found." });
+
+			var isOwner = string.Equals(doc.GuestHouseBooking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase);
+			var isFrontOffice = User.IsInRole("Admin") || User.IsInRole("CorporateAdmin");
+			if (!isOwner && !isFrontOffice)
+				return NotFound(new { Success = false, Message = "Document not found." });
+
+			var root = GetUploadsRoot();
+			var normalized = doc.FilePath.TrimStart('\\', '/').Replace('/', Path.DirectorySeparatorChar);
+			var fullPath = Path.GetFullPath(Path.Combine(root, normalized));
+			var rootWithSep = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+			if (!fullPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) || !System.IO.File.Exists(fullPath))
+				return NotFound(new { Success = false, Message = "Document not found." });
+
+			var contentType = string.IsNullOrWhiteSpace(doc.ContentType) ? "application/octet-stream" : doc.ContentType;
+
+			return download
+				? PhysicalFile(fullPath, contentType, string.IsNullOrWhiteSpace(doc.FileName) ? "document" : doc.FileName)
+				: PhysicalFile(fullPath, contentType);
 		}
 
 		// GET /api/GuestHouseBooking/availability?guestHouseId=1&checkIn=2026-09-10T14:00&checkOut=2026-09-12T12:00
@@ -420,6 +544,15 @@ namespace SpicAPI.Controllers
                 });
             }
 
+            // Best-effort, additive: the booking itself is already fully committed above.
+            // Linking the previously-uploaded ID Proof (if any) happens AFTER commit so a
+            // problem here can never roll back or corrupt the booking that was just created.
+            string? documentWarning = null;
+            if (!string.IsNullOrWhiteSpace(request.IdProofTempToken))
+            {
+                documentWarning = await LinkIdProofDocumentAsync(booking.Id, request.IdProofTempToken, request.IdProofFileName, userId);
+            }
+
             return Ok(new BookingResultDto
             {
                 Success = true,
@@ -438,7 +571,8 @@ namespace SpicAPI.Controllers
                 TotalAmount = total,
                 PaymentMethod = paymentMethod,
                 PaymentStatus = paymentStatus,
-                BookingStatus = bookingStatus
+                BookingStatus = bookingStatus,
+                DocumentWarning = documentWarning
             });
         }
 
@@ -544,6 +678,7 @@ namespace SpicAPI.Controllers
 				.Include(b => b.GuestHouseRoom)
 				.Include(b => b.Guests)
 				.Include(b => b.Payments)
+				.Include(b => b.Documents)
 				.FirstOrDefaultAsync(b => b.Id == id);
 
 			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
@@ -562,6 +697,7 @@ namespace SpicAPI.Controllers
 			var numberOfNights = booking.NumberOfNights ?? 1;
 			var roomCost = booking.RoomPrice * numberOfRooms * numberOfNights;
 			var extraBedCharges = (booking.ExtraCotPrice ?? 0m) * (booking.ExtraCotQuantity ?? 0) * numberOfNights;
+			var hasInvoice = await _db.GuestHouseBills.AnyAsync(b => b.GuestHouseBookingId == id);
 
 			return Ok(new BookingDetailsDto
 			{
@@ -571,6 +707,7 @@ namespace SpicAPI.Controllers
 				RoomImagePath = cover,
 				RoomType = booking.GuestHouseRoom?.RoomType ?? "Room",
 				RoomNumber = booking.GuestHouseRoom?.RoomNumber,
+				HasInvoice = hasInvoice,
 				CheckInDate = booking.CheckInDate,
 				CheckInTime = booking.CheckInTime,
 				CheckOutDate = booking.CheckOutDate,
@@ -601,8 +738,73 @@ namespace SpicAPI.Controllers
 				Email = guest?.Email,
 				AadhaarOrPassportNumber = guest?.AadhaarOrPassportNumber,
 				Nationality = guest?.Nationality,
-				Address = guest?.Address
+				Address = guest?.Address,
+				Documents = booking.Documents
+					.Select(d => new BookingDocumentDto
+					{
+						DocumentId = d.Id,
+						DocumentType = d.DocumentType,
+						FileName = d.FileName,
+						ContentType = d.ContentType,
+						FileSize = d.FileSize,
+						UploadedAt = d.UploadedAt
+					})
+					.ToList()
 			});
+		}
+
+		// GET /api/GuestHouseBooking/bookings/{id}/invoice
+		// Customer-side Download Invoice. Reuses the SAME generated GuestHouseBill data and the
+		// SAME Tax Invoice PDF builder (GuestHouseInvoicePdfBuilder) as the Front Office / Admin
+		// download, so the customer's invoice is byte-identical to the admin invoice. It is a thin
+		// authorization wrapper ONLY: it does NOT create a bill, does NOT recalculate GST/billing,
+		// and does NOT change the existing Generate Bill flow.
+		//
+		// Server-side authorization chain:
+		//   authenticated customer -> owns/has access to booking -> payment is Paid ->
+		//   existing bill belongs to booking -> allow PDF download
+		[Authorize]
+		[HttpGet("bookings/{id:int}/invoice")]
+		public async Task<IActionResult> DownloadInvoice(int id)
+		{
+			var userName = User.Identity?.Name;
+			if (string.IsNullOrWhiteSpace(userName))
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
+			var booking = await _db.GuestHouseBookings
+				.AsNoTracking()
+				.FirstOrDefaultAsync(b => b.Id == id);
+
+			// Ownership: only the user who created the booking may download its invoice. We
+			// return NotFound (same as GetBookingDetails) so a bookingId belonging to another
+			// customer never reveals that the booking/invoice exists.
+			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+				return NotFound(new { Success = false, Message = "Booking not found." });
+
+			// Payment: a final Tax Invoice is only downloadable once the payment is actually
+			// completed (existing backend PaymentStatus).
+			if (booking.PaymentStatus != GuestHousePaymentStatus.Paid)
+				return BadRequest(new { Success = false, Message = "The invoice is available only after payment has been completed." });
+
+			// Bill: reuse the existing generated bill for this booking. We never create one here.
+			var bill = await _db.GuestHouseBills
+				.AsNoTracking()
+				.Include(b => b.LineItems)
+				.FirstOrDefaultAsync(b => b.GuestHouseBookingId == id);
+			if (bill == null)
+				return NotFound(new { Success = false, Message = "No invoice has been generated for this booking yet." });
+
+			try
+			{
+				var (companyName, gstNumber) = await GuestHouseBillPdfHelper.ResolveGuestCompanyAndGstAsync(_db, bill.GuestHouseBookingId);
+				var bytes = GuestHouseInvoicePdfBuilder.Build(GuestHouseBillPdfHelper.ToBillViewDto(bill, companyName, gstNumber));
+				var fileName = $"{bill.BillNumber ?? $"BILL-{bill.Id:000000}"}.pdf";
+				return File(bytes, "application/pdf", fileName);
+			}
+			catch (Exception)
+			{
+				return StatusCode(500, new { Success = false, Message = "Failed to generate the invoice PDF. Please try again." });
+			}
 		}
 
 		private static string BookingStatusName(GuestHouseBookingStatus status)
@@ -742,6 +944,108 @@ namespace SpicAPI.Controllers
 				webRoot = Path.Combine(_env.ContentRootPath, "wwwroot");
 			return webRoot;
 		}
+
+		// ---- ID Proof document helpers ----
+
+		private static readonly string[] AllowedIdProofExtensions = { ".pdf", ".jpg", ".jpeg", ".png" };
+
+		// Same ad hoc extension + size validation style already used by UploadHouseImage -
+		// there is no centralized file-validation service in the project to reuse.
+		private static string? ValidateIdProofFile(IFormFile file)
+		{
+			var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+			if (!AllowedIdProofExtensions.Contains(ext))
+				return "Only PDF, JPG, or PNG files are allowed.";
+
+			if (file.Length > 5 * 1024 * 1024)
+				return "File must be 5 MB or less.";
+
+			return null;
+		}
+
+		private static string ResolveContentType(string ext) => ext switch
+		{
+			".pdf" => "application/pdf",
+			".jpg" or ".jpeg" => "image/jpeg",
+			".png" => "image/png",
+			_ => "application/octet-stream"
+		};
+
+		private static bool IsValidToken(string? token) =>
+			!string.IsNullOrWhiteSpace(token) &&
+			System.Text.RegularExpressions.Regex.IsMatch(token, "^[0-9a-fA-F]{32}$");
+
+		// Opportunistic cleanup of abandoned temp uploads (customer selected a file but never
+		// completed the booking). Runs best-effort on every new temp upload; never throws.
+		private static void CleanupOldTempFiles(string tempRoot)
+		{
+			try
+			{
+				var cutoff = DateTime.UtcNow.AddHours(-24);
+				foreach (var f in Directory.GetFiles(tempRoot))
+				{
+					if (System.IO.File.GetCreationTimeUtc(f) < cutoff)
+					{
+						try { System.IO.File.Delete(f); } catch (Exception) { /* best effort */ }
+					}
+				}
+			}
+			catch (Exception) { /* best effort */ }
+		}
+
+		// Stage 2 of the ID Proof upload flow: moves the temp file into its final
+		// per-booking folder and creates the GuestHouseBookingDocument row, now that the
+		// booking has a real Id. Reuses the SAME entity the model already defines
+		// (SPIC.Core.Entities.GuestHouseBookingDocument / table "GuestHouseBookingDocument"),
+		// accessed via _db.Set&lt;T&gt;() since it is already part of the EF model through the
+		// GuestHouseBooking.Documents navigation - no schema change, no DbSet needed.
+		// Returns a user-facing warning string on failure, or null on success.
+		private async Task<string?> LinkIdProofDocumentAsync(int bookingId, string tempToken, string? originalFileName, string? userId)
+		{
+			try
+			{
+				if (!IsValidToken(tempToken))
+					return "The uploaded ID proof reference was invalid, so it was not attached to this booking.";
+
+				var tempRoot = Path.Combine(GetUploadsRoot(), "GuestHouseBookingDocuments", "_temp");
+				var tempFile = Directory.Exists(tempRoot)
+					? Directory.GetFiles(tempRoot, tempToken + ".*").FirstOrDefault()
+					: null;
+
+				if (tempFile == null)
+					return "The uploaded ID proof could not be found, so it was not attached to this booking. You can add it later from My Bookings.";
+
+				var ext = Path.GetExtension(tempFile);
+				var finalFolder = Path.Combine(GetUploadsRoot(), "GuestHouseBookingDocuments", bookingId.ToString());
+				Directory.CreateDirectory(finalFolder);
+
+				var storedName = $"idproof_{DateTime.UtcNow:yyyyMMddHHmmssfff}{ext}";
+				var finalPath = Path.Combine(finalFolder, storedName);
+				System.IO.File.Move(tempFile, finalPath);
+
+				var relativePath = $"GuestHouseBookingDocuments/{bookingId}/{storedName}";
+
+				_db.Set<GuestHouseBookingDocument>().Add(new GuestHouseBookingDocument
+				{
+					GuestHouseBookingId = bookingId,
+					DocumentType = "IDProof",
+					FileName = string.IsNullOrWhiteSpace(originalFileName) ? storedName : originalFileName,
+					FilePath = relativePath,
+					ContentType = ResolveContentType(ext),
+					FileSize = new FileInfo(finalPath).Length,
+					IsVerified = false,
+					UploadedBy = userId,
+					UploadedAt = DateTime.Now
+				});
+				await _db.SaveChangesAsync();
+
+				return null;
+			}
+			catch (Exception)
+			{
+				return "The booking was created, but the ID proof document could not be attached. You can upload it again from My Bookings.";
+			}
+		}
 	}
 
 	public class GuestHouseCardDto
@@ -813,6 +1117,12 @@ namespace SpicAPI.Controllers
 		public string? Nationality { get; set; }
 		public string? Address { get; set; }
 		public GuestHousePaymentMethod PaymentMethod { get; set; }
+
+		// Optional ID Proof, uploaded to documents/upload-temp on the Guest Details page
+		// before the booking existed. When present, it is linked to the booking right
+		// after it is created.
+		public string? IdProofTempToken { get; set; }
+		public string? IdProofFileName { get; set; }
 	}
 
 	public class BookingResultDto
@@ -834,6 +1144,20 @@ namespace SpicAPI.Controllers
 		public GuestHousePaymentMethod PaymentMethod { get; set; }
 		public GuestHousePaymentStatus PaymentStatus { get; set; }
 		public GuestHouseBookingStatus BookingStatus { get; set; }
+
+		// Non-null only when an ID Proof was supplied but could not be attached; the
+		// booking itself is always created successfully regardless of this value.
+		public string? DocumentWarning { get; set; }
+	}
+
+	public class BookingDocumentDto
+	{
+		public int DocumentId { get; set; }
+		public string? DocumentType { get; set; }
+		public string? FileName { get; set; }
+		public string? ContentType { get; set; }
+		public long? FileSize { get; set; }
+		public DateTime UploadedAt { get; set; }
 	}
 
 	public class MyBookingsResponse
@@ -900,6 +1224,10 @@ namespace SpicAPI.Controllers
 		public decimal? TaxAmount { get; set; }
 		public decimal? TotalAmount { get; set; }
 
+		// True when a Tax Invoice (GuestHouseBill) has already been generated for this
+		// booking, i.e. the customer may download it from Booking Details.
+		public bool HasInvoice { get; set; }
+
 		public string BookingStatus { get; set; } = "";
 		public string PaymentStatus { get; set; } = "";
 		public string PaymentMethod { get; set; } = "";
@@ -915,5 +1243,7 @@ namespace SpicAPI.Controllers
 		public string? AadhaarOrPassportNumber { get; set; }
 		public string? Nationality { get; set; }
 		public string? Address { get; set; }
+
+		public List<BookingDocumentDto> Documents { get; set; } = new List<BookingDocumentDto>();
 	}
 }

@@ -43,10 +43,25 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public int? NumberOfChildren { get; set; }
         public string? Address { get; set; }
 
+        // Optional ID Proof, uploaded to a temp holding area on the Guest Details page
+        // before the booking exists. Carried through Preview -> Payment, where it is sent
+        // with the booking-creation request to be linked to the newly created booking.
+        public string? IdProofTempToken { get; set; }
+        public string? IdProofFileName { get; set; }
+        public string? IdProofContentType { get; set; }
+        public long? IdProofFileSize { get; set; }
+
         public bool IsInitialized => _initialized;
 
         public void MarkInitialized() => _initialized = true;
 
-        public void Clear() => _initialized = false;
+        public void Clear()
+        {
+            _initialized = false;
+            IdProofTempToken = null;
+            IdProofFileName = null;
+            IdProofContentType = null;
+            IdProofFileSize = null;
+        }
     }
 }

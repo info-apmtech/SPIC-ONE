@@ -2,9 +2,11 @@
 
 @inject HttpClient Http
 @inject NavigationManager Navigation
+@inject LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.GuestHouseBookingState BookingState
 
 @using System.Globalization
+@using System.IO
 @using Microsoft.AspNetCore.Components
 
 <style>
@@ -227,6 +229,21 @@
         .btn-primary-continue:hover {
             background-color: var(--primary-blue-hover);
         }
+
+    /* ── Mobile additions ── */
+    @@media (max-width: 640px) {
+        .form-card, .summary-card { padding: 1.25rem; }
+        .summary-row { flex-wrap: wrap; gap: 6px; }
+        .summary-row .val { text-align: left; }
+        .summary-total { flex-wrap: wrap; gap: 6px; }
+    }
+    @@media (max-width: 480px) {
+        .btn-action-row { flex-wrap: wrap; }
+        .btn-action-row .btn-outline-back,
+        .btn-action-row .btn-primary-continue { width: 100%; flex: 1 1 100%; }
+        .page-title { font-size: 1.25rem; }
+        .summary-total .val { font-size: 1.15rem; }
+    }
 </style>
 
 <div class="container-fluid py-4 px-0">
@@ -310,18 +327,41 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Address</label>
-                        <textarea class="form-control-custom" placeholder="Enter Address" @bind="_form.Address"></textarea>
-                    </div>
-                    <div class="col-md-6">
                         <label class="form-label">Upload ID Proof (Optional)</label>
-                        <div class="upload-box">
-                            <div class="upload-icon-circle">
-                                <i class="bi bi-upload"></i>
+                        @if (string.IsNullOrEmpty(_idProofFileName))
+                        {
+                            <label class="upload-box" for="idProofInput" style="cursor:pointer;">
+                                <div class="upload-icon-circle">
+                                    @if (_idProofUploading)
+                                    {
+                                        <span class="spinner-border spinner-border-sm text-white" role="status"></span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-upload"></i>
+                                    }
+                                </div>
+                                <p class="upload-title">@(_idProofUploading ? "Uploading..." : "Drag & drop files here or click to browse")</p>
+                                <p class="upload-subtitle">Accepted: PDF, JPG, PNG - Max 5MB per file</p>
+                            </label>
+                            <InputFile id="idProofInput" hidden OnChange="OnIdProofSelected" accept=".pdf,.jpg,.jpeg,.png" disabled="@_idProofUploading" />
+                        }
+                        else
+                        {
+                            <div class="upload-box" style="cursor:default; flex-direction:row; justify-content:space-between; padding:0 16px;">
+                                <div class="d-flex align-items-center gap-2" style="min-width:0;">
+                                    <div class="upload-icon-circle" style="margin-bottom:0; flex-shrink:0;"><i class="bi bi-file-earmark-check"></i></div>
+                                    <span class="upload-title text-truncate" style="margin:0;" title="@_idProofFileName">@_idProofFileName</span>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-link text-danger" style="text-decoration:none;" @onclick="RemoveIdProofAsync" disabled="@_idProofUploading">
+                                    <i class="bi bi-x-circle"></i> Remove
+                                </button>
                             </div>
-                            <p class="upload-title">Drag & drop files here or click to browse</p>
-                            <p class="upload-subtitle">Accepted: PDF, JPG, PNG - Max 5MB per file</p>
-                        </div>
+                        }
+                        @if (!string.IsNullOrEmpty(_idProofError))
+                        {
+                            <p class="upload-subtitle" style="color:#dc2626; margin-top:6px;">@_idProofError</p>
+                        }
                     </div>
 
                 </div>
@@ -454,8 +494,26 @@
     private decimal _total;
     private int _taxRatePercent => (int)TaxRate;
 
+    // ID Proof upload (Optional) - staged to a temp holding area until the booking is
+    // actually created (see GuestHouseBookingState / Payment.razor).
+    private string? _idProofTempToken;
+    private string? _idProofFileName;
+    private string? _idProofContentType;
+    private long? _idProofFileSize;
+    private bool _idProofUploading;
+    private string? _idProofError;
+
     protected override async Task OnInitializedAsync()
     {
+        // Resume an already-staged ID Proof if the customer navigated back to this page.
+        if (!string.IsNullOrEmpty(BookingState.IdProofTempToken))
+        {
+            _idProofTempToken = BookingState.IdProofTempToken;
+            _idProofFileName = BookingState.IdProofFileName;
+            _idProofContentType = BookingState.IdProofContentType;
+            _idProofFileSize = BookingState.IdProofFileSize;
+        }
+
         if (!RoomTypeId.HasValue || string.IsNullOrWhiteSpace(CheckIn) || string.IsNullOrWhiteSpace(CheckOut))
         {
             Navigation.NavigateTo("/GuestHouse");
@@ -479,6 +537,44 @@
         _extraBeds = Math.Max(0, ExtraBeds ?? 0);
 
         await LoadRoomAsync();
+
+        // Dealer-only: automatically bind the dealer's Phone Number and Email from
+        // the same Dealer/proprietor data source used by the Proprietor page.
+        // Non-Dealer roles keep the existing manual entry behavior untouched.
+        if (LoginState.UserRole == SPIC.Core.Entities.AppRole.Dealer)
+        {
+            await LoadDealerContactAsync();
+        }
+    }
+
+    // Resolves the logged-in Dealer's registration (via UserTableId) and reuses
+    // the same DealerOwnershipInfo lookup the Proprietor page uses to obtain
+    // the dealer's Phone Number and Email ID. Fails gracefully: on any error the
+    // fields stay empty and the existing form validation handles missing data.
+    private async Task LoadDealerContactAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LoginState.UserId)) return;
+
+        try
+        {
+            var dealer = await Http.GetFromJsonAsync<DealerLookupDto>(
+                $"api/DealerRegistration/by-user/{Uri.EscapeDataString(LoginState.UserId)}");
+            if (dealer == null || dealer.Id <= 0) return;
+
+            var owners = await Http.GetFromJsonAsync<List<DealerOwnershipInfoDto>>(
+                $"api/DealerOwnershipInfo/byDealer/{dealer.Id}");
+            if (owners == null || owners.Count == 0) return;
+
+            var owner = owners.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o.PhoneNumber)) ?? owners[0];
+            if (!string.IsNullOrWhiteSpace(owner.PhoneNumber))
+                _form.PhoneNumber = owner.PhoneNumber;
+            if (!string.IsNullOrWhiteSpace(owner.Email))
+                _form.Email = owner.Email;
+        }
+        catch (Exception)
+        {
+            // Graceful: never break the Guest Details page or populate wrong data.
+        }
     }
 
     private async Task LoadRoomAsync()
@@ -520,6 +616,117 @@
     private static string _money(decimal value)
     {
         return "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+    }
+
+    // ---------------------------- ID PROOF UPLOAD ----------------------------
+    // Same client-side pattern already used for Guest House image upload
+    // (GuestHouseMaster.razor): InputFile -> size check -> MultipartFormDataContent POST.
+    private async Task OnIdProofSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        _idProofError = null;
+
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        var allowedExts = new[] { ".pdf", ".jpg", ".jpeg", ".png" };
+        if (!allowedExts.Contains(ext))
+        {
+            _idProofError = "Only PDF, JPG, or PNG files are allowed.";
+            return;
+        }
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _idProofError = "File must be 5 MB or less.";
+            return;
+        }
+
+        _idProofUploading = true;
+        StateHasChanged();
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            await using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var streamContent = new StreamContent(stream);
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+            content.Add(streamContent, "file", file.Name);
+
+            var response = await Http.PostAsync("api/GuestHouseBooking/documents/upload-temp", content);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _idProofError = ParseErrorMessage(body) ?? "The file could not be uploaded. Please try again.";
+                return;
+            }
+
+            var result = System.Text.Json.JsonSerializer.Deserialize<TempUploadResult>(body,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (result == null || string.IsNullOrEmpty(result.TempToken))
+            {
+                _idProofError = "The file could not be uploaded. Please try again.";
+                return;
+            }
+
+            _idProofTempToken = result.TempToken;
+            _idProofFileName = result.FileName;
+            _idProofContentType = result.ContentType;
+            _idProofFileSize = result.FileSize;
+
+            BookingState.IdProofTempToken = _idProofTempToken;
+            BookingState.IdProofFileName = _idProofFileName;
+            BookingState.IdProofContentType = _idProofContentType;
+            BookingState.IdProofFileSize = _idProofFileSize;
+        }
+        catch (Exception)
+        {
+            _idProofError = "The file could not be uploaded. Please try again.";
+        }
+        finally
+        {
+            _idProofUploading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveIdProofAsync()
+    {
+        if (_idProofUploading) return;
+
+        var token = _idProofTempToken;
+
+        _idProofTempToken = null;
+        _idProofFileName = null;
+        _idProofContentType = null;
+        _idProofFileSize = null;
+        _idProofError = null;
+        BookingState.IdProofTempToken = null;
+        BookingState.IdProofFileName = null;
+        BookingState.IdProofContentType = null;
+        BookingState.IdProofFileSize = null;
+        StateHasChanged();
+
+        if (!string.IsNullOrEmpty(token))
+        {
+            try { await Http.DeleteAsync($"api/GuestHouseBooking/documents/upload-temp/{token}"); }
+            catch (Exception) { /* best effort - the temp file cleans itself up after 24h regardless */ }
+        }
+    }
+
+    private static string? ParseErrorMessage(string body)
+    {
+        try
+        {
+            var parsed = System.Text.Json.JsonSerializer.Deserialize<ErrorResponse>(body,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return parsed?.Message;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void GoBack()
@@ -595,7 +802,6 @@
         BookingState.NumberOfPersons = int.TryParse(_form.NumberOfPersons, out var persons) ? persons : null;
         BookingState.NumberOfAdults = int.TryParse(_form.NumberOfAdults, out var adults) ? adults : null;
         BookingState.NumberOfChildren = int.TryParse(_form.NumberOfChildren, out var children) ? children : null;
-        BookingState.Address = _form.Address?.Trim();
 
         BookingState.MarkInitialized();
 
@@ -629,6 +835,33 @@
         public string? NumberOfPersons { get; set; }
         public string? NumberOfAdults { get; set; }
         public string? NumberOfChildren { get; set; }
-        public string? Address { get; set; }
+    }
+
+    public class DealerLookupDto
+    {
+        public int Id { get; set; }
+        public string? DealerCode { get; set; }
+    }
+
+    public class DealerOwnershipInfoDto
+    {
+        public int Id { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+    }
+
+    public class TempUploadResult
+    {
+        public bool Success { get; set; }
+        public string? TempToken { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? FileSize { get; set; }
+    }
+
+    public class ErrorResponse
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
     }
 }
