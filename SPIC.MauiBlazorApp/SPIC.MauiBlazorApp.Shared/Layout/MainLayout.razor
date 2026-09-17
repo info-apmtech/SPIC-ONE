@@ -337,7 +337,7 @@
 
 
             @* ================= DASHBOARD ================= *@
-            @if (LoginState.CanAccess(PagePermission.Dashboard))
+            @if (LoginState.UserRole != AppRole.Dealer && LoginState.CanAccess(PagePermission.Dashboard))
             {
                 <NavLink class="nav-link"
                          href="/Dashboard"
@@ -352,8 +352,24 @@
             }
 
 
-            @* ================= PURCHASES ================= *@
-            @if (LoginState.CanAccess(PagePermission.Purchases))
+            @* ================= SUB DEALER MASTER ================= *@
+            @if (LoginState.CanAccess(PagePermission.SubDealerList))
+            {
+                <NavLink class="nav-link"
+                         href="/SubDealerList"
+                         Match="NavLinkMatch.All">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg"
+                         class="SideBariconimg" />
+
+                    Sub Dealer Master
+
+                </NavLink>
+            }
+
+
+            @* ================= PURCHASES (removed - no page) ================= *@
+            @* @if (LoginState.CanAccess(PagePermission.Purchases))
             {
                 <NavLink class="nav-link"
                          href="/Purchases">
@@ -364,11 +380,11 @@
                     Purchases
 
                 </NavLink>
-            }
+            } *@
 
 
-            @* ================= REWARDS ================= *@
-            @if (LoginState.CanAccess(PagePermission.Rewards))
+            @* ================= REWARDS (removed - no page) ================= *@
+            @* @if (LoginState.CanAccess(PagePermission.Rewards))
             {
                 <NavLink class="nav-link"
                          href="/Rewards">
@@ -379,11 +395,11 @@
                     Rewards
 
                 </NavLink>
-            }
+            } *@
 
 
-            @* ================= CROP ADVICE ================= *@
-            @if (LoginState.CanAccess(PagePermission.CropAdvice))
+            @* ================= CROP ADVICE (removed - no page) ================= *@
+            @* @if (LoginState.CanAccess(PagePermission.CropAdvice))
             {
                 <NavLink class="nav-link"
                          href="/CropAdvice">
@@ -394,11 +410,11 @@
                     Crop Advice
 
                 </NavLink>
-            }
+            } *@
 
 
-            @* ================= YIELD PREDICTION ================= *@
-            @if (LoginState.CanAccess(PagePermission.YieldPrediction))
+            @* ================= YIELD PREDICTION (removed - no page) ================= *@
+            @* @if (LoginState.CanAccess(PagePermission.YieldPrediction))
             {
                 <NavLink class="nav-link"
                          href="/YieldPrediction">
@@ -409,11 +425,11 @@
                     Yield Prediction
 
                 </NavLink>
-            }
+            } *@
 
 
-            @* ================= DISEASE DETECTION ================= *@
-            @if (LoginState.CanAccess(PagePermission.DiseaseDetection))
+            @* ================= DISEASE DETECTION (removed - no page) ================= *@
+            @* @if (LoginState.CanAccess(PagePermission.DiseaseDetection))
             {
                 <NavLink class="nav-link"
                          href="/DiseaseDetection">
@@ -424,11 +440,11 @@
                     Disease Detection
 
                 </NavLink>
-            }
+            } *@
 
 
-            @* ================= COMMUNITY ================= *@
-            @if (LoginState.CanAccess(PagePermission.Community))
+            @* ================= COMMUNITY (removed - no page) ================= *@
+            @* @if (LoginState.CanAccess(PagePermission.Community))
             {
                 <NavLink class="nav-link"
                          href="/Community">
@@ -439,11 +455,11 @@
                     Community
 
                 </NavLink>
-            }
+            } *@
 
 
-            @* ================= NOTIFICATIONS ================= *@
-            @if (LoginState.CanAccess(PagePermission.Notifications))
+            @* ================= NOTIFICATIONS (removed - no page) ================= *@
+            @* @if (LoginState.CanAccess(PagePermission.Notifications))
             {
                 <NavLink class="nav-link"
                          href="/Notifications">
@@ -454,7 +470,7 @@
                     Notifications
 
                 </NavLink>
-            }
+            } *@
 
 
             @* ================= PROFILE ================= *@
@@ -491,12 +507,27 @@
             @if (LoginState.CanAccess(PagePermission.dealerreviewlist))
             {
                 <NavLink class="nav-link"
-                         href="/DealerApplicationReview">
+                         href="/DealerReviewList">
 
                     <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
                          class="SideBariconimg" />
 
                     Dealer Application Review
+
+                </NavLink>
+            }
+
+
+            @* ================= FINANCIAL YEAR SALES DATA ================= *@
+            @if (LoginState.CanAccess(PagePermission.CreditLimitSales))
+            {
+                <NavLink class="nav-link"
+                         href="/CreditLimitSales">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
+                         class="SideBariconimg" />
+
+                    Financial Year Sales Data
 
                 </NavLink>
             }
@@ -534,15 +565,232 @@
                 </NavLink>
             }
 
+            @if (LoginState.UserRole == AppRole.Admin)
+            {
+                <NavLink class="nav-link"
+                         href="/IfmsLogins">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg"
+                         class="SideBariconimg" />
+
+                    IFMS Logins
+
+                </NavLink>
+            }
+
+
+            @* ================= SUBSIDY MANAGEMENT SYSTEM ================= *@
+            @if (AnySubsidyAccessible)
+            {
+
+                <div class="settings-menu-wrapper">
+
+                    <a href="javascript:void(0);"
+                       class="nav-link mt-2 @(isSubsidyOpen ? "active" : "")"
+                       @onclick="ToggleSubsidyMenu">
+
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/StockReport.svg"
+                             class="SideBariconimg" />
+
+                        Subsidy Management System
+
+                        <i class="bi @(isSubsidyOpen
+                                                                                                                                                                              ? "bi-chevron-up"
+                                                                                                                                                                              : "bi-chevron-down") chevron-icon">
+                        </i>
+
+                    </a>
+
+
+                    @if (isSubsidyOpen)
+                    {
+
+                        <ul class="submenu-list">
+
+                            @if (LoginState.CanAccess(PagePermission.SalesReport))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/StockReport"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Stock Report
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.CompanySales))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/CompanySales"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Pending Acknowledgement
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.AgeingReport))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/AgeingReport"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Ageing Report
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.Acknowledgement))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/Acknowledgement"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Acknowledgement
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.LiquidationCycle))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/LiquidationCycle"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Liquidation Cycle
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.TopRankingDistrict))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/TopRankingDistrict"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Top Ranking District
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.TopRankingWholesalers))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/TopRankingWholesalers"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Top Ranking Wholesaler
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.TopRankingRetailers))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/TopRankingRetailers"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Top Ranking Retailers
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.ProductWiseStockAvailability))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/ProductWiseStockAvailability"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Productwise Stock Availability
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess(PagePermission.StockDetails))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/StockDetails"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Stock Details
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.UserRole == AppRole.Admin)
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/ExcelFormatFileUpload"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        File Upload
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                        </ul>
+
+                    }
+
+                </div>
+
+            }
+
 
             @* ================= SETTINGS ================= *@
-            @if (
-                                                    LoginState.CanAccess(PagePermission.LocationMaster)
-                                                    || LoginState.CanAccess(PagePermission.Agriculture)
-                                                    || LoginState.CanAccess(PagePermission.Logistics)
-                                                    || LoginState.CanAccess(PagePermission.Financial)
-                                                    || LoginState.CanAccess(PagePermission.Relationship)
-                                                )
+@if (
+                                        LoginState.CanAccess(PagePermission.LocationMaster)
+                                        || LoginState.CanAccess(PagePermission.Agriculture)
+                                        || LoginState.CanAccess(PagePermission.Logistics)
+                                        || LoginState.CanAccess(PagePermission.Financial)
+                                        || LoginState.CanAccess(PagePermission.Relationship)
+                                        || LoginState.CanAccess(PagePermission.Designation)
+                                        || LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+                                    )
             {
 
                 <div class="settings-menu-wrapper">
@@ -650,6 +898,38 @@
                             }
 
 
+                            @if (LoginState.CanAccess(PagePermission.Designation))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/Designation"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Designation
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+
+                            @if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/PageManagement"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Page Management
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+
                         </ul>
 
                     }
@@ -660,15 +940,16 @@
 
 
             @* ================= SDWA ================= *@
-            @if (
-                                                    LoginState.CanAccess(PagePermission.SDWADashboard)
-                                                    || (LoginState.UserRole != AppRole.Dealer && (LoginState.CanAccess(PagePermission.SchemeApproval) || LoginState.UserRole == AppRole.Director))
-                                                    || LoginState.CanAccess(PagePermission.SubDealerEmployeeMaster)
-                                                    || LoginState.CanAccess(PagePermission.WelfareSchemes)
-                                                    || LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin
-                                                    || LoginState.CanAccess(PagePermission.FrontOffice)
-                                                    || LoginState.CanAccess(PagePermission.GenerateBill)
-                                                )
+@if (
+                                        LoginState.CanAccess("ReportDashboard")
+                                        || LoginState.CanAccess(PagePermission.SDWADashboard)
+                                        || (LoginState.UserRole != AppRole.Dealer && (LoginState.CanAccess(PagePermission.SchemeApproval) || LoginState.UserRole == AppRole.Director))
+                                        || LoginState.CanAccess(PagePermission.SubDealerEmployeeMaster)
+                                        || LoginState.CanAccess(PagePermission.WelfareSchemes)
+                                        || LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+                                        || LoginState.CanAccess(PagePermission.FrontOffice)
+                                        || LoginState.CanAccess(PagePermission.GenerateBill)
+                                    )
             {
 
                 <div class="settings-menu-wrapper">
@@ -703,7 +984,22 @@
                                              class="submenu-link"
                                              Match="NavLinkMatch.All">
 
-                                        SDWA Dashboard
+                                        Dealer Dashboard
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.CanAccess("ReportDashboard"))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/ReportDashboard"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Admin Dashboard
 
                                     </NavLink>
 
@@ -740,7 +1036,7 @@
                                 </li>
                             }
 
-                            @if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
+                            @if (LoginState.CanAccess(PagePermission.SubDealerEmployeeMaster))
                             {
                                 <li class="submenu-item">
 
@@ -764,6 +1060,21 @@
                                              Match="NavLinkMatch.All">
 
                                         Guest House
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+                            @if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/SdwaCompanyMaster"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Company Details
 
                                     </NavLink>
 
@@ -806,6 +1117,21 @@
 
                 </div>
 
+            }
+
+
+            @* ================= CONTACT US ================= *@
+            @if (LoginState.CanAccess("ContactUs"))
+            {
+                <NavLink class="nav-link"
+                         href="/ContactUs">
+
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
+                         class="SideBariconimg" />
+
+                    Contact Us
+
+                </NavLink>
             }
 
         </nav>
@@ -1437,6 +1763,8 @@ else
 
     private bool isSdwaOpen = false;
 
+    private bool isSubsidyOpen = false;
+
     private bool _showUserMenu = false;
 
     private Timer? _tokenExpiryTimer;
@@ -1460,6 +1788,7 @@ else
     {
         isSettingsOpen = IsSettingsSectionActive();
         isSdwaOpen = IsSdwaSectionActive();
+        isSubsidyOpen = IsSubsidySectionActive();
 
         StartExpiryCheck();
 
@@ -1533,15 +1862,22 @@ else
 
     private void ToggleSettingsMenu()
     {
-        if (!isSettingsOpen) { isSettingsOpen = true; isSdwaOpen = false; }
+        if (!isSettingsOpen) { isSettingsOpen = true; isSdwaOpen = false; isSubsidyOpen = false; }
         else isSettingsOpen = false;
     }
 
 
     private void ToggleSdwaMenu()
     {
-        if (!isSdwaOpen) { isSdwaOpen = true; isSettingsOpen = false; }
+        if (!isSdwaOpen) { isSdwaOpen = true; isSettingsOpen = false; isSubsidyOpen = false; }
         else isSdwaOpen = false;
+    }
+
+
+    private void ToggleSubsidyMenu()
+    {
+        if (!isSubsidyOpen) { isSubsidyOpen = true; isSettingsOpen = false; isSdwaOpen = false; }
+        else isSubsidyOpen = false;
     }
 
 
@@ -1600,7 +1936,9 @@ else
             || uri == "agriculture"
             || uri == "logistics"
             || uri == "financial"
-            || uri == "relationship";
+            || uri == "relationship"
+            || uri == "designation"
+            || uri == "pagemanagement";
     }
 
 
@@ -1614,10 +1952,46 @@ else
         return uri == "sdwadashboard"
             || uri == "schemeapproval"
             || uri == "welfareschemes"
+            || uri == "reportdashboard"
             || uri == "subdealeremployeemaster"
             || uri == "guesthousemaster"
+            || uri == "sdwacompanymaster"
             || uri == "frontoffice"
             || uri == "generatebill";
+    }
+
+
+    private bool AnySubsidyAccessible =>
+        LoginState.CanAccess(PagePermission.SalesReport)
+        || LoginState.CanAccess(PagePermission.CompanySales)
+        || LoginState.CanAccess(PagePermission.AgeingReport)
+        || LoginState.CanAccess(PagePermission.Acknowledgement)
+        || LoginState.CanAccess(PagePermission.LiquidationCycle)
+        || LoginState.CanAccess(PagePermission.TopRankingDistrict)
+        || LoginState.CanAccess(PagePermission.TopRankingWholesalers)
+        || LoginState.CanAccess(PagePermission.TopRankingRetailers)
+        || LoginState.CanAccess(PagePermission.ProductWiseStockAvailability)
+        || LoginState.CanAccess(PagePermission.StockDetails);
+
+
+    private bool IsSubsidySectionActive()
+    {
+        var uri =
+            Navigation
+                .ToBaseRelativePath(Navigation.Uri)
+                .ToLower();
+
+        return uri == "stockreport"
+            || uri == "companysales"
+            || uri == "ageingreport"
+            || uri == "acknowledgement"
+            || uri == "liquidationcycle"
+            || uri == "toprankingdistrict"
+            || uri == "toprankingwholesalers"
+            || uri == "toprankingretailers"
+            || uri == "productwisestockavailability"
+            || uri == "stockdetails"
+            || uri == "excelformatfileupload";
     }
 
 
