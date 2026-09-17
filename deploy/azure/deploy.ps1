@@ -99,26 +99,25 @@ $deployer = Invoke-AzJson ad signed-in-user show --query id
 
 # Custom domains are bound outside the template (bind-domains.ps1). Read the current bindings
 # and pass them back in, otherwise the template run would remove them.
-function Get-CustomDomainsJson([string]$app) {
+function Get-CustomDomains([string]$app) {
     $exists = Invoke-AzJson containerapp list -g $names.ResourceGroup --query "[?name=='$app'].name"
-    if (-not $exists) { return '[]' }
+    if (-not $exists) { return @() }
     $d = Invoke-AzJson containerapp hostname list -n $app -g $names.ResourceGroup --query "[].{name:name, certificateId:certificateId, bindingType:bindingType}"
-    if (-not $d) { return '[]' }
-    return (ConvertTo-Json @($d) -Compress)
+    if (-not $d) { return @() }
+    return [array]$d
 }
-$apiDomains = Get-CustomDomainsJson $outputs.apiAppName
-$webDomains = Get-CustomDomainsJson $outputs.webAppName
+[array]$apiDomains = Get-CustomDomains $outputs.apiAppName
+[array]$webDomains = Get-CustomDomains $outputs.webAppName
+if ($apiDomains.Count -or $webDomains.Count) { Write-Host "Keeping custom domains: $((@($apiDomains) + @($webDomains) | ForEach-Object { $_.name }) -join ', ')" -ForegroundColor DarkGray }
 
-$secretsFile = New-SecretParametersFile -VaultName $vault
+$secretsFile = New-SecretParametersFile -VaultName $vault -ExtraParameters @{ apiCustomDomains = $apiDomains; webCustomDomains = $webDomains }
 try {
     $extra = @(
         'deployApps=true',
         "apiImage=$apiImage",
         "webImage=$webImage",
         "deployerObjectId=$deployer",
-        "webApiBaseUrl=$WebApiBaseUrl",
-        "apiCustomDomains=$apiDomains",
-        "webCustomDomains=$webDomains"
+        "webApiBaseUrl=$WebApiBaseUrl"
     )
     $outputs = Invoke-PlatformDeployment -Names $names -SecretsFile $secretsFile -ExtraParameters $extra -Label "$Environment-apps"
 }

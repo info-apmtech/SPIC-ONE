@@ -97,7 +97,8 @@ function New-SecretParametersFile {
     # SAME values instead of letting newGuid() rotate them. Caller must delete the file.
     param(
         [string]$VaultName,
-        [hashtable]$Overrides = @{}
+        [hashtable]$Overrides = @{},
+        [hashtable]$ExtraParameters = @{}   # non-secret values that must not travel on the command line
     )
     $map = @{
         postgresAdminPassword = 'postgres-admin-password'
@@ -114,12 +115,13 @@ function New-SecretParametersFile {
         elseif ($VaultName) { $value = Get-KeyVaultSecretValue -VaultName $VaultName -Name $map[$param] }
         if ($value) { $parameters[$param] = @{ value = $value } }
     }
+    foreach ($k in $ExtraParameters.Keys) { $parameters[$k] = @{ value = $ExtraParameters[$k] } }
     $file = Join-Path ([IO.Path]::GetTempPath()) ("spicone-secrets-" + [guid]::NewGuid().ToString('N') + '.json')
     @{
         '$schema'      = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
         contentVersion = '1.0.0.0'
         parameters     = $parameters
-    } | ConvertTo-Json -Depth 5 | Set-Content -Path $file -Encoding utf8
+    } | ConvertTo-Json -Depth 8 | Set-Content -Path $file -Encoding utf8
     return $file
 }
 
