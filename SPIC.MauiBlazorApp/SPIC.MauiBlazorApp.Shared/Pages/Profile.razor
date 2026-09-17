@@ -3,11 +3,13 @@
 @using SPIC.Core.Entities
 @using SPIC.Core.DTOs
 @using SPIC.MauiBlazorApp.Shared.Services
+@using static SPIC.Core.Entities.EmployeeRegistration
 @using RelationshipEntity = SPIC.Core.Entities.Relationship
+
 @inject HttpClient Http
 @inject LoginState LoginState
 @inject NavigationManager Nav
-
+@inject LookupCacheService LookupCache
 <style>
     :root {
         --dp-bg-body: #f8fafc;
@@ -250,59 +252,169 @@
                 else
                 {
                     <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#2e7d32;color:#fff;font-size:2rem;font-weight:700;">
-                        @GetInitials(_headerInfo?.DealerName)
+                        @GetInitials(_isDealer ? _headerInfo?.DealerName : _employee?.Name)
                     </div>
                 }
             </div>
 
             <div class="dp-banner-content">
-                <h2 class="dp-dealer-name">@(_headerInfo?.DealerName ?? "No Dealer")</h2>
+                @if (_isDealer)
+                {
+                    <h2 class="dp-dealer-name">@(_headerInfo?.DealerName ?? "No Dealer")</h2>
 
-                <div class="dp-dealer-meta">
-                    @if (!string.IsNullOrWhiteSpace(_headerInfo?.DealerCode))
-                    {
-                        <span>Dealer Code: @_headerInfo!.DealerCode</span>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(_fmsId))
-                    {
-                        <span>FMS ID: @_fmsId</span>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(_headerInfo?.State) || !string.IsNullOrWhiteSpace(_headerInfo?.District))
-                    {
-                        <span>@_headerInfo!.State — @_headerInfo!.District</span>
-                    }
-                </div>
-
-                <div class="dp-tag-row">
-                    <span class="dp-tag-outline">SPIC Authorized Dealer</span>
-                </div>
-
-                <div class="dp-progress-section">
-                    <div class="dp-progress-texts">
-                        <span>Profile Completion</span>
-                        <span>@(_headerInfo?.ProfileCompletion ?? 0)%</span>
+                    <div class="dp-dealer-meta">
+                        @if (!string.IsNullOrWhiteSpace(_headerInfo?.DealerCode))
+                        {
+                            <span>Dealer Code: @_headerInfo!.DealerCode</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_fmsId))
+                        {
+                            <span>FMS ID: @_fmsId</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_headerInfo?.State) || !string.IsNullOrWhiteSpace(_headerInfo?.District))
+                        {
+                            <span>@_headerInfo!.State — @_headerInfo!.District</span>
+                        }
                     </div>
-                    <div class="dp-progress-track">
-                        <div class="dp-progress-fill" style="width: @(_headerInfo?.ProfileCompletion ?? 0)%;"></div>
-                    </div>
-                </div>
 
-                <div class="dp-action-row">
-                    <button class="dp-btn-outline-white">Download PDF</button>
-                    <button class="dp-btn-outline-white">Change Password</button>
-                </div>
+                    <div class="dp-tag-row">
+                        <span class="dp-tag-outline">SPIC Authorized Dealer</span>
+                    </div>
+
+                    <div class="dp-progress-section">
+                        <div class="dp-progress-texts">
+                            <span>Profile Completion</span>
+                            <span>@(_headerInfo?.ProfileCompletion ?? 0)%</span>
+                        </div>
+                        <div class="dp-progress-track">
+                            <div class="dp-progress-fill" style="width: @(_headerInfo?.ProfileCompletion ?? 0)%;"></div>
+                        </div>
+                    </div>
+
+                    <div class="dp-action-row">
+                        <button class="dp-btn-outline-white">Download PDF</button>
+                        <button class="dp-btn-outline-white">Change Password</button>
+                    </div>
+                }
+                else
+                {
+                    <h2 class="dp-dealer-name">@(_employee?.Name ?? "Employee Profile")</h2>
+
+                    <div class="dp-dealer-meta">
+                        @if (!string.IsNullOrWhiteSpace(_employee?.EmployeeCode))
+                        {
+                            <span>Employee Code: @_employee!.EmployeeCode</span>
+                        }
+                        @if (_employeeLogin != null)
+                        {
+                            <span>@RoleDisplayText(_employeeLogin.Role)</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(LoginState.DesignationName))
+                        {
+                            <span>@LoginState.DesignationName</span>
+                        }
+                    </div>
+
+                    <div class="dp-tag-row">
+                        <span class="dp-tag-outline">SPIC Employee</span>
+                    </div>
+                }
             </div>
         </div>
 
-        <div class="dp-tabs-container">
-            <div class="dp-tab-item @(activeTab == "DealerInfo" ? "active" : "")" @onclick='() => SetTab("DealerInfo")'>Dealer Info</div>
-            <div class="dp-tab-item @(activeTab == "Proprietorship" ? "active" : "")" @onclick='() => SetTab("Proprietorship")'>Proprietorship</div>
-            <div class="dp-tab-item @(activeTab == "Nominees" ? "active" : "")" @onclick='() => SetTab("Nominees")'>Nominees</div>
-            <div class="dp-tab-item @(activeTab == "Trade" ? "active" : "")" @onclick='() => SetTab("Trade")'>Trade Experience</div>
-            <div class="dp-tab-item @(activeTab == "Turnover" ? "active" : "")" @onclick='() => SetTab("Turnover")'>Turnover</div>
-            <div class="dp-tab-item @(activeTab == "Assets" ? "active" : "")" @onclick='() => SetTab("Assets")'>Assets</div>
-            <div class="dp-tab-item @(activeTab == "Welfare" ? "active" : "")" @onclick='() => SetTab("Welfare")'>Welfare Scheme</div>
-        </div>
+        @if (_isDealer)
+        {
+            <div class="dp-tabs-container">
+                <div class="dp-tab-item @(activeTab == "DealerInfo" ? "active" : "")" @onclick='() => SetTab("DealerInfo")'>Dealer Info</div>
+                <div class="dp-tab-item @(activeTab == "Proprietorship" ? "active" : "")" @onclick='() => SetTab("Proprietorship")'>Proprietorship</div>
+                <div class="dp-tab-item @(activeTab == "Nominees" ? "active" : "")" @onclick='() => SetTab("Nominees")'>Nominees</div>
+                <div class="dp-tab-item @(activeTab == "Trade" ? "active" : "")" @onclick='() => SetTab("Trade")'>Trade Experience</div>
+                <div class="dp-tab-item @(activeTab == "Turnover" ? "active" : "")" @onclick='() => SetTab("Turnover")'>Turnover</div>
+                <div class="dp-tab-item @(activeTab == "Assets" ? "active" : "")" @onclick='() => SetTab("Assets")'>Assets</div>
+                <div class="dp-tab-item @(activeTab == "Welfare" ? "active" : "")" @onclick='() => SetTab("Welfare")'>Welfare Scheme</div>
+            </div>
+        }
+        else
+        {
+            <div class="dp-tabs-container">
+                <div class="dp-tab-item @(activeTab == "Employee" ? "active" : "")" @onclick='() => SetTab("Employee")'>Employee</div>
+            </div>
+        }
+
+        @if (activeTab == "Employee")
+        {
+            <div class="dp-info-card">
+                <div class="dp-card-header">
+                    <div class="dp-icon-box dp-icon-green"><i class="bi bi-person-badge"></i></div>
+                    <h3 class="dp-card-title">Employee Details</h3>
+                </div>
+                @if (_employee != null && _employeeLogin != null)
+                {
+                    <div class="dp-card-body">
+                        <div class="dp-info-row">
+                            <div class="dp-info-box flex-1-2">
+                                <div class="dp-box-lbl">Employee Code</div>
+                                <div class="dp-box-val">@TextOrDash(_employee.EmployeeCode)</div>
+                            </div>
+                            <div class="dp-info-box flex-1-8">
+                                <div class="dp-box-lbl">Name</div>
+                                <div class="dp-box-val">@TextOrDash(_employee.Name)</div>
+                            </div>
+                            <div class="dp-info-box flex-1">
+                                <div class="dp-box-lbl">Role</div>
+                                <div class="dp-box-val">@RoleDisplayText(_employeeLogin.Role)</div>
+                            </div>
+                        </div>
+                        <div class="dp-info-row">
+                            <div class="dp-info-box flex-1-2">
+                                <div class="dp-box-lbl">Designation</div>
+                                <div class="dp-box-val">@(LoginState.DesignationName ?? "—")</div>
+                            </div>
+                            <div class="dp-info-box flex-1-8">
+                                <div class="dp-box-lbl">Email</div>
+                                <div class="dp-box-val">@TextOrDash(_employee.Email)</div>
+                            </div>
+                            <div class="dp-info-box flex-1">
+                                <div class="dp-box-lbl">Personal Phone</div>
+                                <div class="dp-box-val">@TextOrDash(_employee.PersonalPhoneNumber)</div>
+                            </div>
+                            <div class="dp-info-box flex-1">
+                                <div class="dp-box-lbl">Official Phone</div>
+                                <div class="dp-box-val">@TextOrDash(_employee.OfficialPhoneNumber)</div>
+                            </div>
+                        </div>
+                        <div class="dp-info-row">
+                            <div class="dp-info-box flex-1">
+                                <div class="dp-box-lbl">Zone</div>
+                                <div class="dp-box-val">@EmployeeZoneName</div>
+                            </div>
+                            <div class="dp-info-box flex-1">
+                                <div class="dp-box-lbl">State</div>
+                                <div class="dp-box-val">@EmployeeStateName</div>
+                            </div>
+                            <div class="dp-info-box flex-1">
+                                <div class="dp-box-lbl">Region</div>
+                                <div class="dp-box-val">@EmployeeRegionName</div>
+                            </div>
+                            <div class="dp-info-box flex-1">
+                                <div class="dp-box-lbl">Headquarter</div>
+                                <div class="dp-box-val">@EmployeeHQName</div>
+                            </div>
+                        </div>
+                        <div class="dp-info-row">
+                            <div class="dp-info-box flex-1">
+                                <div class="dp-box-lbl">Status</div>
+                                <div class="dp-box-val">@(_employeeLogin.IsActive ? "Active" : "Inactive")</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="dp-empty-state"><div class="dp-empty-state-icon"><i class="bi bi-person-badge"></i></div>No employee profile information available.</div>
+                }
+            </div>
+        }
 
         @if (activeTab == "DealerInfo")
         {
@@ -528,66 +640,65 @@
         @if (activeTab == "Turnover")
         {
             <div class="dp-info-card">
-                <div class="dp-card-header">
-                    <div class="dp-icon-box dp-icon-orange"><i class="bi bi-graph-up-arrow"></i></div>
-                    <h3 class="dp-card-title">Business Turnover Details</h3>
+                <div class="dp-tabs-container">
+                    <div class="dp-tab-item @(turnoverSubTab == "SPIC" ? "active" : "")" @onclick='() => SetTurnoverTab("SPIC")'>SPIC</div>
+                    <div class="dp-tab-item @(turnoverSubTab == "GreenStar" ? "active" : "")" @onclick='() => SetTurnoverTab("GreenStar")'>Green Star</div>
                 </div>
-                @if (_hasDealer && _annualSales.Any())
-                {
-                    <div class="dp-card-body">
-                        <div class="dp-table-wrapper">
-                            <table class="dp-turnover-table">
-                                <thead>
-                                    <tr>
-                                        <th>Product Name</th>
-                                        <th>Category</th>
-                                        <th>Own Retail Qty</th>
-                                        <th>Own Retail Amt</th>
-                                        <th>Dealer Sale Qty</th>
-                                        <th>Dealer Sale Amt</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var row in _annualSales)
-                                    {
+                <div class="dp-card-body">
+                    <h5 class="dp-trade-subcard-title">Business Turnover Details</h5>
+                    @if (_turnoverLoading)
+                    {
+                        <div class="dp-empty-state"><div class="dp-empty-state-icon"><i class="bi bi-hourglass-split"></i></div>Loading turnover details...</div>
+                    }
+                    else
+                    {
+                        var tabRows = TurnoverRowsForTab;
+                        if (tabRows.Count == 0)
+                        {
+                            <div class="dp-empty-state"><div class="dp-empty-state-icon"><i class="bi bi-graph-up"></i></div>No turnover data available.</div>
+                        }
+                        else
+                        {
+                            <div class="dp-table-wrapper" style="width:100%;">
+                                <table class="dp-turnover-table">
+                                    <thead>
                                         <tr>
-                                            <td>
-                                                <div class="dp-prod-name-cell">
-                                                    <div class="dp-prod-icon">@(GetProductInitials(row.ProductId))</div>
-                                                    <div>
-                                                        <div class="dp-prod-title">@(GetProductName(row.ProductId))</div>
-                                                        <div class="dp-prod-sub">@(GetCategoryName(row.CategoryId))</div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td>@(GetCategoryName(row.CategoryId))</td>
-                                            <td>@FormatCurrency(row.OwnRetailsSaleQty)</td>
-                                            <td>₹@FormatCurrency(row.OwnRetailsSaleAmount)</td>
-                                            <td>@FormatCurrency(row.SaleToDealerQty)</td>
-                                            <td>₹@FormatCurrency(row.SaleToDealerAmount)</td>
+                                            <th>Product Name</th>
+                                            @for (int i = 0; i < _turnoverFYIds.Count; i++)
+                                            {
+                                                <th class="text-end">@GetTurnoverFYName(i) (MT)</th>
+                                            }
+                                            <th class="text-end">Growth</th>
                                         </tr>
-                                    }
-                                    <tr class="dp-grand-total">
-                                        <td>Grand Total</td>
-                                        <td></td>
-                                        <td>@FormatCurrency(_annualSales.Sum(s => s.OwnRetailsSaleQty))</td>
-                                        <td>₹@FormatCurrency(_annualSales.Sum(s => s.OwnRetailsSaleAmount))</td>
-                                        <td>@FormatCurrency(_annualSales.Sum(s => s.SaleToDealerQty))</td>
-                                        <td>₹@FormatCurrency(_annualSales.Sum(s => s.SaleToDealerAmount))</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                }
-                else if (_hasDealer)
-                {
-                    <div class="dp-empty-state"><div class="dp-empty-state-icon"><i class="bi bi-graph-up"></i></div>No turnover information available.</div>
-                }
-                else
-                {
-                    <div class="dp-empty-state"><div class="dp-empty-state-icon"><i class="bi bi-graph-up"></i></div>No dealer registration data available.</div>
-                }
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var row in tabRows)
+                                        {
+                                            <tr>
+                                                <td>@row.ProductName</td>
+                                                @for (int i = 0; i < _turnoverFYIds.Count; i++)
+                                                {
+                                                    <td class="text-end">@QtyOrDash(row.Qty?[i])</td>
+                                                }
+                                                <td class="text-end">@GrowthForRow(row)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="dp-grand-total">
+                                            <td>Grand Total</td>
+                                            @for (int i = 0; i < _turnoverFYIds.Count; i++)
+                                            {
+                                                <td class="text-end">@QtyOrDash(TotalForIndex(i, tabRows))</td>
+                                            }
+                                            <td class="text-end">@GrowthForTotal(tabRows)</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        }
+                    }
+                </div>
             </div>
         }
 
@@ -726,9 +837,38 @@
     private List<DealerAssetBuilding> _buildingAssets = new();
     private List<DealerAssetBank> _bankAssets = new();
     private List<WelfareApplicationSummaryDto> _welfareApps = new();
+    private string turnoverSubTab = "SPIC";
+    private DealerCreditLimitProposal? _creditProposal;
+    private List<CreditLimitHistory> _creditHistories = new();
+    private List<FinancialYear> _financialYears = new();
+    private List<int> _turnoverFYIds = new();
+    private List<TurnoverSalesRow> _turnoverRows = new();
+    private bool _turnoverLoading = true;
+
+    private class TurnoverSalesRow
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public decimal?[]? Qty { get; set; }
+    }
+
+    private List<TurnoverSalesRow> TurnoverRowsForTab =>
+        turnoverSubTab == "GreenStar"
+            ? _turnoverRows.Where(r => !IsUreaProductName(r.ProductName)).ToList()
+            : _turnoverRows.Where(r => IsUreaProductName(r.ProductName)).ToList();
+
+    private static bool IsUreaProductName(string productName) =>
+        !string.IsNullOrWhiteSpace(productName) &&
+        productName.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase);
+
+    private bool _isDealer = false;
+    private EmployeeInformation? _employee;
+    private Employeelogin? _employeeLogin;
+    private List<ZoneItemDto> _zones = new();
 
     private void SetTab(string tabName)
     {
+        if (!_isDealer && tabName != "Employee") return;
         activeTab = tabName;
         if (tabName == "Welfare" && !_welfareApps.Any() && !_isLoadingWelfare && _hasDealer)
         {
@@ -739,6 +879,16 @@
     protected override async Task OnInitializedAsync()
     {
         if (!LoginState.IsLoggedIn) { _isLoading = false; return; }
+
+        _isDealer = LoginState.UserRole == AppRole.Dealer;
+        activeTab = _isDealer ? "DealerInfo" : "Employee";
+
+        if (!_isDealer)
+        {
+            await LoadEmployeeProfileAsync();
+            _isLoading = false;
+            return;
+        }
 
         try
         {
@@ -770,9 +920,13 @@
             var categoriesTask = SafeGetAsync<List<Category>>("api/Category");
             var unitsTask = SafeGetAsync<List<Unit>>("api/Unit");
             var relationshipsTask = SafeGetAsync<List<RelationshipEntity>>("api/Relationship/all");
+            var financialYearsTask = SafeGetAsync<List<FinancialYear>>("api/FinancialYear");
+            var creditProposalTask = SafeGetAsync<List<DealerCreditLimitProposal>>($"api/DealerCreditLimitProposal/byDealer/{dealerId}");
+            var creditHistoryTask = SafeGetAsync<List<CreditLimitHistory>>($"api/CreditLimitHistory/byDealer/{dealerId}");
 
             await Task.WhenAll(ownersTask, expTask, annualTask, landTask, buildingTask, bankTask,
-                competitorsTask, productsTask, categoriesTask, unitsTask, relationshipsTask);
+                competitorsTask, productsTask, categoriesTask, unitsTask, relationshipsTask,
+                financialYearsTask, creditProposalTask, creditHistoryTask);
 
             _owners = (await ownersTask ?? new()).ToList();
             _experiences = (await expTask ?? new()).ToList();
@@ -785,6 +939,11 @@
             _categories = (await categoriesTask ?? new()).ToList();
             _units = (await unitsTask ?? new()).ToList();
             _relationships = (await relationshipsTask ?? new()).ToList();
+            _financialYears = (await financialYearsTask ?? new()).ToList();
+            _creditProposal = (await creditProposalTask ?? new()).FirstOrDefault();
+            _creditHistories = (await creditHistoryTask ?? new()).ToList();
+
+            await LoadTurnoverRowsAsync(dealerId);
 
             var ownerIds = _owners.Select(o => o.Id).ToList();
             if (ownerIds.Any())
@@ -885,6 +1044,304 @@
     }
 
     private static string FormatCurrency(decimal value) => value == 0 ? "0" : value.ToString("N0");
+
+    private void SetTurnoverTab(string tabName) => turnoverSubTab = tabName;
+
+    private async Task LoadTurnoverRowsAsync(int dealerId)
+    {
+        _turnoverLoading = true;
+        _turnoverRows = new();
+        _turnoverFYIds = new();
+
+        if (_creditProposal != null)
+        {
+            var fyIds = new[] { _creditProposal.FY1, _creditProposal.FY2, _creditProposal.FY3 }
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+            _turnoverFYIds = fyIds;
+        }
+
+        if (_turnoverFYIds.Count == 0)
+        {
+            var fallback = GetReviewFinancialYears();
+            _turnoverFYIds = fallback.Select(f => f.Id).ToList();
+        }
+
+        try
+        {
+            if (_turnoverFYIds.Count == 0)
+            {
+                _turnoverLoading = false;
+                return;
+            }
+
+            var summary = await Http.GetFromJsonAsync<DealerSalesSummaryDto>(
+                $"api/creditlimitsales/dealer-sales-summary/{dealerId}");
+
+            if (summary?.ProductSales == null || summary.ProductSales.Count == 0)
+            {
+                _turnoverLoading = false;
+                return;
+            }
+
+            var grouped = summary.ProductSales
+                .GroupBy(p => p.ProductId)
+                .ToList();
+
+            foreach (var group in grouped.OrderBy(g => g.FirstOrDefault()?.ProductName))
+            {
+                var row = new TurnoverSalesRow
+                {
+                    ProductId = group.Key,
+                    ProductName = group.FirstOrDefault()?.ProductName ?? GetProductName(group.Key),
+                    Qty = new decimal?[_turnoverFYIds.Count]
+                };
+
+                for (int i = 0; i < _turnoverFYIds.Count; i++)
+                {
+                    var fyId = _turnoverFYIds[i];
+                    var match = group.FirstOrDefault(p => p.FinancialYearId == fyId);
+                    if (match != null)
+                        row.Qty![i] = match.Quantity;
+                }
+
+                _turnoverRows.Add(row);
+            }
+        }
+        catch { }
+        finally
+        {
+            _turnoverLoading = false;
+        }
+    }
+
+    private List<FinancialYear> GetReviewFinancialYears()
+    {
+        var today = DateTime.Today;
+        int currentFyStartYear = today.Month >= 4 ? today.Year : today.Year - 1;
+
+        var wantedStartYears = new[]
+        {
+            currentFyStartYear - 3,
+            currentFyStartYear - 2,
+            currentFyStartYear - 1
+        };
+
+        var matched = _financialYears
+            .Where(fy => wantedStartYears.Contains(GetFyStartYear(fy)))
+            .OrderBy(fy => GetFyStartYear(fy))
+            .ToList();
+
+        if (matched.Count == 0)
+        {
+            matched = _financialYears
+                .OrderByDescending(fy => fy.EndDate)
+                .ThenByDescending(fy => fy.Id)
+                .Take(3)
+                .OrderBy(fy => fy.EndDate)
+                .ThenBy(fy => fy.Id)
+                .ToList();
+        }
+
+        return matched;
+    }
+
+    private int GetFyStartYear(FinancialYear fy)
+    {
+        if (fy.StartDate != default && fy.StartDate.Year > 1)
+            return fy.StartDate.Year;
+
+        if (!string.IsNullOrWhiteSpace(fy.Name))
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(fy.Name, @"(\d{4})");
+            if (m.Success && int.TryParse(m.Groups[1].Value, out var y))
+                return y;
+        }
+
+        if (fy.EndDate != default && fy.EndDate.Year > 1)
+            return fy.EndDate.Year - 1;
+
+        return 0;
+    }
+
+    private string GetTurnoverFYName(int index)
+    {
+        if (index < 0 || index >= _turnoverFYIds.Count) return "—";
+        var fyId = _turnoverFYIds[index];
+        return _financialYears.FirstOrDefault(f => f.Id == fyId)?.Name ?? $"FY {index + 1}";
+    }
+
+    private static string QtyOrDash(decimal? value) => value.HasValue ? value.Value.ToString("N2") : "—";
+
+    private string GrowthForRow(TurnoverSalesRow row)
+    {
+        if (row.Qty == null) return "—";
+        return GrowthFromSeries(row.Qty);
+    }
+
+    private string GrowthForTotal(List<TurnoverSalesRow> rows)
+    {
+        if (_turnoverFYIds.Count < 2) return "—";
+        var totals = new List<decimal?>();
+        for (int i = 0; i < _turnoverFYIds.Count; i++)
+            totals.Add(TotalForIndex(i, rows));
+        return GrowthFromSeries(totals.ToArray());
+    }
+
+    private decimal? TotalForIndex(int index, List<TurnoverSalesRow> rows)
+    {
+        if (index < 0 || index >= _turnoverFYIds.Count) return null;
+        decimal sum = 0m;
+        var any = false;
+        foreach (var row in rows)
+        {
+            if (row.Qty != null && row.Qty[index].HasValue)
+            {
+                sum += row.Qty[index]!.Value;
+                any = true;
+            }
+        }
+        return any ? sum : null;
+    }
+
+    private static string GrowthFromSeries(decimal?[] series)
+    {
+        var values = series.Where(v => v.HasValue).Select(v => v!.Value).ToList();
+        if (values.Count < 2) return "—";
+
+        var prev = values[values.Count - 2];
+        var latest = values[values.Count - 1];
+        if (prev == 0) return "—";
+
+        var pct = (latest - prev) / prev * 100m;
+        return pct >= 0 ? $"+{pct.ToString("N2")}%" : $"{pct.ToString("N2")}%";
+    }
+
+    private async Task LoadEmployeeProfileAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LoginState.UserId)) return;
+
+        try
+        {
+            var logins = await Http.GetFromJsonAsync<List<Employeelogin>>("api/Employeelogin/all");
+            _employeeLogin = logins?.FirstOrDefault(l => l.UserId == LoginState.UserId);
+
+            if (_employeeLogin == null || _employeeLogin.EmployeeInformationID <= 0) return;
+
+            _employee = await SafeGetAsync<EmployeeInformation>($"api/EmployeeRegistration/{_employeeLogin.EmployeeInformationID}");
+            if (_employee == null) return;
+
+            await LookupCache.EnsureLoadedAsync();
+            _zones = (await SafeGetAsync<List<ZoneItemDto>>("api/Zone/all")) ?? new();
+        }
+        catch { }
+    }
+
+    private static string TextOrDash(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private static string RoleDisplayText(AppRole role) =>
+        role == AppRole.SMM ? "SM" : role.ToString();
+
+    private string EmployeeZoneName =>
+        _zones.FirstOrDefault(z => z.Id == (_employeeLogin?.ZoneId ?? 0))?.ZoneName ?? "—";
+
+    private string EmployeeStateName =>
+        _employeeLogin?.StateId > 0
+            ? LookupCache.States.FirstOrDefault(s => s.Id == _employeeLogin.StateId)?.StateName ?? "—"
+            : "—";
+
+    private string EmployeeRegionName =>
+        _employeeLogin?.RegionId > 0
+            ? LookupCache.Regions.FirstOrDefault(r => r.Id == _employeeLogin.RegionId)?.RegionName ?? "—"
+            : "—";
+
+    private string EmployeeHQName =>
+        _employeeLogin?.HeadquartersId > 0
+            ? LookupCache.Headquarters.FirstOrDefault(h => h.Id == _employeeLogin.HeadquartersId)?.HeadquarterName ?? "—"
+            : "—";
+
+    private class ZoneItemDto
+    {
+        public int Id { get; set; }
+        public string ZoneName { get; set; } = "";
+    }
+
+    private List<CreditLimitHistory> SpicCreditHistories =>
+        _creditHistories.Where(h => h.CreditType == CreditType.SPIC)
+            .OrderByDescending(h => h.CreatedAt).ToList();
+
+    private List<CreditLimitHistory> GreenstarCreditHistories =>
+        _creditHistories.Where(h => h.CreditType == CreditType.Greenstar)
+            .OrderByDescending(h => h.CreatedAt).ToList();
+
+    private CreditLimitHistory? SpicCreditHistory => SpicCreditHistories.FirstOrDefault();
+    private CreditLimitHistory? GreenstarCreditHistory => GreenstarCreditHistories.FirstOrDefault();
+
+    private bool HasSpicCreditData =>
+        (_creditProposal != null && HasAnySpicValue(_creditProposal)) || SpicCreditHistories.Any();
+
+    private bool HasGreenstarCreditData =>
+        (_creditProposal != null && HasAnyGreenstarValue(_creditProposal)) || GreenstarCreditHistories.Any();
+
+    private static bool HasAnySpicValue(DealerCreditLimitProposal p) =>
+        p.SpicExistingCreditLimitAmount != 0 ||
+        p.AdditionalCreditLimit != 0 ||
+        p.Q11Mark > 0 ||
+        p.SpicMonthlyAvgNetOverdues.HasValue ||
+        !string.IsNullOrWhiteSpace(p.SpicFDNumber) || p.SpicFDAmount != 0 ||
+        !string.IsNullOrWhiteSpace(p.SpicBGNumber) || p.SpicBGAmount != 0 ||
+        !string.IsNullOrWhiteSpace(p.SpicCollateralNumber) || p.SpicCollateralAmount != 0 ||
+        !string.IsNullOrWhiteSpace(p.SpicTradeDepositNumber) || p.SpicTradeDepositAmount != 0;
+
+    private static bool HasAnyGreenstarValue(DealerCreditLimitProposal p) =>
+        p.GSExistingCreditLimitAmount != 0 ||
+        p.GreenstarAdditionalCreditLimit != 0 ||
+        p.GQ12Mark > 0 ||
+        p.GreenstarMonthlyAvgNetOverdues.HasValue ||
+        !string.IsNullOrWhiteSpace(p.GreenstarFDNumber) || p.GreenstarFDAmount != 0 ||
+        !string.IsNullOrWhiteSpace(p.GreenstarBGNumber) || p.GreenstarBGAmount != 0 ||
+        !string.IsNullOrWhiteSpace(p.GreenstarCollateralNumber) || p.GreenstarCollateralAmount != 0 ||
+        !string.IsNullOrWhiteSpace(p.GreenstarTradeDepositNumber) || p.GreenstarTradeDepositAmount != 0;
+
+    private bool HasSpicSecurities =>
+        _creditProposal != null && (
+            !string.IsNullOrWhiteSpace(_creditProposal.SpicFDNumber) || _creditProposal.SpicFDAmount != 0 ||
+            !string.IsNullOrWhiteSpace(_creditProposal.SpicBGNumber) || _creditProposal.SpicBGAmount != 0 ||
+            !string.IsNullOrWhiteSpace(_creditProposal.SpicCollateralNumber) || _creditProposal.SpicCollateralAmount != 0 ||
+            !string.IsNullOrWhiteSpace(_creditProposal.SpicTradeDepositNumber) || _creditProposal.SpicTradeDepositAmount != 0);
+
+    private bool HasGreenstarSecurities =>
+        _creditProposal != null && (
+            !string.IsNullOrWhiteSpace(_creditProposal.GreenstarFDNumber) || _creditProposal.GreenstarFDAmount != 0 ||
+            !string.IsNullOrWhiteSpace(_creditProposal.GreenstarBGNumber) || _creditProposal.GreenstarBGAmount != 0 ||
+            !string.IsNullOrWhiteSpace(_creditProposal.GreenstarCollateralNumber) || _creditProposal.GreenstarCollateralAmount != 0 ||
+            !string.IsNullOrWhiteSpace(_creditProposal.GreenstarTradeDepositNumber) || _creditProposal.GreenstarTradeDepositAmount != 0);
+
+    private decimal SpicSecurityTotal =>
+        (_creditProposal?.SpicFDAmount ?? 0) +
+        (_creditProposal?.SpicBGAmount ?? 0) +
+        (_creditProposal?.SpicCollateralAmount ?? 0) +
+        (_creditProposal?.SpicTradeDepositAmount ?? 0);
+
+    private decimal GreenstarSecurityTotal =>
+        (_creditProposal?.GreenstarFDAmount ?? 0) +
+        (_creditProposal?.GreenstarBGAmount ?? 0) +
+        (_creditProposal?.GreenstarCollateralAmount ?? 0) +
+        (_creditProposal?.GreenstarTradeDepositAmount ?? 0);
+
+    private static string ToAmount(decimal? value) =>
+        value.HasValue ? "₹ " + value.Value.ToString("N2") : "—";
+
+    private static string ToAmount(double? value) =>
+        value.HasValue ? "₹ " + value.Value.ToString("N2") : "—";
+
+    private static string ToScore(double? value) =>
+        value.HasValue ? value.Value.ToString("N0") : "—";
+
+    private static string ToDate(DateTime? value) =>
+        value.HasValue && value.Value != default ? value.Value.ToString("dd MMM yyyy") : "—";
 
     private MarkupString GetWelfareStatusPill(int status)
     {
