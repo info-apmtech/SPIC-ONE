@@ -144,6 +144,84 @@
             }
         </div>
     }
+    @if (AnyMdPortalAccessible)
+    {
+        <div class="settings-menu-wrapper">
+            <a href="javascript:void(0);"
+               class="nav-link mt-2 @(ShowMdPortalExpanded ? "active" : "") @MatchClass("MD Portal")"
+               @onclick="ToggleMdPortalMenu">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/MDportal.png" class="SideBariconimg" />
+                MD Portal
+                <i class="bi @(ShowMdPortalExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+            </a>
+
+            @if (ShowMdPortalExpanded)
+            {
+                <ul class="submenu-list">
+                    @if (loginState.CanAccess("BudgetOverview"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/BudgetOverview" class="@SubmenuLinkClass("Budget Overview")" Match="NavLinkMatch.All">Budget Overview</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("BudgetingManagements"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/BudgetingManagements" class="@SubmenuLinkClass("Budgeting Management")" Match="NavLinkMatch.All">Budgeting Management</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.BudgetSubmissions))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/BudgetSubmissions" class="@SubmenuLinkClass("Budget Submissions")" Match="NavLinkMatch.All">Budget Submissions</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.CSR1Create))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/CREATE-CSR-1Management" class="@SubmenuLinkClass("CSR-1 Create")" Match="NavLinkMatch.All">CSR-1 Create</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.CSR1Management))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/CSR-1List" class="@SubmenuLinkClass("CSR-1 Management")" Match="NavLinkMatch.All">CSR-1 Management</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("CSR2"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/CSR2" class="@SubmenuLinkClass("CSR-2")" Match="NavLinkMatch.All">CSR-2</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("FinalReportCSRView"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/FinalReportCSRView" class="@SubmenuLinkClass("Final Report CSR")" Match="NavLinkMatch.All">Final Report CSR</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("RMDValidationQueue"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/RMDValidationQueue" class="@SubmenuLinkClass("RMD Validation Queue")" Match="NavLinkMatch.All">RMD Validation Queue</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("MOSubmissionValidation"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/MOSubmissionValidation" class="@SubmenuLinkClass("MO Submission Validation")" Match="NavLinkMatch.All">MO Submission Validation</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("RMApprovalStatus"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/RMApprovalStatus" class="@SubmenuLinkClass("RM Approval Status")" Match="NavLinkMatch.All">RM Approval Status</NavLink>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
   @*   @if (loginState.CanAccess(PagePermission.BudgetSubmissions))
     {
         <NavLink class="@NavLinkClass("Budget Submissions")" href="/BudgetSubmissions">
@@ -421,12 +499,14 @@
     private bool isSettingsOpen = false;
     private bool isSubsidyOpen = false;
     private bool isSdwaOpen = false;
+    private bool isMdPortalOpen = false;
 
     protected override void OnInitialized()
     {
         isSettingsOpen = IsSettingsSectionActive();
         isSubsidyOpen = IsSubsidySectionActive();
         isSdwaOpen = IsSdwaSectionActive();
+        isMdPortalOpen = IsMdPortalSectionActive();
         loginState.OnChange += HandleLoginStateChanged;
         SearchState.OnChange += HandleSearchChanged;
     }
@@ -484,7 +564,7 @@
 
     private void ToggleSettingsMenu()
     {
-        if (!isSettingsOpen) { isSettingsOpen = true; isSubsidyOpen = false; isSdwaOpen = false; }
+        if (!isSettingsOpen) { isSettingsOpen = true; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; }
         else isSettingsOpen = false;
     }
 
@@ -524,7 +604,7 @@
 
     private void ToggleSubsidyMenu()
     {
-        if (!isSubsidyOpen) { isSubsidyOpen = true; isSettingsOpen = false; isSdwaOpen = false; }
+        if (!isSubsidyOpen) { isSubsidyOpen = true; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; }
         else isSubsidyOpen = false;
     }
 
@@ -564,7 +644,7 @@
 
     private void ToggleSdwaMenu()
     {
-        if (!isSdwaOpen) { isSdwaOpen = true; isSettingsOpen = false; isSubsidyOpen = false; }
+        if (!isSdwaOpen) { isSdwaOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; }
         else isSdwaOpen = false;
     }
 
@@ -579,24 +659,46 @@
             || uri == "frontoffice" || uri == "generatebill";
     }
 
+    private bool AnyMdPortalAccessible =>
+        loginState.CanAccess("BudgetOverview")
+        || loginState.CanAccess("BudgetingManagements")
+        || loginState.CanAccess(PagePermission.BudgetSubmissions)
+        || loginState.CanAccess(PagePermission.CSR1Create)
+        || loginState.CanAccess(PagePermission.CSR1Management)
+        || loginState.CanAccess("CSR2")
+        || loginState.CanAccess("FinalReportCSRView")
+        || loginState.CanAccess("RMDValidationQueue")
+        || loginState.CanAccess("MOSubmissionValidation")
+        || loginState.CanAccess("RMApprovalStatus");
+
     private bool AnyMdPortalItemMatches =>
         SearchState.Matches("Budget Overview")
+        || SearchState.Matches("Budgeting Management")
         || SearchState.Matches("Budget Submissions")
         || SearchState.Matches("CSR-1 Create")
         || SearchState.Matches("CSR-1 Management")
         || SearchState.Matches("CSR-2")
         || SearchState.Matches("Final Report CSR")
-        || SearchState.Matches("Budgeting Management")
+        || SearchState.Matches("RMD Validation Queue")
+        || SearchState.Matches("MO Submission Validation")
+        || SearchState.Matches("RM Approval Status")
         || SearchState.Matches("MD Portal");
 
     private bool ShowMdPortalExpanded => isMdPortalOpen || AnyMdPortalItemMatches;
 
-    private void ToggleMdPortalMenu() => isMdPortalOpen = !isMdPortalOpen;
+    private void ToggleMdPortalMenu()
+    {
+        if (!isMdPortalOpen) { isMdPortalOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; }
+        else isMdPortalOpen = false;
+    }
 
     private bool IsMdPortalSectionActive()
     {
         var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
-        return uri == "budgetoverview" || uri == "budgetingmanagements" || uri == "budgetsubmissions" || uri == "create-csr-1management" || uri == "csr-1list" || uri == "csr2" || uri == "finalreportcsrview";
+        return uri == "budgetoverview" || uri == "budgetingmanagements" || uri == "budgetsubmissions"
+            || uri == "create-csr-1management" || uri == "csr-1list" || uri == "csr2"
+            || uri == "finalreportcsrview" || uri == "rmdvalidationqueue"
+            || uri == "mosubmissionvalidation" || uri == "rmapprovalstatus";
     }
 }
 <script>
