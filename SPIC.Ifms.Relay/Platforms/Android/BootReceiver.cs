@@ -5,9 +5,11 @@ using SPIC.Ifms.Relay.Services;
 namespace SPIC.Ifms.Relay.Platforms.Android
 {
 	/// <summary>
-	/// Restarts the watcher after a reboot. Without this, a phone that restarted
-	/// overnight would silently stop watching, and the first anyone would know
-	/// is a missing morning import.
+	/// Restarts the watcher after a reboot, and after this app is updated.
+	/// Without the first, a phone that restarted overnight would silently stop
+	/// watching; without the second, every sideloaded update killed the service
+	/// and it stayed dead until somebody opened the app — two nights of missed
+	/// OTPs in September came from exactly that.
 	/// </summary>
 	[BroadcastReceiver(Enabled = true, Exported = true, DirectBootAware = false)]
 	[IntentFilter(new[]
@@ -15,6 +17,7 @@ namespace SPIC.Ifms.Relay.Platforms.Android
 		Intent.ActionBootCompleted,
 		"android.intent.action.QUICKBOOT_POWERON"
 	})]
+	[IntentFilter(new[] { Intent.ActionMyPackageReplaced })]
 	public sealed class BootReceiver : BroadcastReceiver
 	{
 		public override void OnReceive(Context? context, Intent? intent)
@@ -22,12 +25,20 @@ namespace SPIC.Ifms.Relay.Platforms.Android
 			if (context is null)
 				return;
 
-			if (intent?.Action is not (Intent.ActionBootCompleted or "android.intent.action.QUICKBOOT_POWERON"))
+			var action = intent?.Action;
+
+			if (action is not (Intent.ActionBootCompleted
+				or "android.intent.action.QUICKBOOT_POWERON"
+				or Intent.ActionMyPackageReplaced))
+			{
 				return;
+			}
 
 			try
 			{
-				RelayLog.Info("Phone restarted; starting the watcher");
+				RelayLog.Info(action == Intent.ActionMyPackageReplaced
+					? "App updated; starting the watcher"
+					: "Phone restarted; starting the watcher");
 				RelayForegroundService.EnsureRunning(context);
 			}
 			catch
