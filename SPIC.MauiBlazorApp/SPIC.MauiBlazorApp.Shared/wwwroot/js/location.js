@@ -20,6 +20,48 @@ window.getCurrentPosition = function () {
     });
 };
 
+window.showRouteOnMap = function (elementId, originLat, originLng, destLat, destLng) {
+    var map = window.mapInstances ? window.mapInstances[elementId] : null;
+    if (!map) return;
+
+    if (map.marker) {
+        map.marker.remove();
+        map.marker = null;
+    }
+
+    if (map.routeLayer) {
+        map.removeLayer(map.routeLayer);
+        map.routeLayer = null;
+    }
+
+    var originIcon = L.divIcon({
+        className: 'cu-map-pin-icon cu-map-pin-origin',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        html: '<i class="bi bi-person-fill"></i>'
+    });
+    var destIcon = L.divIcon({
+        className: 'cu-map-pin-icon cu-map-pin-dest',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        html: '<i class="bi bi-geo-alt-fill"></i>'
+    });
+
+    map.routeLayer = L.layerGroup([
+        L.marker([originLat, originLng], { icon: originIcon })
+            .bindPopup('<b>Your Location</b>'),
+        L.marker([destLat, destLng], { icon: destIcon })
+            .bindPopup('<b>SPIC Office</b><br/>SPIC House, 88 Anna Salai<br/>Little Mount, Guindy, Chennai – 600032'),
+        L.polyline([[originLat, originLng], [destLat, destLng]], {
+            color: '#2D72D9',
+            weight: 4,
+            opacity: 0.8
+        })
+    ]).addTo(map);
+
+    map.fitBounds([[originLat, originLng], [destLat, destLng]], { padding: [40, 40] });
+};
+
 window.openPrintableHtml = function (htmlContent) {
     var w = window.open('', '_blank');
     if (w) {

@@ -1,4 +1,5 @@
 ﻿@page "/ContactUs"
+@inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0">
     <h1 class="cu-page-title">Contact Us</h1>
@@ -121,17 +122,47 @@ Chennai – 600032</h3>
             
         <div class="cu-action-card">
             <div class="cu-action-header">
-                <h3>—</h3>
-                <p>—</p>
+                <h3>Get Directions</h3>
+                <p>Your route to SPIC Office</p>
             </div>
-                
+
+            <div class="cu-spic-address">
+                <span class="cu-spic-address-label"><i class="bi bi-geo-alt-fill"></i> SPIC Office</span>
+                <span class="cu-spic-address-text">SPIC House, 88 Anna Salai, Little Mount, Guindy, Chennai – 600032</span>
+            </div>
+
             <div class="cu-map-wrapper">
+                <div class="cu-leaflet-map" id="contactUsLeafletMap"></div>
                 <div class="cu-map-badge cu-badge-interactive">
-                    — Not available
+                    @if (_isGettingLocation)
+                    {
+                        <i class="bi bi-arrow-repeat spin"></i> <span>Getting Location...</span>
+                    }
+                    else if (_distanceToSpic.HasValue)
+                    {
+                        <span>Distance to SPIC Office: @_distanceToSpic.Value.ToString("F1") km (approx.)</span>
+                    }
+                    else if (!string.IsNullOrEmpty(_locationErrorMessage))
+                    {
+                        <span>@_locationErrorMessage</span>
+                    }
+                    else
+                    {
+                        <span>Tap "Get Directions" to show your route</span>
+                    }
                 </div>
             </div>
 
-            <button class="cu-btn-primary">Get Directions</button>
+            <button class="cu-btn-primary" @onclick="GetDirectionsAsync" disabled="@_isGettingLocation">
+                @if (_isGettingLocation)
+                {
+                    <i class="bi bi-arrow-repeat spin"></i> <span>Getting Location...</span>
+                }
+                else
+                {
+                    <span>Get Directions</span>
+                }
+            </button>
         </div>
 
         <div class="cu-action-card">
@@ -179,3 +210,84 @@ Chennai – 600032</h3>
 
     </div>
 </div>
+
+@code {
+    private bool _isGettingLocation;
+    private double? _distanceToSpic;
+    private string? _locationErrorMessage;
+
+    private const string MapElementId = "contactUsLeafletMap";
+    private const double SpicOfficeLatitude = 13.011683879768821;
+    private const double SpicOfficeLongitude = 80.21861485797974;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("initLeafletMap", MapElementId, (object?)null);
+                await JS.InvokeVoidAsync("updateLeafletMap", MapElementId, SpicOfficeLatitude, SpicOfficeLongitude);
+            }
+            catch
+            {
+                // Map unavailable — page remains functional; Get Directions still computes distance.
+            }
+        }
+    }
+
+    private async Task GetDirectionsAsync()
+    {
+        _isGettingLocation = true;
+        _locationErrorMessage = null;
+        _distanceToSpic = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await JS.InvokeAsync<GeoLocationResult>("getCurrentPosition");
+            if (!string.IsNullOrEmpty(result.Error))
+            {
+                _locationErrorMessage = result.Error.Contains("denied", StringComparison.OrdinalIgnoreCase)
+                    ? "Location permission is required to calculate the distance to SPIC Office."
+                    : $"Location error: {result.Error}";
+                return;
+            }
+
+            _distanceToSpic = CalculateDistanceKm(
+                result.Latitude, result.Longitude,
+                SpicOfficeLatitude, SpicOfficeLongitude);
+
+            await JS.InvokeVoidAsync("showRouteOnMap", MapElementId,
+                result.Latitude, result.Longitude,
+                SpicOfficeLatitude, SpicOfficeLongitude);
+        }
+        catch (Exception ex)
+        {
+            _locationErrorMessage = $"Failed to get location: {ex.Message}";
+        }
+        finally
+        {
+            _isGettingLocation = false;
+            StateHasChanged();
+        }
+    }
+
+    private static double CalculateDistanceKm(double lat1, double lng1, double lat2, double lng2)
+    {
+        const double R = 6371.0;
+        var dLat = (lat2 - lat1) * Math.PI / 180.0;
+        var dLng = (lng2 - lng1) * Math.PI / 180.0;
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+                + Math.Cos(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0)
+                * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+    }
+
+    private class GeoLocationResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+}
