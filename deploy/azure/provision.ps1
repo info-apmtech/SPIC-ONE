@@ -38,7 +38,7 @@ Invoke-Az config set bicep.check_version=false --only-show-errors | Out-Null
 foreach ($provider in 'Microsoft.App', 'Microsoft.OperationalInsights', 'Microsoft.DBforPostgreSQL',
                       'Microsoft.ContainerRegistry', 'Microsoft.KeyVault', 'Microsoft.Storage',
                       'Microsoft.ManagedIdentity', 'Microsoft.Insights', 'Microsoft.Network') {
-    $state = Invoke-Az provider show -n $provider --query registrationState -o tsv
+    $state = Invoke-Az provider show -n $provider --query registrationState --output tsv
     if ($state -ne 'Registered') {
         Write-Host "Registering provider $provider ..." -ForegroundColor DarkGray
         Invoke-Az provider register -n $provider --wait | Out-Null

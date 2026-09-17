@@ -30,9 +30,9 @@ $null = Assert-AzLogin
 $outputs = Get-Outputs -Names $names
 $rg = $names.ResourceGroup
 
-$staticIp = Invoke-Az containerapp env show -n $outputs.environmentName -g $rg --query properties.staticIp -o tsv
-$verifyId = Invoke-Az containerapp show -n $outputs.webAppName -g $rg --query properties.customDomainVerificationId -o tsv
-$apiFqdn = Invoke-Az containerapp show -n $outputs.apiAppName -g $rg --query properties.configuration.ingress.fqdn -o tsv
+$staticIp = Invoke-Az containerapp env show -n $outputs.environmentName -g $rg --query properties.staticIp --output tsv
+$verifyId = Invoke-Az containerapp show -n $outputs.webAppName -g $rg --query properties.customDomainVerificationId --output tsv
+$apiFqdn = Invoke-Az containerapp show -n $outputs.apiAppName -g $rg --query properties.configuration.ingress.fqdn --output tsv
 
 function Get-Label([string]$hostName, [string]$zone) {
     if ($hostName -eq $zone) { return '@' }
