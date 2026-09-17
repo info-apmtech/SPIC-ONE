@@ -270,7 +270,16 @@
 
                     <div class="col-md-6">
                         <label class="form-label">Company Name</label>
-                        <input type="text" class="form-control-custom" placeholder="Enter Company Name" @bind="_form.CompanyName">
+                        <select class="form-select-custom" @bind="_form.CompanyName" @bind:after="OnCompanyChanged">
+                            <option value="">-- Select Company --</option>
+                            @foreach (var company in _companies)
+                            {
+                                var label = string.IsNullOrWhiteSpace(company.ShortCode)
+                                    ? company.CompanyName
+                                    : company.ShortCode;
+                                <option value="@company.CompanyName">@label</option>
+                            }
+                        </select>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Phone Number</label>
@@ -477,6 +486,11 @@
     private bool _isLoading = true;
     private string _loadError = "";
 
+    // Company Master (optional dropdown — filtered by the selected Guest House)
+    private List<CompanyLookupDto> _companies = new();
+    private int? _selectedSdwaCompanyId;
+    private string? _selectedGstin;
+
     private DateTime _checkInDate;
     private DateTime _checkOutDate;
     private int _numberOfNights;
@@ -537,6 +551,9 @@
         _extraBeds = Math.Max(0, ExtraBeds ?? 0);
 
         await LoadRoomAsync();
+
+        // Company Master dropdown — load companies applicable to the selected Guest House.
+        await LoadCompaniesAsync();
 
         // Dealer-only: automatically bind the dealer's Phone Number and Email from
         // the same Dealer/proprietor data source used by the Proprietor page.
@@ -616,6 +633,44 @@
     private static string _money(decimal value)
     {
         return "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+    }
+
+    // --------------- COMPANY MASTER DROPDOWN ---------------
+    // Loads the active companies mapped to the selected Guest House only.
+    private async Task LoadCompaniesAsync()
+    {
+        if (!GuestHouseId.HasValue)
+        {
+            _companies = new();
+            return;
+        }
+
+        try
+        {
+            _companies = await Http.GetFromJsonAsync<List<CompanyLookupDto>>(
+                $"api/SdwaCompany/by-guest-house/{GuestHouseId}") ?? new();
+        }
+        catch (Exception)
+        {
+            // Graceful: an empty list leaves Company Name optional, existing validation is untouched.
+            _companies = new();
+        }
+    }
+
+    // Captures the selected company's master id + GSTIN for the booking/billing flow.
+    private void OnCompanyChanged()
+    {
+        var selected = _companies.FirstOrDefault(c => c.CompanyName == _form.CompanyName);
+        if (selected != null)
+        {
+            _selectedSdwaCompanyId = selected.Id;
+            _selectedGstin = selected.GSTIN;
+        }
+        else
+        {
+            _selectedSdwaCompanyId = null;
+            _selectedGstin = null;
+        }
     }
 
     // ---------------------------- ID PROOF UPLOAD ----------------------------
@@ -795,6 +850,8 @@
         BookingState.EmployeeOrDealerCode = _form.EmployeeOrDealerCode?.Trim();
         BookingState.GuestName = _form.GuestName?.Trim();
         BookingState.CompanyName = _form.CompanyName?.Trim();
+        BookingState.SdwaCompanyId = _selectedSdwaCompanyId;
+        BookingState.GstinNumber = _selectedGstin;
         BookingState.PhoneNumber = _form.PhoneNumber?.Trim();
         BookingState.Email = _form.Email?.Trim();
         BookingState.AadhaarOrPassport = _form.AadhaarOrPassport?.Trim();
@@ -835,6 +892,14 @@
         public string? NumberOfPersons { get; set; }
         public string? NumberOfAdults { get; set; }
         public string? NumberOfChildren { get; set; }
+    }
+
+    public class CompanyLookupDto
+    {
+        public int Id { get; set; }
+        public string CompanyName { get; set; } = "";
+        public string? ShortCode { get; set; }
+        public string? GSTIN { get; set; }
     }
 
     public class DealerLookupDto

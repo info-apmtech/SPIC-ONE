@@ -1,8 +1,21 @@
-﻿@page "/ReportDashboard"
+﻿@* SDWA admin dashboard *@
+@page "/ReportDashboard"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using System.Globalization
+@inject HttpClient Http
+@inject NavigationManager Navigation
 
 
 <div class="container-fluid py-4 px-0">
     
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 14px;border-radius:8px;font-size:0.85rem;margin-bottom:16px;">
+            @_error
+        </div>
+    }
+
     <h1 class="dsh-page-title">Dashboard</h1>
 
     <div class="dsh-welcome-banner">
@@ -17,32 +30,32 @@
         <div class="dsh-kpi-card kpi-purple">
             <div class="dsh-kpi-content">
                 <span class="dsh-kpi-lbl">Total Welfare Applications</span>
-                <span class="dsh-kpi-val">1,536</span>
-                <span class="dsh-kpi-sub">+12.4% vs last year</span>
+                <span class="dsh-kpi-val">@Val(_approvalOk, TotalApplications)</span>
+                <span class="dsh-kpi-sub">@(_approvalOk ? $"{AllPendingCount:N0} pending across stages" : "—")</span>
             </div>
             <div class="dsh-kpi-icon"><i class="bi bi-file-earmark-text"></i></div>
         </div>
         <div class="dsh-kpi-card1 kpi-orange">
             <div class="dsh-kpi-content">
                 <span class="dsh-kpi-lbl">Pending Final Approval</span>
-                <span class="dsh-kpi-val">26</span>
-                <span class="dsh-kpi-sub">-6% vs last month</span>
+                <span class="dsh-kpi-val">@Val(_approvalOk, PendingFinalApproval)</span>
+                <span class="dsh-kpi-sub">awaiting your final decision</span>
             </div>
             <div class="dsh-kpi-icon"><i class="bi bi-clock-history"></i></div>
         </div>
         <div class="dsh-kpi-card2 kpi-green">
             <div class="dsh-kpi-content">
                 <span class="dsh-kpi-lbl">Approved Applications</span>
-                <span class="dsh-kpi-val">866</span>
-                <span class="dsh-kpi-sub">+8.1% vs last year</span>
+                <span class="dsh-kpi-val">@Val(_approvalOk, ApprovedApplications)</span>
+                <span class="dsh-kpi-sub">final stage approvals completed</span>
             </div>
             <div class="dsh-kpi-icon"><i class="bi bi-check-circle"></i></div>
         </div>
         <div class="dsh-kpi-card3 kpi-red">
             <div class="dsh-kpi-content">
                 <span class="dsh-kpi-lbl">Rejected Applications</span>
-                <span class="dsh-kpi-val">82</span>
-                <span class="dsh-kpi-sub">-3.2% vs last year</span>
+                <span class="dsh-kpi-val">@Val(_approvalOk, RejectedApplications)</span>
+                <span class="dsh-kpi-sub">rejected in the approval flow</span>
             </div>
             <div class="dsh-kpi-icon"><i class="bi bi-x-octagon"></i></div>
         </div>
@@ -50,32 +63,32 @@
         <div class="dsh-kpi-card4 kpi-teal">
             <div class="dsh-kpi-content">
                 <span class="dsh-kpi-lbl">Total Dealers</span>
-                <span class="dsh-kpi-val">156</span>
-                <span class="dsh-kpi-sub">+4 new this month</span>
+                <span class="dsh-kpi-val">@Val(_dealersOk, TotalDealers)</span>
+                <span class="dsh-kpi-sub">@(_dealersOk ? $"{NewDealersThisMonth:N0} joined this month" : "—")</span>
             </div>
             <div class="dsh-kpi-icon"><i class="bi bi-people"></i></div>
         </div>
         <div class="dsh-kpi-card5 kpi-green">
             <div class="dsh-kpi-content">
                 <span class="dsh-kpi-lbl">Active Schemes</span>
-                <span class="dsh-kpi-val">6</span>
-                <span class="dsh-kpi-sub">All operational</span>
+                <span class="dsh-kpi-val">—</span>
+                <span class="dsh-kpi-sub">no active-schemes data source</span>
             </div>
             <div class="dsh-kpi-icon"><i class="bi bi-clipboard-data"></i></div>
         </div>
         <div class="dsh-kpi-card6 kpi-orange">
             <div class="dsh-kpi-content">
                 <span class="dsh-kpi-lbl">Guest House Bookings</span>
-                <span class="dsh-kpi-val">128</span>
-                <span class="dsh-kpi-sub">+22 this month</span>
+                <span class="dsh-kpi-val">@Val(_billsOk, GuestHouseBookings)</span>
+                <span class="dsh-kpi-sub">completed &amp; billed bookings</span>
             </div>
             <div class="dsh-kpi-icon"><i class="bi bi-building"></i></div>
         </div>
         <div class="dsh-kpi-card7 kpi-purple">
             <div class="dsh-kpi-content">
                 <span class="dsh-kpi-lbl">Benefit Released</span>
-                <span class="dsh-kpi-val">₹48.50L</span>
-                <span class="dsh-kpi-sub">+₹3.2L vs last month</span>
+                <span class="dsh-kpi-val">—</span>
+                <span class="dsh-kpi-sub">no benefit-release aggregate source</span>
             </div>
             <div class="dsh-kpi-icon"><i class="bi bi-cash-stack"></i></div>
         </div>
@@ -127,12 +140,12 @@
         </div>
 
         <div class="dsh-workflow-stats">
-            <div class="dsh-wf-statbox ws-blue"><span class="dsh-wf-statval">42</span><span class="dsh-wf-statlbl">Pending at MO</span></div>
-            <div class="dsh-wf-statbox ws-purple"><span class="dsh-wf-statval">18</span><span class="dsh-wf-statlbl">Pending at RM</span></div>
-            <div class="dsh-wf-statbox ws-orange"><span class="dsh-wf-statval">12</span><span class="dsh-wf-statlbl">Pending at SMM</span></div>
-            <div class="dsh-wf-statbox ws-teal"><span class="dsh-wf-statval">26</span><span class="dsh-wf-statlbl">Pending at SDWA</span></div>
-            <div class="dsh-wf-statbox ws-red"><span class="dsh-wf-statval">08</span><span class="dsh-wf-statlbl">Rejected</span></div>
-            <div class="dsh-wf-statbox ws-brown"><span class="dsh-wf-statval">04</span><span class="dsh-wf-statlbl">SLA Delayed</span></div>
+            <div class="dsh-wf-statbox ws-blue"><span class="dsh-wf-statval">@Val(_approvalOk, PendingAtMo)</span><span class="dsh-wf-statlbl">Pending at MO</span></div>
+            <div class="dsh-wf-statbox ws-purple"><span class="dsh-wf-statval">@Val(_approvalOk, PendingAtRm)</span><span class="dsh-wf-statlbl">Pending at RM</span></div>
+            <div class="dsh-wf-statbox ws-orange"><span class="dsh-wf-statval">@Val(_approvalOk, PendingAtSm)</span><span class="dsh-wf-statlbl">Pending at SMM</span></div>
+            <div class="dsh-wf-statbox ws-teal"><span class="dsh-wf-statval">@Val(_approvalOk, PendingAtSdwa)</span><span class="dsh-wf-statlbl">Pending at SDWA</span></div>
+            <div class="dsh-wf-statbox ws-red"><span class="dsh-wf-statval">@Val(_approvalOk, RejectedApplications)</span><span class="dsh-wf-statlbl">Rejected</span></div>
+            <div class="dsh-wf-statbox ws-brown"><span class="dsh-wf-statval">—</span><span class="dsh-wf-statlbl">SLA Delayed</span></div>
         </div>
     </div>
 
@@ -160,90 +173,47 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td>WF-2026-001</td>
-                        <td>DLR-12345</td>
-                        <td>
-                            <div class="dsh-avatar-cell">
-                                <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=50&q=80" class="dsh-td-avatar">
-                                Rajesh Kumar
-                            </div>
-                        </td>
-                        <td style="color: var(--dsh-green);">Medical Assistance</td>
-                        <td><span class="dsh-pill pill-orange">SDWA Final Approval</span></td>
-                        <td>
-                            <div class="dsh-avatar-cell">
-                                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=50&q=80" class="dsh-td-avatar">
-                                Rajesh (SMM)
-                            </div>
-                        </td>
-                        <td>2 Days</td>
-                        <td><span style="color: var(--dsh-orange); font-weight:700;">Medium</span></td>
-                        <td>
-                            <div class="dsh-action-icons">
-                                <i class="bi bi-eye icon-view"></i>
-                                <i class="bi bi-check-circle icon-approve"></i>
-                                <i class="bi bi-x-circle icon-reject"></i>
-                                <i class="bi bi-download icon-download"></i>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>WF-2026-002</td>
-                        <td>DLR-12345</td>
-                        <td>
-                            <div class="dsh-avatar-cell">
-                                <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=50&q=80" class="dsh-td-avatar">
-                                Rajesh Kumar
-                            </div>
-                        </td>
-                        <td style="color: var(--dsh-green);">Medical Assistance</td>
-                        <td><span class="dsh-pill pill-orange">SDWA Final Approval</span></td>
-                        <td>
-                            <div class="dsh-avatar-cell">
-                                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=50&q=80" class="dsh-td-avatar">
-                                Rajesh (SMM)
-                            </div>
-                        </td>
-                        <td>1 Day</td>
-                        <td><span style="color: var(--dsh-green); font-weight:700;">Low</span></td>
-                        <td>
-                            <div class="dsh-action-icons">
-                                <i class="bi bi-eye icon-view"></i>
-                                <i class="bi bi-check-circle icon-approve"></i>
-                                <i class="bi bi-x-circle icon-reject"></i>
-                                <i class="bi bi-download icon-download"></i>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>WF-2026-003</td>
-                        <td>DLR-12345</td>
-                        <td>
-                            <div class="dsh-avatar-cell">
-                                <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=50&q=80" class="dsh-td-avatar">
-                                Rajesh Kumar
-                            </div>
-                        </td>
-                        <td style="color: var(--dsh-green);">Medical Assistance</td>
-                        <td><span class="dsh-pill pill-orange">SDWA Final Approval</span></td>
-                        <td>
-                            <div class="dsh-avatar-cell">
-                                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=50&q=80" class="dsh-td-avatar">
-                                Rajesh (SMM)
-                            </div>
-                        </td>
-                        <td>5 Days</td>
-                        <td><span style="color: var(--dsh-red); font-weight:700;">High</span></td>
-                        <td>
-                            <div class="dsh-action-icons">
-                                <i class="bi bi-eye icon-view"></i>
-                                <i class="bi bi-check-circle icon-approve"></i>
-                                <i class="bi bi-x-circle icon-reject"></i>
-                                <i class="bi bi-download icon-download"></i>
-                            </div>
-                        </td>
-                    </tr>
+                    @if (_approval.Applications.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;">
+                                @(_loading ? "Loading pending applications..." : _approvalOk ? "No applications are currently pending your action." : "Pending applications could not be loaded.")
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var app in _approval.Applications)
+                        {
+                            var days = PendingDays(app.ApplicationDate);
+                            <tr>
+                                <td>@app.ApplicationNumber</td>
+                                <td>@app.DealerCode</td>
+                                <td>
+                                    <div class="dsh-avatar-cell">
+                                        @app.DealerName
+                                    </div>
+                                </td>
+                                <td style="color: var(--dsh-green);">@app.SchemeName</td>
+                                <td><span class="dsh-pill pill-orange">@app.StatusDisplay</span></td>
+                                <td>
+                                    <div class="dsh-avatar-cell">
+                                        @RecommendedByText(app)
+                                    </div>
+                                </td>
+                                <td>@PendingSinceText(app.ApplicationDate)</td>
+                                <td><span style="color:@PriorityColorFor(days); font-weight:700;">@PriorityFor(days)</span></td>
+                                <td>
+                                    <div class="dsh-action-icons">
+                                        <i class="bi bi-eye icon-view"></i>
+                                        <i class="bi bi-check-circle icon-approve"></i>
+                                        <i class="bi bi-x-circle icon-reject"></i>
+                                        <i class="bi bi-download icon-download"></i>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
                 </tbody>
             </table>
         </div>
@@ -254,144 +224,94 @@
             <h3 class="dsh-card-title">Scheme Distribution</h3>
             
             <div class="dsh-chart-flex">
-                <div class="dsh-donut-container">
+                <div class="dsh-donut-container" style="@DonutStyle">
                     <div class="dsh-donut-inner"></div>
                 </div>
                 
                 <div class="dsh-legend-list">
-                    <div class="dsh-legend-row">
-                        <div class="dsh-legend-label"><div class="dsh-dot" style="background:#86efac;"></div> Medical Assistance</div>
-                        <div class="dsh-legend-val">123</div>
-                        <div class="dsh-legend-pct">48.5%</div>
-                    </div>
-                    <div class="dsh-legend-row">
-                        <div class="dsh-legend-label"><div class="dsh-dot" style="background:#c084fc;"></div> Wedding Gift</div>
-                        <div class="dsh-legend-val">345</div>
-                        <div class="dsh-legend-pct">11.7%</div>
-                    </div>
-                    <div class="dsh-legend-row">
-                        <div class="dsh-legend-label"><div class="dsh-dot" style="background:#fcd34d;"></div> Grahapravesam</div>
-                        <div class="dsh-legend-val">78</div>
-                        <div class="dsh-legend-pct">29.9%</div>
-                    </div>
-                    <div class="dsh-legend-row">
-                        <div class="dsh-legend-label"><div class="dsh-dot" style="background:#93c5fd;"></div> Educational Assistance</div>
-                        <div class="dsh-legend-val">234</div>
-                        <div class="dsh-legend-pct">60.4%</div>
-                    </div>
-                    <div class="dsh-legend-row">
-                        <div class="dsh-legend-label"><div class="dsh-dot" style="background:#f472b6;"></div> Sathabhishekam</div>
-                        <div class="dsh-legend-val">98</div>
-                        <div class="dsh-legend-pct">20.4%</div>
-                    </div>
-                    <div class="dsh-legend-row">
-                        <div class="dsh-legend-label"><div class="dsh-dot" style="background:#9ca3af;"></div> Death Relief Assistance</div>
-                        <div class="dsh-legend-val">44</div>
-                        <div class="dsh-legend-pct">47.4%</div>
-                    </div>
+                    @if (!_approvalOk)
+                    {
+                        <div class="dsh-legend-row">
+                            <div class="dsh-legend-label"><div class="dsh-dot" style="background:#e2e8f0;"></div> Data unavailable</div>
+                            <div class="dsh-legend-val">—</div>
+                        </div>
+                    }
+                    else if (SchemeLegend.Count == 0)
+                    {
+                        <div class="dsh-legend-row">
+                            <div class="dsh-legend-label"><div class="dsh-dot" style="background:#e2e8f0;"></div> No application data</div>
+                            <div class="dsh-legend-val">0</div>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var item in SchemeLegend)
+                        {
+                            <div class="dsh-legend-row">
+                                <div class="dsh-legend-label"><div class="dsh-dot" style="background:@SchemeColor(item.SchemeType);"></div> @item.Name</div>
+                                <div class="dsh-legend-val">@item.Count</div>
+                                <div class="dsh-legend-pct">@item.PercentText</div>
+                            </div>
+                        }
+                    }
                 </div>
             </div>
         </div>
 
         <div class="dsh-card">
             <h3 class="dsh-card-title">Monthly Application Trend</h3>
-            
-            <div class="dsh-line-chart-area">
-                <div class="dsh-chart-y-axis">
-                    <span>200</span><span>150</span><span>100</span><span>50</span><span>0</span>
+            @if (_loading)
+            {
+                <div style="display:flex; align-items:center; justify-content:center; min-height:220px; color:var(--dsh-text-muted); font-size:0.9rem;">…</div>
+            }
+            else if (!_approvalOk || MonthlyApplicationTrend.Count == 0)
+            {
+                <div style="display:flex; align-items:center; justify-content:center; min-height:220px; color:var(--dsh-text-muted); font-size:0.9rem;">
+                    No data available
                 </div>
-                <div class="dsh-chart-grid-lines">
-                    <div class="dsh-grid-line"></div><div class="dsh-grid-line"></div>
-                    <div class="dsh-grid-line"></div><div class="dsh-grid-line"></div><div class="dsh-grid-line"></div>
-                </div>
-                <div class="dsh-chart-x-axis">
-                    <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span>
-                    <span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span>
-                </div>
-
-                <div class="dsh-svg-wrapper">
-                    <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 100 100">
-                        <path d="M 0,50 C 5,60 12,70 18,70 C 24,70 30,55 36,40 C 42,25 48,5 54,5 C 60,5 68,10 72,15 C 80,25 90,40 100,55" 
-                              fill="none" stroke="#ef4444" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
-                        
-                        <circle cx="0" cy="50" r="2.5" class="dsh-data-point" />
-                        <circle cx="9.09" cy="62" r="2.5" class="dsh-data-point" />
-                        <circle cx="18.18" cy="70" r="2.5" class="dsh-data-point" />
-                        <circle cx="27.27" cy="65" r="2.5" class="dsh-data-point" />
-                        <circle cx="36.36" cy="40" r="2.5" class="dsh-data-point" />
-                        <circle cx="45.45" cy="15" r="2.5" class="dsh-data-point" />
-                        <circle cx="54.54" cy="5" r="2.5" class="dsh-data-point" />
-                        
-                        <g class="dsh-data-group dsh-group-aug">
-                            <rect x="58" y="0" width="11" height="100" class="dsh-hover-area" />
-                            <line x1="63.6" y1="0" x2="63.6" y2="100" class="dsh-focus-line" vector-effect="non-scaling-stroke" />
-                            <circle cx="63.6" cy="10" r="2.5" class="dsh-data-point" />
-                            <circle cx="63.6" cy="10" class="dsh-data-point-active" vector-effect="non-scaling-stroke" />
-                        </g>
-
-                        <circle cx="72.72" cy="15" r="2.5" class="dsh-data-point" />
-                        <circle cx="81.81" cy="25" r="2.5" class="dsh-data-point" />
-                        <circle cx="90.9" cy="40" r="2.5" class="dsh-data-point" />
-                        <circle cx="100" cy="55" r="2.5" class="dsh-data-point" />
-                    </svg>
-                </div>
-                
-                <div class="dsh-tooltip-container">
-                    <div class="dsh-chart-tooltip dsh-tooltip-aug" style="left: 63.6%;">
-                        <div class="dsh-tooltip-title">Aug</div>
-                        <div class="dsh-tooltip-row" style="color: var(--dsh-blue);">
-                            <span class="dsh-tooltip-lbl">Submitted:</span> 
-                            <span class="dsh-tooltip-val">123</span>
-                        </div>
-                        <div class="dsh-tooltip-row" style="color: var(--dsh-green);">
-                            <span class="dsh-tooltip-lbl">Approved:</span> 
-                            <span class="dsh-tooltip-val">103</span>
-                        </div>
-                        <div class="dsh-tooltip-row" style="color: var(--dsh-red);">
-                            <span class="dsh-tooltip-lbl">Rejected:</span> 
-                            <span class="dsh-tooltip-val">20</span>
-                        </div>
+            }
+            else
+            {
+                <div style="display:flex; flex-direction:column; min-height:220px;">
+                    <div style="display:flex; align-items:flex-end; gap:9px; flex:1; padding-top:8px;">
+                        @foreach (var m in MonthlyApplicationTrend)
+                        {
+                            <div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;">
+                                <span style="font-size:0.72rem; font-weight:700; color:var(--dsh-text-main); margin-bottom:4px;">@m.Count</span>
+                                <div style="width:100%; max-width:36px; height:@m.HeightPct; background:var(--dsh-blue); border-radius:4px 4px 0 0;"></div>
+                            </div>
+                        }
+                    </div>
+                    <div style="display:flex; gap:9px; margin-top:8px; border-top:1px solid #e2e8f0; padding-top:8px;">
+                        @foreach (var m in MonthlyApplicationTrend)
+                        {
+                            <span style="flex:1; min-width:0; text-align:center; font-size:0.7rem; color:var(--dsh-text-muted); white-space:nowrap;">@m.MonthLabel</span>
+                        }
                     </div>
                 </div>
-
-            </div>
-
-            <div class="dsh-chart-bottom-legend">
-                <div class="dsh-cb-item" style="color: var(--dsh-blue);">
-                    <div class="dsh-cb-icon"><div class="dsh-cb-dot" style="border-color:var(--dsh-blue);"></div><div class="dsh-cb-line" style="background:var(--dsh-blue);"></div><div class="dsh-cb-dot" style="border-color:var(--dsh-blue);"></div></div>
-                    Submitted
-                </div>
-                <div class="dsh-cb-item" style="color: var(--dsh-green);">
-                    <div class="dsh-cb-icon"><div class="dsh-cb-dot" style="border-color:var(--dsh-green);"></div><div class="dsh-cb-line" style="background:var(--dsh-green);"></div><div class="dsh-cb-dot" style="border-color:var(--dsh-green);"></div></div>
-                    Approved
-                </div>
-                <div class="dsh-cb-item" style="color: var(--dsh-red);">
-                    <div class="dsh-cb-icon"><div class="dsh-cb-dot" style="border-color:var(--dsh-red);"></div><div class="dsh-cb-line" style="background:var(--dsh-red);"></div><div class="dsh-cb-dot" style="border-color:var(--dsh-red);"></div></div>
-                    Rejected
-                </div>
-            </div>
+            }
         </div>
     </div>
 
     <div class="dsh-grid-5">
         <div class="dsh-mini-kpi" style="border-left-color: var(--dsh-purple);">
-            <div class="dsh-mkpi-content"><span class="dsh-mkpi-lbl">Total Dealers</span><span class="dsh-mkpi-val">156</span></div>
+            <div class="dsh-mkpi-content"><span class="dsh-mkpi-lbl">Total Dealers</span><span class="dsh-mkpi-val">@Val(_dealersOk, TotalDealers)</span></div>
             <i class="bi bi-people-fill dsh-mkpi-icon" style="color: var(--dsh-purple);"></i>
         </div>
         <div class="dsh-mini-kpi" style="border-left-color: var(--dsh-green); background: #f0fdf4;">
-            <div class="dsh-mkpi-content"><span class="dsh-mkpi-lbl">Active Dealers</span><span class="dsh-mkpi-val">146</span></div>
+            <div class="dsh-mkpi-content"><span class="dsh-mkpi-lbl">Active Dealers</span><span class="dsh-mkpi-val">@Val(_dealersOk, ActiveDealers)</span></div>
             <i class="bi bi-person-check-fill dsh-mkpi-icon" style="color: var(--dsh-green);"></i>
         </div>
         <div class="dsh-mini-kpi" style="border-left-color: var(--dsh-orange); background: #fefce8;">
-            <div class="dsh-mkpi-content"><span class="dsh-mkpi-lbl">New Dealers</span><span class="dsh-mkpi-val">8</span></div>
+            <div class="dsh-mkpi-content"><span class="dsh-mkpi-lbl">New Dealers</span><span class="dsh-mkpi-val">@Val(_dealersOk, NewDealersThisMonth)</span></div>
             <i class="bi bi-person-plus-fill dsh-mkpi-icon" style="color: var(--dsh-orange);"></i>
         </div>
         <div class="dsh-mini-kpi" style="border-left-color: var(--dsh-text-muted);">
-            <div class="dsh-mkpi-content"><span class="dsh-mkpi-lbl">Inactive Dealers</span><span class="dsh-mkpi-val">14</span></div>
+            <div class="dsh-mkpi-content"><span class="dsh-mkpi-lbl">Inactive Dealers</span><span class="dsh-mkpi-val">@Val(_dealersOk, InactiveDealers)</span></div>
             <i class="bi bi-person-x-fill dsh-mkpi-icon"></i>
         </div>
         <div class="dsh-mini-kpi" style="border-left-color: var(--dsh-teal); background: #f0fdfa;">
-            <div class="dsh-mkpi-content"><span class="dsh-mkpi-lbl">Regions Covered</span><span class="dsh-mkpi-val">12</span></div>
+            <div class="dsh-mkpi-content"><span class="dsh-mkpi-lbl">Regions Covered</span><span class="dsh-mkpi-val">@Val(_dealersOk, RegionsCovered)</span></div>
             <i class="bi bi-geo-alt-fill dsh-mkpi-icon" style="color: var(--dsh-teal);"></i>
         </div>
     </div>
@@ -417,9 +337,25 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td>Chennai</td><td>36</td><td>284</td><td style="color:var(--dsh-green); font-weight:700;">242</td><td style="color:var(--dsh-red);">12</td><td>₹12.4L</td></tr>
-                    <tr><td>Chennai</td><td>36</td><td>268</td><td style="color:var(--dsh-green); font-weight:700;">242</td><td style="color:var(--dsh-red);">12</td><td>₹12.4L</td></tr>
-                    <tr><td>Chennai</td><td>36</td><td>286</td><td style="color:var(--dsh-green); font-weight:700;">242</td><td style="color:var(--dsh-red);">12</td><td>₹12.4L</td></tr>
+                    @if (!_approvalOk)
+                    {
+                        <tr>
+                            <td colspan="6" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;">Regional application data could not be loaded.</td>
+                        </tr>
+                    }
+                    else if (RegionalRows.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;">No regional application data available.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in RegionalRows)
+                        {
+                            <tr><td>@row.Region</td><td>—</td><td>@row.Applications</td><td style="color:var(--dsh-green); font-weight:700;">@row.Approved</td><td style="color:var(--dsh-red);">@row.Rejected</td><td>—</td></tr>
+                        }
+                    }
                 </tbody>
             </table>
         </div>
@@ -430,41 +366,54 @@
         <div class="dsh-card">
             <h3 class="dsh-card-title">Guest House Overview</h3>
             <div class="dsh-gh-box-grid">
-                <div class="dsh-gh-box" style="background:#f1f5f9;"><span class="lbl">Total Bookings</span><span class="val">123</span></div>
-                <div class="dsh-gh-box" style="background:#fff7ed;"><span class="lbl">Upcoming Check-ins</span><span class="val">14</span></div>
-                <div class="dsh-gh-box" style="background:#dcfce7;"><span class="lbl">Completed Stays</span><span class="val">89</span></div>
-                <div class="dsh-gh-box" style="background:#fee2e2;"><span class="lbl">Cancelled</span><span class="val">11</span></div>
-                <div class="dsh-gh-box" style="background:#f3e8ff;"><span class="lbl">Occupancy Rate</span><span class="val">78%</span></div>
-                <div class="dsh-gh-box" style="background:#fce7f3;"><span class="lbl">Revenue Collected</span><span class="val">₹3.2L</span></div>
+                <div class="dsh-gh-box" style="background:#f1f5f9;"><span class="lbl">Active Bookings</span><span class="val">@Val(_roomsOk, ActiveBookings)</span></div>
+                <div class="dsh-gh-box" style="background:#fff7ed;"><span class="lbl">Upcoming Check-ins</span><span class="val">—</span></div>
+                <div class="dsh-gh-box" style="background:#dcfce7;"><span class="lbl">Completed Stays</span><span class="val">@Val(_billsOk, GuestHouseBookings)</span></div>
+                <div class="dsh-gh-box" style="background:#fee2e2;"><span class="lbl">Cancelled</span><span class="val">—</span></div>
+                <div class="dsh-gh-box" style="background:#f3e8ff;"><span class="lbl">Occupancy Rate</span><span class="val">@OccupancyRateText</span></div>
+                <div class="dsh-gh-box" style="background:#fce7f3;"><span class="lbl">Revenue Collected</span><span class="val">@RevenueText</span></div>
             </div>
 
             <div style="margin-top:20px;">
                 <h4 style="font-size:0.9rem; font-weight:700; margin-bottom:12px;">Occupancy by property</h4>
-                <div class="dsh-progress-row">
-                    <div class="dsh-pr-header"><span>T-Nagar Guest House</span><span style="color:var(--dsh-purple);">92%</span></div>
-                    <div class="dsh-pr-track"><div class="dsh-pr-fill" style="width:92%; background:var(--dsh-purple);"></div></div>
-                </div>
-                <div class="dsh-progress-row">
-                    <div class="dsh-pr-header"><span>Tirupathi Guest House</span><span style="color:var(--dsh-orange);">62%</span></div>
-                    <div class="dsh-pr-track"><div class="dsh-pr-fill" style="width:62%; background:var(--dsh-orange);"></div></div>
-                </div>
+                @if (_roomsOk && OccupancyByProperty.Count > 0)
+                {
+                    <div style="display:flex; flex-direction:column; gap:12px;">
+                        @foreach (var prop in OccupancyByProperty)
+                        {
+                            <div>
+                                <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
+                                    <span style="font-weight:600;">@prop.GuestHouseName</span>
+                                    <span style="color:var(--dsh-text-muted);">@prop.OccupiedRooms/@prop.TotalRooms occupied · @prop.PercentText</span>
+                                </div>
+                                <div style="height:6px; background:#f1f5f9; border-radius:4px; margin-top:4px; overflow:hidden;">
+                                    <div style="height:100%; width:@prop.PercentWidth; background:var(--dsh-blue); border-radius:4px;"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div style="color:var(--dsh-text-muted); font-size:0.9rem;">No data available</div>
+                }
             </div>
 
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
-                <span style="font-size:0.85rem; font-weight:600;">Refund Pending: <span style="color:var(--dsh-text-main);">₹28,500</span></span>
-                <button style="background:var(--dsh-blue); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; font-size:0.8rem; cursor:pointer;">View All Bookings</button>
+                <span style="font-size:0.85rem; font-weight:600;">Refund Pending: <span style="color:var(--dsh-text-main);">—</span></span>
+                <button @onclick="GoToFrontOffice" style="background:var(--dsh-blue); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; font-size:0.8rem; cursor:pointer;">View All Bookings</button>
             </div>
         </div>
 
         <div class="dsh-card">
             <h3 class="dsh-card-title">Finance & Benefit Release</h3>
             <div class="dsh-gh-box-grid">
-                <div class="dsh-gh-box" style="background:#f8fafc;"><span class="lbl">Total Approved Amt</span><span class="val">₹52.4L</span></div>
-                <div class="dsh-gh-box" style="background:#dcfce7;"><span class="lbl">Amount Released</span><span class="val">₹48.5L</span></div>
-                <div class="dsh-gh-box" style="background:#fff7ed;"><span class="lbl">Pending Payment</span><span class="val">₹3.9L</span></div>
-                <div class="dsh-gh-box" style="background:#fee2e2;"><span class="lbl">Refund Pending</span><span class="val">₹28.5K</span></div>
-                <div class="dsh-gh-box" style="background:#f1f5f9;"><span class="lbl">Cheque Processing</span><span class="val">12</span></div>
-                <div class="dsh-gh-box" style="background:#f0fdfa;"><span class="lbl">NEFT Completed</span><span class="val">124</span></div>
+                <div class="dsh-gh-box" style="background:#f8fafc;"><span class="lbl">Total Approved Amt</span><span class="val">—</span></div>
+                <div class="dsh-gh-box" style="background:#dcfce7;"><span class="lbl">Amount Released</span><span class="val">—</span></div>
+                <div class="dsh-gh-box" style="background:#fff7ed;"><span class="lbl">Pending Payment</span><span class="val">—</span></div>
+                <div class="dsh-gh-box" style="background:#fee2e2;"><span class="lbl">Refund Pending</span><span class="val">—</span></div>
+                <div class="dsh-gh-box" style="background:#f1f5f9;"><span class="lbl">Cheque Processing</span><span class="val">—</span></div>
+                <div class="dsh-gh-box" style="background:#f0fdfa;"><span class="lbl">NEFT Completed</span><span class="val">—</span></div>
             </div>
             
             <div class="table-responsive" style="margin-top:16px;">
@@ -473,9 +422,9 @@
                         <tr><th>Application ID</th><th>Dealer Name</th><th>Welfare Scheme</th><th>Amount</th><th>Status</th><th>Date</th></tr>
                     </thead>
                     <tbody>
-                        <tr><td>WF-2026-001</td><td><div class="dsh-avatar-cell"><img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=30&q=80" style="width:24px;height:24px;border-radius:50%;"> Rajesh Kumar</div></td><td style="color:var(--dsh-green);">Medical Assistance</td><td>₹45,000</td><td><span class="dsh-pill pill-green" style="font-size:0.65rem;">Released</span></td><td>17/05/2026</td></tr>
-                        <tr><td>WF-2026-001</td><td><div class="dsh-avatar-cell"><img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=30&q=80" style="width:24px;height:24px;border-radius:50%;"> Rajesh Kumar</div></td><td style="color:var(--dsh-green);">Medical Assistance</td><td>₹10,500</td><td><span class="dsh-pill" style="font-size:0.65rem; background:#ccfbf1; color:#0f766e;">NEFT Done</span></td><td>17/05/2026</td></tr>
-                        <tr><td>WF-2026-001</td><td><div class="dsh-avatar-cell"><img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=30&q=80" style="width:24px;height:24px;border-radius:50%;"> Rajesh Kumar</div></td><td style="color:var(--dsh-green);">Medical Assistance</td><td>₹20,000</td><td><span class="dsh-pill pill-orange" style="font-size:0.65rem;">Processing</span></td><td>17/05/2026</td></tr>
+                        <tr>
+                            <td colspan="6" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;">No payment release records available</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -483,63 +432,65 @@
 
         <div class="dsh-card">
             <h3 class="dsh-card-title" style="margin-bottom: 20px;">Recent Activities</h3>
-            <div class="dsh-timeline">
-                <div class="dsh-tl-item">
-                    <h4 class="dsh-tl-title">Application WF-2026-301 approved by SDWA</h4>
-                    <p class="dsh-tl-time">09:32 AM today</p>
+            @if (RecentActivities.Count == 0)
+            {
+                <div style="color:var(--dsh-text-muted); font-size:0.9rem;">No recent activity data available</div>
+            }
+            else
+            {
+                <div style="display:flex; flex-direction:column; gap:16px; margin-top:2px;">
+                    @foreach (var item in RecentActivities)
+                    {
+                        <div style="display:flex; align-items:flex-start; gap:12px;">
+                            <div style="width:36px; height:36px; min-width:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; background:@item.Accent; font-size:0.95rem;">
+                                <i class="bi @item.Icon"></i>
+                            </div>
+                            <div style="flex:1; min-width:0;">
+                                <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;">
+                                    <span style="font-weight:600; font-size:0.88rem; color:var(--dsh-text-main);">@item.Title</span>
+                                    <span style="font-size:0.75rem; color:var(--dsh-text-muted); white-space:nowrap;">@WhenText(item.When)</span>
+                                </div>
+                                <div style="font-size:0.8rem; color:var(--dsh-text-muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@item.Detail</div>
+                            </div>
+                        </div>
+                    }
                 </div>
-                <div class="dsh-tl-item">
-                    <h4 class="dsh-tl-title">SMM forwarded Medical Assistance application WF-2026-298</h4>
-                    <p class="dsh-tl-time">08:55 AM today</p>
-                </div>
-                <div class="dsh-tl-item">
-                    <h4 class="dsh-tl-title">Refund processed for guest house booking BK123456</h4>
-                    <p class="dsh-tl-time">Yesterday, 3:10 PM</p>
-                </div>
-                <div class="dsh-tl-item">
-                    <h4 class="dsh-tl-title">Payment ₹45,000 released via NEFT - Rajan Petrochemicals</h4>
-                    <p class="dsh-tl-time">18 May 2026</p>
-                </div>
-                <div class="dsh-tl-item">
-                    <h4 class="dsh-tl-title">New dealer registered in Chennai region</h4>
-                    <p class="dsh-tl-time">18 May 2026</p>
-                </div>
-            </div>
+            }
         </div>
 
         <div class="dsh-card">
             <h3 class="dsh-card-title" style="margin-bottom: 20px;">Quick actions</h3>
             <div class="dsh-qa-grid">
                 
-                <div class="dsh-qa-card" style="background:#fff7ed; border-color:#ffedd5;">
+                <div class="dsh-qa-card" style="background:#fff7ed; border-color:#ffedd5; cursor:pointer;" @onclick="GoToSchemeApproval">
                     <div class="dsh-qa-icon" style="background:#ffedd5; color:#c2410c;"><i class="bi bi-file-earmark-check"></i></div>
                     <div>
                         <h4 class="dsh-qa-title">Review Pending Approvals</h4>
-                        <p class="dsh-qa-sub">26 awaiting action</p>
+                        <p class="dsh-qa-sub">@Val(_approvalOk, PendingFinalApproval) awaiting action</p>
                     </div>
                 </div>
 
-                <div class="dsh-qa-card" style="background:#eff6ff; border-color:#dbeafe;">
+                <div class="dsh-qa-card" style="background:#eff6ff; border-color:#dbeafe; cursor:pointer;" @onclick="GoToDealerDashboard">
                     <div class="dsh-qa-icon" style="background:#dbeafe; color:#2563eb;"><i class="bi bi-people"></i></div>
                     <div>
                         <h4 class="dsh-qa-title">Dealer Directory</h4>
-                        <p class="dsh-qa-sub">156 registered dealers</p>
+                        <p class="dsh-qa-sub">@Val(_dealersOk, TotalDealers) registered dealers</p>
                     </div>
                 </div>
 
-                <div class="dsh-qa-card" style="background:#f3e8ff; border-color:#e9d5ff;">
+                <div class="dsh-qa-card" style="background:#f3e8ff; border-color:#e9d5ff; cursor:pointer;" @onclick="GoToWelfareSchemes">
                     <div class="dsh-qa-icon" style="background:#e9d5ff; color:#9333ea;"><i class="bi bi-card-checklist"></i></div>
                     <div>
                         <h4 class="dsh-qa-title">Manage Schemes</h4>
-                        <p class="dsh-qa-sub">6 active schemes</p>
+                        <p class="dsh-qa-sub">Manage welfare scheme catalog</p>
                     </div>
                 </div>
 
-                <div class="dsh-qa-card" style="background:#f0fdf4; border-color:#dcfce7;">
+                <div class="dsh-qa-card" style="background:#f0fdf4; border-color:#dcfce7; cursor:pointer;" @onclick="GoToFrontOffice">
                     <div class="dsh-qa-icon" style="background:#dcfce7; color:#16a34a;"><i class="bi bi-building"></i></div>
                     <div>
                         <h4 class="dsh-qa-title">Guest House Bookings</h4>
-                        <p class="dsh-qa-sub">128 bookings total</p>
+                        <p class="dsh-qa-sub">@Val(_billsOk, GuestHouseBookings) bookings total</p>
                     </div>
                 </div>
 
@@ -547,7 +498,7 @@
                     <div class="dsh-qa-icon" style="background:#fce7f3; color:#db2777;"><i class="bi bi-file-earmark-bar-graph"></i></div>
                     <div>
                         <h4 class="dsh-qa-title">Generate Reports</h4>
-                        <p class="dsh-qa-sub">Export & analytics</p>
+                        <p class="dsh-qa-sub">Export &amp; analytics</p>
                     </div>
                 </div>
 
@@ -555,7 +506,7 @@
                     <div class="dsh-qa-icon" style="background:#fef3c7; color:#d97706;"><i class="bi bi-images"></i></div>
                     <div>
                         <h4 class="dsh-qa-title">Gallery</h4>
-                        <p class="dsh-qa-sub">Activities & events</p>
+                        <p class="dsh-qa-sub">Activities &amp; events</p>
                     </div>
                 </div>
 
@@ -567,5 +518,480 @@
 </div>
 
 @code {
-    
+    private bool _loading = true;
+    private bool _approvalOk = false;
+    private bool _approvalValidatedOk = false;
+    private bool _approvalRejectedOk = false;
+    private bool _approvalCompletedOk = false;
+    private bool _dealersOk = false;
+    private bool _billsOk = false;
+    private bool _roomsOk = false;
+    private string _error = "";
+
+    private WelfareApprovalPageDto _approval = new();
+    private List<WelfareApprovalApplicationDto> _pipeline = new();
+    private List<DealerRegistration> _dealers = new();
+    private List<BillListItemDto> _bills = new();
+    private List<FrontOfficeHouseDto> _rooms = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tApproval = SafeGetAsync<WelfareApprovalPageDto>("api/WelfareSchemeApproval/applications");
+        var tValidated = SafeGetAsync<WelfareApprovalPageDto>("api/WelfareSchemeApproval/applications?tab=validatedmo");
+        var tRejected = SafeGetAsync<WelfareApprovalPageDto>("api/WelfareSchemeApproval/applications?tab=rejected");
+        var tCompleted = SafeGetAsync<WelfareApprovalPageDto>("api/WelfareSchemeApproval/applications?tab=completed");
+        var tDealers = SafeGetAsync<List<DealerRegistration>>("api/DealerRegistration/all");
+        var tBills = SafeGetAsync<List<BillListItemDto>>("api/GuestHouseFrontOffice/bills");
+        var tRooms = SafeGetAsync<List<FrontOfficeHouseDto>>("api/GuestHouseFrontOffice/rooms");
+
+        await Task.WhenAll(tApproval, tValidated, tRejected, tCompleted, tDealers, tBills, tRooms);
+
+        _approvalOk = tApproval.Result.Ok;
+        _approvalValidatedOk = tValidated.Result.Ok;
+        _approvalRejectedOk = tRejected.Result.Ok;
+        _approvalCompletedOk = tCompleted.Result.Ok;
+        _dealersOk = tDealers.Result.Ok;
+        _billsOk = tBills.Result.Ok;
+        _roomsOk = tRooms.Result.Ok;
+
+        _approval = tApproval.Result.Value ?? new();
+        _pipeline = Merge(tApproval.Result.Value, tValidated.Result.Value, tRejected.Result.Value, tCompleted.Result.Value);
+        _dealers = tDealers.Result.Value ?? new();
+        _bills = tBills.Result.Value ?? new();
+        _rooms = tRooms.Result.Value ?? new();
+
+        // Welfare KPIs / donut / workflow / trend / regional / activities depend on ALL four
+        // approval-tab calls succeeding. If any one is unavailable, the merged pipeline would
+        // be silently incomplete, so the entire welfare section is marked unavailable rather
+        // than showing partial data as valid.
+        if (!_approvalValidatedOk || !_approvalRejectedOk || !_approvalCompletedOk)
+            _approvalOk = false;
+
+        var failed = new List<string>();
+        if (!_approvalOk) failed.Add("welfare approvals");
+        if (!_dealersOk) failed.Add("dealers");
+        if (!_billsOk) failed.Add("guest house bills");
+        if (!_roomsOk) failed.Add("guest house room availability");
+        if (failed.Count > 0)
+            _error = $"Could not load: {string.Join(", ", failed)}. Affected sections are shown as — (their real values are unavailable).";
+
+        _loading = false;
+    }
+
+    private async Task<(T? Value, bool Ok)> SafeGetAsync<T>(string url)
+    {
+        try
+        {
+            var value = await Http.GetFromJsonAsync<T>(url);
+            if (value is null) return (default, false);
+            return (value, true);
+        }
+        catch
+        {
+            return (default, false);
+        }
+    }
+
+    private static List<WelfareApprovalApplicationDto> Merge(params WelfareApprovalPageDto?[] pages)
+    {
+        var byId = new Dictionary<int, WelfareApprovalApplicationDto>();
+        foreach (var page in pages)
+        {
+            if (page == null) continue;
+            foreach (var app in page.Applications)
+                byId[app.Id] = app;
+        }
+        return byId.Values.OrderByDescending(a => a.ApplicationDate).ToList();
+    }
+
+    // ---- Welfare application KPIs (real aggregates from api/WelfareSchemeApproval/applications) ----
+    private int TotalApplications => _approval.Stats.TotalApplications;
+    private int PendingFinalApproval => _approval.Stats.PendingMyStage;
+    private int ApprovedApplications => _approval.Stats.Completed;
+    private int RejectedApplications => _approval.Stats.Rejected;
+    private int AllPendingCount => Math.Max(0, TotalApplications - ApprovedApplications - RejectedApplications);
+
+    // ---- Per-stage workflow counts ----
+    // RM/SM/SDWA are exact counts of the loaded real application rows. Pending at MO
+    // is the residual of the real aggregate Stats fields (Total minus validated-by-MO
+    // minus terminal), i.e. applications not yet validated by MO, incl. returned ones.
+    private int PendingAtMo => Math.Max(0, TotalApplications - _approval.Stats.ValidatedByMO - RejectedApplications - ApprovedApplications);
+    private int PendingAtRm => _pipeline.Count(a => a.Status == (int)WelfareApplicationStatus.RMReview);
+    private int PendingAtSm => _pipeline.Count(a => a.Status == (int)WelfareApplicationStatus.SMReview);
+    private int PendingAtSdwa => _pipeline.Count(a => a.Status == (int)WelfareApplicationStatus.AVPReview);
+
+    // ---- Dealer KPIs (real data from api/DealerRegistration/all) ----
+    private int TotalDealers => _dealers.Count;
+    private int ActiveDealers => _dealers.Count(d => d.Status == DealerStatus.Active);
+    private int InactiveDealers => _dealers.Count(d => d.Status != DealerStatus.Active);
+    private int NewDealersThisMonth => _dealers.Count(d => d.CreatedAt.Year == DateTime.Today.Year && d.CreatedAt.Month == DateTime.Today.Month);
+    private int RegionsCovered => _dealers.Select(d => d.Region).Distinct().Count();
+
+    // ---- Guest house (real data from api/GuestHouseFrontOffice/bills - completed/billed stays) ----
+    private int GuestHouseBookings => _bills.Count;
+
+    // Revenue Collected: NO reliable existing field represents actually-collected revenue.
+    // A bill's PaymentStatus is only a snapshot taken when the bill is generated and is not
+    // updated when the stay is settled later, and TotalAmount is the gross billed amount,
+    // so neither sums to cash actually collected. Not available -> "—" (never a real-looking 0).
+    private string RevenueText => _loading ? "…" : "—";
+
+    // ---- Guest House Overview (real data from api/GuestHouseFrontOffice/rooms + bills) ----
+    // Occupancy uses ONLY valid existing records from the rooms payload:
+    // - skips phantom room rows the server emits for room types with AvailableQuantity = 0;
+    // - de-duplicates the same physical room number across room types per property;
+    // - counts a room as occupied only when its occupying booking is Confirmed(2) or
+    //   CheckedIn(5) (Draft(0)/PendingPayment(1) holds are not treated as occupancy).
+    // The rooms endpoint already excludes Cancelled/Completed bookings from its payload.
+    // "Active Bookings" stays the live availability flag count from the same payload.
+    private List<FrontOfficeRoomDto> AllRooms => _rooms.SelectMany(h => h.Rooms).ToList();
+    private int ActiveBookings => AllRooms.Count(r => r.RoomStatus == 1 || r.RoomStatus == 2);
+
+    private List<FrontOfficeRoomDto> ValidOccupancyRooms => AllRooms
+        .Where(r => r.AvailableQuantity > 0 && !string.IsNullOrWhiteSpace(r.RoomNumber))
+        .GroupBy(r => new { r.GuestHouseId, Room = r.RoomNumber!.Trim().ToUpperInvariant() })
+        .Select(g => g.OrderByDescending(r => r.CurrentBookingId.HasValue ? 1 : 0).First())
+        .ToList();
+
+    private List<FrontOfficeRoomDto> OccupiedRooms =>
+        ValidOccupancyRooms.Where(r => r.CurrentBookingId.HasValue && (r.BookingStatus == 2 || r.BookingStatus == 5)).ToList();
+
+    private string OccupancyRateText
+    {
+        get
+        {
+            if (!_roomsOk) return _loading ? "…" : "—";
+            if (ValidOccupancyRooms.Count <= 0) return "—";
+            return $"{(OccupiedRooms.Count * 100.0 / ValidOccupancyRooms.Count):0.0}%";
+        }
+    }
+
+    private List<GuestHouseOccupancyItem> OccupancyByProperty => ValidOccupancyRooms
+        .GroupBy(r => r.GuestHouseId)
+        .Select(g => new GuestHouseOccupancyItem
+        {
+            GuestHouseName = _rooms.FirstOrDefault(h => h.GuestHouseId == g.Key)?.GuestHouseName ?? "",
+            TotalRooms = g.Count(),
+            OccupiedRooms = g.Count(r => r.CurrentBookingId.HasValue && (r.BookingStatus == 2 || r.BookingStatus == 5))
+        })
+        .Where(p => p.TotalRooms > 0)
+        .OrderByDescending(p => p.OccupiedRooms)
+        .ToList();
+
+    // ---- Recent Activities (latest 5, merged from SDWA Scheme + Guest House real sources) ----
+    // Scheme activities use the real event timestamps already returned by
+    // api/WelfareSchemeApproval/applications: ApplicationDate for the submission
+    // and each approval step's ApprovedAt for the MO/RM/SM/AVP/Director decision.
+    // Guest House activities use api/GuestHouseFrontOffice/bills (completed/billed
+    // stays): the real check-in date when recorded and the bill date as the
+    // booking-completed event. Nothing is hardcoded and no timestamps are invented.
+    private List<RecentActivityItem> RecentActivities
+    {
+        get
+        {
+            var items = new List<RecentActivityItem>();
+
+            if (_approvalOk)
+            {
+                // In-progress applications (validated by MO) and invalid (rejected)
+                // applications carry no sub-status text, so use the plain status.
+                foreach (var app in _pipeline)
+                {
+                    var ctx = $"{app.SchemeName} · {app.DealerName}";
+                    var refText = string.IsNullOrWhiteSpace(app.ApplicationNumber) ? $"App #{app.Id}" : app.ApplicationNumber;
+
+                    items.Add(new RecentActivityItem
+                    {
+                        When = app.ApplicationDate,
+                        Icon = "bi-file-earmark-arrow-up",
+                        Accent = "#2563eb",
+                        Title = "Scheme application submitted",
+                        Detail = $"{ctx} ({refText})"
+                    });
+
+                    var lastStep = app.Approvals
+                        .Where(s => s.ApprovedAt.HasValue)
+                        .OrderByDescending(s => s.ApprovedAt)
+                        .FirstOrDefault();
+
+                    if (lastStep != null)
+                    {
+                        var approved = string.Equals(lastStep.ApprovalStatus, "Approved", StringComparison.OrdinalIgnoreCase);
+                        items.Add(new RecentActivityItem
+                        {
+                            When = lastStep.ApprovedAt!.Value,
+                            Icon = approved ? "bi-patch-check" : "bi-x-octagon",
+                            Accent = approved ? "#16a34a" : "#dc2626",
+                            Title = approved ? "Scheme approved" : "Scheme rejected",
+                            Detail = $"{ctx} · {lastStep.ApprovalLevel} ({refText})"
+                        });
+                    }
+                }
+            }
+
+            if (_billsOk)
+            {
+                foreach (var bill in _bills)
+                {
+                    if (bill.CheckInDate.HasValue)
+                    {
+                        items.Add(new RecentActivityItem
+                        {
+                            When = bill.CheckInDate.Value,
+                            Icon = "bi-box-arrow-in-right",
+                            Accent = "#0d9488",
+                            Title = "Guest booked & checked in",
+                            Detail = $"{bill.GuestName} · {bill.GuestHouseName} · {bill.RoomNumber}"
+                        });
+                    }
+
+                    items.Add(new RecentActivityItem
+                    {
+                        When = bill.BillDate,
+                        Icon = "bi-receipt",
+                        Accent = "#7c3aed",
+                        Title = "Guest house stay billed",
+                        Detail = bill.TotalAmount == 0
+                            ? $"{bill.GuestName} · {bill.GuestHouseName} · {bill.BookingReference}"
+                            : $"{bill.GuestName} · {bill.GuestHouseName} · {bill.BookingReference} · ₹{bill.TotalAmount:N0}"
+                    });
+                }
+            }
+
+            return items
+                .OrderByDescending(i => i.When)
+                .Take(5)
+                .ToList();
+        }
+    }
+
+    // ---- Recent Activities display-only model (no DB entity, no API) ----
+    private class RecentActivityItem
+    {
+        public DateTime When { get; set; }
+        public string Icon { get; set; } = string.Empty;
+        public string Accent { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Detail { get; set; } = string.Empty;
+    }
+
+    private static string WhenText(DateTime when)
+    {
+        var diff = DateTime.Now - when;
+        if (diff < TimeSpan.FromMinutes(1)) return "just now";
+        if (diff < TimeSpan.FromHours(1)) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff < TimeSpan.FromHours(24)) return $"{(int)diff.TotalHours}h ago";
+        if (diff < TimeSpan.FromDays(7)) return $"{(int)diff.TotalDays}d ago";
+        return when.ToString("dd MMM yyyy");
+    }
+
+    // ---- Monthly Application Trend (real counts from the loaded SDWA application rows) ----
+    // Groups the real applications by their application (creation) month. The merged _pipeline
+    // list is already deduplicated by application Id, so the same application can never be
+    // counted twice even if it appears under more than one workflow tab. Only months that have
+    // actual applications are emitted; nothing is invented or estimated.
+    private List<MonthlyAppTrendItem> MonthlyApplicationTrend
+    {
+        get
+        {
+            var groups = _pipeline
+                .Where(a => a.ApplicationDate != default)
+                .GroupBy(a => new { a.ApplicationDate.Year, a.ApplicationDate.Month })
+                .Select(g => new { g.Key.Year, g.Key.Month, Count = g.Count() })
+                .OrderBy(g => g.Year)
+                .ThenBy(g => g.Month)
+                .ToList();
+
+            if (groups.Count == 0) return new List<MonthlyAppTrendItem>();
+
+            var maxCount = groups.Max(g => g.Count);
+            var singleYear = groups.Select(g => g.Year).Distinct().Count() <= 1;
+
+            return groups
+                .Select(g => new MonthlyAppTrendItem(g.Year, g.Month, g.Count, maxCount, singleYear))
+                .ToList();
+        }
+    }
+
+    // ---- Monthly Application Trend display model (chart-only, no DB entity, no API) ----
+    private class MonthlyAppTrendItem
+    {
+        public MonthlyAppTrendItem(int year, int month, int count, int maxCount, bool singleYear)
+        {
+            Count = count;
+            MonthLabel = new DateTime(year, month, 1).ToString(singleYear ? "MMM" : "MMM yy", CultureInfo.InvariantCulture);
+            var pct = maxCount <= 0 ? 0 : count * 100d / maxCount;
+            HeightPct = $"{Math.Max(4, (int)Math.Round(pct))}%";
+        }
+
+        public int Count { get; }
+        public string MonthLabel { get; }
+        public string HeightPct { get; }
+    }
+
+    // ---- Scheme distribution (real counts computed from the loaded application rows) ----
+    private List<SchemeLegendItem> SchemeLegend => _pipeline
+        .GroupBy(a => a.SchemeType)
+        .Select(g => new SchemeLegendItem
+        {
+            SchemeType = g.Key,
+            Name = g.First().SchemeName,
+            Count = g.Count(),
+            Percent = _pipeline.Count > 0 ? g.Count() * 100.0 / _pipeline.Count : 0
+        })
+        .OrderByDescending(x => x.Count)
+        .ToList();
+
+    private string DonutStyle
+    {
+        get
+        {
+            if (!_approvalOk)
+                return "background: conic-gradient(#e2e8f0 0deg 360deg);";
+            var items = SchemeLegend;
+            var total = items.Sum(i => i.Count);
+            if (total <= 0)
+                return "background: conic-gradient(#e2e8f0 0deg 360deg);";
+            double acc = 0;
+            var segments = new List<string>();
+            foreach (var it in items)
+            {
+                var deg = it.Count * 360.0 / total;
+                segments.Add($"{SchemeColor(it.SchemeType)} {acc:0.0}deg {acc + deg:0.0}deg");
+                acc += deg;
+            }
+            return $"background: conic-gradient({string.Join(", ", segments)});";
+        }
+    }
+
+    // ---- Regional distribution (real counts computed from the loaded application rows) ----
+    private List<RegionalRow> RegionalRows => _pipeline
+        .Where(a => !string.IsNullOrWhiteSpace(a.Region))
+        .GroupBy(a => a.Region!)
+        .Select(g => new RegionalRow
+        {
+            Region = g.Key,
+            Applications = g.Count(),
+            Approved = g.Count(a => a.Status == (int)WelfareApplicationStatus.Approved),
+            Rejected = g.Count(a => a.Status == (int)WelfareApplicationStatus.Rejected)
+        })
+        .OrderByDescending(r => r.Applications)
+        .ToList();
+
+    // ---- Pending queue helpers ----
+    private static int PendingDays(DateTime date) => Math.Max(0, (DateTime.Today - date.Date).Days);
+
+    private static string PendingSinceText(DateTime date)
+    {
+        var days = PendingDays(date);
+        return days <= 30 ? $"{days} Day{(days == 1 ? "" : "s")}" : date.ToString("dd MMM yyyy");
+    }
+
+    private static string PriorityFor(int days) => days >= 5 ? "High" : days >= 2 ? "Medium" : "Low";
+
+    private static string PriorityColorFor(int days) =>
+        days >= 5 ? "var(--dsh-red)" : days >= 2 ? "var(--dsh-orange)" : "var(--dsh-green)";
+
+    private static string RecommendedByText(WelfareApprovalApplicationDto app)
+    {
+        var rec = app.Approvals.LastOrDefault(s =>
+            string.Equals(s.ApprovalStatus, "Approved", StringComparison.OrdinalIgnoreCase));
+        if (rec == null) return "—";
+        return string.IsNullOrWhiteSpace(rec.ApprovedBy) ? rec.ApprovalLevel : rec.ApprovedBy;
+    }
+
+    // ---- Quick action navigation ----
+    private void GoToSchemeApproval() => Navigation.NavigateTo("/SchemeApproval");
+
+    private void GoToDealerDashboard() => Navigation.NavigateTo("/Dashboard");
+
+    private void GoToWelfareSchemes() => Navigation.NavigateTo("/WelfareSchemes");
+
+    private void GoToFrontOffice() => Navigation.NavigateTo("/FrontOffice");
+
+    // Value shown only when the real source actually loaded; "…" while loading;
+    // "—" when the source failed (never a fake 0). Genuine 0 from a loaded source shows as 0.
+    private string Val(bool ok, int value) => _loading ? "…" : ok ? value.ToString("N0") : "—";
+
+    private static readonly Dictionary<int, string> SchemeColorMap = new()
+    {
+        [(int)WelfareSchemeType.MedicalAssistance] = "#86efac",
+        [(int)WelfareSchemeType.Wedding] = "#c084fc",
+        [(int)WelfareSchemeType.Grahapravesam] = "#fcd34d",
+        [(int)WelfareSchemeType.EducationalAssistance] = "#93c5fd",
+        [(int)WelfareSchemeType.Sathabhishekam] = "#f472b6",
+        [(int)WelfareSchemeType.DeathRelief] = "#9ca3af",
+        [(int)WelfareSchemeType.MeritAward] = "#a5b4fc",
+        [(int)WelfareSchemeType.DistinctionAward] = "#fdba74"
+    };
+
+    private static string SchemeColor(int schemeType) =>
+        SchemeColorMap.TryGetValue(schemeType, out var color) ? color : "#94a3b8";
+
+    private class SchemeLegendItem
+    {
+        public int SchemeType { get; set; }
+        public string Name { get; set; } = "";
+        public int Count { get; set; }
+        public double Percent { get; set; }
+        public string PercentText => $"{Percent:0.0}%";
+    }
+
+    private class RegionalRow
+    {
+        public string Region { get; set; } = "";
+        public int Applications { get; set; }
+        public int Approved { get; set; }
+        public int Rejected { get; set; }
+    }
+
+    private class BillListItemDto
+    {
+        public int BillId { get; set; }
+        public string? BillNumber { get; set; }
+        public string? BookingReference { get; set; }
+        public int BookingId { get; set; }
+        public string? GuestName { get; set; }
+        public string? GuestHouseName { get; set; }
+        public string? RoomNumber { get; set; }
+        public DateTime BillDate { get; set; }
+        public DateTime? CheckInDate { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public decimal TotalAmount { get; set; }
+        public decimal BalanceAmount { get; set; }
+        public int PaymentStatus { get; set; }
+        public int PaymentMethod { get; set; }
+    }
+
+    // ---- Guest House Overview display DTOs (mirrors api/GuestHouseFrontOffice/rooms payload) ----
+    // RoomStatus: 0 = Available, 1 = Reserved, 2 = CheckedIn (same values Front Office uses).
+    // BookingStatus is the occupying booking's status (absent for Available rooms -> 0/Draft),
+    // so it is only meaningful when CurrentBookingId != null.
+    private class FrontOfficeHouseDto
+    {
+        public int GuestHouseId { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public List<FrontOfficeRoomDto> Rooms { get; set; } = new();
+    }
+
+    private class FrontOfficeRoomDto
+    {
+        public string? RoomNumber { get; set; }
+        public int GuestHouseId { get; set; }
+        public int AvailableQuantity { get; set; }
+        public int RoomStatus { get; set; }
+        public int? CurrentBookingId { get; set; }
+        public int BookingStatus { get; set; }
+    }
+
+    private class GuestHouseOccupancyItem
+    {
+        public string GuestHouseName { get; set; } = "";
+        public int TotalRooms { get; set; }
+        public int OccupiedRooms { get; set; }
+        public string PercentText =>
+            TotalRooms <= 0 ? "—" : $"{OccupiedRooms * 100.0 / TotalRooms:0.0}%";
+        public string PercentWidth =>
+            TotalRooms <= 0 ? "0%" : $"{Math.Min(100, (int)Math.Round(OccupiedRooms * 100.0 / TotalRooms)):0}%";
+    }
 }

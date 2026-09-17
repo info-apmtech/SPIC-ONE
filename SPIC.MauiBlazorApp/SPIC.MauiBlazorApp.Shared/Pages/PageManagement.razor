@@ -15,6 +15,8 @@
     private bool _isSaving;
     private string _searchText = "";
     private string _statusFilter = "All";
+    private int _currentPage = 1;
+    private int _pageSize = 16;
     private string? _message;
     private bool _isError;
 
@@ -48,6 +50,11 @@
     private int ActiveCount => _pages.Count(p => p.IsActive);
     private int InactiveCount => _pages.Count(p => !p.IsActive);
 
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_filtered.Count / (double)_pageSize));
+    private IEnumerable<DR.ApplicationPage> PagedItems => _filtered
+        .Skip((_currentPage - 1) * _pageSize)
+        .Take(_pageSize);
+
     private void ApplyFilter()
     {
         var q = _searchText?.Trim() ?? "";
@@ -61,6 +68,8 @@
                  (_statusFilter == "Active" && p.IsActive) ||
                  (_statusFilter == "Inactive" && !p.IsActive)))
             .ToList();
+
+        if (_currentPage > TotalPages) _currentPage = 1;
     }
 
     private void StartAdd()
@@ -230,6 +239,31 @@
         _message = message;
         _isError = isError;
     }
+
+    private void GoToPage(int page) { _currentPage = page; }
+    private void PreviousPage() { if (_currentPage > 1) _currentPage--; }
+    private void NextPage() { if (_currentPage < TotalPages) _currentPage++; }
+
+    private IEnumerable<int> PageNumbers
+    {
+        get
+        {
+            var total = TotalPages;
+            if (total <= 7)
+                return Enumerable.Range(1, total);
+
+            var pages = new List<int> { 1 };
+            var start = Math.Max(2, _currentPage - 1);
+            var end = Math.Min(total - 1, _currentPage + 1);
+
+            if (start > 2) pages.Add(-1);
+            for (var i = start; i <= end; i++) pages.Add(i);
+            if (end < total - 1) pages.Add(-1);
+            pages.Add(total);
+
+            return pages;
+        }
+    }
 }
 
 <style>
@@ -337,9 +371,9 @@
 
         <div class="desig-form-row">
             <div class="desig-field">
-                <label>Page Key (permission code)</label>
+                <label>Page Key (permission code. Cannot be changed after creation)</label>
                 <input type="text" @bind="_model.Key" placeholder="e.g. NewFeatureRegister" maxlength="80" disabled="@_isEditMode" @ref="_firstInputRef" />
-                <span class="desig-hint">Cannot be changed after creation</span>
+                @* <span class="desig-hint">Cannot be changed after creation</span> *@
             </div>
 
             <div class="desig-field">
@@ -427,13 +461,13 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @if (_filtered.Any())
+                    @if (PagedItems.Any())
                     {
-                        var sno = 1;
-                        foreach (var p in _filtered)
+                        var sno = (_currentPage - 1) * _pageSize + 1;
+                        foreach (var p in PagedItems)
                         {
                             <tr>
-                                <td>@sno</td>
+                                <td>@(sno++)</td>
                                 <td class="pm-cell-left pm-key-cell">@p.Key</td>
                                 <td class="pm-cell-left">@p.Name</td>
                                 <td>@(p.Module ?? "-")</td>
@@ -456,7 +490,6 @@
                                     </div>
                                 </td>
                             </tr>
-                            sno++;
                         }
                     }
                     else
@@ -465,6 +498,37 @@
                     }
                 </tbody>
             </table>
+        </div>
+
+        <div class="pagination-container">
+            <div class="items-per-page">
+                Items Per Page
+                <select @bind="_pageSize" @bind:after="ApplyFilter">
+                    <option value="16">16</option>
+                    <option value="32">32</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+
+            <div class="pagination-controls">
+                <div class="page-btn @(_currentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage">
+                    <i class="bi bi-chevron-left"></i>
+                </div>
+                @foreach (var thispage in PageNumbers)
+                {
+                    @if (thispage == -1)
+                    {
+                        <div class="page-btn ellipsis">...</div>
+                    }
+                    else
+                    {
+                        <div class="page-btn @(thispage == _currentPage ? "active" : "")" @onclick="() => GoToPage(thispage)">@(thispage)</div>
+                    }
+                }
+                <div class="page-btn @(_currentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage">
+                    <i class="bi bi-chevron-right"></i>
+                </div>
+            </div>
         </div>
     </div>
 </div>
