@@ -298,7 +298,17 @@ namespace SPIC.Ifms.Automation.Reports
 			}
 			try
 			{
-				var login = await portal.LoginAsync(account, runId: 0, CancellationToken.None);
+				var loginTask = portal.LoginAsync(account, runId: 0, CancellationToken.None);
+				// The automatic path (8 CAPTCHA reads, one OTP) is over within four minutes. Past
+				// that the login is waiting for a person to answer the CAPTCHA in the app, which
+				// can take hours, and the other runs must not queue behind it.
+				if (await Task.WhenAny(loginTask, Task.Delay(TimeSpan.FromMinutes(4))) != loginTask)
+				{
+					Console.WriteLine("  this login is waiting on the app; the login turn is released to the other runs meanwhile");
+					held.Dispose();
+					held = null;
+				}
+				var login = await loginTask;
 				if (!login.Success)
 				{
 					Console.WriteLine($"Not signed in: {login.FailureReason}");
@@ -306,12 +316,12 @@ namespace SPIC.Ifms.Automation.Reports
 				}
 				Console.WriteLine($"Signed in ({login.CaptchaMethod}, OTP {login.OtpMethod ?? "not requested"}).");
 				// A moment for the portal to settle before the next process starts its own login.
-				await Task.Delay(TimeSpan.FromSeconds(10));
+				if (held is not null) await Task.Delay(TimeSpan.FromSeconds(10));
 				return true;
 			}
 			finally
 			{
-				held.Dispose();
+				held?.Dispose();
 			}
 		}
 
