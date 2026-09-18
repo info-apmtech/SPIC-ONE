@@ -68,6 +68,12 @@ if ($IfmsDeviceKeyFile)        { $overrides.ifmsDeviceKey        = Read-SecretFi
 if ($IfmsAutomationKeyFile)    { $overrides.ifmsAutomationKey    = Read-SecretFile $IfmsAutomationKeyFile }
 
 if ($DatabaseConnectionStringFile) { $overrides.databaseConnectionString = Read-SecretFile $DatabaseConnectionStringFile }
+function Restore-SoftDeletedSecret([string]$vaultName, [string]$name) {
+    if (-not $vaultName) { return }
+    $az = Get-AzCli
+    $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { & $az keyvault secret recover --vault-name $vaultName --name $name --only-show-errors -o none 2>&1 | Out-Null; Start-Sleep -Seconds 5 } finally { $ErrorActionPreference = $previous }
+}
 
 # -SecretsFromAppSettings takes the connection strings and IFMS keys the VPS deployment runs with
 # straight from SpicAPI/appsettings.json (comments stripped), so the Azure API can use the same
@@ -85,11 +91,16 @@ if ($SecretsFromAppSettings) {
 
 $vault = Find-KeyVault -ResourceGroup $names.ResourceGroup
 if ($vault) { Write-Host "Existing Key Vault $vault found; reusing its secrets." -ForegroundColor DarkGray }
+if ($vault -and $overrides.databaseConnectionString) { Restore-SoftDeletedSecret $vault 'db-connection-override' }
 if ($vault -and $ClearDatabaseOverride) {
     Write-Host 'Clearing db-connection-override: the API will use the Azure PostgreSQL server.' -ForegroundColor Yellow
     $az = Get-AzCli
-    & $az keyvault secret delete --vault-name $vault --name db-connection-override --only-show-errors -o none 2>$null
-    & $az keyvault secret purge  --vault-name $vault --name db-connection-override --only-show-errors -o none 2>$null
+    $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try {
+        & $az keyvault secret delete --vault-name $vault --name db-connection-override --only-show-errors -o none 2>&1 | Out-Null
+        # Purge is refused when purge protection is on; a soft-deleted secret is already invisible to the API, so that is fine.
+        & $az keyvault secret purge  --vault-name $vault --name db-connection-override --only-show-errors -o none 2>&1 | Out-Null
+    } finally { $ErrorActionPreference = $previous }
     $overrides.Remove('databaseConnectionString')
 }
 $secretsFile = New-SecretParametersFile -VaultName $vault -Overrides $overrides
