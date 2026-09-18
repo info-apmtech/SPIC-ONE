@@ -58,7 +58,7 @@ What the developer needs, in this order:
    (`winget install Microsoft.AzureCLI`, then `az bicep install`), Windows PowerShell 5.1 or later.
 4. **Sign in once**: `az login --tenant southernpetrochemical.onmicrosoft.com` (browser window;
    pick the invited account; device-code sign-in is blocked by SPIC's security defaults).
-5. **Release**: from the repository root, `.\deployzure\deploy.ps1 -Environment prod -Quick`.
+5. **Release**: from the repository root, `.\deploy\azure\deploy.ps1 -Environment prod -Quick`.
    The first run on a new PC rebuilds the local outputs file from the resource group by itself.
    Add `-RemoteBuild` if Docker Desktop is not available. Roll back with
    `-Quick -SkipBuild -Tag <previous tag>` (tags are printed at the end of every release and
@@ -70,9 +70,9 @@ The database is Azure Database for PostgreSQL Flexible Server, reachable only fr
 and only over SSL.
 
 ```powershell
-.\deployzure\db-access.ps1 -Environment prod                 # opens the firewall for this PC, prints host/db/user
-.\deployzure\db-access.ps1 -Environment prod -ShowPassword   # also prints the password from Key Vault
-.\deployzure\db-access.ps1 -Environment prod -Remove         # closes it again
+.\deploy\azure\db-access.ps1 -Environment prod                 # opens the firewall for this PC, prints host/db/user
+.\deploy\azure\db-access.ps1 -Environment prod -ShowPassword   # also prints the password from Key Vault
+.\deploy\azure\db-access.ps1 -Environment prod -Remove         # closes it again
 ```
 
 Then in pgAdmin / DBeaver / psql: host and user as printed, port 5432, database `spicone`,
