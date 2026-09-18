@@ -18,7 +18,8 @@ param(
     [int]$SourcePort = 30001,
     [string]$SourceUser = 'postgres',
     [string]$SourceDatabase = 'spicone',
-    [Parameter(Mandatory)][string]$SourcePasswordFile,
+    [string]$SourcePasswordFile,
+    [string]$SourceConnectionStringFile,   # alternative: a Npgsql connection string (or an appsettings JSON line) holding host/port/db/user/password
     [string]$PostgresImage = 'postgres:16-alpine',
     [switch]$KeepDump
 )
@@ -31,7 +32,21 @@ $outputs = Get-Outputs -Names $names
 $vault = Find-KeyVault -ResourceGroup $names.ResourceGroup
 $targetPassword = Get-KeyVaultSecretValue -VaultName $vault -Name 'postgres-admin-password'
 if (-not $targetPassword) { throw 'postgres-admin-password not readable from Key Vault.' }
-$sourcePassword = (Get-Content $SourcePasswordFile -Raw).Trim()
+if ($SourceConnectionStringFile) {
+    $cs = (Get-Content $SourceConnectionStringFile -Raw).Trim()
+    if ($cs -match '^\s*"[^"]+"\s*:\s*"(.*)"\s*,?\s*$') { $cs = $Matches[1] }
+    $kv = @{}
+    foreach ($part in ($cs -split ';')) { if ($part -match '^\s*([^=]+)=(.*)$') { $kv[$Matches[1].Trim().ToLower()] = $Matches[2].Trim() } }
+    if ($kv['host'])     { $SourceHost = $kv['host'] }
+    if ($kv['port'])     { $SourcePort = [int]$kv['port'] }
+    if ($kv['database']) { $SourceDatabase = $kv['database'] }
+    if ($kv['username']) { $SourceUser = $kv['username'] }
+    $sourcePassword = $kv['password']
+    if (-not $sourcePassword) { throw 'No Password= in the connection string file.' }
+} elseif ($SourcePasswordFile) {
+    $sourcePassword = (Get-Content $SourcePasswordFile -Raw).Trim()
+} else { throw 'Give -SourcePasswordFile or -SourceConnectionStringFile.' }
+Write-Host "Source: $SourceHost`:$SourcePort/$SourceDatabase as $SourceUser" -ForegroundColor DarkGray
 
 $work = Join-Path ([IO.Path]::GetTempPath()) "spicone-dbcopy-$((Get-Date).ToString('yyyyMMddHHmmss'))"
 New-Item -ItemType Directory -Path $work | Out-Null
