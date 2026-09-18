@@ -163,6 +163,12 @@ namespace SPIC.Ifms.Automation.Reports
 									comboCache[job.Key] = combinations;
 									Console.WriteLine($"  {combinations.Count} {string.Join("/", job.ForEach.Select(l => l.TokenName))} combination(s) found; reused for every day of this report.");
 								}
+								if (_sessionSuspect)
+								{
+									Console.WriteLine("  the portal error during discovery breaks the session; signing in again before downloading");
+									_sessionSuspect = false;
+									loggedIn = false;
+								}
 							}
 							catch (Exception ex)
 							{
@@ -270,17 +276,47 @@ namespace SPIC.Ifms.Automation.Reports
 			return summary.Values.Any(t => t.failed > 0) ? 1 : 0;
 		}
 
+		/// <summary>
+		/// Signs in under a lock shared by every backfill process on this machine. All the
+		/// portal logins send their OTP to the same handset and the relay hands out the newest
+		/// code, so two logins in flight at once swap codes and both fail; one at a time, they
+		/// do not. The nightly service does not take the lock, which is what the pause is for.
+		/// </summary>
 		private static async Task<bool> LoginAsync(IfmsPortalClient portal, IfmsAccountCredentials account)
 		{
-			var login = await portal.LoginAsync(account, runId: 0, CancellationToken.None);
-			if (!login.Success)
+			var lockPath = Path.Combine(AppContext.BaseDirectory, "login.lock");
+			FileStream? held = null;
+			var waited = false;
+			while (held is null)
 			{
-				Console.WriteLine($"Not signed in: {login.FailureReason}");
-				return false;
+				try { held = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+				catch (IOException)
+				{
+					if (!waited) { Console.WriteLine("  another run is signing in; waiting for it to finish first"); waited = true; }
+					await Task.Delay(TimeSpan.FromSeconds(5));
+				}
 			}
-			Console.WriteLine($"Signed in ({login.CaptchaMethod}, OTP {login.OtpMethod ?? "not requested"}).");
-			return true;
+			try
+			{
+				var login = await portal.LoginAsync(account, runId: 0, CancellationToken.None);
+				if (!login.Success)
+				{
+					Console.WriteLine($"Not signed in: {login.FailureReason}");
+					return false;
+				}
+				Console.WriteLine($"Signed in ({login.CaptchaMethod}, OTP {login.OtpMethod ?? "not requested"}).");
+				// A moment for the portal to settle before the next process starts its own login.
+				await Task.Delay(TimeSpan.FromSeconds(10));
+				return true;
+			}
+			finally
+			{
+				held.Dispose();
+			}
 		}
+
+		/// <summary>Set when a discovery hit the portal's Internal Server Error, which leaves the session broken.</summary>
+		private static bool _sessionSuspect;
 
 		private static RunTokens Tokens(IfmsAccountCredentials account, DateTime start, DateTime end, Dictionary<string, string> pinned)
 		{
@@ -315,6 +351,7 @@ namespace SPIC.Ifms.Automation.Reports
 					// An inner list that never loads (the portal answers "Internal Server Error" for
 					// one plant's products, every time) must not sink the whole day: skip that branch.
 					Console.WriteLine($"  {string.Join("/", chosen.Select(c => c.Value))}: could not read the {loop.TokenName} list ({ex.Message.Split(Environment.NewLine)[0]}); skipped");
+					_sessionSuspect = true;   // the next page after that error comes back blank, then the login page
 					return new List<List<(string, string)>>();
 				}
 			}
