@@ -46,7 +46,7 @@ if ($SourceConnectionStringFile) {
 } elseif ($SourcePasswordFile) {
     $sourcePassword = (Get-Content $SourcePasswordFile -Raw).Trim()
 } else { throw 'Give -SourcePasswordFile or -SourceConnectionStringFile.' }
-Write-Host "Source: $SourceHost`:$SourcePort/$SourceDatabase as $SourceUser" -ForegroundColor DarkGray
+Write-Host "Source: ${SourceHost}:${SourcePort}/${SourceDatabase} as ${SourceUser}" -ForegroundColor DarkGray
 
 $work = Join-Path ([IO.Path]::GetTempPath()) "spicone-dbcopy-$((Get-Date).ToString('yyyyMMddHHmmss'))"
 New-Item -ItemType Directory -Path $work | Out-Null
