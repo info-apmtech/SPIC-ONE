@@ -23,7 +23,14 @@ builder.Services.AddHealthChecks();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents()
+    .AddInteractiveServerComponents(options =>
+    {
+        // A user whose connection drops (mobile network, laptop sleep) keeps the page and
+        // the half-filled form on the server for 30 minutes; the browser retries for as long
+        // (see Blazor.start in App.razor). Default was 3 minutes / 100 circuits.
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(30);
+        options.DisconnectedCircuitMaxRetained = 500;
+    })
     .AddHubOptions(options =>
     {
         options.MaximumReceiveMessageSize = 100 * 1024 * 1024; // 100 MB
