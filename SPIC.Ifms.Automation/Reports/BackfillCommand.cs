@@ -31,6 +31,12 @@ namespace SPIC.Ifms.Automation.Reports
 	/// portal timeout, an expired session or a killed process and only does what is left.
 	/// A session that dies mid-way is re-established, up to 40 logins per job.
 	///
+	/// The portal allows ONE session per login: a second sign-in on the same account silently
+	/// ends the first (seen 2026-09-18, two backfill processes). So never run two backfills for
+	/// the same account, and the command pauses during the nightly service's window
+	/// (pause=04:00-05:45 by default, server local time) so the two do not sign each other out.
+	/// After the pause it signs in again, since the nightly run has taken the session.
+	///
 	/// The date tokens are overridden per chunk: everything a job uses as the start of its
 	/// range (fromDate, quarterStart, monthStart, yesterday) becomes the chunk start; everything
 	/// it uses as the end (toDate, today, reportDate, monthEnd) becomes the chunk end.
@@ -49,7 +55,8 @@ namespace SPIC.Ifms.Automation.Reports
 
 			if (keys.Count == 0 || !options.TryGetValue("from", out var fromText))
 			{
-				Console.WriteLine("usage: backfill <jobKey|all> from=YYYY-MM-DD [to=YYYY-MM-DD] [step=day|week|month|<days>] [account=key] [dry=true] [token=value ...]");
+				Console.WriteLine("usage: backfill <jobKey|all> from=YYYY-MM-DD [to=YYYY-MM-DD] [step=day|week|month|<days>] [account=key] [pause=HH:mm-HH:mm] [dry=true] [token=value ...]");
+				Console.WriteLine("       pause defaults to 04:00-05:45 (the nightly run's window; the portal allows one session per login).");
 				Console.WriteLine("       step defaults per job: 90 (days) for the invoice reports that use {{quarterStart}}, day for the stock reports.");
 				return 1;
 			}
@@ -65,7 +72,10 @@ namespace SPIC.Ifms.Automation.Reports
 				return 1;
 			}
 			var dry = options.TryGetValue("dry", out var dryText) && dryText.Equals("true", StringComparison.OrdinalIgnoreCase);
-			var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "from", "to", "step", "account", "dry" };
+			var pauseText = options.TryGetValue("pause", out var pt) ? pt : "04:00-05:45";
+			var pause = ParsePause(pauseText);
+			if (pause is null) { Console.WriteLine($"pause must look like 04:00-05:45, not '{pauseText}'."); return 1; }
+			var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "from", "to", "step", "account", "dry", "pause" };
 			var pinned = options.Where(kv => !reserved.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
 
 			await using var scope = services.CreateAsyncScope();
@@ -162,6 +172,7 @@ namespace SPIC.Ifms.Automation.Reports
 								attempt++;
 								try
 								{
+									if (await PauseForNightlyAsync(pause.Value)) loggedIn = false;
 									if (!loggedIn) { logins++; loggedIn = await LoginAsync(portal, account); if (!loggedIn) return 1; }
 									var tokens = Tokens(account, start, end, pinned);
 									foreach (var (name, value) in combo) tokens.WithLiteral(name, value);
@@ -194,10 +205,19 @@ namespace SPIC.Ifms.Automation.Reports
 										loggedIn = false;
 										continue;
 									}
-									if (attempt < 2 && !sessionLost)
+									if (attempt == 1 && !sessionLost)
 									{
 										Console.WriteLine($"  {start:yyyy-MM-dd}..{end:yyyy-MM-dd} {loopText,-28} retry after: {reason}");
 										await Task.Delay(TimeSpan.FromSeconds(10));
+										continue;
+									}
+									if (attempt == 2 && !sessionLost && logins < MaxLoginsPerJob)
+									{
+										// A session the portal ended silently (another login on the same account, a
+										// portal restart) shows up as an export that never downloads, not as a login
+										// page - so the last resort is a fresh sign-in, not another retry.
+										Console.WriteLine($"  {start:yyyy-MM-dd}..{end:yyyy-MM-dd} {loopText,-28} still failing ({reason}); signing in again in case the session expired");
+										loggedIn = false;
 										continue;
 									}
 									Console.WriteLine($"  {start:yyyy-MM-dd}..{end:yyyy-MM-dd} {loopText,-28} FAILED: {reason}");
@@ -300,6 +320,30 @@ namespace SPIC.Ifms.Automation.Reports
 				cursor = end.AddDays(1);
 			}
 			return list;
+		}
+
+		private static (TimeSpan From, TimeSpan To)? ParsePause(string text)
+		{
+			var parts = text.Split('-', 2);
+			if (parts.Length != 2) return null;
+			if (!TimeSpan.TryParseExact(parts[0].Trim(), @"hh\:mm", CultureInfo.InvariantCulture, out var from)) return null;
+			if (!TimeSpan.TryParseExact(parts[1].Trim(), @"hh\:mm", CultureInfo.InvariantCulture, out var to)) return null;
+			return (from, to);
+		}
+
+		/// <summary>Waits out the nightly service's window (local time). True when it waited, so the caller signs in again.</summary>
+		private static async Task<bool> PauseForNightlyAsync((TimeSpan From, TimeSpan To) pause)
+		{
+			if (pause.From == pause.To) return false;
+			var now = DateTime.Now;
+			var t = now.TimeOfDay;
+			var inside = pause.From < pause.To ? (t >= pause.From && t < pause.To) : (t >= pause.From || t < pause.To);
+			if (!inside) return false;
+			var resume = now.Date + pause.To;
+			if (resume <= now) resume = resume.AddDays(1);
+			Console.WriteLine($"  paused until {resume:HH:mm} for the nightly run (it takes the portal session); signing in again after.");
+			await Task.Delay(resume - now);
+			return true;
 		}
 
 		private static string Key(string job, DateTime start, DateTime end, string loops) => $"{job}|{start:yyyy-MM-dd}|{end:yyyy-MM-dd}|{loops}";
