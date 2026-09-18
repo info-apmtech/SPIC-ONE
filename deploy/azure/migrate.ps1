@@ -28,8 +28,8 @@ if (-not $conn) { throw 'db-connection secret not readable. Are you signed in as
 $ip = Get-MyPublicIp
 $rule = "migrate-$((Get-Date).ToString('yyyyMMddHHmmss'))"
 Write-Host "Opening PostgreSQL firewall for $ip ($rule) ..." -ForegroundColor DarkGray
-Invoke-Az postgres flexible-server firewall-rule create --resource-group $names.ResourceGroup --name $outputs.postgresServerName `
-    --rule-name $rule --start-ip-address $ip --end-ip-address $ip | Out-Null
+Invoke-Az postgres flexible-server firewall-rule create --resource-group $names.ResourceGroup --server-name $outputs.postgresServerName `
+    --name $rule --start-ip-address $ip --end-ip-address $ip | Out-Null
 
 try {
     Push-Location $script:RepoRoot
@@ -42,6 +42,6 @@ try {
 finally {
     Remove-Item Env:\ConnectionStrings__DefaultConnection -ErrorAction SilentlyContinue
     Pop-Location
-    Invoke-Az postgres flexible-server firewall-rule delete --resource-group $names.ResourceGroup --name $outputs.postgresServerName --rule-name $rule --yes | Out-Null
+    Invoke-Az postgres flexible-server firewall-rule delete --resource-group $names.ResourceGroup --server-name $outputs.postgresServerName --name $rule --yes | Out-Null
 }
 Write-Host 'Migrations applied.' -ForegroundColor Green

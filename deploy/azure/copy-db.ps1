@@ -56,8 +56,8 @@ $dumpDir = Join-Path $work 'dump'; New-Item -ItemType Directory -Path $dumpDir |
 
 $ip = Get-MyPublicIp
 $rule = "dbcopy-$((Get-Date).ToString('yyyyMMddHHmmss'))"
-Invoke-Az postgres flexible-server firewall-rule create --resource-group $names.ResourceGroup --name $outputs.postgresServerName `
-    --rule-name $rule --start-ip-address $ip --end-ip-address $ip | Out-Null
+Invoke-Az postgres flexible-server firewall-rule create --resource-group $names.ResourceGroup --server-name $outputs.postgresServerName `
+    --name $rule --start-ip-address $ip --end-ip-address $ip | Out-Null
 
 try {
     Write-Host "Dumping $SourceDatabase from ${SourceHost}:${SourcePort} ..." -ForegroundColor Cyan
@@ -73,7 +73,7 @@ try {
     Write-Host 'Database copied.' -ForegroundColor Green
 }
 finally {
-    Invoke-Az postgres flexible-server firewall-rule delete --resource-group $names.ResourceGroup --name $outputs.postgresServerName --rule-name $rule --yes | Out-Null
+    Invoke-Az postgres flexible-server firewall-rule delete --resource-group $names.ResourceGroup --server-name $outputs.postgresServerName --name $rule --yes | Out-Null
     Remove-Item $srcEnv, $dstEnv -Force -ErrorAction SilentlyContinue
     if (-not $KeepDump) { Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue } else { Write-Host "Dump kept at $dumpDir" }
 }
