@@ -99,8 +99,11 @@ namespace SPIC.Ifms.Automation.Reports
 				Console.WriteLine($"No login for account '{accountKey}'.");
 				return 1;
 			}
+			// With account= given explicitly the jobs run under that login whatever their own
+			// AccountKey says: that is how several Greenstar user IDs share the report set.
+			var explicitAccount = options.ContainsKey("account");
 			var jobs = selected
-				.Where(j => string.IsNullOrWhiteSpace(j!.AccountKey) || string.Equals(j.AccountKey, account.AccountKey, StringComparison.OrdinalIgnoreCase))
+				.Where(j => explicitAccount || string.IsNullOrWhiteSpace(j!.AccountKey) || string.Equals(j.AccountKey, account.AccountKey, StringComparison.OrdinalIgnoreCase))
 				.OrderBy(j => j!.Order)
 				.Select(j => j!)
 				.ToList();
