@@ -91,7 +91,7 @@ if ($SecretsFromAppSettings) {
 
 $vault = Find-KeyVault -ResourceGroup $names.ResourceGroup
 if ($vault) { Write-Host "Existing Key Vault $vault found; reusing its secrets." -ForegroundColor DarkGray }
-if ($vault -and $overrides.databaseConnectionString) { Restore-SoftDeletedSecret $vault 'db-connection-override' }
+if ($vault -and $overrides.ContainsKey('databaseConnectionString')) { Restore-SoftDeletedSecret $vault 'db-connection-override' }
 if ($vault -and $ClearDatabaseOverride) {
     Write-Host 'Clearing db-connection-override: the API will use the Azure PostgreSQL server.' -ForegroundColor Yellow
     $az = Get-AzCli
