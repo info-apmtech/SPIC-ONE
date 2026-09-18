@@ -113,6 +113,35 @@ namespace SpicAPI.Controllers
 
 		private static bool IsRead(string keyword) => keyword is "select" or "with";
 
+		private static readonly HashSet<string> SqlWords = new(StringComparer.OrdinalIgnoreCase)
+		{
+			"select","from","where","and","or","not","in","is","null","as","on","join","left","right","inner","outer","full","cross",
+			"group","by","order","asc","desc","limit","offset","having","distinct","union","all","case","when","then","else","end",
+			"insert","into","values","update","set","delete","with","like","ilike","between","exists","true","false","count","sum",
+			"min","max","avg","coalesce","cast","now","current_date","interval","returning","using","any","some","nulls","first","last"
+		};
+		private static readonly Regex Token = new(@"""[^""]*""|'[^']*'|[A-Za-z_][A-Za-z0-9_]*", RegexOptions.Compiled);
+
+		/// <summary>
+		/// PostgreSQL lowercases unquoted names, while the application's tables are created in
+		/// PascalCase ("Categories"). Rewrites unquoted table and column names to their exact
+		/// catalogue spelling, double-quoted, so a user can type them in any case.
+		/// </summary>
+		private static string FixIdentifierCase(NpgsqlConnection conn, string sql)
+		{
+			var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+			using (var cmd = new NpgsqlCommand("select table_name from information_schema.tables where table_schema = 'public' union select column_name from information_schema.columns where table_schema = 'public'", conn))
+			using (var r = cmd.ExecuteReader())
+				while (r.Read()) { var n = r.GetString(0); names.TryAdd(n, n); }
+			return Token.Replace(sql, m =>
+			{
+				var t = m.Value;
+				if (t.Length > 0 && (t[0] == '"' || t[0] == '\'')) return t;
+				if (SqlWords.Contains(t)) return t;
+				return names.TryGetValue(t, out var exact) && exact != t.ToLowerInvariant() ? "\"" + exact + "\"" : t;
+			});
+		}
+
 		// ------------------------------------------------------------------ catalogue
 
 		private static List<DataExplorerColumnInfo> LoadColumns(NpgsqlConnection conn, string schema, string table)
@@ -169,6 +198,7 @@ namespace SpicAPI.Controllers
 			{
 				var (sql, keyword) = Sanitize(req.Sql);
 				using var conn = OpenConnection();
+				sql = FixIdentifierCase(conn, sql);
 				if (IsRead(keyword))
 				{
 					var pageSize = Math.Clamp(req.PageSize, 1, MaxPageSize);
@@ -197,6 +227,7 @@ namespace SpicAPI.Controllers
 				var (sql, keyword) = Sanitize(req.Sql);
 				if (!IsRead(keyword)) return BadRequest(new { message = "Only SELECT can be exported." });
 				using var conn = OpenConnection();
+				sql = FixIdentifierCase(conn, sql);
 				var result = RunRead(conn, $"select * from ({sql}) q limit {ExportRowCap}", new List<NpgsqlParameter>(), 1, ExportRowCap);
 				WriteAudit(conn, null, "export", sql, result.Rows.Count);
 				return CsvFile(result, $"query-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv");
