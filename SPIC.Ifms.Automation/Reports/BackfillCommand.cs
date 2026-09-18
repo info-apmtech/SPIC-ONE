@@ -306,7 +306,17 @@ namespace SPIC.Ifms.Automation.Reports
 			else
 			{
 				foreach (var (n, v) in chosen) tokens.WithLiteral(n, v);
-				values = await portal.DiscoverLoopValuesAsync(job, loop, tokens, ct);
+				try
+				{
+					values = await portal.DiscoverLoopValuesAsync(job, loop, tokens, ct);
+				}
+				catch (Exception ex) when (loop.ContinueOnFailure && chosen.Count > 0)
+				{
+					// An inner list that never loads (the portal answers "Internal Server Error" for
+					// one plant's products, every time) must not sink the whole day: skip that branch.
+					Console.WriteLine($"  {string.Join("/", chosen.Select(c => c.Value))}: could not read the {loop.TokenName} list ({ex.Message.Split(Environment.NewLine)[0]}); skipped");
+					return new List<List<(string, string)>>();
+				}
 			}
 			var result = new List<List<(string, string)>>();
 			foreach (var value in values)
