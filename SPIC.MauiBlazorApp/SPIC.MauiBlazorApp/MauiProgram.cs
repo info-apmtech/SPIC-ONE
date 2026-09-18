@@ -39,7 +39,7 @@ namespace SPIC.MauiBlazorApp
                 return new HttpClient(handler)
                 {
                     //BaseAddress = new Uri("https://localhost:7032/")
-                    BaseAddress = new Uri("https://spicapi.apmiot.com/"),
+                    BaseAddress = new Uri("https://api.spicone.in/"),
                     Timeout = TimeSpan.FromMinutes(30)
                 };
             });

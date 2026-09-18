@@ -21,7 +21,14 @@ namespace SPIC.Ifms.Relay.Services
 		private const string LastSmsRelayedKey = "relay_last_sms_relayed_utc";
 
 		/// <summary>The production API, the same one SPIC ONE talks to.</summary>
-		public const string DefaultApiBase = "https://spicapi.apmiot.com/";
+		public const string DefaultApiBase = "https://api.spicone.in/";
+
+		/// <summary>
+		/// Where the API lived until 18 Sep 2026. Phones paired before the move
+		/// still hold it; the getter swaps it for the new address so nobody has
+		/// to re-pair, since the device token lives in the same database.
+		/// </summary>
+		private const string RetiredApiBase = "spicapi.apmiot.com";
 
 		/// <summary>The IFMS portal's OTP sender, as seen on the SIM so far.</summary>
 		public const string DefaultAcceptedSenders = "7305430555";
@@ -38,7 +45,19 @@ namespace SPIC.Ifms.Relay.Services
 
 		public static string ApiBase
 		{
-			get => Preferences.Default.Get(ApiBaseKey, DefaultApiBase);
+			get
+			{
+				var stored = Preferences.Default.Get(ApiBaseKey, DefaultApiBase);
+
+				if (stored.Contains(RetiredApiBase, StringComparison.OrdinalIgnoreCase))
+				{
+					Preferences.Default.Set(ApiBaseKey, DefaultApiBase);
+					RelayLog.Info($"API address moved to {DefaultApiBase}");
+					return DefaultApiBase;
+				}
+
+				return stored;
+			}
 			set => Preferences.Default.Set(ApiBaseKey, value);
 		}
 

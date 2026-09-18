@@ -18,7 +18,7 @@ project in the solution. Package id `com.apmiot.spic.ifmsrelay`.
 
 ## Endpoints
 
-All relative to the API base (default `https://spicapi.apmiot.com/`). Every
+All relative to the API base (default `https://api.spicone.in/`). Every
 call after pairing carries `X-Device-Token`; every such call also refreshes
 `LastSeenAt` on the server, so polling doubles as the heartbeat.
 
