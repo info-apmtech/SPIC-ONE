@@ -12,17 +12,24 @@ namespace SPIC.Ifms.Automation.Reports
 	/// One-time historical download of the date-ranged reports, download only:
 	///
 	///   dotnet SPIC.Ifms.Automation.dll backfill company-sales-greenstar from=2024-04-01 to=2026-09-17
-	///   dotnet SPIC.Ifms.Automation.dll backfill all from=2024-04-01 step=month account=greenstar
+	///   dotnet SPIC.Ifms.Automation.dll backfill all from=2024-04-01 account=greenstar
 	///   dotnet SPIC.Ifms.Automation.dll backfill retail-stocks-greenstar from=2024-04-01 dry=true
+	///   dotnet SPIC.Ifms.Automation.dll backfill wholesale-sales-greenstar from=2024-04-01 step=90
 	///
-	/// Logs in once, then for every period chunk (month by default, or week/day) and every
-	/// loop value (state, plant/product) downloads the report into
-	/// downloads/backfill/&lt;job&gt;/&lt;from&gt;_&lt;to&gt;/&lt;loop values&gt;/. Nothing is uploaded.
+	/// Logs in once, then for every period chunk and every loop value (state, plant/product)
+	/// downloads the report into downloads/backfill/&lt;job&gt;/&lt;from&gt;_&lt;to&gt;/&lt;loop values&gt;/.
+	/// Nothing is uploaded.
+	///
+	/// Chunk size: step=day | week | month | &lt;N&gt; (a number of days, e.g. 90). When step is not
+	/// given it is chosen per job: 90 days for the invoice reports (the ones that use
+	/// {{quarterStart}}, whose rows carry their own dates and whose portal filter allows up to
+	/// 90 days), and one download per date for everything else, because a stock report is a
+	/// position as on a date and a range would only give the position at its end.
 	///
 	/// Every result is appended to downloads/backfill/progress.jsonl, and a chunk that already
 	/// has a line with status ok or empty is skipped, so the command can be re-run after a
 	/// portal timeout, an expired session or a killed process and only does what is left.
-	/// A session that dies mid-way is re-established, up to three logins per job.
+	/// A session that dies mid-way is re-established, up to 40 logins per job.
 	///
 	/// The date tokens are overridden per chunk: everything a job uses as the start of its
 	/// range (fromDate, quarterStart, monthStart, yesterday) becomes the chunk start; everything
@@ -30,7 +37,7 @@ namespace SPIC.Ifms.Automation.Reports
 	/// </summary>
 	public static class BackfillCommand
 	{
-		private const int MaxLoginsPerJob = 3;
+		private const int MaxLoginsPerJob = 40;   // a daily-step run lasts days and outlives many portal sessions; each login needs an OTP via the relay
 
 		public static async Task<int> RunAsync(IServiceProvider services, string[] args)
 		{
@@ -42,7 +49,8 @@ namespace SPIC.Ifms.Automation.Reports
 
 			if (keys.Count == 0 || !options.TryGetValue("from", out var fromText))
 			{
-				Console.WriteLine("usage: backfill <jobKey|all> from=YYYY-MM-DD [to=YYYY-MM-DD] [step=month|week|day] [account=key] [dry=true] [token=value ...]");
+				Console.WriteLine("usage: backfill <jobKey|all> from=YYYY-MM-DD [to=YYYY-MM-DD] [step=day|week|month|<days>] [account=key] [dry=true] [token=value ...]");
+				Console.WriteLine("       step defaults per job: 90 (days) for the invoice reports that use {{quarterStart}}, day for the stock reports.");
 				return 1;
 			}
 
@@ -50,7 +58,12 @@ namespace SPIC.Ifms.Automation.Reports
 			var to = options.TryGetValue("to", out var toText)
 				? DateTime.ParseExact(toText, "yyyy-MM-dd", CultureInfo.InvariantCulture)
 				: DateTime.Today.AddDays(-1);
-			var step = options.TryGetValue("step", out var stepText) ? stepText.ToLowerInvariant() : "month";
+			var stepOverride = options.TryGetValue("step", out var stepText) ? stepText.ToLowerInvariant().TrimEnd('d') : null;
+			if (stepOverride is not null && stepOverride is not ("day" or "week" or "month") && !(int.TryParse(stepOverride, out var n) && n > 0))
+			{
+				Console.WriteLine($"step must be day, week, month or a number of days, not '{stepText}'.");
+				return 1;
+			}
 			var dry = options.TryGetValue("dry", out var dryText) && dryText.Equals("true", StringComparison.OrdinalIgnoreCase);
 			var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "from", "to", "step", "account", "dry" };
 			var pinned = options.Where(kv => !reserved.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
@@ -82,18 +95,22 @@ namespace SPIC.Ifms.Automation.Reports
 				.Select(j => j!)
 				.ToList();
 
-			var chunks = Chunks(from, to, step);
 			var root = Path.Combine(AppContext.BaseDirectory, "downloads", "backfill");
 			Directory.CreateDirectory(root);
 			var progressPath = Path.Combine(root, "progress.jsonl");
 			var done = LoadDone(progressPath);
 
-			Console.WriteLine($"Backfill {account.CompanyName}: {jobs.Count} job(s), {chunks.Count} {step} chunk(s) from {from:yyyy-MM-dd} to {to:yyyy-MM-dd}.");
+			Console.WriteLine($"Backfill {account.CompanyName}: {jobs.Count} job(s) from {from:yyyy-MM-dd} to {to:yyyy-MM-dd}.");
+			foreach (var j in jobs)
+			{
+				var st = stepOverride ?? DefaultStep(j);
+				Console.WriteLine($"  {j.Key,-34} step {StepLabel(st),-8} {Chunks(from, to, st).Count,5} chunk(s){(j.ForEach.Count > 0 ? " x " + string.Join(" x ", j.ForEach.Select(l => l.TokenName)) : "")}");
+			}
 			Console.WriteLine($"Files under {root}; progress in {progressPath}. Nothing is uploaded.");
 			if (dry)
 			{
 				foreach (var j in jobs)
-					foreach (var (start, end) in chunks)
+					foreach (var (start, end) in Chunks(from, to, stepOverride ?? DefaultStep(j)))
 						Console.WriteLine($"  {j.Key} {start:yyyy-MM-dd}..{end:yyyy-MM-dd} {(done.Contains(Key(j.Key, start, end, "")) ? "(done)" : "")}");
 				return 0;
 			}
@@ -108,8 +125,9 @@ namespace SPIC.Ifms.Automation.Reports
 				{
 					var logins = 0;
 					var tally = (ok: 0, empty: 0, failed: 0, skipped: 0);
+					var chunks = Chunks(from, to, stepOverride ?? DefaultStep(job));
 					Console.WriteLine();
-					Console.WriteLine($"=== {job.Key} : {job.Title} ===");
+					Console.WriteLine($"=== {job.Key} : {job.Title} — {chunks.Count} chunk(s) of {StepLabel(stepOverride ?? DefaultStep(job))} ===");
 
 					foreach (var (start, end) in chunks)
 					{
@@ -254,6 +272,16 @@ namespace SPIC.Ifms.Automation.Reports
 			return result;
 		}
 
+		/// <summary>
+		/// 90 days for a job whose steps use {{quarterStart}} (Company Sale, Wholesaler Sale: dated
+		/// invoice rows, portal accepts up to 90 days); otherwise one download per date, because a
+		/// stock report is a position as on a date.
+		/// </summary>
+		private static string DefaultStep(ReportJob job) =>
+			job.Steps.Any(s => (s.Value ?? "").Contains("{{quarterStart}}", StringComparison.OrdinalIgnoreCase)) ? "90" : "day";
+
+		private static string StepLabel(string step) => int.TryParse(step, out var n) ? $"{n} days" : step;
+
 		private static List<(DateTime Start, DateTime End)> Chunks(DateTime from, DateTime to, string step)
 		{
 			var list = new List<(DateTime, DateTime)>();
@@ -264,7 +292,8 @@ namespace SPIC.Ifms.Automation.Reports
 				{
 					"day" => cursor,
 					"week" => cursor.AddDays(6),
-					_ => new DateTime(cursor.Year, cursor.Month, DateTime.DaysInMonth(cursor.Year, cursor.Month))
+					"month" => new DateTime(cursor.Year, cursor.Month, DateTime.DaysInMonth(cursor.Year, cursor.Month)),
+					_ => cursor.AddDays(int.Parse(step) - 1)
 				};
 				if (end > to.Date) end = to.Date;
 				list.Add((cursor, end));
