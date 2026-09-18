@@ -25,6 +25,7 @@ param(
     [string]$IfmsDeviceKeyFile,
     [string]$IfmsAutomationKeyFile,
     [string]$DatabaseConnectionStringFile,
+    [string]$DataExplorerPasswordFile,
     [switch]$SecretsFromAppSettings,
     [switch]$ClearDatabaseOverride,
     [string]$WebApiBaseUrl = ''
@@ -68,6 +69,7 @@ if ($IfmsDeviceKeyFile)        { $overrides.ifmsDeviceKey        = Read-SecretFi
 if ($IfmsAutomationKeyFile)    { $overrides.ifmsAutomationKey    = Read-SecretFile $IfmsAutomationKeyFile }
 
 if ($DatabaseConnectionStringFile) { $overrides.databaseConnectionString = Read-SecretFile $DatabaseConnectionStringFile }
+if ($DataExplorerPasswordFile)     { $overrides.dataExplorerPassword     = Read-SecretFile $DataExplorerPasswordFile }
 function Restore-SoftDeletedSecret([string]$vaultName, [string]$name) {
     if (-not $vaultName) { return }
     $az = Get-AzCli

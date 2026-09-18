@@ -1,0 +1,537 @@
+@page "/DataExplorer"
+@using System.Net.Http.Json
+@using System.Text.Json
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+<PageTitle>Data Explorer</PageTitle>
+
+<style>
+    .dx { font-family: 'Inter', sans-serif; display: flex; flex-direction: column; gap: 12px; height: calc(100vh - 110px); }
+    .dx-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .dx-head h1 { font-size: 22px; margin: 0; }
+    .dx-head p { margin: 2px 0 0; color: #6b7280; font-size: 13px; }
+    .dx-lock { max-width: 420px; margin: 60px auto; padding: 28px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; }
+    .dx-lock h2 { margin: 0 0 6px; font-size: 18px; }
+    .dx-lock p { color: #6b7280; font-size: 13px; margin: 0 0 16px; }
+    .dx-body { display: grid; grid-template-columns: 260px 1fr; gap: 12px; min-height: 0; flex: 1; }
+    .dx-body.with-editor { grid-template-columns: 260px 1fr 360px; }
+    .dx-panel { border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; display: flex; flex-direction: column; min-height: 0; }
+    .dx-panel-head { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .dx-panel-body { overflow: auto; flex: 1; min-height: 0; }
+    .dx-tables { list-style: none; margin: 0; padding: 4px; }
+    .dx-tables li { padding: 7px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; font-size: 13px; }
+    .dx-tables li:hover { background: #f3f4f6; }
+    .dx-tables li.active { background: #e8f0fe; color: #1d4ed8; font-weight: 600; }
+    .dx-tables small { color: #9ca3af; }
+    .dx-input { padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+    .dx-btn { padding: 7px 12px; border-radius: 6px; border: 1px solid #d1d5db; background: #fff; font-size: 13px; cursor: pointer; }
+    .dx-btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .dx-btn.danger { background: #dc2626; border-color: #dc2626; color: #fff; }
+    .dx-btn:disabled { opacity: .5; cursor: default; }
+    .dx-table { border-collapse: collapse; font-size: 12.5px; white-space: nowrap; }
+    .dx-table th, .dx-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; max-width: 320px; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+    .dx-table th { position: sticky; top: 0; background: #f9fafb; cursor: pointer; user-select: none; font-weight: 600; }
+    .dx-table tbody tr:hover { background: #f8fafc; cursor: pointer; }
+    .dx-table tbody tr.selected { background: #e8f0fe; }
+    .dx-null { color: #9ca3af; font-style: italic; }
+    .dx-banner { padding: 8px 12px; border-radius: 6px; font-size: 13px; }
+    .dx-banner.ok { background: #ecfdf5; color: #065f46; }
+    .dx-banner.err { background: #fef2f2; color: #991b1b; }
+    .dx-field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+    .dx-field label { font-size: 12px; font-weight: 600; color: #374151; }
+    .dx-field small { color: #9ca3af; font-size: 11px; }
+    .dx-field .row { display: flex; gap: 6px; align-items: center; }
+    .dx-field input[type=text] { flex: 1; }
+    .dx-tabs { display: flex; gap: 6px; }
+    .dx-tabs button.active { background: #111827; color: #fff; border-color: #111827; }
+    .dx-muted { color: #6b7280; font-size: 12px; }
+</style>
+
+<div class="dx">
+    <div class="dx-head">
+        <div>
+            <h1>Data Explorer</h1>
+            <p>Browse, filter, export and correct rows of any table. Every change is written to the audit log with your name.</p>
+        </div>
+        @if (_unlocked)
+        {
+            <div class="dx-tabs">
+                <button class="dx-btn @(_tab == "data" ? "active" : "")" @onclick='() => _tab = "data"'>Tables</button>
+                <button class="dx-btn @(_tab == "query" ? "active" : "")" @onclick='() => _tab = "query"'>Query</button>
+                <button class="dx-btn @(_tab == "audit" ? "active" : "")" @onclick="ShowAudit">Audit log</button>
+                <button class="dx-btn" @onclick="Lock">Lock</button>
+            </div>
+        }
+    </div>
+
+    @if (!(LoginState.UserRole is AppRole.Admin or AppRole.SpecialAdmin))
+    {
+        <div class="dx-banner err">Data Explorer is available to Admin and SpecialAdmin users only.</div>
+    }
+    else if (!_unlocked)
+    {
+        <div class="dx-lock">
+            <h2>Enter the Data Explorer password</h2>
+            <p>This is a separate password from your login. It stays in this tab only.</p>
+            <div style="display:flex; gap:8px;">
+                <input class="dx-input" type="password" style="flex:1" @bind="_password" @bind:event="oninput" @onkeydown="OnPasswordKey" placeholder="Password" />
+                <button class="dx-btn primary" @onclick="Unlock" disabled="@_busy">Unlock</button>
+            </div>
+            @if (_error != null) { <div class="dx-banner err" style="margin-top:10px">@_error</div> }
+        </div>
+    }
+    else if (_tab == "query")
+    {
+        <div class="dx-panel" style="flex:0 0 auto">
+            <div class="dx-panel-head">
+                <strong>SQL</strong>
+                <span class="dx-muted">One statement. SELECT shows rows; INSERT, UPDATE and DELETE are dry-run first and need Confirm. Ctrl+Enter runs.</span>
+            </div>
+            <div style="padding:10px 12px; display:flex; flex-direction:column; gap:8px">
+                <textarea class="dx-input" style="width:100%; min-height:110px; font-family:Consolas, monospace" @bind="_sql" @bind:event="oninput" @onkeydown="OnSqlKey" placeholder="select * from &quot;DealerRegistrations&quot; limit 20"></textarea>
+                <div style="display:flex; gap:8px; align-items:center">
+                    <button class="dx-btn primary" @onclick="() => RunSql(false, 1)" disabled="@(_busy || string.IsNullOrWhiteSpace(_sql))">Run</button>
+                    @if (_query?.Kind == "affected" && !_query.Committed)
+                    {
+                        <button class="dx-btn danger" @onclick="() => RunSql(true, 1)" disabled="@_busy">Confirm: change @_query.AffectedRows row(s)</button>
+                    }
+                    @if (_query?.Kind == "rows")
+                    {
+                        <button class="dx-btn" @onclick="ExportQueryCsv" disabled="@_busy">Export CSV</button>
+                        <span style="flex:1"></span>
+                        <button class="dx-btn" @onclick="() => RunSql(false, _query.Page - 1)" disabled="@(_busy || _query.Page <= 1)">&lsaquo; Prev</button>
+                        <span class="dx-muted">page @_query.Page · @_query.Rows.Count rows @(_query.HasMore ? "+" : "") · @_query.ElapsedMs ms</span>
+                        <button class="dx-btn" @onclick="() => RunSql(false, _query.Page + 1)" disabled="@(_busy || !_query.HasMore)">Next &rsaquo;</button>
+                    }
+                </div>
+                @if (_error != null) { <div class="dx-banner err">@_error</div> }
+                @if (_query?.Kind == "affected")
+                {
+                    <div class="dx-banner @(_query.Committed ? "ok" : "err")">@_query.Message</div>
+                }
+                @if (_query?.Kind == "message")
+                {
+                    <div class="dx-banner ok">@_query.Message</div>
+                }
+            </div>
+        </div>
+        @if (_query?.Kind == "rows")
+        {
+            <div class="dx-panel">
+                <div class="dx-panel-body">
+                    @if (_query.Rows.Count == 1 && _query.Columns.Count == 1)
+                    {
+                        <div style="padding:24px">
+                            <div class="dx-muted">@_query.Columns[0]</div>
+                            <div style="font-size:32px; font-weight:600">@(_query.Rows[0][0] ?? "NULL")</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <table class="dx-table">
+                            <thead><tr>@foreach (var c in _query.Columns) { <th style="cursor:default">@c</th> }</tr></thead>
+                            <tbody>
+                                @foreach (var row in _query.Rows)
+                                {
+                                    <tr style="cursor:default">@foreach (var v in row) { <td title="@v">@if (v == null) { <span class="dx-null">NULL</span> } else { @v }</td> }</tr>
+                                }
+                            </tbody>
+                        </table>
+                        @if (_query.Rows.Count == 0) { <div class="dx-muted" style="padding:16px">No rows.</div> }
+                    }
+                </div>
+            </div>
+        }
+    }
+    else if (_tab == "audit")
+    {
+        <div class="dx-panel">
+            <div class="dx-panel-head"><strong>Last @_audit.Count changes</strong><button class="dx-btn" @onclick="ShowAudit">Refresh</button></div>
+            <div class="dx-panel-body">
+                <table class="dx-table">
+                    <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Table and key</th><th>Rows</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _audit)
+                        {
+                            <tr style="cursor:default"><td>@a.At</td><td>@a.UserName</td><td>@a.Kind</td><td title="@a.Sql">@a.Sql</td><td>@a.AffectedRows</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    else
+    {
+        @if (_error != null) { <div class="dx-banner err">@_error</div> }
+        @if (_notice != null) { <div class="dx-banner ok">@_notice</div> }
+
+        <div class="dx-body @(_editing ? "with-editor" : "")">
+            <div class="dx-panel">
+                <div class="dx-panel-head">
+                    <input class="dx-input" style="width:100%" placeholder="Search tables" @bind="_tableSearch" @bind:event="oninput" />
+                </div>
+                <div class="dx-panel-body">
+                    <ul class="dx-tables">
+                        @foreach (var t in _tables.Where(t => string.IsNullOrEmpty(_tableSearch) || t.Name.Contains(_tableSearch, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            <li class="@(_table?.Name == t.Name ? "active" : "")" @onclick="() => OpenTable(t)">
+                                <span>@t.Name</span><small>@t.EstimatedRows.ToString("N0")</small>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+
+            <div class="dx-panel">
+                @if (_table == null)
+                {
+                    <div class="dx-panel-head"><span class="dx-muted">Pick a table on the left.</span></div>
+                }
+                else
+                {
+                    <div class="dx-panel-head">
+                        <strong>@_table.Name</strong>
+                        <input class="dx-input" style="width:240px" placeholder="Filter (any column contains)" @bind="_filter" @onkeydown="OnFilterKey" />
+                        <button class="dx-btn" @onclick="() => LoadRows(1)" disabled="@_busy">Refresh</button>
+                        <button class="dx-btn primary" @onclick="NewRow" disabled="@_busy">New row</button>
+                        <button class="dx-btn" @onclick="ExportCsv" disabled="@_busy">Export CSV</button>
+                        <span style="flex:1"></span>
+                        <select class="dx-input" @bind="_pageSize" @bind:after="() => LoadRows(1)">
+                            <option value="50">50</option><option value="100">100</option><option value="200">200</option><option value="500">500</option>
+                        </select>
+                        <button class="dx-btn" @onclick="() => LoadRows(_page - 1)" disabled="@(_busy || _page <= 1)">&lsaquo; Prev</button>
+                        <span class="dx-muted">page @_page · @_rows.Count rows @(_hasMore ? "+" : "") · @_elapsedMs ms</span>
+                        <button class="dx-btn" @onclick="() => LoadRows(_page + 1)" disabled="@(_busy || !_hasMore)">Next &rsaquo;</button>
+                    </div>
+                    <div class="dx-panel-body">
+                        <table class="dx-table">
+                            <thead>
+                                <tr>
+                                    @foreach (var c in _table.Columns)
+                                    {
+                                        <th @onclick="() => SortBy(c.Name)" title="@ColumnTitle(c)">
+                                            @(c.IsPrimaryKey ? "🔑 " : "")@c.Name @(_orderBy == c.Name ? (_desc ? "▼" : "▲") : "")
+                                        </th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (var i = 0; i < _rows.Count; i++)
+                                {
+                                    var idx = i;
+                                    <tr class="@(_selectedRow == idx ? "selected" : "")" @onclick="() => EditRow(idx)">
+                                        @foreach (var v in _rows[idx])
+                                        {
+                                            <td title="@v">@if (v == null) { <span class="dx-null">NULL</span> } else { @v }</td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        @if (_rows.Count == 0 && !_busy) { <div class="dx-muted" style="padding:16px">No rows.</div> }
+                    </div>
+                }
+            </div>
+
+            @if (_editing && _table != null)
+            {
+                <div class="dx-panel">
+                    <div class="dx-panel-head">
+                        <strong>@(_isNew ? "New row in " : "Edit row in ") @_table.Name</strong>
+                        <span style="flex:1"></span>
+                        <button class="dx-btn" @onclick="CancelEdit">Cancel</button>
+                    </div>
+                    <div class="dx-panel-body" style="padding:12px">
+                        @foreach (var c in _table.Columns)
+                        {
+                            var col = c;
+                            var readOnly = !_isNew && col.IsPrimaryKey;
+                            <div class="dx-field">
+                                <label>@(col.IsPrimaryKey ? "🔑 " : "")@col.Name</label>
+                                <div class="row">
+                                    <input type="text" class="dx-input" value="@_edit[col.Name]" @oninput="e => _edit[col.Name] = e.Value?.ToString()" disabled="@(readOnly || _editNull[col.Name])" />
+                                    @if (col.Nullable && !readOnly)
+                                    {
+                                        <label style="font-weight:normal; font-size:12px"><input type="checkbox" checked="@_editNull[col.Name]" @onchange="e => _editNull[col.Name] = (bool)(e.Value ?? false)" /> NULL</label>
+                                    }
+                                </div>
+                                <small>@col.DataType@(col.HasDefault && _isNew ? " · leave empty for the default" : "")</small>
+                            </div>
+                        }
+                        <div style="display:flex; gap:8px; margin-top:8px">
+                            <button class="dx-btn primary" @onclick="SaveRow" disabled="@_busy">@(_isNew ? "Insert" : "Save")</button>
+                            @if (!_isNew) { <button class="dx-btn danger" @onclick="DeleteRow" disabled="@_busy">Delete</button> }
+                        </div>
+                        <p class="dx-muted" style="margin-top:12px">Save and Delete only go through when the key matches exactly one row. The change is recorded in the audit log.</p>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private const string PasswordHeader = "X-Explorer-Password";
+
+    private static string ColumnTitle(DataExplorerColumnInfo c) => c.DataType + (c.Nullable ? ", nullable" : string.Empty);
+
+    private bool _unlocked;
+    private bool _busy;
+    private string _password = string.Empty;
+    private string? _error;
+    private string? _notice;
+    private string _tab = "data";
+
+    private List<DataExplorerTableInfo> _tables = new();
+    private string _tableSearch = string.Empty;
+    private DataExplorerTableInfo? _table;
+
+    private string _filter = string.Empty;
+    private string? _orderBy;
+    private bool _desc;
+    private int _page = 1;
+    private int _pageSize = 100;
+    private bool _hasMore;
+    private long _elapsedMs;
+    private List<string> _columns = new();
+    private List<List<string?>> _rows = new();
+    private int _selectedRow = -1;
+
+    private bool _editing;
+    private bool _isNew;
+    private Dictionary<string, string?> _edit = new();
+    private Dictionary<string, bool> _editNull = new();
+    private Dictionary<string, string?> _editKey = new();
+
+    private List<DataExplorerAuditEntry> _audit = new();
+
+    private string _sql = string.Empty;
+    private DataExplorerQueryResult? _query;
+
+    private async Task OnSqlKey(KeyboardEventArgs e) { if (e.Key == "Enter" && e.CtrlKey) await RunSql(false, 1); }
+
+    private async Task RunSql(bool confirm, int page)
+    {
+        if (string.IsNullOrWhiteSpace(_sql)) return;
+        _error = null; _busy = true;
+        if (!confirm) _query = null;
+        try
+        {
+            var r = await Send(HttpMethod.Post, "api/DataExplorer/query", new DataExplorerQueryRequest { Sql = _sql, Page = Math.Max(1, page), PageSize = _pageSize, Confirm = confirm });
+            if (!r.IsSuccessStatusCode) { _error = await ErrorOf(r); return; }
+            _query = await r.Content.ReadFromJsonAsync<DataExplorerQueryResult>();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task ExportQueryCsv()
+    {
+        if (string.IsNullOrWhiteSpace(_sql)) return;
+        _error = null; _busy = true;
+        try
+        {
+            var r = await Send(HttpMethod.Post, "api/DataExplorer/query/export", new DataExplorerQueryRequest { Sql = _sql });
+            if (!r.IsSuccessStatusCode) { _error = await ErrorOf(r); return; }
+            var bytes = await r.Content.ReadAsByteArrayAsync();
+            var name = r.Content.Headers.ContentDisposition?.FileNameStar ?? r.Content.Headers.ContentDisposition?.FileName?.Trim('"') ?? "query.csv";
+            await JS.InvokeVoidAsync("downloadFileFromBytes", name, "text/csv", Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    // ---------------------------------------------------------------- http
+
+    private async Task<HttpResponseMessage> Send(HttpMethod method, string path, object? body = null)
+    {
+        var req = new HttpRequestMessage(method, path);
+        req.Headers.Add(PasswordHeader, _password);
+        if (body != null) req.Content = JsonContent.Create(body);
+        return await Http.SendAsync(req);
+    }
+
+    private async Task<string> ErrorOf(HttpResponseMessage r)
+    {
+        try
+        {
+            var text = await r.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.TryGetProperty("message", out var m)) return m.GetString() ?? text;
+            return text;
+        }
+        catch { return $"{(int)r.StatusCode} {r.ReasonPhrase}"; }
+    }
+
+    // ---------------------------------------------------------------- lock
+
+    private async Task OnPasswordKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Unlock(); }
+
+    private async Task Unlock()
+    {
+        _error = null; _busy = true;
+        try
+        {
+            var r = await Send(HttpMethod.Get, "api/DataExplorer/tables");
+            if (!r.IsSuccessStatusCode) { _error = await ErrorOf(r); return; }
+            _tables = await r.Content.ReadFromJsonAsync<List<DataExplorerTableInfo>>() ?? new();
+            _unlocked = true;
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private void Lock()
+    {
+        _unlocked = false; _password = string.Empty; _tables.Clear(); _table = null; _rows.Clear(); _editing = false; _tab = "data";
+    }
+
+    // ---------------------------------------------------------------- browse
+
+    private async Task OpenTable(DataExplorerTableInfo t)
+    {
+        _table = t; _filter = string.Empty; _orderBy = t.Columns.FirstOrDefault(c => c.IsPrimaryKey)?.Name; _desc = false; _editing = false; _selectedRow = -1;
+        await LoadRows(1);
+    }
+
+    private async Task OnFilterKey(KeyboardEventArgs e) { if (e.Key == "Enter") await LoadRows(1); }
+
+    private async Task SortBy(string column)
+    {
+        if (_orderBy == column) _desc = !_desc; else { _orderBy = column; _desc = false; }
+        await LoadRows(1);
+    }
+
+    private async Task LoadRows(int page)
+    {
+        if (_table == null) return;
+        _error = null; _busy = true; _selectedRow = -1;
+        try
+        {
+            var r = await Send(HttpMethod.Post, "api/DataExplorer/browse", new DataExplorerBrowseRequest
+            {
+                Schema = _table.Schema, Table = _table.Name, Page = Math.Max(1, page), PageSize = _pageSize,
+                Filter = string.IsNullOrWhiteSpace(_filter) ? null : _filter, OrderBy = _orderBy, Descending = _desc
+            });
+            if (!r.IsSuccessStatusCode) { _error = await ErrorOf(r); return; }
+            var result = await r.Content.ReadFromJsonAsync<DataExplorerQueryResult>() ?? new();
+            _columns = result.Columns; _rows = result.Rows; _hasMore = result.HasMore; _page = result.Page; _elapsedMs = result.ElapsedMs;
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task ExportCsv()
+    {
+        if (_table == null) return;
+        _error = null; _busy = true;
+        try
+        {
+            var r = await Send(HttpMethod.Post, "api/DataExplorer/export", new DataExplorerBrowseRequest
+            {
+                Schema = _table.Schema, Table = _table.Name, Filter = string.IsNullOrWhiteSpace(_filter) ? null : _filter, OrderBy = _orderBy, Descending = _desc
+            });
+            if (!r.IsSuccessStatusCode) { _error = await ErrorOf(r); return; }
+            var bytes = await r.Content.ReadAsByteArrayAsync();
+            var name = r.Content.Headers.ContentDisposition?.FileNameStar ?? r.Content.Headers.ContentDisposition?.FileName?.Trim('"') ?? $"{_table.Name}.csv";
+            await JS.InvokeVoidAsync("downloadFileFromBytes", name, "text/csv", Convert.ToBase64String(bytes));
+            _notice = $"Exported {name}.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    // ---------------------------------------------------------------- edit
+
+    private void NewRow()
+    {
+        if (_table == null) return;
+        _isNew = true; _editing = true; _selectedRow = -1; _notice = null; _error = null;
+        _edit = _table.Columns.ToDictionary(c => c.Name, _ => (string?)string.Empty);
+        _editNull = _table.Columns.ToDictionary(c => c.Name, _ => false);
+        _editKey = new();
+    }
+
+    private void EditRow(int index)
+    {
+        if (_table == null || index < 0 || index >= _rows.Count) return;
+        _isNew = false; _editing = true; _selectedRow = index; _notice = null; _error = null;
+        var row = _rows[index];
+        _edit = new(); _editNull = new(); _editKey = new();
+        for (var i = 0; i < _columns.Count; i++)
+        {
+            var c = _columns[i];
+            _edit[c] = row[i] ?? string.Empty;
+            _editNull[c] = row[i] == null;
+            var col = _table.Columns.FirstOrDefault(x => x.Name == c);
+            if (col?.IsPrimaryKey == true) _editKey[c] = row[i];
+        }
+    }
+
+    private void CancelEdit() { _editing = false; _selectedRow = -1; }
+
+    private async Task SaveRow()
+    {
+        if (_table == null) return;
+        _error = null; _notice = null; _busy = true;
+        try
+        {
+            var values = new Dictionary<string, string?>();
+            foreach (var c in _table.Columns)
+            {
+                if (!_isNew && c.IsPrimaryKey) continue;
+                if (_editNull.TryGetValue(c.Name, out var isNull) && isNull) { values[c.Name] = "NULL"; continue; }
+                var v = _edit.TryGetValue(c.Name, out var s) ? s : null;
+                if (_isNew && string.IsNullOrEmpty(v)) continue;           // let the database default apply
+                values[c.Name] = v ?? string.Empty;
+            }
+            var req = new DataExplorerRowRequest { Schema = _table.Schema, Table = _table.Name, Key = _editKey, Values = values };
+            var r = await Send(HttpMethod.Post, _isNew ? "api/DataExplorer/row/insert" : "api/DataExplorer/row/update", req);
+            if (!r.IsSuccessStatusCode) { _error = await ErrorOf(r); return; }
+            var result = await r.Content.ReadFromJsonAsync<DataExplorerExecuteResult>();
+            _notice = result?.Message ?? "Saved.";
+            _editing = false;
+            await LoadRows(_page);
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task DeleteRow()
+    {
+        if (_table == null || _isNew) return;
+        var keyText = string.Join(", ", _editKey.Select(kv => $"{kv.Key} = {kv.Value}"));
+        var ok = await JS.InvokeAsync<bool>("confirm", $"Delete the row where {keyText} from {_table.Name}? This cannot be undone.");
+        if (!ok) return;
+        _error = null; _notice = null; _busy = true;
+        try
+        {
+            var r = await Send(HttpMethod.Post, "api/DataExplorer/row/delete", new DataExplorerRowRequest { Schema = _table.Schema, Table = _table.Name, Key = _editKey });
+            if (!r.IsSuccessStatusCode) { _error = await ErrorOf(r); return; }
+            var result = await r.Content.ReadFromJsonAsync<DataExplorerExecuteResult>();
+            _notice = result?.Message ?? "Deleted.";
+            _editing = false;
+            await LoadRows(_page);
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    // ---------------------------------------------------------------- audit
+
+    private async Task ShowAudit()
+    {
+        _tab = "audit"; _error = null; _busy = true;
+        try
+        {
+            var r = await Send(HttpMethod.Get, "api/DataExplorer/audit?take=100");
+            if (!r.IsSuccessStatusCode) { _error = await ErrorOf(r); return; }
+            _audit = await r.Content.ReadFromJsonAsync<List<DataExplorerAuditEntry>>() ?? new();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+}

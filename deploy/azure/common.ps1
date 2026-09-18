@@ -107,6 +107,7 @@ function New-SecretParametersFile {
         ifmsAutomationKey     = 'ifms-automation-key'
         ifmsConnectionString  = 'ifms-connection'
         databaseConnectionString = 'db-connection-override'
+        dataExplorerPassword  = 'data-explorer-password'
     }
     $parameters = @{}
     foreach ($param in $map.Keys) {

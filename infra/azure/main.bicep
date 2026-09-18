@@ -57,6 +57,9 @@ param jwtIssuer string = 'SPIC_API'
 param jwtAudience string = 'SPIC_API_USERS'
 @description('Lifetime of a login token in minutes.')
 param jwtExpiryMinutes int = 60
+@description('Password of the admin Data Explorer page. Empty = the page stays disabled.')
+@secure()
+param dataExplorerPassword string = ''
 @secure()
 param ifmsDeviceKey string = ''
 @secure()
@@ -314,6 +317,12 @@ resource secretIfmsAutomationKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' 
   properties: { value: ifmsAutomationKey }
 }
 
+resource secretDataExplorerPassword 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(dataExplorerPassword)) {
+  parent: kv
+  name: 'data-explorer-password'
+  properties: { value: dataExplorerPassword }
+}
+
 resource secretIfmsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(ifmsConnectionString)) {
   parent: kv
   name: 'ifms-connection'
@@ -374,7 +383,8 @@ var apiSecretsBase = [
 var apiSecretsIfms = concat(
   empty(ifmsDeviceKey) ? [] : [{ name: 'ifms-device-key', keyVaultUrl: '${kv.properties.vaultUri}secrets/ifms-device-key', identity: uai.id }],
   empty(ifmsAutomationKey) ? [] : [{ name: 'ifms-automation-key', keyVaultUrl: '${kv.properties.vaultUri}secrets/ifms-automation-key', identity: uai.id }],
-  empty(ifmsConnectionString) ? [] : [{ name: 'ifms-connection', keyVaultUrl: '${kv.properties.vaultUri}secrets/ifms-connection', identity: uai.id }]
+  empty(ifmsConnectionString) ? [] : [{ name: 'ifms-connection', keyVaultUrl: '${kv.properties.vaultUri}secrets/ifms-connection', identity: uai.id }],
+  empty(dataExplorerPassword) ? [] : [{ name: 'data-explorer-password', keyVaultUrl: '${kv.properties.vaultUri}secrets/data-explorer-password', identity: uai.id }]
 )
 
 var apiEnvBase = [
@@ -389,7 +399,8 @@ var apiEnvBase = [
 var apiEnvIfms = concat(
   empty(ifmsDeviceKey) ? [] : [{ name: 'IfmsAutomation__DeviceKey', secretRef: 'ifms-device-key' }],
   empty(ifmsAutomationKey) ? [] : [{ name: 'IfmsAutomation__AutomationKey', secretRef: 'ifms-automation-key' }],
-  empty(ifmsConnectionString) ? [] : [{ name: 'ConnectionStrings__IfmsConnection', secretRef: 'ifms-connection' }]
+  empty(ifmsConnectionString) ? [] : [{ name: 'ConnectionStrings__IfmsConnection', secretRef: 'ifms-connection' }],
+  empty(dataExplorerPassword) ? [] : [{ name: 'DataExplorer__Password', secretRef: 'data-explorer-password' }]
 )
 
 resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
@@ -446,7 +457,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
       ]
     }
   }
-  dependsOn: [acrPull, kvSecretsUser, caeStorages, secretIfmsDeviceKey, secretIfmsAutomationKey, secretIfmsConnection]
+  dependsOn: [acrPull, kvSecretsUser, caeStorages, secretIfmsDeviceKey, secretIfmsAutomationKey, secretIfmsConnection, secretDataExplorerPassword]
 }
 
 var apiBaseUrl = !empty(webApiBaseUrl) ? webApiBaseUrl : (deployApps ? 'https://${apiApp.properties.configuration.ingress.fqdn}/' : '')
