@@ -131,6 +131,7 @@ namespace SPIC.Ifms.Automation.Reports
 			var portal = scope.ServiceProvider.GetRequiredService<IfmsPortalClient>();
 			var summary = new Dictionary<string, (int ok, int empty, int failed, int skipped)>();
 			var comboCache = new Dictionary<string, List<List<(string Name, string Value)>>>(StringComparer.OrdinalIgnoreCase);
+			var capturedEmpty = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 			var loggedIn = false;
 
 			try
@@ -227,6 +228,24 @@ namespace SPIC.Ifms.Automation.Reports
 								catch (Exception ex)
 								{
 									var reason = ex.Message.Split(Environment.NewLine)[0];
+									var exportNeverAppeared = job.DownloadStep?.TimeoutMs is int dl
+										&& reason.StartsWith("Timeout", StringComparison.OrdinalIgnoreCase)
+										&& reason.Contains($"{dl}ms", StringComparison.Ordinal);
+									if (exportNeverAppeared && job.ForEach.Any(l => l.AllowEmptyPerValue))
+									{
+										// The Global Stock pages show no export button at all when the plant/product
+										// has nothing on that date; that is an empty result, not a failure to retry.
+										if (capturedEmpty.Add(job.Key))
+										{
+											try { Console.WriteLine($"  (page kept for reference: {await portal.CapturePageAsync(null, CancellationToken.None)})"); }
+											catch { /* diagnostics only */ }
+										}
+										Console.WriteLine($"  {start:yyyy-MM-dd}..{end:yyyy-MM-dd} {loopText,-28} empty (no export offered)");
+										Append(progressPath, job.Key, start, end, loopText, "empty", 0, "no export button");
+										tally.empty++;
+										done.Add(key);
+										break;
+									}
 									var sessionLost = reason.Contains("authoris", StringComparison.OrdinalIgnoreCase)
 										|| reason.Contains("login", StringComparison.OrdinalIgnoreCase)
 										|| reason.Contains("session", StringComparison.OrdinalIgnoreCase);
