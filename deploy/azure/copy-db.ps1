@@ -60,7 +60,7 @@ Invoke-Az postgres flexible-server firewall-rule create --resource-group $names.
     --rule-name $rule --start-ip-address $ip --end-ip-address $ip | Out-Null
 
 try {
-    Write-Host "Dumping $SourceDatabase from $SourceHost:$SourcePort ..." -ForegroundColor Cyan
+    Write-Host "Dumping $SourceDatabase from ${SourceHost}:${SourcePort} ..." -ForegroundColor Cyan
     docker run --rm --env-file $srcEnv -v "${dumpDir}:/dump" $PostgresImage `
         pg_dump -h $SourceHost -p $SourcePort -U $SourceUser -d $SourceDatabase -Fc --no-owner --no-privileges -f /dump/spicone.dump
     if ($LASTEXITCODE -ne 0) { throw 'pg_dump failed.' }
