@@ -43,6 +43,47 @@ The kit is subscription-agnostic. To deploy into a subscription that belongs to 
 History: the first deployment (10 Sep 2026) was in APM's subscription and was deleted on 16 Sep 2026
 at SPIC's request; SPIC hosts under their own Azure account.
 
+## Onboarding another developer to deploy
+
+What the developer needs, in this order:
+
+1. **Access to SPIC's Azure.** SPIC IT (spic1support@greenstar.net.in) invites the developer's
+   Microsoft account as a guest into the SOUTHERN PETROCHEMICAL directory (Microsoft Entra ID →
+   Users → New user → Invite external user) and gives it the **Owner** role on the subscription
+   "Azure subscription 1" (Subscriptions → Access control (IAM) → Add role assignment →
+   Privileged administrator roles → Owner). Contributor is not enough: the template assigns roles.
+2. **Access to the code.** GitHub repository `info-apmtech/SPIC-ONE`, branch `azure-deploy`
+   (releases are built from it; merge `Satham` into it first).
+3. **On the PC.** Git, Docker Desktop (Linux containers), .NET 10 SDK, Azure CLI
+   (`winget install Microsoft.AzureCLI`, then `az bicep install`), Windows PowerShell 5.1 or later.
+4. **Sign in once**: `az login --tenant southernpetrochemical.onmicrosoft.com` (browser window;
+   pick the invited account; device-code sign-in is blocked by SPIC's security defaults).
+5. **Release**: from the repository root, `.\deployzure\deploy.ps1 -Environment prod -Quick`.
+   The first run on a new PC rebuilds the local outputs file from the resource group by itself.
+   Add `-RemoteBuild` if Docker Desktop is not available. Roll back with
+   `-Quick -SkipBuild -Tag <previous tag>` (tags are printed at the end of every release and
+   listed under the container registry in the portal).
+
+### Connecting to the production database
+
+The database is Azure Database for PostgreSQL Flexible Server, reachable only from allowed IPs
+and only over SSL.
+
+```powershell
+.\deployzure\db-access.ps1 -Environment prod                 # opens the firewall for this PC, prints host/db/user
+.\deployzure\db-access.ps1 -Environment prod -ShowPassword   # also prints the password from Key Vault
+.\deployzure\db-access.ps1 -Environment prod -Remove         # closes it again
+```
+
+Then in pgAdmin / DBeaver / psql: host and user as printed, port 5432, database `spicone`,
+SSL mode `require`. Reading the password needs the **Key Vault Secrets User** role on the
+vault `kv-spicone-prd-…` (portal → Key Vault → Access control (IAM)); the person who ran
+provision.ps1 has it already. Without that role the password can be read by anyone with
+Key Vault access in the portal under Secrets → postgres-admin-password.
+
+The IFMS tables live in a separate database `spiconeifms` on cam.server (103.14.121.144:30001),
+not in Azure; see the IFMS automation notes.
+
 ## One-time prerequisites on the PC
 
 1. Docker Desktop running (Linux containers).

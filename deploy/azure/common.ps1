@@ -152,9 +152,30 @@ function Invoke-PlatformDeployment {
 }
 
 function Get-Outputs {
+    # The outputs file is written by provision.ps1 and is not committed. On a PC that never ran
+    # provision (another developer), rebuild it by looking at what exists in the resource group.
     param([Parameter(Mandatory)][hashtable]$Names)
     if (-not (Test-Path $Names.OutputsFile)) {
-        throw "No outputs for this environment yet. Run provision.ps1 -Environment <env> first."
+        Write-Host "No local outputs file; discovering resources in $($Names.ResourceGroup) ..." -ForegroundColor DarkGray
+        $rg = $Names.ResourceGroup
+        $acr = Invoke-AzJson acr list -g $rg --query "[0].{name:name, login:loginServer}"
+        $kv = Find-KeyVault -ResourceGroup $rg
+        $st = Invoke-AzJson storage account list -g $rg --query "[0].name"
+        $pg = Invoke-AzJson postgres flexible-server list -g $rg --query "[0].{name:name, fqdn:fullyQualifiedDomainName, admin:administratorLogin}"
+        $cae = Invoke-AzJson containerapp env list -g $rg --query "[0].name"
+        $law = Invoke-AzJson monitor log-analytics workspace list -g $rg --query "[0].name"
+        $apps = Invoke-AzJson containerapp list -g $rg --query "[].{name:name, fqdn:properties.configuration.ingress.fqdn}"
+        if (-not ($acr -and $kv -and $st -and $pg -and $cae)) { throw "Resource group $rg does not contain a SPIC ONE environment. Run provision.ps1 first." }
+        $api = $apps | Where-Object { $_.name -like 'ca-spicone-api-*' } | Select-Object -First 1
+        $web = $apps | Where-Object { $_.name -like 'ca-spicone-web-*' } | Select-Object -First 1
+        $discovered = @{
+            resourceGroupName = $rg; acrName = $acr.name; acrLoginServer = $acr.login; keyVaultName = $kv
+            storageAccountName = $st; postgresServerName = $pg.name; postgresFqdn = $pg.fqdn
+            postgresDatabase = 'spicone'; postgresAdminLogin = $pg.admin; environmentName = $cae; logAnalyticsName = $law
+            apiAppName = $(if ($api) { $api.name } else { '' }); webAppName = $(if ($web) { $web.name } else { '' })
+            apiFqdn = $(if ($api) { $api.fqdn } else { '' }); webFqdn = $(if ($web) { $web.fqdn } else { '' })
+        }
+        $discovered | ConvertTo-Json | Set-Content -Path $Names.OutputsFile -Encoding utf8
     }
     $obj = Get-Content $Names.OutputsFile -Raw | ConvertFrom-Json
     $flat = @{}

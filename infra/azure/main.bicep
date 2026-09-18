@@ -55,6 +55,8 @@ param postgresAdminPassword string = newGuid()
 param jwtKey string = newGuid()
 param jwtIssuer string = 'SPIC_API'
 param jwtAudience string = 'SPIC_API_USERS'
+@description('Lifetime of a login token in minutes.')
+param jwtExpiryMinutes int = 60
 @secure()
 param ifmsDeviceKey string = ''
 @secure()
@@ -381,6 +383,7 @@ var apiEnvBase = [
   { name: 'Jwt__Key', secretRef: 'jwt-key' }
   { name: 'Jwt__Issuer', value: jwtIssuer }
   { name: 'Jwt__Audience', value: jwtAudience }
+  { name: 'Jwt__ExpiryMinutes', value: string(jwtExpiryMinutes) }
   { name: 'DataProtection__KeysPath', value: '/app/keys' }
 ]
 var apiEnvIfms = concat(
