@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -144,7 +144,7 @@ builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
 var isTool = command is "test-captcha" or "set-credentials" or "list-credentials"
 	or "test-email" or "otp" or "run-now" or "test-login" or "dump-page" or "test-job" or "test-jobs"
-	or "upload-saved";
+	or "upload-saved" or "backfill";
 
 if (!isTool)
 {
@@ -192,6 +192,10 @@ if (command == "dump-page")
 
 if (command == "test-job" || command == "test-jobs")
 	return await RunTestJobAsync(host.Services, args);
+
+// One-time history: every date-ranged report, month by month, download only.
+if (command == "backfill")
+	return await SPIC.Ifms.Automation.Reports.BackfillCommand.RunAsync(host.Services, args);
 
 // Push files an earlier run left behind - the day Upload:Enabled was off, or
 // SpicAPI was down at 04:05 - without logging in to the portal again.
