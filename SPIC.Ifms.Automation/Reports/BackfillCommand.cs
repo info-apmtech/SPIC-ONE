@@ -130,6 +130,7 @@ namespace SPIC.Ifms.Automation.Reports
 
 			var portal = scope.ServiceProvider.GetRequiredService<IfmsPortalClient>();
 			var summary = new Dictionary<string, (int ok, int empty, int failed, int skipped)>();
+			var comboCache = new Dictionary<string, List<List<(string Name, string Value)>>>(StringComparer.OrdinalIgnoreCase);
 			var loggedIn = false;
 
 			try
@@ -145,22 +146,43 @@ namespace SPIC.Ifms.Automation.Reports
 					foreach (var (start, end) in chunks)
 					{
 						var chunkDir = Path.Combine(root, job.Key, $"{start:yyyy-MM-dd}_{end:yyyy-MM-dd}");
-						List<List<(string Name, string Value)>> combinations;
-						try
+						List<List<(string Name, string Value)>>? combinations = null;
+						if (job.ForEach.Count == 0) combinations = new List<List<(string, string)>> { new() };
+						else if (!job.ForEach.Any(l => l.TokenName.Equals("state", StringComparison.OrdinalIgnoreCase)) && comboCache.TryGetValue(job.Key, out var cached))
+							combinations = cached;   // plants and products do not change from one day to the next; states are cheap and left as they are
+						for (var discovery = 1; combinations is null; discovery++)
 						{
-							if (!loggedIn) { logins++; loggedIn = await LoginAsync(portal, account); if (!loggedIn) return 1; }
-							var baseTokens = Tokens(account, start, end, pinned);
-							combinations = job.ForEach.Count == 0
-								? new List<List<(string, string)>> { new() }
-								: await ExpandAsync(portal, job, baseTokens, 0, new List<(string, string)>(), pinned, CancellationToken.None);
+							try
+							{
+								if (await PauseForNightlyAsync(pause.Value)) loggedIn = false;
+								if (!loggedIn) { logins++; loggedIn = await LoginAsync(portal, account); if (!loggedIn) return 1; }
+								var baseTokens = Tokens(account, start, end, pinned);
+								combinations = await ExpandAsync(portal, job, baseTokens, 0, new List<(string, string)>(), pinned, CancellationToken.None);
+								if (!job.ForEach.Any(l => l.TokenName.Equals("state", StringComparison.OrdinalIgnoreCase)))
+								{
+									comboCache[job.Key] = combinations;
+									Console.WriteLine($"  {combinations.Count} {string.Join("/", job.ForEach.Select(l => l.TokenName))} combination(s) found; reused for every day of this report.");
+								}
+							}
+							catch (Exception ex)
+							{
+								var reason = ex.Message.Split(Environment.NewLine)[0];
+								if (discovery < 3)
+								{
+									// The portal throws "Internal Server Error" dialogs now and then while the
+									// product list loads; a second look, and then a fresh sign-in, usually clears it.
+									Console.WriteLine($"  {start:yyyy-MM-dd}..{end:yyyy-MM-dd}  discovering loop values failed ({reason}); {(discovery == 1 ? "trying again" : "signing in again")}");
+									if (discovery == 2 && logins < MaxLoginsPerJob) loggedIn = false;
+									await Task.Delay(TimeSpan.FromSeconds(15));
+									continue;
+								}
+								Console.WriteLine($"  {start:yyyy-MM-dd}..{end:yyyy-MM-dd}  FAILED discovering loop values: {reason}");
+								Append(progressPath, job.Key, start, end, "", "failed", 0, ex.Message);
+								tally.failed++;
+								break;
+							}
 						}
-						catch (Exception ex)
-						{
-							Console.WriteLine($"  {start:yyyy-MM-dd}..{end:yyyy-MM-dd}  FAILED discovering loop values: {ex.Message.Split(Environment.NewLine)[0]}");
-							Append(progressPath, job.Key, start, end, "", "failed", 0, ex.Message);
-							tally.failed++;
-							continue;
-						}
+						if (combinations is null) continue;
 
 						foreach (var combo in combinations)
 						{
