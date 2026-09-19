@@ -30,6 +30,8 @@ namespace SPIC.MauiBlazorApp
             builder.Services.AddSingleton<IFormFactor, FormFactor>();
             builder.Services.AddSingleton<ISessionStore, SecureSessionStore>();
             builder.Services.AddScoped<FileDownloadService>();
+            builder.Services.AddScoped<ToastService>();
+            builder.Services.AddScoped<ConnectivityState>();
 
             builder.Services.AddMauiBlazorWebView();
 			builder.Services.AddScoped<LoginState>();

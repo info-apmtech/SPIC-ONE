@@ -47,6 +47,8 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
 builder.Services.AddScoped<ISessionStore, BrowserSessionStore>();
 builder.Services.AddScoped<FileDownloadService>();
+builder.Services.AddScoped<ToastService>();
+builder.Services.AddScoped<ConnectivityState>();
 builder.Services.AddScoped<LoginState>();
 builder.Services.AddScoped<LoadingService>();
 builder.Services.AddScoped<AppSearchState>();
