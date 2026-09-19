@@ -7,6 +7,7 @@
 @inject LoadingService Loading
 @inject LoginState LoginState
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 @code {
     [Parameter]
@@ -190,7 +191,7 @@
                     await LoadCreditLimitSalesData(_dealer.Id);
                 }
             }
-            catch { }
+            catch { Toast.Error("Could not load the dealer application. Please try again."); }
             finally
             {
                 _isLoading = false;
@@ -1315,7 +1316,7 @@ private async Task ApproveDealer()
             await UpdateApprovalForCreditTypeAsync(histories, DR.CreditType.SPIC, _rmCreditLimitSpic, _smCreditLimitSpic, _avpCreditLimitSpic);
             await UpdateApprovalForCreditTypeAsync(histories, DR.CreditType.Greenstar, _rmCreditLimitGfl, _smCreditLimitGfl, _avpCreditLimitGfl);
         }
-        catch { }
+        catch { Toast.Error("Could not update the credit limit approval history."); }
     }
 
     private async Task UpdateApprovalForCreditTypeAsync(
@@ -1764,12 +1765,9 @@ private async Task ApproveDealer()
         }
 </style>
 
-<div class="container-fluid py-4 px-0">
+<div class="container-fluid py-4 px-0 sdr-review-page">
 
-    <div class="page-header-row">
-        <h1 class="page-title">Review - Dealer Application</h1>
-        <div class="page-subtitle">Review and approve dealer registration</div>
-    </div>
+    <PageHeader Title="Review - Dealer Application" Subtitle="Review and approve dealer registration" />
 
     @if (_dealer?.IsCreditLimitConsentGiven == true)
     {
@@ -3993,20 +3991,41 @@ private async Task ApproveDealer()
 
 @if (CanShowApprovalButton())
 {
-    <div class="d-flex justify-content-end gap-2 mt-3 mb-5 px-4">
-
-      <button type="button"
-            class="btn btn-outline-warning px-3"
-            @onclick="@ShowSendBackPopup">
-        <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
-    </button>
-        
-      <button class="btn-submit px-3" @onclick="ShowConfirmProceedPopup" disabled="@_isApproving">
-        @(_isApproving ? "Processing..." : ApprovalButtonText())
-    </button>
-    </div>
+    <ActionBar CssClass="sdr-review-actions" AriaLabel="Review actions">
+        <Secondary>
+            <button type="button"
+                    class="btn btn-outline-warning px-3"
+                    @onclick="@ShowSendBackPopup">
+                <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
+            </button>
+        </Secondary>
+        <ChildContent>
+            <button class="btn-submit px-3" @onclick="ShowConfirmProceedPopup" disabled="@_isApproving">
+                @(_isApproving ? "Processing..." : ApprovalButtonText())
+            </button>
+        </ChildContent>
+    </ActionBar>
 }
 <style>
+    /* native: phone */
+    /* Review actions render through ActionBar. Tablet/desktop keep the previous inline spacing
+       (mt-3 mb-5 px-4) so nothing moves above 768px; on phones the bar is sticky at the bottom. */
+    @@media (min-width: 768px) {
+        .fb-actionbar.sdr-review-actions { margin: 1rem 0 3rem; padding: 0 1.5rem; }
+    }
+
+    @@media (max-width: 767.98px) {
+        .fb-actionbar--sticky.sdr-review-actions .btn-submit,
+        .fb-actionbar--sticky.sdr-review-actions .btn { min-height: var(--tap-min, 44px); }
+
+        /* Review tables scroll inside their .table-responsive wrapper instead of squeezing. */
+        .sdr-review-page .rv-table { table-layout: auto; min-width: 560px; }
+        .sdr-review-page .sales-table { min-width: 560px; }
+
+        .sdr-review-page .file-view-btn { min-height: 40px; padding: 6px 12px; font-size: 0.8rem; }
+        .sdr-review-page .approved-btn { white-space: normal; }
+    }
+
     .newdealer-review-box { height: 100%; border: 1px solid #dbeafe; background: #f8fbff; border-radius: 10px; padding: 14px 16px; }
     .newdealer-review-title { color: #1f3b64; font-weight: 700; font-size: 0.82rem; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #dbeafe; }
     .file-view-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
