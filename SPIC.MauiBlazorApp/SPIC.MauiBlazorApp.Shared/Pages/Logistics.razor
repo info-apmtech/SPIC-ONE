@@ -1470,6 +1470,44 @@
         }
     }
 
+
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .lg-page .lm-page-heading-row { flex-wrap: wrap; margin-bottom: 1rem; }
+        .lg-page .lm-page-heading-row > div { width: 100%; }
+        .lg-page .lm-page-heading-row > div > button { flex: 1 1 0; min-height: var(--tap-min, 44px); justify-content: center; }
+        .lg-page .tab-item { padding: 10px 16px; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; }
+        .lg-page .form-control-custom,
+        .lg-page .form-select-custom { min-height: var(--tap-min, 44px); font-size: 16px; }
+        .lg-page .status-btn-group .btn { min-height: 38px; }
+        /* map: 60vh so the pin can be placed with a thumb; 44px location buttons */
+        .lg-page .map-box-wrap,
+        .lg-page .leaflet-map-el { height: 60vh; min-height: 60vh; }
+        .lg-page .map-loc-btn { font-size: 0.8rem; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; gap: 6px; }
+        .lg-page .use-current-loc-btn { min-height: var(--tap-min, 44px); width: 100%; justify-content: center; }
+        .lg-page .primary-location-header { flex-direction: column; align-items: stretch; }
+        /* uploads: one full-width zone per document */
+        .lg-page .lm-doc-grid { grid-template-columns: 1fr; gap: 10px; }
+        .lg-page .lm-doc-card { min-height: 0; }
+        .lg-page .lm-upload-btn { width: 100%; min-height: var(--tap-min, 44px); }
+        /* three compact metric tiles */
+        .lg-page .row.g-3.mb-4 > .col-md-4 { flex: 0 0 33.333%; max-width: 33.333%; }
+        .lg-page .metric-card { padding: 12px 8px; }
+        .lg-page .metric-title { font-size: 0.72rem; }
+        .lg-page .metric-val { font-size: 1.25rem; }
+        .lg-page .lm-save-row { margin: 0; }
+        .lg-page .table-controls { flex-wrap: wrap; }
+        .lg-page .table-controls .filter-select { flex: 1 1 45%; min-height: var(--tap-min, 44px); }
+        .lg-page .table-controls .search-box { flex: 1 1 100%; }
+        .lg-page .spic-card-actions .btn { flex: 1 1 auto; }
+    }
+    @@media (min-width: 768px) and (max-width: 1199.98px) {
+        .lg-page .map-box-wrap,
+        .lg-page .leaflet-map-el { height: 420px; min-height: 420px; }
+        .lg-page .map-loc-btn { font-size: 0.75rem; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; gap: 6px; }
+        .lg-page .use-current-loc-btn { min-height: var(--tap-min, 44px); }
+        .lg-page .lm-upload-btn { min-height: var(--tap-min, 44px); }
+    }
 </style>
 
 @if (PdfViewMode && PdfViewId > 0)
@@ -1482,9 +1520,9 @@ else
 {
 
 
-    <div class="container-fluid py-4 px-0">
+    <div class="container-fluid py-4 px-0 lg-page">
         <div class="lm-page-heading-row">
-            <h5 class="fw-bold reg-page-heading">Logistics Master</h5>
+            <PageHeader Title="Logistics Master" Subtitle="Warehouses, rake points and ports" CssClass="reg-page-heading" />
 
             <div style="display:inline-flex; align-items:center; gap:8px;">
                 <button type="button"
@@ -1614,10 +1652,13 @@ else
                     </div>
                 </div>
 
-                <div class="lm-save-row">
-                    <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
-                        <i class="bi bi-x"></i> Cancel
-                    </button>
+                <ActionBar CssClass="lm-save-row" AriaLabel="Save logistics record">
+                    <Secondary>
+                        <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
+                            <i class="bi bi-x"></i> Cancel
+                        </button>
+                    </Secondary>
+                    <ChildContent>
 
                     @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) ||
                                                                      (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update")))
@@ -1630,7 +1671,8 @@ else
                             @(_isSaving ? "Saving..." : (_isEditing ? "Update" : "Save"))
                         </button>
                     }
-                </div>
+                    </ChildContent>
+                </ActionBar>
             </div>
         }
         else
@@ -3144,10 +3186,13 @@ else
                     }
                 </div>
 
-                <div class="lm-save-row">
-                    <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
-                        <i class="bi bi-x"></i> Cancel
-                    </button>
+                <ActionBar CssClass="lm-save-row" AriaLabel="Save logistics record">
+                    <Secondary>
+                        <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
+                            <i class="bi bi-x"></i> Cancel
+                        </button>
+                    </Secondary>
+                    <ChildContent>
 
                     @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) ||
                                                                  _isEditing)
@@ -3160,7 +3205,8 @@ else
                             @(_isUploadingDocuments ? "Uploading Documents..." : (_isSaving ? "Saving..." : (_isEditing ? "Update" : "Save")))
                         </button>
                     }
-                </div>
+                    </ChildContent>
+                </ActionBar>
             </div>
         }
 
@@ -3198,7 +3244,9 @@ else
                            Title="@($"Existing {ActiveTabDisplayName}")"
                            FileName="@CurrentFileName"
                            ExportColumns="GetExportColumns()"
-                           SearchText="@_searchText">
+                           SearchText="@_searchText"
+                           EmptyTitle="@($"No {ActiveTabDisplayName.ToLowerInvariant()} yet")"
+                           EmptyMessage="Use the form above to add the first record, or change the filters.">
 
                 <FilterControls>
                     <div class="search-box">
@@ -3452,6 +3500,38 @@ else
                         </td>
                     }
                 </TableRow>
+                <CardActions Context="item">
+                    @if (IsWarehouseTab || IsRakePointTab)
+                    {
+                        var cardDocCount = GetItemDocumentEntries(item).Count;
+                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(cardDocCount == 0)" @onclick="() => OpenDocumentsModal(item)">
+                            <i class="bi bi-folder2-open"></i> Documents (@cardDocCount)
+                        </button>
+                    }
+                    @if (item.InSpic == true)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick='() => OpenLogisticsPdf(item, "SPIC")'><i class="bi bi-file-earmark-pdf"></i> SPIC PDF</button>
+                    }
+                    @if (item.InGreenStar == true)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick='() => OpenLogisticsPdf(item, "GreenStar")'><i class="bi bi-file-earmark-pdf"></i> Green Star PDF</button>
+                    }
+                    @if (item.InSpic != true && item.InGreenStar != true)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenLogisticsPdf(item, null)"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                    }
+                    @if (CanApprove(item))
+                    {
+                        <button type="button" class="btn btn-sm btn-success" @onclick="() => OpenApproveModal(item)" disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
+                            <i class="bi bi-check-circle"></i> @(_approvingId == item.Id ? "Approving..." : GetApproveButtonText(item))
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning" @onclick="() => OpenRejectModal(item)" disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
+                            <i class="bi bi-arrow-counterclockwise"></i> Send Back
+                        </button>
+                    }
+                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+                </CardActions>
             </SpicDataTable>
         </div>
     </div>
