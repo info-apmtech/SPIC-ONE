@@ -41,10 +41,87 @@
 		background-color: #DCFCE7;
 		color: #059669;
 	}
-</style>
-<div class="container-fluid">
 
-	<h2 class="page-title">Location Master</h2>
+	/* native: phone */
+	@@media (max-width: 767.98px) {
+		.lm-page .section-header {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 10px;
+		}
+		.lm-page .section-header > .d-flex {
+			flex-wrap: wrap;
+		}
+		.lm-page .section-header > .d-flex > button {
+			flex: 1 1 0;
+			min-height: var(--tap-min, 44px);
+			white-space: nowrap;
+		}
+		.lm-page .tab-item {
+			padding: 10px 18px;
+			min-height: var(--tap-min, 44px);
+			display: inline-flex;
+			align-items: center;
+		}
+		.lm-page .form-control-custom,
+		.lm-page .searchable-select-input {
+			min-height: var(--tap-min, 44px);
+			font-size: 16px; /* prevents iOS zoom on focus */
+		}
+		.lm-page .status-toggle-box {
+			min-height: var(--tap-min, 44px);
+		}
+		.lm-page .lm-form-actions {
+			flex-wrap: nowrap;
+			gap: 10px;
+		}
+		.lm-page .lm-form-actions .fb-actionbar__secondary,
+		.lm-page .lm-form-actions .fb-actionbar__primary {
+			flex: 1 1 0;
+			min-width: 0;
+		}
+		.lm-page .lm-form-actions button {
+			flex: 1 1 0;
+			width: 100%;
+			min-height: var(--tap-min, 44px);
+			justify-content: center;
+		}
+		/* three compact metric tiles in one row */
+		.lm-page .row.g-3.mb-4:has(.metric-card) {
+			--bs-gutter-x: 8px;
+		}
+		.lm-page .row.g-3.mb-4 > .col-md-4:has(.metric-card) {
+			flex: 0 0 33.333%;
+			max-width: 33.333%;
+		}
+		.lm-page .metric-card {
+			padding: 12px 10px;
+		}
+		.lm-page .metric-title {
+			font-size: 0.72rem;
+		}
+		.lm-page .metric-val {
+			font-size: 1.25rem;
+		}
+		.lm-page .searchable-dropdown-item {
+			padding: 12px 14px;
+			font-size: 0.95rem;
+		}
+	}
+	@@media (min-width: 768px) and (max-width: 1199.98px) {
+		.lm-page .tab-item {
+			padding: 8px 20px;
+		}
+	}
+
+    /* native: keep the pre-existing desktop/tablet spacing of the inline ActionBar */
+    @@media (min-width: 768px) {
+        .lm-page .lm-form-actions.fb-actionbar { padding-top: 0; padding-bottom: 0; }
+    }
+</style>
+<div class="container-fluid lm-page">
+
+	<PageHeader Title="Location Master" Subtitle="Zones, states, districts, regions and headquarters" />
 
 	@if (!string.IsNullOrEmpty(_message))
 	{
@@ -338,15 +415,19 @@
 			</div>
 		</div>
 
-		<div class="d-flex justify-content-end pt-2 mt-4">
-			<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
-			@if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Entry")) || (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Update")))
-			{
-				<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
-					<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
-				</button>
-			}
-		</div>
+		<ActionBar Sticky="false" CssClass="lm-form-actions pt-2 mt-4">
+			<Secondary>
+				<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
+			</Secondary>
+			<ChildContent>
+				@if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Entry")) || (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Update")))
+				{
+					<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+						<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+					</button>
+				}
+			</ChildContent>
+		</ActionBar>
 	</div>
 
 	<div class="row g-3 mb-4">
@@ -381,7 +462,9 @@
 				   Title="@($"Existing {ActiveTab}")"
 				   FileName="@ActiveTab"
 				   ExportColumns="GetExportColumns()"
-				   SearchText="@_searchText">
+				   SearchText="@_searchText"
+				   EmptyTitle="@($"No {ActiveTab.ToLower()} yet")"
+				   EmptyMessage="Use the form above to add the first record, or bulk upload an Excel file.">
 
 		<FilterControls>
 			<div class="search-box">
@@ -498,6 +581,20 @@
 				</td>
 			}
 		</TableRow>
+
+		<CardActions Context="item">
+			<button type="button" class="btn btn-sm @(item.IsActive ? "btn-outline-success" : "btn-outline-secondary")" @onclick="() => ToggleStatus(item)">
+				<i class="bi @(item.IsActive ? "bi-toggle-on" : "bi-toggle-off")"></i> @(item.IsActive ? "Active" : "Inactive")
+			</button>
+			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Update"))
+			{
+				<button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+			}
+			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Delete"))
+			{
+				<button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+			}
+		</CardActions>
 	</SpicDataTable>
 
 </div>

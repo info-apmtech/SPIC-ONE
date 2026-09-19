@@ -348,11 +348,67 @@
     .desig-modal-actions { display: flex; gap: 12px; justify-content: center; }
     .desig-btn-delete { background: #DC2626; color: #fff; }
     .desig-btn-delete:hover { background: #B91C1C; }
+
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .pm-page .desig-form-card, .pm-page .desig-list-card { padding: 16px; border-radius: 12px; }
+        .pm-page .desig-form-row { gap: 12px; }
+        .pm-page .desig-field { width: 100%; }
+        .pm-page .desig-field input[type="text"],
+        .pm-page .desig-field input[type="number"] { width: 100%; min-height: var(--tap-min, 44px); font-size: 16px; }
+        .pm-page .desig-field > label:empty { display: none; }
+        .pm-page .desig-check-field { min-height: var(--tap-min, 44px); padding-bottom: 0; }
+        .pm-page .desig-check-field input[type="checkbox"] { width: 20px; height: 20px; }
+        .pm-page .desig-toggle-pill { min-height: var(--tap-min, 44px); width: 100%; justify-content: space-between; }
+
+        .pm-page .desig-form-actions { flex-wrap: nowrap; gap: 10px; padding: 8px 0 0; }
+        .pm-page .desig-form-actions .fb-actionbar__secondary,
+        .pm-page .desig-form-actions .fb-actionbar__primary { flex: 1 1 0; min-width: 0; }
+        .pm-page .desig-form-actions .desig-btn { width: 100%; min-height: var(--tap-min, 44px); justify-content: center; }
+
+        .pm-page .desig-stats-row { gap: 8px; flex-wrap: nowrap; margin-bottom: 16px; }
+        .pm-page .desig-stat-card { min-width: 0; padding: 12px 10px; }
+        .pm-page .desig-stat-label { font-size: 0.72rem; margin-bottom: 4px; }
+        .pm-page .desig-stat-value { font-size: 1.25rem; }
+
+        .pm-page .desig-list-tools { width: 100%; }
+        .pm-page .desig-search { flex: 1 1 auto; min-width: 0; min-height: var(--tap-min, 44px); font-size: 16px; }
+        .pm-page .desig-status-select { min-height: var(--tap-min, 44px); }
+        .pm-page .pm-table-wrap { display: none; }
+        .pm-cards { display: flex; flex-direction: column; gap: 10px; }
+        .pm-card { border: 1px solid #E5E7EB; border-radius: 12px; padding: 12px 14px; background: #fff; }
+        .pm-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .pm-card-no { font-size: 0.72rem; color: #9CA3AF; font-weight: 600; }
+        .pm-card-title { flex: 1 1 auto; margin: 0; font-size: 0.98rem; font-weight: 700; color: #1F2937; min-width: 0; overflow-wrap: anywhere; }
+        .pm-card-rows { margin: 8px 0 0; }
+        .pm-card-row { display: flex; gap: 10px; font-size: 0.8rem; padding: 3px 0; }
+        .pm-card-row dt { flex: 0 0 72px; color: #6B7280; font-weight: 600; margin: 0; }
+        .pm-card-row dd { flex: 1 1 auto; margin: 0; color: #374151; overflow-wrap: anywhere; }
+        .pm-card-actions { display: flex; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #F3F4F6; }
+        .pm-card-actions .btn { flex: 1 1 0; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+
+        .pm-page .pagination-container { flex-direction: column; align-items: stretch; gap: 10px; }
+        .pm-page .pagination-controls { justify-content: center; flex-wrap: wrap; }
+        .pm-page .page-btn { min-width: var(--tap-min, 44px); min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; justify-content: center; }
+        .pm-page .items-per-page select { min-height: var(--tap-min, 44px); }
+
+        .desig-modal { padding: 20px; }
+        .desig-modal-actions .desig-btn { flex: 1 1 0; min-height: var(--tap-min, 44px); justify-content: center; }
+    }
+    @@media (min-width: 768px) and (max-width: 1199.98px) {
+        .pm-page .pm-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .pm-page .desig-table { min-width: 680px; }
+    }
+
+    /* native: keep the pre-existing desktop/tablet spacing of the inline ActionBar */
+    @@media (min-width: 768px) {
+        .pm-page .desig-form-actions.fb-actionbar { padding-top: 0; padding-bottom: 0; }
+    }
 </style>
 
-<div class="container-fluid py-2 px-0">
+<div class="container-fluid py-2 px-0 pm-page">
 
-    <h1 class="desig-page-title">Page Management</h1>
+    <PageHeader Title="Page Management" Subtitle="Application pages and permission keys" CssClass="desig-page-title" />
 
     @if (!string.IsNullOrEmpty(_message))
     {
@@ -406,14 +462,18 @@
             </div>
         </div>
 
-        <div class="desig-form-actions">
-            <button type="button" class="desig-btn desig-btn-cancel" @onclick="ResetForm">
-                <i class="bi bi-x-lg"></i> Cancel
-            </button>
-            <button type="button" class="desig-btn desig-btn-save" @onclick="SavePage" disabled="@_isSaving">
-                <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : (_isEditMode ? "Update" : "Save"))
-            </button>
-        </div>
+        <ActionBar Sticky="false" CssClass="desig-form-actions">
+            <Secondary>
+                <button type="button" class="desig-btn desig-btn-cancel" @onclick="ResetForm">
+                    <i class="bi bi-x-lg"></i> Cancel
+                </button>
+            </Secondary>
+            <ChildContent>
+                <button type="button" class="desig-btn desig-btn-save" @onclick="SavePage" disabled="@_isSaving">
+                    <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : (_isEditMode ? "Update" : "Save"))
+                </button>
+            </ChildContent>
+        </ActionBar>
     </div>
 
     <!-- ============ Stat Cards ============ -->
@@ -447,7 +507,43 @@
             </div>
         </div>
 
-        <div class="table-responsive">
+        <div class="pm-cards phone-only">
+            @if (PagedItems.Any())
+            {
+                var cno = (_currentPage - 1) * _pageSize + 1;
+                foreach (var p in PagedItems)
+                {
+                    <article class="pm-card">
+                        <header class="pm-card-head">
+                            <span class="pm-card-no">#@(cno++)</span>
+                            <h4 class="pm-card-title">@p.Name</h4>
+                            <span class="desig-badge @(p.IsActive ? "desig-badge-active" : "desig-badge-inactive")">@(p.IsActive ? "Active" : "Inactive")</span>
+                        </header>
+                        <dl class="pm-card-rows">
+                            <div class="pm-card-row"><dt>Key</dt><dd class="pm-key-cell">@p.Key</dd></div>
+                            <div class="pm-card-row"><dt>Module</dt><dd>@(p.Module ?? "-")</dd></div>
+                        </dl>
+                        <div class="pm-card-actions">
+                            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditPage(p)"><i class="bi bi-pencil-square"></i> Edit</button>
+                            @if (p.IsActive)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OpenDeleteModal(p)"><i class="bi bi-slash-circle"></i> Deactivate</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-success" @onclick="() => ReactivatePage(p)"><i class="bi bi-arrow-counterclockwise"></i> Activate</button>
+                            }
+                        </div>
+                    </article>
+                }
+            }
+            else
+            {
+                <EmptyState Icon="bi-window-stack" Title="No pages found" Message="Add a page using the form above or change the filter." />
+            }
+        </div>
+
+        <div class="table-responsive pm-table-wrap">
             <table class="desig-table">
                 <thead>
                     <tr>

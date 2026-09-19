@@ -6,7 +6,7 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
-<PageTitle>Data Explorer</PageTitle>
+@inject ToastService Toast
 
 <style>
     .dx { font-family: 'Inter', sans-serif; display: flex; flex-direction: column; gap: 12px; height: calc(100vh - 110px); }
@@ -48,14 +48,43 @@
     .dx-tabs { display: flex; gap: 6px; }
     .dx-tabs button.active { background: #111827; color: #fff; border-color: #111827; }
     .dx-muted { color: #6b7280; font-size: 12px; }
+
+    /* native: phone */
+    .dx-page-header { margin-bottom: 0; }
+    @@media (max-width: 1199.98px) {
+        .dx { height: auto; min-height: 0; }
+        .dx-body { grid-template-columns: 220px 1fr; }
+        .dx-body.with-editor { grid-template-columns: 220px 1fr; }
+        .dx-body.with-editor > .dx-panel:last-child { grid-column: 1 / -1; }
+        .dx-panel-body { max-height: 60vh; }
+    }
+    @@media (max-width: 767.98px) {
+        .dx { gap: 10px; }
+        .dx-head { flex-direction: column; align-items: stretch; }
+        .dx-tabs { flex-wrap: wrap; }
+        .dx-tabs .dx-btn { flex: 1 1 40%; }
+        .dx-body, .dx-body.with-editor { grid-template-columns: 1fr; }
+        .dx-body > .dx-panel:first-child .dx-panel-body { max-height: 32vh; }
+        .dx-panel-body { max-height: 55vh; -webkit-overflow-scrolling: touch; }
+        .dx-panel-head { gap: 6px; }
+        .dx-panel-head .dx-input { flex: 1 1 100%; width: 100% !important; }
+        .dx-btn { min-height: var(--tap-min, 44px); }
+        .dx-input { min-height: var(--tap-min, 44px); font-size: 16px; }
+        .dx-lock { margin: 24px auto; padding: 20px; }
+        .dx-lock > div { flex-wrap: wrap; }
+        .dx-lock .dx-btn { width: 100%; }
+        .dx-tables li { min-height: var(--tap-min, 44px); align-items: center; }
+        .dx-table th, .dx-table td { max-width: 200px; }
+        .dx-field .row { flex-wrap: wrap; }
+    }
 </style>
 
 <div class="dx">
     <div class="dx-head">
-        <div>
-            <h1>Data Explorer</h1>
-            <p>Browse, filter, export and correct rows of any table. Every change is written to the audit log with your name.</p>
-        </div>
+        <PageHeader Title="Data Explorer"
+                    Subtitle="Browse, filter, export and correct rows of any table. Every change is written to the audit log with your name."
+                    ShowBack="false"
+                    CssClass="dx-page-header" />
         @if (_unlocked)
         {
             <div class="dx-tabs">
@@ -504,7 +533,7 @@
     {
         if (_table == null || _isNew) return;
         var keyText = string.Join(", ", _editKey.Select(kv => $"{kv.Key} = {kv.Value}"));
-        var ok = await JS.InvokeAsync<bool>("confirm", $"Delete the row where {keyText} from {_table.Name}? This cannot be undone.");
+        var ok = await Toast.ConfirmAsync("Delete row?", $"Delete the row where {keyText} from {_table.Name}? This cannot be undone.", "Delete", danger: true);
         if (!ok) return;
         _error = null; _notice = null; _busy = true;
         try
